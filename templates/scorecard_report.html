@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{title}}</title>
+    <meta name="description" content="{{subtitle}}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400..900&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400..900&family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inconsolata:wght@200..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <style>
+    :root {
+        --background: #ffffff;
+        --focus-background: #f1f9fe;
+        --neutral: #DDD;
+        --red: #d33;
+        --green: #393;
+        --text: #333;
+        --red-text: #d33;
+        --green-text: #393;
+    }
+    h1, .cinzel-700 {
+        font-family: "Cinzel", serif;
+        font-optical-sizing: auto;
+        font-weight: 700;
+        font-style: normal;
+        margin: 0;
+    }
+    h2 {
+        margin-block-start: 0;
+        margin-block-end: 0;
+    }
+    body, p, .montserrat {
+        font-family: "Montserrat", sans-serif;
+        font-optical-sizing: auto;
+        font-weight: 400;
+        font-style: normal;
+    }
+    .inconsolata, .fixed {
+        font-family: "Inconsolata", monospace;
+        font-optical-sizing: auto;
+        font-weight: 700;
+        font-style: bold;
+        font-variation-settings:
+            "wdth" 100;
+    }
+    body {
+      margin: 2em 1em;
+      color: var(--text);
+      background-color: var(--background);
+    }
+    header {
+        display: block;
+        margin: 0 0 1em 0;
+        padding: 1em;
+        border: 1em solid var(--neutral);
+        border-radius: 1em;
+    }
+    section.session {
+        padding: 0;
+        border: 1em solid var(--focus-background);
+        border-radius: 1em;
+        margin: 0 -1em 3em -1em;
+        background-color: var(--focus-background);
+    }
+    section.session > metadata {
+        display: block;
+        border: 1em solid var(--neutral);
+        border-radius: 1em;
+        margin: 0 0 1em 0;
+    }
+    score {
+        display: block;
+        margin: 0 0 1em 0;
+        padding: 0;
+        border: 1px solid var(--neutral);
+        border-radius: 1em;
+        overflow: hidden;
+    }
+    score.correct {
+        background-color: var(--green);
+        border-color: var(--green);
+    }
+    score.incorrect {
+        background-color: var(--red);
+        border-color: var(--red)
+    }
+    metadata {
+        display: block;
+        margin: 1em;
+        padding: calc(1em - 1px);
+        border: 1px solid var(--neutral);
+        color: var(--text);
+        background-color: var(--background);
+        border-radius: .7em;
+    }
+    metadata.top {
+        margin: 0 1em 1em 1em;
+    }
+    element {
+        display: block;
+        margin: 1em 0 0 0;
+        padding: calc(1em - 1px);
+        border: 1px solid var(--neutral);
+        color: var(--text);
+        background-color: var(--background);
+        border-radius: .7em;
+    }
+    session.correct element {
+        border-color: var(--green);
+    }
+    session.incorrect element {
+        border-color: var(--red)
+    }
+    metadata, element {
+      position: relative;
+    }
+    .correct {
+      color: var(--green-text);
+    }
+    .incorrect {
+      color: var(--red-text);
+    }
+    .label {
+        font-weight: 900;
+        letter-spacing: 0.2ex;
+        padding: 1ex;
+        border-radius: 1ex;
+        color: var(--text);
+        background-color: var(--neutral);
+        text-align: center;
+    }
+    .label.correct {
+        color: white;
+        background-color: var(--green-text);
+    }
+    .label.incorrect {
+        color: white;
+        background-color: var(--red-text);
+    }
+    .collapsible_content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.2s ease-out;
+    }
+    .collapsible_toggle:checked ~ .collapsible_content {
+      max-height: unset;
+    }
+    .checkbox {
+      display: inline-block;
+    }
+    .icon {
+      position: absolute;
+      top: 1em;
+      right: 1em;
+    }
+    .fixed {
+        font-family: "Inconsolata", monospace;
+    }
+    </style>
+    <script>
+        function enlargeImage(base64Image) {
+            // Create an overlay div
+            var overlay = document.createElement("div");
+            overlay.setAttribute("style", "position:fixed;top:0;left:0;width:100%;height:100%;background-color:rgba(0,0,0,0.85);z-index:1000;display:flex;justify-content:center;align-items:center;");
+            overlay.addEventListener("click", function() {
+                document.body.removeChild(overlay);
+            });
+
+            // Create an img element
+            var img = document.createElement("img");
+            img.setAttribute("src", base64Image);
+            img.setAttribute("style", "max-width:90%;max-height:90%;");
+
+            // Append img to overlay, then overlay to body
+            overlay.appendChild(img);
+            document.body.appendChild(overlay);
+        }
+    </script>
+</head>
+<body>
+{% if results|length == 0 %}
+    No results found.
+{% else %}
+    <header>
+        <h1>{{ title }}</h1>
+        <p>{{ subtitle }}</p>
+        <table>
+            {% for key, metric in metrics.items() %}
+            <tr>
+                <td>{{ metric['label'] }}</td>
+                <td class="fixed">
+                    {% if metric['value'] is number %}
+                        {% if metric['value']|round|int == metric['value'] %}
+                            {{ metric['value']|round|int }}
+                        {% else %}
+                            ${{ "%.6f"|format(metric['value']) }}
+                        {% endif %}
+                    {% else %}
+                        {{ metric['value'] }}
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </header>
+{% endif %}
+
+{% set context = namespace(current_session_id='', section_opened=false) %}
+{% for result in results %}
+    {% if result.session_id != context.current_session_id %}
+        {% if context.section_opened %}
+            <!-- Close the previous section if it's not the first iteration -->
+            </section>
+        {% endif %}
+        <!-- Start a new section for a new session ID -->
+        <section class="session">
+            <metadata class="top">
+                <i class="fas fa-phone icon"></i>
+                <h2>Call Session <span class="fixed">{{ result.session_id }}</span></h2>
+            </metadata>
+        {% set context.current_session_id = result.session_id %}
+        {% set context.section_opened = true %}
+    {% endif %}
+    <score class="{{ 'correct' if result.correct else 'incorrect' }}">
+        <metadata>
+            <div style="display: flex; flex-direction: column; gap: 1em;">
+                <div style="display: flex; justify-content: space-between; gap: 2em;">
+                    <div style="flex: 3; display: flex; flex-direction: column; gap: 1em;">
+                        <div><h2>Score: {{ result.question_name }}</h2></div>
+                        <div><b>Overall question:</b> {{ result.overall_question }}</div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); font-weight: bold; margin: 0 10%; gap: 3em;">
+                            <div>Answer</div>
+                            <div>Label</div>
+                            <div>Match?</div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 3em; margin: 0 10%;">
+                            <div class="label">{{ result.value|upper }}</div>
+                            <div class="label">{{ result.human_label|upper }}</div>
+                            <div class="label {{ 'correct' if result.correct else 'incorrect' }}">{{ 'YES' if result.correct else 'NO' }}</div>
+                        </div>
+                        <div><b>Reasoning:</b> {{ result.reasoning|replace("\n", "<br/>") }}</div>
+                        <div><b>Relevant quote:</b> <i>"{{ result.relevant_quote }}"</i></div>
+                    </div>
+                    <div style="flex: 2; display: flex; justify-content: center; align-items: start;">
+                        <img onclick="enlargeImage(this.src)" style="width: 100%; height: auto; max-width: 500px; margin-top: 2em;" src="data:image/png;base64,{{ result.visualization_image_base64 }}" alt="Decision Path Visualization">
+                    </div>
+                </div>
+                <div>
+                    <b>Cost:</b>
+                    <div class="collapsible_section">
+                        <label for="collapsible">Click to expand</label>
+                        <input type="checkbox" class="collapsible_toggle">
+                        <div class="collapsible_content">
+                            <br/>
+                            <div style="display: flex; align-items: flex-start; gap: 1em;">
+                                <div style="flex: 1; display: grid; grid-template-columns: repeat(2, auto); gap: 10px;">
+                                    <div>LLM request count:</div>
+                                    <div class="fixed">{{ result.llm_request_count }}</div>
+
+                                    <div>Prompt tokens:</div>
+                                    <div class="fixed">{{ result.prompt_tokens }}</div>
+
+                                    <div>Completion tokens:</div>
+                                    <div class="fixed">{{ result.completion_tokens }}</div>
+
+                                    {#
+                                    <div>Input cost:</div>
+                                    <div class="fixed">${{ "%.6f"|format(result.input_cost) }}</div>
+
+                                    <div>Output cost:</div>
+                                    <div class="fixed">${{ "%.6f"|format(result.output_cost) }}</div>
+
+                                    <div>Total cost:</div>
+                                    <div class="fixed">${{ "%.6f"|format(result.total_cost) }}</div>
+                                    #}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <b>Full Transcript:</b>
+                    <div class="collapsible_section">
+                        <label for="collapsible">Click to expand</label>
+                        <input type="checkbox" class="collapsible_toggle">
+                        <div class="collapsible_content">
+                            <br/>
+                            {{ result.transcript|replace("\n", "<br/>")|default("No transcript available", true) }}
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <b>Decision Elements:</b>
+                    <div class="collapsible_section">
+                        <label for="collapsible">Click to expand</label>
+                        <input type="checkbox" class="collapsible_toggle">
+                        <div class="collapsible_content">
+                            <elements class="collapsible_content">
+                                {% for element in result.element_results %}
+                                    <element>
+                                        <i class="{{ 'fas fa-comments icon' if 'clarification_reasoning' in element.metadata else 'fas fa-comment icon' }}"></i>
+                                        <div style="display: flex; flex-direction: column; gap: 1em;">
+
+                                            <div class="question">
+                                                <h2>Decision Element: <span class="fixed">{{ element.metadata['element_name'] }}</span></h2>
+                                            </div>
+                                            <div class="result_value">
+                                                <div class="label {{ 'correct' if element.metadata['value'].lower() == 'yes' else 'incorrect' }}">{{ element.metadata['value']|upper }}</div>
+                                            </div>
+                                            <div class="reasoning">
+                                                <b>Reasoning</b> <span>{{ element.metadata['reasoning']|replace("\n", "<br/>") }}</span>
+                                            </div>
+                                            {% if 'clarification_reasoning' in element.metadata %}
+                                                <div class="reasoning"><b>Reasoning about rules</b> <span>{{ element.metadata['clarification_reasoning']|replace("\n", "<br/>") }}</span></div>
+                                            {% endif %}
+                                            <div class="prompt"><b>Prompt</b>
+                                                <div class="collapsible_section">
+                                                    <label for="collapsible">Click to expand</label>
+                                                    <input type="checkbox" class="collapsible_toggle">
+                                                    <div class="collapsible_content">
+                                                        <br/>
+                                                        {{ element.metadata['prompt']|replace("\n", "<br/>") }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {% if 'transcript' in element.metadata %}
+                                                <div class="transcript"><b>Transcript Chunk</b>
+                                                    <div class="collapsible_section">
+                                                        <label for="collapsible">Click to expand</label>
+                                                        <input type="checkbox" class="collapsible_toggle">
+                                                        <div class="collapsible_content">
+                                                            <br/>
+                                                            {{ element.metadata['transcript']|replace("\\n", "\n")|replace("\n", "<br/>") }}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            {% endif %}
+                                            {% if 'chat_history' in element.metadata %}
+                                                <div class="transcript"><b>Chat History</b>
+                                                    <div class="collapsible_section">
+                                                        <label for="collapsible">Click to expand</label>
+                                                        <input type="checkbox" class="collapsible_toggle">
+                                                        <div class="collapsible_content">
+                                                            <br/>
+                                                            {% for message in element.metadata['chat_history'] %}
+                                                                <p><b>{{ message['role'] }}:</b> {{ message['content']|replace("\n", "<br/>") }}</p>
+                                                            {% endfor %}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    </element>
+                                {% endfor %}
+                            </elements>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </metadata>
+
+    </score>
+{% else %}
+    <p>No results found.</p>
+{% endfor %}
+
+{% if context.section_opened %}
+    <!-- Close the last section if any sections were opened -->
+    </section>
+{% endif %}
+
+</body>
+</html>
