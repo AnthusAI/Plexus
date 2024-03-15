@@ -8,10 +8,10 @@ import importlib.util
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from .Score import Score
-from .ScoreResult import ScoreResult
-from .Registries import ScoreRegistry
-from .CompositeScore import CompositeScore
+from plexus.Score import Score
+from plexus.ScoreResult import ScoreResult
+from plexus.Registries import ScoreRegistry
+from plexus.CompositeScore import CompositeScore
 
 class Scorecard:
     score_registry = ScoreRegistry()
@@ -90,6 +90,8 @@ class Scorecard:
             )
             score_result = score_instance.compute_result()
 
+            score_result.name = score_name
+
             score_result_value = score_result.value
             logging.info(f"Score result: {score_result_value}")
             # logging.info(f"Score element summary: prompt_tokens={score_result.element_results['prompt_tokens']}, completion_tokens={score_result.element_results['completion_tokens']}, input_cost={score_result.element_results['input_cost']}, output_cost={score_result.element_results['output_cost']}, total_cost={score_result.element_results['total_cost']}, value={score_result.element_results['value']}")
@@ -115,7 +117,7 @@ class Scorecard:
         if subset_of_score_names is None:
             subset_of_score_names = self.score_names()
 
-        scorecard_results = {name: None for name in subset_of_score_names}
+        score_results_dict = {}
         with ThreadPoolExecutor(max_workers=thread_pool_size) as executor:
             future_to_score_name = {
                 executor.submit(self.get_score_result, score_name=score_name, transcript=transcript): score_name
@@ -123,14 +125,14 @@ class Scorecard:
             }
             for future in as_completed(future_to_score_name):
                 score_name = future_to_score_name[future]
-
                 try:
-                    scorecard_results[score_name] = future.result()
+                    result = future.result()
+                    score_results_dict[score_name] = result.to_dict()  # Assuming ScoreResult has a to_dict method
                 except Exception as e:
-                    logging.exception(f"Exception occurred for question {score_name}: {e}")
-                    scorecard_results[score_name] = ScoreResult(value="Error", error=str(e))
+                    logging.exception(f"Exception occurred for score {score_name}: {e}")
+                    score_results_dict[score_name] = {'value': "Error", 'error': str(e)}
 
-        return scorecard_results
+        return score_results_dict
 
     def accumulated_expenses(self):
         return {

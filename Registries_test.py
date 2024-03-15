@@ -1,6 +1,6 @@
 import unittest
 
-from .Registries import BaseRegistry, ScoreRegistry, ScorecardRegistry
+from plexus.Registries import BaseRegistry, ScoreRegistry, ScorecardRegistry
 
 class MockScore:
     pass

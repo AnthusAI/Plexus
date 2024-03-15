@@ -12,10 +12,10 @@ from openai_cost_calculator.openai_cost_calculator import calculate_cost
 from requests.exceptions import HTTPError
 from tenacity import retry, retry_if_exception_type, wait_random_exponential, stop_after_attempt, retry_if_exception_type, before_sleep_log
 
-from ..CompositeScore import CompositeScore
-from ..Score import Score
-from ..ScoreResult import ScoreResult
-from ..Registries import scorecard_registry
+from plexus.CompositeScore import CompositeScore
+from plexus.Score import Score
+from plexus.ScoreResult import ScoreResult
+from plexus.Registries import scorecard_registry
 
 logging.getLogger("openai._base_client").setLevel(logging.INFO)
 

@@ -1,7 +1,7 @@
 import re
 
-from .Classifier import Classifier
-from ..CustomLogging import logging
+from plexus.classifiers.Classifier import Classifier
+from plexus.CustomLogging import logging
 
 class KeywordClassifier(Classifier):
     def __init__(self, keywords):

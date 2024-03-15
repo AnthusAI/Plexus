@@ -1,6 +1,6 @@
 import nltk.data
 
-from .CustomLogging import logging
+from plexus.CustomLogging import logging
 
 class TranscriptFilter:
     def __init__(self, classifier):

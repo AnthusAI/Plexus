@@ -51,7 +51,7 @@
             "wdth" 100;
     }
     body {
-      margin: 2em 1em;
+      margin: 2em 1em 1ex 1em;
       color: var(--text);
       background-color: var(--background);
     }
@@ -62,12 +62,18 @@
         border: 1em solid var(--neutral);
         border-radius: 1em;
     }
+    header td {
+        padding-right: 1ex;
+    }
     section.session {
         padding: 0;
         border: 1em solid var(--focus-background);
         border-radius: 1em;
-        margin: 0 -1em 3em -1em;
+        margin: 0 -1em 1ex -1em;
         background-color: var(--focus-background);
+    }
+    .session + .session {
+        margin-top: 3em;
     }
     section.session > metadata {
         display: block;
@@ -163,6 +169,9 @@
     .fixed {
         font-family: "Inconsolata", monospace;
     }
+    footer {
+       text-align: center;
+    }
     </style>
     <script>
         function enlargeImage(base64Image) {
@@ -194,7 +203,7 @@
         <table>
             {% for key, metric in metrics.items() %}
             <tr>
-                <td>{{ metric['label'] }}</td>
+                <td>{{ metric['label'] }}:</td>
                 <td class="fixed">
                     {% if metric['value'] is number %}
                         {% if metric['value']|round|int == metric['value'] %}
@@ -233,8 +242,8 @@
             <div style="display: flex; flex-direction: column; gap: 1em;">
                 <div style="display: flex; justify-content: space-between; gap: 2em;">
                     <div style="flex: 3; display: flex; flex-direction: column; gap: 1em;">
-                        <div><h2>Score: {{ result.question_name }}</h2></div>
-                        <div><b>Overall question:</b> {{ result.overall_question }}</div>
+                        <div><h2>Score: {{ result.name }}</h2></div>
+                        <div><b>Overall question:</b> {{ result.metadata.overall_question }}</div>
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); font-weight: bold; margin: 0 10%; gap: 3em;">
                             <div>Answer</div>
                             <div>Label</div>
@@ -245,8 +254,8 @@
                             <div class="label">{{ result.human_label|upper }}</div>
                             <div class="label {{ 'correct' if result.correct else 'incorrect' }}">{{ 'YES' if result.correct else 'NO' }}</div>
                         </div>
-                        <div><b>Reasoning:</b> {{ result.reasoning|replace("\n", "<br/>") }}</div>
-                        <div><b>Relevant quote:</b> <i>"{{ result.relevant_quote }}"</i></div>
+                        <div><b>Reasoning:</b> {{ result.metadata.reasoning|replace("\n", "<br/>") }}</div>
+                        <div><b>Relevant quote:</b> <i>"{{ result.metadata.relevant_quote }}"</i></div>
                     </div>
                     <div style="flex: 2; display: flex; justify-content: center; align-items: start;">
                         <img onclick="enlargeImage(this.src)" style="width: 100%; height: auto; max-width: 500px; margin-top: 2em;" src="data:image/png;base64,{{ result.visualization_image_base64 }}" alt="Decision Path Visualization">
@@ -262,24 +271,22 @@
                             <div style="display: flex; align-items: flex-start; gap: 1em;">
                                 <div style="flex: 1; display: grid; grid-template-columns: repeat(2, auto); gap: 10px;">
                                     <div>LLM request count:</div>
-                                    <div class="fixed">{{ result.llm_request_count }}</div>
+                                    <div class="fixed">{{ result.metadata.llm_request_count }}</div>
 
                                     <div>Prompt tokens:</div>
-                                    <div class="fixed">{{ result.prompt_tokens }}</div>
+                                    <div class="fixed">{{ result.metadata.prompt_tokens }}</div>
 
                                     <div>Completion tokens:</div>
-                                    <div class="fixed">{{ result.completion_tokens }}</div>
+                                    <div class="fixed">{{ result.metadata.completion_tokens }}</div>
 
-                                    {#
                                     <div>Input cost:</div>
-                                    <div class="fixed">${{ "%.6f"|format(result.input_cost) }}</div>
+                                    <div class="fixed">{{ result.metadata.input_cost }}</div>
 
                                     <div>Output cost:</div>
-                                    <div class="fixed">${{ "%.6f"|format(result.output_cost) }}</div>
+                                    <div class="fixed">${{ result.metadata.output_cost }}</div>
 
                                     <div>Total cost:</div>
-                                    <div class="fixed">${{ "%.6f"|format(result.total_cost) }}</div>
-                                    #}
+                                    <div class="fixed">${{ result.metadata.total_cost }}</div>
                                 </div>
                             </div>
                         </div>
@@ -376,5 +383,7 @@
     </section>
 {% endif %}
 
+
+<footer>{{footer}}</footer>
 </body>
 </html>

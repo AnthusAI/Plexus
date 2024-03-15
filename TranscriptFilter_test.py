@@ -1,9 +1,9 @@
 import re
 import unittest
 
-from .TranscriptFilter import TranscriptFilter
-from .classifiers.Classifier import Classifier
-from .classifiers.KeywordClassifier import KeywordClassifier
+from plexus.TranscriptFilter import TranscriptFilter
+from plexus.classifiers.Classifier import Classifier
+from plexus.classifiers.KeywordClassifier import KeywordClassifier
 
 # Mock classifier for testing purposes
 class MockClassifier(Classifier):

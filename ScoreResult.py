@@ -9,6 +9,29 @@ class ScoreResult:
         self.decision_tree = decision_tree
         self.error = error
 
+    def to_dict(self):
+        return {
+            'name': self.name,
+            'value': self.value,
+            'element_results': self.element_results,
+            'metadata': self.metadata,
+            'reasoning': self.reasoning,
+            'relevant_quotes': self.relevant_quotes,
+            'decision_tree': self.decision_tree,
+            'error': self.error
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(
+            value=data['value'],
+            name=data.get('name'),
+            element_results=data.get('element_results', []),
+            metadata=data.get('metadata', {}),
+            decision_tree=data.get('decision_tree'),
+            error=data.get('error')
+        )
+
     def __eq__(self, other):
         if isinstance(other, ScoreResult):
             return self.value.lower() == other.value.lower()

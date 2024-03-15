@@ -1,5 +1,5 @@
-from ..Scorecard import Scorecard
-from ..Registries import scorecard_registry
+from plexus.Scorecard import Scorecard
+from plexus.Registries import scorecard_registry
 
 @scorecard_registry.register('term-life-ai', family='term-life-ai')
 class TermLifeAI(Scorecard):

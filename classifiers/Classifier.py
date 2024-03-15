@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from ..CustomLogging import logging
+from plexus.CustomLogging import logging
 
 class Classifier(ABC):
     """

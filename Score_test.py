@@ -1,6 +1,6 @@
 import unittest
 
-from .Score import Score
+from plexus.Score import Score
 
 # Create a concrete subclass of Score for testing
 class ConcreteScore(Score):

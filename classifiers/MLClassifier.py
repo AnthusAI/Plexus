@@ -4,8 +4,8 @@ import pandas as pd
 from abc import ABC, abstractmethod
 import mlflow.pyfunc
 
-from ..CustomLogging import logging
-from .Classifier import Classifier
+from plexus.CustomLogging import logging
+from plexus.classifiers.Classifier import Classifier
 
 class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
     """

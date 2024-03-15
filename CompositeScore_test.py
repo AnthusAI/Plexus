@@ -5,7 +5,7 @@ import unittest
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from .CompositeScore import CompositeScore
+from plexus.CompositeScore import CompositeScore
 
 class MockCompositeScore(CompositeScore):
     def compute_element(self, name, transcript):

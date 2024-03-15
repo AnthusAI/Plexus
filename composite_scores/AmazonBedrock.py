@@ -11,10 +11,10 @@ from openai import OpenAI
 from requests.exceptions import HTTPError
 from tenacity import retry, retry_if_exception_type, wait_random_exponential, stop_after_attempt, retry_if_exception_type, before_sleep_log
 
-from ..CompositeScore import CompositeScore
-from ..Score import Score
-from ..ScoreResult import ScoreResult
-from ..Registries import scorecard_registry
+from plexus.CompositeScore import CompositeScore
+from plexus.Score import Score
+from plexus.ScoreResult import ScoreResult
+from plexus.Registries import scorecard_registry
 
 litellm.set_verbose=True
 

@@ -1,6 +1,6 @@
 import unittest
 
-from .ScoreResult import ScoreResult
+from plexus.ScoreResult import ScoreResult
 
 class TestScoreResult(unittest.TestCase):
 

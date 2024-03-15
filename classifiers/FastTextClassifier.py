@@ -5,8 +5,8 @@ from sklearn.model_selection import train_test_split
 import mlflow
 import mlflow.pyfunc
 
-from .MLClassifier import MLClassifier
-from .LLMGenerator import LLMGenerator
+from plexus.classifiers.MLClassifier import MLClassifier
+from plexus.classifiers.LLMGenerator import LLMGenerator
 
 fasttext.FastText.eprint = lambda x: None
 

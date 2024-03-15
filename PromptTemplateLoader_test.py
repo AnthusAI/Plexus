@@ -3,7 +3,7 @@ from unittest.mock import mock_open, patch
 from jinja2 import Environment
 from jinja2.exceptions import TemplateNotFound
 
-from .PromptTemplateLoader import PromptTemplateLoader
+from plexus.PromptTemplateLoader import PromptTemplateLoader
 
 class TestPromptTemplateLoader(unittest.TestCase):
     def setUp(self):

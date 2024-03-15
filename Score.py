@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
 
-from .CustomLogging import logging
+from plexus.CustomLogging import logging
 
 class Score(ABC):
-    def __init__(self, *, transcript):
+    def __init__(self, *, transcript, name=None):
         self.transcript = transcript
+        self.name = name
 
     def process_transcript(self, transcript):
         """

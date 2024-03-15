@@ -6,13 +6,13 @@ import importlib
 from decimal import Decimal
 from abc import ABC, abstractmethod
 
-from .Score import Score
-from .ScoreResult import ScoreResult
-from .Registries import scorecard_registry
-from .classifiers.KeywordClassifier import KeywordClassifier
-from .TranscriptFilter import TranscriptFilter
-from .PromptTemplateLoader import PromptTemplateLoader
-from .CustomLogging import logging
+from plexus.Score import Score
+from plexus.ScoreResult import ScoreResult
+from plexus.Registries import scorecard_registry
+from plexus.classifiers.KeywordClassifier import KeywordClassifier
+from plexus.TranscriptFilter import TranscriptFilter
+from plexus.PromptTemplateLoader import PromptTemplateLoader
+from plexus.CustomLogging import logging
 
 class CompositeScore(Score):
     """
@@ -175,6 +175,7 @@ class CompositeScore(Score):
                 super().__init__(transcript=transcript)
                 self.decision_tree = decision_tree_config
                 self.prompt_template_loader = PromptTemplateLoader(markdown_content=markdown_content)
+                self.name = score_name
 
                 # Dynamically generate the elements array from the Markdown content
                 self.elements = self.generate_elements_from_markdown()

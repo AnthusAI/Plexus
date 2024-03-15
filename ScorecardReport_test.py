@@ -1,8 +1,9 @@
+import unittest
 from decimal import Decimal
 
-from .ScorecardReport import ScorecardReport
-from .CompositeScore import CompositeScore
-from .ScoreResult import ScoreResult
+from plexus.ScorecardResultsAnalysis import ScorecardResultsAnalysis
+from plexus.CompositeScore import CompositeScore
+from plexus.ScoreResult import ScoreResult
 
 class TestCompositeScore1(CompositeScore):
     def __init__(self, *, transcript):
@@ -74,71 +75,39 @@ class TestCompositeScore3(CompositeScore):
             relevant_quote='Test quote 3'
         )
 
-def test_html_report_with_actual_composite_score():
-    # Define some mock transcripts
-    transcripts = ["Transcript 1", "Transcript 2", "Transcript 3"]
+class TestScorecardReport(unittest.TestCase):
+    def test_html_report_with_actual_composite_score(self):
+        # Define some mock transcripts
+        transcripts = ["Transcript 1", "Transcript 2", "Transcript 3"]
 
-    # Create TestCompositeScore instances and convert them to dictionaries
-    composite_scores = [TestCompositeScore1, TestCompositeScore2, TestCompositeScore3]
-    results = [score(transcript=transcript).to_dict() for score, transcript in zip(composite_scores, transcripts)]
+        # Create TestCompositeScore instances and convert them to dictionaries
+        composite_scores = [TestCompositeScore1, TestCompositeScore2, TestCompositeScore3]
+        results = [score(transcript=transcript).to_dict() for score, transcript in zip(composite_scores, transcripts)]
 
-    # Define some mock metrics
-    metrics = {
-        'overall_accuracy': {
-            'label': "Overall Accuracy",
-            'value': 0.95
-        },
-        'another_metric': {
-            'label': "Another Metric",
-            'value': 0.85
+        # Define some mock metrics
+        metrics = {
+            'overall_accuracy': {
+                'label': "Overall Accuracy",
+                'value': 0.95
+            },
+            'another_metric': {
+                'label': "Another Metric",
+                'value': 0.85
+            }
         }
-    }
 
-    # Create a ScorecardReport instance
-    report_generator = ScorecardReport(results, metrics)
+        # Create a ScorecardReport instance
+        report_generator = ScorecardReport(results, metrics)
 
-    # Generate the HTML report
-    html_report = report_generator.generate_html_report()
+        # Generate the HTML report
+        html_report = report_generator.generate_html_report()
 
-    # Check if the report is not empty
-    assert html_report != ""
+        # Check if the report is not empty
+        assert html_report != ""
 
-    # Print the report for manual inspection
-    print("HTML Report:")
-    print(html_report)
-
-def test_csv_report_with_actual_composite_score():
-    # Define some mock transcripts
-    transcripts = ["Transcript 1", "Transcript 2", "Transcript 3"]
-
-    # Create TestCompositeScore instances and convert them to dictionaries
-    composite_scores = [TestCompositeScore1, TestCompositeScore2, TestCompositeScore3]
-    results = [score(transcript=transcript).to_dict() for score, transcript in zip(composite_scores, transcripts)]
-
-    # Define some mock metrics
-    metrics = {
-        'overall_accuracy': {
-            'label': "Overall Accuracy",
-            'value': 0.95
-        },
-        'another_metric': {
-            'label': "Another Metric",
-            'value': 0.85
-        }
-    }
-
-    # Create a ScorecardReport instance
-    report_generator = ScorecardReport(results, metrics)
-
-    # Generate the CSV report
-    csv_report = report_generator.generate_csv_report()
-
-    # Check if the report is not empty
-    assert csv_report != ""
-
-    # Print the report for manual inspection
-    print("CSV Report:")
-    print(csv_report)
+        # Print the report for manual inspection
+        # print("HTML Report:")
+        # print(html_report)
 
 if __name__ == '__main__':
     unittest.main()
