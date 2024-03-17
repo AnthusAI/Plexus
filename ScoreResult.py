@@ -1,5 +1,12 @@
 class ScoreResult:
-    def __init__(self, *, value, name=None, element_results=None, metadata=None, decision_tree=None, error=None):
+    def __init__(self, *,
+            value,
+            name=None,
+            element_results=None,
+            metadata=None,
+            decision_tree=None,
+            llm_request_history=None,
+            error=None):
         self.name = name
         self.value = value
         self.element_results = element_results or []
@@ -7,6 +14,7 @@ class ScoreResult:
         self.reasoning = []
         self.relevant_quotes = []
         self.decision_tree = decision_tree
+        self.llm_request_history = llm_request_history
         self.error = error
 
     def to_dict(self):
@@ -14,6 +22,7 @@ class ScoreResult:
             'name': self.name,
             'value': self.value,
             'element_results': self.element_results,
+            'llm_request_history': self.llm_request_history,
             'metadata': self.metadata,
             'reasoning': self.reasoning,
             'relevant_quotes': self.relevant_quotes,

@@ -96,6 +96,8 @@ class OpenAICompositeScore(CompositeScore):
             logging.info(f"{message['role']}:\n{message['content']}\n")
 
         response = self.openai_api_request(
+            name=name,
+            element_type=element_type,
             messages=messages,
             # tools=self.yes_no_tool
         )
@@ -142,7 +144,7 @@ class OpenAICompositeScore(CompositeScore):
         # If not then ask for clarification.
         else:
             reasoning = response_content
-            yes_or_no = self.clarify_yes_or_no(messages=messages)
+            yes_or_no = self.clarify_yes_or_no(name=name, messages=messages)
             answer = yes_or_no['answer']
             messages.extend(yes_or_no['messages'])
 
@@ -202,7 +204,7 @@ class OpenAICompositeScore(CompositeScore):
 
         return ScoreResult(value=score_result_metadata['value'], metadata=score_result_metadata)
 
-    def clarify_yes_or_no(self, *, messages, top_p=0.2):
+    def clarify_yes_or_no(self, *, name, messages, top_p=0.2):
         """
         Used to ask for clarification when the answer is not clear.
         This function will continue to repeat the question using increasing LLM randomness parameters until the answer is clear.
@@ -216,6 +218,8 @@ class OpenAICompositeScore(CompositeScore):
         messages_with_yes_or_no_question.append(yes_or_no_question)
 
         response = self.openai_api_request(
+            name=name,
+            element_type='clarify_yes_or_no',
             messages=messages_with_yes_or_no_question,
             top_p=top_p,
             max_tokens=1, # Only enough room for "yes" or "no".
@@ -246,7 +250,7 @@ class OpenAICompositeScore(CompositeScore):
                     "messages": new_messages
                 }
             # Recurse with more randomness and try again.
-            return self.clarify_yes_or_no(messages=messages, top_p=top_p + 0.1)
+            return self.clarify_yes_or_no(name=name, messages=messages, top_p=top_p + 0.1)
 
     @retry(
         wait=wait_random_exponential(multiplier=5, max=600),  # Exponential backoff with random jitter
@@ -254,7 +258,7 @@ class OpenAICompositeScore(CompositeScore):
         stop=stop_after_attempt(100),
         before_sleep=before_sleep_log(logging, logging.INFO)
     )
-    def openai_api_request(self, messages, tools=None, tool_choice=None, top_p=0.4, seed=None, max_tokens=768):
+    def openai_api_request(self, name, element_type, messages, tools=None, tool_choice=None, top_p=0.4, seed=None, max_tokens=768):
 
         logging.debug("Messages to OpenAI:\n%s", json.dumps(messages, indent=4))
 
@@ -278,11 +282,35 @@ class OpenAICompositeScore(CompositeScore):
             request_arguments["tools"] = tools
             request_arguments["tool_choice"] = {"type": "function", "function": {"name": tools[0]['function']['name']}}
 
-        self.llm_request_count += 1
-
         # Use the constructed dictionary as **kwargs to pass to the function
         client = openai.OpenAI()
-        return client.chat.completions.create(**request_arguments)
+        response = client.chat.completions.create(**request_arguments)
+
+        self.llm_request_count += 1
+
+        # Calculate costs
+        cost_details = calculate_cost(
+            model_name =    self.model_name,
+            input_tokens =  response.usage.prompt_tokens,
+            output_tokens = response.usage.completion_tokens
+        )
+        logging.info(f"Token counts:  Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}")
+        logging.info(f"Costs:  Input: {cost_details['input_cost']}, Output: {cost_details['output_cost']}, Total: {cost_details['total_cost']}")
+
+        self.llm_request_history.append({
+            'name': name,
+            'element_type': element_type,
+            'request': request_arguments,
+            'response': response,
+            'prompt_tokens': response.usage.prompt_tokens,
+            'completion_tokens': response.usage.completion_tokens,
+            'total_tokens': response.usage.total_tokens,
+            'input_cost': cost_details['input_cost'],
+            'output_cost': cost_details['output_cost'],
+            'total_cost': cost_details['total_cost']
+        })
+
+        return response
 
     def construct_system_prompt(self, *, transcript):
 
@@ -481,7 +509,10 @@ You have some hints in your responses to the sub-questions.
 The relevant quotes should be short, succinct.  Just one or two lines.  Don't provide any quotes if the answer is no.
 """
 }]
-        
+
+        # This defaults to 'prompt' but it becomes 'request_valid_json' when it's a retry after a broken JSON response.
+        element_type = 'prompt'
+
         if attempt_count > 1:
             if error:
                 prompts.extend([
@@ -492,12 +523,13 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
                     {
                         'role': 'user',
                         'content': (
-                            "There was an error in the previous response.  Please try again.  "
+                            "I had an error parsing the JSON from your last response.  Please try again.  "
                             f"This is attempt number {attempt_count}.\n"
                             f"Error:\n{exception}"
                         )
                     }
                 ])
+            element_type = 'request_valid_json'
             logging.info("Retry prompts:\n%s", json.dumps(prompts, indent=4))
         else:
             logging.info("Prompt:\n%s", json.dumps(prompts[0], indent=4))
@@ -511,6 +543,8 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
         logging.info("Summarization chat history:\n%s", json.dumps(new_chat_history, indent=4))
 
         response = self.openai_api_request(
+            name='summary',
+            element_type=element_type,
             messages=new_chat_history,
             tools=self.reasoning_and_relevant_quote_tool,
             max_tokens=512

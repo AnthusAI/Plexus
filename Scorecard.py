@@ -127,7 +127,7 @@ class Scorecard:
                 score_name = future_to_score_name[future]
                 try:
                     result = future.result()
-                    score_results_dict[score_name] = result.to_dict()  # Assuming ScoreResult has a to_dict method
+                    score_results_dict[score_name] = result.to_dict()
                 except Exception as e:
                     logging.exception(f"Exception occurred for score {score_name}: {e}")
                     score_results_dict[score_name] = {'value': "Error", 'error': str(e)}

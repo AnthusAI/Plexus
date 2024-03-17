@@ -1,4 +1,5 @@
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -36,6 +37,20 @@ class ScorecardResultsAnalysis:
             'total_scores': total_scores,
             'overall_accuracy_percentage': overall_accuracy_percentage
         }
+
+    def calculate_total_cost(self, mode=None):
+        total_cost = 0
+        for scorecard_result in self.scorecard_results.data:
+            for score_result in scorecard_result.get('results', {}).values():
+                for element_result in score_result.get('element_results', []):
+                    # try:
+                        element_metadata = element_result.metadata
+                        if mode == 'production' and element_metadata.get('element_name') == 'summary':
+                            continue
+                        total_cost += element_metadata.get('total_cost', 0)
+                    # except KeyError:
+                        # pass
+        return total_cost
 
     def calculate_row_accuracy(self, entry):
         total_correct_scores = 0
@@ -88,8 +103,6 @@ class ScorecardResultsAnalysis:
         ax.set_title('Accuracy Compared With Human Labels', fontsize=16)
         ax.set_xlabel(f"Overall Accuracy: {overall_accuracy:.2f}%", fontsize=14)
 
-        mlflow.log_metric("overall_accuracy", overall_accuracy)
-
         row_accuracies = [self.calculate_row_accuracy(result) for result in self.scorecard_results.data]
 
         # Convert the list of rows into a DataFrame
@@ -107,38 +120,44 @@ class ScorecardResultsAnalysis:
 
     def generate_html_report(self, *, only_incorrect_scores=False, redact_cost_information=False,
             title="Scorecard Report",
-            subtitle="This report contains the results of scorecard evaluations, with detailed reasoning and explanations for each score.",
-            footer="Powered by Anthus Plexus&#8482;."
+            subtitle="This report contains the results of scorecard evaluations, with detailed reasoning and explanations for each score."
         ):
 
         # We need to compute a `results` list containing the ScoreResult for each score,
         # as a long, flat list, over all scorecard results.
         results = []
-        for scorecard_result in self.scorecard_results.data:
-            for score_result in scorecard_result['results']:
-                # Add the session ID to it.
-                scorecard_result['results'][score_result]['session_id'] = \
-                scorecard_result['session_id']
+        visualization_tasks = []
+        with ThreadPoolExecutor() as executor:
+            for scorecard_result in self.scorecard_results.data:
+                for score_result in scorecard_result['results']:    
 
-                # Generate visualization image for the current score result
-                visualization_image_path = self.visualize_decision_path(
-                    score_result = scorecard_result['results'][score_result],
-                    decision_tree = scorecard_result['results'][score_result]['decision_tree'],
-                    element_results = scorecard_result['results'][score_result]['element_results'],
-                    session_id = scorecard_result['session_id']
-                )
-                        
+                    # Add the session ID to it.
+                    scorecard_result['results'][score_result]['session_id'] = \
+                        scorecard_result['session_id']
+
+                    if scorecard_result['results'][score_result]['error'] is None:
+                        task = executor.submit(
+                            self.visualize_decision_path,
+                            score_result=scorecard_result['results'][score_result],
+                            decision_tree=scorecard_result['results'][score_result]['decision_tree'],
+                            element_results=scorecard_result['results'][score_result]['element_results'],
+                            session_id=scorecard_result['session_id'],
+                            score_name=score_result
+                        )
+                        visualization_tasks.append((task, scorecard_result, score_result))
+
+            # Process completed tasks
+            for future, scorecard_result, score_result in visualization_tasks:
+                visualization_image_path = future.result()
                 # Encode the image as base64
                 with open(visualization_image_path, "rb") as image_file:
                     encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-                        
+                
                 # Embed the base64-encoded image in the HTML
                 scorecard_result['results'][score_result]['visualization_image_base64'] = encoded_string
 
-                # Add this one to the list.
-                if only_incorrect_scores and scorecard_result['results'][score_result]['correct']:
-                    continue
-                else:
+                # Add this one to the list if it meets the criteria
+                if not (only_incorrect_scores and scorecard_result['results'][score_result]['correct']):
                     results.append(scorecard_result['results'][score_result])
 
         # Extra metadata at the overall experiment level.
@@ -149,9 +168,12 @@ class ScorecardResultsAnalysis:
             }
         }
         if not redact_cost_information:
-            total_cost = sum(score_result['metadata']['total_cost'] for scorecard_result in self.scorecard_results.data for score_result in scorecard_result['results'].values())
+            total_cost = self.calculate_total_cost()
             number_of_transcripts = len(self.scorecard_results.data)
             cost_per_transcript = total_cost / number_of_transcripts
+
+            total_production_cost = self.calculate_total_cost(mode='production')
+            production_cost_per_transcript = total_production_cost / number_of_transcripts
 
             metrics.update({
                 'total_cost': {
@@ -161,6 +183,14 @@ class ScorecardResultsAnalysis:
                 'cost_per_transcript': {
                     'label': 'Cost Per Transcript',
                     'value': f"${cost_per_transcript:.2f}"
+                },
+                'total_production_cost': {
+                    'label': 'Total Production Cost',
+                    'value': f"${total_production_cost:.2f}"
+                },
+                'production_cost_per_transcript': {
+                    'label': 'Production Cost Per Transcript',
+                    'value': f"${production_cost_per_transcript:.2f}"
                 }
             })
 
@@ -174,12 +204,17 @@ class ScorecardResultsAnalysis:
             metrics=metrics,
             title=title,
             subtitle=subtitle,
-            footer=footer
+            only_incorrect_scores=only_incorrect_scores,
+            redact_cost_information=redact_cost_information,
         )
 
         return report
 
-    def visualize_decision_path(self, *, score_result, decision_tree, element_results, session_id):
+    def visualize_decision_path(self, *, score_result, decision_tree, element_results, session_id, score_name, filename=None):
+
+        if filename is None:
+            filename = f'/tmp/decision_path_visualization_{session_id}_{CompositeScore.normalize_element_name(score_name)}.png'
+
         # Define the outcome nodes with unique IDs at the beginning of the method
         outcome_nodes = {
             'yes': 'node_yes',
@@ -291,18 +326,27 @@ class ScorecardResultsAnalysis:
         add_to_graph(decision_tree)
 
         # Render the graph to a file
-        filename = f'/tmp/decision_path_visualization_{session_id}'
+        with open(f"{filename}.dot", "w") as dotfile:
+            dotfile.write(dot.source)
         dot.render(filename, format='png', view=False)
         return filename + '.png'
 
     def plot_scorecard_costs(self, results):
 
+        sky_blue = np.array([0.0, 0.28, 0.67])
+        fuchsia = np.array([0.815, 0.2, 0.51])
+        teal = np.array([0, 0.5, 0.5])
+        purple = np.array([0.5, 0, 0.5])
+        forest_green = np.array([0.133, 0.545, 0.133])
+        burnt_orange = np.array([0.8, 0.333, 0.0])
+        deep_forest_green = np.array([0.0, 0.39, 0.0])
+        bluish_grey = np.array([0.4, 0.5, 0.55])
+
+        colors = [sky_blue, fuchsia, teal, purple, forest_green, burnt_orange, deep_forest_green, bluish_grey]
+
         def plot_input_output_costs():
             total_input_costs = {}
             total_output_costs = {}
-
-            sky_blue = (0.012, 0.635, 0.996)
-            fuchsia = (0.815, 0.2, 0.51)
 
             for result in results:
                 for score_name, score_result in result['results'].items():
@@ -335,9 +379,27 @@ class ScorecardResultsAnalysis:
             plt.savefig('mlruns/scorecard_input_output_costs.png')
             plt.close(fig)
 
+        def plot_histogram_of_total_costs():
+            total_costs = []
+
+            for result in results:
+                result_total_cost = 0
+                for score_result in result['results'].values():
+                    for element_result in score_result.get('element_results', []):
+                        result_total_cost += element_result.metadata.get('total_cost', 0)
+                total_costs.append(result_total_cost)
+
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.hist(total_costs, bins=20, color=sky_blue, edgecolor=bluish_grey)
+            ax.set_title('Histogram of Total Costs for Different Results')
+            ax.set_xlabel('Total Cost')
+            ax.set_ylabel('Number of Results')
+            ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
+
+            plt.savefig('mlruns/histogram_of_total_costs.png')
+            plt.close(fig)
+
         def plot_distribution_of_costs():
-            # Hypothetical plot for demonstration
-            # Assuming this plot shows the distribution of input costs
             total_input_costs = {}
 
             for result in results:
@@ -349,10 +411,31 @@ class ScorecardResultsAnalysis:
             input_costs = [total_input_costs[name] for name in score_names]
 
             fig, ax = plt.subplots(figsize=(6, 6))
-            ax.pie(input_costs, labels=score_names, autopct='%1.1f%%', startangle=140)
+            pie_wedges = ax.pie(input_costs, labels=score_names, autopct='%1.1f%%', startangle=140, colors=colors[:len(score_names)])
+            plt.setp(pie_wedges[2], color='w')  # Set the color of the autopct texts to white
             ax.set_title('Distribution of Input Costs')
 
             plt.savefig('mlruns/distribution_of_input_costs.png')
+            plt.close(fig)
+
+        def plot_distribution_of_costs_by_element_type():
+            total_costs = {}
+
+            for result in results:
+                for score_name, score_result in result['results'].items():
+                    for element_result in score_result.get('llm_request_history', []):
+                        element_type = element_result.get('element_type', 'unknown')
+                        total_costs[element_type] = element_result.get('total_cost', 0)
+
+            element_types = list(total_costs.keys())
+            input_costs = [total_costs[element_type] for element_type in element_types]
+
+            fig, ax = plt.subplots(figsize=(6, 6))
+            pie_wedges = ax.pie(input_costs, labels=element_types, autopct='%1.1f%%', startangle=140, colors=colors[:len(element_types)])
+            plt.setp(pie_wedges[2], color='w')  # Set the color of the autopct texts to white
+            ax.set_title('Distribution of Input Costs by Element Type')
+
+            plt.savefig('mlruns/distribution_of_input_costs_by_element_type.png')
             plt.close(fig)
 
         def plot_total_llm_calls_by_score():
@@ -368,7 +451,7 @@ class ScorecardResultsAnalysis:
             llm_calls_counts = [total_llm_calls[name] for name in score_names]
 
             fig, ax = plt.subplots(figsize=(6, 6))
-            ax.bar(score_names, llm_calls_counts, color='teal')
+            ax.bar(score_names, llm_calls_counts, color=purple)
             ax.set_ylabel('Total LLM Calls')
             ax.set_title('Total LLM Calls by Score')
             ax.set_xticks(np.arange(len(score_names)))
@@ -382,7 +465,9 @@ class ScorecardResultsAnalysis:
         os.makedirs('mlruns', exist_ok=True)
 
         plot_input_output_costs()
+        plot_histogram_of_total_costs()
         plot_distribution_of_costs()
+        plot_distribution_of_costs_by_element_type()
         plot_total_llm_calls_by_score()
 
     def generate_csv_scorecard_report(self, *, results):

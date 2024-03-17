@@ -4,11 +4,19 @@ from decimal import Decimal
 class ScorecardResultsEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Decimal):
+            return float(obj)  # Convert Decimals to floats for JSON serialization
+        elif isinstance(obj, (str, int, float, bool)):
+            return obj  # Directly serializable types
+        elif hasattr(obj, '__dict__'):
+            # Serialize objects by recursively converting their __dict__
+            return {key: self.default(value) for key, value in obj.__dict__.items() if not key.startswith('_')}
+        elif isinstance(obj, list):
+            return [self.default(item) for item in obj]
+        elif isinstance(obj, dict):
+            return {key: self.default(value) for key, value in obj.items()}
+        else:
+            # Fallback: convert to string if the object is not directly serializable
             return str(obj)
-        try:
-            return obj.to_dict()
-        except AttributeError:
-            return super().default(obj)
 
 class ScorecardResults:
     def __init__(self, data=None):

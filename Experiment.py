@@ -203,10 +203,6 @@ class AccuracyExperiment(Experiment):
                 total_correct += is_match
                 total_questions += 1
 
-        # Calculate overall accuracy
-        overall_accuracy = (total_correct / total_questions) * 100 if total_questions > 0 else 0
-        logging.info(f"Overall accuracy: {overall_accuracy:.2f}%")
-
         analysis = ScorecardResultsAnalysis(
             scorecard_results=scorecard_results
         )
@@ -236,8 +232,10 @@ class AccuracyExperiment(Experiment):
         # Plot costs and log in MLFlow.
         analysis.plot_scorecard_costs(results=results)
         mlflow.log_artifact('mlruns/scorecard_input_output_costs.png')
+        mlflow.log_artifact('mlruns/histogram_of_total_costs.png')
         mlflow.log_artifact('mlruns/distribution_of_input_costs.png')
         mlflow.log_artifact('mlruns/total_llm_calls_by_score.png')
+        mlflow.log_artifact('mlruns/distribution_of_input_costs_by_element_type.png')
 
         expenses = self.scorecard.accumulated_expenses()
         logging.info(f"Expenses: {expenses}")
@@ -246,6 +244,11 @@ class AccuracyExperiment(Experiment):
         logging.info(f"Number of transcripts to sample: {len(selected_sample_rows)}")
         logging.info(f"Total cost: {expenses['total_cost']}")
         logging.info(f"Cost per transcript: {expenses['cost_per_transcript']}")
+
+        # Calculate overall accuracy
+        overall_accuracy = (total_correct / total_questions) * 100 if total_questions > 0 else 0
+        logging.info(f"Overall accuracy: {overall_accuracy:.2f}%")
+        mlflow.log_metric("overall_accuracy", overall_accuracy)
 
         # Log the results to MLflow
         mlflow.log_metric("number_of_transcripts", len(selected_sample_rows))

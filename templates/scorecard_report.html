@@ -13,11 +13,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inconsolata:wght@200..900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
     :root {
         --background: #ffffff;
-        --focus-background: #f1f9fe;
+        --focus-background: #F0F0F0;
         --neutral: #DDD;
         --red: #d33;
         --green: #393;
@@ -47,8 +47,6 @@
         font-optical-sizing: auto;
         font-weight: 700;
         font-style: bold;
-        font-variation-settings:
-            "wdth" 100;
     }
     body {
       margin: 2em 1em 1ex 1em;
@@ -58,12 +56,15 @@
     header {
         display: block;
         margin: 0 0 1em 0;
-        padding: 1em;
         border: 1em solid var(--neutral);
+        background-color: var(--neutral);
         border-radius: 1em;
     }
     header td {
         padding-right: 1ex;
+    }
+    header metadata {
+        margin: 0;
     }
     section.session {
         padding: 0;
@@ -83,11 +84,15 @@
     }
     score {
         display: block;
-        margin: 0 0 1em 0;
+        margin: 0;
         padding: 0;
         border: 1px solid var(--neutral);
+        background-color: var(--neutral);
         border-radius: 1em;
         overflow: hidden;
+    }
+    score + score {
+        margin-top: 1em;
     }
     score.correct {
         background-color: var(--green);
@@ -106,9 +111,6 @@
         background-color: var(--background);
         border-radius: .7em;
     }
-    metadata.top {
-        margin: 0 1em 1em 1em;
-    }
     element {
         display: block;
         margin: 1em 0 0 0;
@@ -118,6 +120,19 @@
         background-color: var(--background);
         border-radius: .7em;
     }
+    .token_metrics {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 3em;
+        width: 100%;
+    }
+    .metric {
+        display: flex;
+        justify-content: space-between;
+    }
+    .metric_name, .metric_value {
+        display: block;
+    }
     session.correct element {
         border-color: var(--green);
     }
@@ -125,17 +140,17 @@
         border-color: var(--red)
     }
     metadata, element {
-      position: relative;
+        position: relative;
     }
     .correct {
-      color: var(--green-text);
+        color: var(--green-text);
     }
     .incorrect {
-      color: var(--red-text);
+        color: var(--red-text);
     }
     .label {
-        font-weight: 900;
-        letter-spacing: 0.2ex;
+        font-weight: 700;
+        letter-spacing: 0.12ex;
         padding: 1ex;
         border-radius: 1ex;
         color: var(--text);
@@ -151,26 +166,41 @@
         background-color: var(--red-text);
     }
     .collapsible_content {
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height 0.2s ease-out;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.2s ease-out;
     }
     .collapsible_toggle:checked ~ .collapsible_content {
-      max-height: unset;
+        max-height: unset;
     }
     .checkbox {
-      display: inline-block;
+        display: inline-block;
     }
     .icon {
-      position: absolute;
-      top: 1em;
-      right: 1em;
+        position: absolute;
+        top: 1em;
+        right: 1em;
     }
     .fixed {
         font-family: "Inconsolata", monospace;
     }
     footer {
-       text-align: center;
+        font-size: 0.8;
+        text-align: center;
+        margin-top: 2em;
+    }
+    .logotype {
+        font-family: "Cinzel", serif;
+        font-weight: 900;
+        display: flex;
+        justify-content: center;
+    }
+    .logotype a {
+        color: #dc5497;
+        text-decoration: none;
+    }
+    .logotype a .prominent {
+        color: #0389d7;
     }
     </style>
     <script>
@@ -198,26 +228,28 @@
     No results found.
 {% else %}
     <header>
-        <h1>{{ title }}</h1>
-        <p>{{ subtitle }}</p>
-        <table>
-            {% for key, metric in metrics.items() %}
-            <tr>
-                <td>{{ metric['label'] }}:</td>
-                <td class="fixed">
-                    {% if metric['value'] is number %}
-                        {% if metric['value']|round|int == metric['value'] %}
-                            {{ metric['value']|round|int }}
+        <metadata>
+            <h1>{{ title }}</h1>
+            <p>{{ subtitle }}</p>
+            <table>
+                {% for key, metric in metrics.items() %}
+                <tr>
+                    <td>{{ metric['label'] }}:</td>
+                    <td class="fixed">
+                        {% if metric['value'] is number %}
+                            {% if metric['value']|round|int == metric['value'] %}
+                                {{ metric['value']|round|int }}
+                            {% else %}
+                                ${{ "%.6f"|format(metric['value']) }}
+                            {% endif %}
                         {% else %}
-                            ${{ "%.6f"|format(metric['value']) }}
+                            {{ metric['value'] }}
                         {% endif %}
-                    {% else %}
-                        {{ metric['value'] }}
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </table>
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+        </metadata>
     </header>
 {% endif %}
 
@@ -230,10 +262,18 @@
         {% endif %}
         <!-- Start a new section for a new session ID -->
         <section class="session">
-            <metadata class="top">
-                <i class="fas fa-phone icon"></i>
-                <h2>Call Session <span class="fixed">{{ result.session_id }}</span></h2>
-            </metadata>
+            <score>
+                <metadata>
+                    <div style="display: flex; flex-direction: column; gap: 1em;">
+                        <div style="display: flex; justify-content: space-between; gap: 2em;">
+                            <div style="flex: 3; display: flex; flex-direction: column; gap: 1em;">    
+                                <i class="fas fa-phone icon"></i>
+                                <h2>Call Session <span class="fixed">{{ result.session_id }}</span></h2>
+                            </div>
+                        </div>
+                    </div>
+                </metadata>
+            </score>
         {% set context.current_session_id = result.session_id %}
         {% set context.section_opened = true %}
     {% endif %}
@@ -255,12 +295,15 @@
                             <div class="label {{ 'correct' if result.correct else 'incorrect' }}">{{ 'YES' if result.correct else 'NO' }}</div>
                         </div>
                         <div><b>Reasoning:</b> {{ result.metadata.reasoning|replace("\n", "<br/>") }}</div>
+                        {% if result.metadata.relevant_quote|trim %}
                         <div><b>Relevant quote:</b> <i>"{{ result.metadata.relevant_quote }}"</i></div>
+                        {% endif %}
                     </div>
                     <div style="flex: 2; display: flex; justify-content: center; align-items: start;">
                         <img onclick="enlargeImage(this.src)" style="width: 100%; height: auto; max-width: 500px; margin-top: 2em;" src="data:image/png;base64,{{ result.visualization_image_base64 }}" alt="Decision Path Visualization">
                     </div>
                 </div>
+                {% if not redact_cost_information %}
                 <div>
                     <b>Cost:</b>
                     <div class="collapsible_section">
@@ -292,6 +335,7 @@
                         </div>
                     </div>
                 </div>
+                {% endif %}
                 <div>
                     <b>Full Transcript:</b>
                     <div class="collapsible_section">
@@ -312,7 +356,7 @@
                             <elements class="collapsible_content">
                                 {% for element in result.element_results %}
                                     <element>
-                                        <i class="{{ 'fas fa-comments icon' if 'clarification_reasoning' in element.metadata else 'fas fa-comment icon' }}"></i>
+                                        <i class="{{ 'fa-solid fa-circle-question icon' if 'clarification_reasoning' in element.metadata else 'fa-circle-question fa-regular icon' }}"></i>
                                         <div style="display: flex; flex-direction: column; gap: 1em;">
 
                                             <div class="question">
@@ -370,6 +414,47 @@
                         </div>
                     </div>
                 </div>
+                {% if not redact_cost_information %}
+                <div>
+                    <b>LLM Requests:</b>
+                    <div class="collapsible_section">
+                        <label for="collapsible">Click to expand</label>
+                        <input type="checkbox" class="collapsible_toggle">
+                        <div class="collapsible_content">
+                            <elements class="collapsible_content">
+                                {% for element in result.llm_request_history %}
+                                    <element>
+                                        <i class="{{ 'fas fa-comment icon' if 'prompt' in element['element_type'] else 'fas fa-comments icon' }}"></i>
+                                        <div style="display: flex; flex-direction: column; gap: 1em;">
+
+                                            <div>
+                                                {{ loop.index }}/{{ result.metadata.llm_request_count }}:
+                                                <span class="fixed">{{ element['name'] }}: {{ element['element_type'] }}</span>
+                                            </div>
+
+                                            <div class="token_metrics">
+                                                <div class="metric">
+                                                    <span class="metric_name">Prompt<br/>Tokens:</span>
+                                                    <span class="metric_value"><b>{{ element['prompt_tokens'] }}</b></span>
+                                                </div>
+                                                <div class="metric">
+                                                    <span class="metric_name">Completion<br/>Tokens:</span>
+                                                    <span class="metric_value"><b></b>{{ element['completion_tokens'] }}</b></span>
+                                                </div>
+                                                <div class="metric">
+                                                    <span class="metric_name">Total<br/>Tokens:</span>
+                                                    <span class="metric_value"><b></b>{{ element['total_tokens'] }}</b></span>
+                                                </div>
+                                            </div>
+
+                                        </div>
+                                    </element>
+                                {% endfor %}
+                            </elements>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </metadata>
 
@@ -384,6 +469,9 @@
 {% endif %}
 
 
-<footer>{{footer}}</footer>
+<footer>
+    Powered by Plexus&#8482;.
+    <div class="logotype"><a href="https://www.anth.us"><span class="prominent">Anthus</span> AI Solutions</a></div>
+</footer>
 </body>
 </html>

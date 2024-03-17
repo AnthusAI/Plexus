@@ -43,12 +43,13 @@ class CompositeScore(Score):
         self.relevant_quotes = []
 
         # Accumulators for tracking the total expenses.
-        self.llm_request_count = 0
-        self.prompt_tokens     = 0
-        self.completion_tokens = 0
         self.input_cost =  Decimal('0.0')
         self.output_cost = Decimal('0.0')
-        self.total_cost =  Decimal('0.0')
+        self.total_cost =  Decimal('0.0')    
+        self.prompt_tokens     = 0
+        self.completion_tokens = 0
+        self.llm_request_count = 0
+        self.llm_request_history = []
 
         self.element_results = []
         
@@ -532,6 +533,7 @@ class CompositeScore(Score):
             name=name,
             value=value,
             element_results=self.element_results,
+            llm_request_history=self.llm_request_history,
             metadata={
                 "overall_question": self.overall_questions[result_index],
                 "reasoning": self.reasoning[result_index],
