@@ -58,6 +58,14 @@ class Experiment:
         mlflow.end_run()
 
     def start_mlflow_run(self):
+
+        mlflow_tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
+        if mlflow_tracking_uri:
+            logging.info(f"Using MLFlow tracking URL: {mlflow_tracking_uri}")
+            mlflow.set_tracking_uri(mlflow_tracking_uri)
+        else:
+            mlflow.set_tracking_uri(f'file:///{os.path.abspath("./mlruns")}')
+
         mlflow.set_experiment("Accuracy: " + self.scorecard.__class__.name())
 
         try:
@@ -182,10 +190,13 @@ class AccuracyExperiment(Experiment):
         print("Final all scorecard results:\n")
         pretty_printer.pprint(results)
 
+        if not os.path.exists("./tmp/"):
+            os.makedirs("./tmp/")
+
         # Log the raw results data as an artifact in MLFlow.
         scorecard_results = ScorecardResults(results)
-        scorecard_results.save_to_file("mlruns/scorecard_results.json")
-        mlflow.log_artifact("mlruns/scorecard_results.json")
+        scorecard_results.save_to_file("tmp/scorecard_results.json")
+        mlflow.log_artifact("tmp/scorecard_results.json")
 
         logging.info("Scoring completed.")
 
@@ -209,33 +220,33 @@ class AccuracyExperiment(Experiment):
 
         # Log the accuracy heatmap plot as an artifact in MLFlow
         analysis.plot_accuracy_heatmap()
-        mlflow.log_artifact('mlruns/accuracy_heatmap.png')
+        mlflow.log_artifact('tmp/accuracy_heatmap.png')
 
         # Generate an HTML report and log that in MLFlow, too.
         html_report_content = analysis.generate_html_report()
-        with open("mlruns/scorecard_report.html", "w") as file:
+        with open("tmp/scorecard_report.html", "w") as file:
             file.write(html_report_content)
-        mlflow.log_artifact("mlruns/scorecard_report.html")
+        mlflow.log_artifact("tmp/scorecard_report.html")
 
         # Only incorrect scores.
         html_report_content = analysis.generate_html_report(only_incorrect_scores=True)
-        with open("mlruns/scorecard_report_incorrect_scores.html", "w") as file:
+        with open("tmp/scorecard_report_incorrect_scores.html", "w") as file:
             file.write(html_report_content)
-        mlflow.log_artifact("mlruns/scorecard_report_incorrect_scores.html")
+        mlflow.log_artifact("tmp/scorecard_report_incorrect_scores.html")
 
         # Date menu: no costs.
         html_report_content = analysis.generate_html_report(redact_cost_information=True)
-        with open("mlruns/scorecard_report_no_costs.html", "w") as file:
+        with open("tmp/scorecard_report_no_costs.html", "w") as file:
             file.write(html_report_content)
-        mlflow.log_artifact("mlruns/scorecard_report_no_costs.html")
+        mlflow.log_artifact("tmp/scorecard_report_no_costs.html")
 
         # Plot costs and log in MLFlow.
         analysis.plot_scorecard_costs(results=results)
-        mlflow.log_artifact('mlruns/scorecard_input_output_costs.png')
-        mlflow.log_artifact('mlruns/histogram_of_total_costs.png')
-        mlflow.log_artifact('mlruns/distribution_of_input_costs.png')
-        mlflow.log_artifact('mlruns/total_llm_calls_by_score.png')
-        mlflow.log_artifact('mlruns/distribution_of_input_costs_by_element_type.png')
+        mlflow.log_artifact('tmp/scorecard_input_output_costs.png')
+        mlflow.log_artifact('tmp/histogram_of_total_costs.png')
+        mlflow.log_artifact('tmp/distribution_of_input_costs.png')
+        mlflow.log_artifact('tmp/total_llm_calls_by_score.png')
+        mlflow.log_artifact('tmp/distribution_of_input_costs_by_element_type.png')
 
         expenses = self.scorecard.accumulated_expenses()
         logging.info(f"Expenses: {expenses}")
@@ -257,10 +268,10 @@ class AccuracyExperiment(Experiment):
         mlflow.log_metric("cost_per_transcript", expenses['cost_per_transcript'])
 
         # Write out a CSV of incorrect scores.
-        with open("mlruns/scorecard_report_for_incorrect_results.csv", "w") as file:
+        with open("tmp/scorecard_report_for_incorrect_results.csv", "w") as file:
             file.write(analysis.generate_csv_scorecard_report(
                 results=results))
-        mlflow.log_artifact("mlruns/scorecard_report_for_incorrect_results.csv")
+        mlflow.log_artifact("tmp/scorecard_report_for_incorrect_results.csv")
 
     # Function to classify a single transcript and collect metrics
     @retry(

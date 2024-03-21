@@ -116,7 +116,7 @@ class ScorecardResultsAnalysis:
             ax.text(len(heatmap_df.columns) + 0.1, i + 0.5, f"{row_accuracy:.2f}%", va='center', ha='left', transform=ax.transData, fontsize=14, family='monospace')
 
         plt.tight_layout()
-        plt.savefig('mlruns/accuracy_heatmap.png', bbox_inches='tight', pad_inches=0.2)
+        plt.savefig('tmp/accuracy_heatmap.png', bbox_inches='tight', pad_inches=0.2)
 
     def generate_html_report(self, *, only_incorrect_scores=False, redact_cost_information=False,
             title="Scorecard Report",
@@ -376,7 +376,7 @@ class ScorecardResultsAnalysis:
             ax.legend()
 
             fig.tight_layout()
-            plt.savefig('mlruns/scorecard_input_output_costs.png')
+            plt.savefig('tmp/scorecard_input_output_costs.png')
             plt.close(fig)
 
         def plot_histogram_of_total_costs():
@@ -396,7 +396,7 @@ class ScorecardResultsAnalysis:
             ax.set_ylabel('Number of Results')
             ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
 
-            plt.savefig('mlruns/histogram_of_total_costs.png')
+            plt.savefig('tmp/histogram_of_total_costs.png')
             plt.close(fig)
 
         def plot_distribution_of_costs():
@@ -415,7 +415,7 @@ class ScorecardResultsAnalysis:
             plt.setp(pie_wedges[2], color='w')  # Set the color of the autopct texts to white
             ax.set_title('Distribution of Input Costs')
 
-            plt.savefig('mlruns/distribution_of_input_costs.png')
+            plt.savefig('tmp/distribution_of_input_costs.png')
             plt.close(fig)
 
         def plot_distribution_of_costs_by_element_type():
@@ -435,7 +435,7 @@ class ScorecardResultsAnalysis:
             plt.setp(pie_wedges[2], color='w')  # Set the color of the autopct texts to white
             ax.set_title('Distribution of Input Costs by Element Type')
 
-            plt.savefig('mlruns/distribution_of_input_costs_by_element_type.png')
+            plt.savefig('tmp/distribution_of_input_costs_by_element_type.png')
             plt.close(fig)
 
         def plot_total_llm_calls_by_score():
@@ -459,7 +459,7 @@ class ScorecardResultsAnalysis:
             ax.yaxis.get_major_locator().set_params(integer=True)
 
             fig.tight_layout()
-            plt.savefig('mlruns/total_llm_calls_by_score.png')
+            plt.savefig('tmp/total_llm_calls_by_score.png')
             plt.close(fig)
 
         os.makedirs('mlruns', exist_ok=True)
