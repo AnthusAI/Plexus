@@ -6,7 +6,6 @@ import logging
 import requests
 import functools
 import litellm
-import openai
 from openai import OpenAI
 from requests.exceptions import HTTPError
 from tenacity import retry, retry_if_exception_type, wait_random_exponential, stop_after_attempt, retry_if_exception_type, before_sleep_log

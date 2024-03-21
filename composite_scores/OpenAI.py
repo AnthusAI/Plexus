@@ -5,6 +5,7 @@ import time
 import logging
 import requests
 import functools
+import litellm
 import openai
 from openai import OpenAI
 from decimal import Decimal
@@ -17,7 +18,9 @@ from plexus.Score import Score
 from plexus.ScoreResult import ScoreResult
 from plexus.Registries import scorecard_registry
 
-logging.getLogger("openai._base_client").setLevel(logging.INFO)
+# logging.getLogger("openai._base_client").setLevel(logging.INFO)
+
+litellm.set_verbose=True
 
 class ToolCallProcessingError(Exception):
     def __init__(self, exception, message, tool_arguments, *args):
@@ -92,8 +95,8 @@ class OpenAICompositeScore(CompositeScore):
         if previous_message is not None:
             messages.insert(1, previous_message)
 
-        for message in messages:
-            logging.info(f"{message['role']}:\n{message['content']}\n")
+        # for message in messages:
+        #     logging.info(f"{message['role']}:\n{message['content']}\n")
 
         response = self.openai_api_request(
             name=name,
@@ -262,11 +265,9 @@ class OpenAICompositeScore(CompositeScore):
 
         logging.debug("Messages to OpenAI:\n%s", json.dumps(messages, indent=4))
 
-        client = openai.OpenAI()
-
         # Construct the dictionary for the arguments
         request_arguments = {
-            "model": self.model_name,
+            # "model": self.model_name,
             "messages": messages,
             "max_tokens": max_tokens,
             "timeout": 45,
@@ -283,18 +284,17 @@ class OpenAICompositeScore(CompositeScore):
             request_arguments["tool_choice"] = {"type": "function", "function": {"name": tools[0]['function']['name']}}
 
         # Use the constructed dictionary as **kwargs to pass to the function
-        client = openai.OpenAI()
-        response = client.chat.completions.create(**request_arguments)
+        response = litellm.completion("azure/CallCriteriaGPT35Turbo16k", **request_arguments)
 
         self.llm_request_count += 1
 
         # Calculate costs
         cost_details = calculate_cost(
             model_name =    self.model_name,
-            input_tokens =  response.usage.prompt_tokens,
-            output_tokens = response.usage.completion_tokens
+            input_tokens =  response['usage']['prompt_tokens'],
+            output_tokens = response['usage']['completion_tokens']
         )
-        logging.info(f"Token counts:  Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}")
+        logging.info(f"Token counts:  Input: {response['usage']['prompt_tokens']}, Output: {response['usage']['completion_tokens']}")
         logging.info(f"Costs:  Input: {cost_details['input_cost']}, Output: {cost_details['output_cost']}, Total: {cost_details['total_cost']}")
 
         self.llm_request_history.append({
@@ -302,9 +302,9 @@ class OpenAICompositeScore(CompositeScore):
             'element_type': element_type,
             'request': request_arguments,
             'response': response,
-            'prompt_tokens': response.usage.prompt_tokens,
-            'completion_tokens': response.usage.completion_tokens,
-            'total_tokens': response.usage.total_tokens,
+            'prompt_tokens': response['usage']['prompt_tokens'],
+            'completion_tokens': response['usage']['completion_tokens'],
+            'total_tokens': response['usage']['total_tokens'],
             'input_cost': cost_details['input_cost'],
             'output_cost': cost_details['output_cost'],
             'total_cost': cost_details['total_cost']

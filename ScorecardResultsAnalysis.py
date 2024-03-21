@@ -80,12 +80,10 @@ class ScorecardResultsAnalysis:
                 annotations.append(annotation_row)
             return heatmap_data, annotations
 
-        # Assuming self.evaluation_results is already populated with accuracy data
-        # Extract heatmap data and annotations from evaluation_results
         heatmap_data, annotations = _prepare_heatmap_data(self)
 
         # Convert the list of rows into a DataFrame
-        score_names = self._extract_score_names()  # Assuming this method is implemented
+        score_names = self._extract_score_names()
         heatmap_df = pd.DataFrame(heatmap_data, columns=score_names)
 
         if heatmap_df.empty:
@@ -129,13 +127,18 @@ class ScorecardResultsAnalysis:
         visualization_tasks = []
         with ThreadPoolExecutor() as executor:
             for scorecard_result in self.scorecard_results.data:
-                for score_result in scorecard_result['results']:    
+                for score_result in scorecard_result['results']:
 
                     # Add the session ID to it.
                     scorecard_result['results'][score_result]['session_id'] = \
                         scorecard_result['session_id']
+                    
+                    # Add this one to the list if it meets the criteria
+                    if not (only_incorrect_scores and scorecard_result['results'][score_result]['correct']):
+                        results.append(scorecard_result['results'][score_result])
 
-                    if scorecard_result['results'][score_result]['error'] is None:
+                    if (scorecard_result['results'][score_result]['error'] is None and
+                        scorecard_result['results'][score_result]['decision_tree'] is not None):
                         task = executor.submit(
                             self.visualize_decision_path,
                             score_result=scorecard_result['results'][score_result],
@@ -149,16 +152,14 @@ class ScorecardResultsAnalysis:
             # Process completed tasks
             for future, scorecard_result, score_result in visualization_tasks:
                 visualization_image_path = future.result()
-                # Encode the image as base64
-                with open(visualization_image_path, "rb") as image_file:
-                    encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-                
-                # Embed the base64-encoded image in the HTML
-                scorecard_result['results'][score_result]['visualization_image_base64'] = encoded_string
 
-                # Add this one to the list if it meets the criteria
-                if not (only_incorrect_scores and scorecard_result['results'][score_result]['correct']):
-                    results.append(scorecard_result['results'][score_result])
+                # Sometimes the path will be None because we don't draw visualizations
+                # for secondary scores with a parent score because it's the parent score's
+                # decision tree that produces the result for a secondary score.
+                if visualization_image_path is not None:
+                    with open(visualization_image_path, "rb") as image_file:
+                        encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+                    scorecard_result['results'][score_result]['visualization_image_base64'] = encoded_string
 
         # Extra metadata at the overall experiment level.
         metrics = {
@@ -193,6 +194,8 @@ class ScorecardResultsAnalysis:
                     'value': f"${production_cost_per_transcript:.2f}"
                 }
             })
+
+        results.reverse()
 
         # Use Jinja2 to generate the HTML report.
         self.env = Environment(
@@ -265,6 +268,7 @@ class ScorecardResultsAnalysis:
             # Create the outcome nodes within this subgraph
             for outcome, color in outcome_colors.items():
                 s.node(outcome_nodes[outcome], outcome.upper(), color=color, fontcolor='white')
+                created_nodes[outcome.upper()] = outcome_nodes[outcome]
 
         def did_element_decision_happen(element_name, element_results):
             return any(result.metadata['element_name'] == element_name for result in element_results)
@@ -292,23 +296,34 @@ class ScorecardResultsAnalysis:
                     dot.edge(parent_id, outcome_node_id, label=decision_made, color=edge_color, fontcolor=edge_color, penwidth=edge_penwidth, labeldistance='5')
                 return
             
+            # If there are multiple decision values for this tree then pick the first one.
+            if isinstance(tree, list):
+                element = tree[0]['value'].upper()
+            else:
+                element = tree['element']
+
+            normalized_decision_label = None
+
             # Check if the node has already been created
-            if tree['element'] in created_nodes:
-                node_id = created_nodes[tree['element']]
+            if element in created_nodes:
+                node_id = created_nodes[element]
+                normalized_decision_label = parent_element_name
             else:
                 node_id = f"node_{len(created_nodes)}"
-                created_nodes[tree['element']] = node_id
-                decision_label = tree['element']
+                created_nodes[element] = node_id
+                decision_label = element
                 normalized_decision_label = CompositeScore.normalize_element_name(decision_label)
                 it_was_positive = was_element_positive(normalized_decision_label, element_results)
                 node_color = '#339933' if it_was_positive else '#DD3333' if normalized_decision_label in [result.metadata['element_name'] for result in element_results] else '#666666'
                 dot.node(node_id, decision_label, style='filled, rounded', color=node_color, fontcolor='white')
 
             # Connect decision nodes to their parent.
-            logging.debug(f"Creating edge from {parent_id} to {node_id} with label {decision_made}")
             if parent_id is not None:
+                logging.debug(f"Creating edge from {parent_id} to {node_id} with label {decision_made}")
                 parent_decision_result = was_element_positive(CompositeScore.normalize_element_name(parent_element_name), element_results)
-                did_decision_happen = did_element_decision_happen(CompositeScore.normalize_element_name(normalized_decision_label), element_results)
+                did_decision_happen = False
+                if normalized_decision_label is not None:
+                    did_decision_happen = did_element_decision_happen(CompositeScore.normalize_element_name(normalized_decision_label), element_results)
                 if did_decision_happen and decision_made == 'yes' and parent_decision_result:
                     dot.edge(parent_id, node_id, label=decision_made, penwidth='3', labeldistance='5')
                 elif did_decision_happen and decision_made == 'no' and not parent_decision_result:
@@ -370,7 +385,7 @@ class ScorecardResultsAnalysis:
             ax.bar(x + width/2, output_costs, width, label='Output Costs', color=fuchsia)
 
             ax.set_ylabel('Costs')
-            ax.set_title('Costs by score and type')
+            ax.set_title('Costs by Score')
             ax.set_xticks(x)
             ax.set_xticklabels(score_names, rotation=45, ha="right")
             ax.legend()
@@ -391,7 +406,7 @@ class ScorecardResultsAnalysis:
 
             fig, ax = plt.subplots(figsize=(10, 6))
             ax.hist(total_costs, bins=20, color=sky_blue, edgecolor=bluish_grey)
-            ax.set_title('Histogram of Total Costs for Different Results')
+            ax.set_title('Histogram of Total Costs for Different Call Sessions')
             ax.set_xlabel('Total Cost')
             ax.set_ylabel('Number of Results')
             ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
@@ -413,7 +428,7 @@ class ScorecardResultsAnalysis:
             fig, ax = plt.subplots(figsize=(6, 6))
             pie_wedges = ax.pie(input_costs, labels=score_names, autopct='%1.1f%%', startangle=140, colors=colors[:len(score_names)])
             plt.setp(pie_wedges[2], color='w')  # Set the color of the autopct texts to white
-            ax.set_title('Distribution of Input Costs')
+            ax.set_title('Distribution of Input Costs by Score')
 
             plt.savefig('tmp/distribution_of_input_costs.png')
             plt.close(fig)
@@ -475,6 +490,7 @@ class ScorecardResultsAnalysis:
 
         for scorecard_result in results:
             for question_name, score_result in scorecard_result['results'].items():
-                report += f"{scorecard_result['session_id']}, {question_name}, {score_result['human_label']}, {score_result['value']}, ,\n"
+                if score_result['correct'] != True:
+                    report += f"{scorecard_result['session_id']}, {question_name}, {score_result['human_label']}, {score_result['value']}, ,\n"
                         
         return report

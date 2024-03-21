@@ -178,13 +178,13 @@ class AccuracyExperiment(Experiment):
             # Collect the results as they are completed
             for future in as_completed(future_to_index):
                 index = future_to_index[future]
-                try:
-                    result = future.result()
-                    logging.info(f"Transcript {index} classified.")
-                    logging.info(f"Result: {result}")
-                    results.append(result)
-                except Exception as e:
-                    logging.exception(f"Error processing transcript at index {index}: {e}")
+                # try:
+                result = future.result()
+                logging.info(f"Transcript {index} classified.")
+                logging.info(f"Result: {result}")
+                results.append(result)
+                # except Exception as e:
+                #     logging.exception(f"Error processing transcript at index {index}: {e}")
 
         pretty_printer = pprint.PrettyPrinter()
         print("Final all scorecard results:\n")
@@ -288,17 +288,17 @@ class AccuracyExperiment(Experiment):
         # Some of our test data has escaped newlines, so we need to replace them with actual newlines.
         transcript = transcript.replace("\\n", "\n")
 
-        logging.info(f"Fixed transcript content: {transcript}")
-
-        # Extract human labels for each question from the DataFrame row
-        human_labels = {question_name: row[question_name] for question_name in self.score_names()}
+        logging.debug(f"Fixed transcript content: {transcript}")
 
         scorecard_results = self.scorecard.score_entire_transcript(
             transcript=transcript,
             subset_of_score_names=self.score_names()
         )
 
-        for question_name in self.score_names():
+        # Extract human labels for each question from the DataFrame row
+        human_labels = {question_name: row[question_name] for question_name in scorecard_results.keys()}
+
+        for question_name in scorecard_results.keys():
             try:
                 score_result = scorecard_results[question_name]
 
@@ -309,10 +309,10 @@ class AccuracyExperiment(Experiment):
 
                 # Apply overrides if available
                 if session_id in self.override_data:
-                    for question_name, correct_value in self.override_data[session_id].items():
-                        if question_name in human_labels:
-                            logging.info(f"OVERRIDING human label for question '{question_name}' in session '{session_id}' from '{human_labels[question_name]}' to '{correct_value}'")
-                            human_labels[question_name] = correct_value
+                    for override_question_name, correct_value in self.override_data[session_id].items():
+                        if override_question_name in human_labels:
+                            logging.info(f"OVERRIDING human label for question '{override_question_name}' in session '{session_id}' from '{human_labels[override_question_name]}' to '{correct_value}'")
+                            human_labels[override_question_name] = correct_value
 
                 human_label = str(human_labels[question_name]).lower()
                 if human_label == 'nan':

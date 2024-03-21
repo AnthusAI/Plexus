@@ -240,6 +240,15 @@ class CompositeScore(Score):
         """
 
     @abstractmethod
+    def compute_element_for_chunk(self, *, name, element_type, previous_message=None, prompt, chunk):
+        """
+        The orchestration framework in CompositeScore calls this function to do the work specific to a composite score element.
+        
+        This method must be implemented by subclasses.
+        """
+        pass
+
+    @abstractmethod
     def compute_element(self, *, name, transcript=None):
         """
         Compute the result for a single element of the composite score.  This method is
@@ -404,7 +413,7 @@ class CompositeScore(Score):
             A boolean value that indicates whether the score result was "Yes" or not.
         """
         print("\n---\n")
-        logging.info(f'Classifying {name} for {self.__class__.__name__}')
+        logging.info(f'Classifying {name} for {self.name}')
 
         element = self.get_element_by_name(name=name)
         if callable(element):
@@ -428,7 +437,7 @@ class CompositeScore(Score):
         
         # Set this to 1 to process them in sequence.  Slower but cheaper since it will short-cirtuit
         # in the decision tree and potentially not run a lot of the elements.
-        max_threads = 20
+        max_threads = 1
 
         if max_threads > 1:
             # Parallel processing with ThreadPoolExecutor
@@ -460,9 +469,19 @@ class CompositeScore(Score):
         return re.sub(r"\W+", "_", name).lower().strip("_")
 
     def compute_result(self, tree=None):
+        # Initialize to the score's decision tree at the start.
+        # After that, each iteration's tree is a sub-tree, as we make decisions.
         tree = tree if tree is not None else self.decision_tree
-        if isinstance(tree, str):
-            return getattr(self, tree)()
+
+        if isinstance(tree, list) and all(isinstance(item, dict) and 'score' in item and 'value' in item for item in tree):
+            ordered_results = {item['score']: item['value'] for item in tree}
+            return self.multiple(ordered_results)
+        elif isinstance(tree, str):
+            # Call the method dynamically and store the result
+            method_result = getattr(self, tree)()
+
+            # Wrap the result in a list containing a single dictionary.
+            return [method_result]
 
         element_name = CompositeScore.normalize_element_name(tree["element"])
         decision_result = self.compute_element(name=element_name)
@@ -529,17 +548,33 @@ class CompositeScore(Score):
         """
         Return the result with the reasoning and relevant quote.
         """
+
+        # Find the name unless the `multiple()` function needed to explicitly set it.
+        if name is None:
+            name = self.name
+
+        # This stuff only goes into the first result or else
+        # costs and stuff could get double-counted.
+        element_results = []
+        llm_request_history = []
+        decision_tree = None
+        if result_index == 0:
+            element_results = self.element_results
+            llm_request_history = self.llm_request_history
+            decision_tree = self.decision_tree
+
         return ScoreResult(
             name=name,
             value=value,
-            element_results=self.element_results,
-            llm_request_history=self.llm_request_history,
             metadata={
                 "overall_question": self.overall_questions[result_index],
                 "reasoning": self.reasoning[result_index],
                 "relevant_quote": self.relevant_quotes[result_index]
             },
-            decision_tree=self.decision_tree
+
+            element_results=element_results,
+            llm_request_history=llm_request_history,
+            decision_tree=decision_tree
         )
 
     def yes(self):
@@ -580,7 +615,7 @@ class CompositeScore(Score):
 
     def multiple(self, ordered_results):
         results = []
-        for index, (key, value) in enumerate(ordered_results.items()):
+        for index, (key, value) in enumerate(ordered_results.items()):            
             results.append(
                 self.return_result_with_context(
                     name=key,

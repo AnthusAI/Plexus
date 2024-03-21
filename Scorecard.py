@@ -89,12 +89,7 @@ class Scorecard:
                 transcript=transcript
             )
             score_result = score_instance.compute_result()
-
-            score_result.name = score_name
-
-            score_result_value = score_result.value
-            logging.info(f"Score result: {score_result_value}")
-            # logging.info(f"Score element summary: prompt_tokens={score_result.element_results['prompt_tokens']}, completion_tokens={score_result.element_results['completion_tokens']}, input_cost={score_result.element_results['input_cost']}, output_cost={score_result.element_results['output_cost']}, total_cost={score_result.element_results['total_cost']}, value={score_result.element_results['value']}")
+            logging.info(f"Score result: {score_result}")
 
             score_total_cost = score_instance.accumulated_expenses()
             logging.info(f"Total cost: {score_total_cost}")
@@ -105,7 +100,7 @@ class Scorecard:
             self.output_cost         += score_total_cost['output_cost']
             self.total_cost          += score_total_cost['total_cost']
 
-            score_result.metadata.update(score_total_cost)
+            score_result[0].metadata.update(score_total_cost)
             return score_result
 
         else:
@@ -126,10 +121,11 @@ class Scorecard:
             for future in as_completed(future_to_score_name):
                 score_name = future_to_score_name[future]
                 try:
-                    result = future.result()
-                    score_results_dict[score_name] = result.to_dict()
+                    results_list = future.result()
+                    for result in results_list:
+                        score_results_dict[result.name] = result.to_dict()
                 except Exception as e:
-                    logging.exception(f"Exception occurred for score {score_name}: {e}")
+                    logging.exception(f"Exception occurred for score {score_name}: {e}", exc_info=True)
                     score_results_dict[score_name] = {'value': "Error", 'error': str(e)}
 
         return score_results_dict
