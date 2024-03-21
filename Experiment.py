@@ -118,18 +118,22 @@ class AccuracyExperiment(Experiment):
 
     def load_override_data(self):
         override_data = {}
-        for filename in os.listdir(self.override_folder):
-            if filename.endswith(".csv"):
-                filepath = os.path.join(self.override_folder, filename)
-                df = pd.read_csv(filepath, keep_default_na=False)  # Prevents automatic conversion of "NA" to NaN
-                for _, row in df.iterrows():
-                    session_id = row['session_id']
-                    question_name = row['question_name'].strip()
-                    correct_value = row['correct_value'].strip()
-                    if correct_value:  # Ignore rows where correct_value is an empty string
-                        if session_id not in override_data:
-                            override_data[session_id] = {}
-                        override_data[session_id][question_name] = correct_value
+        if os.path.exists(self.override_folder):
+            for filename in os.listdir(self.override_folder):
+                if filename.endswith(".csv"):
+                    filepath = os.path.join(self.override_folder, filename)
+                    try:
+                        df = pd.read_csv(filepath, keep_default_na=False)  # Prevents automatic conversion of "NA" to NaN
+                        for _, row in df.iterrows():
+                            session_id = row['session_id']
+                            question_name = row['question_name'].strip()
+                            correct_value = row['correct_value'].strip()
+                            if correct_value:  # Ignore rows where correct_value is an empty string
+                                if session_id not in override_data:
+                                    override_data[session_id] = {}
+                                override_data[session_id][question_name] = correct_value
+                    except Exception as e:
+                        print(f"Could not read {filepath}: {e}")
         return override_data
 
     @Experiment.time_execution
