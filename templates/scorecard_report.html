@@ -299,11 +299,13 @@
                         <div><b>Relevant quote:</b> <i>"{{ result.metadata.relevant_quote }}"</i></div>
                         {% endif %}
                     </div>
+                    {% if result.visualization_image_base64 %}
                     <div style="flex: 2; display: flex; justify-content: center; align-items: start;">
                         <img onclick="enlargeImage(this.src)" style="width: 100%; height: auto; max-width: 500px; margin-top: 2em;" src="data:image/png;base64,{{ result.visualization_image_base64 }}" alt="Decision Path Visualization">
                     </div>
+                    {% endif %}
                 </div>
-                {% if not redact_cost_information %}
+                {% if not redact_cost_information and result.metadata.llm_request_count %}
                 <div>
                     <b>Cost:</b>
                     <div class="collapsible_section">
@@ -347,6 +349,7 @@
                         </div>
                     </div>
                 </div>
+                {% if result.element_results %}
                 <div>
                     <b>Decision Elements:</b>
                     <div class="collapsible_section">
@@ -414,7 +417,8 @@
                         </div>
                     </div>
                 </div>
-                {% if not redact_cost_information %}
+                {% endif %}
+                {% if not redact_cost_information and result.llm_request_history %}
                 <div>
                     <b>LLM Requests:</b>
                     <div class="collapsible_section">

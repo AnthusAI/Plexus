@@ -2,12 +2,23 @@ import os
 import re
 import json
 import unittest
+from unittest.mock import ANY
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from plexus.CompositeScore import CompositeScore
+from plexus.ScoreResult import ScoreResult
 
 class MockCompositeScore(CompositeScore):
+    def __init__(self, transcript):
+        super().__init__(transcript=transcript)
+        self.elements = [
+            {
+                'name': 'mock_element',
+                'prompt': "Mock prompt for testing purposes."
+            }
+        ]
+        
     def compute_element(self, name, transcript):
         pass  # Dummy implementation
 
@@ -16,6 +27,53 @@ class MockCompositeScore(CompositeScore):
 
     def construct_system_prompt(self, *, transcript):
         return "Mock prompt"  # Dummy implementation
+    
+    def compute_element_for_chunk(self, *, name, element_type, previous_message=None, prompt, chunk):
+        # Mock implementation for testing
+        mock_response = ScoreResult(value="yes")
+        mock_response.is_yes = MagicMock(return_value=True)
+        mock_response.metadata = {
+            'response_content': "Mock response content",
+            'reasoning': "Mock reasoning",
+            'relevant_quote': "Mock relevant quote"
+        }
+        return mock_response
+
+class TestProcessTranscriptChunk(unittest.TestCase):
+    def setUp(self):
+        self.composite_score = MockCompositeScore(transcript="Initial transcript")
+
+    @patch('plexus.CompositeScore.CompositeScore.compute_element_for_chunk')
+    def test_process_transcript_chunk(self, mock_compute_element_for_chunk):
+        # Mock the behavior of compute_element_for_chunk
+        mock_response = MagicMock()
+        mock_response.is_yes.return_value = True
+        mock_response.metadata = {'response_content': "Mock response content"}
+        self.composite_score.compute_element_for_chunk = MagicMock()
+        mock_compute_element_for_chunk = self.composite_score.compute_element_for_chunk
+        mock_compute_element_for_chunk.return_value = mock_response
+
+        # Define the input for the test
+        chunk = "Test transcript chunk"
+        name = "mock_element"
+
+        # Call the method with the test input
+        result = self.composite_score._process_transcript_chunk(
+            name=name,
+            transcript_chunk=chunk
+        )
+
+        # Assert the expected outcome
+        self.assertTrue(result.is_yes())
+        self.assertEqual(result.metadata['response_content'], "Mock response content")
+
+        # Assert that compute_element_for_chunk was called with the expected arguments
+        mock_compute_element_for_chunk.assert_called_once_with(
+            name='mock_element',
+            element_type='prompt',  # Add this line to match the actual call
+            prompt='Mock prompt for testing purposes.',  # Specify the exact prompt if necessary
+            chunk='Test transcript chunk'
+        )
 
 class TestCompositeScore(unittest.TestCase):
 
@@ -50,16 +108,6 @@ class TestCompositeScore(unittest.TestCase):
 class TestGetElementByName(unittest.TestCase):
 
     def setUp(self):
-        class MockCompositeScore(CompositeScore):
-            def compute_element(self, name, transcript):
-                pass
-
-            def compute_result(self):
-                pass
-
-            def construct_system_prompt(self, *, transcript):
-                return "Please answer the following questions about dependents:"
-
         self.composite_score = MockCompositeScore(transcript="Test transcript")
         self.composite_score.elements = [
             {'name': 'element1', 'value': 'value1'},
@@ -81,16 +129,6 @@ class TestGetElementByName(unittest.TestCase):
 class TestAccumulatedExpenses(unittest.TestCase):
 
     def setUp(self):
-        class MockCompositeScore(CompositeScore):
-            def compute_element(self, name, transcript):
-                pass
-
-            def compute_result(self):
-                pass
-
-            def construct_system_prompt(self, *, transcript):
-                return "Please answer the following questions about dependents:"
-
         self.composite_score = MockCompositeScore(transcript="Test transcript")
 
     def test_accumulated_expenses(self):
@@ -198,6 +236,31 @@ lowercase: true
 """
         result = MockCompositeScore.extract_yaml_section(markdown_content, 'Preprocessing')
         self.assertEqual(None, result)
+
+    def test_extract_yaml_section_with_multiple_values(self):
+        markdown_content = """
+# Decision Tree
+- element: first_decision
+  true:
+    - score: "Score1"
+      value: "yes"
+    - score: "Score2"
+      value: "high"
+  false: "no"
+"""
+        expected_decision_tree = [
+            {
+                'element': 'first_decision',
+                True: [
+                    {'score': 'Score1', 'value': 'yes'},
+                    {'score': 'Score2', 'value': 'high'}
+                ],
+                False: 'no'
+            }
+        ]
+
+        result = MockCompositeScore.extract_yaml_section(markdown_content, 'Decision Tree')
+        self.assertEqual(expected_decision_tree, result)
 
 class TestJSONSerialization(unittest.TestCase):
     def setUp(self):
