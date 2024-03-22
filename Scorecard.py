@@ -26,12 +26,10 @@ class Scorecard:
         self.output_cost = Decimal('0.0')
         self.total_cost =  Decimal('0.0')
 
-    # A human-readable name.  Based on the class name by default, but you can do better than that.
     @classmethod
     def name(cls):
         return cls.__name__
 
-    # Abstract function to be implemented by subclasses for returning a list of Score names.
     @classmethod
     def score_names(cls):
         pass
