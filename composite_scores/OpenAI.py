@@ -2,6 +2,7 @@ import os
 import re
 import json
 import time
+import httpx
 import logging
 import requests
 import functools
@@ -257,7 +258,7 @@ class OpenAICompositeScore(CompositeScore):
 
     @retry(
         wait=wait_random_exponential(multiplier=5, max=600),  # Exponential backoff with random jitter
-        retry=retry_if_exception_type((openai.RateLimitError, openai.APIConnectionError, openai.InternalServerError)),
+        retry=retry_if_exception_type((openai.RateLimitError, openai.APIConnectionError, openai.InternalServerError, httpx.HTTPStatusError)),
         stop=stop_after_attempt(100),
         before_sleep=before_sleep_log(logging, logging.INFO)
     )
