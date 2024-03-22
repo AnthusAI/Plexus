@@ -87,9 +87,14 @@ class Experiment:
         mlflow.log_param("number_of_transcripts_to_sample", self.number_of_transcripts_to_sample)
 
     def score_names(self):
-        if not hasattr(self, 'memoized_score_names'):
-            self.memoized_score_names = self.subset_of_score_names if self.subset_of_score_names is not None else self.scorecard.score_names()
-        return self.memoized_score_names
+        return self.subset_of_score_names if self.subset_of_score_names is not None else self.scorecard.score_names()
+
+    def score_names_to_process(self):
+        all_score_names_to_process = self.scorecard.score_names_to_process()
+        if self.subset_of_score_names is not None:
+            return [score_name for score_name in self.subset_of_score_names if score_name in all_score_names_to_process]
+        else:
+            return all_score_names_to_process
 
     @staticmethod
     def time_execution(func):
@@ -296,7 +301,7 @@ class AccuracyExperiment(Experiment):
 
         scorecard_results = self.scorecard.score_entire_transcript(
             transcript=transcript,
-            subset_of_score_names=self.score_names()
+            subset_of_score_names=self.score_names_to_process()
         )
 
         # Extract human labels for each question from the DataFrame row

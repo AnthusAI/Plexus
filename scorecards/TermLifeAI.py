@@ -40,21 +40,4 @@ class TermLifeAI(Scorecard):
         "Wrap Up - Application Underwrite": {}
     }
 
-    @classmethod
-    def score_names(cls):
-        """
-        The list of scores in the whole scorecard.
-        """
-        return cls.scores.keys()
-
-    @classmethod
-    def score_names_to_process(cls):
-        """
-        Some scores are comuted implicitly by other scores and don't need to be directly processed.
-        """
-        return [
-            score_name for score_name, details in cls.scores.items()
-            if not details.get('primary')
-        ]
-
 TermLifeAI.load_and_register_scores()

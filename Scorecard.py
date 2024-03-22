@@ -34,7 +34,11 @@ class Scorecard:
     # Abstract function to be implemented by subclasses for returning a list of Score names.
     @classmethod
     def score_names(cls):
-        pass
+        """
+        The list of all scores in the whole scorecard.
+        Incuding scores that are computed implicitly by other scores.
+        """
+        return cls.scores.keys()
 
     @classmethod
     def score_names_to_process(cls):
@@ -43,7 +47,7 @@ class Scorecard:
         """
         return [
             score_name for score_name, details in cls.scores.items()
-            if not details.get('primary')
+            if 'primary' not in details
         ]
 
     @classmethod
@@ -110,7 +114,7 @@ class Scorecard:
 
     def score_entire_transcript(self, *, transcript, subset_of_score_names=None, thread_pool_size=25):
         if subset_of_score_names is None:
-            subset_of_score_names = self.score_names()
+            subset_of_score_names = self.score_names_to_process()
 
         score_results_dict = {}
         with ThreadPoolExecutor(max_workers=thread_pool_size) as executor:
