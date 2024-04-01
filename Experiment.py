@@ -66,7 +66,10 @@ class Experiment:
         else:
             mlflow.set_tracking_uri(f'file:///{os.path.abspath("./mlruns")}')
 
-        mlflow.set_experiment("Accuracy: " + self.scorecard.__class__.name())
+        experiment_name = self.scorecard.__class__.name()
+        if os.getenv('MLFLOW_EXPERIMENT_NAME'):
+            experiment_name = experiment_name + " - " + os.getenv('MLFLOW_EXPERIMENT_NAME')
+        mlflow.set_experiment(experiment_name)
 
         try:
             mlflow.start_run()
