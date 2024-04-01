@@ -548,7 +548,7 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
             element_type=element_type,
             messages=new_chat_history,
             tools=self.reasoning_and_relevant_quote_tool,
-            max_tokens=512
+            max_tokens=1024
         )
 
         logging.info(f"Response: {response}")
