@@ -437,7 +437,7 @@ class CompositeScore(Score):
         
         # Set this to 1 to process them in sequence.  Slower but cheaper since it will short-cirtuit
         # in the decision tree and potentially not run a lot of the elements.
-        max_threads = 1
+        max_threads = 20
 
         if max_threads > 1:
             # Parallel processing with ThreadPoolExecutor
