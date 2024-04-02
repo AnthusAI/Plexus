@@ -283,7 +283,9 @@
                 <div style="display: flex; justify-content: space-between; gap: 2em;">
                     <div style="flex: 3; display: flex; flex-direction: column; gap: 1em;">
                         <div><h2>Score: {{ result.name }}</h2></div>
-                        <div><b>Overall question:</b> {{ result.metadata.overall_question }}</div>
+                        {% if result.metadata %}
+                            <div><b>Overall question:</b> {{ result.metadata.overall_question }}</div>
+                        {% endif %}
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); font-weight: bold; margin: 0 10%; gap: 3em;">
                             <div>Answer</div>
                             <div>Label</div>
@@ -294,9 +296,14 @@
                             <div class="label">{{ result.human_label|upper }}</div>
                             <div class="label {{ 'correct' if result.correct else 'incorrect' }}">{{ 'YES' if result.correct else 'NO' }}</div>
                         </div>
-                        <div><b>Reasoning:</b> {{ result.metadata.reasoning|replace("\n", "<br/>") }}</div>
-                        {% if result.metadata.relevant_quote|trim %}
-                        <div><b>Relevant quote:</b> <i>"{{ result.metadata.relevant_quote }}"</i></div>
+                        {% if result.metadata %}
+                            <div><b>Reasoning:</b> {{ result.metadata.reasoning|replace("\n", "<br/>") }}</div>
+                            {% if result.metadata.relevant_quote|trim %}
+                            <div><b>Relevant quote:</b> <i>"{{ result.metadata.relevant_quote }}"</i></div>
+                            {% endif %}
+                        {% endif %}
+                        {% if result.error %}
+                            <div><b>Error:</b> {{ result.error }}</div>
                         {% endif %}
                     </div>
                     {% if result.visualization_image_base64 %}
@@ -305,7 +312,7 @@
                     </div>
                     {% endif %}
                 </div>
-                {% if not redact_cost_information and result.metadata.llm_request_count %}
+                {% if not redact_cost_information and result.metadata and result.metadata.llm_request_count %}
                 <div>
                     <b>Cost:</b>
                     <div class="collapsible_section">
