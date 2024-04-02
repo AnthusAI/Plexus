@@ -59,6 +59,8 @@ class Experiment:
 
     def start_mlflow_run(self):
 
+        logging.getLogger('mlflow').setLevel(logging.WARNING)
+
         mlflow_tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
         if mlflow_tracking_uri:
             logging.info(f"Using MLFlow tracking URL: {mlflow_tracking_uri}")
