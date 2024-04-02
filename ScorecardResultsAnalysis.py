@@ -197,6 +197,10 @@ class ScorecardResultsAnalysis:
 
         results.reverse()
 
+        for result in results:
+            if 'metadata' not in result:
+                logging.error(f"Result for session ID {result['session_id']} is missing the 'metadata' key")
+
         # Use Jinja2 to generate the HTML report.
         self.env = Environment(
             loader=PackageLoader('plexus', 'templates')

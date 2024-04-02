@@ -548,7 +548,7 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
             element_type=element_type,
             messages=new_chat_history,
             tools=self.reasoning_and_relevant_quote_tool,
-            max_tokens=1024
+            max_tokens=2048
         )
 
         logging.info(f"Response: {response}")
@@ -558,6 +558,16 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
             tool_call = tool_calls[0]
             tool_results = json.loads(tool_call.function.arguments)
         except Exception as e:
+            try:
+                repaired_json = tool_call.function.arguments + '"}'
+                tool_results = json.loads(repaired_json)
+            except json.JSONDecodeError:
+                raise ToolCallProcessingError(
+                    message="Failed to process tool call arguments after attempting to repair JSON",
+                    exception=e,
+                    tool_arguments=tool_call.function.arguments
+                )
+
             raise ToolCallProcessingError(
                 message="Failed to process tool call arguments",
                 exception=e,

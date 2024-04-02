@@ -128,7 +128,11 @@ class Scorecard:
                         score_results_dict[result.name] = result.to_dict()
                 except Exception as e:
                     logging.exception(f"Exception occurred for score {score_name}: {e}", exc_info=True)
-                    score_results_dict[score_name] = {'value': "Error", 'error': str(e)}
+                    score_results_dict[score_name] = {
+                        'name':  score_name,
+                        'value': "Error",
+                        'error': str(e)
+                    }
 
         return score_results_dict
 
