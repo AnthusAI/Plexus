@@ -32,7 +32,7 @@ class TermLifeAI(Scorecard):
         "Solution Fit": {},
         "Ask Doubles Pitch": {},
         "Assumptive Doubles Pitch": {"primary": "Ask Doubles Pitch"},
-        "Length of Debt": {},
+        "Length Of Debt": {},
         "Wrap Up - Carrier Name": {},
         "Wrap Up - Coverage Amount": {},
         "Wrap Up - Exam and Details": {},
