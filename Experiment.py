@@ -38,7 +38,8 @@ class Experiment:
         sampling_method = 'random',
         random_seed = None,
         session_ids_to_sample = None,
-        subset_of_score_names = None
+        subset_of_score_names = None,
+        experiment_label = None
     ):
         self.scorecard = scorecard
         self.labeled_samples_filename = labeled_samples_filename
@@ -49,6 +50,8 @@ class Experiment:
         # Parse lists, if available.
         self.session_ids_to_sample = session_ids_to_sample
         self.subset_of_score_names = subset_of_score_names
+
+        self.experiment_label = experiment_label
 
     def __enter__(self):
         self.start_mlflow_run()
@@ -71,6 +74,8 @@ class Experiment:
         experiment_name = self.scorecard.__class__.name()
         if os.getenv('MLFLOW_EXPERIMENT_NAME'):
             experiment_name = experiment_name + " - " + os.getenv('MLFLOW_EXPERIMENT_NAME')
+        if self.experiment_label:
+            experiment_name = experiment_name + " - " + self.experiment_label
         mlflow.set_experiment(experiment_name)
 
         try:
