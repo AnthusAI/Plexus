@@ -287,12 +287,10 @@ class CompositeScore(Score):
                 selected_results.append(results[0])
         return selected_results
 
-    def remove_system_messages_and_concatenate_chat_history(self, selected_results):
+    def concatenate_chat_history(self, selected_results):
         concatenated_chat_history = []
         for result in selected_results:
-            # Skip the first message if it's from the 'system' role
-            chat_history_without_system = result.metadata['chat_history'][1:] if result.metadata['chat_history'][0]['role'] == 'system' else result.metadata['chat_history']
-            concatenated_chat_history.extend(chat_history_without_system)
+            concatenated_chat_history.extend(result.metadata['chat_history'])
         return concatenated_chat_history
 
     def compute_reasoning_and_relevant_quote(compute_result_method):
@@ -300,7 +298,7 @@ class CompositeScore(Score):
             
             grouped_results = self.group_element_results_by_name()
             selected_results = self.select_element_results_to_include(grouped_results)
-            concatenated_chat_history = self.remove_system_messages_and_concatenate_chat_history(selected_results)
+            concatenated_chat_history = self.concatenate_chat_history(selected_results)
   
             # Accumulate the reasoning and relevant quotes.
             self._compute_reasoning_and_relevant_quote_implementation(

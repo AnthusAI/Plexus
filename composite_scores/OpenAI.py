@@ -536,7 +536,6 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
             logging.info("Prompt:\n%s", json.dumps(prompts[0], indent=4))
 
         new_chat_history = (
-            [self.construct_system_prompt(transcript=self.filtered_transcript)] +
             chat_history +
             prompts
         )
