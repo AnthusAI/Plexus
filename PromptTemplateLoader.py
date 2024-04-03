@@ -44,8 +44,14 @@ class PromptTemplateLoader:
                     current_section = text
                     parsing_rules = False
                     sections[current_section] = {'prompt': '', 'rules': None}
-            elif node['type'] in ['paragraph', 'block_quote', 'list_item']:
+            elif node['type'] in ['blank_line', 'paragraph', 'block_code', 'block_quote', 'list_item']:
                 text = extract_text_from_node(node)
+                if node['type'] == 'block_code':
+                    text = "```\n" + text + "\n```"
+                elif node['type'] == 'list_item':
+                    text = '* ' + text
+                elif node['type'] == 'block_quote':
+                    text = '> ' + text
                 if current_section:
                     if parsing_rules:
                         sections[current_section]['rules'] += text + '\n'

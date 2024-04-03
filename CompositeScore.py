@@ -240,7 +240,7 @@ class CompositeScore(Score):
         """
 
     @abstractmethod
-    def compute_element_for_chunk(self, *, name, element_type, previous_message=None, prompt, chunk):
+    def compute_element_for_chunk(self, *, name, element_type, previous_messages=None, prompt, chunk):
         """
         The orchestration framework in CompositeScore calls this function to do the work specific to a composite score element.
         
@@ -373,10 +373,7 @@ class CompositeScore(Score):
                 element_type='clarification',
                 
                 # Add the previous response content to the chat history.
-                previous_message={
-                    "role": "assistant",
-                    "content": score_result.metadata['response_content']
-                },
+                previous_messages=score_result.metadata['chat_history'],
                 prompt=rules,
                 chunk=transcript_chunk
             )

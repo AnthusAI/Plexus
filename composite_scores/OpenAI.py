@@ -13,6 +13,7 @@ from decimal import Decimal
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
 from requests.exceptions import HTTPError
 from tenacity import retry, retry_if_exception_type, wait_random_exponential, stop_after_attempt, retry_if_exception_type, before_sleep_log
+from jinja2 import Environment, PackageLoader, select_autoescape
 
 from plexus.CompositeScore import CompositeScore
 from plexus.Score import Score
@@ -76,7 +77,7 @@ class OpenAICompositeScore(CompositeScore):
         stop=stop_after_attempt(4),
         before_sleep=before_sleep_log(logging, logging.INFO)
     )
-    def compute_element_for_chunk(self, *, name, element_type, previous_message=None, prompt, chunk):
+    def compute_element_for_chunk(self, *, name, element_type, previous_messages=None, prompt, chunk):
         """
         The orchestration framework in CompositeScore calls this function to do the OpenAI work.
         """
@@ -89,15 +90,16 @@ class OpenAICompositeScore(CompositeScore):
         #     formatted_messages += f"{message['role']}:\n{message['content']}\n\n"
         # logging.info(f"Messages to OpenAI:\n{formatted_messages}")
 
+        new_message = self.construct_element_prompt(prompt=prompt, transcript=chunk)
         messages = [
             self.construct_system_prompt(transcript=chunk),
-            self.construct_element_prompt(prompt=prompt, transcript=chunk)
+            new_message            
         ]
-        if previous_message is not None:
-            messages.insert(1, previous_message)
+        if previous_messages is not None:
+            messages = previous_messages + [new_message]
 
-        # for message in messages:
-        #     logging.info(f"{message['role']}:\n{message['content']}\n")
+        for message in messages:
+            logging.debug(f"{message['role']}:\n{message['content']}\n")
 
         response = self.openai_api_request(
             name=name,
@@ -317,6 +319,9 @@ class OpenAICompositeScore(CompositeScore):
 
         context = self.get_element_by_name(name='context')['prompt']
  
+        system_prompt_template = Environment().from_string(context)
+        context = system_prompt_template.render(transcript=transcript)
+
         return {
             "role": "system",
             "content": f"""
@@ -328,19 +333,17 @@ Your job is to examine chunks of text and make yes-or-no classifications, and al
 Background:
 The system transcribes phone calls that are about 25 minutes long, filters them to find chunks that might possibly be relevant.  The chunks will be out of context and that might start with someone confusingly speaking an answer to a question that was trimmed out of the chunk of text.  Not all parts of the filtered transcript will necessarily apply to the question, you will almost always see extra noise.  Don't assume that statements you see without clear context are relevant to the question.  If you see a "Yes, we do", or, "No, I don't", then don't assume that it's about the question we're asking.  If you see someone talk about a question, don't assume it's about the question we're asking.  The agent will be filling out a form so they will be talking about questions in the call but that's different from our question that we're trying to answer here.  There will be a lot of irrelevant distractions in the transcripts, so understand that you'll hear stray things, and disregard anything without clear applicability to the question at hand.
 
+Context:
 {context}
-
-Transcript:
-This is a chunk sliced out of a filtered transcript of a call between a customer and a call center agent:
-
-```
-{transcript}
-```
 """
     }
 
     # Construct the message for the request
     def construct_element_prompt(self, *, prompt, transcript):
+
+        system_prompt_template = Environment().from_string(prompt)
+        prompt = system_prompt_template.render(transcript=transcript)
+
         return {
             "role": "user",
             "content": prompt
