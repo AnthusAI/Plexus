@@ -7,6 +7,8 @@ from graphviz import Digraph
 from jinja2 import Environment, PackageLoader, select_autoescape
 import csv
 import base64
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 import mlflow

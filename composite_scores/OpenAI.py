@@ -259,7 +259,7 @@ class OpenAICompositeScore(CompositeScore):
             return self.clarify_yes_or_no(name=name, messages=messages, top_p=top_p + 0.1)
 
     @retry(
-        wait=wait_random_exponential(multiplier=5, max=600),  # Exponential backoff with random jitter
+        wait=wait_random_exponential(multiplier=2, max=600),  # Exponential backoff with random jitter
         retry=retry_if_exception_type((openai.RateLimitError, openai.APIConnectionError, openai.InternalServerError, httpx.HTTPStatusError)),
         stop=stop_after_attempt(100),
         before_sleep=before_sleep_log(logging, logging.INFO)
