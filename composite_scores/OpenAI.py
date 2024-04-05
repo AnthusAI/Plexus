@@ -557,7 +557,7 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
             prompts
         )
 
-        logging.info("Summarization chat history:\n%s", json.dumps(new_chat_history, indent=4))
+        logging.debug("Summarization chat history:\n%s", json.dumps(new_chat_history, indent=4))
 
         response = self.openai_api_request(
             name='summary',

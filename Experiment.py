@@ -201,14 +201,14 @@ class AccuracyExperiment(Experiment):
                 # try:
                 result = future.result()
                 logging.info(f"Transcript {index} classified.")
-                logging.info(f"Result: {result}")
+                logging.debug(f"Result: {result}")
                 results.append(result)
                 # except Exception as e:
                 #     logging.exception(f"Error processing transcript at index {index}: {e}")
 
-        pretty_printer = pprint.PrettyPrinter()
-        print("Final all scorecard results:\n")
-        pretty_printer.pprint(results)
+        # pretty_printer = pprint.PrettyPrinter()
+        # print("Final all scorecard results:\n")
+        # pretty_printer.pprint(results)
 
         if not os.path.exists("./tmp/"):
             os.makedirs("./tmp/")

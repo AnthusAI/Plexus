@@ -91,7 +91,7 @@ class Scorecard:
                 transcript=transcript
             )
             score_result = score_instance.compute_result()
-            logging.info(f"Score result: {score_result}")
+            logging.debug(f"Score result: {score_result}")
 
             score_total_cost = score_instance.accumulated_expenses()
             logging.info(f"Total cost: {score_total_cost}")
