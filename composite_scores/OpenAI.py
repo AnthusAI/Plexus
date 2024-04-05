@@ -101,13 +101,6 @@ class OpenAICompositeScore(CompositeScore):
         for message in messages:
             logging.debug(f"{message['role']}:\n{message['content']}\n")
 
-        response = self.openai_api_request(
-            name=name,
-            element_type=element_type,
-            messages=messages,
-            # tools=self.yes_no_tool
-        )
-
         score_result_metadata = {
             'prompt_tokens': 0,
             'completion_tokens': 0,
@@ -116,9 +109,47 @@ class OpenAICompositeScore(CompositeScore):
             'total_cost':  Decimal('0.0')
         }
 
-        # The tool call, from the API response.
-        response_content = response.choices[0].message.content
-        logging.debug(f"Raw response content: {response_content}")
+        # The element name and prompt.
+        score_result_metadata['element_name'] = name
+        score_result_metadata['element_type'] = element_type
+
+        element = self.get_element_by_name(name=name)
+        if element is None:
+            raise ValueError(f"No element found with the name: {name}")
+        score_result_metadata['prompt'] = element['prompt']
+
+        # Add this response to the chat history.
+        # self.chat_history.append(
+        #     self.construct_element_response_prompt(
+        #         element_response=tool_results))
+
+        # We need the filtered transcript also, for the report.
+        score_result_metadata['transcript'] = chunk
+
+        try:
+            response = self.openai_api_request(
+                name=name,
+                element_type=element_type,
+                messages=messages,
+                # tools=self.yes_no_tool
+            )
+
+            response_content = response.choices[0].message.content
+            logging.debug(f"Raw response content: {response_content}")
+        except openai.APIError as e:
+            logging.error(f"OpenAI API Error: {str(e)}")
+            
+            # Return 'No' if there are any errors processing this chunk.
+            # For example: 'Safety' guardrail errors from the model concluding that the transcript chunk is
+            # about suicide or sex or something.
+            # TODO: Make this more robust, possibly by breaking the chunk into sub-chunks and attempting to process
+            # each sub-chunk separately, so that we will discard less transcript data if any sub-chunk fails.
+            score_result_metadata['value'] = "No"
+            return ScoreResult(value="No", metadata=score_result_metadata)
+
+        if response.choices[0]['finish_reason'] == 'content_filter':
+            score_result_metadata['value'] = "No"
+            return ScoreResult(value="No", metadata=score_result_metadata)
 
         # Add a log of this chat history including the response to the score result metadata.
         messages.append(
@@ -153,23 +184,6 @@ class OpenAICompositeScore(CompositeScore):
             yes_or_no = self.clarify_yes_or_no(name=name, messages=messages)
             answer = yes_or_no['answer']
             messages.extend(yes_or_no['messages'])
-
-        # The element name and prompt.
-        score_result_metadata['element_name'] = name
-        score_result_metadata['element_type'] = element_type
-
-        element = self.get_element_by_name(name=name)
-        if element is None:
-            raise ValueError(f"No element found with the name: {name}")
-        score_result_metadata['prompt'] = element['prompt']
-
-        # Add this response to the chat history.
-        # self.chat_history.append(
-        #     self.construct_element_response_prompt(
-        #         element_response=tool_results))
-
-        # We need the filtered transcript also, for the report.
-        score_result_metadata['transcript'] = chunk
 
         logging.info(f"Response:  {response_content}")
         logging.info(f"Value:     {answer}")
@@ -264,7 +278,7 @@ class OpenAICompositeScore(CompositeScore):
         stop=stop_after_attempt(100),
         before_sleep=before_sleep_log(logging, logging.INFO)
     )
-    def openai_api_request(self, name, element_type, messages, tools=None, tool_choice=None, top_p=0.4, seed=None, max_tokens=768):
+    def openai_api_request(self, name, element_type, messages, tools=None, tool_choice=None, top_p=0.05, seed=None, max_tokens=768):
 
         logging.debug("Messages to OpenAI:\n%s", json.dumps(messages, indent=4))
 
