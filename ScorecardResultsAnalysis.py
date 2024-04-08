@@ -118,7 +118,7 @@ class ScorecardResultsAnalysis:
         plt.tight_layout()
         plt.savefig('tmp/accuracy_heatmap.png', bbox_inches='tight', pad_inches=0.2)
 
-    def generate_html_report(self, *, only_incorrect_scores=False, redact_cost_information=False,
+    def generate_html_report(self, *, only_incorrect_scores=False, redact_cost_information=False, include_evaluation=True,
             title="Scorecard Report",
             subtitle="This report contains the results of scorecard evaluations, with detailed reasoning and explanations for each score."
         ):
@@ -159,17 +159,20 @@ class ScorecardResultsAnalysis:
                 # for secondary scores with a parent score because it's the parent score's
                 # decision tree that produces the result for a secondary score.
                 if visualization_image_path is not None:
-                    with open(visualization_image_path, "rb") as image_file:
+                    with open(visualization_image_path + '.png', "rb") as image_file:
                         encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
                     scorecard_result['results'][score_result]['visualization_image_base64'] = encoded_string
 
         # Extra metadata at the overall experiment level.
-        metrics = {
-            'overall_accuracy': {
-                'label': 'Overall Accuracy',
-                'value': f"{self.calculate_overall_accuracy()['overall_accuracy_percentage']:.2f}%"
-            }
-        }
+        metrics = {}
+        if include_evaluation:
+            metrics.update({
+                'overall_accuracy': {
+                    'label': 'Overall Accuracy',
+                    'value': f"{self.calculate_overall_accuracy()['overall_accuracy_percentage']:.2f}%"
+                }
+            })
+
         if not redact_cost_information:
             total_cost = self.calculate_total_cost()
             number_of_transcripts = len(self.scorecard_results.data)
@@ -213,6 +216,7 @@ class ScorecardResultsAnalysis:
             metrics=metrics,
             title=title,
             subtitle=subtitle,
+            include_evaluation=include_evaluation,
             only_incorrect_scores=only_incorrect_scores,
             redact_cost_information=redact_cost_information,
         )
@@ -222,7 +226,7 @@ class ScorecardResultsAnalysis:
     def visualize_decision_path(self, *, score_result, decision_tree, element_results, session_id, score_name, filename=None):
 
         if filename is None:
-            filename = f'/tmp/decision_path_visualization_{session_id}_{CompositeScore.normalize_element_name(score_name)}.png'
+            filename = f'tmp/decision_path_visualization_{session_id}_{CompositeScore.normalize_element_name(score_name)}'
 
         # Define the outcome nodes with unique IDs at the beginning of the method
         outcome_nodes = {
@@ -347,10 +351,10 @@ class ScorecardResultsAnalysis:
         add_to_graph(decision_tree)
 
         # Render the graph to a file
-        with open(f"{filename}.dot", "w") as dotfile:
-            dotfile.write(dot.source)
+        # with open(f"{filename}.dot", "w") as dotfile:
+        #     dotfile.write(dot.source)
         dot.render(filename, format='png', view=False)
-        return filename + '.png'
+        return filename
 
     def plot_scorecard_costs(self, results):
 

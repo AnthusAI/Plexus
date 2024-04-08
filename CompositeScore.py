@@ -5,6 +5,7 @@ import yaml
 import importlib
 from decimal import Decimal
 from abc import ABC, abstractmethod
+import tiktoken
 
 from plexus.Score import Score
 from plexus.ScoreResult import ScoreResult
@@ -288,10 +289,36 @@ class CompositeScore(Score):
         return selected_results
 
     def concatenate_chat_history(self, selected_results):
+        # Correcting the model version based on the latest guidance
+        encoder = tiktoken.encoding_for_model("gpt-3.5")
         concatenated_chat_history = []
+        current_token_count = 0
+        token_limit = 15000
+
         for result in selected_results:
-            concatenated_chat_history.extend(result.metadata['chat_history'])
+            for message in result.metadata['chat_history']:
+                if message['role'] in ['user', 'assistant']:
+                    # Encode the message content and count tokens
+                    encoded_message = encoder.encode(message['content'])
+                    message_token_count = len(encoded_message)
+
+                    # Check if adding this message exceeds the token limit
+                    if current_token_count + message_token_count <= token_limit:
+                        concatenated_chat_history.append(message)
+                        current_token_count += message_token_count
+                    else:
+                        # Stop adding messages if we reach the token limit
+                        return concatenated_chat_history
         return concatenated_chat_history
+
+    def get_total_token_count(self, chat_history):
+        encoder = tiktoken.encoding_for_model("gpt-3.5")
+        # This method might not be necessary if the count is maintained during concatenation
+        total_token_count = 0
+        for message in chat_history:
+            encoded_message = encoder.encode(message['content'])
+            total_token_count += len(encoded_message.tokens)
+        return total_token_count
 
     def compute_reasoning_and_relevant_quote(compute_result_method):
         def wrapper(self, *, value, result_index=0, **kwargs):

@@ -277,24 +277,29 @@
         {% set context.current_session_id = result.session_id %}
         {% set context.section_opened = true %}
     {% endif %}
-    <score class="{{ 'correct' if result.correct else 'incorrect' }}">
+    <score class="{{ 'correct' if result.include_evaluation and result.correct else 'incorrect' if result.include_evaluation else '' }}">
+
         <metadata>
             <div style="display: flex; flex-direction: column; gap: 1em;">
                 <div style="display: flex; justify-content: space-between; gap: 2em;">
                     <div style="flex: 3; display: flex; flex-direction: column; gap: 1em;">
                         <div><h2>Score: {{ result.name }}</h2></div>
-                        {% if result.metadata %}
+                        {% if result.metadata and include_evaluation %}
                             <div><b>Overall question:</b> {{ result.metadata.overall_question }}</div>
                         {% endif %}
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); font-weight: bold; margin: 0 10%; gap: 3em;">
                             <div>Answer</div>
+                            {% if result.include_evaluation %}
                             <div>Label</div>
                             <div>Match?</div>
+                            {% endif %}
                         </div>
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 3em; margin: 0 10%;">
                             <div class="label">{{ result.value|upper }}</div>
+                            {% if result.include_evaluation %}
                             <div class="label">{{ result.human_label|upper }}</div>
                             <div class="label {{ 'correct' if result.correct else 'incorrect' }}">{{ 'YES' if result.correct else 'NO' }}</div>
+                            {% endif %}
                         </div>
                         {% if result.metadata %}
                             <div><b>Reasoning:</b> {{ result.metadata.reasoning|replace("\n", "<br/>") }}</div>
