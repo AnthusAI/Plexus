@@ -277,7 +277,7 @@
         {% set context.current_session_id = result.session_id %}
         {% set context.section_opened = true %}
     {% endif %}
-    <score class="{{ 'correct' if result.include_evaluation and result.correct else 'incorrect' if result.include_evaluation else '' }}">
+    <score class="{{ 'correct' if include_evaluation and result.correct else 'incorrect' if include_evaluation else '' }}">
 
         <metadata>
             <div style="display: flex; flex-direction: column; gap: 1em;">
@@ -289,14 +289,14 @@
                         {% endif %}
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); font-weight: bold; margin: 0 10%; gap: 3em;">
                             <div>Answer</div>
-                            {% if result.include_evaluation %}
+                            {% if include_evaluation %}
                             <div>Label</div>
                             <div>Match?</div>
                             {% endif %}
                         </div>
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 3em; margin: 0 10%;">
                             <div class="label">{{ result.value|upper }}</div>
-                            {% if result.include_evaluation %}
+                            {% if include_evaluation %}
                             <div class="label">{{ result.human_label|upper }}</div>
                             <div class="label {{ 'correct' if result.correct else 'incorrect' }}">{{ 'YES' if result.correct else 'NO' }}</div>
                             {% endif %}
