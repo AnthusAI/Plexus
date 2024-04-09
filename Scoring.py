@@ -39,6 +39,8 @@ from .Scorecard import Scorecard
 from .ScorecardResults import ScorecardResults
 from .ScorecardResultsAnalysis import ScorecardResultsAnalysis
 
+from .storage.FileStorageBackend import FileStorageBackend
+
 from dotenv import load_dotenv
 load_dotenv()
 server_name   = os.getenv('DB_SERVER')
@@ -93,9 +95,16 @@ class Scoring:
         # Fetch any scoring requests that don't already have associated jobs from the database.
         logging.info("Fetching scoring requests...")
         requests = AnthusScorecardRequest.new_requests(session)
+        # requests = session.query(AnthusScorecardRequest).all()
 
-        # TODO: Remove this!
-        requests = requests[:1] # Limit to just the first request.
+        # Limit to just the first request.
+        requests = requests[:1]
+
+        if len(requests) == 0:
+            logging.warn(f"No new requests.")
+            exit()
+
+        logging.info(f"Scoring the first new request: {requests[0].report_id}")
 
         results = []
         max_thread_pool_size = 10
@@ -119,7 +128,8 @@ class Scoring:
         if not os.path.exists("./tmp/"):
             os.makedirs("./tmp/")
 
-        logging.info("Scoring completed.  Writing reports...")
+        logging.info(f"Scoring completed for job ID: {results[0]['job_id']}")
+        logging.info("Writing reports...")
 
         # Generate JSON log from scoring that batch.
         scorecard_results = ScorecardResults(results)
@@ -137,7 +147,49 @@ class Scoring:
         with open("tmp/scorecard_report.html", "w") as file:
             file.write(html_report_content)
 
-        expenses = self.scorecard.accumulated_expenses()
+        # Move the artifacts into place on the storage backend.
+        if not os.path.exists("./results/"):
+            os.makedirs("./results/")
+        storage = FileStorageBackend(base_path='./results')
+        json_file_path = storage.compute_file_path(
+            scorecard_id = results[0]['scorecard_id'],
+            report_id =    results[0]['report_id'],
+            job_id =       results[0]['job_id'],
+            extension =    "json"
+        )
+        storage.save_file(tmp_path="tmp/scorecard_results.json", target_path=json_file_path)
+
+        html_file_path = storage.compute_file_path(
+            scorecard_id = results[0]['scorecard_id'],
+            report_id =    results[0]['report_id'],
+            job_id =       results[0]['job_id'],
+            suffix =       '-with-costs',
+            extension =    'html'
+        )
+        storage.save_file(tmp_path="tmp/scorecard_report_with_costs.html", target_path=html_file_path)
+
+        html_file_path = storage.compute_file_path(
+            scorecard_id = results[0]['scorecard_id'],
+            report_id =    results[0]['report_id'],
+            job_id =       results[0]['job_id'],
+            extension =    'html'
+        )
+        storage.save_file(tmp_path="tmp/scorecard_report.html", target_path=html_file_path)
+
+        logging.info("Wrote reports.")
+
+        # Commit the DB transaction after successfully writing the artifact files to the data lake.
+        self.session.commit()
+
+        logging.info("Triggering Call Criteria processing...")
+
+        job_id = results[0]['job_id']
+        job = session.query(AnthusScorecardJob).filter_by(job_id=job_id).first()
+        # job.reset_call_criteria_processing()
+        job.trigger_call_criteria_processing()
+
+        job.job_status = 'processed'
+        self.session.commit()
 
         logging.info("Done.")
 
@@ -149,14 +201,13 @@ class Scoring:
         retry=retry_if_exception_type((Timeout, RequestException))  # retry on specific exceptions
     )
     def score_request(self, *, request):
-        report = request.report()
+        report = request.report
 
         job = AnthusScorecardJob(
             report_id=report.id,
             job_status='pending'
         )
         self.session.add(job)
-        self.session.commit()
 
         transcript = request.transcript()
         logging.debug(f"Transcript content: {transcript}")
@@ -183,15 +234,17 @@ class Scoring:
                 quote = score_result['metadata']['relevant_quote']
             )
             self.session.add(result)
-            self.session.commit()
 
             # Add the full transcript to the score result, for the reports.
             score_result['transcript'] = transcript
 
-        job.job_status = 'completed'
-        self.session.commit()
+        job.job_status = 'scored'
+        session.flush() # Flush the session without committing to get a UUID for the job.
 
         return {
-            'session_id': report.session_id,
-            'results': scorecard_results,
+            'report_id':    report.id,
+            'scorecard_id': request.scorecard_id,
+            'job_id':       job.job_id,
+            'session_id':   report.session_id,
+            'results':      scorecard_results,
         }

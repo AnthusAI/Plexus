@@ -183,7 +183,7 @@ class OpenAICompositeScore(CompositeScore):
             reasoning = response_content
             yes_or_no = self.clarify_yes_or_no(name=name, messages=messages)
             answer = yes_or_no['answer']
-            messages.extend(yes_or_no['messages'])
+            # messages.extend(yes_or_no['messages'])
 
         logging.info(f"Response:  {response_content}")
         logging.info(f"Value:     {answer}")
@@ -520,11 +520,13 @@ The overall question we're trying to answer through those previous questions is:
 
 Our logic concludes, based on the sub-questions, that the overall answer is: {result}.
 
-Provide your reasoning for that answer and if possible a breif relevant quote from the transcript using the `reasoning_and_relevant_quote_tool()` function.
+We need to provide reasoning for that answer.  Please look through the chat history at your responses for each chunk of transcript, which contain reasoning.  Sometimes they also provide relevant quotes.
 
-You have some hints in your responses to the sub-questions.
+Please try to summarize your overall reasoning based on your own responses in the chat history.  If there are any relevant quotes in your responses in the chat history that would help explain your summary of your reasoning then please include a brief quote or two.  Do not imagine quotes that don't exist in this chat history.
 
-The relevant quotes should be short, succinct.  Just one or two lines.  Don't provide any quotes if the answer is no.
+Provide your reasoning and if the quote using the `reasoning_and_relevant_quote_tool()` function.
+
+The relevant quotes should be short, succinct.  Just one or two lines.  Don't provide any quotes if the answer is no.  Only provide quotes that are in the transcript, from your responses, don't offer quotes that were examples from the prompts from the user.
 """
 }]
 
@@ -557,8 +559,7 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
             prompts
         )
 
-        logging.debug("Summarization chat history:\n%s", json.dumps(new_chat_history, indent=4))
-
+        logging.info("Summarization chat history:\n%s", json.dumps(new_chat_history, indent=4))
         response = self.openai_api_request(
             name='summary',
             element_type=element_type,
