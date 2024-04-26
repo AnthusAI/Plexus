@@ -17,9 +17,11 @@ setup(
         'seaborn',
         'litellm',
         'boto3',
-        'git+https://github.com/Anth-us/openai_cost_calculator.git@main',
         'graphviz',
         'mistune',
         'pyyaml',
+    ],
+    dependency_links=[
+        'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator'
     ]
 )
