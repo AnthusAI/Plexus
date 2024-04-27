@@ -8,7 +8,6 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 import csv
 import base64
 import matplotlib
-import pkg_resources
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
@@ -207,8 +206,11 @@ class ScorecardResultsAnalysis:
             if 'metadata' not in result:
                 logging.error(f"Result for session ID {result['session_id']} is missing the 'metadata' key")
 
-        # Get the absolute path to the templates directory using pkg_resources
-        templates_dir = pkg_resources.resource_filename('plexus', 'templates')
+        # Get the absolute path to the directory containing the current file
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # Construct the path to the templates directory relative to the current file
+        templates_dir = os.path.join(current_dir, 'templates')
 
         # Use Jinja2 to generate the HTML report
         self.env = Environment(
