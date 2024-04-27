@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 from graphviz import Digraph
-from jinja2 import Environment, PackageLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 import csv
 import base64
 import matplotlib
@@ -206,9 +206,15 @@ class ScorecardResultsAnalysis:
             if 'metadata' not in result:
                 logging.error(f"Result for session ID {result['session_id']} is missing the 'metadata' key")
 
-        # Use Jinja2 to generate the HTML report.
+        # Get the absolute path to the directory containing the current file
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # Construct the path to the templates directory relative to the current file
+        templates_dir = os.path.join(current_dir, 'templates')
+
+        # Use Jinja2 to generate the HTML report
         self.env = Environment(
-            loader=PackageLoader('plexus', 'templates')
+            loader=FileSystemLoader(templates_dir)
         )
         template = self.env.get_template('scorecard_report.html')
         report = template.render(
