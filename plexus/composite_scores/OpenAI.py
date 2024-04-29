@@ -449,10 +449,21 @@ Relevant quote: "{element_response['relevant_quote']}"
                 raise ValueError("The 'result_index' must be 0 when 'overall_question' is a single value.")
             question = self.overall_questions[0]
 
+        # Extract decision element results
+        decision_element_results = self.element_results
+        # Filter results where the answer was 'yes' and collect reasoning
+        yes_reasoning = [elem.metadata.get('reasoning', '') for elem in decision_element_results if elem.metadata.get('value', '').lower() == 'yes']
+        # Use reasoning from 'yes' answers if available, otherwise use from 'no' answers
+        if yes_reasoning:
+            decision_reasoning = " ".join(yes_reasoning)
+        else:
+            no_reasoning = [elem.metadata.get('reasoning', '') for elem in decision_element_results if elem.metadata.get('value', '').lower() == 'no']
+            decision_reasoning = " ".join(no_reasoning)
+
         # Compute the reasoning and relevant quote for the specific result
         self.compute_single_reasoning_and_relevant_quote(
             chat_history=chat_history,
-            question=question,
+            question=question + " " + decision_reasoning,
             result=value)
 
         # Return the reasoning and relevant quote for this specific result
