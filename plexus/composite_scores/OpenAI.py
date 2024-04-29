@@ -183,7 +183,7 @@ class OpenAICompositeScore(CompositeScore):
             reasoning = response_content
             yes_or_no = self.clarify_yes_or_no(name=name, messages=messages)
             answer = yes_or_no['answer']
-            # messages.extend(yes_or_no['messages'])
+            messages.extend(yes_or_no['messages'])
 
         logging.info(f"Response:  {response_content}")
         logging.info(f"Value:     {answer}")
