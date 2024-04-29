@@ -7,6 +7,11 @@ setup(
     package_data={
         'plexus': ['templates/*'],
     },
+    entry_points={
+        'console_scripts': [
+            'plexus=plexus.cli.CommandLineInterface:main',
+        ],
+    },
     install_requires=[
         'python-dotenv==1.0.0',
         'typer[all]==0.9.0',
