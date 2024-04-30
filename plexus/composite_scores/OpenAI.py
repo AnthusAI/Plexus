@@ -163,17 +163,10 @@ class OpenAICompositeScore(CompositeScore):
         # Extract the first word from the response content, accounting for punctuation
         first_word = re.split(r'\W+', response_content)[0].lower()
 
-        # We might need these too, if the first word thing doesn't work out.
-        first_no_index = response_content.lower().find("no")
-        first_yes_index = response_content.lower().find("yes")
-
         # If the first word is a yes/no then call that the answer.
         if first_word in ["yes", "no"]:
             answer = first_word
             reasoning = response_content[len(first_word):].strip()
-
-            answer = response_content[:3].lower()
-            reasoning = response_content[3:].lstrip(", ")
 
             if reasoning and reasoning[0].islower():
                 reasoning = reasoning.capitalize()
