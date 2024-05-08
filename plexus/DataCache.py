@@ -4,7 +4,13 @@ import json
 from tqdm import tqdm
 import pandas as pd
 from io import StringIO
-import logging
+from plexus.logging import logging
+from plexus.cli.console import console
+from rich.progress import Progress
+from rich.console import Console
+from rich.table import Table
+from rich.columns import Columns
+from functools import partial
 
 class DataCache:
     def __init__(self,
@@ -22,8 +28,7 @@ class DataCache:
         self.local_cache_directory = local_cache_directory
 
         os.makedirs(self.local_cache_directory, exist_ok=True)
-        logging.basicConfig(level=logging.INFO)
-        logging.info("Initialized DataCache with local cache directory at {}".format(self.local_cache_directory))
+        logging.info("Initialized DataCache with local cache directory at [purple][b]{}[/b][/purple]".format(self.local_cache_directory), extra={"highlighter": None})
 
     def execute_athena_query(self, query):
         query_execution_response = self.athena_client.start_query_execution(
@@ -43,11 +48,11 @@ class DataCache:
         query_execution_response = self.athena_client.get_query_execution(QueryExecutionId=query_execution_id)
         query_execution_state = query_execution_response['QueryExecution']['Status']['State']
 
-        while query_execution_state in ['QUEUED', 'RUNNING']:
-            logging.info(f"Query in state '{query_execution_state}', waiting for completion...")
-            time.sleep(5)
-            query_execution_response = self.athena_client.get_query_execution(QueryExecutionId=query_execution_id)
-            query_execution_state = query_execution_response['QueryExecution']['Status']['State']
+        with console.status(f"Query in state '{query_execution_state}', waiting for completion...", spinner_style="boxBounce2"):
+            while query_execution_state in ['QUEUED', 'RUNNING']:
+                time.sleep(5)
+                query_execution_response = self.athena_client.get_query_execution(QueryExecutionId=query_execution_id)
+                query_execution_state = query_execution_response['QueryExecution']['Status']['State']
 
         if query_execution_state == 'SUCCEEDED':
             query_results_paginator = self.athena_client.get_paginator('get_query_results')
@@ -112,13 +117,11 @@ class DataCache:
         # return metadata, transcript, transcript_txt
         return metadata, transcript_txt
 
-    def load_dataframe(self, scorecard_id):
+    def load_dataframe(self, *, scorecard_id):
         dataframe_cache_filename = os.path.join(self.local_cache_directory, f"scorecard_id={scorecard_id}.h5")
         if os.path.exists(dataframe_cache_filename):
-            print(f"Loading dataframe from cache at {dataframe_cache_filename}")
+            logging.info(f"Loading dataframe from cache at [purple][b]{dataframe_cache_filename}[/b][/purple]", extra={"highlighter": None})
             return pd.read_hdf(dataframe_cache_filename, key='df')
-
-        print(f"Loading dataframe from Athena for scorecard {scorecard_id}")
 
         scorecard_query = f"""
             SELECT DISTINCT report_id
@@ -133,20 +136,25 @@ class DataCache:
         from concurrent.futures import ThreadPoolExecutor
         import functools
 
-        def process_report(report_id):
+        def process_report(report_id, progress, downloading_progress):
             report_metadata, report_transcript_txt = self.download_report(scorecard_id, report_id)
+            progress.update(downloading_progress, advance=1)
             report_row = {'report_id': report_id}
             for score in report_metadata.get('scores', []):
                 report_row[score['name']] = score['answer']
             report_row['Transcription'] = report_transcript_txt
             return report_row
 
-        with ThreadPoolExecutor() as executor:
-            report_data = list(tqdm(executor.map(process_report, report_ids), total=len(report_ids), desc="Processing reports"))
+        with Progress() as progress:
+            downloading_progress = progress.add_task("[magenta]Downloading report files from training data lake...[magenta]", total=len(report_ids))
+            process_report_with_progress = partial(process_report, progress=progress, downloading_progress=downloading_progress)
+
+            with ThreadPoolExecutor() as executor:
+                report_data = list(executor.map(process_report_with_progress, report_ids))
 
         scorecard_dataframe = pd.DataFrame(report_data)
         scorecard_dataframe.to_hdf(dataframe_cache_filename, key='df', mode='w')
 
-        print(f"Loaded dataframe for scorecard {scorecard_id} with {len(scorecard_dataframe)} rows and columns: {', '.join(scorecard_dataframe.columns)}")
+        logging.info(f"Loaded dataframe for scorecard {scorecard_id} with {len(scorecard_dataframe)} rows and columns: {', '.join(scorecard_dataframe.columns)}")
 
         return scorecard_dataframe

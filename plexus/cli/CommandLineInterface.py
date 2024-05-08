@@ -1,9 +1,11 @@
 import click
+from rich.console import Console
 from collections import OrderedDict
 from .DataCommands import data
 from .EvaluationCommands import evaluate
 from .TrainingCommands import train
 from .ScoringCommands import score
+from  .console import console
 
 from dotenv import load_dotenv
 load_dotenv()

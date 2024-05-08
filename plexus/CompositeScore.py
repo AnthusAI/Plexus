@@ -150,6 +150,9 @@ class CompositeScore(Score):
 
     @classmethod
     def create_from_markdown(cls, *, scorecard, score_name, markdown_file_path):
+        if not os.path.exists(markdown_file_path):
+            return None
+
         with open(markdown_file_path, 'r') as file:
             markdown_content = file.read()
 
