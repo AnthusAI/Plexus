@@ -1,5 +1,6 @@
 import os
 import re
+import yaml
 import json
 import requests
 import json
@@ -11,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from plexus.Score import Score
 from plexus.ScoreResult import ScoreResult
 from plexus.Registries import ScoreRegistry
+from plexus.Registries import scorecard_registry
 from plexus.CompositeScore import CompositeScore
 
 class Scorecard:
@@ -55,6 +57,26 @@ class Scorecard:
         """
         return re.sub(r'\W+', '', score_name.replace(' ', ''))
 
+    @classmethod
+    def create_from_yaml(cls, yaml_file_path):
+        with open(yaml_file_path, 'r') as file:
+            yaml_data = yaml.safe_load(file)
+
+        scorecard_name = list(yaml_data.keys())[0]
+        scorecard_data = yaml_data[scorecard_name]
+
+        scorecard_class = type(scorecard_name, (Scorecard,), {
+            'scorecard_id': classmethod(lambda cls: scorecard_data['properties']['scorecard_id']),
+            'name': classmethod(lambda cls: scorecard_data['properties']['name']),
+            'scorecard_folder_path': scorecard_data['properties']['scorecard_folder_path'],
+            'scores': scorecard_data['scores']
+        })
+
+        scorecard_registry.register(scorecard_data['registry']['key'], scorecard_data['registry']['family'])(scorecard_class)
+        scorecard_class.load_and_register_scores()
+
+        return scorecard_class
+    
     @classmethod
     def load_and_register_scores(cls):
         """
