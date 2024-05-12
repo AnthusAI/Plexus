@@ -8,6 +8,10 @@ class TermLifeAI(Scorecard):
     """
 
     @classmethod
+    def scorecard_id(cls):
+        return '1402'
+
+    @classmethod
     def name(cls):
         return "SelectQuote Term Life AI 3.0"
 

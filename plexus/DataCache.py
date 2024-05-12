@@ -39,7 +39,8 @@ class DataCache:
                 'EncryptionConfiguration': {'EncryptionOption': 'SSE_S3'}
             }
         )
-        logging.info("Executed Athena query, received QueryExecutionId: {}".format(query_execution_response['QueryExecutionId']))
+        logging.info("Started Athena query, received QueryExecutionId: {}".format(query_execution_response['QueryExecutionId']))
+        logging.info("Query: {}".format(query))
         return query_execution_response['QueryExecutionId']
 
     def get_query_results(self, query_execution_id):
@@ -50,7 +51,7 @@ class DataCache:
 
         with console.status(f"Query in state '{query_execution_state}', waiting for completion...", spinner_style="boxBounce2"):
             while query_execution_state in ['QUEUED', 'RUNNING']:
-                time.sleep(5)
+                time.sleep(1)
                 query_execution_response = self.athena_client.get_query_execution(QueryExecutionId=query_execution_id)
                 query_execution_state = query_execution_response['QueryExecution']['Status']['State']
 
@@ -63,6 +64,11 @@ class DataCache:
                 all_query_results.extend(query_results_page['ResultSet']['Rows'])
             
             logging.info("Query succeeded and all results retrieved")
+            number_of_rows = len(all_query_results)
+            number_of_columns = len(all_query_results[0]['Data']) if all_query_results else 0
+            logging.info(f"Query results summary: {number_of_rows} rows and {number_of_columns} columns")
+            if all_query_results:
+                logging.info("First few rows of query results: {}".format(all_query_results[:3]))
             return all_query_results
         elif query_execution_state in ['FAILED', 'CANCELLED']:
             error_message = query_execution_response['QueryExecution']['Status']['StateChangeReason']
@@ -117,44 +123,66 @@ class DataCache:
         # return metadata, transcript, transcript_txt
         return metadata, transcript_txt
 
-    def load_dataframe(self, *, scorecard_id):
-        dataframe_cache_filename = os.path.join(self.local_cache_directory, f"scorecard_id={scorecard_id}.h5")
-        if os.path.exists(dataframe_cache_filename):
-            logging.info(f"Loading dataframe from cache at [purple][b]{dataframe_cache_filename}[/b][/purple]", extra={"highlighter": None})
-            return pd.read_hdf(dataframe_cache_filename, key='df')
+    def load_dataframe(self, *, queries):
+        dataframes = []
 
-        scorecard_query = f"""
-            SELECT DISTINCT report_id
-            FROM "{self.athena_database}"
-            WHERE scorecard_id = '{scorecard_id}'
-        """
-        scorecard_query_execution_id = self.execute_athena_query(scorecard_query)
-        scorecard_query_results = self.get_query_results(scorecard_query_execution_id)
-
-        report_ids = [row['Data'][0]['VarCharValue'] for row in scorecard_query_results[1:]]
-
-        from concurrent.futures import ThreadPoolExecutor
-        import functools
-
-        def process_report(report_id, progress, downloading_progress):
-            report_metadata, report_transcript_txt = self.download_report(scorecard_id, report_id)
-            progress.update(downloading_progress, advance=1)
-            report_row = {'report_id': report_id}
-            for score in report_metadata.get('scores', []):
-                report_row[score['name']] = score['answer']
-            report_row['Transcription'] = report_transcript_txt
-            return report_row
-
-        with Progress() as progress:
-            downloading_progress = progress.add_task("[magenta]Downloading report files from training data lake...[magenta]", total=len(report_ids))
-            process_report_with_progress = partial(process_report, progress=progress, downloading_progress=downloading_progress)
-
+        logging.info("Loading dataframe with queries: {}".format(queries))
+        
+        for query_params in queries:
+            if 'scorecard-id' in query_params:
+                scorecard_id = query_params['scorecard-id']
+                number = query_params.get('number')
+                
+                query = f"""
+                    SELECT DISTINCT report_id
+                    FROM "{self.athena_database}"
+                    WHERE scorecard_id = '{scorecard_id}'
+                """
+                if number:
+                    query += f" LIMIT {number}"
+            elif 'question-id' in query_params and 'answer' in query_params:
+                question_id = query_params['question-id']
+                answer = query_params['answer']
+                number = query_params.get('number')
+                
+                query = f"""
+                    SELECT report_id
+                    FROM (
+                        SELECT report_id, MIN(CASE WHEN t.score.id = {question_id} THEN t.score.answer END) AS answer
+                        FROM "{self.athena_database}"
+                        CROSS JOIN UNNEST(scores) AS t(score)
+                        GROUP BY report_id
+                    )
+                    WHERE answer = '{answer}'
+                """
+                if number:
+                    query += f" LIMIT {number}"
+            else:
+                raise ValueError("Invalid query parameters. Each query must contain either 'scorecard-id' or both 'question-id' and 'answer'.")
+            
+            query_execution_id = self.execute_athena_query(query)
+            query_results = self.get_query_results(query_execution_id)
+            
+            report_ids = [row['Data'][0]['VarCharValue'] for row in query_results[1:]]
+            
+            from concurrent.futures import ThreadPoolExecutor
+            
+            def process_report(report_id):
+                report_metadata, report_transcript_txt = self.download_report(scorecard_id, report_id)
+                report_row = {'report_id': report_id}
+                for score in report_metadata.get('scores', []):
+                    report_row[score['name']] = score['answer']
+                report_row['Transcription'] = report_transcript_txt
+                return report_row
+            
             with ThreadPoolExecutor() as executor:
-                report_data = list(executor.map(process_report_with_progress, report_ids))
-
-        scorecard_dataframe = pd.DataFrame(report_data)
-        scorecard_dataframe.to_hdf(dataframe_cache_filename, key='df', mode='w')
-
-        logging.info(f"Loaded dataframe for scorecard {scorecard_id} with {len(scorecard_dataframe)} rows and columns: {', '.join(scorecard_dataframe.columns)}")
-
-        return scorecard_dataframe
+                report_data = list(executor.map(process_report, report_ids))
+            
+            dataframe = pd.DataFrame(report_data)
+            dataframes.append(dataframe)
+        
+        combined_dataframe = pd.concat(dataframes, ignore_index=True)
+        
+        logging.info(f"Loaded dataframe with {len(combined_dataframe)} rows and columns: {', '.join(combined_dataframe.columns)}")
+        
+        return combined_dataframe
