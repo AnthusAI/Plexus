@@ -6,6 +6,7 @@ import pandas as pd
 from io import StringIO
 from plexus.logging import logging
 from plexus.cli.console import console
+from concurrent.futures import ThreadPoolExecutor
 from rich.progress import Progress
 from rich.console import Console
 from rich.table import Table
@@ -80,16 +81,16 @@ class DataCache:
         transcript_key = f"scorecard_id={scorecard_id}/report_id={report_id}/transcript.json"
         transcript_txt_key = f"scorecard_id={scorecard_id}/report_id={report_id}/transcript.txt"
 
-        metadata_local_path = os.path.join(self.local_cache_directory, metadata_key)
-        transcript_local_path = os.path.join(self.local_cache_directory, transcript_key)
-        transcript_txt_local_path = os.path.join(self.local_cache_directory, transcript_txt_key)
+        metadata_local_path = os.path.join(self.local_cache_directory, 'reports', metadata_key)
+        transcript_local_path = os.path.join(self.local_cache_directory, 'reports', transcript_key)
+        transcript_txt_local_path = os.path.join(self.local_cache_directory, 'reports', transcript_txt_key)
 
         if os.path.exists(metadata_local_path):
-            logging.info("Metadata already exists locally at {}".format(metadata_local_path))
+            logging.debug("Metadata already exists locally at {}".format(metadata_local_path))
             with open(metadata_local_path, 'r') as metadata_file:
                 metadata = json.load(metadata_file)
         else:
-            logging.info("Downloading metadata from S3 bucket {}".format(self.s3_bucket))
+            logging.debug("Downloading metadata from S3 bucket {}".format(self.s3_bucket))
             metadata_obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=metadata_key)
             metadata = json.loads(metadata_obj['Body'].read().decode('utf-8'))
             os.makedirs(os.path.dirname(metadata_local_path), exist_ok=True)
@@ -109,11 +110,11 @@ class DataCache:
         #         json.dump(transcript, transcript_file)
 
         if os.path.exists(transcript_txt_local_path):
-            logging.info("Transcript text already exists locally at {}".format(transcript_txt_local_path))
+            logging.debug("Transcript text already exists locally at {}".format(transcript_txt_local_path))
             with open(transcript_txt_local_path, 'r') as transcript_txt_file:
                 transcript_txt = transcript_txt_file.read()
         else:
-            logging.info("Downloading transcript text from S3 bucket {}".format(self.s3_bucket))
+            logging.debug("Downloading transcript text from S3 bucket {}".format(self.s3_bucket))
             transcript_txt_obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=transcript_txt_key)
             transcript_txt = transcript_txt_obj['Body'].read().decode('utf-8')
             os.makedirs(os.path.dirname(transcript_txt_local_path), exist_ok=True)
@@ -126,11 +127,42 @@ class DataCache:
     def load_dataframe(self, *, queries):
         dataframes = []
 
+        filename_components = []
+        for query_param in queries:
+            scorecard_id = query_param['scorecard-id']
+            score_id = query_param.get('score-id', 'all')
+            answer = query_param.get('answer', 'all')
+            number = query_param.get('number', 'all')
+            filename_components.append(f"scorecard_id={scorecard_id}-score_id={score_id}-answer={answer}-number={number}")
+        cached_dataframe_filename = "_".join(filename_components) + '.h5'
+
+        cached_dataframe_path = os.path.join(self.local_cache_directory, cached_dataframe_filename)
+        if os.path.exists(cached_dataframe_path):
+            logging.info("Loading cached dataframe from {}".format(cached_dataframe_path))
+            return pd.read_hdf(cached_dataframe_path)
+
         logging.info("Loading dataframe with queries: {}".format(queries))
         
         for query_params in queries:
-            if 'scorecard-id' in query_params:
-                scorecard_id = query_params['scorecard-id']
+            scorecard_id = query_params['scorecard-id']
+            if 'score-id' in query_params and 'answer' in query_params:
+                score_id = query_params['score-id']
+                answer = query_params['answer']
+                number = query_params.get('number')
+                
+                query = f"""
+                    SELECT report_id
+                    FROM (
+                        SELECT report_id, MIN(CASE WHEN t.score.id = {score_id} THEN t.score.answer END) AS answer
+                        FROM "{self.athena_database}"
+                        CROSS JOIN UNNEST(scores) AS t(score)
+                        GROUP BY report_id
+                    )
+                    WHERE answer = '{answer}'
+                """
+                if number:
+                    query += f" LIMIT {number}"
+            elif 'scorecard-id' in query_params:
                 number = query_params.get('number')
                 
                 query = f"""
@@ -140,32 +172,13 @@ class DataCache:
                 """
                 if number:
                     query += f" LIMIT {number}"
-            elif 'question-id' in query_params and 'answer' in query_params:
-                question_id = query_params['question-id']
-                answer = query_params['answer']
-                number = query_params.get('number')
-                
-                query = f"""
-                    SELECT report_id
-                    FROM (
-                        SELECT report_id, MIN(CASE WHEN t.score.id = {question_id} THEN t.score.answer END) AS answer
-                        FROM "{self.athena_database}"
-                        CROSS JOIN UNNEST(scores) AS t(score)
-                        GROUP BY report_id
-                    )
-                    WHERE answer = '{answer}'
-                """
-                if number:
-                    query += f" LIMIT {number}"
             else:
-                raise ValueError("Invalid query parameters. Each query must contain either 'scorecard-id' or both 'question-id' and 'answer'.")
+                raise ValueError("Invalid query parameters. Each query must contain 'scorecard-id'.")
             
             query_execution_id = self.execute_athena_query(query)
             query_results = self.get_query_results(query_execution_id)
             
             report_ids = [row['Data'][0]['VarCharValue'] for row in query_results[1:]]
-            
-            from concurrent.futures import ThreadPoolExecutor
             
             def process_report(report_id):
                 report_metadata, report_transcript_txt = self.download_report(scorecard_id, report_id)
@@ -176,7 +189,13 @@ class DataCache:
                 return report_row
             
             with ThreadPoolExecutor() as executor:
-                report_data = list(executor.map(process_report, report_ids))
+                with Progress() as progress:
+                    task = progress.add_task("[cyan]Processing reports...", total=len(report_ids))
+                    report_data = []
+                    for report_id in report_ids:
+                        report_data.append(executor.submit(process_report, report_id))
+                        progress.update(task, advance=1)
+                    report_data = [future.result() for future in report_data]
             
             dataframe = pd.DataFrame(report_data)
             dataframes.append(dataframe)
@@ -185,4 +204,10 @@ class DataCache:
         
         logging.info(f"Loaded dataframe with {len(combined_dataframe)} rows and columns: {', '.join(combined_dataframe.columns)}")
         
+        dataframe_storage_directory = os.path.join(self.local_cache_directory, 'dataframes')
+        os.makedirs(dataframe_storage_directory, exist_ok=True)
+        dataframe_file_path = os.path.join(dataframe_storage_directory, cached_dataframe_filename)
+        combined_dataframe.to_hdf(dataframe_file_path, key='df', mode='w')
+        logging.info(f"Dataframe saved to {dataframe_file_path}")
+
         return combined_dataframe
