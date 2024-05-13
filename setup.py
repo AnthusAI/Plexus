@@ -28,7 +28,9 @@ setup(
         'graphviz',
         'mistune',
         'pyyaml',
-        'sphinx'
+        'sphinx',
+        'mlflow',
+        'sklearn'
     ],
     dependency_links=[
         'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator'
