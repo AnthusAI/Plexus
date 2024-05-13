@@ -1,6 +1,9 @@
 name: documentation
 
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches:
+      - gh-pages
 
 permissions:
   contents: write
@@ -26,7 +29,6 @@ jobs:
           sphinx-build documentation/source documentation
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         with:
           publish_branch: gh-pages
           github_token: ${{ secrets.GITHUB_TOKEN }}
