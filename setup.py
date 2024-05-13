@@ -29,6 +29,7 @@ setup(
         'mistune',
         'pyyaml',
         'sphinx',
+        'sphinx-rtd-theme',
         'mlflow',
         'scikit-learn'
     ],

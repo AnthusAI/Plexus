@@ -9,8 +9,9 @@ Plexus
 **Plexus** is an AI/ML orchestration system for managing classification at scale.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Contents:
+   :titlesonly:
 
 Indices and tables
 ==================
