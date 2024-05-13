@@ -16,10 +16,27 @@ from plexus.Registries import scorecard_registry
 from plexus.CompositeScore import CompositeScore
 
 class Scorecard:
+    """
+    Represents a collection of scores and manages the computation of these scores for given inputs.
+
+    This class provides functionality to load scores from a YAML configuration, compute individual and total scores,
+    and manage the costs associated with score computations.
+
+    Attributes:
+        score_registry (ScoreRegistry): Registry holding all available scores.
+        scorecard_folder_path (str): Path to the folder containing score configurations.
+    """
+        
     score_registry = ScoreRegistry()
     scorecard_folder_path = None
     
     def __init__(self, *, scorecard_folder_path):
+        """
+        Initializes a new instance of the Scorecard class.
+
+        Args:
+            scorecard_folder_path (str): The file system path to the folder containing score configurations.
+        """
         self.scorecard_folder_path = scorecard_folder_path
         # Accumulators for tracking the total expenses.
         self.prompt_tokens = 0
@@ -30,20 +47,33 @@ class Scorecard:
 
     @classmethod
     def name(cls):
+        """
+        Returns the class name of the scorecard.
+
+        Returns:
+            str: The name of the class.
+        """
         return cls.__name__
 
     @classmethod
     def score_names(cls):
         """
-        The list of all scores in the whole scorecard.
+        Retrieves a list of all score names registered in the scorecard.
         Incuding scores that are computed implicitly by other scores.
+
+        Returns:
+            list of str: The names of all registered scores.
         """
         return cls.scores.keys()
 
     @classmethod
     def score_names_to_process(cls):
         """
+        Filters and returns score names that need to be processed directly.
         Some scores are computed implicitly by other scores and don't need to be directly processed.
+
+        Returns:
+            list of str: Names of scores that are marked as 'primary' and need direct processing.
         """
         return [
             score_name for score_name, details in cls.scores.items()
@@ -53,7 +83,13 @@ class Scorecard:
     @classmethod
     def normalize_score_name(cls, score_name):
         """
-        Normalize the score name by removing whitespace and non-word characters.
+        Normalizes a score name by removing whitespace and non-word characters.
+
+        Args:
+            score_name (str): The original score name.
+
+        Returns:
+            str: A normalized score name suitable for file names or dictionary keys.
         """
         return re.sub(r'\W+', '', score_name.replace(' ', ''))
 
