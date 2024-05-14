@@ -11,7 +11,6 @@ from plexus.cli.console import console
 from plexus.Registries import scorecard_registry
 
 from plexus.scorecards.TermLifeAI import TermLifeAI
-from plexus.scorecards.Contactics import Contactics
 
 from dotenv import load_dotenv
 response = load_dotenv('./.env')

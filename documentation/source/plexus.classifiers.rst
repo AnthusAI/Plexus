@@ -1,6 +1,11 @@
 plexus.classifiers package
 ==========================
 
+.. automodule:: plexus.classifiers
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Subpackages
 -----------
 
@@ -12,50 +17,11 @@ Subpackages
 Submodules
 ----------
 
-plexus.classifiers.Classifier module
-------------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: plexus.classifiers.Classifier
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-plexus.classifiers.FastTextClassifier module
---------------------------------------------
-
-.. automodule:: plexus.classifiers.FastTextClassifier
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-plexus.classifiers.KeywordClassifier module
--------------------------------------------
-
-.. automodule:: plexus.classifiers.KeywordClassifier
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-plexus.classifiers.LLMGenerator module
---------------------------------------
-
-.. automodule:: plexus.classifiers.LLMGenerator
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-plexus.classifiers.MLClassifier module
---------------------------------------
-
-.. automodule:: plexus.classifiers.MLClassifier
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: plexus.classifiers
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   plexus.classifiers.Classifier
+   plexus.classifiers.FastTextClassifier
+   plexus.classifiers.KeywordClassifier
+   plexus.classifiers.LLMGenerator
+   plexus.classifiers.MLClassifier

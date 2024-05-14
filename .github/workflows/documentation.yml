@@ -23,6 +23,7 @@ jobs:
         run: pip install .
       - name: Sphinx build
         run: |
+          sphinx-apidoc --separate -o documentation/source plexus "**/*_test*.*" -f -M
           sphinx-build documentation/source documentation
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
