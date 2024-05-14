@@ -114,6 +114,13 @@ class Scorecard:
         return scorecard_class
     
     @classmethod
+    def load_and_register_scorecards(cls, directory_path):
+        for file_name in os.listdir(directory_path):
+            if file_name.endswith('.yaml'):
+                yaml_file_path = os.path.join(directory_path, file_name)
+                cls.create_from_yaml(yaml_file_path)
+
+    @classmethod
     def load_and_register_scores(cls):
         """
         Load and register the scores based on the `scores` dictionary.

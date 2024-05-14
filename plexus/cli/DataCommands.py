@@ -1,5 +1,6 @@
 import os
 import click
+import plexus
 from plexus.DataCache import DataCache
 from rich import print as rich_print
 from rich.table import Table
@@ -25,6 +26,9 @@ def data():
 @click.option('--question-name', required=False, help='The name of the question to analyze for answer breakdown')
 @click.option('--all', 'all_questions', is_flag=True, help='Analyze all questions in the scorecard')
 def analyze(scorecard_name, question_name, all_questions):
+    plexus.Scorecard.load_and_register_scorecards('scorecards/')
+    scorecard_class = scorecard_registry.get(scorecard_name)
+
     logging.info(f"Analyzing data for scorecard [purple][b]{scorecard_name}[/b][/purple]")
     analyze_scorecard(scorecard_name, question_name, all_questions)
 
@@ -44,7 +48,7 @@ def analyze_scorecard(scorecard_name, question_name, all_questions):
     data_cache = DataCache(os.environ['PLEXUS_TRAINING_DATA_LAKE_DATABASE_NAME'],
                            os.environ['PLEXUS_TRAINING_DATA_LAKE_ATHENA_RESULTS_BUCKET_NAME'],
                            os.environ['PLEXUS_TRAINING_DATA_LAKE_BUCKET_NAME'])
-    dataframe = data_cache.load_dataframe(scorecard_id=scorecard_id)
+    dataframe = data_cache.load_dataframe(queries=[{'scorecard-id':scorecard_id}])
 
     print('')
 
@@ -68,7 +72,7 @@ def analyze_scorecard(scorecard_name, question_name, all_questions):
 
         rich_print(outer_panel)
     else:
-        dataframe_summary_title = "[royal_blue1][b]Dataframe Summary[/b][/royal_blue1]\nfor [purple][b]Scorecard ID: " + scorecard_id
+        dataframe_summary_title = f"[royal_blue1][b]Dataframe Summary[/b][/royal_blue1]\nfor [purple][b]Scorecard ID: {scorecard_id}[/b][/purple]"
         dataframe_summary_table = Table(
             title=dataframe_summary_title,
             header_style="sky_blue1",
