@@ -1,1 +1,1 @@
-from .TranscriptFilter import TranscriptFilter
+from .RelevantWindowsTranscriptFilter import RelevantWindowsTranscriptFilter
