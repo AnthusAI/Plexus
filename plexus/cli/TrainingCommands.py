@@ -48,3 +48,6 @@ def train(scorecard_name, score_name):
     # Data processing
     data_queries = score_to_train_configuration['data']['queries']
     classifier_instance.process_data(queries=data_queries)
+
+    # Training
+    classifier_instance.train_model()
