@@ -11,7 +11,7 @@ from plexus.Score import Score
 from plexus.ScoreResult import ScoreResult
 from plexus.Registries import scorecard_registry
 from plexus.classifiers.KeywordClassifier import KeywordClassifier
-from plexus.TranscriptFilter import TranscriptFilter
+from plexus.processors.TranscriptFilter import TranscriptFilter
 from plexus.PromptTemplateLoader import PromptTemplateLoader
 from plexus.CustomLogging import logging
 
@@ -209,7 +209,7 @@ class CompositeScore(Score):
                 # Use the KeywordClassifier with the combined list of strings and regex patterns
                 filtered_transcript = TranscriptFilter(
                     classifier=KeywordClassifier(keyword_patterns)
-                ).compute_relevant_windows(transcript)
+                ).process(transcript=transcript)
 
                 return filtered_transcript
 

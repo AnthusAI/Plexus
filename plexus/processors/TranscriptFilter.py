@@ -6,7 +6,7 @@ class TranscriptFilter:
     def __init__(self, classifier):
         self.classifier = classifier
 
-    def compute_relevant_windows(self, transcript, prev_count=1, next_count=1):
+    def process(self, *, transcript, prev_count=1, next_count=1):
         sentences = transcript.split('\n')
         relevance_flags = [self.classifier.is_relevant(sentence) for sentence in sentences]
         include_flags = self.compute_inclusion_flags(relevance_flags, prev_count, next_count)
