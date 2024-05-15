@@ -29,35 +29,12 @@ from plexus.classifiers.MLClassifier import MLClassifier
 
 class BERTForSequenceClassificationForControlFreaks(MLClassifier):
 
-    def __init__(self, **parameters):
-        logging.info("Initializing [magenta1][b]BERTForSequenceClassificationForControlFreaks[/b][/magenta1]")
-        for name, value in parameters.items():
-            logging.info(f"Setting [royal_blue1]{name}[/royal_blue1] to [magenta]{value}[/magenta]")
-            setattr(self, name, value)
-        self.set_up_mlflow()
-
     def set_up_mlflow(self):
-        experiment_name = f"{self.scorecard_name} - {self.score_name}"
-        if os.getenv('MLFLOW_EXPERIMENT_NAME'):
-            experiment_name = experiment_name + " - " + os.getenv('MLFLOW_EXPERIMENT_NAME')
-        logging.info(f"Setting MLFLow experiment name to [magenta1][b]{experiment_name}[/b][/magenta1]")
-        mlflow.set_experiment(experiment_name)
+        """
+        Set up MLflow for tracking the experiment, including the experiment name and parameters.
+        """
+        super().set_up_mlflow()
 
-        mlflow_tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
-        if mlflow_tracking_uri:
-            logging.info(f"Using MLFlow tracking URL: {mlflow_tracking_uri}")
-            mlflow.set_tracking_uri(mlflow_tracking_uri)
-        else:
-            mlflow.set_tracking_uri(f'file:///{os.path.abspath("./mlruns")}')
-
-        try:
-            mlflow.start_run()
-        except Exception as e:
-            logging.error("Error: ", e)
-            logging.info("Attempting to end the previous run and start a new one.")
-            mlflow.end_run()
-            mlflow.start_run()
-        
         # Log parameters
         mlflow.log_param("max_len", self.max_len)
         mlflow.log_param("epochs", self.epochs)
@@ -72,37 +49,28 @@ class BERTForSequenceClassificationForControlFreaks(MLClassifier):
         mlflow.log_param("data_percentage", self.data_percentage)
         mlflow.log_param("number_of_sentences", self.number_of_sentences)
 
-    def process_data(self, *, queries):
+    def process_data(self):
         """
         Handle any pre-processing of the training data, including the training/validation splits.
         """
 
-        #############
-        # Load data
-
-        # Load the dataframe using Plexus, from the data lake, with caching.
-        from plexus.DataCache import DataCache
-        data_cache = DataCache(os.environ['PLEXUS_TRAINING_DATA_LAKE_DATABASE_NAME'],
-                                os.environ['PLEXUS_TRAINING_DATA_LAKE_ATHENA_RESULTS_BUCKET_NAME'],
-                                os.environ['PLEXUS_TRAINING_DATA_LAKE_BUCKET_NAME'])
-        df = data_cache.load_dataframe(queries=queries)
-
-        number_of_rows_in_data = len(df)
-        print("Number of rows in the dataset:", number_of_rows_in_data)
+        # Call the parent process_data method first, which will iterate over any processor classes
+        # configured in the scorecard YAML file.
+        super().process_data()
 
         # Check for missing or unexpected values
-        print(f"Unique values in '{self.score_name}':", df[self.score_name].unique())
+        print(f"Unique values in '{self.score_name}':", self.dataframe[self.score_name].unique())
 
         #############
         # Balance data
 
         # Check the distribution of labels
         print("\nDistribution of labels:")
-        print(df[self.score_name].value_counts(dropna=False))
+        print(self.dataframe[self.score_name].value_counts(dropna=False))
 
         # Separate 'Yes' and 'No' instances
-        df_yes = df[df[self.score_name] == 'Yes']
-        df_no = df[df[self.score_name] == 'No']
+        df_yes = self.dataframe[self.dataframe[self.score_name] == 'Yes']
+        df_no = self.dataframe[self.dataframe[self.score_name] == 'No']
 
         # Determine the smaller class size
         smaller_class_size = min(len(df_yes), len(df_no))

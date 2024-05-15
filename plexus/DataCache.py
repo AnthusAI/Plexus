@@ -114,7 +114,7 @@ class DataCache:
             with open(transcript_txt_local_path, 'r') as transcript_txt_file:
                 transcript_txt = transcript_txt_file.read()
         else:
-            logging.debug("Downloading transcript text from S3 bucket {}".format(self.s3_bucket))
+            logging.info("Downloading transcript text from S3 bucket {}".format(self.s3_bucket))
             transcript_txt_obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=transcript_txt_key)
             transcript_txt = transcript_txt_obj['Body'].read().decode('utf-8')
             os.makedirs(os.path.dirname(transcript_txt_local_path), exist_ok=True)
@@ -181,22 +181,28 @@ class DataCache:
             report_ids = [row['Data'][0]['VarCharValue'] for row in query_results[1:]]
             
             def process_report(report_id):
-                report_metadata, report_transcript_txt = self.download_report(scorecard_id, report_id)
-                report_row = {'report_id': report_id}
-                for score in report_metadata.get('scores', []):
-                    report_row[score['name']] = score['answer']
-                report_row['Transcription'] = report_transcript_txt
-                return report_row
+                try:
+                    report_metadata, report_transcript_txt = self.download_report(scorecard_id, report_id)
+                    report_row = {'report_id': report_id}
+                    for score in report_metadata.get('scores', []):
+                        report_row[score['name']] = score['answer']
+                    report_row['Transcription'] = report_transcript_txt
+                    return report_row
+                except self.s3_client.exceptions.NoSuchKey:
+                    logging.warning(f"Report with ID {report_id} not found in S3 bucket.")
+                    return None
             
             with ThreadPoolExecutor() as executor:
                 with Progress() as progress:
                     task = progress.add_task("[cyan]Processing reports...", total=len(report_ids))
+                    report_data_futures = [executor.submit(process_report, report_id) for report_id in report_ids]
                     report_data = []
-                    for report_id in report_ids:
-                        report_data.append(executor.submit(process_report, report_id))
-                        progress.update(task, advance=1)
-                    report_data = [future.result() for future in report_data]
-            
+                    for future in report_data_futures:
+                        result = future.result()
+                        if result is not None:
+                            report_data.append(result)
+                        progress.update(task, advance=1)  
+    
             dataframe = pd.DataFrame(report_data)
             dataframes.append(dataframe)
         
