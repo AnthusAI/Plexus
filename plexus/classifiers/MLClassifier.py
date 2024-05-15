@@ -25,7 +25,7 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
         return computed_name
 
     @abstractmethod
-    def process_data(self):
+    def process_data(self, *, queries):
         """
         Handle any pre-processing of the training data, including the training/validation splits.
         """

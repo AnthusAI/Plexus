@@ -23,16 +23,16 @@ def data():
 
 @data.command()
 @click.option('--scorecard-name', required=True, help='The name of the scorecard to load data for')
-@click.option('--question-name', required=False, help='The name of the question to analyze for answer breakdown')
+@click.option('--score-name', required=False, help='The name of the score to analyze for answer breakdown')
 @click.option('--all', 'all_questions', is_flag=True, help='Analyze all questions in the scorecard')
-def analyze(scorecard_name, question_name, all_questions):
+def analyze(scorecard_name, score_name, all_questions):
     plexus.Scorecard.load_and_register_scorecards('scorecards/')
     scorecard_class = scorecard_registry.get(scorecard_name)
 
     logging.info(f"Analyzing data for scorecard [purple][b]{scorecard_name}[/b][/purple]")
-    analyze_scorecard(scorecard_name, question_name, all_questions)
+    analyze_scorecard(scorecard_name, score_name, all_questions)
 
-def analyze_scorecard(scorecard_name, question_name, all_questions):
+def analyze_scorecard(scorecard_name, score_name, all_questions):
     
     # First, find the scorecard class from the name.
     scorecard_type = scorecard_registry.get(scorecard_name)
@@ -52,19 +52,19 @@ def analyze_scorecard(scorecard_name, question_name, all_questions):
 
     print('')
 
-    if (question_name or all_questions):
+    if (score_name or all_questions):
         grid = Table.grid(expand=True)
         grid.add_column()
         
-        if question_name:
-            columns = analyze_question(scorecard_id, question_name, dataframe)
-            question_panel = Panel(columns, title=f"[royal_blue1][b]Question: {question_name}[/b][/royal_blue1]", border_style="magenta1")
+        if score_name:
+            columns = analyze_question(scorecard_id, score_name, dataframe)
+            question_panel = Panel(columns, title=f"[royal_blue1][b]Question: {score_name}[/b][/royal_blue1]", border_style="magenta1")
             grid.add_row(question_panel)
         else:
             # This means --all
-            for question_name in scorecard_instance.score_names():
-                columns = analyze_question(scorecard_id, question_name, dataframe)
-                question_panel = Panel(columns, title=f"[royal_blue1][b]Question: {question_name}[/b][/royal_blue1]", border_style="magenta1")
+            for score_name in scorecard_instance.score_names():
+                columns = analyze_question(scorecard_id, score_name, dataframe)
+                question_panel = Panel(columns, title=f"[royal_blue1][b]Question: {score_name}[/b][/royal_blue1]", border_style="magenta1")
                 grid.add_row(question_panel)
 
         outer_panel = Panel(grid,
@@ -97,7 +97,7 @@ def analyze_scorecard(scorecard_name, question_name, all_questions):
 
         rich_print(outer_panel)
 
-def analyze_question(scorecard_id, question_name, dataframe):
+def analyze_question(scorecard_id, score_name, dataframe):
     panels = []
 
     question_analysis_table = Table(
@@ -108,7 +108,7 @@ def analyze_question(scorecard_id, question_name, dataframe):
     question_analysis_table.add_column("Count", style="magenta1", justify="right")
     question_analysis_table.add_column("Percentage", style="magenta1 bold", justify="right")
 
-    answer_counts = dataframe[question_name].value_counts()
+    answer_counts = dataframe[score_name].value_counts()
     total_responses = answer_counts.sum()
     for answer_value, count in answer_counts.items():
         percentage_of_total = (count / total_responses) * 100
@@ -127,7 +127,7 @@ def analyze_question(scorecard_id, question_name, dataframe):
     dataframe_summary_table.add_row("Number of Rows", str(dataframe.shape[0]), style="magenta1 bold")
 
     smallest_answer_count = answer_counts.min()
-    total_kinds_of_non_null_answers = dataframe[question_name].nunique()
+    total_kinds_of_non_null_answers = dataframe[score_name].nunique()
     total_balanced_count = smallest_answer_count * total_kinds_of_non_null_answers
 
     dataframe_summary_table.add_row("Smallest Count", str(smallest_answer_count))
@@ -136,8 +136,8 @@ def analyze_question(scorecard_id, question_name, dataframe):
     panels.append(Panel(dataframe_summary_table, border_style="royal_blue1"))
 
     columns = Columns(panels)
-    if question_name:   
-        header_text = f"[bold royal_blue1]{question_name}[/bold royal_blue1]"
+    if score_name:   
+        header_text = f"[bold royal_blue1]{score_name}[/bold royal_blue1]"
     else:
         header_text = f"[bold royal_blue1]{scorecard_name}[/bold royal_blue1]"
 

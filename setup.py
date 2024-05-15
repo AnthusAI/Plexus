@@ -31,7 +31,8 @@ setup(
         'sphinx',
         'sphinx-rtd-theme',
         'mlflow',
-        'scikit-learn'
+        'scikit-learn',
+        'tables'
     ],
     dependency_links=[
         'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator'

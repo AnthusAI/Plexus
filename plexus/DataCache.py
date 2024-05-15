@@ -136,7 +136,7 @@ class DataCache:
             filename_components.append(f"scorecard_id={scorecard_id}-score_id={score_id}-answer={answer}-number={number}")
         cached_dataframe_filename = "_".join(filename_components) + '.h5'
 
-        cached_dataframe_path = os.path.join(self.local_cache_directory, cached_dataframe_filename)
+        cached_dataframe_path = os.path.join(self.local_cache_directory, 'dataframes', cached_dataframe_filename)
         if os.path.exists(cached_dataframe_path):
             logging.info("Loading cached dataframe from {}".format(cached_dataframe_path))
             return pd.read_hdf(cached_dataframe_path)
