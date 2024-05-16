@@ -7,7 +7,8 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.columns import Columns
 from rich import print as rich_print
-
+from rich.text import Text
+from plexus.cli.console import console
 from plexus.CustomLogging import logging
 from plexus.classifiers.Classifier import Classifier
 
@@ -54,6 +55,8 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
             mlflow.end_run()
             mlflow.start_run()
 
+        mlflow.log_param("classifier_class", self.__class__.__name__)
+
     def load_data(self, *, queries):
         """
         Load the specified queries from the training data lake, with caching, into a combined DataFrame in the class instance.
@@ -64,6 +67,8 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
                                 os.environ['PLEXUS_TRAINING_DATA_LAKE_ATHENA_RESULTS_BUCKET_NAME'],
                                 os.environ['PLEXUS_TRAINING_DATA_LAKE_BUCKET_NAME'])
         self.dataframe = data_cache.load_dataframe(queries=queries)
+
+        console.print(Text("Loaded dataframe from training data lake:", style="royal_blue1"))
         self.analyze_dataset()
 
     def analyze_dataset(self):
@@ -137,7 +142,45 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
         filtered_dataframe = self.dataframe[[self.score_name, "Transcription"]]
         self.dataframe = filtered_dataframe
 
+        console.print(Text("Filtered dataframe:", style="royal_blue1"))
+
         self.analyze_dataset()
+
+        if 'processors' in self.configuration.get('data', {}):
+            console.print(Text("Running configured processors...", style="royal_blue1"))
+            for processor in self.configuration['data']['processors']:
+                processor_class = processor['class']
+                processor_parameters = processor.get('parameters', {})
+                from plexus.processors import ProcessorFactory
+                processor_instance = ProcessorFactory.create_processor(processor_class, **processor_parameters)
+            
+            first_transcript_before = None
+            first_transcript_after = None
+            
+            for index, row in self.dataframe.iterrows():
+                if first_transcript_before is None:
+                    first_transcript_before = row["Transcription"]
+                
+                processed_transcript = processor_instance.process(transcript=row["Transcription"])
+                self.dataframe.at[index, "Transcription"] = processed_transcript
+                
+                if first_transcript_after is None:
+                    first_transcript_after = processed_transcript
+            
+            if first_transcript_before and first_transcript_after:
+                first_transcript_before_truncated = first_transcript_before[:1000] + '...'
+                first_transcript_after_truncated = first_transcript_after[:1000] + '...'
+                
+                transcript_comparison_table = Table(
+                    title=f"[royal_blue1][b]{processor_class}[/b][/royal_blue1]",
+                    header_style="sky_blue1",
+                    border_style="sky_blue1"
+                )
+                transcript_comparison_table.add_column("Before", style="magenta1", justify="left")
+                transcript_comparison_table.add_column("After", style="magenta1", justify="left")
+                transcript_comparison_table.add_row(first_transcript_before_truncated, first_transcript_after_truncated)
+                
+                console.print(Panel(transcript_comparison_table, border_style="royal_blue1"))
 
     @abstractmethod
     def train_model(self):

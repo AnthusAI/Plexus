@@ -11,7 +11,6 @@ from plexus.Score import Score
 from plexus.ScoreResult import ScoreResult
 from plexus.Registries import scorecard_registry
 from plexus.classifiers.KeywordClassifier import KeywordClassifier
-from plexus.processors.RelevantWindowsTranscriptFilter import RelevantWindowsTranscriptFilter
 from plexus.PromptTemplateLoader import PromptTemplateLoader
 from plexus.CustomLogging import logging
 
@@ -207,10 +206,10 @@ class CompositeScore(Score):
                                 keyword_patterns.append(keyword)
 
                 # Use the KeywordClassifier with the combined list of strings and regex patterns
-                filtered_transcript = RelevantWindowsTranscriptFilter(
+                filtered_transcript = plexus.processors.RelevantWindowsTranscriptFilter(
                     classifier=KeywordClassifier(keyword_patterns)
                 ).process(transcript=transcript)
-
+ 
                 return filtered_transcript
 
             def generate_elements_from_markdown(self):

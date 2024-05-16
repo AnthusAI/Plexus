@@ -1,8 +1,9 @@
 import nltk.data
 
+from .TranscriptFilter import TranscriptFilter
 from plexus.CustomLogging import logging
 
-class RelevantWindowsTranscriptFilter:
+class RelevantWindowsTranscriptFilter(TranscriptFilter):
     def __init__(self, classifier):
         self.classifier = classifier
 

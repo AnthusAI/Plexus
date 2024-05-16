@@ -43,6 +43,7 @@ def train(scorecard_name, score_name):
     # Add the scorecard name and score name to the parameters.
     classifier_parameters['scorecard_name'] = scorecard_class.name()
     classifier_parameters['score_name'] = score_name
+    classifier_parameters['configuration'] = score_to_train_configuration
     classifier_instance = classifier_class(**classifier_parameters)
 
     # Data processing

@@ -1,1 +1,4 @@
+from .ProcessorFactory import ProcessorFactory
+from .TranscriptFilter import TranscriptFilter
 from .RelevantWindowsTranscriptFilter import RelevantWindowsTranscriptFilter
+from .RemoveSpeakerIdentifiersTranscriptFilter import RemoveSpeakerIdentifiersTranscriptFilter
