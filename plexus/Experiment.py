@@ -277,17 +277,21 @@ class AccuracyExperiment(Experiment):
         with ThreadPoolExecutor() as executor:
             # Submit the combined analysis and logging tasks to the executor
             futures = [
-                executor.submit(log_accuracy_heatmap),
+                #executor.submit(log_accuracy_heatmap),
                 executor.submit(log_html_report),
                 executor.submit(log_incorrect_scores_report),
                 executor.submit(log_no_costs_report),
-                executor.submit(log_scorecard_costs),
+                #executor.submit(log_scorecard_costs),
                 executor.submit(log_csv_report)
             ]
 
             # Wait for all the tasks to complete
             for future in futures:
                 future.result()
+
+        # Run these sequentially to avoid issues with Heatmap generation.
+        log_accuracy_heatmap()
+        log_scorecard_costs()
 
         expenses = self.scorecard.accumulated_expenses()
         expenses['cost_per_transcript'] = expenses['total_cost'] / len(selected_sample_rows)
