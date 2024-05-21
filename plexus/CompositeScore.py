@@ -7,6 +7,7 @@ from decimal import Decimal
 from abc import ABC, abstractmethod
 import tiktoken
 
+from plexus.processors.RelevantWindowsTranscriptFilter import RelevantWindowsTranscriptFilter
 from plexus.Score import Score
 from plexus.ScoreResult import ScoreResult
 from plexus.Registries import scorecard_registry
@@ -206,7 +207,7 @@ class CompositeScore(Score):
                                 keyword_patterns.append(keyword)
 
                 # Use the KeywordClassifier with the combined list of strings and regex patterns
-                filtered_transcript = plexus.processors.RelevantWindowsTranscriptFilter(
+                filtered_transcript = RelevantWindowsTranscriptFilter(
                     classifier=KeywordClassifier(keyword_patterns)
                 ).process(transcript=transcript)
  
