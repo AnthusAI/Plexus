@@ -37,11 +37,11 @@ class TermLifeAI(Scorecard):
         "Ask Doubles Pitch": {},
         "Assumptive Doubles Pitch": {"primary": "Ask Doubles Pitch"},
         "Length Of Debt": {},
-        "Wrap Up - Carrier Name": {},
-        "Wrap Up - Coverage Amount": {},
-        "Wrap Up - Exam and Details": {},
-        "Wrap Up - Agent Contact Info": {},
-        "Wrap Up - Application Underwrite": {}
+        # "Wrap Up - Carrier Name": {},
+        # "Wrap Up - Coverage Amount": {},
+        # "Wrap Up - Exam and Details": {},
+        # "Wrap Up - Agent Contact Info": {},
+        # "Wrap Up - Application Underwrite": {}
     }
 
 TermLifeAI.load_and_register_scores()
