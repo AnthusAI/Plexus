@@ -1,13 +1,23 @@
 import os
+import json
 import inspect
+import functools
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
 from abc import ABC, abstractmethod
+from sklearn.metrics import roc_curve, auc, precision_recall_curve
+import matplotlib.ticker as ticker
+import matplotlib.pyplot as plt
 import mlflow.pyfunc
 from rich.table import Table
 from rich.panel import Panel
 from rich.columns import Columns
 from rich import print as rich_print
 from rich.text import Text
+from matplotlib.colors import LinearSegmentedColormap
 from plexus.cli.console import console
 from plexus.CustomLogging import logging
 from plexus.classifiers.Classifier import Classifier
@@ -230,3 +240,163 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
         prediction = self.predict(model_input)['prediction'].iloc[0]
         return prediction == '__label__relevant'
 
+    #############
+    # Private stuff for visualizations.
+
+    # Colors for visualizations.    
+    _sky_blue = (0.012, 0.635, 0.996)
+    _fuchsia = (0.815, 0.2, 0.51)
+    _red = '#DD3333'
+    _green = '#339933'
+
+    def ensure_report_directory_exists(func):
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            report_directory_path = f"./reports/{self.scorecard_name}/{self.score_name}/"
+            if not os.path.exists(report_directory_path):
+                os.makedirs(report_directory_path)
+            return func(self, *args, **kwargs)
+        return wrapper
+
+    @ensure_report_directory_exists
+    def _generate_confusion_matrix(self):
+        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        file_name = os.path.join(directory_path, "confusion_matrix.png")
+
+        precision_color = self._red
+        recall_color = self._green
+
+        colors = [precision_color, recall_color]
+
+        cm = confusion_matrix(self.val_labels, self.val_predictions)
+        sns.heatmap(cm, annot=True, fmt='d', cmap=colors, xticklabels=['false', 'true'], yticklabels=['false', 'true'])
+        plt.xlabel('Predicted')
+        plt.ylabel('Actual')
+
+        plt.title('Confusion Matrix')
+
+        plt.savefig(file_name)
+        plt.show()
+
+        mlflow.log_artifact(file_name)
+
+    @ensure_report_directory_exists
+    def _plot_roc_curve(self):
+        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        file_name = os.path.join(directory_path, "ROC_curve.png")
+
+        fpr, tpr, thresholds = roc_curve(self.val_labels, self.val_predictions)
+        roc_auc = auc(fpr, tpr)
+        plt.figure()
+        plt.plot(fpr, tpr, color=self._sky_blue, lw=2, label='ROC curve (area = %0.2f)' % roc_auc)
+        plt.plot([0, 1], [0, 1], color=self._fuchsia, lw=2, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver Operating Characteristic')
+        plt.legend(loc="lower right")
+        plt.savefig(file_name)
+        plt.show()
+        mlflow.log_artifact(file_name)
+
+    @ensure_report_directory_exists
+    def _plot_precision_recall_curve(self):
+        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        file_name = os.path.join(directory_path, "precision_and_recall_curve.png")
+
+        precision, recall, thresholds = precision_recall_curve(self.val_labels, self.val_predictions)
+        pr_auc = auc(recall, precision)
+        plt.figure()
+        plt.plot(recall, precision, color=self._sky_blue, lw=2, label='PR curve (area = %0.2f)' % pr_auc)
+        plt.fill_between(recall, precision, step='post', alpha=0.2, color=self._fuchsia)
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.title('Precision-Recall curve')
+        plt.legend(loc="lower right")
+        plt.savefig(file_name)
+        plt.show()
+        mlflow.log_artifact(file_name)
+
+    @ensure_report_directory_exists
+    def _plot_training_history(self):
+        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        file_name = os.path.join(directory_path, "training_history.png")
+
+        plt.figure(figsize=(12, 9))  # Adjusted for a 4x3 aspect ratio with three subplots
+
+        plt.suptitle(f"Training History\n{self.score_name}", fontsize=16, verticalalignment='top')
+
+        # Learning Rate plot
+        plt.subplot(1, 3, 1)  # First subplot for learning rate
+        plt.plot(self.history.history['lr'], label='Learning Rate', color=self._fuchsia, lw=4)
+        plt.title('Learning Rate')
+        plt.ylabel('Learning Rate')
+        plt.xlabel('Epoch')
+        plt.legend(loc='upper right')
+        plt.gca().xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+        plt.gca().set_xticklabels(range(1, len(self.history.history['lr']) + 1))
+
+        # Loss plot
+        plt.subplot(1, 3, 2)  # Second subplot for loss
+        plt.plot(self.history.history['loss'], label='Train Loss', color=self._sky_blue, lw=4)
+        plt.plot(self.history.history['val_loss'], label='Validation Loss', color=self._fuchsia, lw=4)
+        plt.title('Model Loss')
+        plt.ylabel('Loss')
+        plt.xlabel('Epoch')
+        plt.yscale('log')  # Logarithmic scale for loss
+        plt.legend(loc='upper right')
+        plt.gca().xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+        plt.gca().set_xticklabels(range(1, len(self.history.history['loss']) + 1))
+
+        # Set the loss y-axis to have a fixed locator so it only shows specific ticks, and format them properly.
+        plt.gca().yaxis.set_major_locator(ticker.FixedLocator(np.logspace(np.log10(plt.ylim()[0]), np.log10(plt.ylim()[1]), num=5)))
+        plt.gca().yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: '{:.2g}'.format(y)))
+
+        # Accuracy plot
+        plt.subplot(1, 3, 3)  # Third subplot for accuracy
+        plt.plot(self.history.history['accuracy'], label='Train Accuracy', color=self._sky_blue, lw=4)
+        plt.plot(self.history.history['val_accuracy'], label='Validation Accuracy', color=self._fuchsia, lw=4)
+        plt.title('Model Accuracy')
+        plt.ylabel('Accuracy (%)')
+        plt.xlabel('Epoch')
+        plt.legend(loc='lower right')
+        plt.ylim(0.45, 1.0)  # Adjust based on your model's accuracy range
+        # Adjust y-axis to show percentages, and format them properly.
+        plt.gca().yaxis.set_major_formatter(ticker.PercentFormatter(xmax=1.0, decimals=0))
+        plt.gca().set_xticklabels(range(1, len(self.history.history['accuracy']) + 1))
+
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        plt.savefig(file_name)
+        plt.show()
+        mlflow.log_artifact(file_name)
+
+    @ensure_report_directory_exists
+    def record_configuration(self, configuration):
+        """
+        Record the provided configuration dictionary as a JSON file in the appropriate report folder for this model.
+
+        :param configuration: Dictionary containing the configuration to be recorded.
+        :type configuration: dict
+        """
+        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        file_name = os.path.join(directory_path, "configuration.json")
+
+        with open(file_name, 'w') as json_file:
+            json.dump(configuration, json_file, indent=4)
+
+    @ensure_report_directory_exists
+    def _record_metrics(self, metrics):
+        """
+        Record the provided metrics dictionary as a JSON file in the appropriate report folder for this model.
+
+        :param metrics: Dictionary containing the metrics to be recorded.
+        :type metrics: dict
+        """
+        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        file_name = os.path.join(directory_path, "metrics.json")
+
+        with open(file_name, 'w') as json_file:
+            json.dump(metrics, json_file, indent=4)

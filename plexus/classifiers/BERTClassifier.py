@@ -83,13 +83,13 @@ class BERTClassifier(MLClassifier):
 
         # Encode the training and validation texts
         print("Training:")
-        train_encoded_texts = encode_texts(tokenizer, train_texts, self.max_len)
+        self.train_encoded_texts = encode_texts(tokenizer, train_texts, self.max_len)
         print("Validation:")
-        val_encoded_texts = encode_texts(tokenizer, val_texts, self.max_len)
+        self.val_encoded_texts = encode_texts(tokenizer, val_texts, self.max_len)
 
         # Extract input_ids
-        self.train_input_ids = train_encoded_texts
-        self.val_input_ids = val_encoded_texts
+        self.train_input_ids = self.train_encoded_texts
+        self.val_input_ids = self.val_encoded_texts
 
         # Create attention masks
         self.train_attention_mask = tf.where(self.train_input_ids != 0, 1, 0)
@@ -101,8 +101,8 @@ class BERTClassifier(MLClassifier):
 
         # Check the distribution of labels in the training set
         print("Training set label breakdown:")
-        print(np.bincount(train_labels))
+        print(np.bincount(self.train_labels))
 
         # Check the distribution of labels in the validation set
         print("Validation set label breakdown:")
-        print(np.bincount(val_labels))
+        print(np.bincount(self.val_labels))

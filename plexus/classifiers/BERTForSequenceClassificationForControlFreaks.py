@@ -19,6 +19,7 @@ from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import confusion_matrix
+from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
 from imblearn.over_sampling import SMOTE
 import nltk
 nltk.download('punkt')
@@ -104,21 +105,19 @@ class BERTForSequenceClassificationForControlFreaks(BERTClassifier):
             kernel_regularizer=regularizers.l2(self.l2_regularization_strength)
         )(dropout)
 
-        model = tf.keras.models.Model(inputs=[input_ids, attention_mask], outputs=out)
+        self.model = tf.keras.models.Model(inputs=[input_ids, attention_mask], outputs=out)
 
         # Compile the model
-        model.compile(
+        self.model.compile(
             optimizer=Adam(learning_rate=self.learning_rate),
             loss='binary_crossentropy',
             metrics=['accuracy']
         )
 
-        model.summary()
+        self.model.summary()
 
         #############
         # Training
-
-        from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
 
         print("Training the model...")
 
@@ -142,7 +141,7 @@ class BERTForSequenceClassificationForControlFreaks(BERTClassifier):
 
         # Save the best model weights
         checkpoint = tf.keras.callbacks.ModelCheckpoint(
-            'best_model_weights.h5',
+            'tmp/best_model_weights.h5',
             monitor='val_loss',
             save_best_only=True,
             save_weights_only=True,  # Save only the model weights
@@ -150,7 +149,7 @@ class BERTForSequenceClassificationForControlFreaks(BERTClassifier):
             verbose=1
         )
 
-        history = model.fit(
+        self.history = self.model.fit(
             [self.train_input_ids, self.train_attention_mask], 
             self.train_labels, 
             validation_data=([self.val_input_ids, self.val_attention_mask], self.val_labels),
@@ -163,18 +162,18 @@ class BERTForSequenceClassificationForControlFreaks(BERTClassifier):
         print("Logging metrics and artifacts...")
 
         # Log metrics to MLflow
-        mlflow.log_metric("training_loss", model.history.history['loss'][-1])
-        mlflow.log_metric("training_accuracy", model.history.history['accuracy'][-1])
-        mlflow.log_metric("validation_loss", model.history.history['val_loss'][-1])
-        mlflow.log_metric("validation_accuracy", model.history.history['val_accuracy'][-1])
+        mlflow.log_metric("training_loss", self.model.history.history['loss'][-1])
+        mlflow.log_metric("training_accuracy", self.model.history.history['accuracy'][-1])
+        mlflow.log_metric("validation_loss", self.model.history.history['val_loss'][-1])
+        mlflow.log_metric("validation_accuracy", self.model.history.history['val_accuracy'][-1])
 
         # Load the best model weights
         print("Loading model weights...")
-        model.load_weights('best_model_weights.h5')
+        self.model.load_weights('tmp/best_model_weights.h5')
 
         # Log the best model
-        print("Logging model weights...")
-        mlflow.keras.log_model(model, "best_model")
+        # print("Logging model weights...")
+        # mlflow.keras.log_model(self.model, "best_model")
 
     def evaluate_model(self):
         """
@@ -182,7 +181,64 @@ class BERTForSequenceClassificationForControlFreaks(BERTClassifier):
 
         :return: The evaluation results.
         """
-        pass
+        print("Generating evaluation metrics...")
+
+        # Predict on validation set
+        self.val_predictions = self.model.predict([self.val_encoded_texts, self.val_attention_mask])
+        self.val_predictions = [1 if pred > 0.5 else 0 for pred in tqdm(self.val_predictions, desc="Processing Validation Predictions")]
+
+        # Compute evaluation metrics
+        accuracy = accuracy_score(self.val_labels, self.val_predictions)
+        f1 = f1_score(self.val_labels, self.val_predictions)
+        recall = recall_score(self.val_labels, self.val_predictions)
+        precision = precision_score(self.val_labels, self.val_predictions)
+
+        # Log evaluation metrics to MLflow
+        mlflow.log_metric("validation_f1_score", f1)
+        mlflow.log_metric("validation_recall", recall)
+        mlflow.log_metric("validation_precision", precision)
+
+        print(f"Validation Accuracy: {accuracy:.4f}")
+        print(f"Validation F1 Score: {f1:.4f}")
+        print(f"Validation Recall: {recall:.4f}")
+        print(f"Validation Precision: {precision:.4f}")
+
+        # # Calculate the difference between the final training and validation accuracy
+        # accuracy_diff = train_accuracy[-1] - val_accuracy[-1]
+
+        # # Calculate the difference between the final training and validation loss
+        # loss_diff = train_loss[-1] - val_loss[-1]
+
+        # print(f"Difference in Accuracy: {accuracy_diff}")
+        # print(f"Difference in Loss: {loss_diff}")
+
+        # mlflow.log_metric("difference_in_accuracy", accuracy_diff)
+        # mlflow.log_metric("difference_in_loss", loss_diff)
+
+        print("Generating visualizations...")
+
+        self._generate_confusion_matrix()
+
+        self._plot_roc_curve()
+
+        self._plot_precision_recall_curve()
+
+        self._plot_training_history()
+
+        metrics = {
+            "training_loss": self.history.history['loss'][-1],
+            "training_accuracy": self.history.history['accuracy'][-1],
+            "validation_loss": self.history.history['val_loss'][-1],
+            "validation_accuracy": self.history.history['val_accuracy'][-1],
+            "validation_f1_score": f1,
+            "validation_recall": recall,
+            "validation_precision": precision
+        }
+
+        self._record_metrics(metrics)
+
+        # End MLflow run
+        mlflow.end_run()
 
     def register_model(self):
         """
