@@ -33,6 +33,7 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
             logging.info(f"Setting [royal_blue1]{name}[/royal_blue1] to [magenta]{value}[/magenta]")
             setattr(self, name, value)
         self.set_up_mlflow()
+        self._is_multi_class = None
 
     def name(self):
         # Get the name of the enclosing folder of the subclass
@@ -263,16 +264,18 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
         directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
         file_name = os.path.join(directory_path, "confusion_matrix.png")
 
-        precision_color = self._red
-        recall_color = self._green
+        # Ensure that both val_labels and val_predictions are in integer format
+        if self.is_multi_class:
+            val_labels_int = np.argmax(self.val_labels, axis=1)
+            val_predictions_int = np.argmax(self.val_predictions, axis=1)
+        else:
+            val_labels_int = self.val_labels_int
+            val_predictions_int = [1 if pred > 0.5 else 0 for pred in self.val_predictions]
 
-        colors = [precision_color, recall_color]
-
-        cm = confusion_matrix(self.val_labels, self.val_predictions)
-        sns.heatmap(cm, annot=True, fmt='d', cmap=colors, xticklabels=['false', 'true'], yticklabels=['false', 'true'])
+        cm = confusion_matrix(val_labels_int, val_predictions_int)
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
         plt.xlabel('Predicted')
         plt.ylabel('Actual')
-
         plt.title('Confusion Matrix')
 
         plt.savefig(file_name)
@@ -285,10 +288,24 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
         directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
         file_name = os.path.join(directory_path, "ROC_curve.png")
 
-        fpr, tpr, thresholds = roc_curve(self.val_labels, self.val_predictions)
-        roc_auc = auc(fpr, tpr)
         plt.figure()
-        plt.plot(fpr, tpr, color=self._sky_blue, lw=2, label='ROC curve (area = %0.2f)' % roc_auc)
+
+        if self.is_multi_class:
+            # Compute ROC curve and ROC area for each class
+            val_labels_int = np.argmax(self.val_labels, axis=1)
+            n_classes = len(np.unique(val_labels_int))
+            fpr = dict()
+            tpr = dict()
+            roc_auc = dict()
+            for i in range(n_classes):
+                fpr[i], tpr[i], _ = roc_curve(self.val_labels[:, i], self.val_predictions[:, i])
+                roc_auc[i] = auc(fpr[i], tpr[i])
+                plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} (area = {roc_auc[i]:0.2f})')
+        else:
+            fpr, tpr, _ = roc_curve(self.val_labels_int, self.val_predictions)
+            roc_auc = auc(fpr, tpr)
+            plt.plot(fpr, tpr, color=self._sky_blue, lw=2, label='ROC curve (area = %0.2f)' % roc_auc)
+
         plt.plot([0, 1], [0, 1], color=self._fuchsia, lw=2, linestyle='--')
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.05])
@@ -305,17 +322,27 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
         directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
         file_name = os.path.join(directory_path, "precision_and_recall_curve.png")
 
-        precision, recall, thresholds = precision_recall_curve(self.val_labels, self.val_predictions)
-        pr_auc = auc(recall, precision)
         plt.figure()
-        plt.plot(recall, precision, color=self._sky_blue, lw=2, label='PR curve (area = %0.2f)' % pr_auc)
-        plt.fill_between(recall, precision, step='post', alpha=0.2, color=self._fuchsia)
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.05])
+
+        if self.is_multi_class:
+            # Compute precision-recall curve and PR area for each class
+            n_classes = self.val_labels.shape[1]
+            precision = dict()
+            recall = dict()
+            pr_auc = dict()
+            for i in range(n_classes):
+                precision[i], recall[i], _ = precision_recall_curve(self.val_labels[:, i], self.val_predictions[:, i])
+                pr_auc[i] = auc(recall[i], precision[i])
+                plt.plot(recall[i], precision[i], lw=2, label=f'Class {i} (area = {pr_auc[i]:0.2f})')
+        else:
+            precision, recall, _ = precision_recall_curve(self.val_labels_int, self.val_predictions)
+            pr_auc = auc(recall, precision)
+            plt.plot(recall, precision, color=self._sky_blue, lw=2, label='PR curve (area = %0.2f)' % pr_auc)
+
         plt.xlabel('Recall')
         plt.ylabel('Precision')
         plt.title('Precision-Recall curve')
-        plt.legend(loc="lower right")
+        plt.legend(loc="lower left")
         plt.savefig(file_name)
         plt.show()
         mlflow.log_artifact(file_name)
@@ -400,3 +427,10 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
 
         with open(file_name, 'w') as json_file:
             json.dump(metrics, json_file, indent=4)
+
+    @property
+    def is_multi_class(self):
+        if self._is_multi_class is None:
+            unique_labels = np.unique(self.train_labels_int)
+            self._is_multi_class = len(unique_labels) > 2
+        return self._is_multi_class

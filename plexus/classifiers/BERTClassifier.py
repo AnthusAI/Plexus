@@ -6,6 +6,7 @@ import nltk
 from sklearn.model_selection import train_test_split
 from transformers import BertTokenizer, TFBertModel
 from plexus.classifiers.MLClassifier import MLClassifier
+from tensorflow.keras.utils import to_categorical
 
 class BERTClassifier(MLClassifier):
     """
@@ -31,23 +32,23 @@ class BERTClassifier(MLClassifier):
         print("\nDistribution of labels:")
         print(self.dataframe[self.score_name].value_counts(dropna=False))
 
-        # Separate 'Yes' and 'No' instances
-        df_yes = self.dataframe[self.dataframe[self.score_name] == 'Yes']
-        df_no = self.dataframe[self.dataframe[self.score_name] == 'No']
+        # Get the unique labels
+        unique_labels = self.dataframe[self.score_name].unique()
 
-        # Determine the smaller class size
-        smaller_class_size = min(len(df_yes), len(df_no))
+        # Create a dictionary to store the dataframes for each label
+        label_dataframes = {label: self.dataframe[self.dataframe[self.score_name] == label] for label in unique_labels}
 
-        # Sample from the larger class to match the number of instances in the smaller class
-        if len(df_yes) > len(df_no):
-            print(f"Sampling {smaller_class_size} instances from the 'Yes' class...")
-            df_yes = df_yes.sample(n=smaller_class_size, random_state=42)
-        else:
-            print(f"Sampling {smaller_class_size} instances from the 'No' class...")
-            df_no = df_no.sample(n=smaller_class_size, random_state=42)
+        # Determine the smallest class size
+        smallest_class_size = min(len(df) for df in label_dataframes.values())
 
-        # Concatenate 'Yes' and 'No' instances
-        df_balanced = pd.concat([df_yes, df_no])
+        # Sample from each class to match the number of instances in the smallest class
+        balanced_dataframes = []
+        for label, dataframe in label_dataframes.items():
+            print(f"Sampling {smallest_class_size} instances from the '{label}' class...")
+            balanced_dataframes.append(dataframe.sample(n=smallest_class_size, random_state=42))
+
+        # Concatenate the balanced dataframes
+        df_balanced = pd.concat(balanced_dataframes)
 
         # Shuffle the data
         df_balanced = df_balanced.sample(frac=1, random_state=42)
@@ -61,7 +62,7 @@ class BERTClassifier(MLClassifier):
 
         # Now you can use df_balanced for the rest of your code
         texts = df_balanced['Transcription'].tolist()
-        labels = df_balanced[self.score_name].apply(lambda x: 1 if x == 'Yes' else 0).tolist()
+        labels = df_balanced[self.score_name].tolist()
 
         #############
         # Tokenization
@@ -95,14 +96,25 @@ class BERTClassifier(MLClassifier):
         self.train_attention_mask = tf.where(self.train_input_ids != 0, 1, 0)
         self.val_attention_mask = tf.where(self.val_input_ids != 0, 1, 0)
 
-        # Convert labels to numpy arrays
-        self.train_labels = np.array(train_labels)
-        self.val_labels = np.array(val_labels)
+        # Convert labels to integers
+        self.label_map = {label: i for i, label in enumerate(unique_labels)}
+        self.train_labels_int = np.array([self.label_map[label] for label in train_labels])
+        self.val_labels_int = np.array([self.label_map[label] for label in val_labels])
+
+        # Determine if it's a binary or multi-class classification task
+        print(f"Is multi-class: {self.is_multi_class}")
+
+        # One-hot encode the labels
+        num_classes = len(unique_labels)
+        self.train_labels = to_categorical(self.train_labels_int, num_classes=num_classes)
+        self.val_labels = to_categorical(self.val_labels_int, num_classes=num_classes)
 
         # Check the distribution of labels in the training set
         print("Training set label breakdown:")
-        print(np.bincount(self.train_labels))
+        train_label_counts = np.unique(np.argmax(self.train_labels, axis=1), return_counts=True)
+        print(dict(zip(unique_labels, train_label_counts[1])))
 
         # Check the distribution of labels in the validation set
         print("Validation set label breakdown:")
-        print(np.bincount(self.val_labels))
+        val_label_counts = np.unique(np.argmax(self.val_labels, axis=1), return_counts=True)
+        print(dict(zip(unique_labels, val_label_counts[1])))

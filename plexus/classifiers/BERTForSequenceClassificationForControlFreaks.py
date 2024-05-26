@@ -56,6 +56,9 @@ class BERTForSequenceClassificationForControlFreaks(BERTClassifier):
 
         :return: The trained model.
         """
+
+        # Determine if it's a binary or multi-class classification task
+        logging.info(f"Is multi-class: [purple][bold]{self.is_multi_class}[/purple][/bold]")
         
         #############
         # Model setup
@@ -99,18 +102,32 @@ class BERTForSequenceClassificationForControlFreaks(BERTClassifier):
 
         # intermediate_dropout = Dropout(rate=dropout_rate)(intermediate_dense)
 
-        out = tf.keras.layers.Dense(
-            1,
-            activation='sigmoid',
-            kernel_regularizer=regularizers.l2(self.l2_regularization_strength)
-        )(dropout)
+        # Modify the output layer based on the classification type
+        if self.is_multi_class:
+            num_labels = len(np.unique(self.train_labels_int))
+            out = tf.keras.layers.Dense(
+                num_labels,
+                activation='softmax',
+                kernel_regularizer=regularizers.l2(self.l2_regularization_strength)
+            )(dropout)
+        else:
+            out = tf.keras.layers.Dense(
+                1,
+                activation='sigmoid',
+                kernel_regularizer=regularizers.l2(self.l2_regularization_strength)
+            )(dropout)
 
         self.model = tf.keras.models.Model(inputs=[input_ids, attention_mask], outputs=out)
 
-        # Compile the model
+        # Compile the model with the appropriate loss function
+        if self.is_multi_class:
+            loss_function = 'categorical_crossentropy'
+        else:
+            loss_function = 'binary_crossentropy'
+
         self.model.compile(
             optimizer=Adam(learning_rate=self.learning_rate),
-            loss='binary_crossentropy',
+            loss=loss_function,
             metrics=['accuracy']
         )
 
@@ -185,13 +202,17 @@ class BERTForSequenceClassificationForControlFreaks(BERTClassifier):
 
         # Predict on validation set
         self.val_predictions = self.model.predict([self.val_encoded_texts, self.val_attention_mask])
-        self.val_predictions = [1 if pred > 0.5 else 0 for pred in tqdm(self.val_predictions, desc="Processing Validation Predictions")]
+
+        if self.is_multi_class:
+            self.val_predictions_labels = np.argmax(self.val_predictions, axis=1)
+        else:
+            self.val_predictions_labels = [1 if pred > 0.5 else 0 for pred in tqdm(self.val_predictions, desc="Processing Validation Predictions")]
 
         # Compute evaluation metrics
-        accuracy = accuracy_score(self.val_labels, self.val_predictions)
-        f1 = f1_score(self.val_labels, self.val_predictions)
-        recall = recall_score(self.val_labels, self.val_predictions)
-        precision = precision_score(self.val_labels, self.val_predictions)
+        accuracy = accuracy_score(self.val_labels_int, self.val_predictions_labels)
+        f1 = f1_score(self.val_labels_int, self.val_predictions_labels, average='weighted' if self.is_multi_class else 'binary')
+        recall = recall_score(self.val_labels_int, self.val_predictions_labels, average='weighted' if self.is_multi_class else 'binary')
+        precision = precision_score(self.val_labels_int, self.val_predictions_labels, average='weighted' if self.is_multi_class else 'binary')
 
         # Log evaluation metrics to MLflow
         mlflow.log_metric("validation_f1_score", f1)
@@ -202,18 +223,6 @@ class BERTForSequenceClassificationForControlFreaks(BERTClassifier):
         print(f"Validation F1 Score: {f1:.4f}")
         print(f"Validation Recall: {recall:.4f}")
         print(f"Validation Precision: {precision:.4f}")
-
-        # # Calculate the difference between the final training and validation accuracy
-        # accuracy_diff = train_accuracy[-1] - val_accuracy[-1]
-
-        # # Calculate the difference between the final training and validation loss
-        # loss_diff = train_loss[-1] - val_loss[-1]
-
-        # print(f"Difference in Accuracy: {accuracy_diff}")
-        # print(f"Difference in Loss: {loss_diff}")
-
-        # mlflow.log_metric("difference_in_accuracy", accuracy_diff)
-        # mlflow.log_metric("difference_in_loss", loss_diff)
 
         print("Generating visualizations...")
 
