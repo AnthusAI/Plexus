@@ -383,7 +383,7 @@ def index(scorecard_name):
 
         if os.path.exists(score_folder):
             artifacts = os.listdir(score_folder)
-            artifacts = [f for f in artifacts if f not in ['configuration.json', 'metrics.json']]
+            artifacts = [f for f in artifacts if f.endswith('.png')]
         else:
             artifacts = []
         
