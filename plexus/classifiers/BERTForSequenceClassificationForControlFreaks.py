@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 import numpy as np
-import logging
+from plexus import logging
 import datetime
 from dotenv import load_dotenv
 load_dotenv()
@@ -27,6 +27,16 @@ nltk.download('punkt')
 from plexus.CustomLogging import logging
 from plexus.classifiers.MLClassifier import MLClassifier
 from plexus.classifiers.BERTClassifier import BERTClassifier
+
+class ProcessWindowLayer(tf.keras.layers.Layer):
+    def __init__(self, bert_model, **kwargs):
+        super(ProcessWindowLayer, self).__init__(**kwargs)
+        self.bert_model = bert_model
+
+    def call(self, inputs):
+        window_input_ids, window_attention_mask = inputs
+        pooled_output = self.bert_model(window_input_ids, attention_mask=window_attention_mask)[1]
+        return pooled_output
 
 class BERTForSequenceClassificationForControlFreaks(BERTClassifier):
 
@@ -65,44 +75,26 @@ class BERTForSequenceClassificationForControlFreaks(BERTClassifier):
 
         from transformers import TFBertModel
 
-        # BERT Model
-        input_ids = tf.keras.layers.Input(shape=(self.max_len,), dtype=tf.int32)
-        attention_mask = tf.keras.layers.Input(shape=(self.max_len,), dtype=tf.int32)
+        # Sliding Window Model Architecture
+        input_ids = tf.keras.layers.Input(shape=(None, self.window_size), dtype=tf.int32)
+        attention_mask = tf.keras.layers.Input(shape=(None, self.window_size), dtype=tf.int32)
         bert_model = TFBertModel.from_pretrained(self.bert_model_name)
 
-        # Set all layers to non-trainable first
         for i in range(len(bert_model.bert.encoder.layer)):
             bert_model.bert.encoder.layer[i].trainable = False
 
-        # Set only some layers to trainable, for fine-tuning.
-        number_of_trainable_bert_layers = 1
+        number_of_trainable_bert_layers = self.number_of_trainable_bert_layers
         for i in range(-(number_of_trainable_bert_layers), 0, 1):
             bert_model.bert.encoder.layer[i].trainable = True
 
-        # Verify the trainability of each layer
-        for i, layer in enumerate(bert_model.bert.encoder.layer):
-            print(f"Layer {i} trainable: {layer.trainable}")
+        process_window_layer = ProcessWindowLayer(bert_model)
 
-        # Extract the pooled output from the BERT model
-        pooled_output = bert_model.bert(input_ids, attention_mask=attention_mask)[1]
+        pooled_outputs = tf.keras.layers.TimeDistributed(process_window_layer)([input_ids, attention_mask])
 
-        # Add a tanh activation layer
+        pooled_output = tf.keras.layers.GlobalAveragePooling1D()(pooled_outputs)
         tanh_output = tf.keras.layers.Dense(768, activation='tanh')(pooled_output)
-
-        # Apply dropout for regularization
         dropout = Dropout(rate=self.dropout_rate)(tanh_output)
 
-        # intermediate_size = 768
-
-        # intermediate_dense = tf.keras.layers.Dense(
-        #     intermediate_size,
-        #     activation='relu',
-        #     kernel_regularizer=regularizers.l2(l2_regularization_strength)
-        # )(dropout)
-
-        # intermediate_dropout = Dropout(rate=dropout_rate)(intermediate_dense)
-
-        # Modify the output layer based on the classification type
         if self.is_multi_class:
             num_labels = len(np.unique(self.train_labels_int))
             out = tf.keras.layers.Dense(
@@ -119,7 +111,6 @@ class BERTForSequenceClassificationForControlFreaks(BERTClassifier):
 
         self.model = tf.keras.models.Model(inputs=[input_ids, attention_mask], outputs=out)
 
-        # Compile the model with the appropriate loss function
         if self.is_multi_class:
             loss_function = 'categorical_crossentropy'
         else:
@@ -133,12 +124,8 @@ class BERTForSequenceClassificationForControlFreaks(BERTClassifier):
 
         self.model.summary()
 
-        #############
-        # Training
-
         print("Training the model...")
 
-        # Reduces the learning rate when the validation loss metric has stopped improving.
         def custom_lr_scheduler(epoch, lr):
             initial_wait_epochs = self.learning_rate_scheduler_initial_wait_epochs
             decay_rate = self.learning_rate_scheduler_decay_rate
@@ -148,29 +135,53 @@ class BERTForSequenceClassificationForControlFreaks(BERTClassifier):
             return lr
         reduce_lr = tf.keras.callbacks.LearningRateScheduler(custom_lr_scheduler)
 
-        # Stop training if the validation loss doesn't improve after a certain number of epochs.
         early_stop = tf.keras.callbacks.EarlyStopping(
             monitor='val_loss',
-            patience=5,  # Increase patience to allow more epochs for improvement
+            patience=self.early_stop_patience,
             verbose=1,
-            restore_best_weights=True  # Restore the best model weights
+            restore_best_weights=True
         )
 
-        # Save the best model weights
         checkpoint = tf.keras.callbacks.ModelCheckpoint(
             'tmp/best_model_weights.h5',
             monitor='val_loss',
             save_best_only=True,
-            save_weights_only=True,  # Save only the model weights
+            save_weights_only=True,
             mode='min',
             verbose=1
         )
 
+        # Ensure input arrays are properly shaped and contain consistent data types
+        self.train_input_ids = tf.keras.preprocessing.sequence.pad_sequences(self.train_input_ids, padding='post', dtype='int32')
+        self.train_attention_mask = tf.keras.preprocessing.sequence.pad_sequences(self.train_attention_mask, padding='post', dtype='int32')
+        self.train_labels = np.array(self.train_labels, dtype=np.float32 if not self.is_multi_class else np.int32)
+
+        # Assuming self.train_input_ids and self.train_attention_mask are lists of batches
+        print(f"Shape of a single batch of train_input_ids: {np.array(self.train_input_ids[0]).shape}")
+        print(f"Shape of a single batch of train_attention_mask: {np.array(self.train_attention_mask[0]).shape}")
+
+        # Print the number of windows per transcript
+        num_windows_per_transcript = [len(seq) for seq in self.train_input_ids]
+        print(f"Number of windows per transcript: {num_windows_per_transcript}")
+        print(f"Max number of windows in a transcript: {max(num_windows_per_transcript)}")
+
+        self.val_input_ids = tf.keras.preprocessing.sequence.pad_sequences(self.val_input_ids, padding='post', dtype='int32')
+        self.val_attention_mask = tf.keras.preprocessing.sequence.pad_sequences(self.val_attention_mask, padding='post', dtype='int32')
+        self.val_labels = np.array(self.val_labels, dtype=np.float32 if not self.is_multi_class else np.int32)
+
+        train_input_ids_tensor = tf.convert_to_tensor(self.train_input_ids, dtype=tf.int32)
+        train_attention_mask_tensor = tf.convert_to_tensor(self.train_attention_mask, dtype=tf.int32)
+        train_labels_tensor = tf.convert_to_tensor(self.train_labels, dtype=tf.float32 if not self.is_multi_class else tf.int32)
+
+        val_input_ids_tensor = tf.convert_to_tensor(self.val_input_ids, dtype=tf.int32)
+        val_attention_mask_tensor = tf.convert_to_tensor(self.val_attention_mask, dtype=tf.int32)
+        val_labels_tensor = tf.convert_to_tensor(self.val_labels, dtype=tf.float32 if not self.is_multi_class else tf.int32)
+
         self.history = self.model.fit(
-            [self.train_input_ids, self.train_attention_mask], 
-            self.train_labels, 
-            validation_data=([self.val_input_ids, self.val_attention_mask], self.val_labels),
-            epochs=self.epochs, 
+            [train_input_ids_tensor, train_attention_mask_tensor], 
+            train_labels_tensor, 
+            validation_data=([val_input_ids_tensor, val_attention_mask_tensor], val_labels_tensor),
+            epochs=self.epochs,
             batch_size=self.batch_size,
             callbacks=[reduce_lr, early_stop, checkpoint],
             verbose=1
@@ -178,19 +189,15 @@ class BERTForSequenceClassificationForControlFreaks(BERTClassifier):
 
         print("Logging metrics and artifacts...")
 
-        # Log metrics to MLflow
         mlflow.log_metric("training_loss", self.model.history.history['loss'][-1])
-        mlflow.log_metric("training_accuracy", self.model.history.history['accuracy'][-1])
         mlflow.log_metric("validation_loss", self.model.history.history['val_loss'][-1])
+        mlflow.log_metric("training_accuracy", self.model.history.history['accuracy'][-1])
         mlflow.log_metric("validation_accuracy", self.model.history.history['val_accuracy'][-1])
 
-        # Load the best model weights
-        print("Loading model weights...")
-        self.model.load_weights('tmp/best_model_weights.h5')
-
-        # Log the best model
-        # print("Logging model weights...")
-        # mlflow.keras.log_model(self.model, "best_model")
+        print("Training complete.")
+            # Log the best model
+            # print("Logging model weights...")
+            # mlflow.keras.log_model(self.model, "best_model")
 
     def evaluate_model(self):
         """
@@ -199,6 +206,10 @@ class BERTForSequenceClassificationForControlFreaks(BERTClassifier):
         :return: The evaluation results.
         """
         print("Generating evaluation metrics...")
+
+        # Load the best model weights
+        print("Loading model weights...")
+        self.model.load_weights('tmp/best_model_weights.h5')
 
         # Predict on validation set
         self.val_predictions = self.model.predict([self.val_encoded_texts, self.val_attention_mask])
