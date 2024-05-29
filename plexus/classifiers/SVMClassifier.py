@@ -32,11 +32,11 @@ import numpy as np
 
 class SVMClassifier(BERTClassifier):
 
-    def set_up_mlflow(self):
+    def start_mlflow_experiment_run(self):
         """
         Set up MLflow for tracking the experiment, including the experiment name and parameters.
         """
-        super().set_up_mlflow()
+        super().start_mlflow_experiment_run()
 
     def train_model(self):
         """
