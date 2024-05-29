@@ -1,19 +1,25 @@
-from CustomLogging import logging
+from plexus.CustomLogging import logging
 import fasttext
 import pandas as pd
 from sklearn.model_selection import train_test_split
 import mlflow
 import mlflow.pyfunc
 
-from plexus.classifiers.MLClassifier import MLClassifier
+from plexus.classifiers.Classifier import Classifier
 from plexus.classifiers.LLMGenerator import LLMGenerator
 
 fasttext.FastText.eprint = lambda x: None
 
-class FastTextClassifier(MLClassifier):
+class FastTextClassifier(Classifier):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **parameters):
+        super().__init__(**parameters)
+        logging.info("Initializing [magenta1][b]FastTextClassifier[/b][/magenta1]")
+        for name, value in parameters.items():
+            logging.info(f"Setting [royal_blue1]{name}[/royal_blue1] to [magenta]{value}[/magenta]")
+            setattr(self, name, value)
+        # self.set_up_mlflow()
+        self._is_multi_class = None
         self.model = None
 
     def data_filename(self):
@@ -167,6 +173,12 @@ class FastTextClassifier(MLClassifier):
         Constructs the model name based on the classifier's name.
         """
         return f"fasttext_model_{self.name()}"
+
+    def save_model(self):
+        """
+        Save the model to the model registry.
+        """
+        pass
 
     def save_model_binary(self):
         if self.model is None:

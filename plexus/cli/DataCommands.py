@@ -6,7 +6,7 @@ import plexus
 from plexus.DataCache import DataCache
 from rich import print as rich_print
 from rich.table import Table
-from plexus.logging import logging
+from plexus.CustomLogging import logging
 from rich.layout import Layout
 from rich.panel import Panel
 from rich.columns import Columns
