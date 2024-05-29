@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from tensorflow.keras.utils import plot_model
 from sklearn.metrics import confusion_matrix
 from abc import ABC, abstractmethod
 from sklearn.metrics import roc_curve, auc, precision_recall_curve
@@ -261,6 +262,13 @@ class MLClassifier(Classifier):
     _fuchsia = (0.815, 0.2, 0.51)
     _red = '#DD3333'
     _green = '#339933'
+
+    @Classifier.ensure_report_directory_exists
+    def _generate_model_diagram(self):
+        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        file_name = os.path.join(directory_path, "model_diagram.png")
+        plot_model(self.model, to_file=file_name, show_shapes=True, show_layer_names=True, rankdir='TB')
+        mlflow.log_artifact(file_name)
 
     @Classifier.ensure_report_directory_exists
     def _generate_confusion_matrix(self):

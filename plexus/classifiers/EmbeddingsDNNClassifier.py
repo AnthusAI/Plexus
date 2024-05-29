@@ -292,6 +292,8 @@ class EmbeddingsDNNClassifier(MLClassifier):
 
         self.model.summary()
 
+        self._generate_model_diagram()
+
         #############
         # Training
 
