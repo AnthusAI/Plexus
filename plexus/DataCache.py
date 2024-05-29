@@ -4,7 +4,7 @@ import json
 from tqdm import tqdm
 import pandas as pd
 from io import StringIO
-from plexus.logging import logging
+from plexus.CustomLogging import logging
 from plexus.cli.console import console
 from concurrent.futures import ThreadPoolExecutor
 from rich.progress import Progress

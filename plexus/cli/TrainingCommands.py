@@ -4,7 +4,7 @@ import importlib
 import plexus
 import copy
 
-from plexus.logging import logging
+from plexus.CustomLogging import logging
 from plexus.cli.console import console
 from plexus.Registries import scorecard_registry
 
@@ -41,7 +41,7 @@ def train(scorecard_name, score_name):
         logging.error(f"{classifier_class_name} is not a class.")
         return
 
-    classifier_parameters = copy.deepcopy(model_configuration['parameters'])
+    classifier_parameters = copy.deepcopy(model_configuration['parameters'] or {})
 
     # Add the scorecard name and score name to the parameters.
     classifier_parameters['scorecard_name'] = scorecard_class.name()

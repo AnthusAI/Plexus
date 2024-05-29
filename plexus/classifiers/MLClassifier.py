@@ -1,5 +1,6 @@
 import os
 import json
+import mlflow
 import inspect
 import functools
 import pandas as pd
@@ -11,7 +12,6 @@ from abc import ABC, abstractmethod
 from sklearn.metrics import roc_curve, auc, precision_recall_curve
 import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
-import mlflow.pyfunc
 from rich.table import Table
 from rich.panel import Panel
 from rich.columns import Columns
@@ -22,16 +22,14 @@ from plexus.cli.console import console
 from plexus.CustomLogging import logging
 from plexus.classifiers.Classifier import Classifier
 
-class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
+class MLClassifier(Classifier):
     """
     Abstract class for a machine-learning classifier, with functions for the various states of ML model development.
     """
 
     def __init__(self, **parameters):
-        logging.info("Initializing [magenta1][b]BERTForSequenceClassificationForControlFreaks[/b][/magenta1]")
-        for name, value in parameters.items():
-            logging.info(f"Setting [royal_blue1]{name}[/royal_blue1] to [magenta]{value}[/magenta]")
-            setattr(self, name, value)
+        super().__init__(**parameters)
+        logging.info("Initializing [magenta1][b]MLClassifier[/b][/magenta1]")
         self.set_up_mlflow()
         self._is_multi_class = None
 
@@ -219,6 +217,20 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
         pass
 
     @abstractmethod
+    def save_model(self):
+        """
+        Save the model to the model registry.
+        """
+        pass
+
+    def load_context(self, context):
+        """
+        Load the trained model and any necessary artifacts based on the MLflow context.
+        """
+        self.model = mlflow.keras.load_model(context.artifacts["model"])
+        # Load any other necessary artifacts
+
+    @abstractmethod
     def predict(self, context, model_input):
         """
         Make predictions on the test data.
@@ -250,16 +262,7 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
     _red = '#DD3333'
     _green = '#339933'
 
-    def ensure_report_directory_exists(func):
-        @functools.wraps(func)
-        def wrapper(self, *args, **kwargs):
-            report_directory_path = f"./reports/{self.scorecard_name}/{self.score_name}/"
-            if not os.path.exists(report_directory_path):
-                os.makedirs(report_directory_path)
-            return func(self, *args, **kwargs)
-        return wrapper
-
-    @ensure_report_directory_exists
+    @Classifier.ensure_report_directory_exists
     def _generate_confusion_matrix(self):
         directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
         file_name = os.path.join(directory_path, "confusion_matrix.png")
@@ -273,7 +276,8 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
             val_predictions_int = [1 if pred > 0.5 else 0 for pred in self.val_predictions]
 
         cm = confusion_matrix(val_labels_int, val_predictions_int)
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+        custom_colormap = sns.light_palette(self._fuchsia, as_cmap=True)
+        sns.heatmap(cm, annot=True, fmt='d', cmap=custom_colormap, xticklabels=self.label_map.keys(), yticklabels=self.label_map.keys())
         plt.xlabel('Predicted')
         plt.ylabel('Actual')
         plt.title('Confusion Matrix')
@@ -283,7 +287,7 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
 
         mlflow.log_artifact(file_name)
 
-    @ensure_report_directory_exists
+    @Classifier.ensure_report_directory_exists
     def _plot_roc_curve(self):
         directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
         file_name = os.path.join(directory_path, "ROC_curve.png")
@@ -317,7 +321,7 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
         plt.show()
         mlflow.log_artifact(file_name)
 
-    @ensure_report_directory_exists
+    @Classifier.ensure_report_directory_exists
     def _plot_precision_recall_curve(self):
         directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
         file_name = os.path.join(directory_path, "precision_and_recall_curve.png")
@@ -347,7 +351,7 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
         plt.show()
         mlflow.log_artifact(file_name)
 
-    @ensure_report_directory_exists
+    @Classifier.ensure_report_directory_exists
     def _plot_training_history(self):
         directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
         file_name = os.path.join(directory_path, "training_history.png")
@@ -400,21 +404,7 @@ class MLClassifier(Classifier, mlflow.pyfunc.PythonModel):
         plt.show()
         mlflow.log_artifact(file_name)
 
-    @ensure_report_directory_exists
-    def record_configuration(self, configuration):
-        """
-        Record the provided configuration dictionary as a JSON file in the appropriate report folder for this model.
-
-        :param configuration: Dictionary containing the configuration to be recorded.
-        :type configuration: dict
-        """
-        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
-        file_name = os.path.join(directory_path, "configuration.json")
-
-        with open(file_name, 'w') as json_file:
-            json.dump(configuration, json_file, indent=4)
-
-    @ensure_report_directory_exists
+    @Classifier.ensure_report_directory_exists
     def _record_metrics(self, metrics):
         """
         Record the provided metrics dictionary as a JSON file in the appropriate report folder for this model.

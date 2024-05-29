@@ -4,7 +4,7 @@ import click
 import plexus
 from jinja2 import Template
 
-from plexus.logging import logging
+from plexus.CustomLogging import logging
 from plexus.cli.console import console
 from plexus.Registries import scorecard_registry
 
