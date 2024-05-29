@@ -11,6 +11,7 @@ from tensorflow.keras.utils import plot_model
 from sklearn.metrics import confusion_matrix
 from abc import ABC, abstractmethod
 from sklearn.metrics import roc_curve, auc, precision_recall_curve
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
 from rich.table import Table
@@ -31,8 +32,14 @@ class MLClassifier(Classifier):
     def __init__(self, **parameters):
         super().__init__(**parameters)
         logging.info("Initializing [magenta1][b]MLClassifier[/b][/magenta1]")
-        self.set_up_mlflow()
         self._is_multi_class = None
+        self._stored_parameters = parameters
+        self.start_mlflow_experiment_run()
+
+    def log_stored_parameters(self):
+        if hasattr(self, '_stored_parameters'):
+            for name, value in self._stored_parameters['configuration']['model']['parameters'].items():
+                mlflow.log_param(name, value)
 
     def name(self):
         # Get the name of the enclosing folder of the subclass
@@ -43,7 +50,7 @@ class MLClassifier(Classifier):
         logging.info(f"Classifier name: {computed_name}")
         return computed_name
 
-    def set_up_mlflow(self):
+    def start_mlflow_experiment_run(self):
         experiment_name = f"{self.scorecard_name} - {self.score_name}"
         if os.getenv('MLFLOW_EXPERIMENT_NAME'):
             experiment_name = experiment_name + " - " + os.getenv('MLFLOW_EXPERIMENT_NAME')
@@ -66,6 +73,18 @@ class MLClassifier(Classifier):
             mlflow.start_run()
 
         mlflow.log_param("classifier_class", self.__class__.__name__)
+
+        # Log common parameters
+        mlflow.log_param("scorecard_name", self.scorecard_name)
+        mlflow.log_param("score_name", self.score_name)
+
+        self.log_stored_parameters()
+
+    def log_evaluation_metrics(self, metrics):
+        mlflow.log_metric("accuracy", metrics["accuracy"])
+        mlflow.log_metric("precision", metrics["precision"])
+        mlflow.log_metric("recall", metrics["recall"])
+        mlflow.log_metric("f1_score", metrics["f1_score"])
 
     def load_data(self, *, queries):
         """
@@ -191,6 +210,49 @@ class MLClassifier(Classifier):
                 transcript_comparison_table.add_row(first_transcript_before_truncated, first_transcript_after_truncated)
                 
                 console.print(Panel(transcript_comparison_table, border_style="royal_blue1"))
+        
+        # Check for missing or unexpected values
+        print(f"Unique values in '{self.score_name}':", self.dataframe[self.score_name].unique())
+
+        #############
+        # Balance data
+
+        if hasattr(self, 'balance_data') and not self.balance_data:
+            return
+
+        # Check the distribution of labels
+        print("\nDistribution of labels in the dataframe:")
+        print(self.dataframe[self.score_name].value_counts(dropna=False))
+
+        # Get the unique labels
+        unique_labels = self.dataframe[self.score_name].unique()
+
+        # Create a dictionary to store the dataframes for each label
+        label_dataframes = {label: self.dataframe[self.dataframe[self.score_name] == label] for label in unique_labels}
+
+        # Determine the smallest class size
+        smallest_class_size = min(len(df) for df in label_dataframes.values())
+
+        # Sample from each class to match the number of instances in the smallest class
+        balanced_dataframes = []
+        for label, dataframe in label_dataframes.items():
+            print(f"Sampling {smallest_class_size} instances from the '{label}' class...")
+            balanced_dataframes.append(dataframe.sample(n=smallest_class_size, random_state=42))
+
+        # Concatenate the balanced dataframes
+        balanced_dataframe = pd.concat(balanced_dataframes)
+
+        # Shuffle the data
+        balanced_dataframe = balanced_dataframe.sample(frac=1, random_state=42)
+
+        # Sample a certain percentage of the data
+        balanced_dataframe = balanced_dataframe.sample(frac=self.data_percentage / 100, random_state=42)
+
+        # Check the distribution of labels
+        print("\nDistribution of labels in the balanced dataframe:")
+        print(balanced_dataframe[self.score_name].value_counts())
+
+        self.dataframe = balanced_dataframe
 
     @abstractmethod
     def train_model(self):
@@ -429,6 +491,6 @@ class MLClassifier(Classifier):
     @property
     def is_multi_class(self):
         if self._is_multi_class is None:
-            unique_labels = np.unique(self.train_labels_int)
+            unique_labels = self.dataframe[self.score_name].unique()
             self._is_multi_class = len(unique_labels) > 2
         return self._is_multi_class

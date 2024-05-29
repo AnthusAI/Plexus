@@ -37,48 +37,6 @@ class EmbeddingsDNNClassifier(MLClassifier):
         # configured in the scorecard YAML file.
         super().process_data()
 
-        # Check for missing or unexpected values
-        print(f"Unique values in '{self.score_name}':", self.dataframe[self.score_name].unique())
-
-        #############
-        # Balance data
-
-        # Check the distribution of labels
-        print("\nDistribution of labels in the dataframe:")
-        print(self.dataframe[self.score_name].value_counts(dropna=False))
-
-        # Get the unique labels
-        unique_labels = self.dataframe[self.score_name].unique()
-
-        # Create a dictionary to store the dataframes for each label
-        label_dataframes = {label: self.dataframe[self.dataframe[self.score_name] == label] for label in unique_labels}
-
-        # Determine the smallest class size
-        smallest_class_size = min(len(df) for df in label_dataframes.values())
-
-        # Sample from each class to match the number of instances in the smallest class
-        balanced_dataframes = []
-        for label, dataframe in label_dataframes.items():
-            print(f"Sampling {smallest_class_size} instances from the '{label}' class...")
-            balanced_dataframes.append(dataframe.sample(n=smallest_class_size, random_state=42))
-
-        # Concatenate the balanced dataframes
-        df_balanced = pd.concat(balanced_dataframes)
-
-        # Shuffle the data
-        df_balanced = df_balanced.sample(frac=1, random_state=42)
-
-        # Sample a certain percentage of the data
-        df_balanced = df_balanced.sample(frac=self.data_percentage / 100, random_state=42)
-
-        # Check the distribution of labels
-        print("\nDistribution of labels in the balanced dataframe:")
-        print(df_balanced[self.score_name].value_counts())
-
-        # Now you can use df_balanced for the rest of your code
-        texts = df_balanced['Transcription'].tolist()
-        labels = df_balanced[self.score_name].tolist()
-
         #############
         # Tokenization
 
@@ -100,6 +58,10 @@ class EmbeddingsDNNClassifier(MLClassifier):
                         encoded_texts.append(future.result())
                         progress.advance(task)
             return tf.concat(encoded_texts, axis=0)
+
+        texts = self.dataframe['Transcription'].tolist()
+        labels = self.dataframe[self.score_name].tolist()
+        unique_labels = self.dataframe[self.score_name].unique()
 
         # Split the data into training and validation sets
         train_texts, val_texts, train_labels, val_labels = train_test_split(texts, labels, test_size=0.2, random_state=42)
@@ -158,26 +120,6 @@ class EmbeddingsDNNClassifier(MLClassifier):
         else:
             val_label_counts = np.unique(self.val_labels, return_counts=True)
             print(dict(zip(unique_labels, val_label_counts[1])))
-    
-    def set_up_mlflow(self):
-        """
-        Set up MLflow for tracking the experiment, including the experiment name and parameters.
-        """
-        super().set_up_mlflow()
-
-        # Log parameters
-        mlflow.log_param("maximum_number_of_tokens_analyzed", self.maximum_number_of_tokens_analyzed)
-        mlflow.log_param("epochs", self.epochs)
-        mlflow.log_param("batch_size", self.batch_size)
-        mlflow.log_param("warmup_start_learning_rate", self.warmup_start_learning_rate)
-        mlflow.log_param("warmup_number_of_epochs", self.warmup_number_of_epochs)
-        mlflow.log_param("plateau_learning_rate", self.plateau_learning_rate)
-        mlflow.log_param("plateau_number_of_epochs", self.plateau_number_of_epochs)
-        mlflow.log_param("learning_rate_decay", self.learning_rate_decay)
-        mlflow.log_param("l2_regularization_strength", self.l2_regularization_strength)
-        mlflow.log_param("dropout_rate", self.dropout_rate)
-        mlflow.log_param("embeddings_model", self.embeddings_model_name)
-        mlflow.log_param("data_percentage", self.data_percentage)
 
     def custom_lr_scheduler(self, epoch, lr):
         # Record validation loss if available
