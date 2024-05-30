@@ -69,7 +69,8 @@ class GoogleGeminiCompositeScore(CompositeScore):
             'completion_tokens': 0,
             'input_cost':  Decimal('0.0'),
             'output_cost': Decimal('0.0'),
-            'total_cost':  Decimal('0.0')
+            'total_cost':  Decimal('0.0'),
+            'chat_history': []
         }
 
         # The element name and prompt.
@@ -257,7 +258,7 @@ class GoogleGeminiCompositeScore(CompositeScore):
             request_arguments["tool_choice"] = {"type": "function", "function": {"name": tools[0]['function']['name']}}
 
         # Use the constructed dictionary as **kwargs to pass to the function
-        response = litellm.completion("azure/CallCriteriaGPT35Turbo16k", **request_arguments)
+        response = litellm.completion("gemini-1.5-flash-preview-0514", **request_arguments)
 
         self.llm_request_count += 1
 
