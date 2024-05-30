@@ -25,7 +25,6 @@ def index(scorecard_name):
 
     plexus.Scorecard.load_and_register_scorecards('scorecards/')
 
-    # First, find the scorecard class from the name.
     scorecard_class = scorecard_registry.get(scorecard_name)
     if scorecard_class is None:
         logging.error(f"Scorecard with name '{scorecard_name}' not found.")
@@ -65,7 +64,10 @@ def index(scorecard_name):
                 --green: #393;
                 --text: #333;
                 --red-text: #d33;
+                --yellow-text: #ff0;
+                --faint-yellow-text: #f0f0b0;
                 --green-text: #393;
+                --light-green-text: #6c6;
             }
             h1, .cinzel-700 {
                 font-family: "Cinzel", serif;
@@ -184,13 +186,29 @@ def index(scorecard_name):
             metadata, element {
                 position: relative;
             }
-            .correct {
-                color: var(--green-text);
+            .exists {
+                background-color: var(--faint-yellow-text);
             }
-            .incorrect {
-                color: var(--red-text);
+            .almost_there {
+                background-color: var(--yellow-text);
+            }
+            .viable {
+                background-color: var(--light-green-text);
+            }
+            .nailed_it {
+                background-color: var(--green-text);
             }
             .label {
+                font-weight: 700;
+                letter-spacing: 0.12ex;
+                padding: 1ex;
+                border-radius: 1ex;
+                color: var(--text);
+                background-color: var(--neutral);
+                text-align: center;
+            }
+            .code_name {
+                font-family: "Inconsolata", monospace;
                 font-weight: 700;
                 letter-spacing: 0.12ex;
                 padding: 1ex;
@@ -290,7 +308,7 @@ def index(scorecard_name):
     """)
 
     score_template = Template("""
-    <score class="{{ 'correct' if viable else '' }}">
+    <score class="{% if viable %}viable {% endif %}{% if nailed_it %}nailed_it {% endif %}{% if almost_there %}almost_there {% endif %}{% if exists %}exists {% endif %}">
     <metadata>
         <div style="display: flex; flex-direction: column; gap: 1em;">
             <div style="display: flex; justify-content: space-between; gap: 2em;">
@@ -303,10 +321,13 @@ def index(scorecard_name):
                         <div>Training Accuracy</div>
                     </div>
                     <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 3em; margin: 0 10%;">
-                        <div class="label">{{ '%.1f'|format(metrics['validation_accuracy']*100) }}</div>
-                        <div class="label">{{ '%.1f'|format(metrics['validation_f1_score']*100) }}</div>
-                        <div class="label">{{ '%.1f'|format(metrics['training_accuracy']*100) }}</div>
+                        <div class="label">{{ '%.1f'|format(metrics.get('validation_accuracy', metrics.get('accuracy', 0)) * 100) }}%</div>
+                        <div class="label">{{ '%.1f'|format(metrics.get('validation_f1_score', metrics.get('f1_score', 0)) * 100) }}%</div>
+                        <div class="label">{{ '%.1f'|format(metrics.get('training_accuracy', metrics.get('accuracy', 0)) * 100) }}%</div>
                     </div>
+                    {% endif %}
+                    {% if classifier_class_name %}
+                    <div><b>Classifier:</b> <span class="code_name">{{ classifier_class_name }}</span></div>
                     {% endif %}
                     <div><b>Configuration:</b></div>
                     <div class="collapsible_section">
@@ -367,6 +388,8 @@ def index(scorecard_name):
         score_configuration = score[1]
         score_folder = os.path.join(report_folder, score_name)
 
+        classifier_class_name = score_configuration.get('model', {}).get('class', None)
+
         data_profiling_file_path = os.path.join(score_folder, 'data_profiling.json')
         if os.path.exists(data_profiling_file_path):
             with open(data_profiling_file_path) as data_profiling_file:
@@ -387,18 +410,31 @@ def index(scorecard_name):
         else:
             artifacts = []
         
+        exists = False
+        if metrics:
+            exists = True
         viable = False
-        if metrics and metrics['validation_accuracy'] > 0.95:
+        if metrics and (metrics.get('validation_accuracy', 0) > 0.90 or metrics.get('accuracy', 0) > 0.90):
             viable = True
+        nailed_it = False
+        if metrics and (metrics.get('validation_accuracy', 0) > 0.95 or metrics.get('accuracy', 0) > 0.95):
+            nailed_it = True
+        almost_there = False
+        if metrics and (metrics.get('validation_accuracy', 0) > 0.80 or metrics.get('accuracy', 0) > 0.80):
+            almost_there = True
 
         score_html = score_template.render(
             scorecard=scorecard_instance,
             score_name=score_name,
+            classifier_class_name=classifier_class_name,
             configuration=score_configuration,
             data_profiling=data_profiling,
             metrics=metrics,
             artifacts=artifacts,
-            viable=viable
+            exists=exists,
+            almost_there=almost_there,
+            viable=viable,
+            nailed_it=nailed_it
         )
         report_html += score_html
         
