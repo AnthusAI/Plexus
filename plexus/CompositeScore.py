@@ -157,31 +157,29 @@ class CompositeScore(Score):
             markdown_content = file.read()
 
         # Parse the Markdown content and extract the YAML sections
-        config               = cls.extract_yaml_section(markdown_content, 'Configuration')
+        config = cls.extract_yaml_section(markdown_content, 'Configuration') or {}
         preprocessing_config = cls.extract_yaml_section(markdown_content, 'Preprocessing')
         decision_tree_config = cls.extract_yaml_section(markdown_content, 'Decision Tree')
 
-        # Get the model class name from the config, default to OpenAI
-        base_model_name = config.get('composite_scores_model', 'OpenAI')
-
         # Get the base class name from the config, default to OpenAICompositeScore
-        base_class_name = config.get('class', 'OpenAICompositeScore')
-        
+        llm_model_name = config.get('model', 'gpt-3.5-turbo-16k-0613')
+        completion_name = config.get('completion', 'azure/CallCriteriaGPT35Turbo16k')
+
         # Hard-code the base module path
         base_module_path = 'plexus.composite_scores'
 
         try:
-            module = importlib.import_module(f"{base_module_path}.{base_model_name}")
-            base_class = getattr(module, base_class_name)
+            module = importlib.import_module(f"{base_module_path}.LLMClassifier")
+            base_class = getattr(module, 'CompositeScore')
         except (ImportError, AttributeError) as e:
             base_class = CompositeScore
-            print(f"Warning: Could not dynamically import {base_class_name} from {base_module_path}.{base_model_name}. Defaulting to OpenAICompositeScore. Error: {e}")
+            print(f"Warning: Could not dynamically import from {base_module_path}.LLMClassifier. Defaulting to OpenAICompositeScore. Error: {e}")
 
         # Create a new subclass of CompositeScore
         class CompositeScoreFromMarkdown(base_class):
             def __init__(self, *, transcript):
                 self.preprocessing_config = preprocessing_config
-                super().__init__(transcript=transcript)
+                super().__init__(transcript=transcript, model_name=llm_model_name, completion_name=completion_name)
                 self.decision_tree = decision_tree_config
                 self.prompt_template_loader = PromptTemplateLoader(markdown_content=markdown_content)
                 self.name = score_name
@@ -214,7 +212,7 @@ class CompositeScore(Score):
                 filtered_transcript = RelevantWindowsTranscriptFilter(
                     classifier=KeywordClassifier(keyword_patterns)
                 ).process(transcript=transcript)
- 
+
                 return filtered_transcript
 
             def generate_elements_from_markdown(self):
@@ -226,7 +224,7 @@ class CompositeScore(Score):
                         rules = self.prompt_template_loader.get_template(section_name=section_name, content_type='rules')
                     except ValueError:
                         rules = None  # Rules are optional
-                    
+
                     element = {
                         'name': CompositeScore.normalize_element_name(section_name),
                         'prompt': prompt,
@@ -234,7 +232,7 @@ class CompositeScore(Score):
                     }
                     elements.append(element)
                 return elements
-        
+
         # Register the created class with the score_registry
         scorecard.score_registry.register(score_name)(CompositeScoreFromMarkdown)
 
