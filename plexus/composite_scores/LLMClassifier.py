@@ -31,15 +31,14 @@ class ToolCallProcessingError(Exception):
         self.message = message
         self.exception = exception
 
-class OpenAICompositeScore(CompositeScore):
+class CompositeScore(CompositeScore):
     """
     Concrete implementation of the CompositeScoreBase class using OpenAI's API.
     """
-    def __init__(self, *, transcript):
+    def __init__(self, *, transcript, model_name, completion_name):
         super().__init__(transcript=transcript)
-        # self.model_name = 'gpt-3.5-turbo-0125'
-        self.model_name = 'gpt-3.5-turbo-16k-0613'
-        # self.model_name = 'gpt-4-turbo-preview'
+        self.model_name = model_name
+        self.completion_name = completion_name
 
     # Define the tool for yes/no answer.
     yes_no_tool = [
@@ -294,7 +293,7 @@ class OpenAICompositeScore(CompositeScore):
             request_arguments["tool_choice"] = {"type": "function", "function": {"name": tools[0]['function']['name']}}
 
         # Use the constructed dictionary as **kwargs to pass to the function
-        response = litellm.completion("azure/CallCriteriaGPT35Turbo16k", **request_arguments)
+        response = litellm.completion(self.completion_name, **request_arguments)
 
         self.llm_request_count += 1
 
