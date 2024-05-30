@@ -161,17 +161,21 @@ class CompositeScore(Score):
         preprocessing_config = cls.extract_yaml_section(markdown_content, 'Preprocessing')
         decision_tree_config = cls.extract_yaml_section(markdown_content, 'Decision Tree')
 
+        # Get the model class name from the config, default to OpenAI
+        base_model_name = config.get('composite_scores_model', 'OpenAI')
+
+        # Get the base class name from the config, default to OpenAICompositeScore
         base_class_name = config.get('class', 'OpenAICompositeScore')
         
         # Hard-code the base module path
         base_module_path = 'plexus.composite_scores'
 
         try:
-            module = importlib.import_module(f"{base_module_path}.OpenAI")
+            module = importlib.import_module(f"{base_module_path}.{base_model_name}")
             base_class = getattr(module, base_class_name)
         except (ImportError, AttributeError) as e:
             base_class = CompositeScore
-            print(f"Warning: Could not dynamically import {base_class_name} from {base_module_path}.OpenAI. Defaulting to CompositeScore. Error: {e}")
+            print(f"Warning: Could not dynamically import {base_class_name} from {base_module_path}.{base_model_name}. Defaulting to OpenAICompositeScore. Error: {e}")
 
         # Create a new subclass of CompositeScore
         class CompositeScoreFromMarkdown(base_class):
