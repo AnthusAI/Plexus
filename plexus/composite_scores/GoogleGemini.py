@@ -31,7 +31,7 @@ class GoogleGeminiCompositeScore(CompositeScore):
     def __init__(self, *, transcript):
         super().__init__(transcript=transcript)
         # self.model_name = 'gpt-3.5-turbo-0125'
-        self.model_name = 'gpt-3.5-turbo-16k-0613'
+        self.model_name = 'gemini-1.5-flash-preview-0514'
         # self.model_name = 'gpt-4-turbo-preview'
 
     @retry(
