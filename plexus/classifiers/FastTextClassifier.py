@@ -146,14 +146,6 @@ class FastTextClassifier(MLClassifier):
         precision_at_one = results[1]
         recall_at_one = results[2]
 
-        evaluation_metrics = {
-            'num_test_examples': num_test_examples,
-            'precision': precision_at_one,
-            'recall': recall_at_one
-        }
-
-        self._record_metrics(evaluation_metrics)
-
         test_data = []
         with open(test_filename, 'r', encoding='utf-8') as file:
             test_data = file.readlines()
@@ -181,6 +173,7 @@ class FastTextClassifier(MLClassifier):
             "number_of_test_examples": num_test_examples
         }
         logging.info(f"Model evaluation results - {metrics}")
+        self._record_metrics(metrics)
         self.log_evaluation_metrics(metrics)
 
         unique_labels = list(set(actual_labels + predicted_labels))
@@ -212,7 +205,7 @@ class FastTextClassifier(MLClassifier):
         self._plot_roc_curve()
         self._plot_precision_recall_curve()
 
-        return evaluation_metrics
+        return metrics
 
     def _log_parameters_recursively(self, params, parent_key=''):
         for key, value in params.items():
