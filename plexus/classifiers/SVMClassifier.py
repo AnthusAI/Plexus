@@ -24,7 +24,7 @@ nltk.download('punkt')
 
 from plexus.CustomLogging import logging
 from plexus.classifiers.MLClassifier import MLClassifier
-from plexus.classifiers.BERTClassifier import BERTClassifier
+from plexus.classifiers.EmbeddingsDNNClassifier import BERTClassifier
 
 from sklearn.svm import LinearSVC
 from sklearn.metrics import classification_report, precision_score, recall_score, f1_score
@@ -32,11 +32,11 @@ import numpy as np
 
 class SVMClassifier(BERTClassifier):
 
-    def set_up_mlflow(self):
+    def start_mlflow_experiment_run(self):
         """
         Set up MLflow for tracking the experiment, including the experiment name and parameters.
         """
-        super().set_up_mlflow()
+        super().start_mlflow_experiment_run()
 
     def train_model(self):
         """

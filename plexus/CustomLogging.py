@@ -1,11 +1,19 @@
+from rich.console import Console
+from rich.logging import RichHandler
 import logging
 import sys
 
-# Configure logging to output to stdout and set the minimum severity to INFO
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s',
-                    stream=sys.stdout)
+# Create a Rich console specifically for output
+console = Console()
 
-# Create a logger object that you can use across your application
-# logging = logging.getLogger(__name__)
-logging = logging.getLogger()
+# Configure logging to use RichHandler with explicit settings for Jupyter
+logging.basicConfig(
+    force = True,
+    level=logging.INFO,
+    format="%(message)s",
+    datefmt="[%X]",
+    handlers=[RichHandler(console=console, markup=True, rich_tracebacks=True, show_time=False, show_path=False)]
+)
+
+# Ensure that logging output goes to sys.stdout
+logging.getLogger().handlers[0].stream = sys.stdout

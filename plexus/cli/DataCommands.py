@@ -1,10 +1,12 @@
 import os
+import json
+
 import click
 import plexus
 from plexus.DataCache import DataCache
 from rich import print as rich_print
 from rich.table import Table
-from plexus.logging import logging
+from plexus.CustomLogging import logging
 from rich.layout import Layout
 from rich.panel import Panel
 from rich.columns import Columns
@@ -43,6 +45,7 @@ def analyze_scorecard(scorecard_name, score_name, all_questions):
 
     scorecard_folder = os.path.join('.', 'scorecards', scorecard_name)
     scorecard_instance = scorecard_type(scorecard_folder_path=scorecard_folder)
+    report_folder = os.path.join('.', 'reports', scorecard_instance.name())
     logging.info(f"Using scorecard key [purple][b]{scorecard_name}[/b][/purple] with class name [purple][b]{scorecard_instance.__class__.__name__}[/b][/purple]")
 
     data_cache = DataCache(os.environ['PLEXUS_TRAINING_DATA_LAKE_DATABASE_NAME'],
@@ -57,13 +60,13 @@ def analyze_scorecard(scorecard_name, score_name, all_questions):
         grid.add_column()
         
         if score_name:
-            columns = analyze_question(scorecard_id, score_name, dataframe)
+            columns = analyze_question(scorecard_id, score_name, dataframe, report_folder)
             question_panel = Panel(columns, title=f"[royal_blue1][b]Question: {score_name}[/b][/royal_blue1]", border_style="magenta1")
             grid.add_row(question_panel)
         else:
             # This means --all
             for score_name in scorecard_instance.score_names():
-                columns = analyze_question(scorecard_id, score_name, dataframe)
+                columns = analyze_question(scorecard_id, score_name, dataframe, report_folder)
                 question_panel = Panel(columns, title=f"[royal_blue1][b]Question: {score_name}[/b][/royal_blue1]", border_style="magenta1")
                 grid.add_row(question_panel)
 
@@ -97,8 +100,10 @@ def analyze_scorecard(scorecard_name, score_name, all_questions):
 
         rich_print(outer_panel)
 
-def analyze_question(scorecard_id, score_name, dataframe):
+def analyze_question(scorecard_id, score_name, dataframe, report_folder):
     panels = []
+
+    data_profiling_results = {}
 
     question_analysis_table = Table(
         title="[royal_blue1][b]Answer Breakdown[/b][/royal_blue1]",
@@ -110,10 +115,15 @@ def analyze_question(scorecard_id, score_name, dataframe):
 
     answer_counts = dataframe[score_name].value_counts()
     total_responses = answer_counts.sum()
+    data_profiling_results['answer_breakdown'] = {}
     for answer_value, count in answer_counts.items():
         percentage_of_total = (count / total_responses) * 100
         formatted_percentage = f"{percentage_of_total:.1f}%"
         question_analysis_table.add_row(str(answer_value), str(count), formatted_percentage)
+        data_profiling_results['answer_breakdown'][answer_value] = {
+            'count': int(count),
+            'percentage': formatted_percentage
+        }
 
     panels.append(Panel(question_analysis_table, border_style="royal_blue1"))
 
@@ -132,6 +142,18 @@ def analyze_question(scorecard_id, score_name, dataframe):
 
     dataframe_summary_table.add_row("Smallest Count", str(smallest_answer_count))
     dataframe_summary_table.add_row("Total Balanced Count", str(total_balanced_count), style="magenta1 bold")
+
+    data_profiling_results['dataframe_summary'] = {
+        'number_of_rows': int(dataframe.shape[0]),
+        'number_of_columns': int(dataframe.shape[1]),
+        'total_cells': int(dataframe.size),
+        'smallest_answer_count': int(smallest_answer_count),
+        'total_balanced_count': int(total_balanced_count)
+    }
+    report_subfolder = os.path.join(report_folder, f'{score_name}')
+    os.makedirs(report_subfolder, exist_ok=True)
+    with open(os.path.join(report_subfolder, 'data_profiling.json'), 'w') as data_profiling_file:
+        json.dump(data_profiling_results, data_profiling_file)
 
     panels.append(Panel(dataframe_summary_table, border_style="royal_blue1"))
 

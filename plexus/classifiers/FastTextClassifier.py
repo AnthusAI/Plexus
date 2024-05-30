@@ -1,7 +1,11 @@
-from CustomLogging import logging
+import os
+import numpy as np
+import re
+from plexus.CustomLogging import logging
 import fasttext
 import pandas as pd
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix
 import mlflow
 import mlflow.pyfunc
 
@@ -12,32 +16,30 @@ fasttext.FastText.eprint = lambda x: None
 
 class FastTextClassifier(MLClassifier):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **parameters):
+        super().__init__(**parameters)
+        logging.info("Initializing [magenta1][b]FastTextClassifier[/b][/magenta1]")
+        for name, value in parameters.items():
+            logging.info(f"Setting [royal_blue1]{name}[/royal_blue1] to [magenta]{value}[/magenta]")
+            setattr(self, name, value)
+        # self.start_mlflow_experiment_run()
+        self._is_multi_class = None
         self.model = None
+        self.label_map = None
 
     def data_filename(self):
-        return self.name() + "_data.txt"
+        def sanitize_string(input_string):
+            sanitized_string = re.sub(r'\W+', '', input_string)
+            sanitized_string = re.sub(r'\s+', '_', sanitized_string)
+            return sanitized_string
 
-    def generate_data(self, *, sample_count: int = 13000):
-
-        logging.info(f"Generating {sample_count} samples of synthetic data for FastTextClassifier...")
-
-        data_filename = self.data_filename()
-        logging.info(f"Data file name: {data_filename}")
-
-        # Instantiate the LLMGenerator
-        generator = LLMGenerator()
-
-        # Use the generator to create data
-        generator.generate_data(
-            context=self.context,
-            relevant_examples=self.relevant_examples,
-            irrelevant_examples=self.irrelevant_examples,
-            filename=data_filename,
-            sample_count=sample_count)
-
-        logging.info("Data generated successfully!")
+        sanitized_scorecard_name = sanitize_string(self.scorecard_name)
+        sanitized_score_name = sanitize_string(self.score_name)
+        return os.path.join(
+            "./tmp",
+            self.name() + '_' + sanitized_scorecard_name + '_' + sanitized_score_name + '_' +
+            "data.txt"
+        )
 
     def _get_train_filename(self):
         return self.data_filename().replace('.txt', '_train.txt')
@@ -46,114 +48,171 @@ class FastTextClassifier(MLClassifier):
         return self.data_filename().replace('.txt', '_test.txt')
     
     def process_data(self):
+        super().process_data()
+
         test_size = 0.2
         logging.info(f"Processing data for FastTextClassifier with a test size of {round(test_size * 100)}%...")
 
-        # Load the data
-        with open(self.data_filename(), 'r', encoding='utf-8') as file:
-            lines = file.readlines()
+        # Split the conversations into individual utterances and label each utterance
+        fasttext_data = []
+        for _, row in self.dataframe.iterrows():
+            conversation = row['Transcription'].replace('\n', '__NEWLINE__')
+            label = re.sub(r'\W+', '_', row[self.score_name])
+            fasttext_data.append(f"__label__{label} {conversation}")
 
         # Split the data into training and test sets (80% training, 20% test)
-        train_data, test_data = train_test_split(lines, test_size=0.2, random_state=42)
+        train_data, test_data = train_test_split(fasttext_data, test_size=0.2, random_state=42)
+
+        # Log the sizes of the training and test sets
+        logging.info(f"Number of training samples: {len(train_data)}")
+        logging.info(f"Number of test samples: {len(test_data)}")
 
         # Write the training and test data to separate files
         train_filename = self._get_train_filename()
         test_filename = self._get_test_filename()
 
         with open(train_filename, 'w', encoding='utf-8') as file:
-            file.writelines(train_data)
+            file.write('\n'.join(train_data))
         with open(test_filename, 'w', encoding='utf-8') as file:
-            file.writelines(test_data)
+            file.write('\n'.join(test_data))
 
         logging.info("Data processed successfully!")
 
     def train_model(self):
         logging.info("Training FastText model...")
-        
+
         # Train the fastText model using the saved training data file
         train_filename = self._get_train_filename()
-        self.model = fasttext.train_supervised(input=train_filename)
+        
+        self.model = fasttext.train_supervised(
+            input=train_filename,
+            lr=self.learning_rate,
+            dim=self.dimension,
+            ws=self.window_size,
+            epoch=self.number_of_epochs,
+            minCount=self.minimum_word_count,
+            minCountLabel=self.minimum_label_count,
+            minn=self.minimum_character_ngram_length,
+            maxn=self.maximum_character_ngram_length,
+            neg=self.number_of_negative_samples,
+            wordNgrams=self.word_ngram_count,
+            loss=self.loss_function,
+            bucket=self.bucket_size,
+            thread=self.number_of_threads,
+            lrUpdateRate=self.learning_rate_update_rate,
+            t=self.sampling_threshold
+        )
 
         logging.info("Model trained successfully!")
-        self.report_model_details()
 
-    def report_model_details(self):
-        model_details = {}
-        if self.model is None:
-            logging.info("Model has not been trained yet.")
+        # Report number of words and labels in the model
+        logging.info(f"Model has {len(self.model.words)} words and {len(self.model.labels)} labels.")
+        model_details = {
+            'vocabulary_size_in_word_count': len(self.model.words),
+            'number_of_labels': len(self.model.labels)
+        }
+        mlflow.log_metrics(model_details)
+        # Report model's hyperparameters, if accessible
+        if hasattr(self.model, 'f'):  # Check if the 'f' function (which gives access to model parameters) exists
+            params = self.model.f.getArgs()
+            hyperparameters = {
+                'lr': params.lr,
+                'dim': params.dim,
+                'ws': params.ws,
+                'epoch': params.epoch,
+                'minCount': params.minCount,
+                'minCountLabel': params.minCountLabel,
+                'minn': params.minn,
+                'maxn': params.maxn,
+                'neg': params.neg,
+                'wordNgrams': params.wordNgrams,
+                'loss': params.loss,
+                'bucket': params.bucket,
+                'thread': params.thread,
+                'lrUpdateRate': params.lrUpdateRate,
+                't': params.t
+            }
+            model_details['hyperparameters'] = hyperparameters
+            logging.info(f"Model hyperparameters: {hyperparameters}")
+            mlflow.log_params(hyperparameters)
+            mlflow.log_metrics(hyperparameters)
         else:
-            # Report number of words and labels in the model
-            logging.info(f"Model has {len(self.model.words)} words and {len(self.model.labels)} labels.")
-            model_details['words'] = len(self.model.words)
-            model_details['labels'] = len(self.model.labels)
-            # Report model's hyperparameters, if accessible
-            if hasattr(self.model, 'f'):  # Check if the 'f' function (which gives access to model parameters) exists
-                params = self.model.f.getArgs()
-                hyperparameters = {
-                    'lr': params.lr,
-                    'dim': params.dim,
-                    'ws': params.ws,
-                    'epoch': params.epoch,
-                    'minCount': params.minCount,
-                    'minCountLabel': params.minCountLabel,
-                    'minn': params.minn,
-                    'maxn': params.maxn,
-                    'neg': params.neg,
-                    'wordNgrams': params.wordNgrams,
-                    'loss': params.loss,
-                    'bucket': params.bucket,
-                    'thread': params.thread,
-                    'lrUpdateRate': params.lrUpdateRate,
-                    't': params.t
-                }
-                model_details['hyperparameters'] = hyperparameters
-                logging.info(f"Model hyperparameters: {hyperparameters}")
-            else:
-                logging.info("Model hyperparameters are not accessible.")
-        return model_details
+            logging.info("Model hyperparameters are not accessible.")
 
     def evaluate_model(self):
-        # Evaluate the model using the test data and log the results: accuracy, precision, recall, F1-score
         test_filename = self._get_test_filename()
         results = self.model.test(test_filename)
-        accuracy = results[1]
-        precision = results[1]
-        recall = results[2]
-        f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+        num_test_examples = results[0]
+        precision_at_one = results[1]
+        recall_at_one = results[2]
+
         evaluation_metrics = {
-            'accuracy': accuracy,
-            'precision': precision,
-            'recall': recall,
-            'f1_score': f1_score
+            'num_test_examples': num_test_examples,
+            'precision': precision_at_one,
+            'recall': recall_at_one
         }
-        logging.info(f"Model evaluation results - {evaluation_metrics}")
+
+        self._record_metrics(evaluation_metrics)
+
+        test_data = []
+        with open(test_filename, 'r', encoding='utf-8') as file:
+            test_data = file.readlines()
+
+        actual_labels = [line.split(' ', 1)[0].replace('__label__', '') for line in test_data]
+        predicted_labels = [
+            self.model.predict(line.split(' ', 1)[1].replace('\n', ' '))[0][0].replace('__label__', '')
+            for line in test_data
+        ]
+
+        logging.info(f"Number of actual labels: {len(actual_labels)}")
+        logging.info(f"Number of predicted labels: {len(predicted_labels)}")
+
+        accuracy = sum(1 for a, p in zip(actual_labels, predicted_labels) if a == p) / len(actual_labels)
+
+        f1_score = 0.0
+        if precision_at_one + recall_at_one != 0:
+            f1_score = 2 * (precision_at_one * recall_at_one) / (precision_at_one + recall_at_one)
+
+        metrics = {
+            "accuracy": accuracy,
+            "precision": precision_at_one,
+            "recall": recall_at_one,
+            "f1_score": f1_score,
+            "number_of_test_examples": num_test_examples
+        }
+        logging.info(f"Model evaluation results - {metrics}")
+        self.log_evaluation_metrics(metrics)
+
+        unique_labels = list(set(actual_labels + predicted_labels))
+        self.label_map = {label: idx for idx, label in enumerate(unique_labels)}
+
+        logging.debug(f"Label map: {self.label_map}")
+
+        self.val_labels_int = np.array([self.label_map[label] for label in actual_labels])
+        self.val_predictions_int = np.array([self.label_map[label] for label in predicted_labels])
+
+        logging.info(f"Integer actual labels: {self.val_labels_int}")
+        logging.info(f"Integer predicted labels: {self.val_predictions_int}")
+
+        logging.info(f"Number of integer actual labels: {len(self.val_labels_int)}")
+        logging.info(f"Number of integer predicted labels: {len(self.val_predictions_int)}")
+
+        if self.is_multi_class:
+            num_classes = len(unique_labels)
+            self.val_labels = np.eye(num_classes)[self.val_labels_int]
+            self.val_predictions = np.eye(num_classes)[self.val_predictions_int]
+        else:
+            self.val_labels = self.val_labels_int
+            self.val_predictions = self.val_predictions_int
+
+        cm = confusion_matrix(self.val_labels_int, self.val_predictions_int)
+        logging.info(f"Confusion matrix: \n{cm}")
+
+        self._generate_confusion_matrix()
+        self._plot_roc_curve()
+        self._plot_precision_recall_curve()
+
         return evaluation_metrics
-    
-    def run_experiment(self):
-        # Set the experiment name
-        mlflow.set_experiment(self.name())
-
-        with mlflow.start_run() as run:
-            # Run the entire model development process and log it in MLFlow
-            self.train_model()
-            model_details = self.report_model_details()
-            model_evaluation_metrics = self.evaluate_model()
-
-            # Log the model details and evaluation metrics in MLFlow
-            self._log_parameters_recursively(model_details)
-            mlflow.log_metrics(model_evaluation_metrics)
-
-            # Save the fastText binary file for logging as an artifact
-            fasttext_binary_path = self.save_model_binary()
-            
-            # Log the fastText binary file as an artifact
-            mlflow.log_artifact(fasttext_binary_path, "model")
-
-            # End the MLFlow run
-            mlflow.end_run()
-
-        # Return the run ID
-        return run.info
 
     def _log_parameters_recursively(self, params, parent_key=''):
         for key, value in params.items():
@@ -168,6 +227,14 @@ class FastTextClassifier(MLClassifier):
         """
         return f"fasttext_model_{self.name()}"
 
+    def _record_metrics(self, metrics):
+        # Use the existing implementation from MLClassifier
+        super()._record_metrics(metrics)
+
+    # This visualization doesn't work for fastText, so leave it out.
+    def _plot_training_history(self):
+        pass
+
     def save_model_binary(self):
         if self.model is None:
             raise Exception("Model not trained yet!")
@@ -176,16 +243,17 @@ class FastTextClassifier(MLClassifier):
         logging.info(f"Model binary saved to {model_binary_path}")
         return model_binary_path
 
-    def register_model(self, run_id, stage='Production'):
+    def register_model(self):
         # Register the model with MLflow
         model_name = self._model_name()
         model_binary_path = f"{self._model_name()}.bin"
-        model_uri = f"runs:/{run_id}/{model_binary_path}"
-        mlflow_model = mlflow.register_model(
-            model_uri=model_uri,
-            name=model_name
-        )
+        mlflow.fasttext.log_model(self.model, model_name)
         logging.info(f"Model registered successfully with name: {model_name}")
+
+    def save_model(self):
+        model_binary_path = f"{self._model_name()}.bin"
+        self.model.save_model(model_binary_path)
+        logging.info(f"Model binary saved to {model_binary_path}")
 
     def load_model(self, model_path):
         self.model = fasttext.load_model(model_path)
@@ -209,36 +277,17 @@ class FastTextClassifier(MLClassifier):
         return local_model_path
 
     def predict(self, model_input):
-        # Attempt to load the model JIT if it hasn't been loaded yet
-        if self.model is None:
-            logging.info("Model not loaded. Attempting to load the model JIT.")
-            # Construct the context with the necessary information to load the model
-            # This should be the same structure as the context provided by MLflow when serving the model
-            model_binary_path = f"{self._model_name()}.bin"
-            context = {
-                'artifacts': {
-                    'model_path': model_binary_path
-                }
-            }
-            # Call load_context with the constructed context
-            self.load_context(context)
-
-        # If the model is still None after attempting to load, report an error
-        if self.model is None:
-            logging.error("No model is registered for this classifier.")
-            raise Exception("No model is registered for this classifier.")
-
-        # Check if the input is a DataFrame with a single column
-        if isinstance(model_input, pd.DataFrame) and model_input.shape[1] == 1:
-            # Extract the text column (assuming it's the first column)
-            texts = model_input.iloc[:, 0].tolist()
+        # Check if the input is a DataFrame with a 'Transcription' column
+        if isinstance(model_input, pd.DataFrame) and 'Transcription' in model_input.columns:
+            # Extract the text column
+            texts = model_input['Transcription'].tolist()
             logging.debug(f"Running inference on texts: {texts}")
         else:
-            logging.error("Model input should be a DataFrame with a single text column.")
-            raise ValueError("Model input should be a DataFrame with a single text column.")
+            logging.error("Model input should be a DataFrame with a 'Transcription' column.")
+            raise ValueError("Model input should be a DataFrame with a 'Transcription' column.")
 
         # Apply the FastText model's predict method to each text entry
-        predictions = [self.model.predict(text)[0][0] for text in texts]
+        predictions = [self.model.predict(text)[0][0].replace('__label__', '') for text in texts]
         logging.debug(f"Predictions: {predictions}")
 
         # Return the predictions as a DataFrame
