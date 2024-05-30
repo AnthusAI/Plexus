@@ -182,8 +182,9 @@ class EmbeddingsDNNClassifier(MLClassifier):
         else:
             print("The model does not have a 'bert' attribute. Skipping layer trainability settings.")
 
-        # Extract the pooled output from the BERT model
-        pooled_output = embeddings_model(input_ids, attention_mask=attention_mask)[1]
+        # Extract the pooled output from the model
+        last_hidden_state = embeddings_model(input_ids, attention_mask=attention_mask)[0]
+        pooled_output = tf.reduce_mean(last_hidden_state, axis=1)
 
         # Add a tanh activation layer
         tanh_output = tf.keras.layers.Dense(768, activation='tanh', name="tanh_amplifier")(pooled_output)
