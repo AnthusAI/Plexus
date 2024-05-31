@@ -45,6 +45,30 @@ class EmbeddingsDNNClassifier(MLClassifier):
         def split_into_sentences(text):
             return nltk.sent_tokenize(text)
 
+        def tokenize_sentence(tokenizer, sentence):
+            return tokenizer.tokenize(sentence)
+
+        def build_sliding_windows(tokenizer, text, max_tokens_per_window):
+            sentences = split_into_sentences(text)
+            windows = []
+            current_window = []
+            current_window_tokens = []
+
+            for sentence in sentences:
+                sentence_tokens = tokenize_sentence(tokenizer, sentence)
+                if len(current_window_tokens) + len(sentence_tokens) <= max_tokens_per_window:
+                    current_window.append(sentence)
+                    current_window_tokens.extend(sentence_tokens)
+                else:
+                    windows.append(current_window)
+                    current_window = [sentence]
+                    current_window_tokens = sentence_tokens
+
+            if current_window:
+                windows.append(current_window)
+
+            return windows
+
         def encode_single_text(tokenizer, text, maximum_length):
             return tokenizer.encode(text, padding='max_length', truncation=True, max_length=maximum_length, return_tensors='tf')
 
@@ -59,67 +83,132 @@ class EmbeddingsDNNClassifier(MLClassifier):
                         progress.advance(task)
             return tf.concat(encoded_texts, axis=0)
 
-        texts = self.dataframe['Transcription'].tolist()
-        labels = self.dataframe[self.score_name].tolist()
-        unique_labels = self.dataframe[self.score_name].unique()
+        def encode_windows_parallel(tokenizer, windows, maximum_length):
+            encoded_windows = []
+            for window in windows:
+                encoded_window = encode_texts_parallel(tokenizer, window, maximum_length)
+                encoded_windows.append(encoded_window)
+            return encoded_windows
 
-        # Split the data into training and validation sets
-        train_texts, val_texts, train_labels, val_labels = train_test_split(texts, labels, test_size=0.2, random_state=42)
+        if hasattr(self, 'sliding_window') and self.sliding_window:
+            texts = self.dataframe['Transcription'].tolist()
+            labels = self.dataframe[self.score_name].tolist()
+            unique_labels = self.dataframe[self.score_name].unique()
 
-        # Encode the training and validation texts
-        print("Training:")
-        self.train_encoded_texts = encode_texts_parallel(tokenizer, train_texts, self.maximum_number_of_tokens_analyzed)
-        print("Validation:")
-        self.val_encoded_texts = encode_texts_parallel(tokenizer, val_texts, self.maximum_number_of_tokens_analyzed)
+            # Split the data into training and validation sets
+            train_texts, val_texts, train_labels, val_labels = train_test_split(texts, labels, test_size=0.2, random_state=42)
 
-        # Extract input_ids
-        self.train_input_ids = self.train_encoded_texts
-        self.val_input_ids = self.val_encoded_texts
+            # Build sliding windows for training and validation texts
+            train_windows = [build_sliding_windows(tokenizer, text, self.maximum_number_of_tokens_analyzed) for text in train_texts]
+            val_windows = [build_sliding_windows(tokenizer, text, self.maximum_number_of_tokens_analyzed) for text in val_texts]
 
-        # Create attention masks
-        self.train_attention_mask = tf.where(self.train_input_ids != 0, 1, 0)
-        self.val_attention_mask = tf.where(self.val_input_ids != 0, 1, 0)
+            # Encode the training and validation windows
+            print("Training:")
+            self.train_encoded_windows = encode_windows_parallel(tokenizer, train_windows, self.maximum_number_of_tokens_analyzed)
+            print("Validation:")
+            self.val_encoded_windows = encode_windows_parallel(tokenizer, val_windows, self.maximum_number_of_tokens_analyzed)
 
-        # Convert labels to integers
-        self.label_map = {label: i for i, label in enumerate(unique_labels)}
-        self.train_labels_int = np.array([self.label_map[label] for label in train_labels])
-        self.val_labels_int = np.array([self.label_map[label] for label in val_labels])
+            # Extract input_ids
+            self.train_input_ids = self.train_encoded_windows
+            self.val_input_ids = self.val_encoded_windows
 
-        # Determine if it's a binary or multi-class classification task
-        print(f"Is multi-class: {self.is_multi_class}")
+            # Create attention masks
+            self.train_attention_mask = [[tf.where(input_ids != 0, 1, 0) for input_ids in encoded_window] for encoded_window in self.train_encoded_windows]
+            self.val_attention_mask = [[tf.where(input_ids != 0, 1, 0) for input_ids in encoded_window] for encoded_window in self.val_encoded_windows]
 
-        # One-hot encode the labels only if it's a multi-class classification
-        if self.is_multi_class:
-            num_classes = len(unique_labels)
-            self.train_labels = to_categorical(self.train_labels_int, num_classes=num_classes)
-            self.val_labels = to_categorical(self.val_labels_int, num_classes=num_classes)
         else:
-            self.train_labels = self.train_labels_int
-            self.val_labels = self.val_labels_int
 
-        # Log the types and shapes of the labels
-        print(f"train_labels type: {type(self.train_labels)}, shape: {self.train_labels.shape}")
-        print(f"val_labels type: {type(self.val_labels)}, shape: {self.val_labels.shape}")
-        print(f"train_labels sample: {self.train_labels[:5]}")
-        print(f"val_labels sample: {self.val_labels[:5]}")
+            texts = self.dataframe['Transcription'].tolist()
+            labels = self.dataframe[self.score_name].tolist()
+            unique_labels = self.dataframe[self.score_name].unique()
 
-        # Check the distribution of labels in the training set
-        print("Training set label breakdown:")
-        if self.is_multi_class:
-            train_label_counts = np.unique(np.argmax(self.train_labels, axis=1), return_counts=True)
-            print(dict(zip(unique_labels, train_label_counts[1])))
-        else:
-            train_label_counts = np.unique(self.train_labels, return_counts=True)
-            print(dict(zip(unique_labels, train_label_counts[1])))
+            # Split the data into training and validation sets
+            train_texts, val_texts, train_labels, val_labels = train_test_split(texts, labels, test_size=0.2, random_state=42)
 
-        # Check the distribution of labels in the validation set
-        print("Validation set label breakdown:")
-        if self.is_multi_class:
-            val_label_counts = np.unique(np.argmax(self.val_labels, axis=1), return_counts=True)
-            print(dict(zip(unique_labels, val_label_counts[1])))
-        else:
-            val_label_counts = np.unique(self.val_labels, return_counts=True)
-            print(dict(zip(unique_labels, val_label_counts[1])))
+            # Encode the training and validation texts
+            print("Training:")
+            self.train_encoded_texts = encode_texts_parallel(tokenizer, train_texts, self.maximum_number_of_tokens_analyzed)
+            print("Validation:")
+            self.val_encoded_texts = encode_texts_parallel(tokenizer, val_texts, self.maximum_number_of_tokens_analyzed)
+
+            # Extract input_ids
+            self.train_input_ids = self.train_encoded_texts
+            self.val_input_ids = self.val_encoded_texts
+
+            # Create attention masks
+            self.train_attention_mask = tf.where(self.train_input_ids != 0, 1, 0)
+            self.val_attention_mask = tf.where(self.val_input_ids != 0, 1, 0)
+
+            # Convert labels to integers
+            self.label_map = {label: i for i, label in enumerate(unique_labels)}
+            self.train_labels_int = np.array([self.label_map[label] for label in train_labels])
+            self.val_labels_int = np.array([self.label_map[label] for label in val_labels])
+
+            # Determine if it's a binary or multi-class classification task
+            logging.info(f"Is multi-class: [purple][bold]{self.is_multi_class}[/purple][/bold]")
+
+            logging.info(f"Sliding window: [purple][bold]{getattr(self, 'sliding_window', False)}[/purple][/bold]")
+            # One-hot encode the labels only if it's a multi-class classification
+            if self.is_multi_class:
+                num_classes = len(unique_labels)
+                self.train_labels = to_categorical(self.train_labels_int, num_classes=num_classes)
+                self.val_labels = to_categorical(self.val_labels_int, num_classes=num_classes)
+            else:
+                self.train_labels = self.train_labels_int.reshape(-1, 1)
+                self.val_labels = self.val_labels_int.reshape(-1, 1)
+
+            if hasattr(self, 'sliding_window') and self.sliding_window:
+                # Duplicate labels for each window within a sample
+                self.train_labels = np.repeat(self.train_labels, [len(windows) for windows in train_windows], axis=0)
+                self.val_labels = np.repeat(self.val_labels, [len(windows) for windows in val_windows], axis=0)
+
+                # Log the types and shapes of the labels for the sliding window scenario
+                print(f"train_labels type: {type(self.train_labels)}, length: {len(self.train_labels)}")
+                print(f"val_labels type: {type(self.val_labels)}, length: {len(self.val_labels)}")
+                print(f"train_labels sample: {self.train_labels[:5]}")
+                print(f"val_labels sample: {self.val_labels[:5]}")
+
+                # Check the distribution of labels in the training set for the sliding window scenario
+                print("Training set label breakdown (sliding window):")
+                if self.is_multi_class:
+                    train_label_counts = np.unique(np.argmax(np.concatenate(self.train_labels), axis=1), return_counts=True)
+                    print(dict(zip(unique_labels, train_label_counts[1])))
+                else:
+                    train_label_counts = np.unique(np.concatenate(self.train_labels), return_counts=True)
+                    print(dict(zip(unique_labels, train_label_counts[1])))
+
+                # Check the distribution of labels in the validation set for the sliding window scenario
+                print("Validation set label breakdown (sliding window):")
+                if self.is_multi_class:
+                    val_label_counts = np.unique(np.argmax(np.concatenate(self.val_labels), axis=1), return_counts=True)
+                    print(dict(zip(unique_labels, val_label_counts[1])))
+                else:
+                    val_label_counts = np.unique(np.concatenate(self.val_labels), return_counts=True)
+                    print(dict(zip(unique_labels, val_label_counts[1])))
+            else:
+                # Log the types and shapes of the labels for the non-sliding window scenario
+                print(f"train_labels type: {type(self.train_labels)}, length: {len(self.train_labels)}")
+                print(f"val_labels type: {type(self.val_labels)}, length: {len(self.val_labels)}")
+                print(f"train_labels sample: {self.train_labels[:5]}")
+                print(f"val_labels sample: {self.val_labels[:5]}")
+
+                # Check the distribution of labels in the training set for the non-sliding window scenario
+                print("Training set label breakdown:")
+                if self.is_multi_class:
+                    train_label_counts = np.unique(np.argmax(self.train_labels, axis=1), return_counts=True)
+                    print(dict(zip(unique_labels, train_label_counts[1])))
+                else:
+                    train_label_counts = np.unique(np.concatenate(self.train_labels), return_counts=True)
+                    print(dict(zip(unique_labels, train_label_counts[1])))
+
+                # Check the distribution of labels in the validation set for the non-sliding window scenario
+                print("Validation set label breakdown:")
+                if self.is_multi_class:
+                    val_label_counts = np.unique(np.argmax(self.val_labels, axis=1), return_counts=True)
+                    print(dict(zip(unique_labels, val_label_counts[1])))
+                else:
+                    val_label_counts = np.unique(np.concatenate(self.val_labels), return_counts=True)
+                    print(dict(zip(unique_labels, val_label_counts[1])))
 
     def custom_lr_scheduler(self, epoch, lr):
         # Record validation loss if available
