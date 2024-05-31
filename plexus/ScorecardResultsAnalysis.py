@@ -119,8 +119,9 @@ class ScorecardResultsAnalysis:
         plt.savefig('tmp/accuracy_heatmap.png', bbox_inches='tight', pad_inches=0.2)
 
     def generate_html_report(self, *, only_incorrect_scores=False, redact_cost_information=False, include_evaluation=True,
-            title="Scorecard Report",
-            subtitle="This report contains the results of scorecard evaluations, with detailed reasoning and explanations for each score."
+        title="Scorecard Report",
+        subtitle="This report contains the results of scorecard evaluations, with detailed reasoning and explanations for each score.",
+        expenses=None
         ):
 
         # We need to compute a `results` list containing the ScoreResult for each score,
@@ -173,8 +174,8 @@ class ScorecardResultsAnalysis:
                 }
             })
 
-        if not redact_cost_information:
-            total_cost = self.calculate_total_cost()
+        if not redact_cost_information and expenses is not None:
+            total_cost = expenses['total_cost']
             number_of_transcripts = len(self.scorecard_results.data)
             cost_per_transcript = total_cost / number_of_transcripts
 
