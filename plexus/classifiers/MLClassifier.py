@@ -177,38 +177,39 @@ class MLClassifier(Classifier):
 
         if 'processors' in self.configuration.get('data', {}):
             console.print(Text("Running configured processors...", style="royal_blue1"))
+
+            # Instantiate all processors once
+            processors = []
             for processor in self.configuration['data']['processors']:
                 processor_class = processor['class']
                 processor_parameters = processor.get('parameters', {})
                 from plexus.processors import ProcessorFactory
                 processor_instance = ProcessorFactory.create_processor(processor_class, **processor_parameters)
-            
-            first_transcript_before = None
-            first_transcript_after = None
-            
-            for index, row in self.dataframe.iterrows():
-                if first_transcript_before is None:
-                    first_transcript_before = row["Transcription"]
-                
-                processed_transcript = processor_instance.process(transcript=row["Transcription"])
-                self.dataframe.at[index, "Transcription"] = processed_transcript
-                
-                if first_transcript_after is None:
-                    first_transcript_after = processed_transcript
-            
+                processors.append(processor_instance)
+
+            # Process the entire column of transcriptions
+            first_transcript_before = self.dataframe["Transcription"].iloc[0]
+            processed_transcriptions = self.dataframe["Transcription"].tolist()
+
+            for processor in processors:
+                processed_transcriptions = [processor.process(transcript=transcription) for transcription in processed_transcriptions]
+
+            self.dataframe["Transcription"] = processed_transcriptions
+            first_transcript_after = self.dataframe["Transcription"].iloc[0]
+
             if first_transcript_before and first_transcript_after:
                 first_transcript_before_truncated = first_transcript_before[:1000] + '...'
                 first_transcript_after_truncated = first_transcript_after[:1000] + '...'
-                
+
                 transcript_comparison_table = Table(
-                    title=f"[royal_blue1][b]{processor_class}[/b][/royal_blue1]",
+                    title=f"[royal_blue1][b]Processors[/b][/royal_blue1]",
                     header_style="sky_blue1",
                     border_style="sky_blue1"
                 )
                 transcript_comparison_table.add_column("Before", style="magenta1", justify="left")
                 transcript_comparison_table.add_column("After", style="magenta1", justify="left")
                 transcript_comparison_table.add_row(first_transcript_before_truncated, first_transcript_after_truncated)
-                
+
                 console.print(Panel(transcript_comparison_table, border_style="royal_blue1"))
         
         # Check for missing or unexpected values
