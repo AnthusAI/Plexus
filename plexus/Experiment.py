@@ -243,13 +243,13 @@ class AccuracyExperiment(Experiment):
             mlflow.log_artifact('tmp/accuracy_heatmap.png')
 
         def log_html_report():
-            html_report_content = analysis.generate_html_report()
+            html_report_content = analysis.generate_html_report(expenses=expenses)
             with open("tmp/scorecard_report.html", "w") as file:
                 file.write(html_report_content)
             mlflow.log_artifact("tmp/scorecard_report.html")
 
         def log_incorrect_scores_report():
-            html_report_content = analysis.generate_html_report(only_incorrect_scores=True)
+            html_report_content = analysis.generate_html_report(only_incorrect_scores=True, expenses=expenses)
             with open("tmp/scorecard_report_incorrect_scores.html", "w") as file:
                 file.write(html_report_content)
             mlflow.log_artifact("tmp/scorecard_report_incorrect_scores.html")
@@ -277,6 +277,9 @@ class AccuracyExperiment(Experiment):
             analysis.generate_question_accuracy_csv(output_file="tmp/question_accuracy_report.csv")
             mlflow.log_artifact("tmp/question_accuracy_report.csv")
 
+        expenses = self.scorecard.accumulated_expenses()
+        expenses['cost_per_transcript'] = expenses['total_cost'] / len(selected_sample_rows)    
+
         # Create a thread pool executor
         with ThreadPoolExecutor() as executor:
             # Submit the combined analysis and logging tasks to the executor
@@ -297,9 +300,6 @@ class AccuracyExperiment(Experiment):
         # Run these sequentially to avoid issues with Heatmap generation.
         log_accuracy_heatmap()
         log_scorecard_costs()
-
-        expenses = self.scorecard.accumulated_expenses()
-        expenses['cost_per_transcript'] = expenses['total_cost'] / len(selected_sample_rows)
 
         # Calculate overall accuracy
         overall_accuracy = (total_correct / total_questions) * 100 if total_questions > 0 else 0
