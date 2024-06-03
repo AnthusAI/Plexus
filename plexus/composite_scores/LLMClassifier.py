@@ -473,17 +473,17 @@ Relevant quote: "{element_response['relevant_quote']}"
                 exception = retry_state.outcome.exception()
                 if exception:
                     logging.info(f"Handling exception from attempt {attempt_count}: {exception}")
-                    retry_state.kwargs['error'] = exception.message
-                    retry_state.kwargs['original_message'] = exception.tool_arguments
-                    retry_state.kwargs['exception'] = exception.exception
+                    retry_state.kwargs['error'] = str(exception)
+                    retry_state.kwargs['original_message'] = str(exception)
+                    retry_state.kwargs['exception'] = exception
 
             retry_state.kwargs['attempt_count'] = attempt_count
             retry_state.kwargs['is_retry'] = is_retry
 
         # Configure retry decorator with the before_retry function
         @retry(
-            retry=retry_if_exception_type(ToolCallProcessingError),
-            stop=stop_after_attempt(10),
+            retry=retry_if_exception_type(Exception),
+            stop=stop_after_attempt(1),
             before_sleep=before_sleep
         )
         def inner_function(*,
@@ -505,15 +505,15 @@ Relevant quote: "{element_response['relevant_quote']}"
         inner_function(chat_history=chat_history, question=question, result=result)
 
     def _compute_single_reasoning_and_relevant_quote(self, *,
-         chat_history, question, result,
-         is_retry=False, attempt_count=0, error=None, original_message=None, exception=None):
+        chat_history, question, result,
+        is_retry=False, attempt_count=0, error=None, original_message=None, exception=None):
         """
-        Use the accumulated chat history to ask the model a new question, asking
-        it to condense the reasoning into a single sentence and to provide one
-        relevant quote, in a structured format.  The end result is to set
-        # self.reasoning and self.relevant_quote.
+Use the accumulated chat history to ask the model a new question, asking
+it to condense the reasoning into a single sentence and to provide one
+relevant quote, in a structured format.  The end result is to set
+# self.reasoning and self.relevant_quote.
         """
- 
+    
         # Compute the next prompt in the chat history and add it to the history.
         prompts = [{
         "role": "user",
@@ -523,15 +523,11 @@ The overall question we're trying to answer through those previous questions is:
 
 Our logic concludes, based on the sub-questions, that the overall answer is: {result}.
 
-We need to provide reasoning for that answer.  Please look through the chat history at your responses for each chunk of transcript, which contain reasoning.  Sometimes they also provide relevant quotes.
+We need to provide reasoning for that answer. Please look through the chat history at your responses for each chunk of transcript, which contain reasoning. Sometimes they also provide relevant quotes.
 
-Please try to summarize your overall reasoning based on your own responses in the chat history.  If there are any relevant quotes in your responses in the chat history that would help explain your summary of your reasoning then please include a brief quote or two.  Do not imagine quotes that don't exist in this chat history.
-
-Provide your reasoning and if the quote using the `reasoning_and_relevant_quote_tool()` function.
-
-The relevant quotes should be short, succinct.  Just one or two lines.  Don't provide any quotes if the answer is no.  Only provide quotes that are in the transcript, from your responses, don't offer quotes that were examples from the prompts from the user.
-"""
-}]
+Please try to summarize your overall reasoning based on your own responses in the chat history. Do not imagine quotes that don't exist in this chat history.
+    """
+    }]
 
         # This defaults to 'prompt' but it becomes 'request_valid_json' when it's a retry after a broken JSON response.
         element_type = 'prompt'
@@ -564,57 +560,65 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
 
         logging.info("Summarization chat history:\n%s", json.dumps(new_chat_history, indent=4))
         response = self.openai_api_request(
-            name='summary',
+            name='summary_reasoning',
             element_type=element_type,
             messages=new_chat_history,
-            tools=self.reasoning_and_relevant_quote_tool,
             max_tokens=2048
         )
 
         logging.info(f"Response: {response}")
 
-        try:
-            tool_calls = response.choices[0].message.tool_calls
-            tool_call = tool_calls[0]
-            tool_results = json.loads(tool_call.function.arguments)
-        except Exception as e:
-            try:
-                repaired_json = tool_call.function.arguments + '"}'
-                tool_results = json.loads(repaired_json)
-            except json.JSONDecodeError:
-                raise ToolCallProcessingError(
-                    message="Failed to process tool call arguments after attempting to repair JSON",
-                    exception=e,
-                    tool_arguments=tool_call.function.arguments
-                )
+        reasoning = response.choices[0].message.content.strip()
+        logging.info(f"Reasoning: {reasoning}")
 
-            raise ToolCallProcessingError(
-                message="Failed to process tool call arguments",
-                exception=e,
-                tool_arguments=tool_call.function.arguments
-            )
-        logging.info(f"Reasoning: {tool_results.get('reasoning', '')}")
-        logging.info(f"Relevant quote: {tool_results.get('relevant_quote', '')}")
-
-        # Store the reasoning and quote.
-        reasoning = tool_results.get('reasoning', "")
+        # Store the reasoning
         self.reasoning.append(reasoning)
-        relevant_quotes = tool_results.get('relevant_quote', "")
+
+        # Ask for relevant quotes
+        quote_prompts = [{
+            "role": "user",
+            "content": f"""
+Don't appologize, I only want the quotes for this part. If there are any relevant quotes in your responses in the chat history that would help explain your summary of your reasoning then please provide a brief quote or two. Do not imagine quotes that don't exist in this chat history.
+
+The relevant quotes should be short, succinct. Just one or two lines. Don't provide any quotes if no relevant quotes exist in the chat history. Only provide quotes that are in the transcript, from your responses, don't offer quotes that were examples from the prompts from the user.
+    """
+        }]
+
+        new_chat_history = (
+            new_chat_history +
+            quote_prompts
+        )
+
+        logging.info("Quote chat history:\n%s", json.dumps(new_chat_history, indent=4))
+
+        quote_response = self.openai_api_request(
+            name='summary_quotes',
+            element_type=element_type,
+            messages=new_chat_history,
+            max_tokens=2048
+        )
+
+        logging.info(f"Quote Response: {quote_response}")
+
+        relevant_quotes = quote_response.choices[0].message.content.strip()
+        logging.info(f"Relevant quote: {relevant_quotes}")
+
+        # Store the relevant quotes
         self.relevant_quotes.append(relevant_quotes)
 
         # Calculate costs
         cost_details = calculate_cost(
             model_name =    self.model_name,
-            input_tokens =  response.usage.prompt_tokens,
-            output_tokens = response.usage.completion_tokens
+            input_tokens =  response.usage.prompt_tokens + quote_response.usage.prompt_tokens,
+            output_tokens = response.usage.completion_tokens + quote_response.usage.completion_tokens
         )
 
         result_metadata = {
             'element_name':      'summary',
             'value':             'summarized',
             'prompt':            prompts[0]['content'],
-            'prompt_tokens':     response.usage.prompt_tokens,
-            'completion_tokens': response.usage.completion_tokens,
+            'prompt_tokens':     response.usage.prompt_tokens + quote_response.usage.prompt_tokens,
+            'completion_tokens': response.usage.completion_tokens + quote_response.usage.completion_tokens,
             'input_cost':        cost_details['input_cost'],
             'output_cost':       cost_details['output_cost'],
             'total_cost':        cost_details['total_cost'],
@@ -631,7 +635,7 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
 
         # Record these costs in the accumulators in this instance.
         self.prompt_tokens     += result_metadata['prompt_tokens']
-        self.completion_tokens += result_metadata['completion_tokens']
+        self.completion_tokens += result_metadata['completion_tokens'] 
         self.input_cost        += result_metadata['input_cost']
         self.output_cost       += result_metadata['output_cost']
         self.total_cost        += result_metadata['total_cost']
