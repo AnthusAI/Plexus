@@ -40,36 +40,6 @@ class CompositeScore(CompositeScore):
         self.model_name = model_name
         self.completion_name = completion_name
 
-    # Define the tool for yes/no answer.
-    yes_no_tool = [
-        {
-            "type": "function",
-            "function": {
-            "name": "classify_yes_no_with_reasoning",
-            "description": "Provide a clear 'yes', 'no' as structured data.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "answer": {
-                        "type": "string",
-                        "enum": ["yes", "no"],
-                        "description": "Valid values: 'yes', 'no'.  Required."
-                    },
-                    "reasoning": {
-                        "type": "string",
-                        "description": "The reasoning behind the answer. Required!"
-                    },
-                    "relevant_quote": {
-                        "type": "string",
-                        "description": "Any relevant quote from the transcript that supports the answer. Optional."
-                    }
-                },
-                "required": ["answer", "reasoning"]
-                }
-            }
-        }
-    ]
-
     @retry(
         wait=wait_random_exponential(multiplier=1, max=600),
         retry=retry_if_exception_type(ValueError),
@@ -83,11 +53,6 @@ class CompositeScore(CompositeScore):
 
         loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
         openai_loggers = [logger for logger in loggers if logger.name.startswith("openai")]
-
-        # formatted_messages = ''
-        # for message in transcript_and_prompt:
-        #     formatted_messages += f"{message['role']}:\n{message['content']}\n\n"
-        # logging.info(f"Messages to OpenAI:\n{formatted_messages}")
 
         new_message = self.construct_element_prompt(prompt=prompt, transcript=chunk)
         messages = [
@@ -117,11 +82,6 @@ class CompositeScore(CompositeScore):
             raise ValueError(f"No element found with the name: {name}")
         score_result_metadata['prompt'] = element['prompt']
 
-        # Add this response to the chat history.
-        # self.chat_history.append(
-        #     self.construct_element_response_prompt(
-        #         element_response=tool_results))
-
         # We need the filtered transcript also, for the report.
         score_result_metadata['transcript'] = chunk
 
@@ -129,8 +89,7 @@ class CompositeScore(CompositeScore):
             response = self.openai_api_request(
                 name=name,
                 element_type=element_type,
-                messages=messages,
-                # tools=self.yes_no_tool
+                messages=messages
             )
 
             response_content = response.choices[0].message.content
@@ -276,7 +235,6 @@ class CompositeScore(CompositeScore):
 
         # Construct the dictionary for the arguments
         request_arguments = {
-            # "model": self.model_name,
             "messages": messages,
             "max_tokens": max_tokens,
             "timeout": 45,
@@ -286,11 +244,6 @@ class CompositeScore(CompositeScore):
             "seed": seed,
             # "temperature": 0,
         }
-
-        # Conditionally add 'tool_choice' if tools are provided and have the required structure
-        if tools and isinstance(tools, list) and 'function' in tools[0]:
-            request_arguments["tools"] = tools
-            request_arguments["tool_choice"] = {"type": "function", "function": {"name": tools[0]['function']['name']}}
 
         # Use the constructed dictionary as **kwargs to pass to the function
         response = litellm.completion(self.completion_name, **request_arguments)
@@ -380,30 +333,6 @@ Relevant quote: "{element_response['relevant_quote']}"
 """
     }
 
-    # Define the tool for yes/no answer.
-    reasoning_and_relevant_quote_tool = [
-        {
-            "type": "function",
-            "function": {
-            "name": "provide_reasoning_and_relevant_quote",
-            "description": "Provide the reasoning for the overall answer and if possible also a relevant quote from the transcript.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                        "reasoning": {
-                        "type": "string",
-                        "description": "The reasoning behind the answer. Required!"
-                    },
-                    "relevant_quote": {
-                        "type": "string",
-                        "description": "Any relevant quote from the transcript that supports the answer. Optional."
-                    }
-                },
-                "required": ["reasoning", "relevant_quote"]
-                }
-            }
-        }
-    ]
     def _compute_reasoning_and_relevant_quote_implementation(self, *, chat_history, value, result_index):
         """
         Computes the reasoning and relevant quote for a specific result at a given index.
@@ -578,7 +507,7 @@ Please try to summarize your overall reasoning based on your own responses in th
         quote_prompts = [{
             "role": "user",
             "content": f"""
-Don't appologize, I only want the quotes for this part. If there are any relevant quotes in your responses in the chat history that would help explain your summary of your reasoning then please provide a brief quote or two. Do not imagine quotes that don't exist in this chat history.
+If there are any relevant quotes in your responses in the chat history that would help explain your summary of your reasoning then please provide a brief quote or two. Do not imagine quotes that don't exist in this chat history.
 
 The relevant quotes should be short, succinct. Just one or two lines. Don't provide any quotes if no relevant quotes exist in the chat history. Only provide quotes that are in the transcript, from your responses, don't offer quotes that were examples from the prompts from the user.
     """
@@ -600,11 +529,11 @@ The relevant quotes should be short, succinct. Just one or two lines. Don't prov
 
         logging.info(f"Quote Response: {quote_response}")
 
-        relevant_quotes = quote_response.choices[0].message.content.strip()
-        logging.info(f"Relevant quote: {relevant_quotes}")
+        relevant_quote= quote_response.choices[0].message.content.strip()
+        logging.info(f"Relevant quote: {relevant_quote}")
 
         # Store the relevant quotes
-        self.relevant_quotes.append(relevant_quotes)
+        self.relevant_quotes.append(relevant_quote)
 
         # Calculate costs
         cost_details = calculate_cost(
@@ -623,7 +552,7 @@ The relevant quotes should be short, succinct. Just one or two lines. Don't prov
             'output_cost':       cost_details['output_cost'],
             'total_cost':        cost_details['total_cost'],
             'reasoning':         reasoning,
-            'relevant_quotes':   relevant_quotes,
+            'relevant_quote':    relevant_quote,
             'chat_history':      new_chat_history
         }
 
