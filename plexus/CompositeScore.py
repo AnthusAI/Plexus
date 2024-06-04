@@ -336,7 +336,9 @@ class CompositeScore(Score):
             self._compute_reasoning_and_relevant_quote_implementation(
                 chat_history=concatenated_chat_history,
                 value=value,
-                result_index=result_index)
+                result_index=result_index,
+                transcript_chunk=self.transcript_chunk
+            )
             
             # Return the result for the current element
             return compute_result_method(self, value=value, result_index=result_index, **kwargs)
@@ -382,6 +384,7 @@ class CompositeScore(Score):
         Returns:
             The score result for the chunk.
         """
+        self.transcript_chunk = transcript_chunk
         truncated_transcript_preview = transcript_chunk[:64] + "..." if len(transcript_chunk) > 64 else transcript_chunk
         logging.debug(f"Transcript chunk:\n{truncated_transcript_preview}")
 
