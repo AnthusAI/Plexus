@@ -333,7 +333,7 @@ Relevant quote: "{element_response['relevant_quote']}"
 """
     }
 
-    def _compute_reasoning_and_relevant_quote_implementation(self, *, chat_history, value, result_index):
+    def _compute_reasoning_and_relevant_quote_implementation(self, *, chat_history, value, result_index, transcript_chunk):
         """
         Computes the reasoning and relevant quote for a specific result at a given index.
 
@@ -384,13 +384,14 @@ Relevant quote: "{element_response['relevant_quote']}"
         # Compute the reasoning and relevant quote for the specific result
         self.compute_single_reasoning_and_relevant_quote(
             chat_history=chat_history,
+            transcript_chunk=transcript_chunk,
             question=question + " " + decision_reasoning,
             result=value)
 
         # Return the reasoning and relevant quote for this specific result
         return self.reasoning[-1], self.relevant_quotes[-1]
 
-    def compute_single_reasoning_and_relevant_quote(self, *, chat_history, question, result):
+    def compute_single_reasoning_and_relevant_quote(self, *, chat_history, question, result, transcript_chunk):
         # Define the before_retry function within this function for better organization
         def before_sleep(retry_state):
             # This function now acts after a failure but before the next attempt
@@ -416,13 +417,14 @@ Relevant quote: "{element_response['relevant_quote']}"
             before_sleep=before_sleep
         )
         def inner_function(*,
-            chat_history, question, result,
+            chat_history, question, result, transcript_chunk,
             is_retry=False,attempt_count=0, error=None, original_message=None, exception=None):
 
             return self._compute_single_reasoning_and_relevant_quote(
                 chat_history=chat_history,
                 question=question,
                 result=result,
+                transcript_chunk=transcript_chunk,
                 is_retry=is_retry,
                 attempt_count=attempt_count,
                 error=error,
@@ -431,10 +433,10 @@ Relevant quote: "{element_response['relevant_quote']}"
             )
 
         # Call the inner function with initial parameters
-        inner_function(chat_history=chat_history, question=question, result=result)
+        inner_function(chat_history=chat_history, question=question, result=result, transcript_chunk=transcript_chunk)
 
     def _compute_single_reasoning_and_relevant_quote(self, *,
-        chat_history, question, result,
+        chat_history, question, result, transcript_chunk,
         is_retry=False, attempt_count=0, error=None, original_message=None, exception=None):
         """
 Use the accumulated chat history to ask the model a new question, asking
@@ -507,16 +509,23 @@ Please try to summarize your overall reasoning based on your own responses in th
         quote_prompts = [{
             "role": "user",
             "content": f"""
-If there are any relevant quotes in your responses in the chat history that would help explain your summary of your reasoning then please provide a brief quote or two. Do not imagine quotes that don't exist in this chat history.
+    Here is the reasoning from the previous response:
+    {reasoning}
 
-The relevant quotes should be short, succinct. Just one or two lines. Don't provide any quotes if no relevant quotes exist in the chat history. Only provide quotes that are in the transcript, from your responses, don't offer quotes that were examples from the prompts from the user.
-    """
+    And here is the original transcript:
+    {transcript_chunk}
+
+    If there are any relevant quotes in the transcript that would help explain the reasoning, please provide a brief quote or two. Do not imagine quotes that don't exist in this transcript.
+
+    The relevant quotes should be short and succinct, just one or two lines. Don't provide any quotes if no relevant quotes exist in the transcript. Only provide quotes that are in the transcript, don't offer quotes that were examples from the prompts.
+        """
         }]
 
         new_chat_history = (
-            new_chat_history +
             quote_prompts
         )
+        
+        logging.info("quote transcript:\n%s", transcript_chunk)
 
         logging.info("Quote chat history:\n%s", json.dumps(new_chat_history, indent=4))
 
