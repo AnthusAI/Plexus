@@ -23,6 +23,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from plexus.cli.console import console
 from plexus.CustomLogging import logging
 from plexus.classifiers.Classifier import Classifier
+from sklearn.preprocessing import LabelBinarizer
 
 class MLClassifier(Classifier):
     """
@@ -167,13 +168,6 @@ class MLClassifier(Classifier):
         """
         Handle any pre-processing of the training data, including the training/validation splits.
         """
-        
-        filtered_dataframe = self.dataframe[[self.score_name, "Transcription"]]
-        self.dataframe = filtered_dataframe
-
-        console.print(Text("Filtered dataframe:", style="royal_blue1"))
-
-        self.analyze_dataset()
 
         if 'processors' in self.configuration.get('data', {}):
             console.print(Text("Running configured processors...", style="royal_blue1"))
@@ -209,6 +203,10 @@ class MLClassifier(Classifier):
                 transcript_comparison_table.add_row(first_transcript_before_truncated, first_transcript_after_truncated)
 
                 console.print(Panel(transcript_comparison_table, border_style="royal_blue1"))
+
+        console.print(Text("Filtered dataframe:", style="royal_blue1"))
+
+        self.analyze_dataset()
 
         # Check for missing or unexpected values
         print(f"Unique values in '{self.score_name}':", self.dataframe[self.score_name].unique())
@@ -368,11 +366,8 @@ class MLClassifier(Classifier):
         plt.figure()
 
         if self.is_multi_class:
-            # Ensure val_labels are in one-hot encoded format
-            if len(self.val_labels.shape) == 1:
-                val_labels_one_hot = np.eye(len(np.unique(self.val_labels)))[self.val_labels]
-            else:
-                val_labels_one_hot = self.val_labels
+            lb = LabelBinarizer()
+            val_labels_one_hot = lb.fit_transform(self.val_labels)
 
             n_classes = val_labels_one_hot.shape[1]
             fpr = dict()
@@ -406,11 +401,8 @@ class MLClassifier(Classifier):
         plt.figure()
 
         if self.is_multi_class:
-            # Ensure val_labels are in one-hot encoded format
-            if len(self.val_labels.shape) == 1:
-                val_labels_one_hot = np.eye(len(np.unique(self.val_labels)))[self.val_labels]
-            else:
-                val_labels_one_hot = self.val_labels
+            lb = LabelBinarizer()
+            val_labels_one_hot = lb.fit_transform(self.val_labels)
 
             n_classes = val_labels_one_hot.shape[1]
             precision = dict()
