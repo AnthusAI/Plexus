@@ -1,38 +1,37 @@
+import pandas as pd
 import nltk.data
 
-from .TranscriptFilter import TranscriptFilter
+from .DataframeProcessor import DataframeProcessor
 from plexus.CustomLogging import logging
 
-class RelevantWindowsTranscriptFilter(TranscriptFilter):
+class RelevantWindowsTranscriptFilter(DataframeProcessor):
     def __init__(self, classifier):
         self.classifier = classifier
 
-    def process(self, *, transcript, prev_count=1, next_count=1):
-        sentences = transcript.split('\n')
-        relevance_flags = [self.classifier.is_relevant(sentence) for sentence in sentences]
-        include_flags = self.compute_inclusion_flags(relevance_flags, prev_count, next_count)
+    def process(self, dataframe: pd.DataFrame) -> pd.DataFrame:
+        def filter_transcript(transcript):
+            sentences = transcript.split('\n')
+            relevance_flags = [self.classifier.is_relevant(sentence) for sentence in sentences]
+            include_flags = self.compute_inclusion_flags(relevance_flags)
 
-        # Create the filtered transcript with ellipses, preserving newline characters
-        filtered_transcript = []
-        for i in range(len(sentences)):
-            if include_flags[i]:
-                filtered_transcript.append(sentences[i])
-            elif self.should_insert_ellipsis(i, include_flags, sentences):
-                filtered_transcript.append("...")
+            filtered_transcript = []
+            for i in range(len(sentences)):
+                if include_flags[i]:
+                    filtered_transcript.append(sentences[i])
+                elif self.should_insert_ellipsis(i, include_flags, sentences):
+                    filtered_transcript.append("...")
 
-        # Combine consecutive ellipses into one
-        combined_transcript = self.combine_consecutive_ellipses(filtered_transcript)
+            combined_transcript = self.combine_consecutive_ellipses(filtered_transcript)
+            result = '\n'.join(combined_transcript).strip()
 
-        # Join sentences with newlines
-        result = '\n'.join(combined_transcript).strip()
+            if result == "...":
+                return ""
 
-        # Special case: if the result is only ellipses, return an empty string
-        if result == "...":
-            return ""
+            logging.debug(f"Filtered transcript: {result}")
+            return result
 
-        logging.debug(f"Filtered transcript: {result}")
-
-        return result
+        dataframe["Transcription"] = dataframe["Transcription"].apply(filter_transcript)
+        return dataframe
 
     def compute_inclusion_flags(self, relevance_flags, prev_count, next_count):
         include_flags = [False] * len(relevance_flags)
