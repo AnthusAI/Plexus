@@ -187,14 +187,12 @@ class MLClassifier(Classifier):
                 processor_instance = ProcessorFactory.create_processor(processor_class, **processor_parameters)
                 processors.append(processor_instance)
 
-            # Process the entire column of transcriptions
+            # Process the entire dataframe
             first_transcript_before = self.dataframe["Transcription"].iloc[0]
-            processed_transcriptions = self.dataframe["Transcription"].tolist()
 
             for processor in processors:
-                processed_transcriptions = [processor.process(transcript=transcription) for transcription in processed_transcriptions]
+                self.dataframe = processor.process(self.dataframe)
 
-            self.dataframe["Transcription"] = processed_transcriptions
             first_transcript_after = self.dataframe["Transcription"].iloc[0]
 
             if first_transcript_before and first_transcript_after:
@@ -211,7 +209,7 @@ class MLClassifier(Classifier):
                 transcript_comparison_table.add_row(first_transcript_before_truncated, first_transcript_after_truncated)
 
                 console.print(Panel(transcript_comparison_table, border_style="royal_blue1"))
-        
+
         # Check for missing or unexpected values
         print(f"Unique values in '{self.score_name}':", self.dataframe[self.score_name].unique())
 
@@ -340,10 +338,14 @@ class MLClassifier(Classifier):
 
         # Ensure that both val_labels and val_predictions are in integer format
         if self.is_multi_class:
-            val_labels_int = np.argmax(self.val_labels, axis=1)
+            if len(self.val_labels.shape) > 1 and self.val_labels.shape[1] > 1:
+                val_labels_int = np.argmax(self.val_labels, axis=1)
+            else:
+                val_labels_int = self.val_labels
+
             val_predictions_int = np.argmax(self.val_predictions, axis=1)
         else:
-            val_labels_int = self.val_labels_int
+            val_labels_int = self.val_labels
             val_predictions_int = [1 if pred > 0.5 else 0 for pred in self.val_predictions]
 
         cm = confusion_matrix(val_labels_int, val_predictions_int)
@@ -366,18 +368,22 @@ class MLClassifier(Classifier):
         plt.figure()
 
         if self.is_multi_class:
-            # Compute ROC curve and ROC area for each class
-            val_labels_int = np.argmax(self.val_labels, axis=1)
-            n_classes = len(np.unique(val_labels_int))
+            # Ensure val_labels are in one-hot encoded format
+            if len(self.val_labels.shape) == 1:
+                val_labels_one_hot = np.eye(len(np.unique(self.val_labels)))[self.val_labels]
+            else:
+                val_labels_one_hot = self.val_labels
+
+            n_classes = val_labels_one_hot.shape[1]
             fpr = dict()
             tpr = dict()
             roc_auc = dict()
             for i in range(n_classes):
-                fpr[i], tpr[i], _ = roc_curve(self.val_labels[:, i], self.val_predictions[:, i])
+                fpr[i], tpr[i], _ = roc_curve(val_labels_one_hot[:, i], self.val_predictions[:, i])
                 roc_auc[i] = auc(fpr[i], tpr[i])
                 plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} (area = {roc_auc[i]:0.2f})')
         else:
-            fpr, tpr, _ = roc_curve(self.val_labels_int, self.val_predictions)
+            fpr, tpr, _ = roc_curve(self.val_labels, self.val_predictions)
             roc_auc = auc(fpr, tpr)
             plt.plot(fpr, tpr, color=self._sky_blue, lw=2, label='ROC curve (area = %0.2f)' % roc_auc)
 
@@ -400,17 +406,22 @@ class MLClassifier(Classifier):
         plt.figure()
 
         if self.is_multi_class:
-            # Compute precision-recall curve and PR area for each class
-            n_classes = self.val_labels.shape[1]
+            # Ensure val_labels are in one-hot encoded format
+            if len(self.val_labels.shape) == 1:
+                val_labels_one_hot = np.eye(len(np.unique(self.val_labels)))[self.val_labels]
+            else:
+                val_labels_one_hot = self.val_labels
+
+            n_classes = val_labels_one_hot.shape[1]
             precision = dict()
             recall = dict()
             pr_auc = dict()
             for i in range(n_classes):
-                precision[i], recall[i], _ = precision_recall_curve(self.val_labels[:, i], self.val_predictions[:, i])
+                precision[i], recall[i], _ = precision_recall_curve(val_labels_one_hot[:, i], self.val_predictions[:, i])
                 pr_auc[i] = auc(recall[i], precision[i])
                 plt.plot(recall[i], precision[i], lw=2, label=f'Class {i} (area = {pr_auc[i]:0.2f})')
         else:
-            precision, recall, _ = precision_recall_curve(self.val_labels_int, self.val_predictions)
+            precision, recall, _ = precision_recall_curve(self.val_labels, self.val_predictions)
             pr_auc = auc(recall, precision)
             plt.plot(recall, precision, color=self._sky_blue, lw=2, label='PR curve (area = %0.2f)' % pr_auc)
 
