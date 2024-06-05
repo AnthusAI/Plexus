@@ -5,8 +5,9 @@ from .DataframeProcessor import DataframeProcessor
 from plexus.CustomLogging import logging
 
 class RelevantWindowsTranscriptFilter(DataframeProcessor):
-    def __init__(self, classifier):
-        self.classifier = classifier
+    def __init__(self, **parameters):
+        super().__init__(**parameters)
+        self.classifier = parameters.get("classifier")
 
     def process(self, dataframe: pd.DataFrame) -> pd.DataFrame:
         def filter_transcript(transcript):
@@ -31,6 +32,7 @@ class RelevantWindowsTranscriptFilter(DataframeProcessor):
             return result
 
         dataframe["Transcription"] = dataframe["Transcription"].apply(filter_transcript)
+        self.display_summary()
         return dataframe
 
     def compute_inclusion_flags(self, relevance_flags, prev_count, next_count):
