@@ -164,6 +164,7 @@ class CompositeScore(Score):
         # Get the base class name from the config, default to OpenAICompositeScore
         llm_model_name = config.get('model', 'gpt-3.5-turbo-16k-0613')
         completion_name = config.get('completion', 'azure/CallCriteriaGPT35Turbo16k')
+        chunking = config.get('chunking', True)
 
         # Hard-code the base module path
         base_module_path = 'plexus.composite_scores'
@@ -179,6 +180,7 @@ class CompositeScore(Score):
         class CompositeScoreFromMarkdown(base_class):
             def __init__(self, *, transcript):
                 self.preprocessing_config = preprocessing_config
+                self.chunking = chunking
                 super().__init__(transcript=transcript, model_name=llm_model_name, completion_name=completion_name)
                 self.decision_tree = decision_tree_config
                 self.prompt_template_loader = PromptTemplateLoader(markdown_content=markdown_content)
@@ -190,6 +192,9 @@ class CompositeScore(Score):
 
             def process_transcript(self, *, transcript):
                 # Initialize an empty list to hold both strings and compiled regex patterns
+                if not self.chunking:
+                    return transcript
+
                 keyword_patterns = []
 
                 for preprocessing_step in self.preprocessing_config:
@@ -446,8 +451,12 @@ class CompositeScore(Score):
         if callable(element):
             return element()
 
-        # Break the transcript into chunks to process them in parallel.
-        chunks = self.break_transcript_into_chunks(self.filtered_transcript)
+        logging.info(f"Chunking: {self.chunking}")
+        if not self.chunking:
+            chunks = [self.filtered_transcript]
+        else:
+            # Break the transcript into chunks to process them in parallel.
+            chunks = self.break_transcript_into_chunks(self.filtered_transcript)
 
         logging.debug(f"Filtered transcript:\n{self.filtered_transcript}")
         logging.info(f"Number of transcript chunks: {len(chunks)}")
