@@ -105,7 +105,8 @@ class CompositeScore(CompositeScore):
             'completion_tokens': 0,
             'input_cost':  Decimal('0.0'),
             'output_cost': Decimal('0.0'),
-            'total_cost':  Decimal('0.0')
+            'total_cost':  Decimal('0.0'),
+            'chat_history': []
         }
 
         # The element name and prompt.
