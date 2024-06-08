@@ -114,12 +114,15 @@ class MLClassifier(Classifier):
         answer_breakdown_table.add_column("Count", style="magenta1", justify="right")
         answer_breakdown_table.add_column("Percentage", style="magenta1 bold", justify="right")
 
-        answer_counts = self.dataframe[self.score_name].value_counts()
-        total_responses = answer_counts.sum()
-        for answer_value, count in answer_counts.items():
-            percentage_of_total = (count / total_responses) * 100
-            formatted_percentage = f"{percentage_of_total:.1f}%"
-            answer_breakdown_table.add_row(str(answer_value), str(count), formatted_percentage)
+        try:
+            answer_counts = self.dataframe[self.score_name].value_counts()
+            total_responses = answer_counts.sum()
+            for answer_value, count in answer_counts.items():
+                percentage_of_total = (count / total_responses) * 100
+                formatted_percentage = f"{percentage_of_total:.1f}%"
+                answer_breakdown_table.add_row(str(answer_value), str(count), formatted_percentage)
+        except KeyError:
+            pass
 
         panels.append(Panel(answer_breakdown_table, border_style="royal_blue1"))
 
@@ -136,13 +139,13 @@ class MLClassifier(Classifier):
         dataframe_summary_table.add_row("Number of Columns", str(self.dataframe.shape[1]))
         dataframe_summary_table.add_row("Total Cells", str(self.dataframe.size))
 
-        smallest_answer_count = answer_counts.min()
-        total_kinds_of_non_null_answers = self.dataframe[self.score_name].nunique()
-        total_balanced_count = smallest_answer_count * total_kinds_of_non_null_answers
+        if 'answer_counts' in locals():
+            smallest_answer_count = answer_counts.min()
+            total_kinds_of_non_null_answers = self.dataframe[self.score_name].nunique()
+            total_balanced_count = smallest_answer_count * total_kinds_of_non_null_answers
 
-        dataframe_summary_table.add_row("Smallest Count", str(smallest_answer_count))
-        dataframe_summary_table.add_row("Total Balanced Count", str(total_balanced_count), style="magenta1 bold")
-
+            dataframe_summary_table.add_row("Smallest Count", str(smallest_answer_count))
+            dataframe_summary_table.add_row("Total Balanced Count", str(total_balanced_count), style="magenta1 bold")
         panels.append(Panel(dataframe_summary_table, border_style="royal_blue1"))
 
         # Column Names Table
@@ -204,8 +207,7 @@ class MLClassifier(Classifier):
 
                 console.print(Panel(transcript_comparison_table, border_style="royal_blue1"))
 
-        console.print(Text("Filtered dataframe:", style="royal_blue1"))
-
+        console.print(Text("Processed dataframe:", style="royal_blue1"))
         self.analyze_dataset()
 
         # Check for missing or unexpected values
@@ -214,7 +216,8 @@ class MLClassifier(Classifier):
         #############
         # Balance data
 
-        if hasattr(self, 'balance_data') and not self.balance_data:
+        if 'balance' in self.configuration.get('data', {}) and not self.configuration['data']['balance']:
+            logging.info("data->balance: [red][b]false.[/b][/red]  Skipping data balancing.")
             return
 
         # Check the distribution of labels
@@ -250,6 +253,9 @@ class MLClassifier(Classifier):
         print(balanced_dataframe[self.score_name].value_counts())
 
         self.dataframe = balanced_dataframe
+
+        console.print(Text("Final, balanced dataframe:", style="royal_blue1"))
+        self.analyze_dataset()
 
     @abstractmethod
     def train_model(self):
@@ -322,16 +328,19 @@ class MLClassifier(Classifier):
     _red = '#DD3333'
     _green = '#339933'
 
+    def _report_directory_path(self):
+        return f"reports/{self.scorecard_name}/{self.score_name}/"
+
     @Classifier.ensure_report_directory_exists
     def _generate_model_diagram(self):
-        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        directory_path = self._report_directory_path()
         file_name = os.path.join(directory_path, "model_diagram.png")
         plot_model(self.model, to_file=file_name, show_shapes=True, show_layer_names=True, rankdir='TB')
         mlflow.log_artifact(file_name)
 
     @Classifier.ensure_report_directory_exists
     def _generate_confusion_matrix(self):
-        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        directory_path = self._report_directory_path()
         file_name = os.path.join(directory_path, "confusion_matrix.png")
 
         # Ensure that both val_labels and val_predictions are in integer format
@@ -360,7 +369,7 @@ class MLClassifier(Classifier):
 
     @Classifier.ensure_report_directory_exists
     def _plot_roc_curve(self):
-        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        directory_path = self._report_directory_path()
         file_name = os.path.join(directory_path, "ROC_curve.png")
 
         plt.figure()
@@ -395,7 +404,7 @@ class MLClassifier(Classifier):
 
     @Classifier.ensure_report_directory_exists
     def _plot_precision_recall_curve(self):
-        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        directory_path = self._report_directory_path()
         file_name = os.path.join(directory_path, "precision_and_recall_curve.png")
 
         plt.figure()
@@ -427,7 +436,7 @@ class MLClassifier(Classifier):
 
     @Classifier.ensure_report_directory_exists
     def _plot_training_history(self):
-        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        directory_path = self._report_directory_path()
         file_name = os.path.join(directory_path, "training_history.png")
 
         plt.figure(figsize=(12, 9))  # Adjusted for a 4x3 aspect ratio with three subplots
