@@ -4,6 +4,7 @@ import numpy as np
 import mlflow
 import mlflow.keras
 from tqdm import tqdm
+from collections import Counter
 from rich.progress import Progress
 from transformers import AutoTokenizer, TFAutoModel
 from tensorflow.keras.metrics import Precision, Recall, AUC
@@ -23,7 +24,13 @@ from tensorflow.keras import mixed_precision
 from sklearn.preprocessing import LabelBinarizer
 from plexus.classifiers.Classifier import Classifier
 import matplotlib.pyplot as plt
+from tensorflow.keras import backend as keras_backend
+keras_backend.clear_session()
 
+# Set the environment variable to allow GPU memory growth
+os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+
+# Set the global policy for mixed precision
 policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_global_policy(policy)
 
@@ -38,34 +45,50 @@ class EmbeddingsLayer(tf.keras.layers.Layer):
             input_ids = input_ids.to_tensor(default_value=0)
         if isinstance(attention_mask, tf.RaggedTensor):
             attention_mask = attention_mask.to_tensor(default_value=0)
+        
+        logging.info(f"Input IDs shape: {input_ids.shape}")
+        logging.info(f"Attention Mask shape: {attention_mask.shape}")
+
         outputs = self.embeddings_model(input_ids, attention_mask=attention_mask)
         last_hidden_state = outputs[0]
         return last_hidden_state
 
 class RaggedEmbeddingsLayer(tf.keras.layers.Layer):
-    def __init__(self, embeddings_model_name):
+    def __init__(self, embeddings_model_name, aggregation='max'):
         super(RaggedEmbeddingsLayer, self).__init__()
         self.embeddings_model = EmbeddingsLayer(embeddings_model_name)
+        self.aggregation = aggregation
 
     def call(self, inputs):
         input_ids, attention_mask = inputs
-        # Ensure that the embeddings model processes each element of the input tensors individually
-        # and the output is concatenated back into a ragged tensor with the same structure.
         def embed_single_instance(args):
             single_input_id, single_attention_mask = args
-            return self.embeddings_model([single_input_id, single_attention_mask])
+            single_embedding = self.embeddings_model([single_input_id, single_attention_mask])
+            if self.aggregation == 'mean':
+                aggregated_embedding = tf.reduce_mean(single_embedding, axis=0)
+            elif self.aggregation == 'max':
+                aggregated_embedding = tf.reduce_max(single_embedding, axis=0)
+            else:
+                raise ValueError(f"Unsupported aggregation method: {self.aggregation}")
+            return aggregated_embedding
 
-        # Apply the embedding model to each element of the ragged tensor individually
-        ragged_embeddings = tf.ragged.map_flat_values(
+        sample_embeddings = tf.map_fn(
             embed_single_instance,
-            (input_ids, attention_mask)
+            (input_ids, attention_mask),
+            fn_output_signature=tf.float32
         )
-        # Flatten the ragged tensor to reduce unnecessary dimensions
-        return ragged_embeddings.flat_values
+
+        logging.info(f"Shape of sample_embeddings: {sample_embeddings.shape}")
+
+        return sample_embeddings
 
 class EmbeddingsDNNClassifier(MLClassifier):
     """
-    This is a base class for classifiers based on BERT embeddings that must pre-propcess data in the same way by tokenizing it with the BERT model.
+    This classifier uses vector embeddings from BERT-like models, including DistilBERT, to represent input text.
+    It has a sliding window feature for computing one combined embedding for the entire input text by 
+    breaking it down into smaller, overlapping windows of text. It then computes the embedding for each window, and then
+    aggregates the vector embeddings for all the windows into one combined embedding for the entire input text.
+    Or, it can use naieve truncation, where it will only examine one window from the beginning of the input text.
     """
 
     def __init__(self, *args, **parameters):
@@ -75,7 +98,12 @@ class EmbeddingsDNNClassifier(MLClassifier):
 
     def process_data(self):
         """
-        Handle any pre-processing of the training data, including the training/validation splits.
+        This function breaks the input text apart into windows of text if the sliding-windows feature is enabled,
+        or it will naively truncate the input text to a single window if the sliding-windows feature is disabled.
+        It will then encode the text and compute the vector embeddings.
+        The dimensionality of the training and validation data will differ, depending on the sliding-windows feature.
+        With sliding windows, the training and validation data will be 3D tensors.
+        With naive truncation, the training and validation data will be 2D tensors.
         """
 
         # Call the parent process_data method first, which will iterate over any processor classes
@@ -102,6 +130,16 @@ class EmbeddingsDNNClassifier(MLClassifier):
             return tokenizer.tokenize(sentence)
 
         def build_sliding_windows(tokenizer, text, max_tokens_per_window, max_windows):
+            """
+            This function breaks long texts into smaller windows of text, where each sentence is
+            entirely within one window, without being broken apart.
+            The token count of the sentence is what determines if it fits into the window, because
+            the maximum size of the windows is specified in a token count.  Because the goal is
+            for the window to be small enough for the BERT model, or something like it, to process
+            the window in one step.  BERT models typically have a maximum input length of 512
+            tokens, so our windows need to fit within that, which we specify with the
+            `self.maximum_number_of_tokens_analyzed` parameter.
+            """
             windows = []
             windows_tokens = []
             current_window = []
@@ -120,12 +158,17 @@ class EmbeddingsDNNClassifier(MLClassifier):
                     current_window = [sentence]
                     current_window_tokens = sentence_tokens
 
-                if len(windows) >= max_windows:
+                # Truncate to the maximum number of windows, but only if that is specified.
+                if max_windows is not None and len(windows) >= max_windows:
                     break
 
-            if current_window and len(windows) < max_windows:
-                windows.append(current_window)
-                windows_tokens.append(current_window_tokens)
+            if current_window:
+                should_we_keep_this_window = True
+                if max_windows is not None:
+                    should_we_keep_this_window = len(windows) < max_windows
+                if should_we_keep_this_window:
+                    windows.append(current_window)
+                    windows_tokens.append(current_window_tokens)
 
             return windows, windows_tokens
 
@@ -188,9 +231,8 @@ class EmbeddingsDNNClassifier(MLClassifier):
         if hasattr(self, 'sliding_window') and self.sliding_window:
 
             # Build sliding windows for training and validation texts
-            train_windows, train_windows_tokens = zip(*[build_sliding_windows(tokenizer, text, self.maximum_number_of_tokens_analyzed, self.sliding_window_maximum_number_of_windows) for text in train_texts])
-            val_windows, val_windows_tokens = zip(*[build_sliding_windows(tokenizer, text, self.maximum_number_of_tokens_analyzed, self.sliding_window_maximum_number_of_windows) for text in val_texts])
-
+            train_windows, train_windows_tokens = zip(*[build_sliding_windows(tokenizer, text, self.maximum_number_of_tokens_analyzed, getattr(self, 'sliding_window_maximum_number_of_windows', None)) for text in tqdm(train_texts, desc="Building train sliding windows")])
+            val_windows, val_windows_tokens = zip(*[build_sliding_windows(tokenizer, text, self.maximum_number_of_tokens_analyzed, getattr(self, 'sliding_window_maximum_number_of_windows', None)) for text in tqdm(val_texts, desc="Building validation sliding windows")])
             if hasattr(self, 'sliding_window_maximum_number_of_windows'):
                 # Limit the number of windows for each text
                 train_windows = [windows[:self.sliding_window_maximum_number_of_windows] for windows in train_windows]
@@ -199,8 +241,27 @@ class EmbeddingsDNNClassifier(MLClassifier):
             # Log the lengths of the windows
             logging.info(f"Number of train_windows after building: {len(train_windows)}")
             logging.info(f"Number of val_windows after building: {len(val_windows)}")
-            logging.info(f"Lengths of individual train_windows: {[len(w) for w in train_windows]}")
-            logging.info(f"Lengths of individual val_windows: {[len(w) for w in val_windows]}")
+            
+            def generate_ascii_histogram(counter, bar_char='#', max_width=50):
+                max_count = max(counter.values())
+                scale = max_width / max_count
+                histogram_lines = []
+                for length, count in sorted(counter.items()):
+                    bar = bar_char * int(count * scale)
+                    histogram_lines.append(f"{length:>3}: {bar} ({count})")
+                return "\n".join(histogram_lines)
+
+            train_window_lengths = [len(w) for w in train_windows]
+            val_window_lengths = [len(w) for w in val_windows]
+
+            train_window_histogram = Counter(train_window_lengths)
+            val_window_histogram = Counter(val_window_lengths)
+
+            train_histogram_ascii = generate_ascii_histogram(train_window_histogram)
+            val_histogram_ascii = generate_ascii_histogram(val_window_histogram)
+
+            logging.info(f"Histogram of train_window lengths:\n{train_histogram_ascii}")
+            logging.info(f"Histogram of val_window lengths:\n{val_histogram_ascii}")
 
             # Log the number of windows for each text
             logging.debug(f"Number of training windows per sample: {[len(windows) for windows in train_windows]}")
@@ -230,18 +291,10 @@ class EmbeddingsDNNClassifier(MLClassifier):
             logging.info(f"Shape of train_encoded_windows after encoding: {train_encoded_windows.shape}")
             logging.info(f"Shape of val_encoded_windows after encoding: {val_encoded_windows.shape}")
  
-            def create_attention_masks(encoded_windows):
-                attention_masks = []
-                for window in encoded_windows:
-                    # Apply tf.where to each tensor within the ragged tensor
-                    mask = tf.ragged.map_flat_values(tf.where, window != 0, 1, 0)
-                    attention_masks.append(mask)
-                return attention_masks
-
-            train_input_ids = tf.ragged.constant([tf.concat(window, axis=0).numpy() for window in train_encoded_windows], dtype=tf.int32)
-            val_input_ids = tf.ragged.constant([tf.concat(window, axis=0).numpy() for window in val_encoded_windows], dtype=tf.int32)
-            train_attention_mask = tf.ragged.constant([tf.concat(mask, axis=0).numpy() for mask in train_attention_masks], dtype=tf.int32)
-            val_attention_mask = tf.ragged.constant([tf.concat(mask, axis=0).numpy() for mask in val_attention_masks], dtype=tf.int32)
+            train_input_ids = tf.ragged.constant([tf.concat(window, axis=0).numpy() for window in tqdm(train_encoded_windows, desc="Processing train windows")], dtype=tf.int32)
+            val_input_ids = tf.ragged.constant([tf.concat(window, axis=0).numpy() for window in tqdm(val_encoded_windows, desc="Processing validation windows")], dtype=tf.int32)
+            train_attention_mask = tf.ragged.constant([tf.concat(mask, axis=0).numpy() for mask in tqdm(train_attention_masks, desc="Processing train attention masks")], dtype=tf.int32)
+            val_attention_mask = tf.ragged.constant([tf.concat(mask, axis=0).numpy() for mask in tqdm(val_attention_masks, desc="Processing validation attention masks")], dtype=tf.int32)
 
             # Log the lengths before expansion
             logging.info(f"Number of train labels: {len(train_labels)}")
@@ -308,8 +361,10 @@ class EmbeddingsDNNClassifier(MLClassifier):
         if self.is_multi_class:
             lb = LabelBinarizer()
             if hasattr(self, 'sliding_window') and self.sliding_window:
-                train_labels = tf.ragged.constant(lb.fit_transform(train_labels.flat_values))
-                val_labels = tf.ragged.constant(lb.transform(val_labels.flat_values))
+                train_labels = lb.fit_transform(train_labels)
+                val_labels = lb.transform(val_labels)
+                train_labels = tf.ragged.constant(train_labels)
+                val_labels = tf.ragged.constant(val_labels)
             else:
                 train_labels = lb.fit_transform(train_labels)
                 val_labels = lb.transform(val_labels)
@@ -317,10 +372,6 @@ class EmbeddingsDNNClassifier(MLClassifier):
             if not (hasattr(self, 'sliding_window') and self.sliding_window):
                 train_labels = train_labels.reshape(-1, 1)
                 val_labels = val_labels.reshape(-1, 1)
-
-        # unique_labels_onehot, label_counts_onehot = np.unique(train_labels, axis=0, return_counts=True)
-        # logging.info(f"Unique labels after one-hot encoding: {unique_labels_onehot}")
-        # logging.info(f"Label counts after one-hot encoding: {label_counts_onehot}")
 
         # Logging for debugging
         logging.info(f"train_labels type: {type(train_labels)}, shape: {train_labels.shape}")
@@ -416,38 +467,9 @@ class EmbeddingsDNNClassifier(MLClassifier):
             window_level_output = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(768, activation='relu'))(last_hidden_state)
             logging.info(f"Shape of window_level_output: {window_level_output.shape}")
 
-            # Flatten the ragged dimensions
-            # flat_output = tf.keras.layers.Lambda(lambda x: tf.reshape(x, [-1, 768]))(window_level_output)
-            # logging.info(f"Shape of flat_output: {flat_output.shape}")
-
-            # Aggregate the window-level representations based on the sliding_window_aggregation parameter
-            if self.sliding_window_aggregation == 'attention':
-                # Apply a Dense layer to compute attention scores over the last dimension of the ragged tensor
-                attention_scores = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(1, activation='tanh'))(window_level_output)
-
-                # Use a softmax layer to compute attention weights, handling the ragged tensor directly
-                attention_weights = tf.keras.layers.TimeDistributed(tf.keras.layers.Softmax(axis=-1))(attention_scores)
-
-                logging.info(f"Attention weights shape: {attention_weights.shape}")
-
-                # Compute the weighted sum using the attention weights, this requires custom handling for ragged tensors
-                # Multiply the weights by the original window_level_output and then sum over the appropriate axis
-                aggregated_output = tf.reduce_sum(attention_weights * window_level_output, axis=-2)
-            elif self.sliding_window_aggregation == 'max':
-                aggregated_output = tf.keras.layers.GlobalMaxPooling1D()(window_level_output)
-            else:
-                aggregated_output = tf.keras.layers.GlobalAveragePooling1D()(window_level_output)
-
-            # Define a custom reshaping function using Lambda layer
-            reshape_func = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (-1, tf.shape(x)[-1])))
-
-            # Apply the custom reshaping function to the aggregated_output tensor
-            aggregated_output = reshape_func(aggregated_output)
-
-            # Log the intermediate representations
-            logging.info(f"Embedding output shape: {last_hidden_state.shape}")
-            logging.info(f"Window-level output shape: {window_level_output.shape}")
-            logging.info(f"Aggregated output shape: {aggregated_output.shape}")
+            # Perform max pooling over the window dimension
+            aggregated_output = tf.reduce_max(window_level_output, axis=-2)
+            logging.info(f"Shape of aggregated_output: {aggregated_output.shape}")
 
             tanh_output = tf.keras.layers.Dense(768, activation='tanh', name="tanh_amplifier")(aggregated_output)
             dropout = tf.keras.layers.Dropout(rate=self.dropout_rate, name="dropout")(tanh_output)
@@ -538,12 +560,6 @@ class EmbeddingsDNNClassifier(MLClassifier):
 
         # During training, after the model is defined
         self.model.summary(print_fn=lambda x: logging.info(x))
-
-        # logging.info("Before predicting")
-        # logging.info(f"val_input_ids shape: {self.val_input_ids.shape}")
-        # logging.info(f"val_attention_mask shape: {self.val_attention_mask.shape}")
-        # val_predictions = self.model.predict([self.val_input_ids, self.val_attention_mask])
-        # logging.info(f"val_predictions shape: {val_predictions.shape}")
 
         self._generate_model_diagram()
 
