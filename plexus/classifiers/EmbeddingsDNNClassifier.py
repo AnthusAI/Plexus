@@ -228,150 +228,123 @@ class EmbeddingsDNNClassifier(MLClassifier):
         train_labels = np.array([label_map[label] for label in train_labels])
         val_labels = np.array([label_map[label] for label in val_labels])
 
-        if hasattr(self, 'sliding_window') and self.sliding_window:
+        # Build sliding windows for training and validation texts
+        train_windows, train_windows_tokens = zip(*[build_sliding_windows(tokenizer, text, self.maximum_number_of_tokens_analyzed, getattr(self, 'sliding_window_maximum_number_of_windows', None)) for text in tqdm(train_texts, desc="Building train sliding windows")])
+        val_windows, val_windows_tokens = zip(*[build_sliding_windows(tokenizer, text, self.maximum_number_of_tokens_analyzed, getattr(self, 'sliding_window_maximum_number_of_windows', None)) for text in tqdm(val_texts, desc="Building validation sliding windows")])
+        if hasattr(self, 'sliding_window_maximum_number_of_windows'):
+            # Limit the number of windows for each text
+            train_windows = [windows[:self.sliding_window_maximum_number_of_windows] for windows in train_windows]
+            val_windows = [windows[:self.sliding_window_maximum_number_of_windows] for windows in val_windows]
 
-            # Build sliding windows for training and validation texts
-            train_windows, train_windows_tokens = zip(*[build_sliding_windows(tokenizer, text, self.maximum_number_of_tokens_analyzed, getattr(self, 'sliding_window_maximum_number_of_windows', None)) for text in tqdm(train_texts, desc="Building train sliding windows")])
-            val_windows, val_windows_tokens = zip(*[build_sliding_windows(tokenizer, text, self.maximum_number_of_tokens_analyzed, getattr(self, 'sliding_window_maximum_number_of_windows', None)) for text in tqdm(val_texts, desc="Building validation sliding windows")])
-            if hasattr(self, 'sliding_window_maximum_number_of_windows'):
-                # Limit the number of windows for each text
-                train_windows = [windows[:self.sliding_window_maximum_number_of_windows] for windows in train_windows]
-                val_windows = [windows[:self.sliding_window_maximum_number_of_windows] for windows in val_windows]
+        # Log the lengths of the windows
+        logging.info(f"Number of train_windows after building: {len(train_windows)}")
+        logging.info(f"Number of val_windows after building: {len(val_windows)}")
+        
+        def generate_ascii_histogram(counter, bar_char='#', max_width=50):
+            max_count = max(counter.values())
+            scale = max_width / max_count
+            histogram_lines = []
+            for length, count in sorted(counter.items()):
+                bar = bar_char * int(count * scale)
+                histogram_lines.append(f"{length:>3}: {bar} ({count})")
+            return "\n".join(histogram_lines)
 
-            # Log the lengths of the windows
-            logging.info(f"Number of train_windows after building: {len(train_windows)}")
-            logging.info(f"Number of val_windows after building: {len(val_windows)}")
-            
-            def generate_ascii_histogram(counter, bar_char='#', max_width=50):
-                max_count = max(counter.values())
-                scale = max_width / max_count
-                histogram_lines = []
-                for length, count in sorted(counter.items()):
-                    bar = bar_char * int(count * scale)
-                    histogram_lines.append(f"{length:>3}: {bar} ({count})")
-                return "\n".join(histogram_lines)
+        train_window_lengths = [len(w) for w in train_windows]
+        val_window_lengths = [len(w) for w in val_windows]
 
-            train_window_lengths = [len(w) for w in train_windows]
-            val_window_lengths = [len(w) for w in val_windows]
+        train_window_histogram = Counter(train_window_lengths)
+        val_window_histogram = Counter(val_window_lengths)
 
-            train_window_histogram = Counter(train_window_lengths)
-            val_window_histogram = Counter(val_window_lengths)
+        train_histogram_ascii = generate_ascii_histogram(train_window_histogram)
+        val_histogram_ascii = generate_ascii_histogram(val_window_histogram)
 
-            train_histogram_ascii = generate_ascii_histogram(train_window_histogram)
-            val_histogram_ascii = generate_ascii_histogram(val_window_histogram)
+        logging.info(f"Histogram of train_window lengths:\n{train_histogram_ascii}")
+        logging.info(f"Histogram of val_window lengths:\n{val_histogram_ascii}")
 
-            logging.info(f"Histogram of train_window lengths:\n{train_histogram_ascii}")
-            logging.info(f"Histogram of val_window lengths:\n{val_histogram_ascii}")
+        # Log the number of windows for each text
+        logging.debug(f"Number of training windows per sample: {[len(windows) for windows in train_windows]}")
+        logging.debug(f"Number of validation windows per sample: {[len(windows) for windows in val_windows]}")
 
-            # Log the number of windows for each text
-            logging.debug(f"Number of training windows per sample: {[len(windows) for windows in train_windows]}")
-            logging.debug(f"Number of validation windows per sample: {[len(windows) for windows in val_windows]}")
+        combined_windows = train_windows + val_windows
+        self._generate_window_count_histogram(combined_windows)
 
-            combined_windows = train_windows + val_windows
-            self._generate_window_count_histogram(combined_windows)
+        # Log a random labeled sample as it gets broken into windows
+        random_index = np.random.randint(len(train_texts))
+        random_text = train_texts[random_index]
+        random_label = train_labels[random_index]
+        random_windows = train_windows[random_index]
 
-            # Log a random labeled sample as it gets broken into windows
-            random_index = np.random.randint(len(train_texts))
-            random_text = train_texts[random_index]
-            random_label = train_labels[random_index]
-            random_windows = train_windows[random_index]
+        print(f"Random labeled sample (label: {random_label}):")
+        print(random_text)
+        print("Sliding windows:")
+        for i, window in enumerate(random_windows):
+            print(f"Window {i + 1}:")
+            print(" ".join(window))
 
-            print(f"Random labeled sample (label: {random_label}):")
-            print(random_text)
-            print("Sliding windows:")
-            for i, window in enumerate(random_windows):
-                print(f"Window {i + 1}:")
-                print(" ".join(window))
+        # Encode the training and validation windows
+        train_encoded_windows, train_attention_masks = encode_windows_parallel(tokenizer, train_windows, self.maximum_number_of_tokens_analyzed)
+        val_encoded_windows, val_attention_masks = encode_windows_parallel(tokenizer, val_windows, self.maximum_number_of_tokens_analyzed)
 
-            # Encode the training and validation windows
-            train_encoded_windows, train_attention_masks = encode_windows_parallel(tokenizer, train_windows, self.maximum_number_of_tokens_analyzed)
-            val_encoded_windows, val_attention_masks = encode_windows_parallel(tokenizer, val_windows, self.maximum_number_of_tokens_analyzed)
+        # Log the shapes of the encoded windows
+        logging.info(f"Shape of train_encoded_windows after encoding: {train_encoded_windows.shape}")
+        logging.info(f"Shape of val_encoded_windows after encoding: {val_encoded_windows.shape}")
 
-            # Log the shapes of the encoded windows
-            logging.info(f"Shape of train_encoded_windows after encoding: {train_encoded_windows.shape}")
-            logging.info(f"Shape of val_encoded_windows after encoding: {val_encoded_windows.shape}")
- 
-            train_input_ids = tf.ragged.constant([tf.concat(window, axis=0).numpy() for window in tqdm(train_encoded_windows, desc="Processing train windows")], dtype=tf.int32)
-            val_input_ids = tf.ragged.constant([tf.concat(window, axis=0).numpy() for window in tqdm(val_encoded_windows, desc="Processing validation windows")], dtype=tf.int32)
-            train_attention_mask = tf.ragged.constant([tf.concat(mask, axis=0).numpy() for mask in tqdm(train_attention_masks, desc="Processing train attention masks")], dtype=tf.int32)
-            val_attention_mask = tf.ragged.constant([tf.concat(mask, axis=0).numpy() for mask in tqdm(val_attention_masks, desc="Processing validation attention masks")], dtype=tf.int32)
+        train_input_ids = tf.ragged.constant([tf.concat(window, axis=0).numpy() for window in tqdm(train_encoded_windows, desc="Processing train windows")], dtype=tf.int32)
+        val_input_ids = tf.ragged.constant([tf.concat(window, axis=0).numpy() for window in tqdm(val_encoded_windows, desc="Processing validation windows")], dtype=tf.int32)
+        train_attention_mask = tf.ragged.constant([tf.concat(mask, axis=0).numpy() for mask in tqdm(train_attention_masks, desc="Processing train attention masks")], dtype=tf.int32)
+        val_attention_mask = tf.ragged.constant([tf.concat(mask, axis=0).numpy() for mask in tqdm(val_attention_masks, desc="Processing validation attention masks")], dtype=tf.int32)
 
-            # Log the lengths before expansion
-            logging.info(f"Number of train labels: {len(train_labels)}")
-            logging.info(f"Number of train windows: {len(train_windows)}")
-            logging.info(f"Number of val labels: {len(val_labels)}")
-            logging.info(f"Number of val windows: {len(val_windows)}")
+        # Log the lengths before expansion
+        logging.info(f"Number of train labels: {len(train_labels)}")
+        logging.info(f"Number of train windows: {len(train_windows)}")
+        logging.info(f"Number of val labels: {len(val_labels)}")
+        logging.info(f"Number of val windows: {len(val_windows)}")
 
-            logging.info(f"train_input_ids type: {type(train_input_ids)}, shape: {train_input_ids.shape}")
-            logging.debug(f"train_input_ids sample: {train_input_ids[:5]}")
+        logging.info(f"train_input_ids type: {type(train_input_ids)}, shape: {train_input_ids.shape}")
+        logging.debug(f"train_input_ids sample: {train_input_ids[:5]}")
 
-            logging.info(f"train_attention_mask type: {type(train_attention_mask)}, shape: {train_attention_mask.shape}")
-            logging.debug(f"train_attention_mask sample: {train_attention_mask[:5]}")
+        logging.info(f"train_attention_mask type: {type(train_attention_mask)}, shape: {train_attention_mask.shape}")
+        logging.debug(f"train_attention_mask sample: {train_attention_mask[:5]}")
 
-            logging.info(f"train_labels type: {type(train_labels)}, shape: {train_labels.shape}")
-            logging.debug(f"train_labels sample: {train_labels[:5]}")
+        logging.info(f"train_labels type: {type(train_labels)}, shape: {train_labels.shape}")
+        logging.debug(f"train_labels sample: {train_labels[:5]}")
 
-            # Check the distribution of labels in the training set for the sliding window scenario
-            print("Training set label breakdown (sliding window):")
-            if self.is_multi_class:
-                train_label_counts = np.unique(train_labels, return_counts=True)
-                print(dict(zip(unique_labels, train_label_counts[1])))
-            else:
-                train_label_counts = np.unique(train_labels, return_counts=True)
-                print(dict(zip(unique_labels, train_label_counts[1])))
-
-            # Check the distribution of labels in the validation set for the sliding window scenario
-            print("Validation set label breakdown (sliding window):")
-            if self.is_multi_class:
-                val_label_counts = np.unique(val_labels, return_counts=True)
-                print(dict(zip(unique_labels, val_label_counts[1])))
-            else:
-                val_label_counts = np.unique(val_labels, return_counts=True)
-                print(dict(zip(unique_labels, val_label_counts[1])))
-            
-            logging.info(f"train_input_ids type: {type(train_input_ids)}, shape: {train_input_ids.shape}")
-            logging.debug(f"train_input_ids sample: {train_input_ids[:5]}")
-
-            logging.info(f"train_attention_mask type: {type(train_attention_mask)}, shape: {train_attention_mask.shape}")
-            logging.debug(f"train_attention_mask sample: {train_attention_mask[:5]}")
-
+        # Check the distribution of labels in the training set for the sliding window scenario
+        print("Training set label breakdown (sliding window):")
+        if self.is_multi_class:
+            train_label_counts = np.unique(train_labels, return_counts=True)
+            print(dict(zip(unique_labels, train_label_counts[1])))
         else:
+            train_label_counts = np.unique(train_labels, return_counts=True)
+            print(dict(zip(unique_labels, train_label_counts[1])))
 
-            # Encode the training and validation texts
-            print("Training:")
-            train_input_ids = encode_texts_parallel(tokenizer, train_texts, self.maximum_number_of_tokens_analyzed)
-            print("Validation:")
-            val_input_ids = encode_texts_parallel(tokenizer, val_texts, self.maximum_number_of_tokens_analyzed)
+        # Check the distribution of labels in the validation set for the sliding window scenario
+        print("Validation set label breakdown (sliding window):")
+        if self.is_multi_class:
+            val_label_counts = np.unique(val_labels, return_counts=True)
+            print(dict(zip(unique_labels, val_label_counts[1])))
+        else:
+            val_label_counts = np.unique(val_labels, return_counts=True)
+            print(dict(zip(unique_labels, val_label_counts[1])))
+        
+        logging.info(f"train_input_ids type: {type(train_input_ids)}, shape: {train_input_ids.shape}")
+        logging.debug(f"train_input_ids sample: {train_input_ids[:5]}")
 
-            # Create attention masks
-            train_attention_mask = tf.where(train_input_ids != 0, 1, 0)
-            val_attention_mask = tf.where(val_input_ids != 0, 1, 0)
-
-            # Log the types and shapes of the labels for the non-sliding window scenario
-            logging.info(f"train_labels type: {type(train_labels)}, length: {len(train_labels)}")
-            logging.info(f"val_labels type: {type(val_labels)}, length: {len(val_labels)}")
-            logging.debug(f"train_labels sample: {train_labels[:5]}")
-            logging.debug(f"val_labels sample: {val_labels[:5]}")
+        logging.info(f"train_attention_mask type: {type(train_attention_mask)}, shape: {train_attention_mask.shape}")
+        logging.debug(f"train_attention_mask sample: {train_attention_mask[:5]}")
 
         # unique_labels, label_counts = np.unique(train_labels, return_counts=True)
         # logging.info(f"Unique labels before one-hot encoding: {unique_labels}")
         # logging.info(f"Label counts before one-hot encoding: {label_counts}")
 
         # One-hot encode the labels only if it's a multi-class classification
+        number_of_labels = len(unique_labels)
         if self.is_multi_class:
-            lb = LabelBinarizer()
-            if hasattr(self, 'sliding_window') and self.sliding_window:
-                train_labels = lb.fit_transform(train_labels)
-                val_labels = lb.transform(val_labels)
-                train_labels = tf.ragged.constant(train_labels)
-                val_labels = tf.ragged.constant(val_labels)
-            else:
-                train_labels = lb.fit_transform(train_labels)
-                val_labels = lb.transform(val_labels)
+            train_labels = tf.ragged.map_flat_values(tf.one_hot, train_labels, depth=number_of_labels)
+            val_labels = tf.ragged.map_flat_values(tf.one_hot, val_labels, depth=number_of_labels)
         else:
-            if not (hasattr(self, 'sliding_window') and self.sliding_window):
-                train_labels = train_labels.reshape(-1, 1)
-                val_labels = val_labels.reshape(-1, 1)
+            train_labels = train_labels.reshape(-1, 1)
+            val_labels = val_labels.reshape(-1, 1)
 
         # Logging for debugging
         logging.info(f"train_labels type: {type(train_labels)}, shape: {train_labels.shape}")
@@ -435,107 +408,62 @@ class EmbeddingsDNNClassifier(MLClassifier):
         #############
         # Model setup
 
-        if hasattr(self, 'sliding_window') and self.sliding_window:
+        logging.info("Model setup: Sliding window")
 
-            logging.info("Model setup: Sliding window")
+        input_ids = tf.keras.layers.Input(shape=(None, None,), ragged=True, dtype=tf.int32, name="input_ids")
+        attention_mask = tf.keras.layers.Input(shape=(None, None,), ragged=True, dtype=tf.int32, name="attention_mask")
+        
+        embeddings_layer = EmbeddingsLayer(self.embeddings_model_name)
+        # Set all layers of the embeddings model to non-trainable first
+        for layer in embeddings_layer.embeddings_model.layers:
+            layer.trainable = False
 
-            input_ids = tf.keras.layers.Input(shape=(None, None,), ragged=True, dtype=tf.int32, name="input_ids")
-            attention_mask = tf.keras.layers.Input(shape=(None, None,), ragged=True, dtype=tf.int32, name="attention_mask")
-            
-            embeddings_layer = EmbeddingsLayer(self.embeddings_model_name)
-            # Set all layers of the embeddings model to non-trainable first
-            for layer in embeddings_layer.embeddings_model.layers:
-                layer.trainable = False
+        # Set only the top few layers to trainable, for fine-tuning
+        trainable_layers = embeddings_layer.embeddings_model.layers[-self.number_of_trainable_embeddings_model_layers:]
+        for layer in trainable_layers:
+            layer.trainable = True
 
-            # Set only the top few layers to trainable, for fine-tuning
-            trainable_layers = embeddings_layer.embeddings_model.layers[-self.number_of_trainable_embeddings_model_layers:]
-            for layer in trainable_layers:
-                layer.trainable = True
+        # Verify the trainability of each layer
+        for i, layer in enumerate(embeddings_layer.embeddings_model.layers):
+            logging.info(f"Layer {i} ({layer.name}) trainable: {layer.trainable}")
 
-            # Verify the trainability of each layer
-            for i, layer in enumerate(embeddings_layer.embeddings_model.layers):
-                logging.info(f"Layer {i} ({layer.name}) trainable: {layer.trainable}")
+        # Create an instance of the custom layer
+        ragged_embeddings_layer = RaggedEmbeddingsLayer(self.embeddings_model_name)
 
-            # Create an instance of the custom layer
-            ragged_embeddings_layer = RaggedEmbeddingsLayer(self.embeddings_model_name)
+        # Pass the ragged tensors directly to the custom layer
+        last_hidden_state = ragged_embeddings_layer([input_ids, attention_mask])
+        logging.info(f"Shape of last_hidden_state: {last_hidden_state.shape}")
 
-            # Pass the ragged tensors directly to the custom layer
-            last_hidden_state = ragged_embeddings_layer([input_ids, attention_mask])
-            logging.info(f"Shape of last_hidden_state: {last_hidden_state.shape}")
+        # Use the TimeDistributed layer to apply the dense layer to each window embedding
+        window_level_output = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(768, activation='relu'))(last_hidden_state)
+        logging.info(f"Shape of window_level_output: {window_level_output.shape}")
 
-            # Use the TimeDistributed layer to apply the dense layer to each window embedding
-            window_level_output = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(768, activation='relu'))(last_hidden_state)
-            logging.info(f"Shape of window_level_output: {window_level_output.shape}")
+        # Perform max pooling over the window dimension
+        aggregated_output = tf.reduce_max(window_level_output, axis=-2)
+        logging.info(f"Shape of aggregated_output: {aggregated_output.shape}")
 
-            # Perform max pooling over the window dimension
-            aggregated_output = tf.reduce_max(window_level_output, axis=-2)
-            logging.info(f"Shape of aggregated_output: {aggregated_output.shape}")
+        tanh_output = tf.keras.layers.Dense(768, activation='tanh', name="tanh_amplifier")(aggregated_output)
+        dropout = tf.keras.layers.Dropout(rate=self.dropout_rate, name="dropout")(tanh_output)
+        logging.info(f"Shape of dropout: {dropout.shape}")
 
-            tanh_output = tf.keras.layers.Dense(768, activation='tanh', name="tanh_amplifier")(aggregated_output)
-            dropout = tf.keras.layers.Dropout(rate=self.dropout_rate, name="dropout")(tanh_output)
-            logging.info(f"Shape of dropout: {dropout.shape}")
-
-            # Add the final output layer
-            if self.is_multi_class:
-                num_labels = self.train_labels.shape[1]
-                logging.info(f"Multi-class -- Number of labels: {num_labels}")
-                out = tf.keras.layers.Dense(
-                    num_labels,
-                    activation='softmax',
-                    kernel_regularizer=regularizers.l2(self.l2_regularization_strength),
-                    name="softmax_multiclass_classifier"
-                )(dropout)
-            else:
-                out = tf.keras.layers.Dense(
-                    1,
-                    activation='sigmoid',
-                    kernel_regularizer=regularizers.l2(self.l2_regularization_strength),
-                    name="sigmoid_binary_classifier"
-                )(dropout)
-            logging.info(f"Shape of final output: {out.shape}")
-
+        # Add the final output layer
+        if self.is_multi_class:
+            number_of_labels = tf.shape(self.train_labels)[1]
+            logging.info(f"Multi-class -- Number of labels: {number_of_labels}")
+            out = tf.keras.layers.Dense(
+                number_of_labels,
+                activation='softmax',
+                kernel_regularizer=regularizers.l2(self.l2_regularization_strength),
+                name="softmax_multiclass_classifier"
+            )(dropout)
         else:
-
-            input_ids = tf.keras.layers.Input(shape=(None,), dtype=tf.int32, name="input_ids")
-            attention_mask = tf.keras.layers.Input(shape=(None,), dtype=tf.int32, name="attention_mask")
-
-            embeddings_model = TFAutoModel.from_pretrained(self.embeddings_model_name)
-
-            # Set all layers to non-trainable first
-            for layer in embeddings_model.layers:
-                layer.trainable = False
-
-            # Set only the top few layers to trainable, for fine-tuning
-            trainable_layers = embeddings_model.layers[-self.number_of_trainable_embeddings_model_layers:]
-            for layer in trainable_layers:
-                layer.trainable = True
-
-            # Verify the trainability of each layer
-            for i, layer in enumerate(embeddings_model.layers):
-                print(f"Layer {i} ({layer.name}) trainable: {layer.trainable}")
-
-            last_hidden_state = embeddings_model(input_ids, attention_mask=attention_mask)[0]
-            pooled_output = tf.reduce_mean(last_hidden_state, axis=1)
-            tanh_output = tf.keras.layers.Dense(768, activation='tanh', name="tanh_amplifier")(pooled_output)
-            dropout = tf.keras.layers.Dropout(rate=self.dropout_rate, name="dropout")(tanh_output)
-
-            # Add the final output layer
-            if self.is_multi_class:
-                num_labels = self.train_labels.shape[1]
-                logging.info(f"Multi-class -- Number of labels: {num_labels}")
-                out = tf.keras.layers.Dense(
-                    num_labels,
-                    activation='softmax',
-                    kernel_regularizer=regularizers.l2(self.l2_regularization_strength),
-                    name="softmax_multiclass_classifier"
-                )(dropout)
-            else:
-                out = tf.keras.layers.Dense(
-                    1,
-                    activation='sigmoid',
-                    kernel_regularizer=regularizers.l2(self.l2_regularization_strength),
-                    name="sigmoid_binary_classifier"
-                )(dropout)
+            out = tf.keras.layers.Dense(
+                1,
+                activation='sigmoid',
+                kernel_regularizer=regularizers.l2(self.l2_regularization_strength),
+                name="sigmoid_binary_classifier"
+            )(dropout)
+        logging.info(f"Shape of final output: {out.shape}")
 
         self.model = tf.keras.models.Model(inputs=[input_ids, attention_mask], outputs=out)
 
@@ -548,7 +476,7 @@ class EmbeddingsDNNClassifier(MLClassifier):
 
         # Compile the model with the appropriate loss function
         if self.is_multi_class:
-            loss_function = 'categorical_crossentropy'
+            loss_function = tf.keras.losses.CategoricalCrossentropy(reduction='auto')
         else:
             loss_function = 'binary_crossentropy'
 
