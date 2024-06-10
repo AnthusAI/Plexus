@@ -35,9 +35,9 @@ policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_global_policy(policy)
 
 class EmbeddingsLayer(tf.keras.layers.Layer):
-    def __init__(self, embeddings_model_name, **kwargs):
+    def __init__(self, embeddings_model, **kwargs):
         super(EmbeddingsLayer, self).__init__(**kwargs)
-        self.embeddings_model = TFAutoModel.from_pretrained(embeddings_model_name)
+        self.embeddings_model = embeddings_model
 
     def call(self, inputs):
         input_ids, attention_mask = inputs
@@ -54,9 +54,9 @@ class EmbeddingsLayer(tf.keras.layers.Layer):
         return last_hidden_state
 
 class RaggedEmbeddingsLayer(tf.keras.layers.Layer):
-    def __init__(self, embeddings_model_name, aggregation='max'):
+    def __init__(self, embeddings_model, aggregation='max'):
         super(RaggedEmbeddingsLayer, self).__init__()
-        self.embeddings_model = EmbeddingsLayer(embeddings_model_name)
+        self.embeddings_model = EmbeddingsLayer(embeddings_model)
         self.aggregation = aggregation
 
     def call(self, inputs):
@@ -413,36 +413,42 @@ class EmbeddingsDNNClassifier(MLClassifier):
         input_ids = tf.keras.layers.Input(shape=(None, None,), ragged=True, dtype=tf.int32, name="input_ids")
         attention_mask = tf.keras.layers.Input(shape=(None, None,), ragged=True, dtype=tf.int32, name="attention_mask")
         
-        embeddings_layer = EmbeddingsLayer(self.embeddings_model_name)
-        # Set all layers of the embeddings model to non-trainable first
-        for layer in embeddings_layer.embeddings_model.layers:
+        self.embeddings_model = TFAutoModel.from_pretrained(self.embeddings_model_name)
+
+        # # Set all layers of the embeddings model to non-trainable first
+        for layer in self.embeddings_model.layers:
             layer.trainable = False
 
-        # Set only the top few layers to trainable, for fine-tuning
-        trainable_layers = embeddings_layer.embeddings_model.layers[-self.number_of_trainable_embeddings_model_layers:]
+        # # Set only the top few layers to trainable, for fine-tuning
+        trainable_layers = self.embeddings_model.layers[-self.number_of_trainable_embeddings_model_layers:]
         for layer in trainable_layers:
             layer.trainable = True
 
-        # Verify the trainability of each layer
-        for i, layer in enumerate(embeddings_layer.embeddings_model.layers):
+        # # Verify the trainability of each layer
+        for i, layer in enumerate(self.embeddings_model.layers):
             logging.info(f"Layer {i} ({layer.name}) trainable: {layer.trainable}")
 
         # Create an instance of the custom layer
-        ragged_embeddings_layer = RaggedEmbeddingsLayer(self.embeddings_model_name)
+        ragged_embeddings_layer = RaggedEmbeddingsLayer(self.embeddings_model)
 
         # Pass the ragged tensors directly to the custom layer
         last_hidden_state = ragged_embeddings_layer([input_ids, attention_mask])
         logging.info(f"Shape of last_hidden_state: {last_hidden_state.shape}")
 
+        # Get the hidden size from the pre-loaded model
+        hidden_size = self.embeddings_model.config.hidden_size
+
         # Use the TimeDistributed layer to apply the dense layer to each window embedding
-        window_level_output = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(768, activation='relu'))(last_hidden_state)
+        window_level_output = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(hidden_size, activation='relu'))(last_hidden_state)
         logging.info(f"Shape of window_level_output: {window_level_output.shape}")
 
         # Perform max pooling over the window dimension
         aggregated_output = tf.reduce_max(window_level_output, axis=-2)
         logging.info(f"Shape of aggregated_output: {aggregated_output.shape}")
 
-        tanh_output = tf.keras.layers.Dense(768, activation='tanh', name="tanh_amplifier")(aggregated_output)
+        tanh_output = tf.keras.layers.Dense(hidden_size, activation='tanh', name="tanh_amplifier_1")(aggregated_output)
+        logging.info(f"Shape of tanh_output: {tanh_output.shape}")
+
         dropout = tf.keras.layers.Dropout(rate=self.dropout_rate, name="dropout")(tanh_output)
         logging.info(f"Shape of dropout: {dropout.shape}")
 
