@@ -34,12 +34,15 @@ class MLClassifier(Classifier):
         super().__init__(**parameters)
         logging.info("Initializing [magenta1][b]MLClassifier[/b][/magenta1]")
         self._is_multi_class = None
-        self._stored_parameters = parameters
         self.start_mlflow_experiment_run()
+
+    class Parameters(Classifier.Parameters):
+        ...
+        data_percentage: float
 
     def log_stored_parameters(self):
         if hasattr(self, '_stored_parameters'):
-            for name, value in self._stored_parameters['configuration']['model']['parameters'].items():
+            for name, value in self.parameters['configuration']['model']['parameters'].items():
                 mlflow.log_param(name, value)
 
     def name(self):
@@ -52,7 +55,7 @@ class MLClassifier(Classifier):
         return computed_name
 
     def start_mlflow_experiment_run(self):
-        experiment_name = f"{self.scorecard_name} - {self.score_name}"
+        experiment_name = f"{self.parameters.scorecard_name} - {self.parameters.score_name}"
         if os.getenv('MLFLOW_EXPERIMENT_NAME'):
             experiment_name = experiment_name + " - " + os.getenv('MLFLOW_EXPERIMENT_NAME')
         logging.info(f"Setting MLFLow experiment name to [magenta1][b]{experiment_name}[/b][/magenta1]")
@@ -68,7 +71,7 @@ class MLClassifier(Classifier):
         try:
             mlflow.start_run()
         except Exception as e:
-            logging.error("Error: ", e)
+            logging.error(f"Error: {e}")
             logging.info("Attempting to end the previous run and start a new one.")
             mlflow.end_run()
             mlflow.start_run()
@@ -76,8 +79,8 @@ class MLClassifier(Classifier):
         mlflow.log_param("classifier_class", self.__class__.__name__)
 
         # Log common parameters
-        mlflow.log_param("scorecard_name", self.scorecard_name)
-        mlflow.log_param("score_name", self.score_name)
+        mlflow.log_param("scorecard_name", self.parameters.scorecard_name)
+        mlflow.log_param("score_name", self.parameters.score_name)
 
         self.log_stored_parameters()
 
@@ -115,7 +118,7 @@ class MLClassifier(Classifier):
         answer_breakdown_table.add_column("Percentage", style="magenta1 bold", justify="right")
 
         try:
-            answer_counts = self.dataframe[self.score_name].value_counts()
+            answer_counts = self.dataframe[self.parameters.score_name].value_counts()
             total_responses = answer_counts.sum()
             for answer_value, count in answer_counts.items():
                 percentage_of_total = (count / total_responses) * 100
@@ -141,7 +144,7 @@ class MLClassifier(Classifier):
 
         if 'answer_counts' in locals():
             smallest_answer_count = answer_counts.min()
-            total_kinds_of_non_null_answers = self.dataframe[self.score_name].nunique()
+            total_kinds_of_non_null_answers = self.dataframe[self.parameters.score_name].nunique()
             total_balanced_count = smallest_answer_count * total_kinds_of_non_null_answers
 
             dataframe_summary_table.add_row("Smallest Count", str(smallest_answer_count))
@@ -162,7 +165,7 @@ class MLClassifier(Classifier):
 
         # Combine all panels into columns
         columns = Columns(panels)
-        header_text = f"[bold royal_blue1]{self.score_name}[/bold royal_blue1]"
+        header_text = f"[bold royal_blue1]{self.parameters.score_name}[/bold royal_blue1]"
 
         # Display the combined panels
         rich_print(Panel(columns, title=header_text, border_style="magenta1"))
@@ -172,12 +175,12 @@ class MLClassifier(Classifier):
         Handle any pre-processing of the training data, including the training/validation splits.
         """
 
-        if 'processors' in self.configuration.get('data', {}):
+        if 'processors' in self.parameters.configuration['data']:
             console.print(Text("Running configured processors...", style="royal_blue1"))
 
             # Instantiate all processors once
             processors = []
-            for processor in self.configuration['data']['processors']:
+            for processor in self.parameters.configuration['data']['processors']:
                 processor_class = processor['class']
                 processor_parameters = processor.get('parameters', {})
                 from plexus.processors import ProcessorFactory
@@ -210,25 +213,40 @@ class MLClassifier(Classifier):
         console.print(Text("Processed dataframe:", style="royal_blue1"))
         self.analyze_dataset()
 
-        # Check for missing or unexpected values
-        print(f"Unique values in '{self.score_name}':", self.dataframe[self.score_name].unique())
+        #############
+        # Subsample the data
+
+        before_subsample_count = len(self.dataframe)
+        self.dataframe = self.dataframe.sample(frac=self.parameters.data_percentage / 100, random_state=42)
+        after_subsample_count = len(self.dataframe)
+
+        subsample_comparison_table = Table(
+            title=f"[royal_blue1][b]Subsampling {self.parameters.data_percentage}% of the data[/b][/royal_blue1]",
+            header_style="sky_blue1",
+            border_style="sky_blue1"
+        )
+        subsample_comparison_table.add_column("Before", style="magenta1", justify="left")
+        subsample_comparison_table.add_column("After", style="magenta1", justify="left")
+        subsample_comparison_table.add_row(str(before_subsample_count), str(after_subsample_count))
+
+        console.print(Panel(subsample_comparison_table, border_style="royal_blue1"))
 
         #############
         # Balance data
 
-        if 'balance' in self.configuration.get('data', {}) and not self.configuration['data']['balance']:
+        if 'balance' in self.parameters.configuration['data'] and not self.parameters.configuration['data']['balance']:
             logging.info("data->balance: [red][b]false.[/b][/red]  Skipping data balancing.")
             return
 
         # Check the distribution of labels
         print("\nDistribution of labels in the dataframe:")
-        print(self.dataframe[self.score_name].value_counts(dropna=False))
+        print(self.dataframe[self.parameters.score_name].value_counts(dropna=False))
 
         # Get the unique labels
-        unique_labels = self.dataframe[self.score_name].unique()
+        unique_labels = self.dataframe[self.parameters.score_name].unique()
 
         # Create a dictionary to store the dataframes for each label
-        label_dataframes = {label: self.dataframe[self.dataframe[self.score_name] == label] for label in unique_labels}
+        label_dataframes = {label: self.dataframe[self.dataframe[self.parameters.score_name] == label] for label in unique_labels}
 
         # Determine the smallest class size
         smallest_class_size = min(len(df) for df in label_dataframes.values())
@@ -245,12 +263,9 @@ class MLClassifier(Classifier):
         # Shuffle the data
         balanced_dataframe = balanced_dataframe.sample(frac=1, random_state=42)
 
-        # Sample a certain percentage of the data
-        balanced_dataframe = balanced_dataframe.sample(frac=self.data_percentage / 100, random_state=42)
-
         # Check the distribution of labels
         print("\nDistribution of labels in the balanced dataframe:")
-        print(balanced_dataframe[self.score_name].value_counts())
+        print(balanced_dataframe[self.parameters.score_name].value_counts())
 
         self.dataframe = balanced_dataframe
 
@@ -329,7 +344,7 @@ class MLClassifier(Classifier):
     _green = '#339933'
 
     def _report_directory_path(self):
-        return f"reports/{self.scorecard_name}/{self.score_name}/"
+        return f"reports/{self.parameters.scorecard_name}/{self.parameters.score_name}/"
 
     @Classifier.ensure_report_directory_exists
     def _generate_model_diagram(self):
@@ -441,7 +456,7 @@ class MLClassifier(Classifier):
 
         plt.figure(figsize=(12, 9))  # Adjusted for a 4x3 aspect ratio with three subplots
 
-        plt.suptitle(f"Training History\n{self.score_name}", fontsize=16, verticalalignment='top')
+        plt.suptitle(f"Training History\n{self.parameters.score_name}", fontsize=16, verticalalignment='top')
 
         # Learning Rate plot
         plt.subplot(1, 3, 1)  # First subplot for learning rate
@@ -495,7 +510,7 @@ class MLClassifier(Classifier):
         :param metrics: Dictionary containing the metrics to be recorded.
         :type metrics: dict
         """
-        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        directory_path = f"reports/{self.parameters.scorecard_name}/{self.parameters.score_name}/"
         file_name = os.path.join(directory_path, "metrics.json")
 
         with open(file_name, 'w') as json_file:
@@ -504,6 +519,6 @@ class MLClassifier(Classifier):
     @property
     def is_multi_class(self):
         if self._is_multi_class is None:
-            unique_labels = self.dataframe[self.score_name].unique()
+            unique_labels = self.dataframe[self.parameters.score_name].unique()
             self._is_multi_class = len(unique_labels) > 2
         return self._is_multi_class

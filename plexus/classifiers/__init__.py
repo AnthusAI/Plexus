@@ -1,0 +1,5 @@
+from plexus.classifiers.Classifier import Classifier
+from plexus.classifiers.MLClassifier import MLClassifier
+from plexus.classifiers.DeepLearningEmbeddingsClassifier import DeepLearningEmbeddingsClassifier
+from plexus.classifiers.DeepLearningSlidingWindowEmbeddingsClassifier import DeepLearningSlidingWindowEmbeddingsClassifier
+
