@@ -22,13 +22,16 @@ from plexus.classifiers.MLClassifier import MLClassifier
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras import mixed_precision
 from sklearn.preprocessing import LabelBinarizer
-from plexus.classifiers.Classifier import Classifier
+from plexus.classifiers import Classifier, DeepLearningEmbeddingsClassifier
 import matplotlib.pyplot as plt
 from tensorflow.keras import backend as keras_backend
 keras_backend.clear_session()
 
 # Set the environment variable to allow GPU memory growth
 os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+
+# Use the CUDA asynchronous memory allocator to reduce memory fragmentation.
+os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
 
 # Set the global policy for mixed precision
 policy = mixed_precision.Policy('mixed_float16')
@@ -82,7 +85,7 @@ class RaggedEmbeddingsLayer(tf.keras.layers.Layer):
 
         return sample_embeddings
 
-class EmbeddingsDNNClassifier(MLClassifier):
+class DeepLearningSlidingWindowEmbeddingsClassifier(DeepLearningEmbeddingsClassifier):
     """
     This classifier uses vector embeddings from BERT-like models, including DistilBERT, to represent input text.
     It has a sliding window feature for computing one combined embedding for the entire input text by 
@@ -94,7 +97,6 @@ class EmbeddingsDNNClassifier(MLClassifier):
     def __init__(self, *args, **parameters):
         super().__init__(*args, **parameters)
         self.validation_losses = []
-        self.data_percentage = float(str(self.data_percentage).strip().replace('%', ''))
 
     def process_data(self):
         """
@@ -113,7 +115,7 @@ class EmbeddingsDNNClassifier(MLClassifier):
         #############
         # Tokenization
 
-        tokenizer = AutoTokenizer.from_pretrained(self.embeddings_model_name, do_lower_case=True)
+        tokenizer = AutoTokenizer.from_pretrained(self.parameters.embeddings_model_name, do_lower_case=True)
 
         train_texts = {}
         train_labels = {}
@@ -138,7 +140,7 @@ class EmbeddingsDNNClassifier(MLClassifier):
             for the window to be small enough for the BERT model, or something like it, to process
             the window in one step.  BERT models typically have a maximum input length of 512
             tokens, so our windows need to fit within that, which we specify with the
-            `self.maximum_number_of_tokens_analyzed` parameter.
+            `self.parameters.maximum_number_of_tokens_analyzed` parameter.
             """
             windows = []
             windows_tokens = []
@@ -212,8 +214,8 @@ class EmbeddingsDNNClassifier(MLClassifier):
             return encoded_windows_ragged, attention_masks_ragged
 
         texts = self.dataframe['Transcription'].tolist()
-        labels = self.dataframe[self.score_name].tolist()
-        unique_labels = self.dataframe[self.score_name].unique()
+        labels = self.dataframe[self.parameters.score_name].tolist()
+        unique_labels = self.dataframe[self.parameters.score_name].unique()
 
         # Split the data into training and validation sets
         train_texts, val_texts, train_labels, val_labels = train_test_split(texts, labels, test_size=0.2, random_state=42)
@@ -229,12 +231,12 @@ class EmbeddingsDNNClassifier(MLClassifier):
         val_labels = np.array([label_map[label] for label in val_labels])
 
         # Build sliding windows for training and validation texts
-        train_windows, train_windows_tokens = zip(*[build_sliding_windows(tokenizer, text, self.maximum_number_of_tokens_analyzed, getattr(self, 'sliding_window_maximum_number_of_windows', None)) for text in tqdm(train_texts, desc="Building train sliding windows")])
-        val_windows, val_windows_tokens = zip(*[build_sliding_windows(tokenizer, text, self.maximum_number_of_tokens_analyzed, getattr(self, 'sliding_window_maximum_number_of_windows', None)) for text in tqdm(val_texts, desc="Building validation sliding windows")])
-        if hasattr(self, 'sliding_window_maximum_number_of_windows'):
+        train_windows, train_windows_tokens = zip(*[build_sliding_windows(tokenizer, text, self.parameters.maximum_number_of_tokens_analyzed, getattr(self, 'maximum_number_of_sliding_windows', None)) for text in tqdm(train_texts, desc="Building train sliding windows")])
+        val_windows, val_windows_tokens = zip(*[build_sliding_windows(tokenizer, text, self.parameters.maximum_number_of_tokens_analyzed, getattr(self, 'maximum_number_of_sliding_windows', None)) for text in tqdm(val_texts, desc="Building validation sliding windows")])
+        if self.parameters.maximum_number_of_sliding_windows != 0:
             # Limit the number of windows for each text
-            train_windows = [windows[:self.sliding_window_maximum_number_of_windows] for windows in train_windows]
-            val_windows = [windows[:self.sliding_window_maximum_number_of_windows] for windows in val_windows]
+            train_windows = [windows[:self.parameters.maximum_number_of_sliding_windows] for windows in train_windows]
+            val_windows = [windows[:self.parameters.maximum_number_of_sliding_windows] for windows in val_windows]
 
         # Log the lengths of the windows
         logging.info(f"Number of train_windows after building: {len(train_windows)}")
@@ -282,8 +284,8 @@ class EmbeddingsDNNClassifier(MLClassifier):
             print(" ".join(window))
 
         # Encode the training and validation windows
-        train_encoded_windows, train_attention_masks = encode_windows_parallel(tokenizer, train_windows, self.maximum_number_of_tokens_analyzed)
-        val_encoded_windows, val_attention_masks = encode_windows_parallel(tokenizer, val_windows, self.maximum_number_of_tokens_analyzed)
+        train_encoded_windows, train_attention_masks = encode_windows_parallel(tokenizer, train_windows, self.parameters.maximum_number_of_tokens_analyzed)
+        val_encoded_windows, val_attention_masks = encode_windows_parallel(tokenizer, val_windows, self.parameters.maximum_number_of_tokens_analyzed)
 
         # Log the shapes of the encoded windows
         logging.info(f"Shape of train_encoded_windows after encoding: {train_encoded_windows.shape}")
@@ -369,17 +371,17 @@ class EmbeddingsDNNClassifier(MLClassifier):
         else:
             val_loss = None
         
-        if epoch < self.warmup_number_of_epochs:
+        if epoch < self.parameters.warmup_number_of_epochs:
             # Linear warmup
-            progress = epoch / self.warmup_number_of_epochs
-            new_lr = self.warmup_start_learning_rate + progress * (self.plateau_learning_rate - self.warmup_start_learning_rate)
-        elif epoch < self.warmup_number_of_epochs + self.plateau_number_of_epochs:
+            progress = epoch / self.parameters.warmup_number_of_epochs
+            new_lr = self.parameters.warmup_start_learning_rate + progress * (self.parameters.plateau_learning_rate - self.parameters.warmup_start_learning_rate)
+        elif epoch < self.parameters.warmup_number_of_epochs + self.parameters.plateau_number_of_epochs:
             # Plateau
-            new_lr = self.plateau_learning_rate
+            new_lr = self.parameters.plateau_learning_rate
         else:
             # Decay
-            decay_steps = epoch - (self.warmup_number_of_epochs + self.plateau_number_of_epochs)
-            new_lr = self.plateau_learning_rate * (self.learning_rate_decay ** decay_steps)
+            decay_steps = epoch - (self.parameters.warmup_number_of_epochs + self.parameters.plateau_number_of_epochs)
+            new_lr = self.parameters.plateau_learning_rate * (self.parameters.learning_rate_decay ** decay_steps)
         
         # Reduce learning rate if validation loss increased compared to the last epoch
         if len(self.validation_losses) > 1 and self.validation_losses[-1] > self.validation_losses[-2]:
@@ -413,14 +415,14 @@ class EmbeddingsDNNClassifier(MLClassifier):
         input_ids = tf.keras.layers.Input(shape=(None, None,), ragged=True, dtype=tf.int32, name="input_ids")
         attention_mask = tf.keras.layers.Input(shape=(None, None,), ragged=True, dtype=tf.int32, name="attention_mask")
         
-        self.embeddings_model = TFAutoModel.from_pretrained(self.embeddings_model_name)
+        self.embeddings_model = TFAutoModel.from_pretrained(self.parameters.embeddings_model_name)
 
         # # Set all layers of the embeddings model to non-trainable first
         for layer in self.embeddings_model.layers:
             layer.trainable = False
 
         # # Set only the top few layers to trainable, for fine-tuning
-        trainable_layers = self.embeddings_model.layers[-self.number_of_trainable_embeddings_model_layers:]
+        trainable_layers = self.embeddings_model.layers[-self.parameters.number_of_trainable_embeddings_model_layers:]
         for layer in trainable_layers:
             layer.trainable = True
 
@@ -429,7 +431,7 @@ class EmbeddingsDNNClassifier(MLClassifier):
             logging.info(f"Layer {i} ({layer.name}) trainable: {layer.trainable}")
 
         # Create an instance of the custom layer
-        ragged_embeddings_layer = RaggedEmbeddingsLayer(self.embeddings_model)
+        ragged_embeddings_layer = RaggedEmbeddingsLayer(self.embeddings_model, aggregation=self.parameters.sliding_window_aggregation)
 
         # Pass the ragged tensors directly to the custom layer
         last_hidden_state = ragged_embeddings_layer([input_ids, attention_mask])
@@ -449,7 +451,7 @@ class EmbeddingsDNNClassifier(MLClassifier):
         tanh_output = tf.keras.layers.Dense(hidden_size, activation='tanh', name="tanh_amplifier_1")(aggregated_output)
         logging.info(f"Shape of tanh_output: {tanh_output.shape}")
 
-        dropout = tf.keras.layers.Dropout(rate=self.dropout_rate, name="dropout")(tanh_output)
+        dropout = tf.keras.layers.Dropout(rate=self.parameters.dropout_rate, name="dropout")(tanh_output)
         logging.info(f"Shape of dropout: {dropout.shape}")
 
         # Add the final output layer
@@ -459,14 +461,14 @@ class EmbeddingsDNNClassifier(MLClassifier):
             out = tf.keras.layers.Dense(
                 number_of_labels,
                 activation='softmax',
-                kernel_regularizer=regularizers.l2(self.l2_regularization_strength),
+                kernel_regularizer=regularizers.l2(self.parameters.l2_regularization_strength),
                 name="softmax_multiclass_classifier"
             )(dropout)
         else:
             out = tf.keras.layers.Dense(
                 1,
                 activation='sigmoid',
-                kernel_regularizer=regularizers.l2(self.l2_regularization_strength),
+                kernel_regularizer=regularizers.l2(self.parameters.l2_regularization_strength),
                 name="sigmoid_binary_classifier"
             )(dropout)
         logging.info(f"Shape of final output: {out.shape}")
@@ -487,7 +489,7 @@ class EmbeddingsDNNClassifier(MLClassifier):
             loss_function = 'binary_crossentropy'
 
         self.model.compile(
-            optimizer=Adam(learning_rate=self.plateau_learning_rate),
+            optimizer=Adam(learning_rate=self.parameters.plateau_learning_rate),
             loss=loss_function,
             metrics=['accuracy', Precision(name='precision'), Recall(name='recall'), AUC(name='auc')]
         )
@@ -534,8 +536,8 @@ class EmbeddingsDNNClassifier(MLClassifier):
             x=[self.train_input_ids, self.train_attention_mask],
             y=self.train_labels,
             validation_data=([self.val_input_ids, self.val_attention_mask], self.val_labels),
-            epochs=self.epochs,
-            batch_size=self.batch_size,
+            epochs=self.parameters.epochs,
+            batch_size=self.parameters.batch_size,
             callbacks=[early_stop, checkpoint, learning_rate_scheduler],
         )
 
