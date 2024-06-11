@@ -15,7 +15,7 @@ from plexus.classifiers.MLClassifier import MLClassifier
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras import mixed_precision
 from sklearn.preprocessing import LabelBinarizer
-from plexus.classifiers import Classifier, DeepLearningEmbeddingsClassifier
+from plexus.classifiers import Score, DeepLearningEmbeddingsClassifier
 import matplotlib.pyplot as plt
 from tensorflow.keras import backend as keras_backend
 keras_backend.clear_session()

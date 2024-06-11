@@ -1,6 +1,6 @@
 import os
 import mlflow
-from plexus.classifiers import Classifier, MLClassifier
+from plexus.classifiers import Score, MLClassifier
 from pydantic import BaseModel, validator, ValidationError
 import numpy as np
 import pandas as pd
@@ -415,7 +415,7 @@ class DeepLearningEmbeddingsClassifier(MLClassifier):
         pass
         pass
 
-    @Classifier.ensure_report_directory_exists
+    @Score.ensure_report_directory_exists
     def _generate_window_count_histogram(self, windows):
         """
         Generates a PNG artifact of a histogram showing the distribution of the lengths of the inner lists in the provided dataset.

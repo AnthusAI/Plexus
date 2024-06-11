@@ -6,16 +6,16 @@ import mlflow.pyfunc
 from plexus.CustomLogging import logging
 from pydantic import BaseModel, ValidationError
 
-class Classifier(ABC, mlflow.pyfunc.PythonModel):
+class Score(ABC, mlflow.pyfunc.PythonModel):
     """
-    Abstract base class for a classifier, with a simple boolean classification function.
+    Abstract base class for a score, with a simple boolean classification function.
     """
 
     def __init__(self, **parameters):
         try:
             self.parameters = self.Parameters(**parameters)
         except ValidationError as e:
-            Classifier.log_validation_errors(e)
+            Score.log_validation_errors(e)
             raise
 
     class Parameters(BaseModel):
