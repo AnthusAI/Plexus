@@ -23,10 +23,10 @@ from rich.text import Text
 from matplotlib.colors import LinearSegmentedColormap
 from plexus.cli.console import console
 from plexus.CustomLogging import logging
-from plexus.classifiers.Classifier import Classifier
+from plexus.classifiers.Score import Score
 from sklearn.preprocessing import LabelBinarizer
 
-class MLClassifier(Classifier):
+class MLClassifier(Score):
     """
     Abstract class for a machine-learning classifier, with functions for the various states of ML model development.
     """
@@ -37,7 +37,7 @@ class MLClassifier(Classifier):
         self._is_multi_class = None
         self.start_mlflow_experiment_run()
 
-    class Parameters(Classifier.Parameters):
+    class Parameters(Score.Parameters):
         ...
         data_percentage: float = 100
 
@@ -401,14 +401,14 @@ class MLClassifier(Classifier):
     def _report_directory_path(self):
         return f"reports/{self.parameters.scorecard_name}/{self.parameters.score_name}/"
 
-    @Classifier.ensure_report_directory_exists
+    @Score.ensure_report_directory_exists
     def _generate_model_diagram(self):
         directory_path = self._report_directory_path()
         file_name = os.path.join(directory_path, "model_diagram.png")
         plot_model(self.model, to_file=file_name, show_shapes=True, show_layer_names=True, rankdir='TB')
         mlflow.log_artifact(file_name)
 
-    @Classifier.ensure_report_directory_exists
+    @Score.ensure_report_directory_exists
     def _generate_confusion_matrix(self):
         directory_path = self._report_directory_path()
         file_name = os.path.join(directory_path, "confusion_matrix.png")
@@ -437,7 +437,7 @@ class MLClassifier(Classifier):
 
         mlflow.log_artifact(file_name)
 
-    @Classifier.ensure_report_directory_exists
+    @Score.ensure_report_directory_exists
     def _plot_roc_curve(self):
         directory_path = self._report_directory_path()
         file_name = os.path.join(directory_path, "ROC_curve.png")
@@ -472,7 +472,7 @@ class MLClassifier(Classifier):
         plt.show()
         mlflow.log_artifact(file_name)
 
-    @Classifier.ensure_report_directory_exists
+    @Score.ensure_report_directory_exists
     def _plot_precision_recall_curve(self):
         directory_path = self._report_directory_path()
         file_name = os.path.join(directory_path, "precision_and_recall_curve.png")
@@ -504,7 +504,7 @@ class MLClassifier(Classifier):
         plt.show()
         mlflow.log_artifact(file_name)
 
-    @Classifier.ensure_report_directory_exists
+    @Score.ensure_report_directory_exists
     def _plot_training_history(self):
         directory_path = self._report_directory_path()
         file_name = os.path.join(directory_path, "training_history.png")
@@ -557,7 +557,7 @@ class MLClassifier(Classifier):
         plt.show()
         mlflow.log_artifact(file_name)
 
-    @Classifier.ensure_report_directory_exists
+    @Score.ensure_report_directory_exists
     def _record_metrics(self, metrics):
         """
         Record the provided metrics dictionary as a JSON file in the appropriate report folder for this model.

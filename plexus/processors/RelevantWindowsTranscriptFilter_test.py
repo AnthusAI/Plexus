@@ -2,11 +2,11 @@ import re
 import unittest
 
 from plexus.processors.RelevantWindowsTranscriptFilter import RelevantWindowsTranscriptFilter
-from plexus.classifiers.Classifier import Classifier
+from plexus.classifiers.Score import Score
 from plexus.classifiers.KeywordClassifier import KeywordClassifier
 
 # Mock classifier for testing purposes
-class MockClassifier(Classifier):
+class MockClassifier(Score):
     def is_relevant(self, text):
         # Use word boundaries to ensure 'relevant' is a whole word
         return bool(re.search(r'\brelevant\b', text, re.IGNORECASE))
