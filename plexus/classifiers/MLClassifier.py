@@ -11,7 +11,8 @@ from tensorflow.keras.utils import plot_model
 from sklearn.metrics import confusion_matrix
 from abc import ABC, abstractmethod
 from sklearn.metrics import roc_curve, auc, precision_recall_curve
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
 import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
 from rich.table import Table
@@ -38,7 +39,7 @@ class MLClassifier(Classifier):
 
     class Parameters(Classifier.Parameters):
         ...
-        data_percentage: float
+        data_percentage: float = 100
 
     def log_stored_parameters(self):
         if hasattr(self, '_stored_parameters'):
@@ -281,14 +282,68 @@ class MLClassifier(Classifier):
         """
         pass
 
-    @abstractmethod
     def evaluate_model(self):
         """
         Evaluate the model on the validation data.
 
         :return: The evaluation results.
         """
-        pass
+        print("Generating evaluation metrics...")
+
+        logging.info(f"val_labels shape: {self.val_labels.shape}")
+
+        # Predict on validation set
+        self.val_predictions = self.model.predict([self.val_input_ids, self.val_attention_mask])
+
+        logging.info(f"val_predictions shape: {self.val_predictions.shape}")
+
+        if self.is_multi_class:
+            self.val_predictions_labels = np.argmax(self.val_predictions, axis=1)
+            if len(self.val_labels.shape) > 1 and self.val_labels.shape[1] > 1:
+                self.val_labels = np.argmax(self.val_labels, axis=1)  # Convert one-hot encoded labels to integer labels
+        else:
+            self.val_predictions_labels = [1 if pred > 0.5 else 0 for pred in self.val_predictions]
+
+        # Compute evaluation metrics
+        accuracy = accuracy_score(self.val_labels, self.val_predictions_labels)
+        f1 = f1_score(self.val_labels, self.val_predictions_labels, average='weighted' if self.is_multi_class else 'binary')
+        recall = recall_score(self.val_labels, self.val_predictions_labels, average='weighted' if self.is_multi_class else 'binary')
+        precision = precision_score(self.val_labels, self.val_predictions_labels, average='weighted' if self.is_multi_class else 'binary')
+
+        # Log evaluation metrics to MLflow
+        mlflow.log_metric("validation_f1_score", f1)
+        mlflow.log_metric("validation_recall", recall)
+        mlflow.log_metric("validation_precision", precision)
+
+        print(f"Validation Accuracy: {accuracy:.4f}")
+        print(f"Validation F1 Score: {f1:.4f}")
+        print(f"Validation Recall: {recall:.4f}")
+        print(f"Validation Precision: {precision:.4f}")
+
+        print("Generating visualizations...")
+
+        self._generate_confusion_matrix()
+
+        self._plot_roc_curve()
+
+        self._plot_precision_recall_curve()
+
+        self._plot_training_history()
+
+        metrics = {
+            "training_loss": self.history.history['loss'][-1],
+            "training_accuracy": self.history.history['accuracy'][-1],
+            "validation_loss": self.history.history['val_loss'][-1],
+            "validation_accuracy": self.history.history['val_accuracy'][-1],
+            "validation_f1_score": f1,
+            "validation_recall": recall,
+            "validation_precision": precision
+        }
+
+        self._record_metrics(metrics)
+
+        # End MLflow run
+        mlflow.end_run()
 
     @abstractmethod
     def register_model(self):

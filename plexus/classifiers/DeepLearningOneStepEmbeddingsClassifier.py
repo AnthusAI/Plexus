@@ -30,43 +30,21 @@ os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
 policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_global_policy(policy)
 
-class DeepLearningSlidingWindowEmbeddingsClassifier(DeepLearningEmbeddingsClassifier):
-    """
-    This sub-class implements the sliding-windows variant of the DeepLearningEmbeddingsClassifier.
-    """
+class DeepLearningOneStepEmbeddingsClassifier(DeepLearningEmbeddingsClassifier):
 
     def __init__(self, *args, **parameters):
+        parameters['maximum_number_of_sliding_windows'] = 1
         super().__init__(*args, **parameters)
         self.validation_losses = []
 
-    class RaggedEmbeddingsLayer(tf.keras.layers.Layer):
-        def __init__(self, embeddings_model, aggregation='max'):
-            super(DeepLearningSlidingWindowEmbeddingsClassifier.RaggedEmbeddingsLayer, self).__init__()
-            self.embeddings_model = DeepLearningEmbeddingsClassifier.EmbeddingsLayer(embeddings_model)
-            self.aggregation = aggregation
+    def process_data(self):
+        super().process_data()
 
-        def call(self, inputs):
-            input_ids, attention_mask = inputs
-            def embed_single_instance(args):
-                single_input_id, single_attention_mask = args
-                single_embedding = self.embeddings_model([single_input_id, single_attention_mask])
-                if self.aggregation == 'mean':
-                    aggregated_embedding = tf.reduce_mean(single_embedding, axis=0)
-                elif self.aggregation == 'max':
-                    aggregated_embedding = tf.reduce_max(single_embedding, axis=0)
-                else:
-                    raise ValueError(f"Unsupported aggregation method: {self.aggregation}")
-                return aggregated_embedding
-
-            sample_embeddings = tf.map_fn(
-                embed_single_instance,
-                (input_ids, attention_mask),
-                fn_output_signature=tf.float32
-            )
-
-            logging.info(f"Shape of sample_embeddings: {sample_embeddings.shape}")
-
-            return sample_embeddings
+        # Flatten the ragged tensors into regular 2D tensors
+        self.train_input_ids = self.train_input_ids.to_tensor()[:, 0, :]
+        self.train_attention_mask = self.train_attention_mask.to_tensor()[:, 0, :]
+        self.val_input_ids = self.val_input_ids.to_tensor()[:, 0, :]
+        self.val_attention_mask = self.val_attention_mask.to_tensor()[:, 0, :]
 
     def train_model(self):
         """
@@ -88,10 +66,10 @@ class DeepLearningSlidingWindowEmbeddingsClassifier(DeepLearningEmbeddingsClassi
         #############
         # Model setup
 
-        logging.info("Model setup: Sliding window")
+        logging.info("Model setup: One-step")
 
-        input_ids = tf.keras.layers.Input(shape=(None, None,), ragged=True, dtype=tf.int32, name="input_ids")
-        attention_mask = tf.keras.layers.Input(shape=(None, None,), ragged=True, dtype=tf.int32, name="attention_mask")
+        input_ids = tf.keras.layers.Input(shape=(None,), dtype=tf.int32, name="input_ids")
+        attention_mask = tf.keras.layers.Input(shape=(None,), dtype=tf.int32, name="attention_mask")
         
         self.embeddings_model = TFAutoModel.from_pretrained(self.parameters.embeddings_model_name)
 
@@ -108,11 +86,8 @@ class DeepLearningSlidingWindowEmbeddingsClassifier(DeepLearningEmbeddingsClassi
         for i, layer in enumerate(self.embeddings_model.layers):
             logging.info(f"Layer {i} ({layer.name}) trainable: {layer.trainable}")
 
-        # Create an instance of the custom layer
-        ragged_embeddings_layer = DeepLearningSlidingWindowEmbeddingsClassifier.RaggedEmbeddingsLayer(self.embeddings_model, aggregation=self.parameters.sliding_window_aggregation)
-
-        # Pass the ragged tensors directly to the custom layer
-        last_hidden_state = ragged_embeddings_layer([input_ids, attention_mask])
+        embeddings_layer = DeepLearningEmbeddingsClassifier.EmbeddingsLayer(self.embeddings_model)
+        last_hidden_state = embeddings_layer([input_ids, attention_mask])
         logging.info(f"Shape of last_hidden_state: {last_hidden_state.shape}")
 
         # Get the hidden size from the pre-loaded model
