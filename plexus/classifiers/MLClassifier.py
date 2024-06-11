@@ -2,14 +2,14 @@ import os
 import json
 import mlflow
 import inspect
-import functools
 import pandas as pd
 import numpy as np
+from pydantic import BaseModel, validator, ValidationError
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tensorflow.keras.utils import plot_model
 from sklearn.metrics import confusion_matrix
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from sklearn.metrics import roc_curve, auc, precision_recall_curve
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
@@ -20,7 +20,6 @@ from rich.panel import Panel
 from rich.columns import Columns
 from rich import print as rich_print
 from rich.text import Text
-from matplotlib.colors import LinearSegmentedColormap
 from plexus.cli.console import console
 from plexus.CustomLogging import logging
 from plexus.classifiers.Score import Score
@@ -31,19 +30,27 @@ class MLClassifier(Score):
     Abstract class for a machine-learning classifier, with functions for the various states of ML model development.
     """
 
+    class Parameters(Score.Parameters):
+        ...
+        data: dict
+
+        @validator('data')
+        def convert_data_percentage(cls, value):
+            if 'percentage' in value:
+                value['percentage'] = float(str(value['percentage']).strip().replace('%', ''))
+            else:
+                value['percentage'] = 100.0
+            return value
+
     def __init__(self, **parameters):
         super().__init__(**parameters)
         logging.info("Initializing [magenta1][b]MLClassifier[/b][/magenta1]")
         self._is_multi_class = None
         self.start_mlflow_experiment_run()
 
-    class Parameters(Score.Parameters):
-        ...
-        data_percentage: float = 100
-
     def log_stored_parameters(self):
         if hasattr(self, '_stored_parameters'):
-            for name, value in self.parameters['configuration']['model']['parameters'].items():
+            for name, value in self.parameters.items():
                 mlflow.log_param(name, value)
 
     def name(self):
@@ -176,12 +183,12 @@ class MLClassifier(Score):
         Handle any pre-processing of the training data, including the training/validation splits.
         """
 
-        if 'processors' in self.parameters.configuration['data']:
+        if 'processors' in self.parameters.data:
             console.print(Text("Running configured processors...", style="royal_blue1"))
 
             # Instantiate all processors once
             processors = []
-            for processor in self.parameters.configuration['data']['processors']:
+            for processor in self.parameters.data['processors']:
                 processor_class = processor['class']
                 processor_parameters = processor.get('parameters', {})
                 from plexus.processors import ProcessorFactory
@@ -218,11 +225,11 @@ class MLClassifier(Score):
         # Subsample the data
 
         before_subsample_count = len(self.dataframe)
-        self.dataframe = self.dataframe.sample(frac=self.parameters.data_percentage / 100, random_state=42)
+        self.dataframe = self.dataframe.sample(frac=self.parameters.data['percentage'] / 100, random_state=42)
         after_subsample_count = len(self.dataframe)
 
         subsample_comparison_table = Table(
-            title=f"[royal_blue1][b]Subsampling {self.parameters.data_percentage}% of the data[/b][/royal_blue1]",
+            title=f"[royal_blue1][b]Subsampling {self.parameters.data['percentage']}% of the data[/b][/royal_blue1]",
             header_style="sky_blue1",
             border_style="sky_blue1"
         )
@@ -235,7 +242,7 @@ class MLClassifier(Score):
         #############
         # Balance data
 
-        if 'balance' in self.parameters.configuration['data'] and not self.parameters.configuration['data']['balance']:
+        if 'balance' in self.parameters.data and not self.parameters.data['balance']:
             logging.info("data->balance: [red][b]false.[/b][/red]  Skipping data balancing.")
             return
 

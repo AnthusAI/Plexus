@@ -26,39 +26,35 @@ def train(scorecard_name, score_name):
 
     logging.info(f"Training Score [magenta1][b]{score_name}[/b][/magenta1]...")
     score_to_train_configuration = scorecard_class.scores[score_name]
-    model_configuration = score_to_train_configuration['model']
 
-    logging.info(f"Model Configuration: {rich.pretty.pretty_repr(model_configuration)}")
+    logging.info(f"Score Configuration: {rich.pretty.pretty_repr(score_to_train_configuration)}")
 
-    # Classifier class instance setup
+    # Score class instance setup
 
-    classifier_class_name = model_configuration['class']
-    classifier_module_path = f'plexus.classifiers.{classifier_class_name}'
-    classifier_module = importlib.import_module(classifier_module_path)
-    classifier_class = getattr(classifier_module, classifier_class_name)
+    score_class_name = score_to_train_configuration['class']
+    score_module_path = f'plexus.classifiers.{score_class_name}'
+    score_module = importlib.import_module(score_module_path)
+    score_class = getattr(score_module, score_class_name)
 
-    if not isinstance(classifier_class, type):
-        logging.error(f"{classifier_class_name} is not a class.")
+    if not isinstance(score_class, type):
+        logging.error(f"{score_class_name} is not a class.")
         return
 
-    classifier_parameters = copy.deepcopy(model_configuration['parameters'] or {})
-
     # Add the scorecard name and score name to the parameters.
-    classifier_parameters['scorecard_name'] = scorecard_class.name()
-    classifier_parameters['score_name'] = score_name
-    classifier_parameters['configuration'] = score_to_train_configuration
-    classifier_instance = classifier_class(**classifier_parameters)
+    score_to_train_configuration['scorecard_name'] = scorecard_class.name()
+    score_to_train_configuration['score_name'] = score_name
+    score_instance = score_class(**score_to_train_configuration)
 
     # Use the new instance to log its own configuration.
-    classifier_instance.record_configuration(score_to_train_configuration)
+    score_instance.record_configuration(score_to_train_configuration)
 
     # Data processing
     data_queries = score_to_train_configuration['data']['queries']
-    classifier_instance.load_data(queries=data_queries)
-    classifier_instance.process_data()
+    score_instance.load_data(queries=data_queries)
+    score_instance.process_data()
 
     # Training
-    classifier_instance.train_model()
+    score_instance.train_model()
 
     # Evaluation
-    classifier_instance.evaluate_model()
+    score_instance.evaluate_model()

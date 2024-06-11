@@ -2,6 +2,7 @@ import os
 import numpy as np
 import mlflow
 import mlflow.keras
+from pydantic import BaseModel, validator, ValidationError
 from transformers import TFAutoModel
 from tensorflow.keras.metrics import Precision, Recall, AUC
 import tensorflow as tf
@@ -34,6 +35,17 @@ class DeepLearningSlidingWindowEmbeddingsClassifier(DeepLearningEmbeddingsClassi
     """
     This sub-class implements the sliding-windows variant of the DeepLearningEmbeddingsClassifier.
     """
+
+    class Parameters(DeepLearningEmbeddingsClassifier.Parameters):
+        ...
+        multiple_windows_aggregation: str = 'max'
+
+        @validator('multiple_windows_aggregation')
+        def validate_multiple_windows_aggregation(cls, value):
+            allowed_values = ['max', 'mean']
+            if value not in allowed_values:
+                raise ValueError(f"multiple_windows_aggregation must be one of {allowed_values}")
+            return value
 
     def __init__(self, *args, **parameters):
         super().__init__(*args, **parameters)
@@ -184,10 +196,10 @@ class DeepLearningSlidingWindowEmbeddingsClassifier(DeepLearningEmbeddingsClassi
             lambda epoch, lr: self.custom_lr_scheduler(epoch, lr)
         )
 
-        # Stop training if the validation loss doesn't improve after a certain number of epochs.
+        # Stop training if the validation loss doesn't improve after a certain number of number_of_epochs.
         early_stop = tf.keras.callbacks.EarlyStopping(
             monitor='val_loss',
-            patience=5,  # Increase patience to allow more epochs for improvement
+            patience=5,  # Increase patience to allow more number_of_epochs for improvement
             verbose=1,
             restore_best_weights=True  # Restore the best model weights
         )
@@ -214,7 +226,7 @@ class DeepLearningSlidingWindowEmbeddingsClassifier(DeepLearningEmbeddingsClassi
             x=[self.train_input_ids, self.train_attention_mask],
             y=self.train_labels,
             validation_data=([self.val_input_ids, self.val_attention_mask], self.val_labels),
-            epochs=self.parameters.epochs,
+            epochs=self.parameters.number_of_epochs,
             batch_size=self.parameters.batch_size,
             callbacks=[early_stop, checkpoint, learning_rate_scheduler],
         )
