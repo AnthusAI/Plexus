@@ -16,28 +16,28 @@ from plexus.CustomLogging import logging, console
 import matplotlib.pyplot as plt
 
 class DeepLearningEmbeddingsClassifierParameters(MLClassifier.Parameters):
-    sliding_window: bool = False
-    sliding_window_aggregation: str = 'max'
-    maximum_number_of_sliding_windows: int = 0
+    embeddings_model: str
+    embeddings_model_trainable_layers: int = 3
+    multiple_windows_aggregation: str = 'max'
+    maximum_tokens_per_window: int = 512
+    multiple_windows: bool = False
+    maximum_windows: int = 0
     epochs: int
-    early_stop_patience: int
     batch_size: int
-    warmup_start_learning_rate: float
-    warmup_number_of_epochs: int
+    warmup_learning_rate: float
+    warmup_epochs: int
     plateau_learning_rate: float
-    plateau_number_of_epochs: int
+    plateau_epochs: int
     learning_rate_decay: float
+    early_stop_patience: int
     l2_regularization_strength: float
     dropout_rate: float
-    embeddings_model_name: str
-    maximum_number_of_tokens_analyzed: int
-    number_of_trainable_embeddings_model_layers: int
 
-    @validator('sliding_window_aggregation')
-    def validate_sliding_window_aggregation(cls, value):
+    @validator('multiple_windows_aggregation')
+    def validate_multiple_windows_aggregation(cls, value):
         allowed_values = ['max', 'mean']
         if value not in allowed_values:
-            raise ValueError(f"sliding_window_aggregation must be one of {allowed_values}")
+            raise ValueError(f"multiple_windows_aggregation must be one of {allowed_values}")
         return value
 
     @validator('data_percentage')
@@ -66,8 +66,8 @@ class DeepLearningEmbeddingsClassifier(MLClassifier):
                 Classifier.log_validation_errors(e)
                 raise
 
-            logging.info(f"Sliding window: {validated_parameters.get('sliding_window', False)}")
-            if validated_parameters.get('sliding_window', False):
+            logging.info(f"Sliding window: {validated_parameters.get('multiple_windows', False)}")
+            if validated_parameters.get('multiple_windows', False):
                 logging.info("Using sliding window embeddings")
                 from plexus.classifiers.DeepLearningSlidingWindowEmbeddingsClassifier import DeepLearningSlidingWindowEmbeddingsClassifier
                 return DeepLearningSlidingWindowEmbeddingsClassifier(*args, **validated_parameters)
@@ -117,7 +117,7 @@ class DeepLearningEmbeddingsClassifier(MLClassifier):
         #############
         # Tokenization
 
-        tokenizer = AutoTokenizer.from_pretrained(self.parameters.embeddings_model_name, do_lower_case=True)
+        tokenizer = AutoTokenizer.from_pretrained(self.parameters.embeddings_model, do_lower_case=True)
 
         train_texts = {}
         train_labels = {}
@@ -133,7 +133,7 @@ class DeepLearningEmbeddingsClassifier(MLClassifier):
         def tokenize_sentence(tokenizer, sentence):
             return tokenizer.tokenize(sentence)
 
-        def build_sliding_windows(tokenizer, text, max_tokens_per_window, max_windows):
+        def build_multiple_windowss(tokenizer, text, max_tokens_per_window, max_windows):
             """
             This function breaks long texts into smaller windows of text, where each sentence is
             entirely within one window, without being broken apart.
@@ -142,7 +142,7 @@ class DeepLearningEmbeddingsClassifier(MLClassifier):
             for the window to be small enough for the BERT model, or something like it, to process
             the window in one step.  BERT models typically have a maximum input length of 512
             tokens, so our windows need to fit within that, which we specify with the
-            `self.parameters.maximum_number_of_tokens_analyzed` parameter.
+            `self.parameters.maximum_tokens_per_window` parameter.
             """
             windows = []
             windows_tokens = []
@@ -233,12 +233,12 @@ class DeepLearningEmbeddingsClassifier(MLClassifier):
         val_labels = np.array([label_map[label] for label in val_labels])
 
         # Build sliding windows for training and validation texts
-        train_windows, train_windows_tokens = zip(*[build_sliding_windows(tokenizer, text, self.parameters.maximum_number_of_tokens_analyzed, getattr(self, 'maximum_number_of_sliding_windows', None)) for text in tqdm(train_texts, desc="Building train sliding windows")])
-        val_windows, val_windows_tokens = zip(*[build_sliding_windows(tokenizer, text, self.parameters.maximum_number_of_tokens_analyzed, getattr(self, 'maximum_number_of_sliding_windows', None)) for text in tqdm(val_texts, desc="Building validation sliding windows")])
-        if self.parameters.maximum_number_of_sliding_windows != 0:
+        train_windows, train_windows_tokens = zip(*[build_multiple_windowss(tokenizer, text, self.parameters.maximum_tokens_per_window, getattr(self, 'maximum_windows', None)) for text in tqdm(train_texts, desc="Building train sliding windows")])
+        val_windows, val_windows_tokens = zip(*[build_multiple_windowss(tokenizer, text, self.parameters.maximum_tokens_per_window, getattr(self, 'maximum_windows', None)) for text in tqdm(val_texts, desc="Building validation sliding windows")])
+        if self.parameters.maximum_windows != 0:
             # Limit the number of windows for each text
-            train_windows = [windows[:self.parameters.maximum_number_of_sliding_windows] for windows in train_windows]
-            val_windows = [windows[:self.parameters.maximum_number_of_sliding_windows] for windows in val_windows]
+            train_windows = [windows[:self.parameters.maximum_windows] for windows in train_windows]
+            val_windows = [windows[:self.parameters.maximum_windows] for windows in val_windows]
 
         # Log the lengths of the windows
         logging.info(f"Number of train_windows after building: {len(train_windows)}")
@@ -286,8 +286,8 @@ class DeepLearningEmbeddingsClassifier(MLClassifier):
             print(" ".join(window))
 
         # Encode the training and validation windows
-        train_encoded_windows, train_attention_masks = encode_windows_parallel(tokenizer, train_windows, self.parameters.maximum_number_of_tokens_analyzed)
-        val_encoded_windows, val_attention_masks = encode_windows_parallel(tokenizer, val_windows, self.parameters.maximum_number_of_tokens_analyzed)
+        train_encoded_windows, train_attention_masks = encode_windows_parallel(tokenizer, train_windows, self.parameters.maximum_tokens_per_window)
+        val_encoded_windows, val_attention_masks = encode_windows_parallel(tokenizer, val_windows, self.parameters.maximum_tokens_per_window)
 
         # Log the shapes of the encoded windows
         logging.info(f"Shape of train_encoded_windows after encoding: {train_encoded_windows.shape}")
@@ -373,16 +373,16 @@ class DeepLearningEmbeddingsClassifier(MLClassifier):
         else:
             val_loss = None
         
-        if epoch < self.parameters.warmup_number_of_epochs:
+        if epoch < self.parameters.warmup_epochs:
             # Linear warmup
-            progress = epoch / self.parameters.warmup_number_of_epochs
-            new_lr = self.parameters.warmup_start_learning_rate + progress * (self.parameters.plateau_learning_rate - self.parameters.warmup_start_learning_rate)
-        elif epoch < self.parameters.warmup_number_of_epochs + self.parameters.plateau_number_of_epochs:
+            progress = epoch / self.parameters.warmup_epochs
+            new_lr = self.parameters.warmup_learning_rate + progress * (self.parameters.plateau_learning_rate - self.parameters.warmup_learning_rate)
+        elif epoch < self.parameters.warmup_epochs + self.parameters.plateau_epochs:
             # Plateau
             new_lr = self.parameters.plateau_learning_rate
         else:
             # Decay
-            decay_steps = epoch - (self.parameters.warmup_number_of_epochs + self.parameters.plateau_number_of_epochs)
+            decay_steps = epoch - (self.parameters.warmup_epochs + self.parameters.plateau_epochs)
             new_lr = self.parameters.plateau_learning_rate * (self.parameters.learning_rate_decay ** decay_steps)
         
         # Reduce learning rate if validation loss increased compared to the last epoch
