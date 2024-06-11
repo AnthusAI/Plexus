@@ -11,17 +11,16 @@ class Score(ABC, mlflow.pyfunc.PythonModel):
     Abstract base class for a score, with a simple boolean classification function.
     """
 
+    class Parameters(BaseModel):
+        scorecard_name: str
+        score_name: str
+
     def __init__(self, **parameters):
         try:
             self.parameters = self.Parameters(**parameters)
         except ValidationError as e:
             Score.log_validation_errors(e)
             raise
-
-    class Parameters(BaseModel):
-        scorecard_name: str
-        score_name: str
-        configuration: dict
 
     @staticmethod
     def log_validation_errors(error: ValidationError):

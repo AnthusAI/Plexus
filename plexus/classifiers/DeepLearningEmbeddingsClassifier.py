@@ -15,35 +15,6 @@ from concurrent.futures import ThreadPoolExecutor
 from plexus.CustomLogging import logging, console
 import matplotlib.pyplot as plt
 
-class DeepLearningEmbeddingsClassifierParameters(MLClassifier.Parameters):
-    embeddings_model: str
-    embeddings_model_trainable_layers: int = 3
-    multiple_windows_aggregation: str = 'max'
-    maximum_tokens_per_window: int = 512
-    multiple_windows: bool = False
-    maximum_windows: int = 0
-    epochs: int
-    batch_size: int
-    warmup_learning_rate: float
-    warmup_epochs: int
-    plateau_learning_rate: float
-    plateau_epochs: int
-    learning_rate_decay: float
-    early_stop_patience: int
-    l2_regularization_strength: float
-    dropout_rate: float
-
-    @validator('multiple_windows_aggregation')
-    def validate_multiple_windows_aggregation(cls, value):
-        allowed_values = ['max', 'mean']
-        if value not in allowed_values:
-            raise ValueError(f"multiple_windows_aggregation must be one of {allowed_values}")
-        return value
-
-    @validator('data_percentage')
-    def convert_data_percentage(cls, value):
-        return float(str(value).strip().replace('%', ''))
-
 class DeepLearningEmbeddingsClassifier(MLClassifier):
     """
     A text classifier that uses HuggingFace transformer embeddings from language models like BERT.
@@ -55,13 +26,32 @@ class DeepLearningEmbeddingsClassifier(MLClassifier):
     The aggregation architecture consumes extra memory, and so the sliding-windows feature works better
     with smaller models, like DistilBERT.
     """
+
+    class Parameters(MLClassifier.Parameters):
+        ...
+        embeddings_model: str
+        embeddings_model_trainable_layers: int = 3
+        maximum_tokens_per_window: int = 512
+        multiple_windows: bool = False
+        maximum_windows: int = 0
+        number_of_epochs: int
+        batch_size: int
+        warmup_learning_rate: float
+        warmup_epochs: int
+        plateau_learning_rate: float
+        number_of_plateau_epochs: int
+        learning_rate_decay: float
+        early_stop_patience: int
+        l2_regularization_strength: float
+        dropout_rate: float
+
     def __new__(cls, *args, **parameters):
         if cls is DeepLearningEmbeddingsClassifier:
             from plexus.classifiers.DeepLearningSlidingWindowEmbeddingsClassifier import DeepLearningSlidingWindowEmbeddingsClassifier
             
             # Validate parameters
             try:
-                validated_parameters = DeepLearningEmbeddingsClassifierParameters(**parameters).dict()
+                validated_parameters = cls.Parameters(**parameters).dict()
             except ValidationError as e:
                 Classifier.log_validation_errors(e)
                 raise
@@ -78,7 +68,7 @@ class DeepLearningEmbeddingsClassifier(MLClassifier):
         else:
             return super(DeepLearningEmbeddingsClassifier, cls).__new__(cls)
 
-    class Parameters(DeepLearningEmbeddingsClassifierParameters):
+    class Parameters(Parameters):
         ...
 
     class EmbeddingsLayer(tf.keras.layers.Layer):
@@ -377,12 +367,12 @@ class DeepLearningEmbeddingsClassifier(MLClassifier):
             # Linear warmup
             progress = epoch / self.parameters.warmup_epochs
             new_lr = self.parameters.warmup_learning_rate + progress * (self.parameters.plateau_learning_rate - self.parameters.warmup_learning_rate)
-        elif epoch < self.parameters.warmup_epochs + self.parameters.plateau_epochs:
+        elif epoch < self.parameters.warmup_epochs + self.parameters.number_of_plateau_epochs:
             # Plateau
             new_lr = self.parameters.plateau_learning_rate
         else:
             # Decay
-            decay_steps = epoch - (self.parameters.warmup_epochs + self.parameters.plateau_epochs)
+            decay_steps = epoch - (self.parameters.warmup_epochs + self.parameters.number_of_plateau_epochs)
             new_lr = self.parameters.plateau_learning_rate * (self.parameters.learning_rate_decay ** decay_steps)
         
         # Reduce learning rate if validation loss increased compared to the last epoch

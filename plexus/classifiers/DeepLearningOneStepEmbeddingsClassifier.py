@@ -159,10 +159,10 @@ class DeepLearningOneStepEmbeddingsClassifier(DeepLearningEmbeddingsClassifier):
             lambda epoch, lr: self.custom_lr_scheduler(epoch, lr)
         )
 
-        # Stop training if the validation loss doesn't improve after a certain number of epochs.
+        # Stop training if the validation loss doesn't improve after a certain number of number_of_epochs.
         early_stop = tf.keras.callbacks.EarlyStopping(
             monitor='val_loss',
-            patience=5,  # Increase patience to allow more epochs for improvement
+            patience=5,  # Increase patience to allow more number_of_epochs for improvement
             verbose=1,
             restore_best_weights=True  # Restore the best model weights
         )
@@ -189,7 +189,7 @@ class DeepLearningOneStepEmbeddingsClassifier(DeepLearningEmbeddingsClassifier):
             x=[self.train_input_ids, self.train_attention_mask],
             y=self.train_labels,
             validation_data=([self.val_input_ids, self.val_attention_mask], self.val_labels),
-            epochs=self.parameters.epochs,
+            number_of_epochs=self.parameters.number_of_epochs,
             batch_size=self.parameters.batch_size,
             callbacks=[early_stop, checkpoint, learning_rate_scheduler],
         )
