@@ -33,7 +33,7 @@ mixed_precision.set_global_policy(policy)
 class DeepLearningOneStepEmbeddingsClassifier(DeepLearningEmbeddingsClassifier):
 
     def __init__(self, *args, **parameters):
-        parameters['maximum_number_of_sliding_windows'] = 1
+        parameters['maximum_windows'] = 1
         super().__init__(*args, **parameters)
         self.validation_losses = []
 
@@ -71,14 +71,14 @@ class DeepLearningOneStepEmbeddingsClassifier(DeepLearningEmbeddingsClassifier):
         input_ids = tf.keras.layers.Input(shape=(None,), dtype=tf.int32, name="input_ids")
         attention_mask = tf.keras.layers.Input(shape=(None,), dtype=tf.int32, name="attention_mask")
         
-        self.embeddings_model = TFAutoModel.from_pretrained(self.parameters.embeddings_model_name)
+        self.embeddings_model = TFAutoModel.from_pretrained(self.parameters.embeddings_model)
 
         # # Set all layers of the embeddings model to non-trainable first
         for layer in self.embeddings_model.layers:
             layer.trainable = False
 
         # # Set only the top few layers to trainable, for fine-tuning
-        trainable_layers = self.embeddings_model.layers[-self.parameters.number_of_trainable_embeddings_model_layers:]
+        trainable_layers = self.embeddings_model.layers[-self.parameters.embeddings_model_trainable_layers:]
         for layer in trainable_layers:
             layer.trainable = True
 

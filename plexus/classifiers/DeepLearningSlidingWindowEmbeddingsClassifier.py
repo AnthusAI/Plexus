@@ -93,14 +93,14 @@ class DeepLearningSlidingWindowEmbeddingsClassifier(DeepLearningEmbeddingsClassi
         input_ids = tf.keras.layers.Input(shape=(None, None,), ragged=True, dtype=tf.int32, name="input_ids")
         attention_mask = tf.keras.layers.Input(shape=(None, None,), ragged=True, dtype=tf.int32, name="attention_mask")
         
-        self.embeddings_model = TFAutoModel.from_pretrained(self.parameters.embeddings_model_name)
+        self.embeddings_model = TFAutoModel.from_pretrained(self.parameters.embeddings_model)
 
         # # Set all layers of the embeddings model to non-trainable first
         for layer in self.embeddings_model.layers:
             layer.trainable = False
 
         # # Set only the top few layers to trainable, for fine-tuning
-        trainable_layers = self.embeddings_model.layers[-self.parameters.number_of_trainable_embeddings_model_layers:]
+        trainable_layers = self.embeddings_model.layers[-self.parameters.embeddings_model_trainable_layers:]
         for layer in trainable_layers:
             layer.trainable = True
 
@@ -109,7 +109,7 @@ class DeepLearningSlidingWindowEmbeddingsClassifier(DeepLearningEmbeddingsClassi
             logging.info(f"Layer {i} ({layer.name}) trainable: {layer.trainable}")
 
         # Create an instance of the custom layer
-        ragged_embeddings_layer = DeepLearningSlidingWindowEmbeddingsClassifier.RaggedEmbeddingsLayer(self.embeddings_model, aggregation=self.parameters.sliding_window_aggregation)
+        ragged_embeddings_layer = DeepLearningSlidingWindowEmbeddingsClassifier.RaggedEmbeddingsLayer(self.embeddings_model, aggregation=self.parameters.multiple_windows_aggregation)
 
         # Pass the ragged tensors directly to the custom layer
         last_hidden_state = ragged_embeddings_layer([input_ids, attention_mask])
