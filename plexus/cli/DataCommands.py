@@ -30,6 +30,8 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 import xgboost as xgb
 import shap
 from plexus.scorecards.TermLifeAI import TermLifeAI
+from imblearn.over_sampling import RandomOverSampler, SMOTE
+from imblearn.under_sampling import RandomUnderSampler
 
 from dotenv import load_dotenv
 response = load_dotenv('./.env')
@@ -188,15 +190,16 @@ def analyze_question(scorecard_id, score_name, dataframe, report_folder, value=N
         sitfl_table_negative.add_column("SHAP Value", style="magenta1", justify="right")
 
         # Get the top 10 features pushing towards the value
-        for feature, shap_value in sorted_shap_values[:10]:
-            sitfl_table_positive.add_row(feature, f"{shap_value:.4f}")
+        sorted_shap_values_desc = sorted(sorted_shap_values, key=lambda x: x[1], reverse=True)
+        for feature, shap_value in sorted_shap_values_desc[:10]:
+            sitfl_table_positive.add_row(feature, f"{shap_value:.8f}")
 
         # Sort the SHAP values in ascending order to get the most negative values first
         sorted_shap_values_asc = sorted(sorted_shap_values, key=lambda x: x[1])
 
         # Get the top 10 features pushing away from the value
         for feature, shap_value in sorted_shap_values_asc[:10]:
-            sitfl_table_negative.add_row(feature, f"{shap_value:.4f}")
+            sitfl_table_negative.add_row(feature, f"{shap_value:.8f}")
 
         panels.append(Panel(sitfl_table_positive, border_style="royal_blue1"))
         panels.append(Panel(sitfl_table_negative, border_style="royal_blue1"))
@@ -257,8 +260,31 @@ from nltk.corpus import stopwords
 nltk.download('punkt')
 nltk.download('stopwords')
 
-def compute_shap_feature_importances(scorecard_id, score_name, answer_value, dataframe, top_n_features=1024, sample_size=.25):
+def compute_shap_feature_importances(scorecard_id, score_name, answer_value, dataframe, top_n_features=1024, sample_size=1):
     logging.info(f"Computing sITFL difference for scorecard: {scorecard_id}, score: {score_name}")
+    
+    # >>> OVERRIDE
+    # This is a fake dataframe for testing, where the word "yes" is associated with the 'Yes' class.
+    # from faker import Faker
+    # faker = Faker()
+
+    # def generate_positive_example():
+    #     return f"{faker.sentence()} yes {faker.sentence()}"
+
+    # def generate_negative_example():
+    #     return faker.sentence().replace('yes', 'no')
+
+    # def create_synthetic_data(score_name, num_positive, num_negative):
+    #     data = []
+    #     for _ in range(num_positive):
+    #         data.append({"Transcription": generate_positive_example(), score_name: "Yes"})
+    #     for _ in range(num_negative):
+    #         data.append({"Transcription": generate_negative_example(), score_name: "No"})
+    #     return pd.DataFrame(data)
+
+    # dataframe = create_synthetic_data(score_name, num_positive=100, num_negative=100)
+    # print(dataframe.head())
+    ## <<< END OVERRIDE
     
     # Filter the dataframe to include only the relevant score
     filtered_dataframe = dataframe[dataframe[score_name].notnull()]
@@ -281,7 +307,7 @@ def compute_shap_feature_importances(scorecard_id, score_name, answer_value, dat
     
     # Create a TF-IDF representation
     logging.info("Creating TF-IDF representation...")
-    vectorizer = TfidfVectorizer()
+    vectorizer = TfidfVectorizer(ngram_range=(2, 2))
     X = vectorizer.fit_transform(preprocessed_text_data)
     
     # Select top N features based on ANOVA F-value with f_classif
@@ -306,13 +332,24 @@ def compute_shap_feature_importances(scorecard_id, score_name, answer_value, dat
     logging.info("Splitting data into training and testing sets...")
     X_train, X_test, y_train, y_test = train_test_split(X_selected, y, test_size=0.2, random_state=42)
 
+    # Oversampling using SMOTE (Synthetic Minority Over-sampling Technique)
+    smote = SMOTE(random_state=42)
+    X_train, y_train = smote.fit_resample(X_train, y_train)
+
     logging.info(f"Data type of y_train: {y_train.dtype}")
     logging.info(f"Unique values in y_train: {np.unique(y_train)}")
 
+    print("Class distribution in training set:")
+    print(y_train.value_counts(normalize=True))
+    print("Class distribution in testing set:")
+    print(y_test.value_counts(normalize=True))
+
+    print("Unique values before encoding:", np.unique(y))
     # Encode the target variable
     label_encoder = LabelEncoder()
     y_train_encoded = label_encoder.fit_transform(y_train)
     y_test_encoded = label_encoder.transform(y_test)
+    print("Unique values after encoding:", np.unique(y_train_encoded), np.unique(y_test_encoded))
 
     # Check if it's a binary or multi-class classification problem
     if len(label_encoder.classes_) == 2:
@@ -351,25 +388,39 @@ def compute_shap_feature_importances(scorecard_id, score_name, answer_value, dat
     logging.info(f"Recall (weighted): {recall:.4f}")
     logging.info(f"F1 Score (weighted): {f1:.4f}")
 
+    # Print predicted probabilities for a few instances
+    print("Predicted probabilities for instance 0:", model.predict_proba(X_test[0:1]))
+    print("Predicted probabilities for instance 1:", model.predict_proba(X_test[1:2]))
+    print("Predicted probabilities for instance 2:", model.predict_proba(X_test[2:3]))
+
     logging.info(f"Feature names: {selected_feature_names}")
 
     # Calculate SHAP values
     logging.info("Calculating SHAP values...")
     explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X_train)
+    shap_values = explainer(X_train)
+
+    # Print SHAP values for a few instances
+    print("SHAP values for instance 0:", shap_values[0])
+    print("SHAP values for instance 1:", shap_values[1])
+    print("SHAP values for instance 2:", shap_values[2])
+    print("SHAP values for instance 3:", shap_values[3])
+    print("SHAP values for instance 4:", shap_values[4])
+    print("SHAP values for instance 5:", shap_values[5])
 
     # Get the index of the answer value in the label encoder's classes
     answer_index = list(label_encoder.classes_).index(answer_value)
 
-    # For binary classification, shap_values is a list with a single array
+    # Extract the SHAP values for the desired answer index
     if len(label_encoder.classes_) == 2:
-        shap_values = shap_values[0]
+        # For binary classification, shap_values.values has shape (n_instances, n_features)
+        shap_values_answer = shap_values.values
     else:
-        # For multi-class classification, shap_values is a list of arrays (one per class)
-        shap_values = shap_values[answer_index]
+        # For multi-class classification, shap_values.values has shape (n_instances, n_classes, n_features)
+        shap_values_answer = shap_values.values[:, answer_index, :]
 
     # Calculate the mean SHAP value for each feature
-    shap_values_list = [(feature, np.mean(shap_value)) for feature, shap_value in zip(selected_feature_names, shap_values)]
+    shap_values_list = [(feature, np.mean(shap_values_answer[:, i])) for i, feature in enumerate(selected_feature_names)]
 
     # Verify SHAP values
     for feature, shap_value in shap_values_list:
