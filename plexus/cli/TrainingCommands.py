@@ -10,7 +10,7 @@ from plexus.Registries import scorecard_registry
 
 @click.command()
 @click.option('--scorecard-name', required=True, help='The name of the scorecard.')
-@click.option('--score-name', required=True, help='The name of the score to train.')
+@click.option('--score-name', help='The name of the score to train.')
 def train(scorecard_name, score_name):
     """Some classifiers use machine-learning models that require training."""
     logging.info(f"Training Scorecard [magenta1][b]{scorecard_name}[/b][/magenta1]...")
@@ -24,8 +24,20 @@ def train(scorecard_name, score_name):
 
     logging.info(f"Found registered Scorecard named [magenta1][b]{scorecard_class.name()}[/b][/magenta1] implemented in Python class [magenta1][b]{scorecard_class.__name__}[/b][/magenta1]")
 
+    if score_name:
+        train_score(score_name, scorecard_class)
+    else:
+        logging.info(f"No score name provided. Training all scores for Scorecard [magenta1][b]{scorecard_class.name()}[/b][/magenta1]...")
+        for score_name in scorecard_class.scores.keys():
+            train_score(score_name, scorecard_class)
+
+def train_score(score_name, scorecard_class):
     logging.info(f"Training Score [magenta1][b]{score_name}[/b][/magenta1]...")
     score_to_train_configuration = scorecard_class.scores[score_name]
+
+    if score_name not in scorecard_class.scores:
+        logging.error(f"Score with name '{score_name}' not found in scorecard '{scorecard_class.name()}'.")
+        return
 
     logging.info(f"Score Configuration: {rich.pretty.pretty_repr(score_to_train_configuration)}")
 

@@ -559,6 +559,12 @@ class MLClassifier(Score):
         plt.gca().yaxis.set_major_formatter(ticker.PercentFormatter(xmax=1.0, decimals=0))
         plt.gca().set_xticklabels(range(1, len(self.history.history['accuracy']) + 1))
 
+        # Add horizontal line and label for final validation accuracy
+        final_val_accuracy = self.history.history['val_accuracy'][-1]
+        plt.axhline(y=final_val_accuracy, color='gray', linestyle='--', lw=2)
+        plt.text(len(self.history.history['val_accuracy']) - 1, final_val_accuracy, f'{final_val_accuracy:.3%}', 
+                 color='black', ha='right', va='bottom')
+
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         plt.savefig(file_name)
         plt.show()
