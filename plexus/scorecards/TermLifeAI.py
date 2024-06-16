@@ -8,6 +8,10 @@ class TermLifeAI(Scorecard):
     """
 
     @classmethod
+    def scorecard_id(cls):
+        return '1402'
+
+    @classmethod
     def name(cls):
         return "SelectQuote Term Life AI 3.0"
 
@@ -33,11 +37,11 @@ class TermLifeAI(Scorecard):
         "Ask Doubles Pitch": {},
         "Assumptive Doubles Pitch": {"primary": "Ask Doubles Pitch"},
         "Length Of Debt": {},
-        "Wrap Up - Carrier Name": {},
-        "Wrap Up - Coverage Amount": {},
-        "Wrap Up - Exam and Details": {},
-        "Wrap Up - Agent Contact Info": {},
-        "Wrap Up - Application Underwrite": {}
+        # "Wrap Up - Carrier Name": {},
+        # "Wrap Up - Coverage Amount": {},
+        # "Wrap Up - Exam and Details": {},
+        # "Wrap Up - Agent Contact Info": {},
+        # "Wrap Up - Application Underwrite": {}
     }
 
 TermLifeAI.load_and_register_scores()

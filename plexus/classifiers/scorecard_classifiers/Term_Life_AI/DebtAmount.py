@@ -1,4 +1,4 @@
-from plexus..FastTextClassifier import FastTextClassifier
+from plexus.FastTextClassifier import FastTextClassifier
 
 class DebtAmount(FastTextClassifier):
 

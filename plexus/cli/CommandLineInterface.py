@@ -1,9 +1,12 @@
 import click
+from rich.console import Console
 from collections import OrderedDict
 from .DataCommands import data
 from .EvaluationCommands import evaluate
 from .TrainingCommands import train
 from .ScoringCommands import score
+from .ReportingCommands import report
+from  .console import console
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -25,6 +28,8 @@ def main():
 
     For scoring content at inference time, the `score` command includes subcommands for scoring content.  The scoring reports will not include accuracy metrics.
 
+    For reporting on training and evaluation results, the `report` command includes subcommands for generating reports.
+
     For more information, please visit https://plexus.anth.us
     """
     pass
@@ -33,3 +38,4 @@ main.add_command(data)
 main.add_command(evaluate)
 main.add_command(train)
 main.add_command(score)
+main.add_command(report)

@@ -23,11 +23,19 @@ setup(
         'fasttext',
         'tiktoken',
         'seaborn',
+        'pydot==2.0.0',
+        'pydotplus==2.0.2',
+        'graphviz==0.20.3',
         'litellm',
         'boto3',
         'graphviz',
         'mistune',
         'pyyaml',
+        'sphinx',
+        'sphinx-rtd-theme',
+        'mlflow',
+        'scikit-learn',
+        'tables'
     ],
     dependency_links=[
         'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator'
