@@ -29,11 +29,10 @@ def index(scorecard_name):
     if scorecard_class is None:
         logging.error(f"Scorecard with name '{scorecard_name}' not found.")
         return
-    scorecard_id = scorecard_class.scorecard_id()
 
     scorecard_folder = os.path.join('.', 'scorecards', scorecard_name)
     scorecard_instance = scorecard_class(scorecard_folder_path=scorecard_folder)
-    report_folder = os.path.join('.', 'reports', scorecard_instance.name())
+    report_folder = os.path.join('.', 'reports', scorecard_class.name)
     report_filename = os.path.join(report_folder, 'index.html')
 
     logging.info(f"Using scorecard key [purple][b]{scorecard_name}[/b][/purple] with class name [purple][b]{scorecard_instance.__class__.__name__}[/b][/purple]")
@@ -44,7 +43,7 @@ def index(scorecard_name):
     <html>
     <head>
         <meta charset="UTF-8">
-        <title>{{ scorecard.name() }} - Training Report</title>
+        <title>{{ scorecard.name }} - Training Report</title>
             <link rel="preconnect" href="https://fonts.googleapis.com">
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
             <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400..900&display=swap" rel="stylesheet">
@@ -297,7 +296,7 @@ def index(scorecard_name):
         <header>
             <metadata>
                 <h1>Training Report</h1>
-                <p>{{ scorecard.name() }}</p>
+                <p>{{ scorecard.name }}</p>
             </metadata>
         </header>
     """)

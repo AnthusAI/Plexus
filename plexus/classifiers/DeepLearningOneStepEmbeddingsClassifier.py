@@ -189,7 +189,7 @@ class DeepLearningOneStepEmbeddingsClassifier(DeepLearningEmbeddingsClassifier):
             x=[self.train_input_ids, self.train_attention_mask],
             y=self.train_labels,
             validation_data=([self.val_input_ids, self.val_attention_mask], self.val_labels),
-            number_of_epochs=self.parameters.number_of_epochs,
+            epochs=self.parameters.number_of_epochs,
             batch_size=self.parameters.batch_size,
             callbacks=[early_stop, checkpoint, learning_rate_scheduler],
         )

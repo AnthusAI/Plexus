@@ -37,7 +37,7 @@ class DeepLearningEmbeddingsClassifier(MLClassifier):
         number_of_epochs: int
         batch_size: int
         warmup_learning_rate: float
-        warmup_epochs: int
+        number_of_warmup_epochs: int
         plateau_learning_rate: float
         number_of_plateau_epochs: int
         learning_rate_decay: float
@@ -53,7 +53,7 @@ class DeepLearningEmbeddingsClassifier(MLClassifier):
             try:
                 validated_parameters = cls.Parameters(**parameters).dict()
             except ValidationError as e:
-                Classifier.log_validation_errors(e)
+                Score.log_validation_errors(e)
                 raise
 
             logging.info(f"Sliding window: {validated_parameters.get('multiple_windows', False)}")
@@ -363,16 +363,16 @@ class DeepLearningEmbeddingsClassifier(MLClassifier):
         else:
             val_loss = None
         
-        if epoch < self.parameters.warmup_epochs:
+        if epoch < self.parameters.number_of_warmup_epochs:
             # Linear warmup
-            progress = epoch / self.parameters.warmup_epochs
+            progress = epoch / self.parameters.number_of_warmup_epochs
             new_lr = self.parameters.warmup_learning_rate + progress * (self.parameters.plateau_learning_rate - self.parameters.warmup_learning_rate)
-        elif epoch < self.parameters.warmup_epochs + self.parameters.number_of_plateau_epochs:
+        elif epoch < self.parameters.number_of_warmup_epochs + self.parameters.number_of_plateau_epochs:
             # Plateau
             new_lr = self.parameters.plateau_learning_rate
         else:
             # Decay
-            decay_steps = epoch - (self.parameters.warmup_epochs + self.parameters.number_of_plateau_epochs)
+            decay_steps = epoch - (self.parameters.number_of_warmup_epochs + self.parameters.number_of_plateau_epochs)
             new_lr = self.parameters.plateau_learning_rate * (self.parameters.learning_rate_decay ** decay_steps)
         
         # Reduce learning rate if validation loss increased compared to the last epoch
