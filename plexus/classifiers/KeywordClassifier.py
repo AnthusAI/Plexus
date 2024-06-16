@@ -1,8 +1,8 @@
 import re
-from plexus.classifiers.Classifier import Classifier
+from plexus.classifiers.Score import Score
 from plexus.CustomLogging import logging
 
-class KeywordClassifier(Classifier):
+class KeywordClassifier(Score):
     def __init__(self, keywords):
         super().__init__()
         self.keywords = keywords
