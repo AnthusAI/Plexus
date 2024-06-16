@@ -510,3 +510,28 @@ class ScorecardResultsAnalysis:
                     report += f"{scorecard_result['session_id']}, {question_name}, {score_result['human_label']}, {score_result['value']}, ,\n"
                         
         return report
+    
+    def generate_question_accuracy_csv(self, output_file='question_accuracy_report.csv'):
+        question_correct_counts = {question: 0 for question in self._extract_score_names()}
+        question_total_counts = {question: 0 for question in self._extract_score_names()}
+
+        for result in self.scorecard_results.data:
+            for question in self._extract_score_names():
+                correct = result['results'][question].get('correct', False)
+                question_total_counts[question] += 1
+                if correct:
+                    question_correct_counts[question] += 1
+
+        # Calculate question accuracies
+        question_accuracies = {question: (question_correct_counts[question] / question_total_counts[question] * 100) if question_total_counts[question] else 0 for question in question_correct_counts}
+
+        # Write to CSV
+        with open(output_file, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(['Question', 'Total Count', 'Correct Count', 'Accuracy (%)'])
+            for question, total_count in question_total_counts.items():
+                correct_count = question_correct_counts[question]
+                accuracy = (correct_count / total_count * 100) if total_count else 0  # Changed to prevent ZeroDivisionError
+                writer.writerow([question, total_count, correct_count, f"{accuracy:.2f}"])
+
+        print(f"Question accuracy report generated: {output_file}")

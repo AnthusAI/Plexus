@@ -1,10 +1,10 @@
 import re
-
 from plexus.classifiers.Classifier import Classifier
 from plexus.CustomLogging import logging
 
 class KeywordClassifier(Classifier):
     def __init__(self, keywords):
+        super().__init__()
         self.keywords = keywords
 
     def is_relevant(self, sentence):
@@ -23,3 +23,10 @@ class KeywordClassifier(Classifier):
                 return True
         return False
 
+    def load_context(self, context=None):
+        # Implement the context loading logic if necessary
+        pass
+
+    def predict(self, context, model_input):
+        # Implement prediction logic using the is_relevant method
+        return [self.is_relevant(sentence) for sentence in model_input]
