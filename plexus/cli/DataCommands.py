@@ -1,4 +1,5 @@
 import click
+from .DataLakeCommands import lake_group
 
 @click.group()
 def data():
@@ -12,3 +13,4 @@ def analyze():
     """
     click.echo("Profiling data...")
 
+data.add_command(lake_group)
