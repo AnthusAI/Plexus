@@ -24,7 +24,7 @@ nltk.download('punkt')
 
 from plexus.CustomLogging import logging
 from plexus.classifiers.MLClassifier import MLClassifier
-from plexus.classifiers.EmbeddingsDNNClassifier import BERTClassifier
+from plexus.classifiers.DeepLearningSlidingWindowEmbeddingsClassifier import BERTClassifier
 
 from sklearn.svm import LinearSVC
 from sklearn.metrics import classification_report, precision_score, recall_score, f1_score

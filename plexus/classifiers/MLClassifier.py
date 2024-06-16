@@ -2,16 +2,17 @@ import os
 import json
 import mlflow
 import inspect
-import functools
 import pandas as pd
 import numpy as np
+from pydantic import BaseModel, validator, ValidationError
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tensorflow.keras.utils import plot_model
 from sklearn.metrics import confusion_matrix
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from sklearn.metrics import roc_curve, auc, precision_recall_curve
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
 import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
 from rich.table import Table
@@ -19,27 +20,37 @@ from rich.panel import Panel
 from rich.columns import Columns
 from rich import print as rich_print
 from rich.text import Text
-from matplotlib.colors import LinearSegmentedColormap
 from plexus.cli.console import console
 from plexus.CustomLogging import logging
-from plexus.classifiers.Classifier import Classifier
+from plexus.classifiers.Score import Score
 from sklearn.preprocessing import LabelBinarizer
 
-class MLClassifier(Classifier):
+class MLClassifier(Score):
     """
     Abstract class for a machine-learning classifier, with functions for the various states of ML model development.
     """
+
+    class Parameters(Score.Parameters):
+        ...
+        data: dict
+
+        @validator('data')
+        def convert_data_percentage(cls, value):
+            if 'percentage' in value:
+                value['percentage'] = float(str(value['percentage']).strip().replace('%', ''))
+            else:
+                value['percentage'] = 100.0
+            return value
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
         logging.info("Initializing [magenta1][b]MLClassifier[/b][/magenta1]")
         self._is_multi_class = None
-        self._stored_parameters = parameters
         self.start_mlflow_experiment_run()
 
     def log_stored_parameters(self):
         if hasattr(self, '_stored_parameters'):
-            for name, value in self._stored_parameters['configuration']['model']['parameters'].items():
+            for name, value in self.parameters.items():
                 mlflow.log_param(name, value)
 
     def name(self):
@@ -52,7 +63,7 @@ class MLClassifier(Classifier):
         return computed_name
 
     def start_mlflow_experiment_run(self):
-        experiment_name = f"{self.scorecard_name} - {self.score_name}"
+        experiment_name = f"{self.parameters.scorecard_name} - {self.parameters.score_name}"
         if os.getenv('MLFLOW_EXPERIMENT_NAME'):
             experiment_name = experiment_name + " - " + os.getenv('MLFLOW_EXPERIMENT_NAME')
         logging.info(f"Setting MLFLow experiment name to [magenta1][b]{experiment_name}[/b][/magenta1]")
@@ -68,7 +79,7 @@ class MLClassifier(Classifier):
         try:
             mlflow.start_run()
         except Exception as e:
-            logging.error("Error: ", e)
+            logging.error(f"Error: {e}")
             logging.info("Attempting to end the previous run and start a new one.")
             mlflow.end_run()
             mlflow.start_run()
@@ -76,8 +87,8 @@ class MLClassifier(Classifier):
         mlflow.log_param("classifier_class", self.__class__.__name__)
 
         # Log common parameters
-        mlflow.log_param("scorecard_name", self.scorecard_name)
-        mlflow.log_param("score_name", self.score_name)
+        mlflow.log_param("scorecard_name", self.parameters.scorecard_name)
+        mlflow.log_param("score_name", self.parameters.score_name)
 
         self.log_stored_parameters()
 
@@ -114,12 +125,15 @@ class MLClassifier(Classifier):
         answer_breakdown_table.add_column("Count", style="magenta1", justify="right")
         answer_breakdown_table.add_column("Percentage", style="magenta1 bold", justify="right")
 
-        answer_counts = self.dataframe[self.score_name].value_counts()
-        total_responses = answer_counts.sum()
-        for answer_value, count in answer_counts.items():
-            percentage_of_total = (count / total_responses) * 100
-            formatted_percentage = f"{percentage_of_total:.1f}%"
-            answer_breakdown_table.add_row(str(answer_value), str(count), formatted_percentage)
+        try:
+            answer_counts = self.dataframe[self.parameters.score_name].value_counts()
+            total_responses = answer_counts.sum()
+            for answer_value, count in answer_counts.items():
+                percentage_of_total = (count / total_responses) * 100
+                formatted_percentage = f"{percentage_of_total:.1f}%"
+                answer_breakdown_table.add_row(str(answer_value), str(count), formatted_percentage)
+        except KeyError:
+            pass
 
         panels.append(Panel(answer_breakdown_table, border_style="royal_blue1"))
 
@@ -136,13 +150,13 @@ class MLClassifier(Classifier):
         dataframe_summary_table.add_row("Number of Columns", str(self.dataframe.shape[1]))
         dataframe_summary_table.add_row("Total Cells", str(self.dataframe.size))
 
-        smallest_answer_count = answer_counts.min()
-        total_kinds_of_non_null_answers = self.dataframe[self.score_name].nunique()
-        total_balanced_count = smallest_answer_count * total_kinds_of_non_null_answers
+        if 'answer_counts' in locals():
+            smallest_answer_count = answer_counts.min()
+            total_kinds_of_non_null_answers = self.dataframe[self.parameters.score_name].nunique()
+            total_balanced_count = smallest_answer_count * total_kinds_of_non_null_answers
 
-        dataframe_summary_table.add_row("Smallest Count", str(smallest_answer_count))
-        dataframe_summary_table.add_row("Total Balanced Count", str(total_balanced_count), style="magenta1 bold")
-
+            dataframe_summary_table.add_row("Smallest Count", str(smallest_answer_count))
+            dataframe_summary_table.add_row("Total Balanced Count", str(total_balanced_count), style="magenta1 bold")
         panels.append(Panel(dataframe_summary_table, border_style="royal_blue1"))
 
         # Column Names Table
@@ -159,7 +173,7 @@ class MLClassifier(Classifier):
 
         # Combine all panels into columns
         columns = Columns(panels)
-        header_text = f"[bold royal_blue1]{self.score_name}[/bold royal_blue1]"
+        header_text = f"[bold royal_blue1]{self.parameters.score_name}[/bold royal_blue1]"
 
         # Display the combined panels
         rich_print(Panel(columns, title=header_text, border_style="magenta1"))
@@ -169,12 +183,12 @@ class MLClassifier(Classifier):
         Handle any pre-processing of the training data, including the training/validation splits.
         """
 
-        if 'processors' in self.configuration.get('data', {}):
+        if 'processors' in self.parameters.data:
             console.print(Text("Running configured processors...", style="royal_blue1"))
 
             # Instantiate all processors once
             processors = []
-            for processor in self.configuration['data']['processors']:
+            for processor in self.parameters.data['processors']:
                 processor_class = processor['class']
                 processor_parameters = processor.get('parameters', {})
                 from plexus.processors import ProcessorFactory
@@ -204,28 +218,43 @@ class MLClassifier(Classifier):
 
                 console.print(Panel(transcript_comparison_table, border_style="royal_blue1"))
 
-        console.print(Text("Filtered dataframe:", style="royal_blue1"))
-
+        console.print(Text("Processed dataframe:", style="royal_blue1"))
         self.analyze_dataset()
 
-        # Check for missing or unexpected values
-        print(f"Unique values in '{self.score_name}':", self.dataframe[self.score_name].unique())
+        #############
+        # Subsample the data
+
+        before_subsample_count = len(self.dataframe)
+        self.dataframe = self.dataframe.sample(frac=self.parameters.data['percentage'] / 100, random_state=42)
+        after_subsample_count = len(self.dataframe)
+
+        subsample_comparison_table = Table(
+            title=f"[royal_blue1][b]Subsampling {self.parameters.data['percentage']}% of the data[/b][/royal_blue1]",
+            header_style="sky_blue1",
+            border_style="sky_blue1"
+        )
+        subsample_comparison_table.add_column("Before", style="magenta1", justify="left")
+        subsample_comparison_table.add_column("After", style="magenta1", justify="left")
+        subsample_comparison_table.add_row(str(before_subsample_count), str(after_subsample_count))
+
+        console.print(Panel(subsample_comparison_table, border_style="royal_blue1"))
 
         #############
         # Balance data
 
-        if hasattr(self, 'balance_data') and not self.balance_data:
+        if 'balance' in self.parameters.data and not self.parameters.data['balance']:
+            logging.info("data->balance: [red][b]false.[/b][/red]  Skipping data balancing.")
             return
 
         # Check the distribution of labels
         print("\nDistribution of labels in the dataframe:")
-        print(self.dataframe[self.score_name].value_counts(dropna=False))
+        print(self.dataframe[self.parameters.score_name].value_counts(dropna=False))
 
         # Get the unique labels
-        unique_labels = self.dataframe[self.score_name].unique()
+        unique_labels = self.dataframe[self.parameters.score_name].unique()
 
         # Create a dictionary to store the dataframes for each label
-        label_dataframes = {label: self.dataframe[self.dataframe[self.score_name] == label] for label in unique_labels}
+        label_dataframes = {label: self.dataframe[self.dataframe[self.parameters.score_name] == label] for label in unique_labels}
 
         # Determine the smallest class size
         smallest_class_size = min(len(df) for df in label_dataframes.values())
@@ -242,14 +271,14 @@ class MLClassifier(Classifier):
         # Shuffle the data
         balanced_dataframe = balanced_dataframe.sample(frac=1, random_state=42)
 
-        # Sample a certain percentage of the data
-        balanced_dataframe = balanced_dataframe.sample(frac=self.data_percentage / 100, random_state=42)
-
         # Check the distribution of labels
         print("\nDistribution of labels in the balanced dataframe:")
-        print(balanced_dataframe[self.score_name].value_counts())
+        print(balanced_dataframe[self.parameters.score_name].value_counts())
 
         self.dataframe = balanced_dataframe
+
+        console.print(Text("Final, balanced dataframe:", style="royal_blue1"))
+        self.analyze_dataset()
 
     @abstractmethod
     def train_model(self):
@@ -260,14 +289,68 @@ class MLClassifier(Classifier):
         """
         pass
 
-    @abstractmethod
     def evaluate_model(self):
         """
         Evaluate the model on the validation data.
 
         :return: The evaluation results.
         """
-        pass
+        print("Generating evaluation metrics...")
+
+        logging.info(f"val_labels shape: {self.val_labels.shape}")
+
+        # Predict on validation set
+        self.val_predictions = self.model.predict([self.val_input_ids, self.val_attention_mask])
+
+        logging.info(f"val_predictions shape: {self.val_predictions.shape}")
+
+        if self.is_multi_class:
+            self.val_predictions_labels = np.argmax(self.val_predictions, axis=1)
+            if len(self.val_labels.shape) > 1 and self.val_labels.shape[1] > 1:
+                self.val_labels = np.argmax(self.val_labels, axis=1)  # Convert one-hot encoded labels to integer labels
+        else:
+            self.val_predictions_labels = [1 if pred > 0.5 else 0 for pred in self.val_predictions]
+
+        # Compute evaluation metrics
+        accuracy = accuracy_score(self.val_labels, self.val_predictions_labels)
+        f1 = f1_score(self.val_labels, self.val_predictions_labels, average='weighted' if self.is_multi_class else 'binary')
+        recall = recall_score(self.val_labels, self.val_predictions_labels, average='weighted' if self.is_multi_class else 'binary')
+        precision = precision_score(self.val_labels, self.val_predictions_labels, average='weighted' if self.is_multi_class else 'binary')
+
+        # Log evaluation metrics to MLflow
+        mlflow.log_metric("validation_f1_score", f1)
+        mlflow.log_metric("validation_recall", recall)
+        mlflow.log_metric("validation_precision", precision)
+
+        print(f"Validation Accuracy: {accuracy:.4f}")
+        print(f"Validation F1 Score: {f1:.4f}")
+        print(f"Validation Recall: {recall:.4f}")
+        print(f"Validation Precision: {precision:.4f}")
+
+        print("Generating visualizations...")
+
+        self._generate_confusion_matrix()
+
+        self._plot_roc_curve()
+
+        self._plot_precision_recall_curve()
+
+        self._plot_training_history()
+
+        metrics = {
+            "training_loss": self.history.history['loss'][-1],
+            "training_accuracy": self.history.history['accuracy'][-1],
+            "validation_loss": self.history.history['val_loss'][-1],
+            "validation_accuracy": self.history.history['val_accuracy'][-1],
+            "validation_f1_score": f1,
+            "validation_recall": recall,
+            "validation_precision": precision
+        }
+
+        self._record_metrics(metrics)
+
+        # End MLflow run
+        mlflow.end_run()
 
     @abstractmethod
     def register_model(self):
@@ -322,16 +405,19 @@ class MLClassifier(Classifier):
     _red = '#DD3333'
     _green = '#339933'
 
-    @Classifier.ensure_report_directory_exists
+    def _report_directory_path(self):
+        return f"reports/{self.parameters.scorecard_name}/{self.parameters.score_name}/"
+
+    @Score.ensure_report_directory_exists
     def _generate_model_diagram(self):
-        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        directory_path = self._report_directory_path()
         file_name = os.path.join(directory_path, "model_diagram.png")
         plot_model(self.model, to_file=file_name, show_shapes=True, show_layer_names=True, rankdir='TB')
         mlflow.log_artifact(file_name)
 
-    @Classifier.ensure_report_directory_exists
+    @Score.ensure_report_directory_exists
     def _generate_confusion_matrix(self):
-        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        directory_path = self._report_directory_path()
         file_name = os.path.join(directory_path, "confusion_matrix.png")
 
         # Ensure that both val_labels and val_predictions are in integer format
@@ -358,9 +444,9 @@ class MLClassifier(Classifier):
 
         mlflow.log_artifact(file_name)
 
-    @Classifier.ensure_report_directory_exists
+    @Score.ensure_report_directory_exists
     def _plot_roc_curve(self):
-        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        directory_path = self._report_directory_path()
         file_name = os.path.join(directory_path, "ROC_curve.png")
 
         plt.figure()
@@ -393,9 +479,9 @@ class MLClassifier(Classifier):
         plt.show()
         mlflow.log_artifact(file_name)
 
-    @Classifier.ensure_report_directory_exists
+    @Score.ensure_report_directory_exists
     def _plot_precision_recall_curve(self):
-        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        directory_path = self._report_directory_path()
         file_name = os.path.join(directory_path, "precision_and_recall_curve.png")
 
         plt.figure()
@@ -425,14 +511,14 @@ class MLClassifier(Classifier):
         plt.show()
         mlflow.log_artifact(file_name)
 
-    @Classifier.ensure_report_directory_exists
+    @Score.ensure_report_directory_exists
     def _plot_training_history(self):
-        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        directory_path = self._report_directory_path()
         file_name = os.path.join(directory_path, "training_history.png")
 
         plt.figure(figsize=(12, 9))  # Adjusted for a 4x3 aspect ratio with three subplots
 
-        plt.suptitle(f"Training History\n{self.score_name}", fontsize=16, verticalalignment='top')
+        plt.suptitle(f"Training History\n{self.parameters.score_name}", fontsize=16, verticalalignment='top')
 
         # Learning Rate plot
         plt.subplot(1, 3, 1)  # First subplot for learning rate
@@ -473,12 +559,18 @@ class MLClassifier(Classifier):
         plt.gca().yaxis.set_major_formatter(ticker.PercentFormatter(xmax=1.0, decimals=0))
         plt.gca().set_xticklabels(range(1, len(self.history.history['accuracy']) + 1))
 
+        # Add horizontal line and label for final validation accuracy
+        final_val_accuracy = self.history.history['val_accuracy'][-1]
+        plt.axhline(y=final_val_accuracy, color='gray', linestyle='--', lw=2)
+        plt.text(len(self.history.history['val_accuracy']) - 1, final_val_accuracy, f'{final_val_accuracy:.3%}', 
+                 color='black', ha='right', va='bottom')
+
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         plt.savefig(file_name)
         plt.show()
         mlflow.log_artifact(file_name)
 
-    @Classifier.ensure_report_directory_exists
+    @Score.ensure_report_directory_exists
     def _record_metrics(self, metrics):
         """
         Record the provided metrics dictionary as a JSON file in the appropriate report folder for this model.
@@ -486,7 +578,7 @@ class MLClassifier(Classifier):
         :param metrics: Dictionary containing the metrics to be recorded.
         :type metrics: dict
         """
-        directory_path = f"reports/{self.scorecard_name}/{self.score_name}/"
+        directory_path = f"reports/{self.parameters.scorecard_name}/{self.parameters.score_name}/"
         file_name = os.path.join(directory_path, "metrics.json")
 
         with open(file_name, 'w') as json_file:
@@ -495,6 +587,6 @@ class MLClassifier(Classifier):
     @property
     def is_multi_class(self):
         if self._is_multi_class is None:
-            unique_labels = self.dataframe[self.score_name].unique()
+            unique_labels = self.dataframe[self.parameters.score_name].unique()
             self._is_multi_class = len(unique_labels) > 2
         return self._is_multi_class

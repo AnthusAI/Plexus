@@ -13,8 +13,12 @@ class DownsampleClassDatasetFilter(DataframeProcessor):
         value_counts = dataframe[self.column_name].value_counts()
         largest_class_size = value_counts[value_counts.index != self.value].max()
         
-        self.before_summary = self.generate_summary(value_counts)
+        # Ensure the target value is included in the value counts
+        if self.value not in value_counts:
+            value_counts[self.value] = 0
         
+        self.before_summary = self.generate_summary(value_counts)
+
         target_class_size = value_counts.get(self.value, 0)
         
         if target_class_size <= largest_class_size:
