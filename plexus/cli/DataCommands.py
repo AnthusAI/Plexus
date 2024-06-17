@@ -37,6 +37,8 @@ from imblearn.under_sampling import RandomUnderSampler
 from dotenv import load_dotenv
 response = load_dotenv('./.env')
 
+# data.add_command(lake_group)
+
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.integer):
@@ -69,15 +71,41 @@ class VectorizerLogger:
 @click.option('--score-name', required=False, help='The name of the score to analyze for answer breakdown')
 @click.option('--all', 'all_questions', is_flag=True, help='Analyze all questions in the scorecard')
 @click.option('--value', 'value', required=False, help='The answer value to analyze for feature importance')
-def analyze(scorecard_name, score_name, all_questions, value):
+@click.option('--top-n-features', 'top_n_features', required=False, default=10000, help='The number of features to analyze for feature importance')
+@click.option('--leaderboard-n-features', 'leaderboard_n_features', required=False, default=10, help='The number of features to show in the leaderboard for feature importance')
+@click.option('--sample-size', 'sample_size', required=False, default=1, help='The number of samples to use for feature importance')
+@click.option('--ngram-range', 'ngram_range', default='2,3', help='The range of n-grams to use for feature extraction, e.g., "2,3"')
+def analyze(scorecard_name, score_name, all_questions, value, top_n_features, leaderboard_n_features, sample_size, ngram_range):
     plexus.Scorecard.load_and_register_scorecards('scorecards/')
     scorecard_class = scorecard_registry.get(scorecard_name)
 
-data.add_command(lake_group)
-    logging.info(f"Analyzing data for scorecard [purple][b]{scorecard_name}[/b][/purple]")
-    analyze_scorecard(scorecard_name, score_name, all_questions, value)
+    try:
+        # Convert the ngram_range string to a tuple of integers
+        start, end = map(int, ngram_range.split(','))
+        ngram_range = (start, end)
+    except (ValueError, TypeError):
+        raise click.BadParameter("Invalid ngram_range format. Expected 'start,end' (e.g., '2,3').")
 
-def analyze_scorecard(scorecard_name, score_name, all_questions, value):
+    logging.info(f"Analyzing data for scorecard [purple][b]{scorecard_name}[/b][/purple]")
+    analyze_scorecard(
+        scorecard_name,
+        score_name,
+        all_questions,
+        value,
+        top_n_features,
+        leaderboard_n_features,
+        sample_size,
+        ngram_range)
+
+def analyze_scorecard(
+        scorecard_name,
+        score_name,
+        all_questions,
+        value,
+        top_n_features,
+        leaderboard_n_features,
+        sample_size,
+        ngram_range):
     
     # First, find the scorecard class from the name.
     scorecard_class = scorecard_registry.get(scorecard_name)
@@ -104,13 +132,26 @@ def analyze_scorecard(scorecard_name, score_name, all_questions, value):
         grid.add_column()
         
         if score_name:
-            columns = analyze_question(scorecard_id, score_name, dataframe, report_folder, value)
+            columns = analyze_question(
+                scorecard_id,
+                score_name,
+                dataframe,
+                report_folder,
+                value,
+                top_n_features=top_n_features,
+                leaderboard_n_features=leaderboard_n_features,
+                sample_size=sample_size,
+                ngram_range=ngram_range)
             question_panel = Panel(columns, title=f"[royal_blue1][b]Question: {score_name}[/b][/royal_blue1]", border_style="magenta1")
             grid.add_row(question_panel)
         else:
             # This means --all
             for score_name in scorecard_instance.score_names():
-                columns = analyze_question(scorecard_id, score_name, dataframe, report_folder)
+                columns = analyze_question(
+                    scorecard_id,
+                    score_name,
+                    dataframe,
+                    report_folder)
                 question_panel = Panel(columns, title=f"[royal_blue1][b]Question: {score_name}[/b][/royal_blue1]", border_style="magenta1")
                 grid.add_row(question_panel)
 
@@ -144,7 +185,16 @@ def analyze_scorecard(scorecard_name, score_name, all_questions, value):
 
         rich_print(outer_panel)
 
-def analyze_question(scorecard_id, score_name, dataframe, report_folder, value=None):
+def analyze_question(
+        scorecard_id,
+        score_name,
+        dataframe,
+        report_folder,
+        value=None,
+        top_n_features=10000,
+        leaderboard_n_features=14,
+        sample_size=1,
+        ngram_range=(2,3)):
     panels = []
 
     data_profiling_results = {}
@@ -171,40 +221,47 @@ def analyze_question(scorecard_id, score_name, dataframe, report_folder, value=N
 
     data_profiling_results['shap_analysis'] = {}
     if value is not None:
-        sorted_shap_values = compute_shap_feature_importances(scorecard_id, score_name, value, dataframe)
+        sorted_shap_values = compute_shap_feature_importances(
+            scorecard_id,
+            score_name,
+            value,
+            dataframe,
+            top_n_features=top_n_features,
+            sample_size=sample_size,
+            ngram_range=ngram_range)
         data_profiling_results['shap_analysis'][value] = {
             'features': [feature for feature, _ in sorted_shap_values],
             'shap_values': [shap_value for _, shap_value in sorted_shap_values]
         }
 
-        sitfl_table_positive = Table(
-            title=f"[royal_blue1][b]Top 10 Features Pushing Towards '{value}'[/b][/royal_blue1]",
+        positive_features = Table(
+            title=f"[royal_blue1][b]Top {leaderboard_n_features} Features Pushing Towards '{value}'[/b][/royal_blue1]",
             header_style="sky_blue1",
             border_style="sky_blue1")
-        sitfl_table_positive.add_column("Feature", style="magenta1")
-        sitfl_table_positive.add_column("SHAP Value", style="magenta1", justify="right")
+        positive_features.add_column("Feature", style="magenta1")
+        positive_features.add_column("SHAP Value", style="magenta1", justify="right")
 
-        sitfl_table_negative = Table(
-            title=f"[royal_blue1][b]Top 10 Features Pushing Away from '{value}'[/b][/royal_blue1]",
+        negative_features = Table(
+            title=f"[royal_blue1][b]Top {leaderboard_n_features} Features Pushing Away from '{value}'[/b][/royal_blue1]",
             header_style="sky_blue1",
             border_style="sky_blue1")
-        sitfl_table_negative.add_column("Feature", style="magenta1")
-        sitfl_table_negative.add_column("SHAP Value", style="magenta1", justify="right")
+        negative_features.add_column("Feature", style="magenta1")
+        negative_features.add_column("SHAP Value", style="magenta1", justify="right")
 
         # Get the top 10 features pushing towards the value
         sorted_shap_values_desc = sorted(sorted_shap_values, key=lambda x: x[1], reverse=True)
-        for feature, shap_value in sorted_shap_values_desc[:10]:
-            sitfl_table_positive.add_row(feature, f"{shap_value:.8f}")
+        for feature, shap_value in sorted_shap_values_desc[:leaderboard_n_features]:
+            positive_features.add_row(feature, f"{shap_value:.4f}")
 
         # Sort the SHAP values in ascending order to get the most negative values first
         sorted_shap_values_asc = sorted(sorted_shap_values, key=lambda x: x[1])
 
         # Get the top 10 features pushing away from the value
-        for feature, shap_value in sorted_shap_values_asc[:10]:
-            sitfl_table_negative.add_row(feature, f"{shap_value:.8f}")
+        for feature, shap_value in sorted_shap_values_asc[:leaderboard_n_features]:
+            negative_features.add_row(feature, f"{shap_value:.4f}")
 
-        panels.append(Panel(sitfl_table_positive, border_style="royal_blue1"))
-        panels.append(Panel(sitfl_table_negative, border_style="royal_blue1"))
+        panels.append(Panel(positive_features, border_style="royal_blue1"))
+        panels.append(Panel(negative_features, border_style="royal_blue1"))
         
     panels.append(Panel(question_analysis_table, border_style="royal_blue1"))
 
@@ -262,31 +319,15 @@ from nltk.corpus import stopwords
 nltk.download('punkt')
 nltk.download('stopwords')
 
-def compute_shap_feature_importances(scorecard_id, score_name, answer_value, dataframe, top_n_features=1024, sample_size=1):
+def compute_shap_feature_importances(
+        scorecard_id,
+        score_name,
+        answer_value,
+        dataframe,
+        top_n_features=10000,
+        sample_size=1,
+        ngram_range=(2,3)):
     logging.info(f"Computing sITFL difference for scorecard: {scorecard_id}, score: {score_name}")
-    
-    # >>> OVERRIDE
-    # This is a fake dataframe for testing, where the word "yes" is associated with the 'Yes' class.
-    # from faker import Faker
-    # faker = Faker()
-
-    # def generate_positive_example():
-    #     return f"{faker.sentence()} yes {faker.sentence()}"
-
-    # def generate_negative_example():
-    #     return faker.sentence().replace('yes', 'no')
-
-    # def create_synthetic_data(score_name, num_positive, num_negative):
-    #     data = []
-    #     for _ in range(num_positive):
-    #         data.append({"Transcription": generate_positive_example(), score_name: "Yes"})
-    #     for _ in range(num_negative):
-    #         data.append({"Transcription": generate_negative_example(), score_name: "No"})
-    #     return pd.DataFrame(data)
-
-    # dataframe = create_synthetic_data(score_name, num_positive=100, num_negative=100)
-    # print(dataframe.head())
-    ## <<< END OVERRIDE
     
     # Filter the dataframe to include only the relevant score
     filtered_dataframe = dataframe[dataframe[score_name].notnull()]
@@ -304,14 +345,16 @@ def compute_shap_feature_importances(scorecard_id, score_name, answer_value, dat
     logging.info(f"Number of examples: {len(text_data)}")
     
     # Preprocess the text data
-    stop_words = set(stopwords.words('english'))
-    preprocessed_text_data = [preprocess_text(text, stop_words) for text in text_data]
+    # stop_words = set(stopwords.words('english'))
+    # text_data = [preprocess_text(text, stop_words) for text in text_data]
     
     # Create a TF-IDF representation
     logging.info("Creating TF-IDF representation...")
-    vectorizer = TfidfVectorizer(ngram_range=(2, 2))
-    X = vectorizer.fit_transform(preprocessed_text_data)
+    vectorizer = TfidfVectorizer(ngram_range=ngram_range)
+    X = vectorizer.fit_transform(text_data)
     
+    logging.info(f"Number of features before selection: {X.shape[1]}")
+
     # Select top N features based on ANOVA F-value with f_classif
     # selection_function = f_classif
     # For mutual cross information, use: mutual_info_classif
@@ -321,7 +364,7 @@ def compute_shap_feature_importances(scorecard_id, score_name, answer_value, dat
     selector = SelectKBest(score_func=f_classif, k=top_n_features)
     logging.info(f"Fitting selector with {X.shape[1]} features...")
     selector.fit(X, y)
-    
+
     selected_feature_names = vectorizer.get_feature_names_out()[selector.get_support()]
     logging.debug(f"Selected feature names: {selected_feature_names}")
 
@@ -332,7 +375,14 @@ def compute_shap_feature_importances(scorecard_id, score_name, answer_value, dat
  
     # Split the data into training and testing sets using the selected features
     logging.info("Splitting data into training and testing sets...")
-    X_train, X_test, y_train, y_test = train_test_split(X_selected, y, test_size=0.2, random_state=42)
+    test_size_proportion = 0.2
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_selected, y, test_size=test_size_proportion, random_state=42)
+
+    # Log the shape and distribution of the training and testing sets
+    logging.info(f"Training set shape: {X_train.shape}, Testing set shape: {X_test.shape}")
+    logging.info(f"Training set class distribution: {y_train.value_counts(normalize=True)}")
+    logging.info(f"Testing set class distribution: {y_test.value_counts(normalize=True)}")
 
     # Oversampling using SMOTE (Synthetic Minority Over-sampling Technique)
     smote = SMOTE(random_state=42)
@@ -384,16 +434,19 @@ def compute_shap_feature_importances(scorecard_id, score_name, answer_value, dat
     recall = recall_score(y_test_encoded, y_pred, average='weighted')
     f1 = f1_score(y_test_encoded, y_pred, average='weighted')
 
+    # Log the predictions and actual values
+    logging.info(f"Predictions: {y_pred}")
+    logging.info(f"Actual values: {y_test_encoded}")
+
+    # Log the confusion matrix
+    confusion_matrix = pd.crosstab(y_test_encoded, y_pred, rownames=['Actual'], colnames=['Predicted'])
+    logging.info(f"Confusion Matrix:\n{confusion_matrix}")
+
     logging.info(f"Model Evaluation for {score_name}:")
     logging.info(f"Accuracy: {accuracy:.4f}")
     logging.info(f"Precision (weighted): {precision:.4f}")
     logging.info(f"Recall (weighted): {recall:.4f}")
     logging.info(f"F1 Score (weighted): {f1:.4f}")
-
-    # Print predicted probabilities for a few instances
-    print("Predicted probabilities for instance 0:", model.predict_proba(X_test[0:1]))
-    print("Predicted probabilities for instance 1:", model.predict_proba(X_test[1:2]))
-    print("Predicted probabilities for instance 2:", model.predict_proba(X_test[2:3]))
 
     logging.info(f"Feature names: {selected_feature_names}")
 
@@ -401,14 +454,6 @@ def compute_shap_feature_importances(scorecard_id, score_name, answer_value, dat
     logging.info("Calculating SHAP values...")
     explainer = shap.TreeExplainer(model)
     shap_values = explainer(X_train)
-
-    # Print SHAP values for a few instances
-    print("SHAP values for instance 0:", shap_values[0])
-    print("SHAP values for instance 1:", shap_values[1])
-    print("SHAP values for instance 2:", shap_values[2])
-    print("SHAP values for instance 3:", shap_values[3])
-    print("SHAP values for instance 4:", shap_values[4])
-    print("SHAP values for instance 5:", shap_values[5])
 
     # Get the index of the answer value in the label encoder's classes
     answer_index = list(label_encoder.classes_).index(answer_value)
@@ -426,7 +471,7 @@ def compute_shap_feature_importances(scorecard_id, score_name, answer_value, dat
 
     # Verify SHAP values
     for feature, shap_value in shap_values_list:
-        logging.info(f"Feature: {feature}, SHAP Value: {shap_value}, Type: {type(shap_value)}")
+        logging.debug(f"Feature: {feature}, SHAP Value: {shap_value}, Type: {type(shap_value)}")
 
     # Sort the features by the absolute value of their SHAP values in descending order
     sorted_shap_values = sorted(shap_values_list, key=lambda x: abs(x[1]), reverse=True)
