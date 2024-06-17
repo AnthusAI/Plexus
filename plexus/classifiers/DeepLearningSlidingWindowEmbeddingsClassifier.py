@@ -16,7 +16,7 @@ from plexus.classifiers.MLClassifier import MLClassifier
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras import mixed_precision
 from sklearn.preprocessing import LabelBinarizer
-from plexus.classifiers import Score, DeepLearningEmbeddingsClassifier
+from plexus.classifiers import Score, DeepLearningSemanticClassifier
 import matplotlib.pyplot as plt
 from tensorflow.keras import backend as keras_backend
 keras_backend.clear_session()
@@ -31,12 +31,12 @@ os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
 policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_global_policy(policy)
 
-class DeepLearningSlidingWindowEmbeddingsClassifier(DeepLearningEmbeddingsClassifier):
+class DeepLearningSlidingWindowEmbeddingsClassifier(DeepLearningSemanticClassifier):
     """
-    This sub-class implements the sliding-windows variant of the DeepLearningEmbeddingsClassifier.
+    This sub-class implements the sliding-windows variant of the DeepLearningSemanticClassifier.
     """
 
-    class Parameters(DeepLearningEmbeddingsClassifier.Parameters):
+    class Parameters(DeepLearningSemanticClassifier.Parameters):
         ...
         multiple_windows_aggregation: str = 'max'
 
@@ -54,7 +54,7 @@ class DeepLearningSlidingWindowEmbeddingsClassifier(DeepLearningEmbeddingsClassi
     class RaggedEmbeddingsLayer(tf.keras.layers.Layer):
         def __init__(self, embeddings_model, aggregation='max'):
             super(DeepLearningSlidingWindowEmbeddingsClassifier.RaggedEmbeddingsLayer, self).__init__()
-            self.embeddings_model = DeepLearningEmbeddingsClassifier.EmbeddingsLayer(embeddings_model)
+            self.embeddings_model = DeepLearningSemanticClassifier.EmbeddingsLayer(embeddings_model)
             self.aggregation = aggregation
 
         def call(self, inputs):
