@@ -15,7 +15,7 @@ from plexus.classifiers.MLClassifier import MLClassifier
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras import mixed_precision
 from sklearn.preprocessing import LabelBinarizer
-from plexus.classifiers import Score, DeepLearningEmbeddingsClassifier
+from plexus.classifiers import Score, DeepLearningSemanticClassifier
 import matplotlib.pyplot as plt
 from tensorflow.keras import backend as keras_backend
 keras_backend.clear_session()
@@ -30,7 +30,7 @@ os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
 policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_global_policy(policy)
 
-class DeepLearningOneStepEmbeddingsClassifier(DeepLearningEmbeddingsClassifier):
+class DeepLearningOneStepEmbeddingsClassifier(DeepLearningSemanticClassifier):
 
     def __init__(self, *args, **parameters):
         parameters['maximum_windows'] = 1
@@ -86,7 +86,7 @@ class DeepLearningOneStepEmbeddingsClassifier(DeepLearningEmbeddingsClassifier):
         for i, layer in enumerate(self.embeddings_model.layers):
             logging.info(f"Layer {i} ({layer.name}) trainable: {layer.trainable}")
 
-        embeddings_layer = DeepLearningEmbeddingsClassifier.EmbeddingsLayer(self.embeddings_model)
+        embeddings_layer = DeepLearningSemanticClassifier.EmbeddingsLayer(self.embeddings_model)
         last_hidden_state = embeddings_layer([input_ids, attention_mask])
         logging.info(f"Shape of last_hidden_state: {last_hidden_state.shape}")
 

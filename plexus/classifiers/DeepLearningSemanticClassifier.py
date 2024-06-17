@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from plexus.CustomLogging import logging, console
 import matplotlib.pyplot as plt
 
-class DeepLearningEmbeddingsClassifier(MLClassifier):
+class DeepLearningSemanticClassifier(MLClassifier):
     """
     A text classifier that uses HuggingFace transformer embeddings from language models like BERT.
     The model attaches a classification head to the embedding model.
@@ -46,7 +46,7 @@ class DeepLearningEmbeddingsClassifier(MLClassifier):
         dropout_rate: float
 
     def __new__(cls, *args, **parameters):
-        if cls is DeepLearningEmbeddingsClassifier:
+        if cls is DeepLearningSemanticClassifier:
             from plexus.classifiers.DeepLearningSlidingWindowEmbeddingsClassifier import DeepLearningSlidingWindowEmbeddingsClassifier
             
             # Validate parameters
@@ -66,14 +66,14 @@ class DeepLearningEmbeddingsClassifier(MLClassifier):
                 from plexus.classifiers.DeepLearningOneStepEmbeddingsClassifier import DeepLearningOneStepEmbeddingsClassifier
                 return DeepLearningOneStepEmbeddingsClassifier(*args, **validated_parameters)
         else:
-            return super(DeepLearningEmbeddingsClassifier, cls).__new__(cls)
+            return super(DeepLearningSemanticClassifier, cls).__new__(cls)
 
     class Parameters(Parameters):
         ...
 
     class EmbeddingsLayer(tf.keras.layers.Layer):
         def __init__(self, embeddings_model, **kwargs):
-            super(DeepLearningEmbeddingsClassifier.EmbeddingsLayer, self).__init__(**kwargs)
+            super(DeepLearningSemanticClassifier.EmbeddingsLayer, self).__init__(**kwargs)
             self.embeddings_model = embeddings_model
 
         def call(self, inputs):
