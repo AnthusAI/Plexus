@@ -24,6 +24,16 @@ from plexus.Registries import scorecard_registry
 
 litellm.set_verbose=True
 
+loggers = [
+    "LiteLLM Proxy",
+    "LiteLLM Router",
+    "LiteLLM"
+]
+
+for logger_name in loggers:
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.WARNING)
+
 class ToolCallProcessingError(Exception):
     def __init__(self, exception, message, tool_arguments, *args):
         super().__init__(message, *args)
@@ -31,15 +41,14 @@ class ToolCallProcessingError(Exception):
         self.message = message
         self.exception = exception
 
-class OpenAICompositeScore(CompositeScore):
+class CompositeScore(CompositeScore):
     """
     Concrete implementation of the CompositeScoreBase class using OpenAI's API.
     """
-    def __init__(self, *, transcript):
+    def __init__(self, *, transcript, model_name, completion_name):
         super().__init__(transcript=transcript)
-        # self.model_name = 'gpt-3.5-turbo-0125'
-        self.model_name = 'gpt-3.5-turbo-16k-0613'
-        # self.model_name = 'gpt-4-turbo-preview'
+        self.model_name = model_name
+        self.completion_name = completion_name
 
     # Define the tool for yes/no answer.
     yes_no_tool = [
@@ -106,7 +115,8 @@ class OpenAICompositeScore(CompositeScore):
             'completion_tokens': 0,
             'input_cost':  Decimal('0.0'),
             'output_cost': Decimal('0.0'),
-            'total_cost':  Decimal('0.0')
+            'total_cost':  Decimal('0.0'),
+            'chat_history': []
         }
 
         # The element name and prompt.
@@ -178,9 +188,9 @@ class OpenAICompositeScore(CompositeScore):
             answer = yes_or_no['answer']
             messages.extend(yes_or_no['messages'])
 
-        logging.info(f"Response:  {response_content}")
-        logging.info(f"Value:     {answer}")
-        logging.info(f"Reasoning: {reasoning}")
+        #logging.info(f"Response:  {response_content}")
+        #logging.info(f"Value:     {answer}")
+        #logging.info(f"Reasoning: {reasoning}")
 
         # The answer result and the reasoning.
         score_result_metadata['response_content'] = response_content
@@ -240,7 +250,7 @@ class OpenAICompositeScore(CompositeScore):
         )
 
         response_content = response.choices[0].message.content
-        logging.info(f"Yes-or-no clarification response: {response_content}")
+        #logging.info(f"Yes-or-no clarification response: {response_content}")
 
         new_messages = [
             yes_or_no_question,
@@ -294,7 +304,7 @@ class OpenAICompositeScore(CompositeScore):
             request_arguments["tool_choice"] = {"type": "function", "function": {"name": tools[0]['function']['name']}}
 
         # Use the constructed dictionary as **kwargs to pass to the function
-        response = litellm.completion("azure/CallCriteriaGPT35Turbo16k", **request_arguments)
+        response = litellm.completion(self.completion_name, **request_arguments)
 
         self.llm_request_count += 1
 
@@ -563,7 +573,7 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
             prompts
         )
 
-        logging.info("Summarization chat history:\n%s", json.dumps(new_chat_history, indent=4))
+        #logging.info("Summarization chat history:\n%s", json.dumps(new_chat_history, indent=4))
         response = self.openai_api_request(
             name='summary',
             element_type=element_type,
@@ -572,7 +582,7 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
             max_tokens=2048
         )
 
-        logging.info(f"Response: {response}")
+        #logging.info(f"Response: {response}")
 
         try:
             tool_calls = response.choices[0].message.tool_calls
@@ -594,8 +604,8 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
                 exception=e,
                 tool_arguments=tool_call.function.arguments
             )
-        logging.info(f"Reasoning: {tool_results.get('reasoning', '')}")
-        logging.info(f"Relevant quote: {tool_results.get('relevant_quote', '')}")
+        #logging.info(f"Reasoning: {tool_results.get('reasoning', '')}")
+        #logging.info(f"Relevant quote: {tool_results.get('relevant_quote', '')}")
 
         # Store the reasoning and quote.
         reasoning = tool_results.get('reasoning', "")
