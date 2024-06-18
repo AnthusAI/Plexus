@@ -22,6 +22,7 @@ setup(
         'pybind11',
         'fasttext',
         'tiktoken',
+        'transformers',
         'seaborn',
         'pydot==2.0.0',
         'pydotplus==2.0.2',
