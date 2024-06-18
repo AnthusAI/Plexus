@@ -36,7 +36,7 @@ setup(
         'mlflow',
         'scikit-learn',
         'tables',
-        'keras==2.15.0'
+        'keras==2.15.0',
         'tensorflow==2.15.1',
         'tensorboard==2.15.2',
         'tensorboard-plugin-profile==2.15.1'
