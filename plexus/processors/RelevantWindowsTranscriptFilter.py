@@ -35,7 +35,7 @@ class RelevantWindowsTranscriptFilter(DataframeProcessor):
         self.display_summary()
         return dataframe
 
-    def compute_inclusion_flags(self, relevance_flags, prev_count, next_count):
+    def compute_inclusion_flags(self, relevance_flags, prev_count=1, next_count=1):
         include_flags = [False] * len(relevance_flags)
         for i, is_relevant in enumerate(relevance_flags):
             if is_relevant:
