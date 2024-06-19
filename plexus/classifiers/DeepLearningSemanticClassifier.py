@@ -382,6 +382,12 @@ class DeepLearningSemanticClassifier(MLClassifier):
         print(f"Epoch {epoch + 1}: Learning rate is {new_lr}, Validation Loss: {val_loss if val_loss is not None else 'N/A'}")
         return new_lr
 
+    def predict_validation(self):
+        """
+        Implement the prediction logic for the validation set.
+        """
+        self.val_predictions = self.model.predict([self.val_input_ids, self.val_attention_mask])
+
     def register_model(self):
         """
         Register the model with the model registry.
@@ -402,7 +408,6 @@ class DeepLearningSemanticClassifier(MLClassifier):
         :param model_input: The input data for making predictions.
         :return: The predictions.
         """
-        pass
         pass
 
     @Score.ensure_report_directory_exists

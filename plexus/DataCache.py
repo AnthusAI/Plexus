@@ -124,7 +124,7 @@ class DataCache:
         # return metadata, transcript, transcript_txt
         return metadata, transcript_txt
 
-    def load_dataframe(self, *, queries):
+    def load_dataframe_from_queries(self, *, queries):
         dataframes = []
 
         filename_components = []
@@ -219,3 +219,22 @@ class DataCache:
         logging.info(f"Dataframe saved to {dataframe_file_path}")
 
         return combined_dataframe
+    
+    def load_dataframe_from_file(self, *, merge):
+        filename_components = []
+
+        file_path = merge['file-path']
+        sheet = merge.get('sheet', 'Sheet1')
+        columns = merge.get('columns', None)
+        integration = merge.get('integration', None)
+        filename_components.append(f"file_path={file_path}-sheet={sheet}-columns={columns}-integration={integration}")
+        cached_dataframe_filename = "_".join(filename_components) + '.h5'
+
+        cached_dataframe_path = os.path.join(self.local_cache_directory, 'dataframes', cached_dataframe_filename)
+        if os.path.exists(cached_dataframe_path):
+            logging.info("Loading cached dataframe from {}".format(cached_dataframe_path))
+            return pd.read_hdf(cached_dataframe_path)
+
+        logging.info("Loading dataframe by merging: {}".format(merge))
+
+        

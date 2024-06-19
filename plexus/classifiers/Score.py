@@ -34,12 +34,14 @@ class Score(ABC, mlflow.pyfunc.PythonModel):
         for message in error_messages:
             logging.error(message)
 
+    def report_directory_path(self):
+        return f"./reports/{self.parameters.scorecard_name}/{self.parameters.score_name}/"
+
     def ensure_report_directory_exists(func):
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
-            report_directory_path = f"./reports/{self.parameters.scorecard_name}/{self.parameters.score_name}/"
-            if not os.path.exists(report_directory_path):
-                os.makedirs(report_directory_path)
+            if not os.path.exists(self.report_directory_path()):
+                os.makedirs(self.report_directory_path())
             return func(self, *args, **kwargs)
         return wrapper
 

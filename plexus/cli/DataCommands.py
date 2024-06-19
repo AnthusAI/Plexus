@@ -30,7 +30,6 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import xgboost as xgb
 import shap
-from plexus.scorecards.TermLifeAI import TermLifeAI
 from imblearn.over_sampling import RandomOverSampler, SMOTE
 from imblearn.under_sampling import RandomUnderSampler
 
@@ -123,7 +122,7 @@ def analyze_scorecard(
     data_cache = DataCache(os.environ['PLEXUS_TRAINING_DATA_LAKE_DATABASE_NAME'],
                            os.environ['PLEXUS_TRAINING_DATA_LAKE_ATHENA_RESULTS_BUCKET_NAME'],
                            os.environ['PLEXUS_TRAINING_DATA_LAKE_BUCKET_NAME'])
-    dataframe = data_cache.load_dataframe(queries=[{'scorecard-id':scorecard_id}])
+    dataframe = data_cache.load_dataframe_from_queries(queries=[{'scorecard-id':scorecard_id}])
 
     print('')
 
@@ -362,11 +361,11 @@ def compute_shap_feature_importances(
 
     logging.info(f"Selecting top {top_n_features} features...")
     selector = SelectKBest(score_func=f_classif, k=top_n_features)
-    logging.info(f"Fitting selector with {X.shape[1]} features...")
     selector.fit(X, y)
 
     selected_feature_names = vectorizer.get_feature_names_out()[selector.get_support()]
-    logging.debug(f"Selected feature names: {selected_feature_names}")
+    selected_feature_names_count = len(selected_feature_names)
+    logging.info(f"Selected {selected_feature_names_count} feature names: {selected_feature_names[:10]}")
 
     # Transform the data using the selected features
     X_selected = selector.transform(X)
@@ -421,9 +420,7 @@ def compute_shap_feature_importances(
             use_label_encoder=False,
             eval_metric='mlogloss')
 
-    with tqdm(total=model.n_estimators, desc="Training", unit="estimator") as pbar:
-        model.fit(X_train, y_train_encoded)
-        pbar.update(model.n_estimators)
+    model.fit(X_train, y_train_encoded)
     
     logging.info("Training completed.")
 
@@ -434,9 +431,8 @@ def compute_shap_feature_importances(
     recall = recall_score(y_test_encoded, y_pred, average='weighted')
     f1 = f1_score(y_test_encoded, y_pred, average='weighted')
 
-    # Log the predictions and actual values
-    logging.info(f"Predictions: {y_pred}")
-    logging.info(f"Actual values: {y_test_encoded}")
+    logging.info(f"Predictions type: {type(y_pred)}, shape: {y_pred.shape}, sample: {y_pred[:5]}")
+    logging.info(f"Actual values type: {type(y_test_encoded)}, shape: {y_test_encoded.shape}, sample: {y_test_encoded[:5]}")
 
     # Log the confusion matrix
     confusion_matrix = pd.crosstab(y_test_encoded, y_pred, rownames=['Actual'], colnames=['Predicted'])
@@ -448,32 +444,34 @@ def compute_shap_feature_importances(
     logging.info(f"Recall (weighted): {recall:.4f}")
     logging.info(f"F1 Score (weighted): {f1:.4f}")
 
-    logging.info(f"Feature names: {selected_feature_names}")
-
-    # Calculate SHAP values
     logging.info("Calculating SHAP values...")
     explainer = shap.TreeExplainer(model)
     shap_values = explainer(X_train)
+    logging.info(f"SHAP values calculated for all classes: {shap_values.values.shape}")
+    logging.info(f"SHAP values calculated: {type(shap_values)}; Shape: {getattr(shap_values, 'shape', 'No shape attribute')}")
 
     # Get the index of the answer value in the label encoder's classes
     answer_index = list(label_encoder.classes_).index(answer_value)
+    logging.info(f"Index of the answer value '{answer_value}' in label encoder's classes: {answer_index}")
 
     # Extract the SHAP values for the desired answer index
     if len(label_encoder.classes_) == 2:
         # For binary classification, shap_values.values has shape (n_instances, n_features)
         shap_values_answer = shap_values.values
+        logging.info("Binary classification detected. Using SHAP values for all instances.")
     else:
         # For multi-class classification, shap_values.values has shape (n_instances, n_classes, n_features)
         shap_values_answer = shap_values.values[:, answer_index, :]
+        logging.info(f"Multi-class classification detected. Extracting SHAP values for class index {answer_index}.")
+
+    logging.info(f"Extracted SHAP values for the desired class: {shap_values_answer.shape}")
 
     # Calculate the mean SHAP value for each feature
     shap_values_list = [(feature, np.mean(shap_values_answer[:, i])) for i, feature in enumerate(selected_feature_names)]
+    logging.info("Mean SHAP values calculated for each feature.")
 
-    # Verify SHAP values
-    for feature, shap_value in shap_values_list:
-        logging.debug(f"Feature: {feature}, SHAP Value: {shap_value}, Type: {type(shap_value)}")
-
-    # Sort the features by the absolute value of their SHAP values in descending order
-    sorted_shap_values = sorted(shap_values_list, key=lambda x: abs(x[1]), reverse=True)
-
-    return sorted_shap_values
+    # Log detailed SHAP values for the first 10 features
+    for feature, shap_value in shap_values_list[:10]:
+        logging.info(f"Feature: \"{feature}\", Mean SHAP Value: {shap_value}")
+    
+    return shap_values_list

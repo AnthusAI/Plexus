@@ -98,16 +98,19 @@ class MLClassifier(Score):
         mlflow.log_metric("recall", metrics["recall"])
         mlflow.log_metric("f1_score", metrics["f1_score"])
 
-    def load_data(self, *, queries):
+    def load_data(self, *, queries=None, merge=None):
         """
         Load the specified queries from the training data lake, with caching, into a combined DataFrame in the class instance.
         """
 
         from plexus.DataCache import DataCache
         data_cache = DataCache(os.environ['PLEXUS_TRAINING_DATA_LAKE_DATABASE_NAME'],
-                                os.environ['PLEXUS_TRAINING_DATA_LAKE_ATHENA_RESULTS_BUCKET_NAME'],
-                                os.environ['PLEXUS_TRAINING_DATA_LAKE_BUCKET_NAME'])
-        self.dataframe = data_cache.load_dataframe(queries=queries)
+            os.environ['PLEXUS_TRAINING_DATA_LAKE_ATHENA_RESULTS_BUCKET_NAME'],
+            os.environ['PLEXUS_TRAINING_DATA_LAKE_BUCKET_NAME'])
+        if queries:
+            self.dataframe = data_cache.load_dataframe_from_queries(queries=queries)
+        else:
+            self.dataframe = data_cache.load_dataframe_from_file(merge=merge)
 
         console.print(Text("Loaded dataframe from training data lake:", style="royal_blue1"))
         self.analyze_dataset()
@@ -289,6 +292,13 @@ class MLClassifier(Score):
         """
         pass
 
+    @abstractmethod
+    def predict_validation(self):
+        """
+        Abstract method for subclasses to implement the prediction logic on the validation set.
+        """
+        pass
+
     def evaluate_model(self):
         """
         Evaluate the model on the validation data.
@@ -297,13 +307,12 @@ class MLClassifier(Score):
         """
         print("Generating evaluation metrics...")
 
-        logging.info(f"val_labels shape: {self.val_labels.shape}")
+        # Call the subclass's prediction method
+        self.predict_validation()
 
-        # Predict on validation set
-        self.val_predictions = self.model.predict([self.val_input_ids, self.val_attention_mask])
-
-        logging.info(f"val_predictions shape: {self.val_predictions.shape}")
-
+        logging.info(f"val_labels type: {type(self.val_labels)}, shape: {self.val_labels.shape}, sample: {self.val_labels[:5]}")
+        logging.info(f"val_predictions type: {type(self.val_predictions)}, shape: {self.val_predictions.shape}, sample: {self.val_predictions[:5]}")
+        
         if self.is_multi_class:
             self.val_predictions_labels = np.argmax(self.val_predictions, axis=1)
             if len(self.val_labels.shape) > 1 and self.val_labels.shape[1] > 1:
@@ -338,14 +347,18 @@ class MLClassifier(Score):
         self._plot_training_history()
 
         metrics = {
-            "training_loss": self.history.history['loss'][-1],
-            "training_accuracy": self.history.history['accuracy'][-1],
-            "validation_loss": self.history.history['val_loss'][-1],
-            "validation_accuracy": self.history.history['val_accuracy'][-1],
             "validation_f1_score": f1,
             "validation_recall": recall,
             "validation_precision": precision
         }
+
+        if hasattr(self, 'history') and hasattr(self.history, 'history'):
+            metrics.update({
+                "training_loss": self.history.history['loss'][-1],
+                "training_accuracy": self.history.history['accuracy'][-1],
+                "validation_loss": self.history.history['val_loss'][-1],
+                "validation_accuracy": self.history.history['val_accuracy'][-1]
+            })
 
         self._record_metrics(metrics)
 
@@ -440,9 +453,13 @@ class MLClassifier(Score):
         plt.title('Confusion Matrix')
 
         plt.savefig(file_name)
-        plt.show()
+        # plt.show()
 
         mlflow.log_artifact(file_name)
+        
+        # Log the confusion matrix as text
+        cm_text = np.array2string(cm, separator=', ')
+        logging.info(f"Confusion matrix: {cm_text}")
 
     @Score.ensure_report_directory_exists
     def _plot_roc_curve(self):
@@ -476,7 +493,7 @@ class MLClassifier(Score):
         plt.title('Receiver Operating Characteristic')
         plt.legend(loc="lower right")
         plt.savefig(file_name)
-        plt.show()
+        # plt.show()
         mlflow.log_artifact(file_name)
 
     @Score.ensure_report_directory_exists
@@ -508,7 +525,7 @@ class MLClassifier(Score):
         plt.title('Precision-Recall curve')
         plt.legend(loc="lower left")
         plt.savefig(file_name)
-        plt.show()
+        # plt.show()
         mlflow.log_artifact(file_name)
 
     @Score.ensure_report_directory_exists
@@ -567,7 +584,7 @@ class MLClassifier(Score):
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         plt.savefig(file_name)
-        plt.show()
+        # plt.show()
         mlflow.log_artifact(file_name)
 
     @Score.ensure_report_directory_exists
