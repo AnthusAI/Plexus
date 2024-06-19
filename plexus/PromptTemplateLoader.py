@@ -14,6 +14,8 @@ class PromptTemplateLoader:
                 return section_content['rules']
             elif content_type == 'prompt':
                 return section_content['prompt']
+            elif content_type == 'dependency' and 'dependency' in section_content:
+                return section_content['dependency']
         if content_type == 'rules':
             raise ValueError(f"Rules for '{section_name}' not found in the template.")
         else:
@@ -23,6 +25,7 @@ class PromptTemplateLoader:
         sections = {}
         current_section = None
         parsing_rules = False
+        parsing_dependency = False
 
         markdown = mistune.create_markdown(renderer=None)
         ast = markdown(markdown_content)
@@ -34,16 +37,20 @@ class PromptTemplateLoader:
                 return ''.join([extract_text_from_node(child) for child in node['children']])
             return ''
 
-        def process_node(node, sections, current_section, parsing_rules):
+        def process_node(node, sections, current_section, parsing_rules, parsing_dependency):
             if node['type'] == 'heading':
                 text = extract_text_from_node(node)
-                if text == 'Rules' and current_section:
+                if text == 'Dependency':
+                    parsing_dependency = True
+                    sections[current_section]['dependency'] = ''
+                elif text == 'Rules' and current_section:
                     parsing_rules = True
                     sections[current_section]['rules'] = ''
                 else:
                     current_section = text
                     parsing_rules = False
-                    sections[current_section] = {'prompt': '', 'rules': None}
+                    parsing_dependency = False
+                    sections[current_section] = {'prompt': '', 'rules': None, 'dependency': None}
             elif node['type'] in ['blank_line', 'paragraph', 'block_code', 'block_quote', 'list_item']:
                 text = extract_text_from_node(node)
                 if node['type'] == 'block_code':
@@ -55,16 +62,18 @@ class PromptTemplateLoader:
                 if current_section:
                     if parsing_rules:
                         sections[current_section]['rules'] += text + '\n'
+                    elif parsing_dependency:
+                        sections[current_section]['dependency'] += text + '\n'
                     else:
                         sections[current_section]['prompt'] += text + '\n'
             elif node['type'] == 'list':
                 for child in node['children']:
-                    current_section, parsing_rules = process_node(child, sections, current_section, parsing_rules)
+                    current_section, parsing_rules, parsing_dependency = process_node(child, sections, current_section, parsing_rules, parsing_dependency)
 
-            return current_section, parsing_rules
+            return current_section, parsing_rules, parsing_dependency
 
         for node in ast:
-            current_section, parsing_rules = process_node(node, sections, current_section, parsing_rules)
+            current_section, parsing_rules, parsing_dependency = process_node(node, sections, current_section, parsing_rules, parsing_dependency)
 
         return sections
 

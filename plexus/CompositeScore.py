@@ -265,10 +265,16 @@ class CompositeScore(Score):
                     except ValueError:
                         rules = None  # Rules are optional
 
+                    try:
+                        dependency = self.prompt_template_loader.get_template(section_name=section_name, content_type='dependency')
+                    except ValueError:
+                        dependency = None  # Dependency is optional
+
                     element = {
                         'name': CompositeScore.normalize_element_name(section_name),
                         'prompt': prompt,
                         'rules': rules,
+                        'dependency': dependency,
                     }
                     elements.append(element)
                 return elements
@@ -426,8 +432,19 @@ class CompositeScore(Score):
         logging.debug(f"Transcript chunk:\n{truncated_transcript_preview}")
 
         element = self.get_element_by_name(name=name)
+        if element is None:
+            raise ValueError(f"No element found with the name: {name}")
+
         prompt = element['prompt']
         logging.debug(f"Prompt:\n{prompt}")
+
+        # Check for dependencies
+        dependency = element.get('dependency')
+        if dependency:
+            # Compute the result for the dependent element first
+            dependent_result = self.compute_element(name=dependency, transcript=transcript_chunk)
+            # Extract the dependent transcript based on the result
+            transcript_chunk = self.get_dependent_transcript(transcript_chunk, dependent_result)
 
         score_result = self.compute_element_for_chunk(
             name=name,
@@ -443,8 +460,6 @@ class CompositeScore(Score):
             clarification_result = self.compute_element_for_chunk(
                 name=name,
                 element_type='clarification',
-                
-                # Add the previous response content to the chat history.
                 previous_messages=score_result.metadata['chat_history'],
                 prompt=rules,
                 chunk=transcript_chunk
@@ -479,12 +494,22 @@ class CompositeScore(Score):
         Returns:
             A boolean value that indicates whether the score result was "Yes" or not.
         """
-        print("\n---\n")
         logging.info(f'Classifying {name} for {self.name}')
 
         element = self.get_element_by_name(name=name)
+        if element is None:
+            raise ValueError(f"No element found with the name: {name}")
+
         if callable(element):
             return element()
+
+        # Check for dependencies
+        dependency = element.get('dependency')
+        if dependency:
+            # Compute the result for the dependent element first
+            dependent_result = self.compute_element(name=CompositeScore.normalize_element_name(dependency), transcript=transcript)
+            # Extract the dependent transcript based on the result
+            transcript = self.get_dependent_transcript(transcript, dependent_result)
 
         logging.info(f"Chunking: {self.chunking}")
         if not self.chunking:
@@ -534,6 +559,22 @@ class CompositeScore(Score):
 
         # This fallback happens when there are no clarifications.  Just pick the first no.
         return chunk_results[0].is_yes()
+
+    def get_dependent_transcript(self, transcript, result):
+        """
+        Extract the transcript segment relevant to a dependent score element.
+
+        Args:
+            transcript (str): The original transcript.
+            result (ScoreResult): The result of the dependent element.
+
+        Returns:
+            str: The dependent transcript segment.
+        """
+        # Implement logic to extract the dependent transcript based on the result
+        # This is a placeholder; you'll need to implement it based on your application's logic
+        # For example, you might use result.metadata['transcript_end_index'] to slice the transcript
+        return transcript[result.metadata['transcript_end_index']:]
 
     @staticmethod
     def normalize_element_name(name):
