@@ -72,7 +72,7 @@ class Experiment:
         else:
             mlflow.set_tracking_uri(f'file:///{os.path.abspath("./mlruns")}')
 
-        experiment_name = self.scorecard.__class__.name()
+        experiment_name = self.scorecard.__class__.name
         if os.getenv('MLFLOW_EXPERIMENT_NAME'):
             experiment_name = experiment_name + " - " + os.getenv('MLFLOW_EXPERIMENT_NAME')
         if self.experiment_label:
@@ -88,7 +88,7 @@ class Experiment:
             mlflow.start_run()
 
         # Add notes about the run
-        mlflow.set_tag("scorecard", self.scorecard.name())
+        mlflow.set_tag("scorecard", self.scorecard.name)
         mlflow.set_tag("experiment_type", self.__class__.__name__)
 
         self.log_parameters()
