@@ -22,7 +22,7 @@ from plexus.Registries import scorecard_registry
 
 # logging.getLogger("openai._base_client").setLevel(logging.INFO)
 
-litellm.set_verbose=True
+litellm.set_verbose=False
 
 loggers = [
     "LiteLLM Proxy",
@@ -45,8 +45,8 @@ class CompositeScore(CompositeScore):
     """
     Concrete implementation of the CompositeScoreBase class using OpenAI's API.
     """
-    def __init__(self, *, transcript, model_name, completion_name):
-        super().__init__(transcript=transcript)
+    def __init__(self, *, transcript, scorecard_name, score_name, model_name, completion_name, **kwargs):
+        super().__init__(transcript=transcript, scorecard_name=scorecard_name, score_name=score_name, **kwargs)
         self.model_name = model_name
         self.completion_name = completion_name
 
@@ -81,23 +81,17 @@ class CompositeScore(CompositeScore):
     ]
 
     @retry(
-        wait=wait_random_exponential(multiplier=1, max=600),
+        wait=wait_random_exponential(multiplier=10, max=600),
         retry=retry_if_exception_type(ValueError),
-        stop=stop_after_attempt(4),
+        stop=stop_after_attempt(20),
         before_sleep=before_sleep_log(logging, logging.INFO)
     )
     def compute_element_for_chunk(self, *, name, element_type, previous_messages=None, prompt, chunk):
         """
         The orchestration framework in CompositeScore calls this function to do the OpenAI work.
         """
-
         loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
         openai_loggers = [logger for logger in loggers if logger.name.startswith("openai")]
-
-        # formatted_messages = ''
-        # for message in transcript_and_prompt:
-        #     formatted_messages += f"{message['role']}:\n{message['content']}\n\n"
-        # logging.info(f"Messages to OpenAI:\n{formatted_messages}")
 
         new_message = self.construct_element_prompt(prompt=prompt, transcript=chunk)
         messages = [
@@ -128,11 +122,6 @@ class CompositeScore(CompositeScore):
             raise ValueError(f"No element found with the name: {name}")
         score_result_metadata['prompt'] = element['prompt']
 
-        # Add this response to the chat history.
-        # self.chat_history.append(
-        #     self.construct_element_response_prompt(
-        #         element_response=tool_results))
-
         # We need the filtered transcript also, for the report.
         score_result_metadata['transcript'] = chunk
 
@@ -141,7 +130,6 @@ class CompositeScore(CompositeScore):
                 name=name,
                 element_type=element_type,
                 messages=messages,
-                # tools=self.yes_no_tool
             )
 
             response_content = response.choices[0].message.content
@@ -225,6 +213,10 @@ class CompositeScore(CompositeScore):
         logging.info(f"Total token counts:  Input: {self.prompt_tokens}  Output: {self.completion_tokens}")
         logging.info(f"Total costs for score:  Input: {self.input_cost}, Output: {self.output_cost}, Total: {self.total_cost}")
 
+        self.element_results.append(
+            ScoreResult(value=score_result_metadata['value'], metadata=score_result_metadata)
+        )
+
         return ScoreResult(value=score_result_metadata['value'], metadata=score_result_metadata)
 
     def clarify_yes_or_no(self, *, name, messages, top_p=0.2):
@@ -276,7 +268,7 @@ class CompositeScore(CompositeScore):
             return self.clarify_yes_or_no(name=name, messages=messages, top_p=top_p + 0.1)
 
     @retry(
-        wait=wait_random_exponential(multiplier=1, max=600),  # Exponential backoff with random jitter
+        wait=wait_random_exponential(multiplier=10, max=600),  # Exponential backoff with random jitter
         retry=retry_if_exception_type((openai.RateLimitError, openai.APIConnectionError, openai.InternalServerError, httpx.HTTPStatusError)),
         stop=stop_after_attempt(100),
         before_sleep=before_sleep_log(logging, logging.INFO)
@@ -494,7 +486,7 @@ Relevant quote: "{element_response['relevant_quote']}"
         # Configure retry decorator with the before_retry function
         @retry(
             retry=retry_if_exception_type(ToolCallProcessingError),
-            stop=stop_after_attempt(10),
+            stop=stop_after_attempt(20),
             before_sleep=before_sleep
         )
         def inner_function(*,
