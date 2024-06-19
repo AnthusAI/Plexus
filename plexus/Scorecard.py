@@ -164,6 +164,8 @@ class Scorecard:
             logging.info("Found score for question: " + score_name)
 
             score_instance = score_class(
+                scorecard_name=self.name(),
+                score_name=score_name,
                 transcript=transcript
             )
             score_result = score_instance.compute_result()
