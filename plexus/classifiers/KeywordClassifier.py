@@ -3,8 +3,8 @@ from plexus.classifiers.Score import Score
 from plexus.CustomLogging import logging
 
 class KeywordClassifier(Score):
-    def __init__(self, keywords):
-        super().__init__()
+    def __init__(self, keywords, scorecard_name, score_name, **kwargs):
+        super().__init__(scorecard_name=scorecard_name, score_name=score_name, **kwargs)
         self.keywords = keywords
 
     def is_relevant(self, sentence):
