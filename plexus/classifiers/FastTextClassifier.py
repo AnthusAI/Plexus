@@ -157,6 +157,12 @@ class FastTextClassifier(MLClassifier):
         else:
             logging.info("Model hyperparameters are not accessible.")
 
+    def predict_validation(self):
+        """
+        Implement the prediction logic for the validation set.
+        """
+        self.val_predictions = self.model.predict(self.val_input_ids)
+
     def evaluate_model(self):
         test_filename = self._get_test_filename()
         results = self.model.test(test_filename)
