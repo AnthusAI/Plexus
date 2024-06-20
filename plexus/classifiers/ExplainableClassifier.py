@@ -20,6 +20,8 @@ from rich import print as rich_print
 from rich.panel import Panel
 from rich.columns import Columns
 from rich.table import Table
+from rich.console import Console
+import scipy.sparse
 
 class ExplainableClassifier(MLClassifier):
     """
@@ -34,6 +36,7 @@ class ExplainableClassifier(MLClassifier):
         target_score_name: str
         target_score_value: str
         ngram_range: str = "2,3"
+        scale_pos_weight_index: float = 0
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
@@ -59,7 +62,7 @@ class ExplainableClassifier(MLClassifier):
         logging.info(f"Number of examples: {len(text_data)}")
 
         # Create a TF-IDF representation
-        logging.info("Creating TF-IDF representation...")
+        logging.info(f"Creating TF-IDF representation with ngram range: {self.parameters.ngram_range}")
         self.vectorizer = TfidfVectorizer(ngram_range=self.ngram_range)
         X = self.vectorizer.fit_transform(text_data)
             
@@ -74,9 +77,8 @@ class ExplainableClassifier(MLClassifier):
         self.selector = SelectKBest(score_func=f_classif, k=self.parameters.top_n_features)
         self.selector.fit(X, y)
 
-        selected_feature_names = self.vectorizer.get_feature_names_out()[self.selector.get_support()]
-        selected_feature_names_count = len(selected_feature_names)
-        logging.info(f"Selected {selected_feature_names_count} feature names: {selected_feature_names[:10]}")
+        self.feature_names = self.vectorizer.get_feature_names_out()[self.selector.get_support()]
+        logging.info(f"Selected {len(self.feature_names)} feature names: {self.feature_names[:10]}")
 
         # Transform the data using the selected features
         X_selected = self.selector.transform(X)
@@ -93,6 +95,12 @@ class ExplainableClassifier(MLClassifier):
         logging.info(f"Training set shape: {self.X_train.shape}, Testing set shape: {self.X_test.shape}")
         logging.info(f"Training set class distribution: {self.y_train.value_counts(normalize=True)}")
         logging.info(f"Testing set class distribution: {self.y_test.value_counts(normalize=True)}")
+
+        # Calculate the negative and positive counts before applying SMOTE
+        target_score_value = self.parameters.target_score_value
+        self.y_train_binary = (self.y_train == target_score_value)
+        negative_count = (~self.y_train_binary).sum()
+        positive_count = self.y_train_binary.sum()
 
         # Oversampling using SMOTE (Synthetic Minority Over-sampling Technique)
         smote = SMOTE(random_state=42)
@@ -117,11 +125,24 @@ class ExplainableClassifier(MLClassifier):
         if len(self.label_encoder.classes_) == 2:
             # Binary classification
             logging.info("Training XGBoost Classifier for binary classification...")
+
+            # Calculate the automatic scale_pos_weight value
+            auto_scale_pos_weight = negative_count / positive_count
+            logging.info(f"Negative count: {negative_count}")
+            logging.info(f"Positive count: {positive_count}")
+            logging.info(f"Auto scale pos weight: {auto_scale_pos_weight}")
+            
+            # Calculate the final scale_pos_weight value based on the index
+            scale_pos_weight = 1 + (auto_scale_pos_weight - 1) * self.parameters.scale_pos_weight_index
+            logging.info(f"Scale pos weight: {scale_pos_weight}")
+            
             self.model = xgb.XGBClassifier(
                 n_estimators=100,
                 random_state=42,
                 use_label_encoder=False,
-                eval_metric='logloss')
+                eval_metric='logloss',
+                scale_pos_weight=scale_pos_weight,
+            )
         else:
             # Multi-class classification
             logging.info("Training XGBoost Classifier for multi-class classification...")
@@ -177,10 +198,6 @@ class ExplainableClassifier(MLClassifier):
         shap_values_list = [(feature, np.mean(shap_values_answer[:, i])) for i, feature in enumerate(selected_feature_names)]
         logging.info("Mean SHAP values calculated for each feature.")
     
-        # Log detailed SHAP values for the first 10 features
-        for feature, shap_value in shap_values_list[:10]:
-            logging.info(f"Feature: \"{feature}\", Mean SHAP Value: {shap_value}")
-
         ##########
         # Rich table
 
@@ -206,13 +223,11 @@ class ExplainableClassifier(MLClassifier):
         # Get the top 10 features pushing towards the value
         sorted_positive_shap_values = sorted(shap_values_list, key=lambda x: x[1], reverse=True)
         for feature, shap_value in sorted_positive_shap_values[:self.parameters.leaderboard_n_features]:
-            logging.info(f"Feature: \"{feature}\", Mean SHAP Value: {shap_value}")
             positive_features.add_row(feature, f"{shap_value:.4f}")
 
         # Get the top 10 features pushing away from the value
         sorted_negative_shap_values = sorted(shap_values_list, key=lambda x: x[1])
         for feature, shap_value in sorted_negative_shap_values[:self.parameters.leaderboard_n_features]:
-            logging.info(f"Feature: \"{feature}\", Mean SHAP Value: {shap_value}")
             negative_features.add_row(feature, f"{shap_value:.4f}")
 
         shapley_analysis_table.add_column("Positive Features", justify="center")
@@ -226,6 +241,7 @@ class ExplainableClassifier(MLClassifier):
 
         ##########
         # SHAP plots
+        plt.clf()
         report_directory_path = self.report_directory_path()
 
         # Get the top 10 positive and negative features
@@ -251,6 +267,7 @@ class ExplainableClassifier(MLClassifier):
         plt.close()
 
         # Plot SHAP summary for top negative features
+        plt.clf()
         top_negative_indices = [selected_feature_names_list.index(feature) for feature in top_negative_features]
         shap_values_negative = shap_values_answer[:, top_negative_indices]
         shap_explanation_negative = shap.Explanation(
@@ -269,8 +286,14 @@ class ExplainableClassifier(MLClassifier):
         """
         Implement the prediction logic for the validation set.
         """
+        # Convert sparse matrix to DataFrame
+        X_test_df = pd.DataFrame(self.X_test.toarray(), columns=self.feature_names)
+
+        # Ensure the labels are encoded
         self.val_labels = self.label_encoder.transform(self.y_test)
-        self.val_predictions = self.model.predict(self.X_test)
+
+        # Call predict() with a DataFrame as would be done in production
+        self.val_predictions = self.predict(None, X_test_df)
 
     def evaluate_model(self):
         # Set the necessary attributes before calling the parent's evaluate_model()
@@ -306,4 +329,63 @@ class ExplainableClassifier(MLClassifier):
         :param model_input: The input data for making predictions.
         :return: The predictions.
         """
-        pass
+        # Convert DataFrame to the necessary sparse matrix format
+        if isinstance(model_input, pd.DataFrame):
+            # Assuming the DataFrame can be converted directly to a sparse matrix
+            # This conversion will depend on how your data needs to be processed
+            model_input = scipy.sparse.csr_matrix(model_input.values)
+
+        # Make predictions using the trained model
+        y_pred, confidence_scores = self.predict_with_confidence(None, model_input)
+        
+        return y_pred
+
+    def predict_with_confidence(self, context, model_input):
+        """
+        Make predictions on the test data with confidence scores and top three influential features.
+        """
+        if isinstance(model_input, pd.DataFrame):
+            model_input = scipy.sparse.csr_matrix(model_input.values)
+
+        probabilities = self.model.predict_proba(model_input)
+        predictions = probabilities.argmax(axis=1)
+        confidenceScores = probabilities.max(axis=1)
+
+        # Extract SHAP values for the features in each sample
+        explainer = shap.TreeExplainer(self.model)
+        shap_values = explainer.shap_values(model_input)
+
+        top_features = []
+        for sample_index in range(model_input.shape[0]):
+            sample_shap_values = shap_values[sample_index]
+            top_feature_indices = np.argsort(np.abs(sample_shap_values))[-10:]
+            feature_names = np.array(self.vectorizer.get_feature_names_out())[top_feature_indices]
+            sorted_features = feature_names[np.argsort(-np.abs(sample_shap_values[top_feature_indices]))]
+
+            if sample_index <= 2:
+                sorted_shap_values = np.abs(sample_shap_values[top_feature_indices])
+                sorted_shap_values = sorted_shap_values[np.argsort(-sorted_shap_values)]
+                feature_shap_pairs = list(zip(sorted_features, sorted_shap_values))
+
+                sample_table = Table(title=f"Sample #{sample_index}")
+                sample_table.add_column("Classification", justify="center")
+                sample_table.add_column("Confidence", justify="center")
+                sample_table.add_column("Features", justify="center")
+
+                feature_table = Table(title="Top Features with SHAP Values")
+                feature_table.add_column("Feature", justify="left")
+                feature_table.add_column("SHAP Value", justify="right")
+                for feature, shap_value in feature_shap_pairs:
+                    feature_table.add_row(feature, f"{shap_value:.4f}")
+
+                sample_table.add_row(
+                    str(predictions[sample_index]),
+                    f"{confidenceScores[sample_index]:.2f}",
+                    feature_table)
+
+                console = Console()
+                console.print(sample_table)
+
+            top_features.append(sorted_features.tolist())
+
+        return predictions, confidenceScores #, top_features

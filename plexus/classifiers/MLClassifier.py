@@ -418,20 +418,13 @@ class MLClassifier(Score):
     _red = '#DD3333'
     _green = '#339933'
 
-    def _report_directory_path(self):
-        return f"reports/{self.parameters.scorecard_name}/{self.parameters.score_name}/"
-
-    @Score.ensure_report_directory_exists
     def _generate_model_diagram(self):
-        directory_path = self._report_directory_path()
-        file_name = os.path.join(directory_path, "model_diagram.png")
+        file_name = self.report_file_name("model_diagram.png")
         plot_model(self.model, to_file=file_name, show_shapes=True, show_layer_names=True, rankdir='TB')
         mlflow.log_artifact(file_name)
 
-    @Score.ensure_report_directory_exists
     def _generate_confusion_matrix(self):
-        directory_path = self._report_directory_path()
-        file_name = os.path.join(directory_path, "confusion_matrix.png")
+        file_name = self.report_file_name("confusion_matrix.png")
 
         # Ensure that both val_labels and val_predictions are in integer format
         if self.is_multi_class:
@@ -461,11 +454,10 @@ class MLClassifier(Score):
         cm_text = np.array2string(cm, separator=', ')
         logging.info(f"Confusion matrix: {cm_text}")
 
-    @Score.ensure_report_directory_exists
     def _plot_roc_curve(self):
-        directory_path = self._report_directory_path()
-        file_name = os.path.join(directory_path, "ROC_curve.png")
+        file_name = self.report_file_name("ROC_curve.png")
 
+        plt.clf()
         plt.figure()
 
         if self.is_multi_class:
@@ -496,10 +488,8 @@ class MLClassifier(Score):
         # plt.show()
         mlflow.log_artifact(file_name)
 
-    @Score.ensure_report_directory_exists
     def _plot_precision_recall_curve(self):
-        directory_path = self._report_directory_path()
-        file_name = os.path.join(directory_path, "precision_and_recall_curve.png")
+        file_name = self.report_file_name("precision_and_recall_curve.png")
 
         plt.figure()
 
@@ -528,10 +518,8 @@ class MLClassifier(Score):
         # plt.show()
         mlflow.log_artifact(file_name)
 
-    @Score.ensure_report_directory_exists
     def _plot_training_history(self):
-        directory_path = self._report_directory_path()
-        file_name = os.path.join(directory_path, "training_history.png")
+        file_name = self.report_file_name("training_history.png")
 
         plt.figure(figsize=(12, 9))  # Adjusted for a 4x3 aspect ratio with three subplots
 
@@ -587,7 +575,6 @@ class MLClassifier(Score):
         # plt.show()
         mlflow.log_artifact(file_name)
 
-    @Score.ensure_report_directory_exists
     def _record_metrics(self, metrics):
         """
         Record the provided metrics dictionary as a JSON file in the appropriate report folder for this model.
@@ -595,8 +582,7 @@ class MLClassifier(Score):
         :param metrics: Dictionary containing the metrics to be recorded.
         :type metrics: dict
         """
-        directory_path = f"reports/{self.parameters.scorecard_name}/{self.parameters.score_name}/"
-        file_name = os.path.join(directory_path, "metrics.json")
+        file_name = self.report_file_name("metrics.json")
 
         with open(file_name, 'w') as json_file:
             json.dump(metrics, json_file, indent=4)
