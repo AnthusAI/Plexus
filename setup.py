@@ -40,7 +40,11 @@ setup(
         'keras==2.15.0',
         'tensorflow==2.15.1',
         'tensorboard==2.15.2',
-        'tensorboard-plugin-profile==2.15.1'
+        'tensorboard-plugin-profile==2.15.1',
+        'xgboost==2.0.3',
+        'imbalanced-learn==0.12.2',
+        'imblearn==0.0',
+        'shap==0.45.1'
     ],
     dependency_links=[
         'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator'
