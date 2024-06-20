@@ -34,9 +34,6 @@ class Score(ABC, mlflow.pyfunc.PythonModel):
         for message in error_messages:
             logging.error(message)
 
-    def report_directory_path(self):
-        return f"./reports/{self.parameters.scorecard_name}/{self.parameters.score_name}/"
-
     def ensure_report_directory_exists(func):
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -44,6 +41,13 @@ class Score(ABC, mlflow.pyfunc.PythonModel):
                 os.makedirs(self.report_directory_path())
             return func(self, *args, **kwargs)
         return wrapper
+
+    def report_directory_path(self):
+        return f"./reports/{self.parameters.scorecard_name}/{self.parameters.score_name}/".replace(' ', '_')
+
+    @ensure_report_directory_exists
+    def report_file_name(self, file_name):
+        return os.path.join(self.report_directory_path(), file_name).replace(' ', '_')
 
     @ensure_report_directory_exists
     def record_configuration(self, configuration):
@@ -53,8 +57,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel):
         :param configuration: Dictionary containing the configuration to be recorded.
         :type configuration: dict
         """
-        directory_path = f"reports/{self.parameters.scorecard_name}/{self.parameters.score_name}/"
-        file_name = os.path.join(directory_path, "configuration.json")
+        file_name = self.report_file_name("configuration.json")
 
         with open(file_name, 'w') as json_file:
             json.dump(configuration, json_file, indent=4)
