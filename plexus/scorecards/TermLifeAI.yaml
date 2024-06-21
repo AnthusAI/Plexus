@@ -1,0 +1,66 @@
+name: Term Life AI 3.0  
+metadata:
+  foreign_id: 1402
+
+# Register the scorecard.
+key: termlife
+family: termlife
+
+scorecard_folder_path: scorecards/TermLifeAI
+transcript_column: Transcription
+
+scores:
+  Dependents:
+    id: 43704
+  Debt Amount:
+    id: 43705
+  Spouse/Partner Income:
+    id: 43706
+  PI Income:
+    id: 43707
+  Free/Independent/Impartial:
+    id: 43708
+  Carrier Access:
+    id: 43709
+  Competitive Advantage:
+    id: 43711
+  Carrier Highlights/Rationale:
+    id: 43712
+  Existing Insurance:
+    id: 43714
+  Term Explanation:
+    id: 43715
+  Temperature Check:
+    id: 43716
+  Apples to Apples:
+    id: 43727
+  Self Endorsement:
+    id: 43726
+  Assumptive Close:
+    id: 43725
+  Total loss to family:
+    id: 43724
+  Solution Fit:
+    id: 43722
+  Ask Doubles Pitch:
+    id: 43713
+  Assumptive Doubles Pitch:
+    id: 43710
+    primary: "Ask Doubles Pitch"
+  Length Of Debt:
+    id: 43717
+  
+  Sold:
+    id: 0
+    data:
+      balance: false
+      merge:
+        file: scorecards/TermLifeAI/Sold_Unsold.xlsx
+        sheet: Term Life All CC Audits
+        columns:
+          - Sold
+        integration:
+          file_column: Session_ID
+          data_lake_column: Session_ID
+      processors:
+        - class: RemoveSpeakerIdentifiersTranscriptFilter

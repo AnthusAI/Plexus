@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import re
+from pydantic import Field
 from plexus.CustomLogging import logging
 import fasttext
 import pandas as pd
@@ -10,11 +11,28 @@ import mlflow
 import mlflow.pyfunc
 
 from plexus.classifiers.MLClassifier import MLClassifier
-from plexus.classifiers.LLMGenerator import LLMGenerator
 
 fasttext.FastText.eprint = lambda x: None
 
 class FastTextClassifier(MLClassifier):
+
+    class Parameters(MLClassifier.Parameters):
+        ...
+        learning_rate: float = 0.1
+        dimension: int = 100
+        window_size: int = 5
+        number_of_epochs: int = 5
+        minimum_word_count: int = 1
+        minimum_label_count: int = 1
+        minimum_character_ngram_length: int = 0
+        maximum_character_ngram_length: int = 0
+        number_of_negative_samples: int = 5
+        word_ngram_count: int = 1
+        loss_function: str = 'softmax'
+        bucket_size: int = 2000000
+        number_of_threads: int = 4
+        learning_rate_update_rate: int = 100
+        sampling_threshold: float = 0.0001
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
@@ -86,21 +104,21 @@ class FastTextClassifier(MLClassifier):
         
         self.model = fasttext.train_supervised(
             input=train_filename,
-            lr=self.learning_rate,
-            dim=self.dimension,
-            ws=self.window_size,
-            epoch=self.number_of_epochs,
-            minCount=self.minimum_word_count,
-            minCountLabel=self.minimum_label_count,
-            minn=self.minimum_character_ngram_length,
-            maxn=self.maximum_character_ngram_length,
-            neg=self.number_of_negative_samples,
-            wordNgrams=self.word_ngram_count,
-            loss=self.loss_function,
-            bucket=self.bucket_size,
-            thread=self.number_of_threads,
-            lrUpdateRate=self.learning_rate_update_rate,
-            t=self.sampling_threshold
+            lr=self.parameters.learning_rate,
+            dim=self.parameters.dimension,
+            ws=self.parameters.window_size,
+            epoch=self.parameters.number_of_epochs,
+            minCount=self.parameters.minimum_word_count,
+            minCountLabel=self.parameters.minimum_label_count,
+            minn=self.parameters.minimum_character_ngram_length,
+            maxn=self.parameters.maximum_character_ngram_length,
+            neg=self.parameters.number_of_negative_samples,
+            wordNgrams=self.parameters.word_ngram_count,
+            loss=self.parameters.loss_function,
+            bucket=self.parameters.bucket_size,
+            thread=self.parameters.number_of_threads,
+            lrUpdateRate=self.parameters.learning_rate_update_rate,
+            t=self.parameters.sampling_threshold
         )
 
         logging.info("Model trained successfully!")
@@ -138,6 +156,12 @@ class FastTextClassifier(MLClassifier):
             mlflow.log_metrics(hyperparameters)
         else:
             logging.info("Model hyperparameters are not accessible.")
+
+    def predict_validation(self):
+        """
+        Implement the prediction logic for the validation set.
+        """
+        self.val_predictions = self.model.predict(self.val_input_ids)
 
     def evaluate_model(self):
         test_filename = self._get_test_filename()

@@ -124,16 +124,16 @@ class DataCache:
         # return metadata, transcript, transcript_txt
         return metadata, transcript_txt
 
-    def load_dataframe(self, *, queries):
+    def load_dataframe_from_queries(self, *, queries):
         dataframes = []
 
         filename_components = []
         for query_param in queries:
             scorecard_id = query_param['scorecard-id']
             score_id = query_param.get('score-id', 'all')
-            answer = query_param.get('answer', 'all')
+            value = query_param.get('value', 'all')
             number = query_param.get('number', 'all')
-            filename_components.append(f"scorecard_id={scorecard_id}-score_id={score_id}-answer={answer}-number={number}")
+            filename_components.append(f"scorecard_id={scorecard_id}-score_id={score_id}-value={value}-number={number}")
         cached_dataframe_filename = "_".join(filename_components) + '.h5'
 
         cached_dataframe_path = os.path.join(self.local_cache_directory, 'dataframes', cached_dataframe_filename)
@@ -145,20 +145,22 @@ class DataCache:
         
         for query_params in queries:
             scorecard_id = query_params['scorecard-id']
-            if 'score-id' in query_params and 'answer' in query_params:
+            if 'score-id' in query_params and ('value' in query_params or 'values' in query_params):
                 score_id = query_params['score-id']
-                answer = query_params['answer']
+                values = query_params['values'] if 'values' in query_params else [query_params['value']]
                 number = query_params.get('number')
+                
+                values_list = ', '.join(f"'{value}'" for value in values)
                 
                 query = f"""
                     SELECT report_id
                     FROM (
-                        SELECT report_id, MIN(CASE WHEN t.score.id = {score_id} THEN t.score.answer END) AS answer
+                        SELECT report_id, MIN(CASE WHEN t.score.id = {score_id} THEN t.score.answer END) AS value
                         FROM "{self.athena_database}"
                         CROSS JOIN UNNEST(scores) AS t(score)
                         GROUP BY report_id
                     )
-                    WHERE answer = '{answer}'
+                    WHERE value IN ({values_list})
                 """
                 if number:
                     query += f" LIMIT {number}"
@@ -217,3 +219,22 @@ class DataCache:
         logging.info(f"Dataframe saved to {dataframe_file_path}")
 
         return combined_dataframe
+    
+    def load_dataframe_from_file(self, *, merge):
+        filename_components = []
+
+        file_path = merge['file-path']
+        sheet = merge.get('sheet', 'Sheet1')
+        columns = merge.get('columns', None)
+        integration = merge.get('integration', None)
+        filename_components.append(f"file_path={file_path}-sheet={sheet}-columns={columns}-integration={integration}")
+        cached_dataframe_filename = "_".join(filename_components) + '.h5'
+
+        cached_dataframe_path = os.path.join(self.local_cache_directory, 'dataframes', cached_dataframe_filename)
+        if os.path.exists(cached_dataframe_path):
+            logging.info("Loading cached dataframe from {}".format(cached_dataframe_path))
+            return pd.read_hdf(cached_dataframe_path)
+
+        logging.info("Loading dataframe by merging: {}".format(merge))
+
+        

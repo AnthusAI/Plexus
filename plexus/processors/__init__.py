@@ -1,4 +1,10 @@
 from .ProcessorFactory import ProcessorFactory
-from .TranscriptFilter import TranscriptFilter
+from .DataframeProcessor import DataframeProcessor
 from .RelevantWindowsTranscriptFilter import RelevantWindowsTranscriptFilter
 from .RemoveSpeakerIdentifiersTranscriptFilter import RemoveSpeakerIdentifiersTranscriptFilter
+from .RemoveStopWordsTranscriptFilter import RemoveStopWordsTranscriptFilter
+from .ColumnDatasetFilter import ColumnDatasetFilter
+from .ByColumnValueDatasetFilter import ByColumnValueDatasetFilter
+from .DownsampleClassDatasetFilter import DownsampleClassDatasetFilter
+from .MergeColumnsDatasetFilter import MergeColumnsDatasetFilter
+

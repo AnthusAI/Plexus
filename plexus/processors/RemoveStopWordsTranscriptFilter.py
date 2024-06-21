@@ -1,8 +1,14 @@
-import re
 import pandas as pd
+import nltk
+from nltk.corpus import stopwords
 from plexus.processors.DataframeProcessor import DataframeProcessor
 
-class RemoveSpeakerIdentifiersTranscriptFilter(DataframeProcessor):
+class RemoveStopWordsTranscriptFilter(DataframeProcessor):
+
+    def __init__(self, **parameters):
+        super().__init__(**parameters)
+        nltk.download('stopwords')
+        self.stop_words = set(stopwords.words('english'))
 
     def process(self, dataframe: pd.DataFrame) -> pd.DataFrame:
         random_row_index = dataframe.sample(n=1).index[0]
@@ -10,7 +16,9 @@ class RemoveSpeakerIdentifiersTranscriptFilter(DataframeProcessor):
         truncated_original_transcript = (original_transcript[:512] + '...') if len(original_transcript) > 512 else original_transcript
 
         dataframe["Transcription"] = dataframe["Transcription"].apply(
-            lambda transcript: re.sub(r'^\w+:\s*', '', transcript, flags=re.MULTILINE)
+            lambda transcript: ' '.join(
+                [word for word in transcript.split() if word.lower() not in self.stop_words]
+            )
         )
 
         modified_transcript = dataframe.at[random_row_index, "Transcription"]
