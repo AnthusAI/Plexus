@@ -22,7 +22,7 @@ def train(scorecard_name, score_name):
         logging.error(f"Scorecard with name '{scorecard_name}' not found.")
         return
 
-    logging.info(f"Found registered Scorecard named [magenta1][b]{scorecard_class.name()}[/b][/magenta1] implemented in Python class [magenta1][b]{scorecard_class.__name__}[/b][/magenta1]")
+    logging.info(f"Found registered Scorecard named [magenta1][b]{scorecard_class.name}[/b][/magenta1] implemented in Python class [magenta1][b]{scorecard_class.__name__}[/b][/magenta1]")
 
     if score_name:
         train_score(score_name, scorecard_class)
@@ -53,7 +53,7 @@ def train_score(score_name, scorecard_class):
         return
 
     # Add the scorecard name and score name to the parameters.
-    score_to_train_configuration['scorecard_name'] = scorecard_class.name()
+    score_to_train_configuration['scorecard_name'] = scorecard_class.name
     score_to_train_configuration['score_name'] = score_name
     score_instance = score_class(**score_to_train_configuration)
 

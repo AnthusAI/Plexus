@@ -183,6 +183,8 @@ class MLClassifier(Score):
         Handle any pre-processing of the training data, including the training/validation splits.
         """
 
+        self.dataframe = self.dataframe[self.dataframe[self.parameters.score_name].notna()]
+
         if 'processors' in self.parameters.data:
             console.print(Text("Running configured processors...", style="royal_blue1"))
 
