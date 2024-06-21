@@ -314,8 +314,12 @@ class MLClassifier(Score):
         logging.info(f"val_predictions type: {type(self.val_predictions)}, shape: {self.val_predictions.shape}, sample: {self.val_predictions[:5]}")
         
         if self.is_multi_class:
-            self.val_predictions_labels = np.argmax(self.val_predictions, axis=1)
-            if len(self.val_labels.shape) > 1 and self.val_labels.shape[1] > 1:
+            if self.val_predictions.ndim > 1:
+                self.val_predictions_labels = np.argmax(self.val_predictions, axis=1)
+            else:
+                self.val_predictions_labels = self.val_predictions  # Use predictions directly if they are already 1D
+            
+            if self.val_labels.ndim > 1 and self.val_labels.shape[1] > 1:
                 self.val_labels = np.argmax(self.val_labels, axis=1)  # Convert one-hot encoded labels to integer labels
         else:
             self.val_predictions_labels = [1 if pred > 0.5 else 0 for pred in self.val_predictions]
@@ -433,7 +437,11 @@ class MLClassifier(Score):
             else:
                 val_labels_int = self.val_labels
 
-            val_predictions_int = np.argmax(self.val_predictions, axis=1)
+            if self.val_predictions.ndim > 1:
+                val_predictions_int = np.argmax(self.val_predictions, axis=1)
+            else:
+                val_predictions_int = self.val_predictions  # Use predictions directly if they are already 1D
+
         else:
             val_labels_int = self.val_labels
             val_predictions_int = [1 if pred > 0.5 else 0 for pred in self.val_predictions]
@@ -463,13 +471,14 @@ class MLClassifier(Score):
         if self.is_multi_class:
             lb = LabelBinarizer()
             val_labels_one_hot = lb.fit_transform(self.val_labels)
+            val_predictions_one_hot = lb.transform(self.val_predictions)
 
             n_classes = val_labels_one_hot.shape[1]
             fpr = dict()
             tpr = dict()
             roc_auc = dict()
             for i in range(n_classes):
-                fpr[i], tpr[i], _ = roc_curve(val_labels_one_hot[:, i], self.val_predictions[:, i])
+                fpr[i], tpr[i], _ = roc_curve(val_labels_one_hot[:, i], val_predictions_one_hot[:, i])
                 roc_auc[i] = auc(fpr[i], tpr[i])
                 plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} (area = {roc_auc[i]:0.2f})')
         else:
@@ -496,13 +505,14 @@ class MLClassifier(Score):
         if self.is_multi_class:
             lb = LabelBinarizer()
             val_labels_one_hot = lb.fit_transform(self.val_labels)
+            val_predictions_one_hot = lb.transform(self.val_predictions)
 
             n_classes = val_labels_one_hot.shape[1]
             precision = dict()
             recall = dict()
             pr_auc = dict()
             for i in range(n_classes):
-                precision[i], recall[i], _ = precision_recall_curve(val_labels_one_hot[:, i], self.val_predictions[:, i])
+                precision[i], recall[i], _ = precision_recall_curve(val_labels_one_hot[:, i], val_predictions_one_hot[:, i])
                 pr_auc[i] = auc(recall[i], precision[i])
                 plt.plot(recall[i], precision[i], lw=2, label=f'Class {i} (area = {pr_auc[i]:0.2f})')
         else:
