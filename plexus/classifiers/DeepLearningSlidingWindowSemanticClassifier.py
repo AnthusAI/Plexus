@@ -31,7 +31,7 @@ os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
 policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_global_policy(policy)
 
-class DeepLearningSlidingWindowEmbeddingsClassifier(DeepLearningSemanticClassifier):
+class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier):
     """
     This sub-class implements the sliding-windows variant of the DeepLearningSemanticClassifier.
     """
@@ -53,7 +53,7 @@ class DeepLearningSlidingWindowEmbeddingsClassifier(DeepLearningSemanticClassifi
 
     class RaggedEmbeddingsLayer(tf.keras.layers.Layer):
         def __init__(self, embeddings_model, aggregation='max'):
-            super(DeepLearningSlidingWindowEmbeddingsClassifier.RaggedEmbeddingsLayer, self).__init__()
+            super(DeepLearningSlidingWindowSemanticClassifier.RaggedEmbeddingsLayer, self).__init__()
             self.embeddings_model = DeepLearningSemanticClassifier.EmbeddingsLayer(embeddings_model)
             self.aggregation = aggregation
 
@@ -121,7 +121,7 @@ class DeepLearningSlidingWindowEmbeddingsClassifier(DeepLearningSemanticClassifi
             logging.info(f"Layer {i} ({layer.name}) trainable: {layer.trainable}")
 
         # Create an instance of the custom layer
-        ragged_embeddings_layer = DeepLearningSlidingWindowEmbeddingsClassifier.RaggedEmbeddingsLayer(self.embeddings_model, aggregation=self.parameters.multiple_windows_aggregation)
+        ragged_embeddings_layer = DeepLearningSlidingWindowSemanticClassifier.RaggedEmbeddingsLayer(self.embeddings_model, aggregation=self.parameters.multiple_windows_aggregation)
 
         # Pass the ragged tensors directly to the custom layer
         last_hidden_state = ragged_embeddings_layer([input_ids, attention_mask])

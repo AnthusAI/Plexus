@@ -47,7 +47,7 @@ class DeepLearningSemanticClassifier(MLClassifier):
 
     def __new__(cls, *args, **parameters):
         if cls is DeepLearningSemanticClassifier:
-            from plexus.classifiers.DeepLearningSlidingWindowEmbeddingsClassifier import DeepLearningSlidingWindowEmbeddingsClassifier
+            from plexus.classifiers.DeepLearningSlidingWindowSemanticClassifier import DeepLearningSlidingWindowSemanticClassifier
             
             # Validate parameters
             try:
@@ -59,12 +59,12 @@ class DeepLearningSemanticClassifier(MLClassifier):
             logging.info(f"Sliding window: {validated_parameters.get('multiple_windows', False)}")
             if validated_parameters.get('multiple_windows', False):
                 logging.info("Using sliding window embeddings")
-                from plexus.classifiers.DeepLearningSlidingWindowEmbeddingsClassifier import DeepLearningSlidingWindowEmbeddingsClassifier
-                return DeepLearningSlidingWindowEmbeddingsClassifier(*args, **validated_parameters)
+                from plexus.classifiers.DeepLearningSlidingWindowSemanticClassifier import DeepLearningSlidingWindowSemanticClassifier
+                return DeepLearningSlidingWindowSemanticClassifier(*args, **validated_parameters)
             else:
                 logging.info("Using one-step embeddings")
-                from plexus.classifiers.DeepLearningOneStepEmbeddingsClassifier import DeepLearningOneStepEmbeddingsClassifier
-                return DeepLearningOneStepEmbeddingsClassifier(*args, **validated_parameters)
+                from plexus.classifiers.DeepLearningOneStepSemanticClassifier import DeepLearningOneStepSemanticClassifier
+                return DeepLearningOneStepSemanticClassifier(*args, **validated_parameters)
         else:
             return super(DeepLearningSemanticClassifier, cls).__new__(cls)
 
@@ -415,7 +415,7 @@ class DeepLearningSemanticClassifier(MLClassifier):
         """
         Generates a PNG artifact of a histogram showing the distribution of the lengths of the inner lists in the provided dataset.
         """
-        directory_path = self._report_directory_path()
+        directory_path = self.report_directory_path()
         file_name = os.path.join(directory_path, "window_count_histogram.png")
 
         # Calculate the lengths of the inner lists
