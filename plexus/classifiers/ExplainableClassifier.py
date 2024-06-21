@@ -179,6 +179,7 @@ class ExplainableClassifier(MLClassifier):
         logging.info(f"Index of the answer value '{self.parameters.target_score_value}' in label encoder's classes: {answer_index}")
 
         # Extract the SHAP values for the desired answer index
+        shap_values_answer = None
         if len(self.label_encoder.classes_) == 2:
             # For binary classification, shap_values.values has shape (n_instances, n_features)
             shap_values_answer = shap_values.values
@@ -195,9 +196,14 @@ class ExplainableClassifier(MLClassifier):
         logging.info(f"Selected {selected_feature_names_count} feature names: {selected_feature_names[:10]}")
         
         # Calculate the mean SHAP value for each feature
-        shap_values_list = [(feature, np.mean(shap_values_answer[:, i])) for i, feature in enumerate(selected_feature_names)]
+        # Calculate the mean SHAP value for each feature
+        shap_values_list = [
+            (feature, np.mean(shap_values_answer[:, featureIndex]))
+            for featureIndex, feature in enumerate(selected_feature_names)
+            if featureIndex < shap_values_answer.shape[1]
+        ]
         logging.info("Mean SHAP values calculated for each feature.")
-    
+
         ##########
         # Rich table
 
@@ -336,8 +342,8 @@ class ExplainableClassifier(MLClassifier):
             model_input = scipy.sparse.csr_matrix(model_input.values)
 
         # Make predictions using the trained model
-        y_pred, confidence_scores = self.predict_with_confidence(None, model_input)
-        
+        y_pred = self.model.predict(model_input)
+
         return y_pred
 
     def predict_with_confidence(self, context, model_input):
