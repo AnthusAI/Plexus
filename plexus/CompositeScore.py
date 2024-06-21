@@ -6,14 +6,21 @@ import importlib
 from decimal import Decimal
 from abc import ABC, abstractmethod
 import tiktoken
+from pydantic import BaseModel
+import pandas as pd
 
 from plexus.processors.RelevantWindowsTranscriptFilter import RelevantWindowsTranscriptFilter
-from plexus.Score import Score
+from plexus.classifiers.Score import Score
 from plexus.ScoreResult import ScoreResult
 from plexus.Registries import scorecard_registry
 from plexus.classifiers.KeywordClassifier import KeywordClassifier
 from plexus.PromptTemplateLoader import PromptTemplateLoader
 from plexus.CustomLogging import logging
+
+class Parameters(BaseModel):
+    scorecard_name: str
+    score_name: str
+    # Add other fields as necessary
 
 class CompositeScore(Score):
     """
@@ -23,7 +30,7 @@ class CompositeScore(Score):
     costs of the individual elements and the composite score.
     """
 
-    def __init__(self, *, transcript):
+    def __init__(self, *, transcript, scorecard_name, score_name, **kwargs):
         """
         Initializes a new instance of the CompositeScore class.
 
@@ -37,7 +44,10 @@ class CompositeScore(Score):
         Raises:
             TypeError: If the provided transcript is not a string.
         """
-        super().__init__(transcript=transcript)
+        super().__init__(transcript=transcript, scorecard_name=scorecard_name, score_name=score_name, **kwargs)
+        self.transcript = transcript
+        self.scorecard_name = scorecard_name
+        self.score_name = score_name
 
         # Aggregate reasoning and quote, computed at the end after computing all other elements.
         self.reasoning = []
@@ -98,7 +108,7 @@ class CompositeScore(Score):
             data = json.load(file)
 
         # Create a new instance of the class
-        instance = cls(transcript=data['transcript'])
+        instance = cls(transcript=data['transcript'], scorecard_name=data['scorecard_name'], score_name=data['score_name'])
 
         # Set the instance attributes from the data
         instance.reasoning = data['reasoning']
@@ -164,6 +174,7 @@ class CompositeScore(Score):
         # Get the base class name from the config, default to OpenAICompositeScore
         llm_model_name = config.get('model', 'gpt-3.5-turbo-16k-0613')
         completion_name = config.get('completion', 'azure/CallCriteriaGPT35Turbo16k')
+        chunking = config.get('chunking', True)
 
         # Hard-code the base module path
         base_module_path = 'plexus.composite_scores'
@@ -177,19 +188,42 @@ class CompositeScore(Score):
 
         # Create a new subclass of CompositeScore
         class CompositeScoreFromMarkdown(base_class):
-            def __init__(self, *, transcript):
+            def __init__(self, *, transcript, scorecard_name, score_name):
                 self.preprocessing_config = preprocessing_config
-                super().__init__(transcript=transcript, model_name=llm_model_name, completion_name=completion_name)
+                self.chunking = chunking
+                super().__init__(transcript=transcript, scorecard_name=scorecard_name, score_name=score_name, model_name=llm_model_name, completion_name=completion_name)
                 self.decision_tree = decision_tree_config
                 self.prompt_template_loader = PromptTemplateLoader(markdown_content=markdown_content)
                 self.name = score_name
+                self.scorecard_name = scorecard_name
 
                 # Dynamically generate the elements array from the Markdown content
                 self.elements = self.generate_elements_from_markdown()
                 self.overall_questions = self.elements[0]['prompt'].strip().split('\n')
+            
+            def load_context(self, context):
+                """
+                Load any necessary artifacts or models based on the context.
+                """
+                # Implement the method
+                pass
+
+            def predict(self, context, model_input):
+                """
+                Make predictions on the input data.
+
+                :param context: Context for the prediction.
+                :param model_input: The input data for making predictions.
+                :return: The predictions.
+                """
+                # Implement the method
+                pass
 
             def process_transcript(self, *, transcript):
                 # Initialize an empty list to hold both strings and compiled regex patterns
+                if not self.chunking:
+                    return transcript
+
                 keyword_patterns = []
 
                 for preprocessing_step in self.preprocessing_config:
@@ -208,10 +242,16 @@ class CompositeScore(Score):
                                 # If keyword is already a compiled regex, add it directly
                                 keyword_patterns.append(keyword)
 
+                # Convert the transcript string into a DataFrame
+                transcript_df = pd.DataFrame({"Transcription": [transcript]})
+
                 # Use the KeywordClassifier with the combined list of strings and regex patterns
-                filtered_transcript = RelevantWindowsTranscriptFilter(
-                    classifier=KeywordClassifier(keyword_patterns)
-                ).process(transcript=transcript)
+                filtered_transcript_df = RelevantWindowsTranscriptFilter(
+                    classifier=KeywordClassifier(keyword_patterns, self.scorecard_name, self.score_name)
+                ).process(transcript_df)
+
+                # Extract the filtered transcript from the DataFrame
+                filtered_transcript = filtered_transcript_df["Transcription"].iloc[0]
 
                 return filtered_transcript
 
@@ -449,8 +489,12 @@ class CompositeScore(Score):
         if callable(element):
             return element()
 
-        # Break the transcript into chunks to process them in parallel.
-        chunks = self.break_transcript_into_chunks(self.filtered_transcript)
+        logging.info(f"Chunking: {self.chunking}")
+        if not self.chunking:
+            chunks = [self.filtered_transcript]
+        else:
+            # Break the transcript into chunks to process them in parallel.
+            chunks = self.break_transcript_into_chunks(self.filtered_transcript)
 
         logging.debug(f"Filtered transcript:\n{self.filtered_transcript}")
         logging.info(f"Number of transcript chunks: {len(chunks)}")

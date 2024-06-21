@@ -7,8 +7,6 @@ import yaml
 from plexus.CustomLogging import logging
 
 from plexus.Registries import scorecard_registry
-from plexus.scorecards.TermLifeAI import TermLifeAI
-
 from plexus.Experiment import AccuracyExperiment
 
 from dotenv import load_dotenv

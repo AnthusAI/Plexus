@@ -22,7 +22,17 @@ from plexus.Registries import scorecard_registry
 
 # logging.getLogger("openai._base_client").setLevel(logging.INFO)
 
-litellm.set_verbose=True
+litellm.set_verbose=False
+
+loggers = [
+    "LiteLLM Proxy",
+    "LiteLLM Router",
+    "LiteLLM"
+]
+
+for logger_name in loggers:
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.WARNING)
 
 class ToolCallProcessingError(Exception):
     def __init__(self, exception, message, tool_arguments, *args):
@@ -35,22 +45,21 @@ class CompositeScore(CompositeScore):
     """
     Concrete implementation of the CompositeScoreBase class using OpenAI's API.
     """
-    def __init__(self, *, transcript, model_name, completion_name):
-        super().__init__(transcript=transcript)
+    def __init__(self, *, transcript, scorecard_name, score_name, model_name, completion_name, **kwargs):
+        super().__init__(transcript=transcript, scorecard_name=scorecard_name, score_name=score_name, **kwargs)
         self.model_name = model_name
         self.completion_name = completion_name
 
     @retry(
-        wait=wait_random_exponential(multiplier=1, max=600),
+        wait=wait_random_exponential(multiplier=10, max=600),
         retry=retry_if_exception_type(ValueError),
-        stop=stop_after_attempt(4),
+        stop=stop_after_attempt(20),
         before_sleep=before_sleep_log(logging, logging.INFO)
     )
     def compute_element_for_chunk(self, *, name, element_type, previous_messages=None, prompt, chunk):
         """
         The orchestration framework in CompositeScore calls this function to do the OpenAI work.
         """
-
         loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
         openai_loggers = [logger for logger in loggers if logger.name.startswith("openai")]
 
@@ -70,7 +79,8 @@ class CompositeScore(CompositeScore):
             'completion_tokens': 0,
             'input_cost':  Decimal('0.0'),
             'output_cost': Decimal('0.0'),
-            'total_cost':  Decimal('0.0')
+            'total_cost':  Decimal('0.0'),
+            'chat_history': []
         }
 
         # The element name and prompt.
@@ -89,7 +99,8 @@ class CompositeScore(CompositeScore):
             response = self.openai_api_request(
                 name=name,
                 element_type=element_type,
-                messages=messages
+                messages=messages,
+                # tools=self.yes_no_tool
             )
 
             response_content = response.choices[0].message.content
@@ -136,9 +147,9 @@ class CompositeScore(CompositeScore):
             answer = yes_or_no['answer']
             messages.extend(yes_or_no['messages'])
 
-        logging.info(f"Response:  {response_content}")
-        logging.info(f"Value:     {answer}")
-        logging.info(f"Reasoning: {reasoning}")
+        #logging.info(f"Response:  {response_content}")
+        #logging.info(f"Value:     {answer}")
+        #logging.info(f"Reasoning: {reasoning}")
 
         # The answer result and the reasoning.
         score_result_metadata['response_content'] = response_content
@@ -173,6 +184,10 @@ class CompositeScore(CompositeScore):
         logging.info(f"Total token counts:  Input: {self.prompt_tokens}  Output: {self.completion_tokens}")
         logging.info(f"Total costs for score:  Input: {self.input_cost}, Output: {self.output_cost}, Total: {self.total_cost}")
 
+        self.element_results.append(
+            ScoreResult(value=score_result_metadata['value'], metadata=score_result_metadata)
+        )
+
         return ScoreResult(value=score_result_metadata['value'], metadata=score_result_metadata)
 
     def clarify_yes_or_no(self, *, name, messages, top_p=0.2):
@@ -198,7 +213,7 @@ class CompositeScore(CompositeScore):
         )
 
         response_content = response.choices[0].message.content
-        logging.info(f"Yes-or-no clarification response: {response_content}")
+        #logging.info(f"Yes-or-no clarification response: {response_content}")
 
         new_messages = [
             yes_or_no_question,
@@ -224,7 +239,7 @@ class CompositeScore(CompositeScore):
             return self.clarify_yes_or_no(name=name, messages=messages, top_p=top_p + 0.1)
 
     @retry(
-        wait=wait_random_exponential(multiplier=1, max=600),  # Exponential backoff with random jitter
+        wait=wait_random_exponential(multiplier=10, max=600),  # Exponential backoff with random jitter
         retry=retry_if_exception_type((openai.RateLimitError, openai.APIConnectionError, openai.InternalServerError, httpx.HTTPStatusError)),
         stop=stop_after_attempt(100),
         before_sleep=before_sleep_log(logging, logging.INFO)
@@ -489,7 +504,7 @@ Please try to summarize your overall reasoning based on your own responses in th
             prompts
         )
 
-        logging.info("Summarization chat history:\n%s", json.dumps(new_chat_history, indent=4))
+        #logging.info("Summarization chat history:\n%s", json.dumps(new_chat_history, indent=4))
         response = self.openai_api_request(
             name='summary_reasoning',
             element_type=element_type,
@@ -497,7 +512,7 @@ Please try to summarize your overall reasoning based on your own responses in th
             max_tokens=2048
         )
 
-        logging.info(f"Response: {response}")
+        #logging.info(f"Response: {response}")
 
         reasoning = response.choices[0].message.content.strip()
         logging.info(f"Reasoning: {reasoning}")

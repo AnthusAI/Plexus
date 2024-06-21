@@ -95,20 +95,31 @@ class Scorecard:
 
     @classmethod
     def create_from_yaml(cls, yaml_file_path):
-        with open(yaml_file_path, 'r') as file:
-            yaml_data = yaml.safe_load(file)
+        """
+        Creates a Scorecard class dynamically from a YAML file.
 
-        scorecard_name = list(yaml_data.keys())[0]
-        scorecard_data = yaml_data[scorecard_name]
+        Args:
+            yaml_file_path (str): The file path to the YAML file containing the scorecard properties.
+
+        Returns:
+            type: A dynamically created Scorecard class.
+        """
+        with open(yaml_file_path, 'r') as file:
+            scorecard_properties = yaml.safe_load(file)
+
+        scorecard_name = scorecard_properties['name']
 
         scorecard_class = type(scorecard_name, (Scorecard,), {
-            'scorecard_id': classmethod(lambda cls: scorecard_data['properties']['scorecard_id']),
-            'name': classmethod(lambda cls: scorecard_data['properties']['name']),
-            'scorecard_folder_path': scorecard_data['properties']['scorecard_folder_path'],
-            'scores': scorecard_data['scores']
+            'name':                  scorecard_properties['name'],
+            'metadata':              scorecard_properties['metadata'],
+            'scorecard_folder_path': scorecard_properties['scorecard_folder_path'],
+            'scores':                scorecard_properties['scores'],
+            'foreign_id':            property(lambda cls: cls.metadata['foreign_id'])
         })
 
-        scorecard_registry.register(scorecard_data['registry']['key'], scorecard_data['registry']['family'])(scorecard_class)
+        scorecard_registry.register(
+            scorecard_properties['key'],
+            scorecard_properties['family'])(scorecard_class)
         scorecard_class.load_and_register_scores()
 
         return scorecard_class
@@ -153,6 +164,8 @@ class Scorecard:
             logging.info("Found score for question: " + score_name)
 
             score_instance = score_class(
+                scorecard_name=self.name,
+                score_name=score_name,
                 transcript=transcript
             )
             score_result = score_instance.compute_result()
