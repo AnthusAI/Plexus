@@ -30,7 +30,7 @@ os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
 policy = mixed_precision.Policy('mixed_float16')
 mixed_precision.set_global_policy(policy)
 
-class DeepLearningOneStepEmbeddingsClassifier(DeepLearningSemanticClassifier):
+class DeepLearningOneStepSemanticClassifier(DeepLearningSemanticClassifier):
 
     def __init__(self, *args, **parameters):
         parameters['maximum_windows'] = 1
