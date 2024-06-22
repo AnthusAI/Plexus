@@ -18,6 +18,7 @@ from rich.panel import Panel
 from rich.columns import Columns
 from plexus.cli.console import console
 from plexus.Registries import scorecard_registry
+from call_criteria_database import DB
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.model_selection import train_test_split
@@ -67,6 +68,7 @@ class VectorizerLogger:
 
 @data.command()
 @click.option('--scorecard-name', required=True, help='The name of the scorecard to load data for')
+@click.option('--excel', required=False, help='The path to the Excel file to load data from')
 @click.option('--score-name', required=False, help='The name of the score to analyze for answer breakdown')
 @click.option('--all', 'all_questions', is_flag=True, help='Analyze all questions in the scorecard')
 @click.option('--value', 'value', required=False, help='The answer value to analyze for feature importance')
@@ -74,20 +76,24 @@ class VectorizerLogger:
 @click.option('--leaderboard-n-features', 'leaderboard_n_features', required=False, default=10, help='The number of features to show in the leaderboard for feature importance')
 @click.option('--sample-size', 'sample_size', required=False, default=1, help='The number of samples to use for feature importance')
 @click.option('--ngram-range', 'ngram_range', default='2,3', help='The range of n-grams to use for feature extraction, e.g., "2,3"')
-def analyze(scorecard_name, score_name, all_questions, value, top_n_features, leaderboard_n_features, sample_size, ngram_range):
+def analyze(scorecard_name, excel, score_name, all_questions, value, top_n_features, leaderboard_n_features, sample_size, ngram_range):
     plexus.Scorecard.load_and_register_scorecards('scorecards/')
     scorecard_class = scorecard_registry.get(scorecard_name)
 
     try:
-        # Convert the ngram_range string to a tuple of integers
-        start, end = map(int, ngram_range.split(','))
-        ngram_range = (start, end)
+        if ',' in ngram_range:
+            start, end = map(int, ngram_range.split(','))
+            ngram_range = (start, end)
+        else:
+            single_value = int(ngram_range)
+            ngram_range = (single_value, single_value)
     except (ValueError, TypeError):
-        raise click.BadParameter("Invalid ngram_range format. Expected 'start,end' (e.g., '2,3').")
+        raise click.BadParameter("Invalid ngram_range format. Expected 'start,end' (e.g., '2,3') or a single integer.")
 
     logging.info(f"Analyzing data for scorecard [purple][b]{scorecard_name}[/b][/purple]")
     analyze_scorecard(
         scorecard_name,
+        excel,
         score_name,
         all_questions,
         value,
@@ -98,6 +104,7 @@ def analyze(scorecard_name, score_name, all_questions, value, top_n_features, le
 
 def analyze_scorecard(
         scorecard_name,
+        excel,
         score_name,
         all_questions,
         value,
@@ -122,9 +129,25 @@ def analyze_scorecard(
     data_cache = DataCache(os.environ['PLEXUS_TRAINING_DATA_LAKE_DATABASE_NAME'],
                            os.environ['PLEXUS_TRAINING_DATA_LAKE_ATHENA_RESULTS_BUCKET_NAME'],
                            os.environ['PLEXUS_TRAINING_DATA_LAKE_BUCKET_NAME'])
-    dataframe = data_cache.load_dataframe_from_queries(queries=[{'scorecard-id':scorecard_id}])
+    dataframe = None
+    if excel:
+        server_name = os.getenv('DB_SERVER')
+        database_name = os.getenv('DB_NAME')
+        user_name = os.getenv('DB_USER')
+        password = os.getenv('DB_PASS')
+        DB.set_current(server_name, database_name, user_name, password)
+    
+        dataframe = data_cache.load_dataframe_from_excel(file_path=excel, score_name=score_name)
+    else:
+        dataframe = data_cache.load_dataframe_from_queries(queries=[{'scorecard-id':scorecard_id}])
 
-    print('')
+    logging.info("Generating summary of the dataframe")
+    dataframe_summary = dataframe.describe()
+    rich_print(Panel(dataframe_summary.to_string(), title="Dataframe Summary", border_style="cyan"))
+
+    logging.info("Displaying the first few rows of the dataframe")
+    dataframe_head = dataframe.head()
+    rich_print(Panel(dataframe_head.to_string(), title="Dataframe Head", border_style="green"))
 
     if (score_name or all_questions):
         grid = Table.grid(expand=True)
