@@ -98,7 +98,7 @@ class MLClassifier(Score):
         mlflow.log_metric("recall", metrics["recall"])
         mlflow.log_metric("f1_score", metrics["f1_score"])
 
-    def load_data(self, *, queries=None, merge=None):
+    def load_data(self, *, queries=None, excel=None):
         """
         Load the specified queries from the training data lake, with caching, into a combined DataFrame in the class instance.
         """
@@ -109,8 +109,8 @@ class MLClassifier(Score):
             os.environ['PLEXUS_TRAINING_DATA_LAKE_BUCKET_NAME'])
         if queries:
             self.dataframe = data_cache.load_dataframe_from_queries(queries=queries)
-        else:
-            self.dataframe = data_cache.load_dataframe_from_file(merge=merge)
+        elif excel:
+            self.dataframe = data_cache.load_dataframe_from_excel(excel=excel)
 
         console.print(Text("Loaded dataframe from training data lake:", style="royal_blue1"))
         self.analyze_dataset()

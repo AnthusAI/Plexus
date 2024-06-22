@@ -1,4 +1,5 @@
 import os
+import re
 import boto3
 import json
 from tqdm import tqdm
@@ -7,6 +8,7 @@ from io import StringIO
 from plexus.CustomLogging import logging
 from plexus.cli.console import console
 from concurrent.futures import ThreadPoolExecutor
+from call_criteria_database import Report
 from rich.progress import Progress
 from rich.console import Console
 from rich.table import Table
@@ -96,18 +98,6 @@ class DataCache:
             os.makedirs(os.path.dirname(metadata_local_path), exist_ok=True)
             with open(metadata_local_path, 'w') as metadata_file:
                 json.dump(metadata, metadata_file)
-
-        # if os.path.exists(transcript_local_path):
-        #     logging.info("Transcript already exists locally at {}".format(transcript_local_path))
-        #     with open(transcript_local_path, 'r') as transcript_file:
-        #         transcript = json.load(transcript_file)
-        # else:
-        #     logging.info("Downloading transcript from S3 bucket {}".format(self.s3_bucket))
-        #     transcript_obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=transcript_key)
-        #     transcript = json.loads(transcript_obj['Body'].read().decode('utf-8'))
-        #     os.makedirs(os.path.dirname(transcript_local_path), exist_ok=True)
-        #     with open(transcript_local_path, 'w') as transcript_file:
-        #         json.dump(transcript, transcript_file)
 
         if os.path.exists(transcript_txt_local_path):
             logging.debug("Transcript text already exists locally at {}".format(transcript_txt_local_path))
@@ -220,21 +210,62 @@ class DataCache:
 
         return combined_dataframe
     
-    def load_dataframe_from_file(self, *, merge):
-        filename_components = []
-
-        file_path = merge['file-path']
-        sheet = merge.get('sheet', 'Sheet1')
-        columns = merge.get('columns', None)
-        integration = merge.get('integration', None)
-        filename_components.append(f"file_path={file_path}-sheet={sheet}-columns={columns}-integration={integration}")
-        cached_dataframe_filename = "_".join(filename_components) + '.h5'
+    def load_dataframe_from_excel(self, *, file_path, score_name):
+        encoded_file_path = re.sub(r'[/\s.]', '_', file_path)
+        filename_components = f"file_path={encoded_file_path}-score_name={score_name}"
+        cached_dataframe_filename = filename_components + '.h5'
 
         cached_dataframe_path = os.path.join(self.local_cache_directory, 'dataframes', cached_dataframe_filename)
         if os.path.exists(cached_dataframe_path):
-            logging.info("Loading cached dataframe from {}".format(cached_dataframe_path))
+            logging.info(f"Loading cached dataframe from {cached_dataframe_path}")
             return pd.read_hdf(cached_dataframe_path)
 
-        logging.info("Loading dataframe by merging: {}".format(merge))
+        if not os.path.exists(file_path):
+            logging.error(f"Excel file not found: {file_path}")
+            raise FileNotFoundError(f"Excel file not found: {file_path}")
 
+        logging.info(f"Loading dataframe from Excel file: {file_path}")
+        dataframe = pd.read_excel(file_path)
         
+        # Filter out everything except for the 'Session_ID' and 'SOLD_FLAG' columns.
+        dataframe = dataframe[['Session_ID', score_name]]
+        
+        logging.info("Loading dataframe from Excel file: {}".format(file_path))
+        
+        # Get the report IDs from the session IDs in the dataframe using the Report model.
+        report_ids = []
+        for session_id in dataframe['Session_ID'].unique():
+            report_id = Report.find_by_session_id(session_id).id
+            report_ids.append(report_id)
+        
+        def process_report(report_id):
+            try:
+                report_metadata, report_transcript_txt = self.download_report(scorecard_id, report_id)
+                report_row = {'report_id': report_id}
+                for score in report_metadata.get('scores', []):
+                    report_row[score['name']] = score['answer']
+                report_row['Transcription'] = report_transcript_txt
+                return report_row
+            except self.s3_client.exceptions.NoSuchKey:
+                logging.warning(f"Report with ID {report_id} not found in S3 bucket.")
+                return None
+        
+        with ThreadPoolExecutor() as executor:
+            with Progress() as progress:
+                task = progress.add_task("[cyan]Processing reports...", total=len(report_ids))
+                report_data_futures = [executor.submit(process_report, report_id) for report_id in report_ids]
+                report_data = []
+                for future in report_data_futures:
+                    result = future.result()
+                    if result is not None:
+                        report_data.append(result)
+                    progress.update(task, advance=1)  
+
+        dataframe = pd.DataFrame(report_data)
+        logging.info(f"Loaded dataframe with {len(dataframe)} rows and columns: {', '.join(dataframe.columns)}")
+        
+        # os.makedirs(os.path.dirname(cached_dataframe_path), exist_ok=True)
+        # dataframe.to_hdf(cached_dataframe_path, key='df', mode='w')
+        # logging.info(f"Cached dataframe saved to {cached_dataframe_path}")
+
+        return dataframe
