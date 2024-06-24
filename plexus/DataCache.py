@@ -210,9 +210,9 @@ class DataCache:
 
         return combined_dataframe
     
-    def load_dataframe_from_excel(self, *, file_path, score_name):
+    def load_dataframe_from_excel(self, *, file_path, scorecard_id, score_name):
         encoded_file_path = re.sub(r'[/\s.]', '_', file_path)
-        filename_components = f"file_path={encoded_file_path}-score_name={score_name}"
+        filename_components = f"file_path={encoded_file_path}-scorecard_id={scorecard_id}-score_name={score_name}"
         cached_dataframe_filename = filename_components + '.h5'
 
         cached_dataframe_path = os.path.join(self.local_cache_directory, 'dataframes', cached_dataframe_filename)
@@ -226,18 +226,25 @@ class DataCache:
 
         logging.info(f"Loading dataframe from Excel file: {file_path}")
         dataframe = pd.read_excel(file_path)
+
+        dataframe[score_name] = dataframe[score_name].map({1: "Yes", 0: "No"})
         
         # Filter out everything except for the 'Session_ID' and 'SOLD_FLAG' columns.
         dataframe = dataframe[['Session_ID', score_name]]
-        
-        logging.info("Loading dataframe from Excel file: {}".format(file_path))
-        
-        # Get the report IDs from the session IDs in the dataframe using the Report model.
+
+        unique_session_ids = dataframe['Session_ID'].unique()
         report_ids = []
-        for session_id in dataframe['Session_ID'].unique():
-            report_id = Report.find_by_session_id(session_id).id
-            report_ids.append(report_id)
-        
+                    
+        # Fetch all report IDs in a single query
+        session_id_to_report_id = Report.find_reports_by_session_ids(unique_session_ids)
+            
+        # Map session IDs to report IDs
+        console.log("Mapping session IDs to report IDs...")
+        report_ids = dataframe['Session_ID'].map(session_id_to_report_id)
+
+        # Add those report IDs as a column to the dataframe
+        dataframe['report_id'] = report_ids
+
         def process_report(report_id):
             try:
                 report_metadata, report_transcript_txt = self.download_report(scorecard_id, report_id)
@@ -257,13 +264,39 @@ class DataCache:
                 report_data = []
                 for future in report_data_futures:
                     result = future.result()
-                    if result is not None:
-                        report_data.append(result)
+                    if result:
+                        if 'Transcription' in result:
+                            dataframe.loc[dataframe['report_id'] == result['report_id'], 'Transcription'] = result['Transcription']
+                        else:
+                            dataframe.loc[dataframe['report_id'] == result['report_id'], 'Transcription'] = None
                     progress.update(task, advance=1)  
-
-        dataframe = pd.DataFrame(report_data)
-        logging.info(f"Loaded dataframe with {len(dataframe)} rows and columns: {', '.join(dataframe.columns)}")
         
+        total_rows = len(dataframe)
+        rows_with_transcription = dataframe['Transcription'].notna().sum()
+        rows_without_transcription = total_rows - rows_with_transcription
+
+        console.print(f"Total rows: {total_rows}")
+        console.print(f"Rows with transcription: {rows_with_transcription}")
+        console.print(f"Rows without transcription: {rows_without_transcription}")
+
+        dataframe = dataframe.dropna(subset=['Transcription'])
+
+        updated_total_rows = len(dataframe)
+        updated_rows_with_transcription = dataframe['Transcription'].notna().sum()
+
+        console.print(f"After removal:")
+        console.print(f"Total rows: {updated_total_rows}")
+        console.print(f"Rows with transcription: {updated_rows_with_transcription}")
+
+        min_count = dataframe[score_name].value_counts().min()
+        balanced_dataframe = dataframe.groupby(score_name).apply(lambda x: x.sample(min_count)).reset_index(drop=True)
+        dataframe = balanced_dataframe
+
+        console.print(f"Balanced dataframe: {len(dataframe)}")
+
+        dataframe['Transcription'] = dataframe['Transcription'].apply(lambda x: '\n'.join([line[7:] for line in x.split('\n') if line.startswith("Customer: ")]))
+        dataframe = dataframe[dataframe['Transcription'].str.strip() != '']
+
         # os.makedirs(os.path.dirname(cached_dataframe_path), exist_ok=True)
         # dataframe.to_hdf(cached_dataframe_path, key='df', mode='w')
         # logging.info(f"Cached dataframe saved to {cached_dataframe_path}")

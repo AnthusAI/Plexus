@@ -137,7 +137,7 @@ def analyze_scorecard(
         password = os.getenv('DB_PASS')
         DB.set_current(server_name, database_name, user_name, password)
     
-        dataframe = data_cache.load_dataframe_from_excel(file_path=excel, score_name=score_name)
+        dataframe = data_cache.load_dataframe_from_excel(file_path=excel, scorecard_id=scorecard_id, score_name=score_name)
     else:
         dataframe = data_cache.load_dataframe_from_queries(queries=[{'scorecard-id':scorecard_id}])
 
