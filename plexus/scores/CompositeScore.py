@@ -181,7 +181,7 @@ class CompositeScore(Score):
 
         try:
             module = importlib.import_module(f"{base_module_path}.LLMClassifier")
-            base_class = getattr(module, 'CompositeScore')
+            base_class = getattr(module, 'LLMClassifier')
         except (ImportError, AttributeError) as e:
             base_class = CompositeScore
             print(f"Warning: Could not dynamically import from {base_module_path}.LLMClassifier. Defaulting to OpenAICompositeScore. Error: {e}")
