@@ -9,11 +9,11 @@ import importlib.util
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from plexus.Score import Score
 from plexus.ScoreResult import ScoreResult
 from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
-from plexus.CompositeScore import CompositeScore
+from plexus.scores.Score import Score
+from plexus.scores.CompositeScore import CompositeScore
 
 class Scorecard:
     """

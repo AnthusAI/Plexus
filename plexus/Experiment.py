@@ -25,7 +25,7 @@ from matplotlib.colors import ListedColormap
 from graphviz import Digraph
 from jinja2 import Template
 
-from .CompositeScore import CompositeScore
+from plexus.scores.CompositeScore import CompositeScore
 from .ScoreResult import ScoreResult
 from .Scorecard import Scorecard
 from .ScorecardResults import ScorecardResults

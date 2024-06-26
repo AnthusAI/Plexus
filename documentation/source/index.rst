@@ -8,8 +8,7 @@ An AI/ML orchestration system for managing classification at scale.
    :caption: Contents:
 
    plexus
-   plexus.classifiers
-   plexus.composite_scores
+   plexus.scores
    plexus.storage
    plexus.cli
 
