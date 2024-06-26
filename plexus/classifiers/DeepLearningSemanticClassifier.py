@@ -71,6 +71,29 @@ class DeepLearningSemanticClassifier(MLClassifier):
     class Parameters(Parameters):
         ...
 
+    def encode_input(self, texts):
+        def encode_single_text(text, maximum_length):
+            return self.tokenizer.encode(text, padding='max_length', truncation=True, max_length=maximum_length, return_tensors='tf')
+
+        def encode_texts_parallel(texts, maximum_length):
+            encoded_texts = []
+            with ThreadPoolExecutor() as executor:
+                with Progress() as progress:
+                    task = progress.add_task("Encoding texts...", total=len(texts))
+                    futures = [executor.submit(encode_single_text, text, maximum_length) for text in texts]
+                    for future in futures:
+                        encoded_texts.append(future.result())
+                        progress.advance(task)
+            return tf.concat(encoded_texts, axis=0)
+
+        encoded_texts = encode_texts_parallel(texts, self.parameters.maximum_tokens_per_window)
+        attention_masks = tf.where(encoded_texts != 0, 1, 0)
+
+        return {
+            'input_ids': encoded_texts,
+            'attention_mask': attention_masks
+        }
+
     class EmbeddingsLayer(tf.keras.layers.Layer):
         def __init__(self, embeddings_model, **kwargs):
             super(DeepLearningSemanticClassifier.EmbeddingsLayer, self).__init__(**kwargs)
@@ -382,12 +405,6 @@ class DeepLearningSemanticClassifier(MLClassifier):
         print(f"Epoch {epoch + 1}: Learning rate is {new_lr}, Validation Loss: {val_loss if val_loss is not None else 'N/A'}")
         return new_lr
 
-    def predict_validation(self):
-        """
-        Implement the prediction logic for the validation set.
-        """
-        self.val_predictions = self.model.predict([self.val_input_ids, self.val_attention_mask])
-
     def register_model(self):
         """
         Register the model with the model registry.
@@ -402,13 +419,43 @@ class DeepLearningSemanticClassifier(MLClassifier):
 
     def predict(self, context, model_input):
         """
-        Make predictions on the test data.
-
-        :param context: MLflow context for the prediction.
-        :param model_input: The input data for making predictions.
-        :return: The predictions.
+        Make predictions on the input data with confidence scores.
         """
-        pass
+        if isinstance(model_input, pd.DataFrame):
+            texts = model_input['Transcription'].tolist()
+            encoded_input = self.encode_input(texts)
+        elif isinstance(model_input, dict) and 'input_ids' in model_input and 'attention_mask' in model_input:
+            encoded_input = model_input
+        else:
+            raise ValueError("Invalid input format. Expected DataFrame or dictionary with 'input_ids' and 'attention_mask'.")
+
+        # Make predictions
+        predictions = self.model.predict([encoded_input['input_ids'], encoded_input['attention_mask']])
+
+        # For multi-class classification
+        if predictions.shape[-1] > 1:
+            confidence_scores = np.max(predictions, axis=-1)
+            predicted_classes = np.argmax(predictions, axis=-1)
+        # For binary classification
+        else:
+            confidence_scores = np.maximum(predictions, 1 - predictions).flatten()
+            predicted_classes = (predictions > 0.5).astype(int).flatten()
+
+        return {
+            'prediction': predicted_classes,
+            'confidence': confidence_scores
+        }
+
+    def predict_validation(self):
+        """
+        Implement the prediction logic for the validation set using the predict() function.
+        """
+        predictions = self.predict(None, {
+            'input_ids': self.val_input_ids,
+            'attention_mask': self.val_attention_mask
+        })
+        self.val_predictions = predictions['prediction']
+        self.val_confidence_scores = predictions['confidence']
 
     @Score.ensure_report_directory_exists
     def _generate_window_count_histogram(self, windows):

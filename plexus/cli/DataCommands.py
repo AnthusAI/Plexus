@@ -18,7 +18,7 @@ from rich.panel import Panel
 from rich.columns import Columns
 from plexus.cli.console import console
 from plexus.Registries import scorecard_registry
-from call_criteria_database import DB
+# from call_criteria_database import DB
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.model_selection import train_test_split
@@ -137,7 +137,7 @@ def analyze_scorecard(
         password = os.getenv('DB_PASS')
         DB.set_current(server_name, database_name, user_name, password)
     
-        dataframe = data_cache.load_dataframe_from_excel(file_path=excel, scorecard_id=scorecard_id, score_name=score_name)
+        # dataframe = data_cache.load_dataframe_from_excel(file_path=excel, scorecard_id=scorecard_id, score_name=score_name)
     else:
         dataframe = data_cache.load_dataframe_from_queries(queries=[{'scorecard-id':scorecard_id}])
 

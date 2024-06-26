@@ -37,6 +37,7 @@ class ExplainableClassifier(MLClassifier):
         target_score_value: str
         ngram_range: str = "2,3"
         scale_pos_weight_index: float = 0
+        include_explanations: bool = False
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
@@ -299,7 +300,7 @@ class ExplainableClassifier(MLClassifier):
         self.val_labels = self.label_encoder.transform(self.y_test)
 
         # Call predict() with a DataFrame as would be done in production
-        self.val_predictions = self.predict(None, X_test_df)
+        self.val_predictions, self.val_confidence_scores, self.val_explanations = self.predict(None, X_test_df)
 
     def evaluate_model(self):
         # Set the necessary attributes before calling the parent's evaluate_model()
@@ -329,25 +330,6 @@ class ExplainableClassifier(MLClassifier):
 
     def predict(self, context, model_input):
         """
-        Make predictions on the test data.
-
-        :param context: MLflow context for the prediction.
-        :param model_input: The input data for making predictions.
-        :return: The predictions.
-        """
-        # Convert DataFrame to the necessary sparse matrix format
-        if isinstance(model_input, pd.DataFrame):
-            # Assuming the DataFrame can be converted directly to a sparse matrix
-            # This conversion will depend on how your data needs to be processed
-            model_input = scipy.sparse.csr_matrix(model_input.values)
-
-        # Make predictions using the trained model
-        y_pred = self.model.predict(model_input)
-
-        return y_pred
-
-    def predict_with_confidence(self, context, model_input):
-        """
         Make predictions on the test data with confidence scores and top three influential features.
         """
         if isinstance(model_input, pd.DataFrame):
@@ -361,37 +343,60 @@ class ExplainableClassifier(MLClassifier):
         explainer = shap.TreeExplainer(self.model)
         shap_values = explainer.shap_values(model_input)
 
-        top_features = []
+        # For binary classification, shap_values is a list with one element
+        if isinstance(shap_values, list):
+            shap_values = shap_values[1]  # We take the positive class SHAP values
+
+        explanations = []
+        positive_log_count = 0
+        negative_log_count = 0
         for sample_index in range(model_input.shape[0]):
-            sample_shap_values = shap_values[sample_index]
-            top_feature_indices = np.argsort(np.abs(sample_shap_values))[-10:]
-            feature_names = np.array(self.vectorizer.get_feature_names_out())[top_feature_indices]
-            sorted_features = feature_names[np.argsort(-np.abs(sample_shap_values[top_feature_indices]))]
+            prediction = predictions[sample_index]
+            sample = model_input[sample_index]
+            non_zero_indices = sample.nonzero()[1]
+            sample_features = np.array(self.feature_names)[non_zero_indices]
+            sample_shap_values = shap_values[sample_index][non_zero_indices]
 
-            if sample_index <= 2:
-                sorted_shap_values = np.abs(sample_shap_values[top_feature_indices])
-                sorted_shap_values = sorted_shap_values[np.argsort(-sorted_shap_values)]
-                feature_shap_pairs = list(zip(sorted_features, sorted_shap_values))
+            # Sort features by absolute SHAP value
+            sorted_indices = np.argsort(-np.abs(sample_shap_values))
+            sorted_features = sample_features[sorted_indices]
+            sorted_shap_values = sample_shap_values[sorted_indices]
 
-                sample_table = Table(title=f"Sample #{sample_index}")
-                sample_table.add_column("Classification", justify="center")
-                sample_table.add_column("Confidence", justify="center")
-                sample_table.add_column("Features", justify="center")
+            # Take top 10 features
+            top_features = sorted_features[:10]
+            top_shap_values = sorted_shap_values[:10]
 
-                feature_table = Table(title="Top Features with SHAP Values")
-                feature_table.add_column("Feature", justify="left")
-                feature_table.add_column("SHAP Value", justify="right")
+            log_output = False
+            if (prediction == 1) and (positive_log_count < 3):
+                positive_log_count += 1
+                log_output = True
+            elif (prediction == 0) and (negative_log_count < 3):
+                negative_log_count += 1
+                log_output = True
+
+            if log_output:
+                feature_shap_pairs = list(zip(top_features, top_shap_values))
+
+                sample_table = Table(title=f"Sample #{sample_index}", title_style="bold magenta1")
+                sample_table.add_column("Classification", justify="center", style="sky_blue1")
+                sample_table.add_column("Confidence", justify="center", style="sky_blue1")
+                sample_table.add_column("Features", justify="center", style="sky_blue1")
+
+                feature_table = Table(title="Top Features with SHAP Values", title_style="bold magenta1")
+                feature_table.add_column("Feature", justify="left", style="sky_blue1")
+                feature_table.add_column("SHAP Value", justify="right", style="sky_blue1")
                 for feature, shap_value in feature_shap_pairs:
-                    feature_table.add_row(feature, f"{shap_value:.4f}")
+                    feature_table.add_row(feature, f"{shap_value:.4f}", style="sky_blue1")
 
                 sample_table.add_row(
                     str(predictions[sample_index]),
                     f"{confidenceScores[sample_index]:.2f}",
-                    feature_table)
+                    feature_table,
+                    style="sky_blue1")
 
                 console = Console()
                 console.print(sample_table)
 
-            top_features.append(sorted_features.tolist())
+            explanations.append("\n".join([f"{feature} ({shap_value:.4f})" for feature, shap_value in zip(top_features, top_shap_values)]))
 
-        return predictions, confidenceScores #, top_features
+        return predictions, confidenceScores, explanations

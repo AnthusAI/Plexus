@@ -13,6 +13,7 @@ from abc import abstractmethod
 from sklearn.metrics import roc_curve, auc, precision_recall_curve
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
+from sklearn.calibration import calibration_curve
 import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
 from rich.table import Table
@@ -350,6 +351,8 @@ class MLClassifier(Score):
 
         self._plot_training_history()
 
+        self._plot_calibration_curve()
+
         metrics = {
             "validation_f1_score": f1,
             "validation_recall": recall,
@@ -585,6 +588,95 @@ class MLClassifier(Score):
         # plt.show()
         mlflow.log_artifact(file_name)
 
+    def _plot_calibration_curve(self):
+        file_name = self.report_file_name("calibration_curve.png")
+
+        confidences = self.val_confidence_scores.flatten()
+        predicted_labels = (self.val_predictions.flatten() >= 0.5).astype(int)
+        true_labels = self.val_labels.flatten()
+
+        # Sort the data by confidence
+        sorted_indices = np.argsort(confidences)
+        sorted_confidences = confidences[sorted_indices]
+        sorted_predictions = predicted_labels[sorted_indices]
+        sorted_true_labels = true_labels[sorted_indices]
+
+        # Define custom bucket sizes
+        n = len(confidences)
+        bucket_sizes = [n // 6, n // 3, n - (n // 6) - (n // 3)]
+
+        buckets = []
+        start_index = 0
+        for size in bucket_sizes:
+            end_index = start_index + size
+
+            bucket_confidences = sorted_confidences[start_index:end_index]
+            bucket_predictions = sorted_predictions[start_index:end_index]
+            bucket_true_labels = sorted_true_labels[start_index:end_index]
+
+            bucket_accuracy = np.mean(bucket_predictions == bucket_true_labels)
+            bucket_mean_confidence = np.mean(bucket_confidences)
+
+            buckets.append((bucket_mean_confidence, bucket_accuracy, len(bucket_predictions)))
+
+            start_index = end_index
+
+        # Plot the calibration curve
+        plt.figure(figsize=(10, 8))
+        plt.plot([0, 1], [0, 1], linestyle='--', color=self._sky_blue, label='Perfectly calibrated')
+
+        bucket_confidences, bucket_accuracies, bucket_sample_counts = zip(*buckets)
+        plt.plot(bucket_confidences, bucket_accuracies, label='Model calibration', marker='o', color=self._fuchsia)
+
+        plt.xlabel('Confidence')
+        plt.ylabel('Accuracy')
+        plt.title('Calibration Curve: Accuracy by Confidence Bucket')
+        plt.legend(loc='lower right')
+
+        # Set X-axis ticks and labels
+        x_ticks = np.arange(0, 1.1, 0.1)
+        plt.xticks(x_ticks)
+        plt.gca().xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:.0%}"))
+
+        # Set Y-axis ticks and labels
+        y_ticks = np.arange(0, 1.1, 0.1)
+        plt.yticks(y_ticks)
+        plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda y, p: f"{y:.0%}"))
+
+        plt.ylim(0, 1)
+        plt.xlim(0, 1)
+        plt.grid(True, linestyle='--', alpha=0.7)
+        plt.tight_layout()
+        plt.savefig(file_name)
+        mlflow.log_artifact(file_name)
+
+        # Print overall statistics
+        print("\nOverall statistics:")
+        print(f"Total samples: {len(confidences)}")
+        print(f"Min confidence: {np.min(confidences):.2%}")
+        print(f"Max confidence: {np.max(confidences):.2%}")
+        print(f"Mean confidence: {np.mean(confidences):.2%}")
+        print(f"Overall accuracy: {np.mean(predicted_labels == true_labels):.2%}")
+
+        # Print histogram of confidences
+        plt.figure(figsize=(10, 6))
+        plt.hist(confidences, bins=20, edgecolor='black')
+        plt.title('Distribution of Confidences')
+        plt.xlabel('Confidence')
+        plt.ylabel('Count')
+        plt.gca().xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:.0%}"))
+        plt.savefig(self.report_file_name("confidence_distribution.png"))
+        mlflow.log_artifact(self.report_file_name("confidence_distribution.png"))
+
+        # Log detailed bucket information
+        print("\nBucket details:")
+        for i in range(len(bucket_confidences)):
+            print(f"Bucket {i+1}:")
+            print(f"  Confidence range: {bucket_confidences[i]:.2%}")
+            print(f"  Mean confidence: {bucket_confidences[i]:.2%}")
+            print(f"  Accuracy: {bucket_accuracies[i]:.2%}")
+            print(f"  Number of samples: {bucket_sample_counts[i]}")
+            
     def _record_metrics(self, metrics):
         """
         Record the provided metrics dictionary as a JSON file in the appropriate report folder for this model.
