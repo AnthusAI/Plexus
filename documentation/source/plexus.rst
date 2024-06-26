@@ -14,7 +14,7 @@ Subpackages
 
    plexus.classifiers
    plexus.cli
-   plexus.composite_scores
+   plexus.scores.composite
    plexus.scorecards
    plexus.storage
 

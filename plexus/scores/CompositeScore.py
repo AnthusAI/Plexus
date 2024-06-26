@@ -177,7 +177,7 @@ class CompositeScore(Score):
         chunking = config.get('chunking', True)
 
         # Hard-code the base module path
-        base_module_path = 'plexus.composite_scores'
+        base_module_path = 'plexus.scores.composite'
 
         try:
             module = importlib.import_module(f"{base_module_path}.LLMClassifier")

@@ -1,7 +1,7 @@
 plexus.composite\_scores.OpenAI\_test module
 ============================================
 
-.. automodule:: plexus.composite_scores.OpenAI_test
+.. automodule:: plexus.scores.composite.OpenAI_test
    :members:
    :undoc-members:
    :show-inheritance:
