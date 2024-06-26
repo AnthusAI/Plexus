@@ -16,7 +16,7 @@ from tenacity import retry, retry_if_exception_type, wait_random_exponential, st
 from jinja2 import Environment, PackageLoader, select_autoescape
 
 from plexus.scores.CompositeScore import CompositeScore
-from plexus.Score import Score
+from plexus.scores.Score import Score
 from plexus.ScoreResult import ScoreResult
 from plexus.Registries import scorecard_registry
 
