@@ -24,8 +24,8 @@ Submodules
 .. toctree::
    :maxdepth: 4
 
-   plexus.CompositeScore
-   plexus.CompositeScore_test
+   plexus.scores.CompositeScore
+   plexus.scores.CompositeScore_test
    plexus.CustomLogging
    plexus.DataCache
    plexus.Experiment

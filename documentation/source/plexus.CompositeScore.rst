@@ -1,7 +1,7 @@
-plexus.CompositeScore module
+plexus.scores.CompositeScore module
 ============================
 
-.. automodule:: plexus.CompositeScore
+.. automodule:: plexus.scores.CompositeScore
    :members:
    :undoc-members:
    :show-inheritance:
