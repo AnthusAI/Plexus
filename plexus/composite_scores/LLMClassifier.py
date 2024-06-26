@@ -15,7 +15,7 @@ from requests.exceptions import HTTPError
 from tenacity import retry, retry_if_exception_type, wait_random_exponential, stop_after_attempt, retry_if_exception_type, before_sleep_log
 from jinja2 import Environment, PackageLoader, select_autoescape
 
-from plexus.CompositeScore import CompositeScore
+from plexus.scores.CompositeScore import CompositeScore
 from plexus.Score import Score
 from plexus.ScoreResult import ScoreResult
 from plexus.Registries import scorecard_registry

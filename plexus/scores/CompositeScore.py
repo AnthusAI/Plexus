@@ -10,10 +10,10 @@ from pydantic import BaseModel
 import pandas as pd
 
 from plexus.processors.RelevantWindowsTranscriptFilter import RelevantWindowsTranscriptFilter
-from plexus.classifiers.Score import Score
+from plexus.scores.Score import Score
 from plexus.ScoreResult import ScoreResult
 from plexus.Registries import scorecard_registry
-from plexus.classifiers.KeywordClassifier import KeywordClassifier
+from plexus.scores.KeywordClassifier import KeywordClassifier
 from plexus.PromptTemplateLoader import PromptTemplateLoader
 from plexus.CustomLogging import logging
 

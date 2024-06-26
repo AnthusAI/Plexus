@@ -2,7 +2,7 @@ import unittest
 from decimal import Decimal
 
 from plexus.ScorecardResultsAnalysis import ScorecardResultsAnalysis
-from plexus.CompositeScore import CompositeScore
+from plexus.scores.CompositeScore import CompositeScore
 from plexus.ScoreResult import ScoreResult
 
 class TestCompositeScore1(CompositeScore):

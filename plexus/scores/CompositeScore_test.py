@@ -6,7 +6,7 @@ from unittest.mock import ANY
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from plexus.CompositeScore import CompositeScore
+from plexus.scores.CompositeScore import CompositeScore
 from plexus.ScoreResult import ScoreResult
 
 class MockCompositeScore(CompositeScore):
@@ -43,7 +43,7 @@ class TestProcessTranscriptChunk(unittest.TestCase):
     def setUp(self):
         self.composite_score = MockCompositeScore(transcript="Initial transcript")
 
-    @patch('plexus.CompositeScore.CompositeScore.compute_element_for_chunk')
+    @patch('plexus.scores.CompositeScore.CompositeScore.compute_element_for_chunk')
     def test_process_transcript_chunk(self, mock_compute_element_for_chunk):
         # Mock the behavior of compute_element_for_chunk
         mock_response = MagicMock()
