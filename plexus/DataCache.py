@@ -8,7 +8,7 @@ from io import StringIO
 from plexus.CustomLogging import logging
 from plexus.cli.console import console
 from concurrent.futures import ThreadPoolExecutor
-from call_criteria_database import Report
+# from call_criteria_database import Report
 from rich.progress import Progress
 from rich.console import Console
 from rich.table import Table
@@ -210,95 +210,95 @@ class DataCache:
 
         return combined_dataframe
     
-    def load_dataframe_from_excel(self, *, file_path, scorecard_id, score_name):
-        encoded_file_path = re.sub(r'[/\s.]', '_', file_path)
-        filename_components = f"file_path={encoded_file_path}-scorecard_id={scorecard_id}-score_name={score_name}"
-        cached_dataframe_filename = filename_components + '.h5'
+    # def load_dataframe_from_excel(self, *, file_path, scorecard_id, score_name):
+    #     encoded_file_path = re.sub(r'[/\s.]', '_', file_path)
+    #     filename_components = f"file_path={encoded_file_path}-scorecard_id={scorecard_id}-score_name={score_name}"
+    #     cached_dataframe_filename = filename_components + '.h5'
 
-        cached_dataframe_path = os.path.join(self.local_cache_directory, 'dataframes', cached_dataframe_filename)
-        if os.path.exists(cached_dataframe_path):
-            logging.info(f"Loading cached dataframe from {cached_dataframe_path}")
-            return pd.read_hdf(cached_dataframe_path)
+    #     cached_dataframe_path = os.path.join(self.local_cache_directory, 'dataframes', cached_dataframe_filename)
+    #     if os.path.exists(cached_dataframe_path):
+    #         logging.info(f"Loading cached dataframe from {cached_dataframe_path}")
+    #         return pd.read_hdf(cached_dataframe_path)
 
-        if not os.path.exists(file_path):
-            logging.error(f"Excel file not found: {file_path}")
-            raise FileNotFoundError(f"Excel file not found: {file_path}")
+    #     if not os.path.exists(file_path):
+    #         logging.error(f"Excel file not found: {file_path}")
+    #         raise FileNotFoundError(f"Excel file not found: {file_path}")
 
-        logging.info(f"Loading dataframe from Excel file: {file_path}")
-        dataframe = pd.read_excel(file_path)
+    #     logging.info(f"Loading dataframe from Excel file: {file_path}")
+    #     dataframe = pd.read_excel(file_path)
 
-        dataframe[score_name] = dataframe[score_name].map({1: "Yes", 0: "No"})
+    #     dataframe[score_name] = dataframe[score_name].map({1: "Yes", 0: "No"})
         
-        # Filter out everything except for the 'Session_ID' and 'SOLD_FLAG' columns.
-        dataframe = dataframe[['Session_ID', score_name]]
+    #     # Filter out everything except for the 'Session_ID' and 'SOLD_FLAG' columns.
+    #     dataframe = dataframe[['Session_ID', score_name]]
 
-        unique_session_ids = dataframe['Session_ID'].unique()
-        report_ids = []
+    #     unique_session_ids = dataframe['Session_ID'].unique()
+    #     report_ids = []
                     
-        # Fetch all report IDs in a single query
-        session_id_to_report_id = Report.find_reports_by_session_ids(unique_session_ids)
+    #     # Fetch all report IDs in a single query
+    #     session_id_to_report_id = Report.find_reports_by_session_ids(unique_session_ids)
             
-        # Map session IDs to report IDs
-        console.log("Mapping session IDs to report IDs...")
-        report_ids = dataframe['Session_ID'].map(session_id_to_report_id)
+    #     # Map session IDs to report IDs
+    #     console.log("Mapping session IDs to report IDs...")
+    #     report_ids = dataframe['Session_ID'].map(session_id_to_report_id)
 
-        # Add those report IDs as a column to the dataframe
-        dataframe['report_id'] = report_ids
+    #     # Add those report IDs as a column to the dataframe
+    #     dataframe['report_id'] = report_ids
 
-        def process_report(report_id):
-            try:
-                report_metadata, report_transcript_txt = self.download_report(scorecard_id, report_id)
-                report_row = {'report_id': report_id}
-                for score in report_metadata.get('scores', []):
-                    report_row[score['name']] = score['answer']
-                report_row['Transcription'] = report_transcript_txt
-                return report_row
-            except self.s3_client.exceptions.NoSuchKey:
-                logging.warning(f"Report with ID {report_id} not found in S3 bucket.")
-                return None
+    #     def process_report(report_id):
+    #         try:
+    #             report_metadata, report_transcript_txt = self.download_report(scorecard_id, report_id)
+    #             report_row = {'report_id': report_id}
+    #             for score in report_metadata.get('scores', []):
+    #                 report_row[score['name']] = score['answer']
+    #             report_row['Transcription'] = report_transcript_txt
+    #             return report_row
+    #         except self.s3_client.exceptions.NoSuchKey:
+    #             logging.warning(f"Report with ID {report_id} not found in S3 bucket.")
+    #             return None
         
-        with ThreadPoolExecutor() as executor:
-            with Progress() as progress:
-                task = progress.add_task("[cyan]Processing reports...", total=len(report_ids))
-                report_data_futures = [executor.submit(process_report, report_id) for report_id in report_ids]
-                report_data = []
-                for future in report_data_futures:
-                    result = future.result()
-                    if result:
-                        if 'Transcription' in result:
-                            dataframe.loc[dataframe['report_id'] == result['report_id'], 'Transcription'] = result['Transcription']
-                        else:
-                            dataframe.loc[dataframe['report_id'] == result['report_id'], 'Transcription'] = None
-                    progress.update(task, advance=1)  
+    #     with ThreadPoolExecutor() as executor:
+    #         with Progress() as progress:
+    #             task = progress.add_task("[cyan]Processing reports...", total=len(report_ids))
+    #             report_data_futures = [executor.submit(process_report, report_id) for report_id in report_ids]
+    #             report_data = []
+    #             for future in report_data_futures:
+    #                 result = future.result()
+    #                 if result:
+    #                     if 'Transcription' in result:
+    #                         dataframe.loc[dataframe['report_id'] == result['report_id'], 'Transcription'] = result['Transcription']
+    #                     else:
+    #                         dataframe.loc[dataframe['report_id'] == result['report_id'], 'Transcription'] = None
+    #                 progress.update(task, advance=1)  
         
-        total_rows = len(dataframe)
-        rows_with_transcription = dataframe['Transcription'].notna().sum()
-        rows_without_transcription = total_rows - rows_with_transcription
+    #     total_rows = len(dataframe)
+    #     rows_with_transcription = dataframe['Transcription'].notna().sum()
+    #     rows_without_transcription = total_rows - rows_with_transcription
 
-        console.print(f"Total rows: {total_rows}")
-        console.print(f"Rows with transcription: {rows_with_transcription}")
-        console.print(f"Rows without transcription: {rows_without_transcription}")
+    #     console.print(f"Total rows: {total_rows}")
+    #     console.print(f"Rows with transcription: {rows_with_transcription}")
+    #     console.print(f"Rows without transcription: {rows_without_transcription}")
 
-        dataframe = dataframe.dropna(subset=['Transcription'])
+    #     dataframe = dataframe.dropna(subset=['Transcription'])
 
-        updated_total_rows = len(dataframe)
-        updated_rows_with_transcription = dataframe['Transcription'].notna().sum()
+    #     updated_total_rows = len(dataframe)
+    #     updated_rows_with_transcription = dataframe['Transcription'].notna().sum()
 
-        console.print(f"After removal:")
-        console.print(f"Total rows: {updated_total_rows}")
-        console.print(f"Rows with transcription: {updated_rows_with_transcription}")
+    #     console.print(f"After removal:")
+    #     console.print(f"Total rows: {updated_total_rows}")
+    #     console.print(f"Rows with transcription: {updated_rows_with_transcription}")
 
-        min_count = dataframe[score_name].value_counts().min()
-        balanced_dataframe = dataframe.groupby(score_name).apply(lambda x: x.sample(min_count)).reset_index(drop=True)
-        dataframe = balanced_dataframe
+    #     min_count = dataframe[score_name].value_counts().min()
+    #     balanced_dataframe = dataframe.groupby(score_name).apply(lambda x: x.sample(min_count)).reset_index(drop=True)
+    #     dataframe = balanced_dataframe
 
-        console.print(f"Balanced dataframe: {len(dataframe)}")
+    #     console.print(f"Balanced dataframe: {len(dataframe)}")
 
-        dataframe['Transcription'] = dataframe['Transcription'].apply(lambda x: '\n'.join([line[7:] for line in x.split('\n') if line.startswith("Customer: ")]))
-        dataframe = dataframe[dataframe['Transcription'].str.strip() != '']
+    #     dataframe['Transcription'] = dataframe['Transcription'].apply(lambda x: '\n'.join([line[7:] for line in x.split('\n') if line.startswith("Customer: ")]))
+    #     dataframe = dataframe[dataframe['Transcription'].str.strip() != '']
 
-        # os.makedirs(os.path.dirname(cached_dataframe_path), exist_ok=True)
-        # dataframe.to_hdf(cached_dataframe_path, key='df', mode='w')
-        # logging.info(f"Cached dataframe saved to {cached_dataframe_path}")
+    #     # os.makedirs(os.path.dirname(cached_dataframe_path), exist_ok=True)
+    #     # dataframe.to_hdf(cached_dataframe_path, key='df', mode='w')
+    #     # logging.info(f"Cached dataframe saved to {cached_dataframe_path}")
 
-        return dataframe
+    #     return dataframe

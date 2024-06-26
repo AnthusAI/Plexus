@@ -158,78 +158,40 @@ class FastTextClassifier(MLClassifier):
             logging.info("Model hyperparameters are not accessible.")
 
     def predict_validation(self):
-        """
-        Implement the prediction logic for the validation set.
-        """
-        self.val_predictions = self.model.predict(self.val_input_ids)
-
-    def evaluate_model(self):
         test_filename = self._get_test_filename()
-        results = self.model.test(test_filename)
-        num_test_examples = results[0]
-        precision_at_one = results[1]
-        recall_at_one = results[2]
 
-        test_data = []
         with open(test_filename, 'r', encoding='utf-8') as file:
             test_data = file.readlines()
 
         actual_labels = [line.split(' ', 1)[0].replace('__label__', '') for line in test_data]
-        predicted_labels = [
-            self.model.predict(line.split(' ', 1)[1].replace('\n', ' '))[0][0].replace('__label__', '')
+
+        predicted_labels_and_confidences = [
+            self.model.predict(line.split(' ', 1)[1].replace('\n', ' '), k=1)
             for line in test_data
         ]
+        predicted_labels = [
+            pred[0][0].replace('__label__', '') for pred, _ in predicted_labels_and_confidences
+        ]
+        confidence_scores = [
+            conf[0] for _, conf in predicted_labels_and_confidences
+        ]
 
-        logging.info(f"Number of actual labels: {len(actual_labels)}")
-        logging.info(f"Number of predicted labels: {len(predicted_labels)}")
+        # Convert string labels to numeric values
+        unique_labels = sorted(set(actual_labels))
+        self.label_map = {label: i for i, label in enumerate(unique_labels)}
+        
+        self.val_labels = np.array([self.label_map[label] for label in actual_labels])
+        self.val_predictions = np.array(confidence_scores)  # Use confidence scores directly
+        self.val_confidence_scores = np.array(confidence_scores)
 
-        accuracy = sum(1 for a, p in zip(actual_labels, predicted_labels) if a == p) / len(actual_labels)
+        # Store the string predictions for later use if needed
+        self.val_predictions_str = np.array(predicted_labels)
 
-        f1_score = 0.0
-        if precision_at_one + recall_at_one != 0:
-            f1_score = 2 * (precision_at_one * recall_at_one) / (precision_at_one + recall_at_one)
-
-        metrics = {
-            "accuracy": accuracy,
-            "precision": precision_at_one,
-            "recall": recall_at_one,
-            "f1_score": f1_score,
-            "number_of_test_examples": num_test_examples
-        }
-        logging.info(f"Model evaluation results - {metrics}")
-        self._record_metrics(metrics)
-        self.log_evaluation_metrics(metrics)
-
-        unique_labels = list(set(actual_labels + predicted_labels))
-        self.label_map = {label: idx for idx, label in enumerate(unique_labels)}
-
-        logging.debug(f"Label map: {self.label_map}")
-
-        self.val_labels_int = np.array([self.label_map[label] for label in actual_labels])
-        self.val_predictions_int = np.array([self.label_map[label] for label in predicted_labels])
-
-        logging.info(f"Integer actual labels: {self.val_labels_int}")
-        logging.info(f"Integer predicted labels: {self.val_predictions_int}")
-
-        logging.info(f"Number of integer actual labels: {len(self.val_labels_int)}")
-        logging.info(f"Number of integer predicted labels: {len(self.val_predictions_int)}")
-
-        if self.is_multi_class:
-            num_classes = len(unique_labels)
-            self.val_labels = np.eye(num_classes)[self.val_labels_int]
-            self.val_predictions = np.eye(num_classes)[self.val_predictions_int]
-        else:
-            self.val_labels = self.val_labels_int
-            self.val_predictions = self.val_predictions_int
-
-        cm = confusion_matrix(self.val_labels_int, self.val_predictions_int)
-        logging.info(f"Confusion matrix: \n{cm}")
-
-        self._generate_confusion_matrix()
-        self._plot_roc_curve()
-        self._plot_precision_recall_curve()
-
-        return metrics
+        # Log the types and shapes of the arrays
+        logging.info(f"val_labels type: {type(self.val_labels)}, shape: {self.val_labels.shape}, sample: {self.val_labels[:5]}")
+        logging.info(f"val_predictions type: {type(self.val_predictions)}, shape: {self.val_predictions.shape}, sample: {self.val_predictions[:5]}")
+        logging.info(f"val_confidence_scores type: {type(self.val_confidence_scores)}, shape: {self.val_confidence_scores.shape}, sample: {self.val_confidence_scores[:5]}")
+        logging.info(f"val_predictions_str type: {type(self.val_predictions_str)}, shape: {self.val_predictions_str.shape}, sample: {self.val_predictions_str[:5]}")
 
     def _log_parameters_recursively(self, params, parent_key=''):
         for key, value in params.items():
@@ -294,18 +256,22 @@ class FastTextClassifier(MLClassifier):
         return local_model_path
 
     def predict(self, model_input):
-        # Check if the input is a DataFrame with a 'Transcription' column
         if isinstance(model_input, pd.DataFrame) and 'Transcription' in model_input.columns:
-            # Extract the text column
             texts = model_input['Transcription'].tolist()
             logging.debug(f"Running inference on texts: {texts}")
         else:
             logging.error("Model input should be a DataFrame with a 'Transcription' column.")
             raise ValueError("Model input should be a DataFrame with a 'Transcription' column.")
 
-        # Apply the FastText model's predict method to each text entry
-        predictions = [self.model.predict(text)[0][0].replace('__label__', '') for text in texts]
-        logging.debug(f"Predictions: {predictions}")
+        predictions = []
+        confidence_scores = []
 
-        # Return the predictions as a DataFrame
-        return pd.DataFrame(predictions, columns=['prediction'])
+        for text in texts:
+            prediction, confidence = self.model.predict(text)
+            predictions.append(self.label_map[prediction[0].replace('__label__', '')])
+            confidence_scores.append(confidence[0])
+
+        logging.debug(f"Predictions: {predictions}")
+        logging.debug(f"Confidence scores: {confidence_scores}")
+
+        return np.array(predictions), np.array(confidence_scores)
