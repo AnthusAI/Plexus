@@ -1,6 +1,6 @@
 import os
 import mlflow
-from plexus.classifiers import Score, MLClassifier
+from plexus.scores import Score, MLClassifier
 from pydantic import BaseModel, validator, ValidationError
 import numpy as np
 import pandas as pd
@@ -47,7 +47,7 @@ class DeepLearningSemanticClassifier(MLClassifier):
 
     def __new__(cls, *args, **parameters):
         if cls is DeepLearningSemanticClassifier:
-            from plexus.classifiers.DeepLearningSlidingWindowSemanticClassifier import DeepLearningSlidingWindowSemanticClassifier
+            from plexus.scores.DeepLearningSlidingWindowSemanticClassifier import DeepLearningSlidingWindowSemanticClassifier
             
             # Validate parameters
             try:
@@ -59,11 +59,11 @@ class DeepLearningSemanticClassifier(MLClassifier):
             logging.info(f"Sliding window: {validated_parameters.get('multiple_windows', False)}")
             if validated_parameters.get('multiple_windows', False):
                 logging.info("Using sliding window embeddings")
-                from plexus.classifiers.DeepLearningSlidingWindowSemanticClassifier import DeepLearningSlidingWindowSemanticClassifier
+                from plexus.scores.DeepLearningSlidingWindowSemanticClassifier import DeepLearningSlidingWindowSemanticClassifier
                 return DeepLearningSlidingWindowSemanticClassifier(*args, **validated_parameters)
             else:
                 logging.info("Using one-step embeddings")
-                from plexus.classifiers.DeepLearningOneStepSemanticClassifier import DeepLearningOneStepSemanticClassifier
+                from plexus.scores.DeepLearningOneStepSemanticClassifier import DeepLearningOneStepSemanticClassifier
                 return DeepLearningOneStepSemanticClassifier(*args, **validated_parameters)
         else:
             return super(DeepLearningSemanticClassifier, cls).__new__(cls)

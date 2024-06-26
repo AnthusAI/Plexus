@@ -8,7 +8,7 @@ from io import StringIO
 from plexus.CustomLogging import logging
 from plexus.cli.console import console
 from concurrent.futures import ThreadPoolExecutor
-from call_criteria_database import Report
+# from call_criteria_database import Report
 from rich.progress import Progress
 from rich.console import Console
 from rich.table import Table
