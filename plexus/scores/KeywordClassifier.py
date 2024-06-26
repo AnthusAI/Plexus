@@ -1,5 +1,5 @@
 import re
-from plexus.classifiers.Score import Score
+from plexus.scores.Score import Score
 from plexus.CustomLogging import logging
 
 class KeywordClassifier(Score):

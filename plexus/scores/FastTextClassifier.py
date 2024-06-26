@@ -10,7 +10,7 @@ from sklearn.metrics import confusion_matrix
 import mlflow
 import mlflow.pyfunc
 
-from plexus.classifiers.MLClassifier import MLClassifier
+from plexus.scores.MLClassifier import MLClassifier
 
 fasttext.FastText.eprint = lambda x: None
 

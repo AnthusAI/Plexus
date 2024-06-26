@@ -14,10 +14,8 @@ Features
 - **Logging**: Custom logging utilities to track and debug processes.
 """
 
-from .CompositeScore import CompositeScore
 from .Experiment import Experiment
 from .PromptTemplateLoader import PromptTemplateLoader
-from .Score import Score
 from .Scorecard import Scorecard
 from .ScorecardResults import ScorecardResults
 from .ScorecardResultsAnalysis import ScorecardResultsAnalysis
