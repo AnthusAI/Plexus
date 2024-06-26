@@ -18,7 +18,6 @@ from rich.panel import Panel
 from rich.columns import Columns
 from plexus.cli.console import console
 from plexus.Registries import scorecard_registry
-# from call_criteria_database import DB
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.model_selection import train_test_split
@@ -130,16 +129,16 @@ def analyze_scorecard(
                            os.environ['PLEXUS_TRAINING_DATA_LAKE_ATHENA_RESULTS_BUCKET_NAME'],
                            os.environ['PLEXUS_TRAINING_DATA_LAKE_BUCKET_NAME'])
     dataframe = None
-    if excel:
-        server_name = os.getenv('DB_SERVER')
-        database_name = os.getenv('DB_NAME')
-        user_name = os.getenv('DB_USER')
-        password = os.getenv('DB_PASS')
-        DB.set_current(server_name, database_name, user_name, password)
+    # if excel:
+    #     server_name = os.getenv('DB_SERVER')
+    #     database_name = os.getenv('DB_NAME')
+    #     user_name = os.getenv('DB_USER')
+    #     password = os.getenv('DB_PASS')
+    #     DB.set_current(server_name, database_name, user_name, password)
     
-        # dataframe = data_cache.load_dataframe_from_excel(file_path=excel, scorecard_id=scorecard_id, score_name=score_name)
-    else:
-        dataframe = data_cache.load_dataframe_from_queries(queries=[{'scorecard-id':scorecard_id}])
+    #     dataframe = data_cache.load_dataframe_from_excel(file_path=excel, scorecard_id=scorecard_id, score_name=score_name)
+    # else:
+    dataframe = data_cache.load_dataframe_from_queries(queries=[{'scorecard-id':scorecard_id}])
 
     logging.info("Generating summary of the dataframe")
     dataframe_summary = dataframe.describe()

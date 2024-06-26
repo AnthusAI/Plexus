@@ -23,7 +23,7 @@ from rich import print as rich_print
 from rich.text import Text
 from plexus.cli.console import console
 from plexus.CustomLogging import logging
-from plexus.classifiers.Score import Score
+from plexus.scores.Score import Score
 from sklearn.preprocessing import LabelBinarizer
 
 class MLClassifier(Score):

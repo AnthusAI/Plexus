@@ -1,7 +1,7 @@
 import os
 import mlflow
 import pandas as pd
-from plexus.classifiers.MLClassifier import MLClassifier
+from plexus.scores.MLClassifier import MLClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.feature_selection import SelectKBest, mutual_info_classif
 from sklearn.feature_selection import SelectKBest, f_classif
@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 import numpy as np
 from plexus.CustomLogging import logging
-from plexus.classifiers.Score import Score
+from plexus.scores.Score import Score
 import xgboost as xgb
 from rich import print as rich_print
 from rich.panel import Panel

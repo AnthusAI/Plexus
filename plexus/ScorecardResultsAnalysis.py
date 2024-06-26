@@ -14,7 +14,7 @@ from matplotlib.colors import ListedColormap
 import mlflow
 
 from plexus.CustomLogging import logging
-from plexus.CompositeScore import CompositeScore
+from plexus.scores.CompositeScore import CompositeScore
 
 class ScorecardResultsAnalysis:
     def __init__(self, *, scorecard_results):
