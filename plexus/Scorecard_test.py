@@ -2,7 +2,6 @@ import unittest
 from decimal import Decimal
 
 from plexus.Scorecard import Scorecard
-from plexus.scorecards import TermLifeAI
 
 class MockScoreResult:
     def __init__(self, value):

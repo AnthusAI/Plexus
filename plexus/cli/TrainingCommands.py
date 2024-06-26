@@ -44,7 +44,7 @@ def train_score(score_name, scorecard_class):
     # Score class instance setup
 
     score_class_name = score_to_train_configuration['class']
-    score_module_path = f'plexus.classifiers.{score_class_name}'
+    score_module_path = f'plexus.scores.{score_class_name}'
     score_module = importlib.import_module(score_module_path)
     score_class = getattr(score_module, score_class_name)
 
