@@ -439,13 +439,17 @@ class CompositeScore(Score):
         rules = element.get('rules')
         if score_result.is_yes() and rules is not None:
             logging.debug(f"Rules:\n{rules}")
+            if not self.chunking:
+                previous_messages=score_result.metadata['chat_history'][-2:],
+            else:
+                previous_messages=score_result.metadata['chat_history'],
 
             clarification_result = self.compute_element_for_chunk(
                 name=name,
                 element_type='clarification',
                 
                 # Add the previous response content to the chat history.
-                previous_messages=score_result.metadata['chat_history'],
+                previous_messages=previous_messages,
                 prompt=rules,
                 chunk=transcript_chunk
             )
