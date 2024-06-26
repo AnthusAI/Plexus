@@ -1,7 +1,7 @@
 Plexus
 ======
 
-An AI/ML orchestration system for managing classification at scale.
+An AI/ML orchestration system for managing classification, extraction and other scoring at scale.
 
 .. toctree::
    :maxdepth: 2
@@ -9,6 +9,7 @@ An AI/ML orchestration system for managing classification at scale.
 
    plexus
    plexus.scores
+   plexus.processors
    plexus.storage
    plexus.cli
 
