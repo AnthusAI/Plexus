@@ -588,20 +588,33 @@ class MLClassifier(Score):
         # plt.show()
         mlflow.log_artifact(file_name)
 
-    def _plot_calibration_curve(self):
+    def _plot_calibration_curve(self, *, target_accuracy=0.90):
         file_name = self.report_file_name("calibration_curve.png")
 
         confidences = self.val_confidence_scores.flatten()
         predicted_labels = (self.val_predictions.flatten() >= 0.5).astype(int)
         true_labels = self.val_labels.flatten()
 
-        # Sort the data by confidence
+        def find_confidence_threshold(confidences, true_labels, predicted_labels, target_accuracy):
+            sorted_indices = np.argsort(confidences)
+            sorted_confidences = confidences[sorted_indices]
+            sorted_true_labels = true_labels[sorted_indices]
+            sorted_predicted_labels = predicted_labels[sorted_indices]
+            
+            for i in range(len(sorted_confidences)):
+                remaining_accuracy = np.mean(sorted_predicted_labels[i:] == sorted_true_labels[i:])
+                if remaining_accuracy >= target_accuracy:
+                    return sorted_confidences[i]
+            
+            return sorted_confidences[-1]  # Return the highest confidence if target not achievable
+
+        confidence_threshold = find_confidence_threshold(confidences, true_labels, predicted_labels, target_accuracy)
+
         sorted_indices = np.argsort(confidences)
         sorted_confidences = confidences[sorted_indices]
         sorted_predictions = predicted_labels[sorted_indices]
         sorted_true_labels = true_labels[sorted_indices]
 
-        # Define custom bucket sizes
         n = len(confidences)
         bucket_sizes = [n // 6, n // 3, n - (n // 6) - (n // 3)]
 
@@ -621,24 +634,23 @@ class MLClassifier(Score):
 
             start_index = end_index
 
-        # Plot the calibration curve
         plt.figure(figsize=(10, 8))
         plt.plot([0, 1], [0, 1], linestyle='--', color=self._sky_blue, label='Perfectly calibrated')
 
         bucket_confidences, bucket_accuracies, bucket_sample_counts = zip(*buckets)
         plt.plot(bucket_confidences, bucket_accuracies, label='Model calibration', marker='o', color=self._fuchsia)
 
+        plt.axvline(x=confidence_threshold, color='blue', linestyle='-', label=f'Confidence threshold ({confidence_threshold:.2%})')
+
         plt.xlabel('Confidence')
         plt.ylabel('Accuracy')
         plt.title('Calibration Curve: Accuracy by Confidence Bucket')
         plt.legend(loc='lower right')
 
-        # Set X-axis ticks and labels
         x_ticks = np.arange(0, 1.1, 0.1)
         plt.xticks(x_ticks)
         plt.gca().xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:.0%}"))
 
-        # Set Y-axis ticks and labels
         y_ticks = np.arange(0, 1.1, 0.1)
         plt.yticks(y_ticks)
         plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda y, p: f"{y:.0%}"))
@@ -650,15 +662,19 @@ class MLClassifier(Score):
         plt.savefig(file_name)
         mlflow.log_artifact(file_name)
 
-        # Print overall statistics
         print("\nOverall statistics:")
         print(f"Total samples: {len(confidences)}")
         print(f"Min confidence: {np.min(confidences):.2%}")
         print(f"Max confidence: {np.max(confidences):.2%}")
         print(f"Mean confidence: {np.mean(confidences):.2%}")
         print(f"Overall accuracy: {np.mean(predicted_labels == true_labels):.2%}")
+        print(f"\nConfidence threshold for {target_accuracy:.0%} accuracy: {confidence_threshold:.2%}")
+        print(f"Predictions above threshold: {np.sum(confidences > confidence_threshold)}")
+        print(f"Predictions at or below threshold: {np.sum(confidences <= confidence_threshold)}")
+        remaining_predictions = confidences > confidence_threshold
+        remaining_accuracy = np.mean(predicted_labels[remaining_predictions] == true_labels[remaining_predictions])
+        print(f"Accuracy of predictions above threshold: {remaining_accuracy:.2%}")
 
-        # Print histogram of confidences
         plt.figure(figsize=(10, 6))
         plt.hist(confidences, bins=20, edgecolor='black')
         plt.title('Distribution of Confidences')
@@ -668,14 +684,13 @@ class MLClassifier(Score):
         plt.savefig(self.report_file_name("confidence_distribution.png"))
         mlflow.log_artifact(self.report_file_name("confidence_distribution.png"))
 
-        # Log detailed bucket information
         print("\nBucket details:")
-        for i in range(len(bucket_confidences)):
+        for i, (conf, acc, count) in enumerate(buckets):
             print(f"Bucket {i+1}:")
-            print(f"  Confidence range: {bucket_confidences[i]:.2%}")
-            print(f"  Mean confidence: {bucket_confidences[i]:.2%}")
-            print(f"  Accuracy: {bucket_accuracies[i]:.2%}")
-            print(f"  Number of samples: {bucket_sample_counts[i]}")
+            print(f"  Confidence range: {conf:.2%}")
+            print(f"  Mean confidence: {conf:.2%}")
+            print(f"  Accuracy: {acc:.2%}")
+            print(f"  Number of samples: {count}")
             
     def _record_metrics(self, metrics):
         """
