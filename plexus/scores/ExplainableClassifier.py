@@ -377,6 +377,25 @@ class ExplainableClassifier(MLClassifier):
             if log_output:
                 feature_shap_pairs = list(zip(top_features, top_shap_values))
 
+                # Create a dictionary mapping feature indices to feature names
+                feature_dict = dict(enumerate(self.feature_names))
+
+                # Generate and save SHAP waterfall plot with actual feature names
+                shap_explanation = shap.Explanation(
+                    values=sample_shap_values,
+                    base_values=explainer.expected_value,
+                    data=sample_features,
+                    feature_names=[feature_dict[i] for i in non_zero_indices]
+                )
+                # Set a larger figure size and adjust left margin
+                plt.figure(figsize=(12, 8))
+                plt.subplots_adjust(left=0.3)
+
+                shap.plots.waterfall(shap_explanation, show=False)
+                plot_filename = self.report_file_name(f"shap_waterfall_sample_{sample_index}.png")            
+                plt.savefig(plot_filename, bbox_inches='tight')
+                plt.close()
+
                 sample_table = Table(title=f"Sample #{sample_index}", title_style="bold magenta1")
                 sample_table.add_column("Classification", justify="center", style="sky_blue1")
                 sample_table.add_column("Confidence", justify="center", style="sky_blue1")
