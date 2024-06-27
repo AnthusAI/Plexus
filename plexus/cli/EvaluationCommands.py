@@ -5,7 +5,7 @@ import click
 import yaml
 
 from plexus.CustomLogging import logging
-
+from plexus.Scorecard import Scorecard
 from plexus.Registries import scorecard_registry
 from plexus.Experiment import AccuracyExperiment
 
@@ -28,9 +28,9 @@ def load_configuration_from_yaml_file(configuration_file_path):
         return {}
 
 @evaluate.command()
-@click.option('--scorecard', 'scorecard_name', default=None, help='Name of the scorecard to evaluate')
+@click.option('--scorecard-name', 'scorecard_name', default=None, help='Name of the scorecard to evaluate')
 def accuracy(
-    scorecard_name: str = 'term-life-ai',
+    scorecard_name: str,
     scorecard_folder: str = 'scorecards/TermLifeAI',
     number_of_transcripts_to_sample: int = 1,
     sampling_method: str = 'random',
@@ -63,12 +63,13 @@ def accuracy(
 
     logging.info('Running accuracy experiment...')
     logging.info(f'  Using labeled samples from {labeled_samples_filename}')
+    Scorecard.load_and_register_scorecards('scorecards/')
     scorecard_type = scorecard_registry.get(scorecard_name)
     if scorecard_type is None:
         logging.error(f"Scorecard with name '{scorecard_name}' not found.")
         return
     # Instantiate the scorecard type and tell it where to find the score definition files.
-    scorecard_instance = scorecard_type(scorecard_folder_path="scorecards/TermLifeAI")
+    scorecard_instance = scorecard_type(scorecard_folder_path=scorecard_folder)
     logging.info(f"  Using scorecard {scorecard_name} with class {scorecard_instance.__class__.__name__}")
 
     with AccuracyExperiment(
