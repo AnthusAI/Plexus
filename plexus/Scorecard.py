@@ -5,6 +5,7 @@ import json
 import requests
 import json
 import logging
+import pandas as pd
 import importlib.util
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -165,10 +166,12 @@ class Scorecard:
 
             score_instance = score_class(
                 scorecard_name=self.name,
-                score_name=score_name,
-                transcript=transcript
+                score_name=score_name
             )
-            score_result = score_instance.compute_result()
+
+            score_result = score_instance.predict(
+                context=None,
+                model_input=pd.DataFrame({'transcript': [transcript]}))
             logging.debug(f"Score result: {score_result}")
 
             score_total_cost = score_instance.accumulated_expenses()

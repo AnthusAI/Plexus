@@ -41,12 +41,12 @@ class ToolCallProcessingError(Exception):
         self.message = message
         self.exception = exception
 
-class CompositeScore(CompositeScore):
+class LLMClassifier(CompositeScore):
     """
     Concrete implementation of the CompositeScoreBase class using OpenAI's API.
     """
-    def __init__(self, *, transcript, scorecard_name, score_name, model_name, completion_name, **kwargs):
-        super().__init__(transcript=transcript, scorecard_name=scorecard_name, score_name=score_name, **kwargs)
+    def __init__(self, *, scorecard_name, score_name, model_name, completion_name, **kwargs):
+        super().__init__(scorecard_name=scorecard_name, score_name=score_name, **kwargs)
         self.model_name = model_name
         self.completion_name = completion_name
 

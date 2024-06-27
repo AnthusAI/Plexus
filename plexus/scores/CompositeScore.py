@@ -30,22 +30,15 @@ class CompositeScore(Score):
     costs of the individual elements and the composite score.
     """
 
-    def __init__(self, *, transcript, scorecard_name, score_name, **kwargs):
+    def __init__(self, *, scorecard_name, score_name):
         """
         Initializes a new instance of the CompositeScore class.
 
         This constructor sets up the initial state of the CompositeScore object, including initializing
         token accumulators for tracking API usage costs and preparing the list to store individual
         element results.
-
-        Args:
-            transcript (str): The transcript text that the composite score will be based upon.
-
-        Raises:
-            TypeError: If the provided transcript is not a string.
         """
-        super().__init__(transcript=transcript, scorecard_name=scorecard_name, score_name=score_name, **kwargs)
-        self.transcript = transcript
+        super().__init__(scorecard_name=scorecard_name, score_name=score_name)
         self.scorecard_name = scorecard_name
         self.score_name = score_name
 
@@ -63,10 +56,6 @@ class CompositeScore(Score):
         self.llm_request_history = []
 
         self.element_results = []
-        
-        # Each score will have a different mechanism for filtering the transcript.
-        # Each element can also optionally override the transcript filtering if necessary.
-        self.filtered_transcript = self.process_transcript(transcript=self.transcript)
 
         # Initialize the chat history with the system prompt.
         self.chat_history = []
@@ -108,7 +97,7 @@ class CompositeScore(Score):
             data = json.load(file)
 
         # Create a new instance of the class
-        instance = cls(transcript=data['transcript'], scorecard_name=data['scorecard_name'], score_name=data['score_name'])
+        instance = cls(scorecard_name=data['scorecard_name'], score_name=data['score_name'])
 
         # Set the instance attributes from the data
         instance.reasoning = data['reasoning']
@@ -181,17 +170,22 @@ class CompositeScore(Score):
 
         try:
             module = importlib.import_module(f"{base_module_path}.LLMClassifier")
-            base_class = getattr(module, 'CompositeScore')
+            base_class = getattr(module, 'LLMClassifier')
         except (ImportError, AttributeError) as e:
             base_class = CompositeScore
             print(f"Warning: Could not dynamically import from {base_module_path}.LLMClassifier. Defaulting to OpenAICompositeScore. Error: {e}")
 
         # Create a new subclass of CompositeScore
         class CompositeScoreFromMarkdown(base_class):
-            def __init__(self, *, transcript, scorecard_name, score_name):
+            def __init__(self, *, scorecard_name, score_name):
                 self.preprocessing_config = preprocessing_config
                 self.chunking = chunking
-                super().__init__(transcript=transcript, scorecard_name=scorecard_name, score_name=score_name, model_name=llm_model_name, completion_name=completion_name)
+                super().__init__(
+                    scorecard_name=scorecard_name, 
+                    score_name=score_name, 
+                    model_name=llm_model_name, 
+                    completion_name=completion_name
+                )
                 self.decision_tree = decision_tree_config
                 self.prompt_template_loader = PromptTemplateLoader(markdown_content=markdown_content)
                 self.name = score_name
@@ -216,8 +210,14 @@ class CompositeScore(Score):
                 :param model_input: The input data for making predictions.
                 :return: The predictions.
                 """
-                # Implement the method
-                pass
+                # Get the transcript from the model input dataframe.
+                transcript = model_input.loc[0, 'transcript']
+
+                # Filter that transcript.
+                self.filtered_transcript = self.process_transcript(transcript=transcript)
+
+                # Run the decision tree.
+                return self.compute_result()
 
             def process_transcript(self, *, transcript):
                 # Initialize an empty list to hold both strings and compiled regex patterns
@@ -440,9 +440,9 @@ class CompositeScore(Score):
         if score_result.is_yes() and rules is not None:
             logging.debug(f"Rules:\n{rules}")
             if not self.chunking:
-                previous_messages=score_result.metadata['chat_history'][-2:],
+                previous_messages=score_result.metadata['chat_history'][-2:]
             else:
-                previous_messages=score_result.metadata['chat_history'],
+                previous_messages=score_result.metadata['chat_history']
 
             clarification_result = self.compute_element_for_chunk(
                 name=name,
@@ -543,7 +543,7 @@ class CompositeScore(Score):
     def normalize_element_name(name):
         return re.sub(r"\W+", "_", name).lower().strip("_")
 
-    def compute_result(self, tree=None):
+    def compute_result(self, *, tree=None):
         # Initialize to the score's decision tree at the start.
         # After that, each iteration's tree is a sub-tree, as we make decisions.
         tree = tree if tree is not None else self.decision_tree
@@ -562,7 +562,7 @@ class CompositeScore(Score):
         decision_result = self.compute_element(name=element_name)
 
         next_step = tree.get(decision_result)
-        return self.compute_result(next_step)
+        return self.compute_result(tree=next_step)
     
     def get_element_by_name(self, *, name):
         """
