@@ -440,9 +440,9 @@ class CompositeScore(Score):
         if score_result.is_yes() and rules is not None:
             logging.debug(f"Rules:\n{rules}")
             if not self.chunking:
-                previous_messages=score_result.metadata['chat_history'][-2:],
+                previous_messages=score_result.metadata['chat_history'][-2:]
             else:
-                previous_messages=score_result.metadata['chat_history'],
+                previous_messages=score_result.metadata['chat_history']
 
             clarification_result = self.compute_element_for_chunk(
                 name=name,
