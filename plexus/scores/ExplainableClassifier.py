@@ -380,19 +380,30 @@ class ExplainableClassifier(MLClassifier):
                 # Create a dictionary mapping feature indices to feature names
                 feature_dict = dict(enumerate(self.feature_names))
 
-                # Generate and save SHAP waterfall plot with actual feature names
+                # Create feature names and values without duplication
+                feature_names = [feature_dict[i] for i in non_zero_indices]
+                feature_values = sample.toarray()[0]  # Convert entire sample to dense array
+
+                # Generate and save SHAP waterfall plot with actual feature names and values
                 shap_explanation = shap.Explanation(
-                    values=sample_shap_values,
+                    values=shap_values[sample_index],  # Use all SHAP values for this sample
                     base_values=explainer.expected_value,
-                    data=sample_features,
-                    feature_names=[feature_dict[i] for i in non_zero_indices]
+                    # data=feature_values,
+                    feature_names=self.feature_names  # Use all feature names
                 )
+                
                 # Set a larger figure size and adjust left margin
                 plt.figure(figsize=(12, 8))
                 plt.subplots_adjust(left=0.3)
+                
+                shap.plots.waterfall(shap_explanation, show=False, max_display=10)
 
-                shap.plots.waterfall(shap_explanation, show=False)
-                plot_filename = self.report_file_name(f"shap_waterfall_sample_{sample_index}.png")            
+                ax = plt.gca()
+                labels = [item.get_text() for item in ax.get_yticklabels()]
+                cleaned_labels = [label.split('=')[0].strip() for label in labels]
+                ax.set_yticklabels(cleaned_labels, rotation=0, ha='right')
+
+                plot_filename = self.report_file_name(f"shap_waterfall_sample_{sample_index}.png")
                 plt.savefig(plot_filename, bbox_inches='tight')
                 plt.close()
 
