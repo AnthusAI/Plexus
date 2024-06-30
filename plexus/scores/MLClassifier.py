@@ -314,22 +314,14 @@ class MLClassifier(Score):
         logging.info(f"val_labels type: {type(self.val_labels)}, shape: {self.val_labels.shape}, sample: {self.val_labels[:5]}")
         logging.info(f"val_predictions type: {type(self.val_predictions)}, shape: {self.val_predictions.shape}, sample: {self.val_predictions[:5]}")
         
-        if self.is_multi_class:
-            if self.val_predictions.ndim > 1:
-                self.val_predictions_labels = np.argmax(self.val_predictions, axis=1)
-            else:
-                self.val_predictions_labels = self.val_predictions  # Use predictions directly if they are already 1D
-            
-            if self.val_labels.ndim > 1 and self.val_labels.shape[1] > 1:
-                self.val_labels = np.argmax(self.val_labels, axis=1)  # Convert one-hot encoded labels to integer labels
-        else:
-            self.val_predictions_labels = [1 if pred > 0.5 else 0 for pred in self.val_predictions]
+        # Ensure val_predictions_labels contains string labels
+        self.val_predictions_labels = self.val_predictions
 
         # Compute evaluation metrics
         accuracy = accuracy_score(self.val_labels, self.val_predictions_labels)
-        f1 = f1_score(self.val_labels, self.val_predictions_labels, average='weighted' if self.is_multi_class else 'binary')
-        recall = recall_score(self.val_labels, self.val_predictions_labels, average='weighted' if self.is_multi_class else 'binary')
-        precision = precision_score(self.val_labels, self.val_predictions_labels, average='weighted' if self.is_multi_class else 'binary')
+        f1 = f1_score(self.val_labels, self.val_predictions_labels, average='weighted')
+        recall = recall_score(self.val_labels, self.val_predictions_labels, average='weighted')
+        precision = precision_score(self.val_labels, self.val_predictions_labels, average='weighted')
 
         # Log evaluation metrics to MLflow
         mlflow.log_metric("validation_f1_score", f1)
@@ -344,21 +336,18 @@ class MLClassifier(Score):
         print("Generating visualizations...")
 
         self._generate_confusion_matrix()
-
         self._plot_roc_curve()
-
         self._plot_precision_recall_curve()
-
         self._plot_training_history()
-
         self._plot_calibration_curve()
 
+        # Create a combined metrics hash and log it.
         metrics = {
+            "validation_accuracy": accuracy,
             "validation_f1_score": f1,
             "validation_recall": recall,
             "validation_precision": precision
         }
-
         if hasattr(self, 'history') and hasattr(self.history, 'history'):
             metrics.update({
                 "training_loss": self.history.history['loss'][-1],
@@ -366,7 +355,6 @@ class MLClassifier(Score):
                 "validation_loss": self.history.history['val_loss'][-1],
                 "validation_accuracy": self.history.history['val_accuracy'][-1]
             })
-
         self._record_metrics(metrics)
 
         # End MLflow run
@@ -393,8 +381,15 @@ class MLClassifier(Score):
         self.model = mlflow.keras.load_model(context.artifacts["model"])
         # Load any other necessary artifacts
 
+    class ModelInput(BaseModel):
+        transcript: str
+
+    class ModelOutput(BaseModel):
+        classification: str
+        confidence: float
+
     @abstractmethod
-    def predict(self, context, model_input):
+    def predict(self, context, model_input: ModelInput):
         """
         Make predictions on the test data.
 
@@ -433,31 +428,20 @@ class MLClassifier(Score):
     def _generate_confusion_matrix(self):
         file_name = self.report_file_name("confusion_matrix.png")
 
-        # Ensure that both val_labels and val_predictions are in integer format
-        if self.is_multi_class:
-            if len(self.val_labels.shape) > 1 and self.val_labels.shape[1] > 1:
-                val_labels_int = np.argmax(self.val_labels, axis=1)
-            else:
-                val_labels_int = self.val_labels
-
-            if self.val_predictions.ndim > 1:
-                val_predictions_int = np.argmax(self.val_predictions, axis=1)
-            else:
-                val_predictions_int = self.val_predictions  # Use predictions directly if they are already 1D
-
-        else:
-            val_labels_int = self.val_labels
-            val_predictions_int = [1 if pred > 0.5 else 0 for pred in self.val_predictions]
+        # Convert string labels to numeric
+        label_to_int = {label: i for i, label in enumerate(self.label_map.values())}
+        val_labels_int = np.array([label_to_int[label] for label in self.val_labels])
+        val_predictions_int = np.array([label_to_int[pred] for pred in self.val_predictions])
 
         cm = confusion_matrix(val_labels_int, val_predictions_int)
         custom_colormap = sns.light_palette(self._fuchsia, as_cmap=True)
-        sns.heatmap(cm, annot=True, fmt='d', cmap=custom_colormap, xticklabels=self.label_map.keys(), yticklabels=self.label_map.keys())
+        sns.heatmap(cm, annot=True, fmt='d', cmap=custom_colormap, xticklabels=self.label_map.values(), yticklabels=self.label_map.values())
         plt.xlabel('Predicted')
         plt.ylabel('Actual')
         plt.title('Confusion Matrix')
 
         plt.savefig(file_name)
-        # plt.show()
+        plt.close()
 
         mlflow.log_artifact(file_name)
         
@@ -468,13 +452,17 @@ class MLClassifier(Score):
     def _plot_roc_curve(self):
         file_name = self.report_file_name("ROC_curve.png")
 
-        plt.clf()
         plt.figure()
+
+        # Convert string labels to numeric
+        label_to_int = {label: i for i, label in enumerate(self.label_map.values())}
+        val_labels_int = np.array([label_to_int[label] for label in self.val_labels])
+        val_predictions_int = np.array([label_to_int[pred] for pred in self.val_predictions])
 
         if self.is_multi_class:
             lb = LabelBinarizer()
-            val_labels_one_hot = lb.fit_transform(self.val_labels)
-            val_predictions_one_hot = lb.transform(self.val_predictions)
+            val_labels_one_hot = lb.fit_transform(val_labels_int)
+            val_predictions_one_hot = lb.transform(val_predictions_int)
 
             n_classes = val_labels_one_hot.shape[1]
             fpr = dict()
@@ -483,9 +471,9 @@ class MLClassifier(Score):
             for i in range(n_classes):
                 fpr[i], tpr[i], _ = roc_curve(val_labels_one_hot[:, i], val_predictions_one_hot[:, i])
                 roc_auc[i] = auc(fpr[i], tpr[i])
-                plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {i} (area = {roc_auc[i]:0.2f})')
+                plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {self.label_map[i]} (area = {roc_auc[i]:0.2f})')
         else:
-            fpr, tpr, _ = roc_curve(self.val_labels, self.val_predictions)
+            fpr, tpr, _ = roc_curve(val_labels_int, self.val_confidence_scores)
             roc_auc = auc(fpr, tpr)
             plt.plot(fpr, tpr, color=self._sky_blue, lw=2, label='ROC curve (area = %0.2f)' % roc_auc)
 
@@ -497,7 +485,7 @@ class MLClassifier(Score):
         plt.title('Receiver Operating Characteristic')
         plt.legend(loc="lower right")
         plt.savefig(file_name)
-        # plt.show()
+        plt.close()
         mlflow.log_artifact(file_name)
 
     def _plot_precision_recall_curve(self):
@@ -505,10 +493,15 @@ class MLClassifier(Score):
 
         plt.figure()
 
+        # Convert string labels to numeric
+        label_to_int = {label: i for i, label in enumerate(self.label_map.values())}
+        val_labels_int = np.array([label_to_int[label] for label in self.val_labels])
+        val_predictions_int = np.array([label_to_int[pred] for pred in self.val_predictions])
+
         if self.is_multi_class:
             lb = LabelBinarizer()
-            val_labels_one_hot = lb.fit_transform(self.val_labels)
-            val_predictions_one_hot = lb.transform(self.val_predictions)
+            val_labels_one_hot = lb.fit_transform(val_labels_int)
+            val_predictions_one_hot = lb.transform(val_predictions_int)
 
             n_classes = val_labels_one_hot.shape[1]
             precision = dict()
@@ -517,9 +510,9 @@ class MLClassifier(Score):
             for i in range(n_classes):
                 precision[i], recall[i], _ = precision_recall_curve(val_labels_one_hot[:, i], val_predictions_one_hot[:, i])
                 pr_auc[i] = auc(recall[i], precision[i])
-                plt.plot(recall[i], precision[i], lw=2, label=f'Class {i} (area = {pr_auc[i]:0.2f})')
+                plt.plot(recall[i], precision[i], lw=2, label=f'Class {self.label_map[i]} (area = {pr_auc[i]:0.2f})')
         else:
-            precision, recall, _ = precision_recall_curve(self.val_labels, self.val_predictions)
+            precision, recall, _ = precision_recall_curve(val_labels_int, self.val_confidence_scores)
             pr_auc = auc(recall, precision)
             plt.plot(recall, precision, color=self._sky_blue, lw=2, label='PR curve (area = %0.2f)' % pr_auc)
 
@@ -528,7 +521,7 @@ class MLClassifier(Score):
         plt.title('Precision-Recall curve')
         plt.legend(loc="lower left")
         plt.savefig(file_name)
-        # plt.show()
+        plt.close()
         mlflow.log_artifact(file_name)
 
     def _plot_training_history(self):
@@ -592,8 +585,13 @@ class MLClassifier(Score):
         file_name = self.report_file_name("calibration_curve.png")
 
         confidences = self.val_confidence_scores.flatten()
-        predicted_labels = (self.val_predictions.flatten() >= 0.5).astype(int)
-        true_labels = self.val_labels.flatten()
+        predicted_labels = self.val_predictions
+        true_labels = self.val_labels
+
+        # Convert string labels to numeric
+        label_to_int = {label: i for i, label in enumerate(self.label_map.values())}
+        predicted_labels_numeric = np.array([label_to_int[label] for label in predicted_labels])
+        true_labels_numeric = np.array([label_to_int[label] for label in true_labels])
 
         def find_confidence_threshold(confidences, true_labels, predicted_labels, target_accuracy):
             sorted_indices = np.argsort(confidences)
@@ -608,12 +606,12 @@ class MLClassifier(Score):
             
             return sorted_confidences[-1]  # Return the highest confidence if target not achievable
 
-        confidence_threshold = find_confidence_threshold(confidences, true_labels, predicted_labels, target_accuracy)
+        confidence_threshold = find_confidence_threshold(confidences, true_labels_numeric, predicted_labels_numeric, target_accuracy)
 
         sorted_indices = np.argsort(confidences)
         sorted_confidences = confidences[sorted_indices]
-        sorted_predictions = predicted_labels[sorted_indices]
-        sorted_true_labels = true_labels[sorted_indices]
+        sorted_predictions = predicted_labels_numeric[sorted_indices]
+        sorted_true_labels = true_labels_numeric[sorted_indices]
 
         n = len(confidences)
         bucket_sizes = [n // 6, n // 3, n - (n // 6) - (n // 3)]
@@ -667,13 +665,16 @@ class MLClassifier(Score):
         print(f"Min confidence: {np.min(confidences):.2%}")
         print(f"Max confidence: {np.max(confidences):.2%}")
         print(f"Mean confidence: {np.mean(confidences):.2%}")
-        print(f"Overall accuracy: {np.mean(predicted_labels == true_labels):.2%}")
+        print(f"Overall accuracy: {np.mean(predicted_labels_numeric == true_labels_numeric):.2%}")
         print(f"\nConfidence threshold for {target_accuracy:.0%} accuracy: {confidence_threshold:.2%}")
         print(f"Predictions above threshold: {np.sum(confidences > confidence_threshold)}")
         print(f"Predictions at or below threshold: {np.sum(confidences <= confidence_threshold)}")
         remaining_predictions = confidences > confidence_threshold
-        remaining_accuracy = np.mean(predicted_labels[remaining_predictions] == true_labels[remaining_predictions])
+        remaining_accuracy = np.mean(predicted_labels_numeric[remaining_predictions] == true_labels_numeric[remaining_predictions])
         print(f"Accuracy of predictions above threshold: {remaining_accuracy:.2%}")
+        predictions_below_threshold = np.sum(confidences <= confidence_threshold)
+        percentage_below_threshold = predictions_below_threshold / len(confidences) * 100
+        print(f"Percentage of predictions below threshold: {percentage_below_threshold:.2f}%")
 
         plt.figure(figsize=(10, 6))
         plt.hist(confidences, bins=20, edgecolor='black')

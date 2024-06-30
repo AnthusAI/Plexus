@@ -66,12 +66,10 @@ class ExplainableClassifier(MLClassifier):
         logging.info(f"Creating TF-IDF representation with ngram range: {self.parameters.ngram_range}")
         self.vectorizer = TfidfVectorizer(ngram_range=self.ngram_range)
         X = self.vectorizer.fit_transform(text_data)
-            
+                
         logging.info(f"Number of features before selection: {X.shape[1]}")
 
         # Select top N features based on ANOVA F-value with f_classif
-        # selection_function = f_classif
-        # For mutual cross information, use: mutual_info_classif
         selection_function = mutual_info_classif
 
         logging.info(f"Selecting top {self.parameters.top_n_features} features...")
@@ -116,14 +114,21 @@ class ExplainableClassifier(MLClassifier):
         print(self.y_test.value_counts(normalize=True))
 
         print("Unique values before encoding:", np.unique(y))
-        # Encode the target variable
-        self.label_encoder = LabelEncoder()
-        self.y_train_encoded = self.label_encoder.fit_transform(self.y_train)
-        self.y_test_encoded = self.label_encoder.transform(self.y_test)
+        # Encode the target variable if it's not already encoded
+        if self.y_train.dtype == 'object':
+            self.label_encoder = LabelEncoder()
+            self.y_train_encoded = self.label_encoder.fit_transform(self.y_train)
+            self.y_test_encoded = self.label_encoder.transform(self.y_test)
+        else:
+            self.y_train_encoded = self.y_train
+            self.y_test_encoded = self.y_test
+            self.label_encoder = LabelEncoder()
+            self.label_encoder.classes_ = np.array(['No', 'Yes'])  # Assuming 0 is 'No' and 1 is 'Yes'
+
         print("Unique values after encoding:", np.unique(self.y_train_encoded), np.unique(self.y_test_encoded))
 
         # Check if it's a binary or multi-class classification problem
-        if len(self.label_encoder.classes_) == 2:
+        if len(np.unique(self.y_train_encoded)) == 2:
             # Binary classification
             logging.info("Training XGBoost Classifier for binary classification...")
 
@@ -158,6 +163,7 @@ class ExplainableClassifier(MLClassifier):
 
         # Create the label_map attribute
         self.label_map = {i: label for i, label in enumerate(self.label_encoder.classes_)}
+        logging.info(f"Label map: {self.label_map}")
 
     @Score.ensure_report_directory_exists
     def explain_model(self):
@@ -290,17 +296,37 @@ class ExplainableClassifier(MLClassifier):
         plt.close()
 
     def predict_validation(self):
-        """
-        Implement the prediction logic for the validation set.
-        """
-        # Convert sparse matrix to DataFrame
-        X_test_df = pd.DataFrame(self.X_test.toarray(), columns=self.feature_names)
+        logging.info("predict_validation() called")
+        logging.info(f"X_test shape: {self.X_test.shape}")
 
-        # Ensure the labels are encoded
-        self.val_labels = self.label_encoder.transform(self.y_test)
+        self.val_predictions = []
+        self.val_confidence_scores = []
+        self.val_explanations = []
+        self.val_labels = self.y_test  # Set val_labels to y_test
 
-        # Call predict() with a DataFrame as would be done in production
-        self.val_predictions, self.val_confidence_scores, self.val_explanations = self.predict(None, X_test_df)
+        positive_log_count = 0
+        negative_log_count = 0
+
+        for i in range(self.X_test.shape[0]):
+            sample = self.X_test[i].toarray().flatten()  # Convert to dense array and flatten
+            result = self.predict(None, sample, i, positive_log_count, negative_log_count)
+            self.val_predictions.append(result.classification)  # Already a string, no need for label_map
+            self.val_confidence_scores.append(result.confidence)
+            self.val_explanations.append(result.explanation)
+
+            if result.classification == 'Yes':  # Assuming 'Yes' is positive
+                positive_log_count += 1
+            else:
+                negative_log_count += 1
+
+        self.val_predictions = np.array(self.val_predictions)
+        self.val_confidence_scores = np.array(self.val_confidence_scores)
+
+        logging.info(f"Generated predictions for {len(self.val_predictions)} samples")
+        logging.info(f"val_predictions shape: {self.val_predictions.shape}")
+        logging.info(f"val_confidence_scores shape: {self.val_confidence_scores.shape}")
+        logging.info(f"val_labels shape: {self.val_labels.shape}")
+        logging.info(f"Number of explanations: {len(self.val_explanations)}")
 
     def evaluate_model(self):
         # Set the necessary attributes before calling the parent's evaluate_model()
@@ -328,94 +354,166 @@ class ExplainableClassifier(MLClassifier):
         """
         pass
 
-    def predict(self, context, model_input):
-        """
-        Make predictions on the test data with confidence scores and top three influential features.
-        """
+    # New subclass for ModelOutput
+    class ExplainableModelOutput(MLClassifier.ModelOutput):
+        explanation: str
+
+    # New method to vectorize a single transcript
+    def vectorize_transcript(self, transcript: str):
+        logging.info("vectorize_transcript() called")
+        logging.info(f"Transcript length: {len(transcript)}")
+        
+        vectorized = self.vectorizer.transform([transcript])
+        logging.info(f"Vectorized shape: {vectorized.shape}")
+        
+        selected = self.selector.transform(vectorized)
+        logging.info(f"Selected shape: {selected.shape}")
+        
+        return selected
+
+    def predict(self, context, model_input, sample_index=0, positive_log_count=0, negative_log_count=0):
+        logging.info(f"predict() called with input type: {type(model_input)}")
+        
+        prepared_input = self._prepare_input(model_input)
+        logging.info(f"Prepared input shape: {prepared_input.shape}")
+        
+        probabilities = self._calculate_probabilities(prepared_input)
+        prediction = np.argmax(probabilities)
+        confidence_score = np.max(probabilities)
+        
+        shap_values = self._extract_shap_values(prepared_input)
+        explanation = self._generate_single_explanation(prepared_input, prediction, confidence_score, shap_values, 
+                                                        sample_index, positive_log_count, negative_log_count)
+
+        # Convert numeric prediction to string label
+        prediction_label = self.label_map[prediction]
+        logging.info(f"Prediction: {prediction_label}, Confidence: {confidence_score:.4f}")
+        
+        return self.ExplainableModelOutput(
+            classification=prediction_label,  # Use string label
+            confidence=confidence_score,
+            explanation=explanation
+        )
+
+    def _prepare_input(self, model_input):
+        logging.info(f"Preparing input of type: {type(model_input)}")
+        if isinstance(model_input, dict):
+            model_input = pd.DataFrame([model_input])
         if isinstance(model_input, pd.DataFrame):
-            model_input = scipy.sparse.csr_matrix(model_input.values)
+            if model_input.shape[0] > 1:
+                raise ValueError("Input should be a single sample, not multiple rows")
+            logging.info(f"Input shape: {model_input.shape}")
+            return scipy.sparse.csr_matrix(model_input.values)
+        elif isinstance(model_input, (list, np.ndarray)):
+            model_input = np.array(model_input).reshape(1, -1)
+            logging.info(f"Input shape: {model_input.shape}")
+            return scipy.sparse.csr_matrix(model_input)
+        elif scipy.sparse.issparse(model_input):
+            if model_input.shape[0] > 1:
+                raise ValueError("Input should be a single sample, not multiple rows")
+            logging.info(f"Input shape: {model_input.shape}")
+            return model_input
+        else:
+            raise ValueError(f"Unsupported input type: {type(model_input)}")
 
-        probabilities = self.model.predict_proba(model_input)
-        predictions = probabilities.argmax(axis=1)
-        confidenceScores = probabilities.max(axis=1)
+    def _calculate_probabilities(self, prepared_input):
+        logging.info("Predicting probabilities")
+        probabilities = self.model.predict_proba(prepared_input)
+        logging.info(f"Probabilities shape: {probabilities.shape}")
+        return probabilities[0]  # Return probabilities for single sample
 
-        # Extract SHAP values for the features in each sample
-        explainer = shap.TreeExplainer(self.model)
-        shap_values = explainer.shap_values(model_input)
-
-        # For binary classification, shap_values is a list with one element
+    def _extract_shap_values(self, prepared_input):
+        logging.info("Extracting SHAP values")
+        self.explainer = shap.TreeExplainer(self.model)
+        shap_values = self.explainer.shap_values(prepared_input)
+        logging.info(f"SHAP values type: {type(shap_values)}")
         if isinstance(shap_values, list):
-            shap_values = shap_values[1]  # We take the positive class SHAP values
+            logging.info("SHAP values is a list, taking positive class values")
+            shap_values = shap_values[1]
+        return shap_values
 
+    def _generate_explanations(self, prepared_input, predictions, confidenceScores, shap_values):
+        logging.info("Generating explanations")
         explanations = []
         positive_log_count = 0
         negative_log_count = 0
-        for sample_index in range(model_input.shape[0]):
-            prediction = predictions[sample_index]
-            sample = model_input[sample_index]
-            non_zero_indices = sample.nonzero()[1]
-            sample_features = np.array(self.feature_names)[non_zero_indices]
-            sample_shap_values = shap_values[sample_index][non_zero_indices]
-
-            # Sort features by absolute SHAP value
-            sorted_indices = np.argsort(-np.abs(sample_shap_values))
-            sorted_features = sample_features[sorted_indices]
-            sorted_shap_values = sample_shap_values[sorted_indices]
-
-            # Take top 10 features
-            top_features = sorted_features[:10]
-            top_shap_values = sorted_shap_values[:10]
-
-            log_output = False
-            if (prediction == 1) and (positive_log_count < 3):
+        for sample_index in range(prepared_input.shape[0]):
+            explanation = self._generate_single_explanation(
+                sample_index, prepared_input, predictions, confidenceScores, shap_values,
+                positive_log_count, negative_log_count
+            )
+            explanations.append(explanation)
+            if predictions[sample_index] == 1:
                 positive_log_count += 1
-                log_output = True
-            elif (prediction == 0) and (negative_log_count < 3):
+            else:
                 negative_log_count += 1
-                log_output = True
+        return explanations
 
-            if log_output:
-                feature_shap_pairs = list(zip(top_features, top_shap_values))
+    def _generate_single_explanation(self, prepared_input, prediction, confidence_score, shap_values, 
+                                    sample_index, positive_log_count, negative_log_count):
+        sample = prepared_input[0]  # Get the first (and only) sample
+        if scipy.sparse.issparse(sample):
+            non_zero_indices = sample.nonzero()[1]
+        else:
+            non_zero_indices = np.nonzero(sample)[0]
+        
+        if len(non_zero_indices) == 0:
+            logging.warning(f"Sample {sample_index}: No non-zero features found. This is unexpected and warrants investigation.")
+            # ... (keep the detailed logging for zero-feature samples)
+            return "Unable to generate explanation due to lack of non-zero features."
 
-                # Create a dictionary mapping feature indices to feature names
-                feature_dict = dict(enumerate(self.feature_names))
+        sample_features = [self.feature_names[i] for i in non_zero_indices]
+        sample_shap_values = shap_values[0][non_zero_indices]  # Get SHAP values for the first (and only) sample
 
-                # Generate and save SHAP waterfall plot with actual feature names
-                shap_explanation = shap.Explanation(
-                    values=sample_shap_values,
-                    base_values=explainer.expected_value,
-                    data=sample_features,
-                    feature_names=[feature_dict[i] for i in non_zero_indices]
-                )
-                # Set a larger figure size and adjust left margin
-                plt.figure(figsize=(12, 8))
-                plt.subplots_adjust(left=0.3)
+        sorted_indices = np.argsort(-np.abs(sample_shap_values))
+        sorted_features = [sample_features[i] for i in sorted_indices]
+        sorted_shap_values = sample_shap_values[sorted_indices]
 
-                shap.plots.waterfall(shap_explanation, show=False)
-                plot_filename = self.report_file_name(f"shap_waterfall_sample_{sample_index}.png")            
-                plt.savefig(plot_filename, bbox_inches='tight')
-                plt.close()
+        top_features = sorted_features[:10]
+        top_shap_values = sorted_shap_values[:10]
 
-                sample_table = Table(title=f"Sample #{sample_index}", title_style="bold magenta1")
-                sample_table.add_column("Classification", justify="center", style="sky_blue1")
-                sample_table.add_column("Confidence", justify="center", style="sky_blue1")
-                sample_table.add_column("Features", justify="center", style="sky_blue1")
+        should_log = (prediction == 1 and positive_log_count < 3) or (prediction == 0 and negative_log_count < 3)
+        if should_log:
+            self._log_sample_explanation(sample_index, prediction, confidence_score,
+                                        top_features, top_shap_values)
 
-                feature_table = Table(title="Top Features with SHAP Values", title_style="bold magenta1")
-                feature_table.add_column("Feature", justify="left", style="sky_blue1")
-                feature_table.add_column("SHAP Value", justify="right", style="sky_blue1")
-                for feature, shap_value in feature_shap_pairs:
-                    feature_table.add_row(feature, f"{shap_value:.4f}", style="sky_blue1")
+        return "\n".join([f"{feature} ({shap_value:.4f})" for feature, shap_value in zip(top_features, top_shap_values)])
 
-                sample_table.add_row(
-                    str(predictions[sample_index]),
-                    f"{confidenceScores[sample_index]:.2f}",
-                    feature_table,
-                    style="sky_blue1")
+    def _log_sample_explanation(self, sample_index, prediction, confidence, top_features, top_shap_values):
+        feature_shap_pairs = list(zip(top_features, top_shap_values))
+        logging.info(f"Sample {sample_index} - Top {len(feature_shap_pairs)} features with SHAP values:")
+        for feature, shap_value in feature_shap_pairs:
+            logging.info(f"  {feature}: {shap_value:.4f}")
 
-                console = Console()
-                console.print(sample_table)
+        shap_explanation = shap.Explanation(
+            values=top_shap_values,
+            base_values=self.explainer.expected_value,
+            data=top_features,
+            feature_names=top_features
+        )
 
-            explanations.append("\n".join([f"{feature} ({shap_value:.4f})" for feature, shap_value in zip(top_features, top_shap_values)]))
+        try:
+            plt.figure(figsize=(12, 8))
+            plt.subplots_adjust(left=0.3)
+            shap.plots.waterfall(shap_explanation, show=False, max_display=10)
+            plot_filename = self.report_file_name(f"shap_waterfall_sample_{sample_index}.png")            
+            plt.savefig(plot_filename, bbox_inches='tight')
+            plt.close()
+        except ValueError as e:
+            logging.warning(f"Unable to create SHAP waterfall plot for sample {sample_index}: {str(e)}")
 
-        return predictions, confidenceScores, explanations
+        sample_table = Table(title=f"Sample #{sample_index}", title_style="bold magenta1")
+        sample_table.add_column("Classification", justify="center", style="sky_blue1")
+        sample_table.add_column("Confidence", justify="center", style="sky_blue1")
+        sample_table.add_column("Features", justify="center", style="sky_blue1")
+
+        feature_table = Table(title="Top Features with SHAP Values", title_style="bold magenta1")
+        feature_table.add_column("Feature", justify="left", style="sky_blue1")
+        feature_table.add_column("SHAP Value", justify="right", style="sky_blue1")
+        for feature, shap_value in feature_shap_pairs:
+            feature_table.add_row(feature, f"{shap_value:.4f}", style="sky_blue1")
+
+        sample_table.add_row(str(prediction), f"{confidence:.2f}", feature_table, style="sky_blue1")
+
+        console = Console()
+        console.print(sample_table)
