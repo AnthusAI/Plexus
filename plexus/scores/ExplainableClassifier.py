@@ -36,6 +36,7 @@ class ExplainableClassifier(MLClassifier):
         target_score_name: str
         target_score_value: str
         ngram_range: str = "2,3"
+        decision_threshold: float = 0.5
         scale_pos_weight_index: float = 0
         include_explanations: bool = False
 
@@ -378,7 +379,7 @@ class ExplainableClassifier(MLClassifier):
         logging.info(f"Prepared input shape: {prepared_input.shape}")
         
         probabilities = self._calculate_probabilities(prepared_input)
-        prediction = np.argmax(probabilities)
+        prediction = (probabilities[1] >= self.parameters.decision_threshold).astype(int)
         confidence_score = np.max(probabilities)
         
         shap_values = self._extract_shap_values(prepared_input)
