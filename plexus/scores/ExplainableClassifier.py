@@ -295,6 +295,34 @@ class ExplainableClassifier(MLClassifier):
         plt.savefig(os.path.join(report_directory_path, "shap_summary_top_negative.png"))
         plt.close()
 
+        # TODO: This is a fix for the waterfall plot that we need to merge.
+
+        # feature_names = [feature_dict[i] for i in non_zero_indices]
+        # feature_values = sample.toarray()[0]  # Convert entire sample to dense array
+
+        # # Generate and save SHAP waterfall plot with actual feature names and values
+        # shap_explanation = shap.Explanation(
+        #     values=shap_values[sample_index],  # Use all SHAP values for this sample
+        #     base_values=explainer.expected_value,
+        #     # data=feature_values,
+        #     feature_names=self.feature_names  # Use all feature names
+        # )
+        
+        # # Set a larger figure size and adjust left margin
+        # plt.figure(figsize=(12, 8))
+        # plt.subplots_adjust(left=0.3)
+        
+        # shap.plots.waterfall(shap_explanation, show=False, max_display=10)
+
+        # ax = plt.gca()
+        # labels = [item.get_text() for item in ax.get_yticklabels()]
+        # cleaned_labels = [label.split('=')[0].strip() for label in labels]
+        # ax.set_yticklabels(cleaned_labels, rotation=0, ha='right')
+
+        # plot_filename = self.report_file_name(f"shap_waterfall_sample_{sample_index}.png")
+        # plt.savefig(plot_filename, bbox_inches='tight')
+        # plt.close()
+
     def predict_validation(self):
         logging.info("predict_validation() called")
         logging.info(f"X_test shape: {self.X_test.shape}")

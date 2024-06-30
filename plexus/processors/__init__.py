@@ -7,4 +7,4 @@ from .ColumnDatasetFilter import ColumnDatasetFilter
 from .ByColumnValueDatasetFilter import ByColumnValueDatasetFilter
 from .DownsampleClassDatasetFilter import DownsampleClassDatasetFilter
 from .MergeColumnsDatasetFilter import MergeColumnsDatasetFilter
-
+from .ExpandContractionsProcessor import ExpandContractionsProcessor

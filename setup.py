@@ -44,7 +44,8 @@ setup(
         'xgboost==2.0.3',
         'imbalanced-learn==0.12.2',
         'imblearn==0.0',
-        'shap==0.45.1'
+        'shap==0.45.1',
+        'contractions==0.1.73'
     ],
     dependency_links=[
         'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator'
