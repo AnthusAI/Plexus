@@ -68,6 +68,10 @@ class DeepLearningSemanticClassifier(MLClassifier):
         else:
             return super(DeepLearningSemanticClassifier, cls).__new__(cls)
 
+    def __init__(self, **parameters):
+        super().__init__(**parameters)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.parameters.embeddings_model)
+
     class Parameters(Parameters):
         ...
 
@@ -88,7 +92,7 @@ class DeepLearningSemanticClassifier(MLClassifier):
 
         encoded_texts = encode_texts_parallel(texts, self.parameters.maximum_tokens_per_window)
         attention_masks = tf.where(encoded_texts != 0, 1, 0)
-
+ 
         return {
             'input_ids': encoded_texts,
             'attention_mask': attention_masks
@@ -240,10 +244,27 @@ class DeepLearningSemanticClassifier(MLClassifier):
         logging.info(f"Original shape of train_labels: {np.shape(train_labels)}")
         logging.info(f"Original shape of val_labels: {np.shape(val_labels)}")
 
-        # Convert labels to integers
-        label_map = {label: i for i, label in enumerate(unique_labels)}
-        train_labels = np.array([label_map[label] for label in train_labels])
-        val_labels = np.array([label_map[label] for label in val_labels])
+        # Create label_map and inverse_label_map
+        self.label_map = {i: label for i, label in enumerate(unique_labels)}
+        self.inverse_label_map = {label: i for i, label in self.label_map.items()}
+
+        logging.info(f"Label map: {self.label_map}")
+        logging.info(f"Inverse label map: {self.inverse_label_map}")
+
+        # Convert labels to integers for training
+        train_labels_int = np.array([self.inverse_label_map[label] for label in train_labels])
+        val_labels_int = np.array([self.inverse_label_map[label] for label in val_labels])
+
+        # Store both integer and string versions of labels
+        self.train_labels = train_labels_int
+        self.val_labels = val_labels_int
+        self.train_labels_str = np.array(train_labels)
+        self.val_labels_str = np.array(val_labels)
+
+        logging.info(f"train_labels type: {type(self.train_labels)}, shape: {self.train_labels.shape}")
+        logging.info(f"val_labels type: {type(self.val_labels)}, shape: {self.val_labels.shape}")
+        logging.info(f"train_labels_str type: {type(self.train_labels_str)}, shape: {self.train_labels_str.shape}")
+        logging.info(f"val_labels_str type: {type(self.val_labels_str)}, shape: {self.val_labels_str.shape}")
 
         # Build sliding windows for training and validation texts
         train_windows, train_windows_tokens = zip(*[build_multiple_windowss(tokenizer, text, self.parameters.maximum_tokens_per_window, getattr(self, 'maximum_windows', None)) for text in tqdm(train_texts, desc="Building train sliding windows")])
@@ -318,65 +339,54 @@ class DeepLearningSemanticClassifier(MLClassifier):
         logging.info(f"Number of val windows: {len(val_windows)}")
 
         logging.info(f"train_input_ids type: {type(train_input_ids)}, shape: {train_input_ids.shape}")
-        logging.debug(f"train_input_ids sample: {train_input_ids[:5]}")
-
         logging.info(f"train_attention_mask type: {type(train_attention_mask)}, shape: {train_attention_mask.shape}")
-        logging.debug(f"train_attention_mask sample: {train_attention_mask[:5]}")
+        logging.info(f"train_labels type: {type(self.train_labels)}, shape: {self.train_labels.shape}")
 
-        logging.info(f"train_labels type: {type(train_labels)}, shape: {train_labels.shape}")
-        logging.debug(f"train_labels sample: {train_labels[:5]}")
+        logging.info(f"val_input_ids type: {type(val_input_ids)}, shape: {val_input_ids.shape}")
+        logging.info(f"val_attention_mask type: {type(val_attention_mask)}, shape: {val_attention_mask.shape}")
+        logging.info(f"val_labels type: {type(self.val_labels)}, shape: {self.val_labels.shape}")
 
         # Check the distribution of labels in the training set for the sliding window scenario
         print("Training set label breakdown (sliding window):")
-        if self.is_multi_class:
-            train_label_counts = np.unique(train_labels, return_counts=True)
-            print(dict(zip(unique_labels, train_label_counts[1])))
-        else:
-            train_label_counts = np.unique(train_labels, return_counts=True)
-            print(dict(zip(unique_labels, train_label_counts[1])))
+        train_label_counts = np.unique(self.train_labels_str, return_counts=True)
+        print(dict(zip(train_label_counts[0], train_label_counts[1])))
 
         # Check the distribution of labels in the validation set for the sliding window scenario
         print("Validation set label breakdown (sliding window):")
-        if self.is_multi_class:
-            val_label_counts = np.unique(val_labels, return_counts=True)
-            print(dict(zip(unique_labels, val_label_counts[1])))
-        else:
-            val_label_counts = np.unique(val_labels, return_counts=True)
-            print(dict(zip(unique_labels, val_label_counts[1])))
-        
+        val_label_counts = np.unique(self.val_labels_str, return_counts=True)
+        print(dict(zip(val_label_counts[0], val_label_counts[1])))
+
         logging.info(f"train_input_ids type: {type(train_input_ids)}, shape: {train_input_ids.shape}")
-        logging.debug(f"train_input_ids sample: {train_input_ids[:5]}")
-
         logging.info(f"train_attention_mask type: {type(train_attention_mask)}, shape: {train_attention_mask.shape}")
-        logging.debug(f"train_attention_mask sample: {train_attention_mask[:5]}")
-
-        # unique_labels, label_counts = np.unique(train_labels, return_counts=True)
-        # logging.info(f"Unique labels before one-hot encoding: {unique_labels}")
-        # logging.info(f"Label counts before one-hot encoding: {label_counts}")
 
         # One-hot encode the labels only if it's a multi-class classification
-        number_of_labels = len(unique_labels)
+        number_of_labels = len(self.label_map)
         if self.is_multi_class:
-            train_labels = tf.ragged.map_flat_values(tf.one_hot, train_labels, depth=number_of_labels)
-            val_labels = tf.ragged.map_flat_values(tf.one_hot, val_labels, depth=number_of_labels)
+            self.train_labels = tf.one_hot(self.train_labels, depth=number_of_labels)
+            self.val_labels = tf.one_hot(self.val_labels, depth=number_of_labels)
         else:
-            train_labels = train_labels.reshape(-1, 1)
-            val_labels = val_labels.reshape(-1, 1)
+            self.train_labels = self.train_labels.reshape(-1, 1)
+            self.val_labels = self.val_labels.reshape(-1, 1)
 
-        # Logging for debugging
-        logging.info(f"train_labels type: {type(train_labels)}, shape: {train_labels.shape}")
-        logging.info(f"train_labels sample: {train_labels[:5]}")
-        logging.info(f"val_labels type: {type(val_labels)}, shape: {val_labels.shape}")
-        logging.info(f"val_labels sample: {val_labels[:5]}")
-    
+        logging.info(f"Final train_labels type: {type(self.train_labels)}, shape: {self.train_labels.shape}")
+        logging.info(f"Final val_labels type: {type(self.val_labels)}, shape: {self.val_labels.shape}")
+        
+        # Store the original string labels for validation
+        self.val_labels_str = np.array(val_labels)
+        
         # Remember the important stuff for later.
         self.train_input_ids = train_input_ids
         self.val_input_ids = val_input_ids
         self.train_attention_mask = train_attention_mask
         self.val_attention_mask = val_attention_mask
-        self.train_labels = train_labels
-        self.val_labels = val_labels
-        self.label_map = label_map
+        self.train_texts = train_texts
+        self.val_texts = val_texts
+
+        # Store both integer and string versions of labels
+        self.train_labels = train_labels_int
+        self.val_labels = val_labels_int
+        self.train_labels_str = np.array(train_labels)
+        self.val_labels_str = np.array(val_labels)
 
     def custom_lr_scheduler(self, epoch, lr):
         # Record validation loss if available
@@ -417,46 +427,61 @@ class DeepLearningSemanticClassifier(MLClassifier):
         """
         pass
 
-    def predict(self, context, model_input):
-        """
-        Make predictions on the input data with confidence scores.
-        """
-        if isinstance(model_input, pd.DataFrame):
-            texts = model_input['Transcription'].tolist()
-            encoded_input = self.encode_input(texts)
-        elif isinstance(model_input, dict) and 'input_ids' in model_input and 'attention_mask' in model_input:
-            encoded_input = model_input
-        else:
-            raise ValueError("Invalid input format. Expected DataFrame or dictionary with 'input_ids' and 'attention_mask'.")
+    def predict(self, context, model_input: MLClassifier.ModelInput):
+        logging.info(f"Received input: {model_input}")
 
-        # Make predictions
+        transcript = model_input.transcript
+        logging.info(f"Processing transcript (first 100 chars): {transcript[:100]}...")
+
+        encoded_input = self.encode_input([transcript])
+        logging.info(f"Encoded input shapes: input_ids={encoded_input['input_ids'].shape}, attention_mask={encoded_input['attention_mask'].shape}")
+
         predictions = self.model.predict([encoded_input['input_ids'], encoded_input['attention_mask']])
+        logging.info(f"Raw prediction shape: {predictions.shape}")
 
-        # For multi-class classification
-        if predictions.shape[-1] > 1:
-            confidence_scores = np.max(predictions, axis=-1)
-            predicted_classes = np.argmax(predictions, axis=-1)
-        # For binary classification
+        if len(self.label_map) > 2:
+            # Multi-class classification
+            confidence_score = float(np.max(predictions[0]))
+            predicted_class = int(np.argmax(predictions[0]))
         else:
-            confidence_scores = np.maximum(predictions, 1 - predictions).flatten()
-            predicted_classes = (predictions > 0.5).astype(int).flatten()
+            # Binary classification
+            confidence_score = float(predictions[0][0])
+            predicted_class = int(predictions[0][0] > 0.5)
 
-        return {
-            'prediction': predicted_classes,
-            'confidence': confidence_scores
-        }
+        # Convert numeric prediction to string label
+        predicted_label = self.label_map[predicted_class]
+
+        logging.info(f"Predicted class: {predicted_class}, Label: {predicted_label}, Confidence: {confidence_score}")
+
+        return self.ModelOutput(
+            classification=predicted_label,
+            confidence=confidence_score
+        )
 
     def predict_validation(self):
-        """
-        Implement the prediction logic for the validation set using the predict() function.
-        """
-        predictions = self.predict(None, {
-            'input_ids': self.val_input_ids,
-            'attention_mask': self.val_attention_mask
-        })
-        self.val_predictions = predictions['prediction']
-        self.val_confidence_scores = predictions['confidence']
+        logging.info("Starting predict_validation")
+        self.val_predictions = []
+        self.val_confidence_scores = []
 
+        for i, transcript in enumerate(self.val_texts):
+            logging.info(f"Processing validation sample {i+1}/{len(self.val_texts)}")
+            
+            model_input = self.ModelInput(transcript=transcript)
+            result = self.predict(None, model_input)
+            
+            self.val_predictions.append(result.classification)
+            self.val_confidence_scores.append(result.confidence)
+
+        self.val_predictions = np.array(self.val_predictions)
+        self.val_confidence_scores = np.array(self.val_confidence_scores)
+
+        # Use the stored string labels for validation
+        self.val_labels = self.val_labels_str
+
+        logging.info(f"Completed predict_validation. Predictions shape: {self.val_predictions.shape}, Confidence scores shape: {self.val_confidence_scores.shape}")
+        logging.info(f"val_predictions type: {type(self.val_predictions)}, shape: {self.val_predictions.shape}, sample: {self.val_predictions[:5]}")
+        logging.info(f"val_labels type: {type(self.val_labels)}, shape: {self.val_labels.shape}, sample: {self.val_labels[:5]}")
+        
     @Score.ensure_report_directory_exists
     def _generate_window_count_histogram(self, windows):
         """
