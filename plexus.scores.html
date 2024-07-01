@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.scores package &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="_static/jquery.js?v=5d32c60e"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="_static/documentation_options.js?v=2709fde1"></script>
+        <script src="_static/doctools.js?v=9a2dae69"></script>
+        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.scores.composite package" href="plexus.scores.composite.html" />
+    <link rel="prev" title="plexus.processors.RemoveStopWordsTranscriptFilter module" href="plexus.processors.RemoveStopWordsTranscriptFilter.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.scores package</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">plexus.scores package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#subpackages">Subpackages</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.composite.html">plexus.scores.composite package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.scorecard_classifiers.html">plexus.scores.scorecard_classifiers package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#submodules">Submodules</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.AgenticExtractor.html">plexus.scores.AgenticExtractor module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.CompositeScore.html">plexus.scores.CompositeScore module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningOneStepSemanticClassifier.html">plexus.scores.DeepLearningOneStepSemanticClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html">plexus.scores.DeepLearningSemanticClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSlidingWindowSemanticClassifier.html">plexus.scores.DeepLearningSlidingWindowSemanticClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.ExplainableClassifier.html">plexus.scores.ExplainableClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.FastTextClassifier.html">plexus.scores.FastTextClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.KeywordClassifier.html">plexus.scores.KeywordClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.LLMGenerator.html">plexus.scores.LLMGenerator module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html">plexus.scores.MLClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.SVMClassifier.html">plexus.scores.SVMClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.Score.html">plexus.scores.Score module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+      <li class="breadcrumb-item active">plexus.scores package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.scores.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="plexus-scores-package">
+<h1>plexus.scores package<a class="headerlink" href="#plexus-scores-package" title="Link to this heading"></a></h1>
+<section id="subpackages">
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.composite.html">plexus.scores.composite package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.composite.html#submodules">Submodules</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.composite.GoogleGemini.html">plexus.scores.composite.GoogleGemini module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.composite.LLMClassifier.html">plexus.scores.composite.LLMClassifier module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.scorecard_classifiers.html">plexus.scores.scorecard_classifiers package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.scorecard_classifiers.html#subpackages">Subpackages</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.scorecard_classifiers.Term_Life_AI.html">plexus.scores.scorecard_classifiers.Term_Life_AI package</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.scorecard_classifiers.Term_Life_AI.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.AgenticExtractor.html">plexus.scores.AgenticExtractor module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.CompositeScore.html">plexus.scores.CompositeScore module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.DeepLearningOneStepSemanticClassifier.html">plexus.scores.DeepLearningOneStepSemanticClassifier module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.DeepLearningOneStepSemanticClassifier.html#plexus.scores.DeepLearningOneStepSemanticClassifier.DeepLearningOneStepSemanticClassifier"><code class="docutils literal notranslate"><span class="pre">DeepLearningOneStepSemanticClassifier</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningOneStepSemanticClassifier.html#plexus.scores.DeepLearningOneStepSemanticClassifier.DeepLearningOneStepSemanticClassifier.__init__"><code class="docutils literal notranslate"><span class="pre">DeepLearningOneStepSemanticClassifier.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningOneStepSemanticClassifier.html#plexus.scores.DeepLearningOneStepSemanticClassifier.DeepLearningOneStepSemanticClassifier.process_data"><code class="docutils literal notranslate"><span class="pre">DeepLearningOneStepSemanticClassifier.process_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningOneStepSemanticClassifier.html#plexus.scores.DeepLearningOneStepSemanticClassifier.DeepLearningOneStepSemanticClassifier.train_model"><code class="docutils literal notranslate"><span class="pre">DeepLearningOneStepSemanticClassifier.train_model()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html">plexus.scores.DeepLearningSemanticClassifier module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html#plexus.scores.DeepLearningSemanticClassifier.DeepLearningSemanticClassifier"><code class="docutils literal notranslate"><span class="pre">DeepLearningSemanticClassifier</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html#plexus.scores.DeepLearningSemanticClassifier.DeepLearningSemanticClassifier.EmbeddingsLayer"><code class="docutils literal notranslate"><span class="pre">DeepLearningSemanticClassifier.EmbeddingsLayer</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html#plexus.scores.DeepLearningSemanticClassifier.DeepLearningSemanticClassifier.EmbeddingsLayer.__init__"><code class="docutils literal notranslate"><span class="pre">DeepLearningSemanticClassifier.EmbeddingsLayer.__init__()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html#plexus.scores.DeepLearningSemanticClassifier.DeepLearningSemanticClassifier.EmbeddingsLayer.call"><code class="docutils literal notranslate"><span class="pre">DeepLearningSemanticClassifier.EmbeddingsLayer.call()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html#plexus.scores.DeepLearningSemanticClassifier.DeepLearningSemanticClassifier.Parameters"><code class="docutils literal notranslate"><span class="pre">DeepLearningSemanticClassifier.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html#plexus.scores.DeepLearningSemanticClassifier.DeepLearningSemanticClassifier.Parameters.model_computed_fields"><code class="docutils literal notranslate"><span class="pre">DeepLearningSemanticClassifier.Parameters.model_computed_fields</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html#plexus.scores.DeepLearningSemanticClassifier.DeepLearningSemanticClassifier.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">DeepLearningSemanticClassifier.Parameters.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html#plexus.scores.DeepLearningSemanticClassifier.DeepLearningSemanticClassifier.Parameters.model_fields"><code class="docutils literal notranslate"><span class="pre">DeepLearningSemanticClassifier.Parameters.model_fields</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html#plexus.scores.DeepLearningSemanticClassifier.DeepLearningSemanticClassifier.__init__"><code class="docutils literal notranslate"><span class="pre">DeepLearningSemanticClassifier.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html#plexus.scores.DeepLearningSemanticClassifier.DeepLearningSemanticClassifier.custom_lr_scheduler"><code class="docutils literal notranslate"><span class="pre">DeepLearningSemanticClassifier.custom_lr_scheduler()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html#plexus.scores.DeepLearningSemanticClassifier.DeepLearningSemanticClassifier.encode_input"><code class="docutils literal notranslate"><span class="pre">DeepLearningSemanticClassifier.encode_input()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html#plexus.scores.DeepLearningSemanticClassifier.DeepLearningSemanticClassifier.predict"><code class="docutils literal notranslate"><span class="pre">DeepLearningSemanticClassifier.predict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html#plexus.scores.DeepLearningSemanticClassifier.DeepLearningSemanticClassifier.predict_validation"><code class="docutils literal notranslate"><span class="pre">DeepLearningSemanticClassifier.predict_validation()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html#plexus.scores.DeepLearningSemanticClassifier.DeepLearningSemanticClassifier.process_data"><code class="docutils literal notranslate"><span class="pre">DeepLearningSemanticClassifier.process_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html#plexus.scores.DeepLearningSemanticClassifier.DeepLearningSemanticClassifier.register_model"><code class="docutils literal notranslate"><span class="pre">DeepLearningSemanticClassifier.register_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSemanticClassifier.html#plexus.scores.DeepLearningSemanticClassifier.DeepLearningSemanticClassifier.save_model"><code class="docutils literal notranslate"><span class="pre">DeepLearningSemanticClassifier.save_model()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.DeepLearningSlidingWindowSemanticClassifier.html">plexus.scores.DeepLearningSlidingWindowSemanticClassifier module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.DeepLearningSlidingWindowSemanticClassifier.html#plexus.scores.DeepLearningSlidingWindowSemanticClassifier.DeepLearningSlidingWindowSemanticClassifier"><code class="docutils literal notranslate"><span class="pre">DeepLearningSlidingWindowSemanticClassifier</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSlidingWindowSemanticClassifier.html#plexus.scores.DeepLearningSlidingWindowSemanticClassifier.DeepLearningSlidingWindowSemanticClassifier.Parameters"><code class="docutils literal notranslate"><span class="pre">DeepLearningSlidingWindowSemanticClassifier.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.DeepLearningSlidingWindowSemanticClassifier.html#plexus.scores.DeepLearningSlidingWindowSemanticClassifier.DeepLearningSlidingWindowSemanticClassifier.Parameters.model_computed_fields"><code class="docutils literal notranslate"><span class="pre">DeepLearningSlidingWindowSemanticClassifier.Parameters.model_computed_fields</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.DeepLearningSlidingWindowSemanticClassifier.html#plexus.scores.DeepLearningSlidingWindowSemanticClassifier.DeepLearningSlidingWindowSemanticClassifier.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">DeepLearningSlidingWindowSemanticClassifier.Parameters.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.DeepLearningSlidingWindowSemanticClassifier.html#plexus.scores.DeepLearningSlidingWindowSemanticClassifier.DeepLearningSlidingWindowSemanticClassifier.Parameters.model_fields"><code class="docutils literal notranslate"><span class="pre">DeepLearningSlidingWindowSemanticClassifier.Parameters.model_fields</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.DeepLearningSlidingWindowSemanticClassifier.html#plexus.scores.DeepLearningSlidingWindowSemanticClassifier.DeepLearningSlidingWindowSemanticClassifier.Parameters.multiple_windows_aggregation"><code class="docutils literal notranslate"><span class="pre">DeepLearningSlidingWindowSemanticClassifier.Parameters.multiple_windows_aggregation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.DeepLearningSlidingWindowSemanticClassifier.html#plexus.scores.DeepLearningSlidingWindowSemanticClassifier.DeepLearningSlidingWindowSemanticClassifier.Parameters.validate_multiple_windows_aggregation"><code class="docutils literal notranslate"><span class="pre">DeepLearningSlidingWindowSemanticClassifier.Parameters.validate_multiple_windows_aggregation()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSlidingWindowSemanticClassifier.html#plexus.scores.DeepLearningSlidingWindowSemanticClassifier.DeepLearningSlidingWindowSemanticClassifier.RaggedEmbeddingsLayer"><code class="docutils literal notranslate"><span class="pre">DeepLearningSlidingWindowSemanticClassifier.RaggedEmbeddingsLayer</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.DeepLearningSlidingWindowSemanticClassifier.html#plexus.scores.DeepLearningSlidingWindowSemanticClassifier.DeepLearningSlidingWindowSemanticClassifier.RaggedEmbeddingsLayer.__init__"><code class="docutils literal notranslate"><span class="pre">DeepLearningSlidingWindowSemanticClassifier.RaggedEmbeddingsLayer.__init__()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.DeepLearningSlidingWindowSemanticClassifier.html#plexus.scores.DeepLearningSlidingWindowSemanticClassifier.DeepLearningSlidingWindowSemanticClassifier.RaggedEmbeddingsLayer.call"><code class="docutils literal notranslate"><span class="pre">DeepLearningSlidingWindowSemanticClassifier.RaggedEmbeddingsLayer.call()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSlidingWindowSemanticClassifier.html#plexus.scores.DeepLearningSlidingWindowSemanticClassifier.DeepLearningSlidingWindowSemanticClassifier.__init__"><code class="docutils literal notranslate"><span class="pre">DeepLearningSlidingWindowSemanticClassifier.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.DeepLearningSlidingWindowSemanticClassifier.html#plexus.scores.DeepLearningSlidingWindowSemanticClassifier.DeepLearningSlidingWindowSemanticClassifier.train_model"><code class="docutils literal notranslate"><span class="pre">DeepLearningSlidingWindowSemanticClassifier.train_model()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.ExplainableClassifier.html">plexus.scores.ExplainableClassifier module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.FastTextClassifier.html">plexus.scores.FastTextClassifier module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.KeywordClassifier.html">plexus.scores.KeywordClassifier module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.LLMGenerator.html">plexus.scores.LLMGenerator module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.MLClassifier.html">plexus.scores.MLClassifier module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier"><code class="docutils literal notranslate"><span class="pre">MLClassifier</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.ModelInput"><code class="docutils literal notranslate"><span class="pre">MLClassifier.ModelInput</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.ModelInput.model_computed_fields"><code class="docutils literal notranslate"><span class="pre">MLClassifier.ModelInput.model_computed_fields</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.ModelInput.model_config"><code class="docutils literal notranslate"><span class="pre">MLClassifier.ModelInput.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.ModelInput.model_fields"><code class="docutils literal notranslate"><span class="pre">MLClassifier.ModelInput.model_fields</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.ModelInput.transcript"><code class="docutils literal notranslate"><span class="pre">MLClassifier.ModelInput.transcript</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.ModelOutput"><code class="docutils literal notranslate"><span class="pre">MLClassifier.ModelOutput</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.ModelOutput.classification"><code class="docutils literal notranslate"><span class="pre">MLClassifier.ModelOutput.classification</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.ModelOutput.confidence"><code class="docutils literal notranslate"><span class="pre">MLClassifier.ModelOutput.confidence</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.ModelOutput.model_computed_fields"><code class="docutils literal notranslate"><span class="pre">MLClassifier.ModelOutput.model_computed_fields</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.ModelOutput.model_config"><code class="docutils literal notranslate"><span class="pre">MLClassifier.ModelOutput.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.ModelOutput.model_fields"><code class="docutils literal notranslate"><span class="pre">MLClassifier.ModelOutput.model_fields</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.Parameters"><code class="docutils literal notranslate"><span class="pre">MLClassifier.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.Parameters.convert_data_percentage"><code class="docutils literal notranslate"><span class="pre">MLClassifier.Parameters.convert_data_percentage()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.Parameters.data"><code class="docutils literal notranslate"><span class="pre">MLClassifier.Parameters.data</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.Parameters.model_computed_fields"><code class="docutils literal notranslate"><span class="pre">MLClassifier.Parameters.model_computed_fields</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">MLClassifier.Parameters.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.Parameters.model_fields"><code class="docutils literal notranslate"><span class="pre">MLClassifier.Parameters.model_fields</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.__init__"><code class="docutils literal notranslate"><span class="pre">MLClassifier.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.analyze_dataset"><code class="docutils literal notranslate"><span class="pre">MLClassifier.analyze_dataset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.evaluate_model"><code class="docutils literal notranslate"><span class="pre">MLClassifier.evaluate_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.is_multi_class"><code class="docutils literal notranslate"><span class="pre">MLClassifier.is_multi_class</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.is_relevant"><code class="docutils literal notranslate"><span class="pre">MLClassifier.is_relevant()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.load_context"><code class="docutils literal notranslate"><span class="pre">MLClassifier.load_context()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.load_data"><code class="docutils literal notranslate"><span class="pre">MLClassifier.load_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.log_evaluation_metrics"><code class="docutils literal notranslate"><span class="pre">MLClassifier.log_evaluation_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.log_stored_parameters"><code class="docutils literal notranslate"><span class="pre">MLClassifier.log_stored_parameters()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.name"><code class="docutils literal notranslate"><span class="pre">MLClassifier.name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.predict"><code class="docutils literal notranslate"><span class="pre">MLClassifier.predict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.predict_validation"><code class="docutils literal notranslate"><span class="pre">MLClassifier.predict_validation()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.process_data"><code class="docutils literal notranslate"><span class="pre">MLClassifier.process_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.register_model"><code class="docutils literal notranslate"><span class="pre">MLClassifier.register_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.save_model"><code class="docutils literal notranslate"><span class="pre">MLClassifier.save_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.start_mlflow_experiment_run"><code class="docutils literal notranslate"><span class="pre">MLClassifier.start_mlflow_experiment_run()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.MLClassifier.html#plexus.scores.MLClassifier.MLClassifier.train_model"><code class="docutils literal notranslate"><span class="pre">MLClassifier.train_model()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.SVMClassifier.html">plexus.scores.SVMClassifier module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.Score.html">plexus.scores.Score module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score"><code class="docutils literal notranslate"><span class="pre">Score</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.Parameters"><code class="docutils literal notranslate"><span class="pre">Score.Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.Parameters.model_computed_fields"><code class="docutils literal notranslate"><span class="pre">Score.Parameters.model_computed_fields</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.Parameters.model_config"><code class="docutils literal notranslate"><span class="pre">Score.Parameters.model_config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.Parameters.model_fields"><code class="docutils literal notranslate"><span class="pre">Score.Parameters.model_fields</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.Parameters.score_name"><code class="docutils literal notranslate"><span class="pre">Score.Parameters.score_name</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.Parameters.scorecard_name"><code class="docutils literal notranslate"><span class="pre">Score.Parameters.scorecard_name</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.__init__"><code class="docutils literal notranslate"><span class="pre">Score.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.ensure_report_directory_exists"><code class="docutils literal notranslate"><span class="pre">Score.ensure_report_directory_exists()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.load_context"><code class="docutils literal notranslate"><span class="pre">Score.load_context()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.log_validation_errors"><code class="docutils literal notranslate"><span class="pre">Score.log_validation_errors()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.predict"><code class="docutils literal notranslate"><span class="pre">Score.predict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.record_configuration"><code class="docutils literal notranslate"><span class="pre">Score.record_configuration()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.report_directory_path"><code class="docutils literal notranslate"><span class="pre">Score.report_directory_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score.report_file_name"><code class="docutils literal notranslate"><span class="pre">Score.report_file_name()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.processors.RemoveStopWordsTranscriptFilter.html" class="btn btn-neutral float-left" title="plexus.processors.RemoveStopWordsTranscriptFilter module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.scores.composite.html" class="btn btn-neutral float-right" title="plexus.scores.composite package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
