@@ -30,6 +30,9 @@ basedir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'p
 sys.path.insert(0, basedir)
 
 autodoc_default_options = {
+    'members': True,
+    'undoc-members': True,
+    'show-inheritance': True,
     'special-members': '__init__',
 }
 autoclass_content = 'both'
