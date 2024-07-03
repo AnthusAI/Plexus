@@ -5,10 +5,12 @@ from pydantic import BaseModel, validator, ValidationError
 import numpy as np
 import pandas as pd
 import nltk
+from nltk.tokenize import PunktSentenceTokenizer
 import tensorflow as tf
 from transformers import AutoTokenizer, TFAutoModel
 from sklearn.model_selection import train_test_split
 from collections import Counter
+from rich.table import Table
 from rich.progress import Progress
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
@@ -34,6 +36,7 @@ class DeepLearningSemanticClassifier(MLClassifier):
         maximum_tokens_per_window: int = 512
         multiple_windows: bool = False
         maximum_windows: int = 0
+        start_from_end: bool = False
         number_of_epochs: int
         batch_size: int
         warmup_learning_rate: float
@@ -145,51 +148,84 @@ class DeepLearningSemanticClassifier(MLClassifier):
         label_map = {}
 
         def split_into_sentences(text):
-            return nltk.sent_tokenize(text)
+            # Download the punkt tokenizer if not already available
+            try:
+                nltk.data.find('tokenizers/punkt')
+            except LookupError:
+                nltk.download('punkt')
+
+            # Create a PunktSentenceTokenizer instance
+            tokenizer = PunktSentenceTokenizer()
+
+            # Tokenize the text into sentences
+            sentences = tokenizer.tokenize(text)
+
+            # Post-process sentences (remove empty ones and strip whitespace)
+            processed_sentences = [sentence.strip() for sentence in sentences if sentence.strip()]
+
+            return processed_sentences
 
         def tokenize_sentence(tokenizer, sentence):
             return tokenizer.tokenize(sentence)
 
-        def build_multiple_windowss(tokenizer, text, max_tokens_per_window, max_windows):
+        def build_multiple_windows(tokenizer, text, max_tokens_per_window, max_windows, start_from_end=False):
             """
             This function breaks long texts into smaller windows of text, where each sentence is
             entirely within one window, without being broken apart.
             The token count of the sentence is what determines if it fits into the window, because
-            the maximum size of the windows is specified in a token count.  Because the goal is
-            for the window to be small enough for the BERT model, or something like it, to process
-            the window in one step.  BERT models typically have a maximum input length of 512
-            tokens, so our windows need to fit within that, which we specify with the
-            `self.parameters.maximum_tokens_per_window` parameter.
+            the maximum size of the windows is specified in a token count.
+
+            Args:
+            tokenizer: The tokenizer to use for tokenizing words.
+            text: The input text to be split into windows.
+            max_tokens_per_window: Maximum number of tokens allowed per window.
+            max_windows: Maximum number of windows to create (0 for no limit).
+            reverse: If True, build windows from the end of the text.
+
+            Returns:
+            windows: List of windows, where each window is a list of sentences.
+            windows_tokens: List of tokenized windows.
             """
             windows = []
             windows_tokens = []
             current_window = []
             current_window_tokens = []
 
-            sentences = split_into_sentences(text.replace('\n', ' '))
+            # Use the split_into_sentences function
+            sentences = split_into_sentences(text)
 
-            for sentence in sentences:
-                sentence_tokens = tokenize_sentence(tokenizer, sentence)
+            if start_from_end:
+                sentences = sentences[::-1]
+            
+            for i, sentence in enumerate(sentences):
+                sentence_tokens = tokenizer.tokenize(sentence)
                 if len(current_window_tokens) + len(sentence_tokens) <= max_tokens_per_window:
-                    current_window.append(sentence)
-                    current_window_tokens.extend(sentence_tokens)
+                    if start_from_end:
+                        current_window.insert(0, sentence)
+                        current_window_tokens = sentence_tokens + current_window_tokens
+                    else:
+                        current_window.append(sentence)
+                        current_window_tokens.extend(sentence_tokens)
                 else:
-                    windows.append(current_window)
-                    windows_tokens.append(current_window_tokens)
+                    if current_window:
+                        windows.append(current_window)
+                        windows_tokens.append(current_window_tokens)
                     current_window = [sentence]
                     current_window_tokens = sentence_tokens
 
                 # Truncate to the maximum number of windows, but only if that is specified.
-                if max_windows is not None and len(windows) >= max_windows:
+                if max_windows and len(windows) >= max_windows:
                     break
 
             if current_window:
-                should_we_keep_this_window = True
-                if max_windows is not None:
-                    should_we_keep_this_window = len(windows) < max_windows
+                should_we_keep_this_window = max_windows == 0 or len(windows) < max_windows
                 if should_we_keep_this_window:
                     windows.append(current_window)
                     windows_tokens.append(current_window_tokens)
+
+            if start_from_end:
+                windows = windows[::-1]
+                windows_tokens = windows_tokens[::-1]
 
             return windows, windows_tokens
 
@@ -245,15 +281,16 @@ class DeepLearningSemanticClassifier(MLClassifier):
         logging.info(f"Original shape of val_labels: {np.shape(val_labels)}")
 
         # Create label_map and inverse_label_map
-        self.label_map = {i: label for i, label in enumerate(unique_labels)}
-        self.inverse_label_map = {label: i for i, label in self.label_map.items()}
+        unique_labels = sorted(set(self.dataframe[self.parameters.score_name]))
+        self.label_map = {str(label): i for i, label in enumerate(unique_labels)}
+        self.inverse_label_map = {i: str(label) for label, i in self.label_map.items()}
+
+        # Convert labels to integers
+        train_labels_int = np.array([self.label_map[str(label)] for label in train_labels])
+        val_labels_int = np.array([self.label_map[str(label)] for label in val_labels])
 
         logging.info(f"Label map: {self.label_map}")
         logging.info(f"Inverse label map: {self.inverse_label_map}")
-
-        # Convert labels to integers for training
-        train_labels_int = np.array([self.inverse_label_map[label] for label in train_labels])
-        val_labels_int = np.array([self.inverse_label_map[label] for label in val_labels])
 
         # Store both integer and string versions of labels
         self.train_labels = train_labels_int
@@ -267,8 +304,25 @@ class DeepLearningSemanticClassifier(MLClassifier):
         logging.info(f"val_labels_str type: {type(self.val_labels_str)}, shape: {self.val_labels_str.shape}")
 
         # Build sliding windows for training and validation texts
-        train_windows, train_windows_tokens = zip(*[build_multiple_windowss(tokenizer, text, self.parameters.maximum_tokens_per_window, getattr(self, 'maximum_windows', None)) for text in tqdm(train_texts, desc="Building train sliding windows")])
-        val_windows, val_windows_tokens = zip(*[build_multiple_windowss(tokenizer, text, self.parameters.maximum_tokens_per_window, getattr(self, 'maximum_windows', None)) for text in tqdm(val_texts, desc="Building validation sliding windows")])
+        train_windows, train_windows_tokens = zip(*[
+            build_multiple_windows(
+                tokenizer=tokenizer, 
+                text=text, 
+                max_tokens_per_window=self.parameters.maximum_tokens_per_window, 
+                max_windows=self.parameters.maximum_windows,
+                start_from_end=self.parameters.start_from_end
+            ) for text in tqdm(train_texts, desc="Building train sliding windows")
+        ])
+        
+        val_windows, val_windows_tokens = zip(*[
+            build_multiple_windows(
+                tokenizer=tokenizer, 
+                text=text, 
+                max_tokens_per_window=self.parameters.maximum_tokens_per_window, 
+                max_windows=self.parameters.maximum_windows,
+                start_from_end=self.parameters.start_from_end
+            ) for text in tqdm(val_texts, desc="Building validation sliding windows")
+        ])
         if self.parameters.maximum_windows != 0:
             # Limit the number of windows for each text
             train_windows = [windows[:self.parameters.maximum_windows] for windows in train_windows]
@@ -439,6 +493,10 @@ class DeepLearningSemanticClassifier(MLClassifier):
         predictions = self.model.predict([encoded_input['input_ids'], encoded_input['attention_mask']])
         logging.info(f"Raw prediction shape: {predictions.shape}")
 
+        logging.info(f"Raw predictions: {predictions}")
+        logging.info(f"Label map: {self.label_map}")
+        logging.info(f"Inverse label map: {self.inverse_label_map}")
+
         if len(self.label_map) > 2:
             # Multi-class classification
             confidence_score = float(np.max(predictions[0]))
@@ -448,8 +506,10 @@ class DeepLearningSemanticClassifier(MLClassifier):
             confidence_score = float(predictions[0][0])
             predicted_class = int(predictions[0][0] > 0.5)
 
-        # Convert numeric prediction to string label
-        predicted_label = self.label_map[predicted_class]
+        logging.info(f"Predicted class (before conversion): {predicted_class}")
+
+        # Convert numeric prediction to string label using inverse_label_map
+        predicted_label = self.inverse_label_map[predicted_class]
 
         logging.info(f"Predicted class: {predicted_class}, Label: {predicted_label}, Confidence: {confidence_score}")
 
@@ -475,8 +535,9 @@ class DeepLearningSemanticClassifier(MLClassifier):
         self.val_predictions = np.array(self.val_predictions)
         self.val_confidence_scores = np.array(self.val_confidence_scores)
 
-        # Use the stored string labels for validation
-        self.val_labels = self.val_labels_str
+        # Convert predictions and labels to string format
+        self.val_predictions = np.array([str(pred) for pred in self.val_predictions])
+        self.val_labels = np.array([str(label) for label in self.val_labels_str])
 
         logging.info(f"Completed predict_validation. Predictions shape: {self.val_predictions.shape}, Confidence scores shape: {self.val_confidence_scores.shape}")
         logging.info(f"val_predictions type: {type(self.val_predictions)}, shape: {self.val_predictions.shape}, sample: {self.val_predictions[:5]}")
