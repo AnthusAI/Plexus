@@ -4,7 +4,7 @@ Scoring models in Plexus follow a uniform interface standard based on the MLFlow
 
 ## MLFlow `pyfunc` Standard
 
-MLFlow provides a unified approach for creating and managing custom MLflow models. This interface standard allows any model to be integrated into the MLFlow model registry using `mlflow.pyfunc.log_model()`. At runtime, these models can be retrieved with `mlflow.pyfunc.load_model()` for inference. This standard interface ensures consistency in sending transcript text to the model and receiving responses, whether dealing with a machine learning model, an agentic LLM score, or a programmatic model, as demonstrated in the first example of the provided [guide]([guide](https://mlflow.org/blog/custom-pyfunc)). For more detailed information, refer to the [documentation](https://mlflow.org/docs/latest/python_api/mlflow.pyfunc.html) for `mlflow.pyfunc`.
+MLFlow provides a unified approach for creating and managing custom MLflow models. This interface standard allows any model to be integrated into the MLFlow model registry using `mlflow.pyfunc.log_model()`. At runtime, these models can be retrieved with `mlflow.pyfunc.load_model()` for inference. This standard interface ensures consistency in sending transcript text to the model and receiving responses, whether dealing with a machine learning model, an agentic LLM score, or a programmatic model, as demonstrated in the first example of the provided [guide](https://mlflow.org/blog/custom-pyfunc). For more detailed information, refer to the [documentation](https://mlflow.org/docs/latest/python_api/mlflow.pyfunc.html) for `mlflow.pyfunc`.
 
 ## Details
 
