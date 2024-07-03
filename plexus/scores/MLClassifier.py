@@ -26,6 +26,7 @@ from plexus.CustomLogging import logging
 from plexus.scores.Score import Score
 from sklearn.preprocessing import LabelBinarizer
 from collections import Counter
+import xgboost as xgb
 
 class MLClassifier(Score):
     """
