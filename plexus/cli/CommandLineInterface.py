@@ -4,7 +4,6 @@ from collections import OrderedDict
 from .DataCommands import data
 from .EvaluationCommands import evaluate
 from .TrainingCommands import train
-from .PredictionCommands import score
 from .ReportingCommands import report
 from .PredictionCommands import predict
 from  .console import console
@@ -38,6 +37,5 @@ def main():
 main.add_command(data)
 main.add_command(evaluate)
 main.add_command(train)
-main.add_command(score)
 main.add_command(report)
 main.add_command(predict)
