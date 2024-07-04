@@ -1,4 +1,6 @@
+import os
 import click
+import subprocess
 
 @click.group(name='lake')
 def lake_group():

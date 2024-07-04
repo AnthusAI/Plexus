@@ -102,6 +102,11 @@ class FastTextClassifier(MLClassifier):
         # Train the fastText model using the saved training data file
         train_filename = self._get_train_filename()
         
+        # Log a few lines from the training file
+        with open(train_filename, 'r', encoding='utf-8') as f:
+            sample_lines = f.readlines()[:5]
+        logging.info(f"Sample lines from training file:\n{''.join(sample_lines)}")
+
         self.model = fasttext.train_supervised(
             input=train_filename,
             lr=self.parameters.learning_rate,
@@ -122,6 +127,9 @@ class FastTextClassifier(MLClassifier):
         )
 
         logging.info("Model trained successfully!")
+
+        # Log the labels the model was trained on
+        logging.info(f"Model labels: {self.model.labels}")
 
         # Report number of words and labels in the model
         logging.info(f"Model has {len(self.model.words)} words and {len(self.model.labels)} labels.")
@@ -165,34 +173,53 @@ class FastTextClassifier(MLClassifier):
 
         actual_labels = [line.split(' ', 1)[0].replace('__label__', '') for line in test_data]
 
-        predicted_labels_and_confidences = [
-            self.model.predict(line.split(' ', 1)[1].replace('\n', ' '), k=1)
-            for line in test_data
-        ]
-        predicted_labels = [
-            pred[0][0].replace('__label__', '') for pred, _ in predicted_labels_and_confidences
-        ]
-        confidence_scores = [
-            conf[0] for _, conf in predicted_labels_and_confidences
-        ]
+        predicted_labels_and_confidences = []
+        for i, line in enumerate(test_data):
+            text = line.split(' ', 1)[1].replace('\n', ' ')
+            prediction = self.model.predict(text, k=len(self.model.labels))
+            predicted_labels_and_confidences.append(prediction)
+            
+            if i < 5:  # Log details for the first 5 predictions
+                logging.info(f"Sample {i+1}:")
+                logging.info(f"  Text: {text[:100]}...")  # Log first 100 characters
+                logging.info(f"  Actual label: {actual_labels[i]}")
+                logging.info(f"  Predicted: {prediction}")
 
-        # Convert string labels to numeric values
-        unique_labels = sorted(set(actual_labels))
-        self.label_map = {label: i for i, label in enumerate(unique_labels)}
-        
-        self.val_labels = np.array([self.label_map[label] for label in actual_labels])
-        self.val_predictions = np.array(confidence_scores)  # Use confidence scores directly
+        # Log some raw predictions
+        logging.info(f"Sample raw predictions: {predicted_labels_and_confidences[:5]}")
+
+        # Create label_map (include all unique labels from both actual and predicted)
+        unique_labels = sorted(set(actual_labels) | set(label.replace('__label__', '') for labels, _ in predicted_labels_and_confidences for label in labels))
+        self.setup_label_map(unique_labels)
+
+        # Prepare predictions and confidence scores
+        predicted_labels = []
+        confidence_scores = []
+
+        for i, (labels, confs) in enumerate(predicted_labels_and_confidences):
+            predicted_labels.append(labels[0].replace('__label__', ''))
+            # For binary classification, we want the confidence score for the positive class
+            positive_class_index = self.label_map['Yes']
+            confidence_scores.append(confs[positive_class_index])
+
+        # Keep labels as strings
+        self.val_labels = np.array(actual_labels)
+        self.val_predictions = np.array(predicted_labels)
         self.val_confidence_scores = np.array(confidence_scores)
 
-        # Store the string predictions for later use if needed
-        self.val_predictions_str = np.array(predicted_labels)
+        logging.info(f"Unique actual labels: {set(actual_labels)}")
+        logging.info(f"Unique predicted labels: {set(predicted_labels)}")
+        logging.info(f"label_map: {self.label_map}")
 
-        # Log the types and shapes of the arrays
-        logging.info(f"val_labels type: {type(self.val_labels)}, shape: {self.val_labels.shape}, sample: {self.val_labels[:5]}")
-        logging.info(f"val_predictions type: {type(self.val_predictions)}, shape: {self.val_predictions.shape}, sample: {self.val_predictions[:5]}")
-        logging.info(f"val_confidence_scores type: {type(self.val_confidence_scores)}, shape: {self.val_confidence_scores.shape}, sample: {self.val_confidence_scores[:5]}")
-        logging.info(f"val_predictions_str type: {type(self.val_predictions_str)}, shape: {self.val_predictions_str.shape}, sample: {self.val_predictions_str[:5]}")
+        self._is_multi_class = len(self.label_map) > 2
 
+        # Log additional information
+        logging.info(f"Shape of val_confidence_scores: {self.val_confidence_scores.shape}")
+        logging.info(f"Number of unique labels in label_map: {len(self.label_map)}")
+        logging.info(f"Number of unique predicted labels: {len(set(predicted_labels))}")
+        logging.info(f"Sample of val_confidence_scores: {self.val_confidence_scores[:5]}")
+        logging.info(f"label_map: {self.label_map}")
+            
     def _log_parameters_recursively(self, params, parent_key=''):
         for key, value in params.items():
             if isinstance(value, dict):
@@ -267,11 +294,18 @@ class FastTextClassifier(MLClassifier):
         confidence_scores = []
 
         for text in texts:
-            prediction, confidence = self.model.predict(text)
-            predictions.append(self.label_map[prediction[0].replace('__label__', '')])
-            confidence_scores.append(confidence[0])
+            prediction = self.model.predict(text, k=len(self.model.labels))
+            labels, confs = prediction
 
-        logging.debug(f"Predictions: {predictions}")
-        logging.debug(f"Confidence scores: {confidence_scores}")
+            if self._is_multi_class:
+                conf_scores = np.zeros(len(self.label_map))
+                for label, conf in zip(labels, confs):
+                    label_index = self.label_map[label.replace('__label__', '')]
+                    conf_scores[label_index] = conf
+                confidence_scores.append(conf_scores)
+            else:
+                confidence_scores.append(confs[0])  # Only keep the positive class confidence
+
+            predictions.append(self.label_map[labels[0].replace('__label__', '')])
 
         return np.array(predictions), np.array(confidence_scores)

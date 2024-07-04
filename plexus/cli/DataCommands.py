@@ -320,7 +320,7 @@ def analyze_question(
     if score_name:   
         header_text = f"[bold royal_blue1]{score_name}[/bold royal_blue1]"
     else:
-        header_text = f"[bold royal_blue1]{scorecard_name}[/bold royal_blue1]"
+        header_text = f"[bold royal_blue1]{scorecard_id}[/bold royal_blue1]"
 
     return columns
 

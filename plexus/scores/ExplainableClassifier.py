@@ -126,6 +126,10 @@ class ExplainableClassifier(MLClassifier):
             self.label_encoder = LabelEncoder()
             self.label_encoder.classes_ = np.array(['No', 'Yes'])  # Assuming 0 is 'No' and 1 is 'Yes'
 
+        # Set up the label map using the standardized method
+        self.setup_label_map(self.label_encoder.classes_)
+        logging.info(f"Label map in train_model(): {self.label_map}")
+        
         print("Unique values after encoding:", np.unique(self.y_train_encoded), np.unique(self.y_test_encoded))
 
         # Check if it's a binary or multi-class classification problem
@@ -161,10 +165,6 @@ class ExplainableClassifier(MLClassifier):
 
         logging.info("Fitting the model...")
         self.model.fit(self.X_train, self.y_train_encoded)
-
-        # Create the label_map attribute
-        self.label_map = {i: label for i, label in enumerate(self.label_encoder.classes_)}
-        logging.info(f"Label map: {self.label_map}")
 
     @Score.ensure_report_directory_exists
     def explain_model(self):
@@ -303,19 +303,19 @@ class ExplainableClassifier(MLClassifier):
         self.val_predictions = []
         self.val_confidence_scores = []
         self.val_explanations = []
-        self.val_labels = self.y_test  # Set val_labels to y_test
+        self.val_labels = self.y_test
 
         positive_log_count = 0
         negative_log_count = 0
 
         for i in range(self.X_test.shape[0]):
-            sample = self.X_test[i].toarray().flatten()  # Convert to dense array and flatten
+            sample = self.X_test[i].toarray().flatten()
             result = self.predict(None, sample, i, positive_log_count, negative_log_count)
-            self.val_predictions.append(result.classification)  # Already a string, no need for label_map
+            self.val_predictions.append(result.classification)
             self.val_confidence_scores.append(result.confidence)
             self.val_explanations.append(result.explanation)
 
-            if result.classification == 'Yes':  # Assuming 'Yes' is positive
+            if result.classification == 'Yes':
                 positive_log_count += 1
             else:
                 negative_log_count += 1
@@ -373,65 +373,63 @@ class ExplainableClassifier(MLClassifier):
         return selected
 
     def predict(self, context, model_input, sample_index=0, positive_log_count=0, negative_log_count=0):
-        logging.info(f"predict() called with input type: {type(model_input)}")
+        logging.debug(f"predict() called with input type: {type(model_input)}")
         
         prepared_input = self._prepare_input(model_input)
-        logging.info(f"Prepared input shape: {prepared_input.shape}")
+        logging.debug(f"Prepared input shape: {prepared_input.shape}")
         
         probabilities = self._calculate_probabilities(prepared_input)
-        prediction = (probabilities[1] >= self.parameters.decision_threshold).astype(int)
+        prediction = np.argmax(probabilities)
         confidence_score = np.max(probabilities)
         
         shap_values = self._extract_shap_values(prepared_input)
         explanation = self._generate_single_explanation(prepared_input, prediction, confidence_score, shap_values, 
                                                         sample_index, positive_log_count, negative_log_count)
 
-        # Convert numeric prediction to string label
-        prediction_label = self.label_map[prediction]
-        logging.info(f"Prediction: {prediction_label}, Confidence: {confidence_score:.4f}")
+        # Convert numeric prediction to string label using label_map
+        prediction_label = list(self.label_map.keys())[list(self.label_map.values()).index(prediction)]
+        logging.debug(f"Prediction: {prediction_label}, Confidence: {confidence_score:.4f}")
         
         return self.ExplainableModelOutput(
-            classification=prediction_label,  # Use string label
+            classification=prediction_label,
             confidence=confidence_score,
             explanation=explanation
         )
 
     def _prepare_input(self, model_input):
-        logging.info(f"Preparing input of type: {type(model_input)}")
+        logging.debug(f"Preparing input of type: {type(model_input)}")
         if isinstance(model_input, dict):
             model_input = pd.DataFrame([model_input])
         if isinstance(model_input, pd.DataFrame):
             if model_input.shape[0] > 1:
                 raise ValueError("Input should be a single sample, not multiple rows")
-            logging.info(f"Input shape: {model_input.shape}")
+            logging.debug(f"Input shape: {model_input.shape}")
             return scipy.sparse.csr_matrix(model_input.values)
         elif isinstance(model_input, (list, np.ndarray)):
             model_input = np.array(model_input).reshape(1, -1)
-            logging.info(f"Input shape: {model_input.shape}")
+            logging.debug(f"Input shape: {model_input.shape}")
             return scipy.sparse.csr_matrix(model_input)
         elif scipy.sparse.issparse(model_input):
             if model_input.shape[0] > 1:
                 raise ValueError("Input should be a single sample, not multiple rows")
-            logging.info(f"Input shape: {model_input.shape}")
+            logging.debug(f"Input shape: {model_input.shape}")
             return model_input
         else:
             raise ValueError(f"Unsupported input type: {type(model_input)}")
 
     def _calculate_probabilities(self, prepared_input):
-        logging.info("Predicting probabilities")
+        logging.debug("Predicting probabilities")
         probabilities = self.model.predict_proba(prepared_input)
-        logging.info(f"Probabilities shape: {probabilities.shape}")
+        logging.debug(f"Probabilities shape: {probabilities.shape}")
         return probabilities[0]  # Return probabilities for single sample
 
     def _extract_shap_values(self, prepared_input):
-        logging.info("Extracting SHAP values")
+        logging.debug("Extracting SHAP values")
         self.explainer = shap.TreeExplainer(self.model)
         shap_values = self.explainer.shap_values(prepared_input)
-        logging.info(f"SHAP values type: {type(shap_values)}")
-        if isinstance(shap_values, list):
-            logging.info("SHAP values is a list, taking positive class values")
-            shap_values = shap_values[1]
-        return shap_values
+        logging.debug(f"SHAP values type: {type(shap_values)}")
+        logging.debug(f"Shape of SHAP values: {np.array(shap_values).shape}")
+        return np.array(shap_values)
 
     def _generate_explanations(self, prepared_input, predictions, confidenceScores, shap_values):
         logging.info("Generating explanations")
@@ -452,21 +450,41 @@ class ExplainableClassifier(MLClassifier):
 
     def _generate_single_explanation(self, prepared_input, prediction, confidence_score, shap_values, 
                                     sample_index, positive_log_count, negative_log_count):
+        logging.debug(f"Generating explanation for sample {sample_index}")
+        logging.debug(f"Prediction: {prediction}, Confidence: {confidence_score}")
+        
         sample = prepared_input[0]  # Get the first (and only) sample
         if scipy.sparse.issparse(sample):
             non_zero_indices = sample.nonzero()[1]
         else:
             non_zero_indices = np.nonzero(sample)[0]
         
+        logging.debug(f"Number of non-zero features: {len(non_zero_indices)}")
+        
         if len(non_zero_indices) == 0:
-            logging.warning(f"Sample {sample_index}: No non-zero features found. This is unexpected and warrants investigation.")
-            # ... (keep the detailed logging for zero-feature samples)
+            logging.warning(f"Sample {sample_index}: No non-zero features found.")
             return "Unable to generate explanation due to lack of non-zero features."
 
         sample_features = [self.feature_names[i] for i in non_zero_indices]
-        sample_shap_values = shap_values[0][non_zero_indices]  # Get SHAP values for the first (and only) sample
+        
+        # Handle multi-class SHAP values
+        if shap_values.ndim == 3:  # Multi-class case
+            logging.debug("Multi-class SHAP values detected")
+            # For multi-class, use the SHAP values for the predicted class
+            sample_shap_values = shap_values[0, non_zero_indices, prediction]
+        else:
+            logging.debug("Binary classification SHAP values detected")
+            sample_shap_values = shap_values[0, non_zero_indices]
+
+        logging.debug(f"Shape of sample_shap_values: {sample_shap_values.shape}")
+        
+        # Ensure sample_shap_values is 1-dimensional
+        if sample_shap_values.ndim > 1:
+            sample_shap_values = sample_shap_values.flatten()
 
         sorted_indices = np.argsort(-np.abs(sample_shap_values))
+        logging.debug(f"Shape of sorted_indices: {sorted_indices.shape}")
+        
         sorted_features = [sample_features[i] for i in sorted_indices]
         sorted_shap_values = sample_shap_values[sorted_indices]
 
@@ -488,8 +506,8 @@ class ExplainableClassifier(MLClassifier):
 
         shap_explanation = shap.Explanation(
             values=top_shap_values,
-            base_values=self.explainer.expected_value,
-            # data=feature_values,
+            base_values=self.explainer.expected_value[prediction] if isinstance(self.explainer.expected_value, list) else self.explainer.expected_value,
+            data=np.zeros(len(top_features)),  # Placeholder data
             feature_names=top_features
         )
 
@@ -507,7 +525,7 @@ class ExplainableClassifier(MLClassifier):
             plt.savefig(plot_filename, bbox_inches='tight')
             plt.close()
 
-        except ValueError as e:
+        except Exception as e:
             logging.warning(f"Unable to create SHAP waterfall plot for sample {sample_index}: {str(e)}")
 
         sample_table = Table(title=f"Sample #{sample_index}", title_style="bold magenta1")
