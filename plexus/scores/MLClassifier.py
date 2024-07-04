@@ -4,7 +4,7 @@ import mlflow
 import inspect
 import pandas as pd
 import numpy as np
-from pydantic import BaseModel, validator, ValidationError
+from pydantic import BaseModel, field_validator, ValidationError
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tensorflow.keras.utils import plot_model
@@ -35,7 +35,7 @@ class MLClassifier(Score):
         ...
         data: dict
 
-        @validator('data')
+        @field_validator('data')
         def convert_data_percentage(cls, value):
             if 'percentage' in value:
                 value['percentage'] = float(str(value['percentage']).strip().replace('%', ''))
@@ -389,13 +389,13 @@ class MLClassifier(Score):
         confidence: float
 
     @abstractmethod
-    def predict(self, context, model_input: ModelInput):
+    def predict(self, model_input: ModelInput):
         """
-        Make predictions on the test data.
+        Make predictions on the input data.
 
-        :param context: MLflow context for the prediction.
-        :param model_input: The input data for making predictions.
-        :return: The predictions.
+        :param model_input: The input data for making predictions, which conforms to MLClassifier.ModelInput.
+        :return: The predictions, which can be one of the supported output types (numpy.ndarray, pandas.Series,
+                 pandas.DataFrame, List, Dict, pyspark.sql.DataFrame).
         """
         pass
 

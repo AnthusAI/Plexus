@@ -2,17 +2,24 @@ import pandas as pd
 import nltk.data
 
 from .DataframeProcessor import DataframeProcessor
+from plexus.scores.MLClassifier import MLClassifier
 from plexus.CustomLogging import logging
 
 class RelevantWindowsTranscriptFilter(DataframeProcessor):
     def __init__(self, **parameters):
         super().__init__(**parameters)
         self.classifier = parameters.get("classifier")
+        self.prev_count = parameters.get("prev_count", 1)
+        self.next_count = parameters.get("next_count", 1)
 
     def process(self, dataframe: pd.DataFrame) -> pd.DataFrame:
         def filter_transcript(transcript):
             sentences = transcript.split('\n')
-            relevance_flags = [self.classifier.is_relevant(sentence) for sentence in sentences]
+            relevance_flags = [
+                self.classifier.predict(
+                    model_input = MLClassifier.ModelInput(transcript=sentence)
+                ) for sentence in sentences
+            ]
             include_flags = self.compute_inclusion_flags(relevance_flags)
 
             filtered_transcript = []
@@ -35,12 +42,12 @@ class RelevantWindowsTranscriptFilter(DataframeProcessor):
         self.display_summary()
         return dataframe
 
-    def compute_inclusion_flags(self, relevance_flags, prev_count=1, next_count=1):
+    def compute_inclusion_flags(self, relevance_flags):
         include_flags = [False] * len(relevance_flags)
         for i, is_relevant in enumerate(relevance_flags):
             if is_relevant:
-                start_index = max(i - prev_count, 0)
-                end_index = min(i + next_count + 1, len(relevance_flags))
+                start_index = max(i - self.prev_count, 0)
+                end_index = min(i + self.next_count + 1, len(relevance_flags))
                 for j in range(start_index, end_index):
                     include_flags[j] = True
         return include_flags

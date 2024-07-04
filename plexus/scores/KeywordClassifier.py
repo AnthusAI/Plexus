@@ -1,13 +1,37 @@
 import re
 from plexus.scores.Score import Score
+from plexus.scores.MLClassifier import MLClassifier
 from plexus.CustomLogging import logging
 
 class KeywordClassifier(Score):
+    """
+    A keyword classifier that returns True if the input sentence contains any of the keywords or matches any of the regular expressions.
+
+    This classifier supports both plain string keywords and regular expressions for more flexible matching.
+
+    Examples
+    --------
+    Plain string keywords:
+    - "child"
+    - "children"
+    - "dependent"
+
+    Regular expressions:
+    - r"\bchild\b"
+    - r"\bchildren\b"
+    - r"\bdependent\b"
+    """
     def __init__(self, keywords, scorecard_name, score_name, **kwargs):
         super().__init__(scorecard_name=scorecard_name, score_name=score_name, **kwargs)
         self.keywords = keywords
 
     def is_relevant(self, sentence):
+        """
+        Check if the input sentence is relevant based on the keywords.
+
+        :param sentence: The input sentence to check.
+        :return: True if the sentence is relevant, False otherwise.
+        """
         logging.debug(f"Checking if sentence is relevant: {sentence}")
         for keyword in self.keywords:
             if isinstance(keyword, str):
@@ -24,9 +48,18 @@ class KeywordClassifier(Score):
         return False
 
     def load_context(self, context=None):
-        # Implement the context loading logic if necessary
+        """
+        Load any necessary artifacts or models based on the MLflow context.
+
+        This function is required by the standard MLFlow model interface for running inference in production.
+        """
         pass
 
-    def predict(self, context, model_input):
-        # Implement prediction logic using the is_relevant method
-        return [self.is_relevant(sentence) for sentence in model_input]
+    def predict(self, model_input: MLClassifier.ModelInput):
+        """
+        Make predictions on the input data.
+
+        :param model_input: The input data for making predictions, which conforms to MLClassifier.ModelInput.
+        :return: The predictions, which can be one of the supported output types (numpy.ndarray, pandas.Series, pandas.DataFrame, List, Dict, pyspark.sql.DataFrame).
+        """
+        return self.is_relevant(model_input.transcript)

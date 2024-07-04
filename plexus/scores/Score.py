@@ -95,6 +95,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel):
                 os.makedirs(self.report_directory_path())
             return func(self, *args, **kwargs)
         return wrapper
+
     def report_directory_path(self):
         return f"./reports/{self.parameters.scorecard_name}/{self.parameters.score_name}/".replace(' ', '_')
 
@@ -135,25 +136,3 @@ class Score(ABC, mlflow.pyfunc.PythonModel):
 
         with open(file_name, 'w') as json_file:
             json.dump(configuration, json_file, indent=4)
-
-    @abstractmethod
-    def load_context(self, context):
-        """
-        Load any necessary artifacts or models based on the MLflow context.
-
-        This function is required by the standard MLFlow model interface for running inference in production.
-        """
-        pass
-
-    @abstractmethod
-    def predict(self, context, model_input):
-        """
-        Make predictions on the input data.
-
-        :param context: MLflow context for the prediction.
-        :param model_input: The input data for making predictions (agnostic dataframe).
-        :return: The predictions.
-
-        This function is required by the standard MLFlow model interface for running inference in production.
-        """
-        pass
