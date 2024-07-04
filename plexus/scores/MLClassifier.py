@@ -25,6 +25,8 @@ from plexus.cli.console import console
 from plexus.CustomLogging import logging
 from plexus.scores.Score import Score
 from sklearn.preprocessing import LabelBinarizer
+from collections import Counter
+import xgboost as xgb
 
 class MLClassifier(Score):
     """
@@ -335,6 +337,16 @@ class MLClassifier(Score):
 
         print("Generating visualizations...")
 
+        logging.info(f"Shape of self.val_labels: {self.val_labels.shape}")
+        logging.info(f"Sample of self.val_labels: {self.val_labels[:5]}")
+        logging.info(f"Shape of self.val_predictions: {self.val_predictions.shape}")
+        logging.info(f"Sample of self.val_predictions: {self.val_predictions[:5]}")
+        logging.info(f"Shape of self.val_confidence_scores: {self.val_confidence_scores.shape}")
+        logging.info(f"Sample of self.val_confidence_scores: {self.val_confidence_scores[:5]}")
+        logging.info(f"Unique values in self.val_labels: {set(self.val_labels)}")
+        logging.info(f"Unique values in self.val_predictions: {set(self.val_predictions)}")
+        logging.info(f"label_map: {self.label_map}")
+
         self._generate_confusion_matrix()
         self._plot_roc_curve()
         self._plot_precision_recall_curve()
@@ -425,22 +437,47 @@ class MLClassifier(Score):
         plot_model(self.model, to_file=file_name, show_shapes=True, show_layer_names=True, rankdir='TB')
         mlflow.log_artifact(file_name)
 
+    def setup_label_map(self, labels):
+        unique_labels = sorted(set(labels))
+        self.label_map = {label: i for i, label in enumerate(unique_labels)}
+        logging.info(f"Label map: {self.label_map}")
+
     def _generate_confusion_matrix(self):
         file_name = self.report_file_name("confusion_matrix.png")
 
-        # Convert string labels to numeric
-        label_to_int = {label: i for i, label in enumerate(self.label_map.values())}
-        val_labels_int = np.array([label_to_int[label] for label in self.val_labels])
-        val_predictions_int = np.array([label_to_int[pred] for pred in self.val_predictions])
+        # Ensure all classes are represented in label_to_int
+        all_classes = set(self.label_map.values())
+        all_classes.update(set(self.val_labels))
+        all_classes.update(set(self.val_predictions))
+        
+        # Convert all labels to strings
+        all_classes = set(str(label) for label in all_classes)
+        
+        # Create a sorted list of unique labels
+        sorted_labels = sorted(all_classes)
+        
+        # Create label_to_int mapping
+        label_to_int = {label: i for i, label in enumerate(sorted_labels)}
+        logging.info(f"Label to int mapping: {label_to_int}")
 
-        cm = confusion_matrix(val_labels_int, val_predictions_int)
+        val_labels_int = np.array([label_to_int[str(label)] for label in self.val_labels])
+        val_predictions_int = np.array([label_to_int[str(pred)] for pred in self.val_predictions])
+
+        # Generate confusion matrix using only the relevant labels
+        relevant_labels = [label_to_int[label] for label in self.label_map.keys()]
+        logging.info(f"Relevant labels: {relevant_labels}")
+        cm = confusion_matrix(val_labels_int, val_predictions_int, labels=relevant_labels)
+        
+        plt.figure(figsize=(10, 8))
         custom_colormap = sns.light_palette(self._fuchsia, as_cmap=True)
-        sns.heatmap(cm, annot=True, fmt='d', cmap=custom_colormap, xticklabels=self.label_map.values(), yticklabels=self.label_map.values())
+        sns.heatmap(cm, annot=True, fmt='d', cmap=custom_colormap, 
+                    xticklabels=list(self.label_map.keys()), yticklabels=list(self.label_map.keys()))
         plt.xlabel('Predicted')
         plt.ylabel('Actual')
         plt.title('Confusion Matrix')
 
-        plt.savefig(file_name)
+        plt.tight_layout()
+        plt.savefig(file_name, dpi=300)
         plt.close()
 
         mlflow.log_artifact(file_name)
@@ -449,70 +486,133 @@ class MLClassifier(Score):
         cm_text = np.array2string(cm, separator=', ')
         logging.info(f"Confusion matrix: {cm_text}")
 
+        # Log class distribution
+        class_distribution = Counter(self.val_labels)
+        logging.info(f"Class distribution in validation set: {dict(class_distribution)}")
+
+    def train_model(self, X_train, y_train, X_val, y_val):
+        # Set the positive class weight
+        scale_pos_weight = self.params.positive_class_weight
+
+        # Train the XGBoost model with the specified positive class weight
+        self.model = xgb.XGBClassifier(scale_pos_weight=scale_pos_weight)
+        self.model.fit(X_train, y_train, eval_set=[(X_val, y_val)], early_stopping_rounds=10)
+
+    def predict(self, X):
+        # Get the decision threshold
+        decision_threshold = self.params.decision_threshold
+
+        # Predict probabilities
+        y_proba = self.model.predict_proba(X)[:, 1]
+
+        # Apply the decision threshold
+        y_pred = (y_proba >= decision_threshold).astype(int)
+        return y_pred
+
     def _plot_roc_curve(self):
-        file_name = self.report_file_name("ROC_curve.png")
+        file_name = self.report_file_name("roc_curve.png")
 
-        plt.figure()
+        # Ensure all classes are represented
+        all_classes = set(self.label_map.values())
+        all_classes.update(set(self.val_labels))
+        all_classes.update(set(self.val_predictions))
+        
+        # Convert all labels to strings
+        all_classes = set(str(label) for label in all_classes)
+        
+        # Create a sorted list of unique labels
+        sorted_labels = sorted(all_classes)
+        
+        # Create label_to_int mapping
+        label_to_int = {label: i for i, label in enumerate(sorted_labels)}
 
-        # Convert string labels to numeric
-        label_to_int = {label: i for i, label in enumerate(self.label_map.values())}
-        val_labels_int = np.array([label_to_int[label] for label in self.val_labels])
-        val_predictions_int = np.array([label_to_int[pred] for pred in self.val_predictions])
+        val_labels_int = np.array([label_to_int[str(label)] for label in self.val_labels])
 
-        if self.is_multi_class:
-            lb = LabelBinarizer()
-            val_labels_one_hot = lb.fit_transform(val_labels_int)
-            val_predictions_one_hot = lb.transform(val_predictions_int)
-
-            n_classes = val_labels_one_hot.shape[1]
-            fpr = dict()
-            tpr = dict()
-            roc_auc = dict()
-            for i in range(n_classes):
-                fpr[i], tpr[i], _ = roc_curve(val_labels_one_hot[:, i], val_predictions_one_hot[:, i])
-                roc_auc[i] = auc(fpr[i], tpr[i])
-                plt.plot(fpr[i], tpr[i], lw=2, label=f'Class {self.label_map[i]} (area = {roc_auc[i]:0.2f})')
+        # Ensure val_confidence_scores is 1D
+        if self.val_confidence_scores.ndim == 2:
+            if self.val_confidence_scores.shape[1] == 1:
+                val_confidence_scores = self.val_confidence_scores.ravel()
+            else:
+                # For multi-class, use the scores for the positive class
+                positive_class_index = self.label_map['Yes']
+                val_confidence_scores = self.val_confidence_scores[:, positive_class_index]
         else:
-            fpr, tpr, _ = roc_curve(val_labels_int, self.val_confidence_scores)
-            roc_auc = auc(fpr, tpr)
-            plt.plot(fpr, tpr, color=self._sky_blue, lw=2, label='ROC curve (area = %0.2f)' % roc_auc)
+            val_confidence_scores = self.val_confidence_scores
 
-        plt.plot([0, 1], [0, 1], color=self._fuchsia, lw=2, linestyle='--')
+        pos_label = label_to_int['Yes']
+
+        fpr, tpr, _ = roc_curve(val_labels_int, val_confidence_scores, pos_label=pos_label)
+        roc_auc = auc(fpr, tpr)
+
+        plt.figure(figsize=(10, 8))
+        plt.plot(fpr, tpr, color=self._fuchsia, lw=2, label=f'ROC curve (AUC = {roc_auc:.2f})')
+        plt.plot([0, 1], [0, 1], color=self._sky_blue, lw=2, linestyle='--')
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.05])
         plt.xlabel('False Positive Rate')
         plt.ylabel('True Positive Rate')
-        plt.title('Receiver Operating Characteristic')
+        plt.title('Receiver Operating Characteristic (ROC) Curve')
         plt.legend(loc="lower right")
         plt.savefig(file_name)
         plt.close()
+
         mlflow.log_artifact(file_name)
+        mlflow.log_metric("roc_auc", roc_auc)
+
+        # Log additional information for debugging
+        logging.info(f"Number of unique labels: {len(sorted_labels)}")
+        logging.info(f"Shape of val_confidence_scores: {val_confidence_scores.shape}")
+        logging.info(f"Shape of val_labels_int: {val_labels_int.shape}")
+        logging.info(f"label_to_int mapping: {label_to_int}")
 
     def _plot_precision_recall_curve(self):
         file_name = self.report_file_name("precision_and_recall_curve.png")
 
         plt.figure()
 
-        # Convert string labels to numeric
-        label_to_int = {label: i for i, label in enumerate(self.label_map.values())}
-        val_labels_int = np.array([label_to_int[label] for label in self.val_labels])
-        val_predictions_int = np.array([label_to_int[pred] for pred in self.val_predictions])
+        # Ensure all classes are represented
+        all_classes = set(self.label_map.values())
+        all_classes.update(set(self.val_labels))
+        all_classes.update(set(self.val_predictions))
+        
+        # Convert all labels to strings
+        all_classes = set(str(label) for label in all_classes)
+        
+        # Create a sorted list of unique labels
+        sorted_labels = sorted(all_classes)
+        
+        # Create label_to_int mapping
+        label_to_int = {label: i for i, label in enumerate(sorted_labels)}
 
-        if self.is_multi_class:
+        val_labels_int = np.array([label_to_int[str(label)] for label in self.val_labels])
+        val_predictions_int = np.array([label_to_int[str(pred)] for pred in self.val_predictions])
+
+        # Remove any instances with unknown labels
+        valid_indices = (val_labels_int != -1) & (val_predictions_int != -1)
+        val_labels_int = val_labels_int[valid_indices]
+        val_predictions_int = val_predictions_int[valid_indices]
+        val_confidence_scores = self.val_confidence_scores[valid_indices]
+
+        if self._is_multi_class:
             lb = LabelBinarizer()
             val_labels_one_hot = lb.fit_transform(val_labels_int)
-            val_predictions_one_hot = lb.transform(val_predictions_int)
+            
+            # Ensure val_confidence_scores is in the correct format for multi-class
+            if val_confidence_scores.ndim == 1:
+                temp_scores = np.zeros((len(val_confidence_scores), len(label_to_int)))
+                temp_scores[np.arange(len(val_predictions_int)), val_predictions_int] = val_confidence_scores
+                val_confidence_scores = temp_scores
 
             n_classes = val_labels_one_hot.shape[1]
-            precision = dict()
-            recall = dict()
-            pr_auc = dict()
             for i in range(n_classes):
-                precision[i], recall[i], _ = precision_recall_curve(val_labels_one_hot[:, i], val_predictions_one_hot[:, i])
-                pr_auc[i] = auc(recall[i], precision[i])
-                plt.plot(recall[i], precision[i], lw=2, label=f'Class {self.label_map[i]} (area = {pr_auc[i]:0.2f})')
+                precision, recall, _ = precision_recall_curve(val_labels_one_hot[:, i], val_confidence_scores[:, i])
+                pr_auc = auc(recall, precision)
+                class_label = list(label_to_int.keys())[list(label_to_int.values()).index(i)]
+                plt.plot(recall, precision, lw=2, label=f'Class {class_label} (area = {pr_auc:0.2f})')
         else:
-            precision, recall, _ = precision_recall_curve(val_labels_int, self.val_confidence_scores)
+            # Convert binary labels to 0 and 1
+            val_labels_binary = (val_labels_int == label_to_int['Yes']).astype(int)
+            precision, recall, _ = precision_recall_curve(val_labels_binary, val_confidence_scores)
             pr_auc = auc(recall, precision)
             plt.plot(recall, precision, color=self._sky_blue, lw=2, label='PR curve (area = %0.2f)' % pr_auc)
 
@@ -588,10 +688,35 @@ class MLClassifier(Score):
         predicted_labels = self.val_predictions
         true_labels = self.val_labels
 
-        # Convert string labels to numeric
-        label_to_int = {label: i for i, label in enumerate(self.label_map.values())}
-        predicted_labels_numeric = np.array([label_to_int[label] for label in predicted_labels])
-        true_labels_numeric = np.array([label_to_int[label] for label in true_labels])
+        logging.info(f"Calibration curve - Unique values in predicted_labels: {set(predicted_labels)}")
+        logging.info(f"Calibration curve - Unique values in true_labels: {set(true_labels)}")
+        logging.info(f"Calibration curve - label_map: {self.label_map}")
+
+        # Ensure all classes are represented
+        all_classes = set(self.label_map.values())
+        all_classes.update(set(true_labels))
+        all_classes.update(set(predicted_labels))
+        
+        # Convert all labels to strings
+        all_classes = set(str(label) for label in all_classes)
+        
+        # Create a sorted list of unique labels
+        sorted_labels = sorted(all_classes)
+        
+        # Create label_to_int mapping
+        label_to_int = {label: i for i, label in enumerate(sorted_labels)}
+
+        logging.info(f"Calibration curve - label_to_int dictionary: {label_to_int}")
+
+        try:
+            predicted_labels_numeric = np.array([label_to_int[str(label)] for label in predicted_labels])
+            true_labels_numeric = np.array([label_to_int[str(label)] for label in true_labels])
+        except KeyError as e:
+            logging.error(f"KeyError encountered: {e}")
+            logging.error(f"Label causing the error: {e.args[0]}")
+            logging.error(f"All unique labels in predicted_labels: {set(predicted_labels)}")
+            logging.error(f"All unique labels in true_labels: {set(true_labels)}")
+            raise
 
         def find_confidence_threshold(confidences, true_labels, predicted_labels, target_accuracy):
             sorted_indices = np.argsort(confidences)
