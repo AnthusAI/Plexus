@@ -147,11 +147,39 @@ Plexus is developed and maintained by [Anthus AI Solutions](https://www.anth.us)
 
 ## Getting Started
 
-TODO: Instructions for installation, configuration, and basic usage.
+### Installation
+
+Clone this repository.  We're not in PyPi yet, so you'll have to install it locally.
+
+`pip install -e .`
+
+### Testing
+
+Run all the tests:
+
+    pytest
+
+Run a single test:
+
+    pytest plexus/processors/RelevantWindowsTranscriptFilter_test.py -k test_multiple_keywords
+
+or:
+
+    pytest -k test_multiple_keywords
+
+#### Test Coverage
+
+Run tests with coverage:
+
+    pytest --cov=plexus
+
+Generate an HTML coverage report:
+
+    pytest --cov=plexus --cov-report=html
 
 ## Documentation 
 
-TODO: Links to more detailed documentation.
+We build the Sphinx documentation at [https://anthus-ai.github.io/plexus/](https://anthus-ai.github.io/plexus/) with the files in the `documentation/` folder.
 
 ## Contributing
 
