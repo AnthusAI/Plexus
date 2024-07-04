@@ -2,7 +2,7 @@ import os
 import numpy as np
 import mlflow
 import mlflow.keras
-from pydantic import BaseModel, validator, ValidationError
+from pydantic import BaseModel, field_validator, ValidationError
 from transformers import TFAutoModel
 from tensorflow.keras.metrics import Precision, Recall, AUC
 import tensorflow as tf
@@ -40,7 +40,7 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
         ...
         multiple_windows_aggregation: str = 'max'
 
-        @validator('multiple_windows_aggregation')
+        @field_validator('multiple_windows_aggregation')
         def validate_multiple_windows_aggregation(cls, value):
             allowed_values = ['max', 'mean']
             if value not in allowed_values:

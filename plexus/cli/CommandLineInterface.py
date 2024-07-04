@@ -4,8 +4,9 @@ from collections import OrderedDict
 from .DataCommands import data
 from .EvaluationCommands import evaluate
 from .TrainingCommands import train
-from .ScoringCommands import score
+from .PredictionCommands import score
 from .ReportingCommands import report
+from .PredictionCommands import predict
 from  .console import console
 
 from dotenv import load_dotenv
@@ -39,3 +40,4 @@ main.add_command(evaluate)
 main.add_command(train)
 main.add_command(score)
 main.add_command(report)
+main.add_command(predict)

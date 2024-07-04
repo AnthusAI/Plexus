@@ -13,6 +13,7 @@ setup(
         ],
     },
     install_requires=[
+        'pytest==8.2.2',
         'python-dotenv==1.0.0',
         'typer[all]==0.9.0',
         'pandas==2.1.4',
