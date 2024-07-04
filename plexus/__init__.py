@@ -1,17 +1,5 @@
 """
-Plexus Module
-=============
-
-Overview
---------
-The `plexus` module is a comprehensive suite designed to support various aspects of data processing, scoring, and analysis for AI/ML classification. It provides a robust framework for managing data workflows, implementing scoring algorithms, and generating detailed reports.
-
-Features
---------
-- **Data Management**: Tools for caching, filtering, and managing data efficiently.
-- **Scoring Algorithms**: Implementations of composite scores and individual scoring mechanisms.
-- **Reporting**: Utilities for creating and analyzing scorecards and generating comprehensive reports.
-- **Logging**: Custom logging utilities to track and debug processes.
+The `plexus` module is an orchestration system for AI/ML classification at scale. It provides a way to configure classifiers, manage hyperparameters for training, handle training and evaluation, and deploy models to production. It supports running sequences of LLM API requests, machine-learning models for inference, and numerical or heuristic methods for scoring.
 """
 
 from .Experiment import Experiment
