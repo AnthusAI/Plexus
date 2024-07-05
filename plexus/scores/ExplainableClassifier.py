@@ -1,7 +1,7 @@
 import os
 import mlflow
 import pandas as pd
-from plexus.scores.MLClassifier import MLClassifier
+from plexus.scores.Score import Score
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.feature_selection import SelectKBest, mutual_info_classif
 from sklearn.feature_selection import SelectKBest, f_classif
@@ -23,13 +23,13 @@ from rich.table import Table
 from rich.console import Console
 import scipy.sparse
 
-class ExplainableClassifier(MLClassifier):
+class ExplainableClassifier(Score):
     """
     A classifier based on XGBoost that uses n-gram vectorization and
     produces a ranked list of features for a target class, by importance.
     """
 
-    class Parameters(MLClassifier.Parameters):
+    class Parameters(Score.Parameters):
         ...
         top_n_features: int = 10000
         leaderboard_n_features: int = 10
@@ -355,7 +355,7 @@ class ExplainableClassifier(MLClassifier):
         """
         pass
 
-    class ModelOutput(MLClassifier.ModelOutput):
+    class ModelOutput(Score.ModelOutput):
         """
         This Score has an additional output attribute, explanation, which is a string
         """

@@ -1,6 +1,5 @@
 import re
 from plexus.scores.Score import Score
-from plexus.scores.MLClassifier import MLClassifier
 from plexus.CustomLogging import logging
 
 class KeywordClassifier(Score):
@@ -55,11 +54,18 @@ class KeywordClassifier(Score):
         """
         pass
 
-    def predict(self, model_input: MLClassifier.ModelInput):
+    def predict(self, model_input: Score.ModelInput):
         """
         Make predictions on the input data.
 
-        :param model_input: The input data for making predictions, which conforms to MLClassifier.ModelInput.
+        :param model_input: The input data for making predictions, which conforms to Score.ModelInput.
         :return: The predictions, which can be one of the supported output types (numpy.ndarray, pandas.Series, pandas.DataFrame, List, Dict, pyspark.sql.DataFrame).
         """
         return self.is_relevant(model_input.transcript)
+
+    def predict_validation(self):
+        pass
+    def register_model(self):
+        pass
+    def save_model(self):
+        pass

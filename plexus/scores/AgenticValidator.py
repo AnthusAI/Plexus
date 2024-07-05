@@ -1,6 +1,6 @@
 from typing import Dict, List, Any, Literal, Optional, TypedDict
 from pydantic import BaseModel, Field, ConfigDict
-from plexus.scores.MLClassifier import MLClassifier
+from plexus.scores.Score import Score
 from plexus.CustomLogging import logging
 import mlflow
 from langchain_core.chat_history import InMemoryChatMessageHistory
@@ -33,12 +33,12 @@ class StepOutput(BaseModel):
     result: str = Field(description="The validation result (e.g., 'Yes', 'No', 'Unclear')")
     explanation: Optional[str] = Field(default=None, description="Explanation for the result")
 
-class AgenticValidator(MLClassifier):
+class AgenticValidator(Score):
     """
     An agentic validator that uses LangGraph and advanced LangChain components to validate education information,
     specifically for school, degree, and modality, using both transcript and metadata.
     """
-    class Parameters(MLClassifier.Parameters):
+    class Parameters(Score.Parameters):
         model_config = ConfigDict(protected_namespaces=())
         model_provider: Literal["AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "AzureChatOpenAI"
         model_name: Optional[str] = None
@@ -251,7 +251,7 @@ class AgenticValidator(MLClassifier):
         
         return state
 
-    def predict(self, model_input: MLClassifier.ModelInput) -> MLClassifier.ModelOutput:
+    def predict(self, model_input: Score.ModelInput) -> Score.ModelOutput:
         self.current_state = ValidationState(
             transcript=model_input.transcript.lower(),  # Convert transcript to lowercase
             metadata={k: v.lower() for k, v in model_input.metadata.items()},  # Convert metadata values to lowercase
@@ -410,10 +410,10 @@ No: The transcript does not mention '{item_value}' or any close synonyms."""
         model_path = f"models/AgenticValidator_{self.parameters.model_provider}_{self.parameters.model_name}"
         mlflow.log_artifact(model_path)
 
-    class ModelInput(MLClassifier.ModelInput):
+    class ModelInput(Score.ModelInput):
         metadata: Dict[str, str]
 
-    class ModelOutput(MLClassifier.ModelOutput):
+    class ModelOutput(Score.ModelOutput):
         classification: Dict[str, Any]
 
 class AgentState(TypedDict):

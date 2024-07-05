@@ -23,7 +23,7 @@ import nltk
 nltk.download('punkt')
 
 from plexus.CustomLogging import logging
-from plexus.scores.MLClassifier import MLClassifier
+from plexus.scores.Score import Score
 from plexus.scores.DeepLearningSlidingWindowEmbeddingsClassifier import BERTClassifier
 
 from sklearn.svm import LinearSVC

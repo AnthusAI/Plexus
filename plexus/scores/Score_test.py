@@ -3,12 +3,17 @@ import json
 import pytest
 from pydantic import ValidationError
 from plexus.scores.Score import Score
-from plexus.scores.MLClassifier import MLClassifier
 
 class ConcreteScore(Score):
+    def predict_validation(self):
+        pass
+    def register_model(self):
+        pass
+    def save_model(self):
+        pass
     def load_context(self, context):
         pass
-    def predict(self, model_input: MLClassifier.ModelInput):
+    def predict(self, model_input: Score.ModelInput):
         return "computed score"
 
 def test_compute_score_result():
@@ -17,7 +22,7 @@ def test_compute_score_result():
         score_name="Test score"
     )
     result = score.predict(
-        MLClassifier.ModelInput(
+        Score.ModelInput(
             transcript="Test transcript"
         )
     )
