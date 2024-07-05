@@ -177,6 +177,12 @@ Generate an HTML coverage report:
 
     pytest --cov=plexus --cov-report=html
 
+That will generate a folder called `htmlcov` with an HTML coverage report.  One way to view that is to run:
+
+    python -m http.server
+
+And then go to [http://localhost:8000](http://localhost:8000)
+
 ## Documentation 
 
 We build the Sphinx documentation at [https://anthus-ai.github.io/plexus/](https://anthus-ai.github.io/plexus/) with the files in the `documentation/` folder.
