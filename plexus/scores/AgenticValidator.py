@@ -28,10 +28,12 @@ class ValidationState(BaseModel):
     validation_results: Dict[str, Any] = Field(default_factory=dict)
     overall_validity: str = "Unknown"
     explanation: str = ""
+    overall_confidence: float = 0.5
 
 class StepOutput(BaseModel):
     result: str = Field(description="The validation result (e.g., 'Yes', 'No', 'Unclear')")
     explanation: Optional[str] = Field(default=None, description="Explanation for the result")
+    confidence: float = Field(default=1.0, description="Confidence score for the result")
 
 def parse_llm_response(response: AIMessage) -> StepOutput:
     content = response.content.strip().lower()
@@ -45,7 +47,13 @@ def parse_llm_response(response: AIMessage) -> StepOutput:
     explanation = content[3:].strip() if result in ["Yes", "No"] else content
     logging.info(f"Extracted explanation: {explanation}")
     
-    return StepOutput(result=result, explanation=explanation)
+    # Calculate confidence based on the presence of uncertainty words
+    uncertainty_words = ["maybe", "possibly", "perhaps", "not sure", "uncertain", "unclear"]
+    confidence = 1.0 - sum(word in explanation.lower() for word in uncertainty_words) * 0.1
+    confidence = max(0.5, min(1.0, confidence))  # Ensure confidence is between 0.5 and 1.0
+    logging.info(f"Calculated confidence: {confidence}")
+    
+    return StepOutput(result=result, explanation=explanation, confidence=confidence)
 
 class AgenticValidator(MLClassifier):
     """
@@ -147,7 +155,7 @@ class AgenticValidator(MLClassifier):
 
     def _validate_step(self, state: ValidationState, step_name: str, prompt: str) -> ValidationState:
         chain = self._create_chain(
-            "You are an expert in validating educational information. Carefully examine the entire transcript for the requested information.",
+            "You are an expert in validating educational information. Carefully examine the entire transcript for the requested information. Respond with 'Yes' or 'No', followed by a brief explanation.",
             prompt
         )
         
@@ -174,11 +182,9 @@ class AgenticValidator(MLClassifier):
             # Log the raw response from the model
             logging.info(f"Raw model response: {response.content}")
             
-            # Ask for a yes/no summary
-            summary_response = self._get_yes_no_summary(chain, step_name, normalized_metadata)
-            
-            parsed_result = parse_llm_response(summary_response)
+            parsed_result = parse_llm_response(response)
             state.validation_results[step_name] = parsed_result.result
+            state.validation_results[f"{step_name}_confidence"] = parsed_result.confidence
             
             # Log the parsed result
             logging.info(f"Parsed result: {parsed_result}")
@@ -186,22 +192,9 @@ class AgenticValidator(MLClassifier):
         except Exception as e:
             logging.error(f"Error in _validate_step for {step_name}: {str(e)}")
             state.validation_results[step_name] = "Error"
+            state.validation_results[f"{step_name}_confidence"] = 0.5
         
         return state
-
-    def _get_yes_no_summary(self, chain, step_name: str, metadata: str) -> AIMessage:
-        summary_prompt = "Based on your previous response, can you summarize whether the information was found in the transcript with a simple 'Yes' or 'No', followed by a brief explanation?"
-        
-        summary_response = chain.invoke(
-            {
-                "input": summary_prompt,
-                step_name: metadata,  # Add this line to include the necessary variable
-            },
-            config={"configurable": {"session_id": step_name}},
-        )
-        
-        logging.info(f"Summary response: {summary_response.content}")
-        return summary_response
 
     def _validate_school(self, state: ValidationState) -> ValidationState:
         return self._validate_step(state, "school", "Is the school '{school}' mentioned in the transcript?")
@@ -216,7 +209,7 @@ class AgenticValidator(MLClassifier):
         yes_count = sum(1 for result in state.validation_results.values() if result == "Yes")
         no_count = sum(1 for result in state.validation_results.values() if result == "No")
         unclear_count = sum(1 for result in state.validation_results.values() if result == "Unclear")
-        total_count = len(state.validation_results)
+        total_count = len(state.validation_results) // 2  # Divide by 2 because we now have result and confidence for each step
         
         if yes_count == total_count:
             state.overall_validity = "Valid"
@@ -228,6 +221,10 @@ class AgenticValidator(MLClassifier):
             state.overall_validity = "Partial"
         
         state.explanation = f"{yes_count} out of {total_count} validations were successful, {no_count} failed, and {unclear_count} were unclear."
+        
+        # Calculate overall confidence
+        confidence_values = [value for key, value in state.validation_results.items() if key.endswith('_confidence')]
+        state.overall_confidence = sum(confidence_values) / len(confidence_values) if confidence_values else 0.5
         
         return state
 
@@ -245,8 +242,11 @@ class AgenticValidator(MLClassifier):
         # Prepare the classification result
         classification = {
             "school_validation": validation_results.get('school', 'Unclear'),
+            "school_confidence": validation_results.get('school_confidence', 0.5),
             "degree_validation": validation_results.get('degree', 'Unclear'),
+            "degree_confidence": validation_results.get('degree_confidence', 0.5),
             "modality_validation": validation_results.get('modality', 'Unclear'),
+            "modality_confidence": validation_results.get('modality_confidence', 0.5),
             "overall_validity": final_state.get('overall_validity', 'Unknown'),
             "explanation": final_state.get('explanation', '')
         }
@@ -255,17 +255,18 @@ class AgenticValidator(MLClassifier):
         logging.info("=" * 50)
         logging.info("VALIDATION RESULTS")
         logging.info("=" * 50)
-        logging.info(f"School ({model_input.metadata['school']}): {classification['school_validation']}")
-        logging.info(f"Degree ({model_input.metadata['degree']}): {classification['degree_validation']}")
-        logging.info(f"Modality ({model_input.metadata['modality']}): {classification['modality_validation']}")
+        logging.info(f"School ({model_input.metadata['school']}): {classification['school_validation']} (Confidence: {classification['school_confidence']:.2f})")
+        logging.info(f"Degree ({model_input.metadata['degree']}): {classification['degree_validation']} (Confidence: {classification['degree_confidence']:.2f})")
+        logging.info(f"Modality ({model_input.metadata['modality']}): {classification['modality_validation']} (Confidence: {classification['modality_confidence']:.2f})")
         logging.info("-" * 50)
         logging.info(f"Overall Validity: {classification['overall_validity']}")
         logging.info(f"Explanation: {classification['explanation']}")
+        logging.info(f"Overall Confidence: {final_state.get('overall_confidence', 0.5):.2f}")
         logging.info("=" * 50)
         
         return self.ModelOutput(
             classification=classification,
-            confidence=1.0  # Set a default confidence since we're not calculating it
+            confidence=final_state.get('overall_confidence', 0.5)
         )
 
     def is_relevant(self, transcript, metadata):
@@ -306,3 +307,4 @@ class AgenticValidator(MLClassifier):
     class ModelOutput(MLClassifier.ModelOutput):
         classification: Dict[str, Any]
         confidence: float = 1.0  # Default confidence to 1.0 since we're not calculating it
+
