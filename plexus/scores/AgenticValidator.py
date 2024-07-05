@@ -1,5 +1,5 @@
 from typing import Dict, List, Any, Literal, Optional, TypedDict
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from plexus.scores.MLClassifier import MLClassifier
 from plexus.CustomLogging import logging
 import mlflow
@@ -28,12 +28,10 @@ class ValidationState(BaseModel):
     validation_results: Dict[str, Any] = Field(default_factory=dict)
     overall_validity: str = "Unknown"
     explanation: str = ""
-    overall_confidence: float = 0.5
 
 class StepOutput(BaseModel):
     result: str = Field(description="The validation result (e.g., 'Yes', 'No', 'Unclear')")
     explanation: Optional[str] = Field(default=None, description="Explanation for the result")
-    confidence: float = Field(default=1.0, description="Confidence score for the result")
 
 class AgenticValidator(MLClassifier):
     """
@@ -41,6 +39,7 @@ class AgenticValidator(MLClassifier):
     specifically for school, degree, and modality, using both transcript and metadata.
     """
     class Parameters(MLClassifier.Parameters):
+        model_config = ConfigDict(protected_namespaces=())
         model_provider: Literal["AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "AzureChatOpenAI"
         model_name: Optional[str] = None
         temperature: float = 0.1
@@ -55,6 +54,7 @@ class AgenticValidator(MLClassifier):
             wait_exponential_jitter=True,
             bound=RunnablePassthrough()
         )
+        self.current_state = None  # Initialize current_state
 
     def train_model(self):
         self.llm = self._initialize_model()
@@ -146,8 +146,7 @@ class AgenticValidator(MLClassifier):
 
         def _parse_validation_result(self, content: str) -> str:
             result = "Valid" if "yes" in content else "Invalid" if "no" in content else "Unclear"
-            confidence = float(content.split("Confidence: ")[-1].split()[0]) if "Confidence: " in content else 0.5
-            return f"{result} (Confidence: {confidence})"
+            return f"{result}"
 
         workflow.add_node("agent", agent_node)
 
@@ -176,12 +175,7 @@ class AgenticValidator(MLClassifier):
         logging.info(f"Extracted result: {result}")
         logging.info(f"Extracted explanation: {explanation}")
         
-        uncertainty_words = ["maybe", "possibly", "perhaps", "not sure", "uncertain", "unclear"]
-        confidence = 1.0 - sum(word in explanation.lower() for word in uncertainty_words) * 0.1
-        confidence = max(0.5, min(1.0, confidence))
-        logging.info(f"Calculated confidence: {confidence}")
-        
-        return StepOutput(result=result, explanation=explanation, confidence=confidence)
+        return StepOutput(result=result, explanation=explanation)
 
     def _validate_school(self, school: str) -> str:
         """Validate if the given school is mentioned in the transcript."""
@@ -246,14 +240,14 @@ class AgenticValidator(MLClassifier):
             logging.info(f"Raw model response: {response.content}")
             
             parsed_result = self.parse_llm_response(response)
-            state.validation_results[step_name] = f"{parsed_result.result} (Confidence: {parsed_result.confidence})"
+            state.validation_results[step_name] = f"{parsed_result.result}"
             
             # Log the parsed result
             logging.info(f"Parsed result: {parsed_result}")
             
         except Exception as e:
             logging.error(f"Error in _validate_step for {step_name}: {str(e)}")
-            state.validation_results[step_name] = "Error (Confidence: 0.5)"
+            state.validation_results[step_name] = "Error"
         
         return state
 
@@ -278,10 +272,12 @@ class AgenticValidator(MLClassifier):
         
         return self.ModelOutput(
             classification=classification,
-            confidence=classification.get('overall_confidence', 0.5)
         )
 
     def _validate_single_item(self, item_type: str, item_value: str) -> Dict[str, Any]:
+        if self.current_state is None:
+            self.current_state = ValidationState(transcript="", metadata={}, current_step="")
+        
         # Convert item_value and transcript to lowercase
         item_value = item_value.lower()
         lowercase_transcript = self.current_state.transcript.lower()
@@ -316,7 +312,6 @@ No: The transcript does not mention '{item_value}' or any close synonyms."""
         
         return {
             f"{item_type}_validation": parsed_result.result,
-            f"{item_type}_confidence": parsed_result.confidence,
             f"{item_type}_explanation": parsed_result.explanation
         }
 
@@ -351,36 +346,25 @@ No: The transcript does not mention '{item_value}' or any close synonyms."""
             classification['overall_validity'] = "Partial"
 
         classification['explanation'] = f"{valid_count} out of 3 validations were successful."
-        classification['overall_confidence'] = (
-            classification['school_confidence'] + 
-            classification['degree_confidence'] + 
-            classification['modality_confidence']
-        ) / 3
 
         return classification
 
     def _parse_agent_output(self, validation_results: Dict[str, Any]) -> Dict[str, Any]:
         classification = {
             "school_validation": "Unclear",
-            "school_confidence": 0.5,
             "degree_validation": "Unclear",
-            "degree_confidence": 0.5,
             "modality_validation": "Unclear",
-            "modality_confidence": 0.5,
             "overall_validity": "Unknown",
             "explanation": ""
         }
 
         for key, value in validation_results.items():
             if "school" in key:
-                classification["school_validation"] = value.split(" (Confidence: ")[0]
-                classification["school_confidence"] = float(value.split(" (Confidence: ")[1].split(")")[0])
+                classification["school_validation"] = value
             elif "degree" in key:
-                classification["degree_validation"] = value.split(" (Confidence: ")[0]
-                classification["degree_confidence"] = float(value.split(" (Confidence: ")[1].split(")")[0])
+                classification["degree_validation"] = value
             elif "modality" in key:
-                classification["modality_validation"] = value.split(" (Confidence: ")[0]
-                classification["modality_confidence"] = float(value.split(" (Confidence: ")[1].split(")")[0])
+                classification["modality_validation"] = value
 
         valid_count = sum(1 for val in [classification['school_validation'], classification['degree_validation'], classification['modality_validation']] if val == "Valid")
         if valid_count == 3:
@@ -391,7 +375,6 @@ No: The transcript does not mention '{item_value}' or any close synonyms."""
             classification['overall_validity'] = "Partial"
 
         classification['explanation'] = f"{valid_count} out of 3 validations were successful."
-        classification['overall_confidence'] = (classification['school_confidence'] + classification['degree_confidence'] + classification['modality_confidence']) / 3
 
         return classification
 
@@ -432,7 +415,7 @@ No: The transcript does not mention '{item_value}' or any close synonyms."""
 
     class ModelOutput(MLClassifier.ModelOutput):
         classification: Dict[str, Any]
-        #confidence: float = 1.0
+        confidence: float = 1  # Hardcoded confidence value
 
 class AgentState(TypedDict):
     messages: List[AnyMessage]
