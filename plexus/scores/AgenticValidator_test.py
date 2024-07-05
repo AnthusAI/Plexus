@@ -80,7 +80,6 @@ def test_validate_single_item(validator):
     result = validator._validate_single_item("school", "MIT")
 
     assert result["school_validation"] == "Yes"
-    assert isinstance(result["school_confidence"], float)
     assert "school_explanation" in result
 
 def test_parse_llm_response(validator):
@@ -88,15 +87,14 @@ def test_parse_llm_response(validator):
     result = validator.parse_llm_response(response)
 
     assert result.result == "Yes"
-    assert isinstance(result.confidence, float)
     assert result.explanation == "The transcript clearly mentions MIT."
 
 def test_validate_with_sample_transcript(validator):
     validator.llm = Mock()
     validator._validate_single_item = Mock(side_effect=[
-        {"school_validation": "Yes", "school_confidence": 1.0, "school_explanation": "Found in transcript"},
-        {"degree_validation": "Yes", "degree_confidence": 1.0, "degree_explanation": "Found in transcript"},
-        {"modality_validation": "Yes", "modality_confidence": 1.0, "modality_explanation": "Found in transcript"}
+        {"school_validation": "Yes", "school_explanation": "Found in transcript"},
+        {"degree_validation": "Yes", "degree_explanation": "Found in transcript"},
+        {"modality_validation": "Yes", "modality_explanation": "Found in transcript"}
     ])
 
     model_input = validator.ModelInput(transcript=SAMPLE_TRANSCRIPT, metadata=SAMPLE_METADATA)
@@ -107,7 +105,6 @@ def test_validate_with_sample_transcript(validator):
     assert result.classification["modality_validation"] == "Yes"
     assert result.classification["overall_validity"] == "Valid"
     assert isinstance(result.classification["explanation"], str)
-    assert isinstance(result.confidence, float)
 
     assert validator._validate_single_item.call_count == 3
 
@@ -118,7 +115,6 @@ def test_validate_with_sample_transcript(validator):
 ])
 def test_is_relevant(validator, overall_validity, expected_relevance):
     validator.predict = Mock(return_value=validator.ModelOutput(
-        classification={"overall_validity": overall_validity},
-        confidence=0.9
+        classification={"overall_validity": overall_validity}
     ))
     assert validator.is_relevant("Sample transcript", {"school": "Sample School"}) == expected_relevance

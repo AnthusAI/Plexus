@@ -415,7 +415,6 @@ No: The transcript does not mention '{item_value}' or any close synonyms."""
 
     class ModelOutput(MLClassifier.ModelOutput):
         classification: Dict[str, Any]
-        confidence: float = 1  # Hardcoded confidence value
 
 class AgentState(TypedDict):
     messages: List[AnyMessage]
