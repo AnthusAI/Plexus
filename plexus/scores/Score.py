@@ -368,10 +368,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         y_val : numpy.ndarray
             Validation data labels.
         """
-        scale_pos_weight = self.params.positive_class_weight
-
-        self.model = xgb.XGBClassifier(scale_pos_weight=scale_pos_weight)
-        self.model.fit(X_train, y_train, eval_set=[(X_val, y_val)], early_stopping_rounds=10)
+        pass
 
     def predict(self, X):
         """
@@ -387,12 +384,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         numpy.ndarray
             Predicted labels.
         """
-        decision_threshold = self.params.decision_threshold
-
-        y_proba = self.model.predict_proba(X)[:, 1]
-
-        y_pred = (y_proba >= decision_threshold).astype(int)
-        return y_pred
+        pass
             
     def _record_metrics(self, metrics):
         """
