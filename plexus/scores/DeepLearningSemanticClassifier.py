@@ -15,6 +15,7 @@ from rich.progress import Progress
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 from plexus.CustomLogging import logging, console
+from plexus.scores.core.utils import ensure_report_directory_exists
 import matplotlib.pyplot as plt
 
 class DeepLearningSemanticClassifier(Score):
@@ -549,7 +550,7 @@ class DeepLearningSemanticClassifier(Score):
         logging.info(f"val_predictions type: {type(self.val_predictions)}, shape: {self.val_predictions.shape}, sample: {self.val_predictions[:5]}")
         logging.info(f"val_labels type: {type(self.val_labels)}, shape: {self.val_labels.shape}, sample: {self.val_labels[:5]}")
         
-    @Score.ensure_report_directory_exists
+    @ensure_report_directory_exists
     def _generate_window_count_histogram(self, windows):
         """
         Generates a PNG artifact of a histogram showing the distribution of the lengths of the inner lists in the provided dataset.
