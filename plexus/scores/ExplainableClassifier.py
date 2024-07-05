@@ -15,6 +15,7 @@ from sklearn.preprocessing import LabelEncoder
 import numpy as np
 from plexus.CustomLogging import logging
 from plexus.scores.Score import Score
+from plexus.scores.core.utils import ensure_report_directory_exists
 import xgboost as xgb
 from rich import print as rich_print
 from rich.panel import Panel
@@ -166,7 +167,7 @@ class ExplainableClassifier(Score):
         logging.info("Fitting the model...")
         self.model.fit(self.X_train, self.y_train_encoded)
 
-    @Score.ensure_report_directory_exists
+    @ensure_report_directory_exists
     def explain_model(self):
         logging.info("Explaining model using SHAP values...")
         target_class_index = list(self.label_encoder.classes_).index(self.parameters.target_score_value)
