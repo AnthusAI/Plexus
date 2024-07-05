@@ -31,14 +31,43 @@ import xgboost as xgb
 class MLClassifier(Score):
     """
     Abstract class for a machine-learning classifier, with functions for the various states of ML model development.
+
+    This class serves as the base class for all classifiers, ensuring a uniform evaluation and deployment process.
+    It includes methods for training, evaluating, and making predictions with any model type.
+    This class is not typically used directly but is subclassed to create specific classifiers.
+
+    Attributes
+    ----------
+    parameters : Parameters
+        An instance of the Parameters class containing the scorecard and score names.
     """
 
     class Parameters(Score.Parameters):
-        ...
+        """
+        Parameters required for the MLClassifier.
+
+        Attributes
+        ----------
+        data : dict
+            Dictionary containing data-related parameters.
+        """
         data: dict
 
         @field_validator('data')
         def convert_data_percentage(cls, value):
+            """
+            Convert the percentage value in the data dictionary to a float.
+
+            Parameters
+            ----------
+            value : dict
+                Dictionary containing data-related parameters.
+
+            Returns
+            -------
+            dict
+                Updated dictionary with the percentage value converted to float.
+            """
             if 'percentage' in value:
                 value['percentage'] = float(str(value['percentage']).strip().replace('%', ''))
             else:
@@ -46,26 +75,46 @@ class MLClassifier(Score):
             return value
 
     def __init__(self, **parameters):
+        """
+        Initialize the MLClassifier instance with the given parameters.
+
+        Parameters
+        ----------
+        **parameters : dict
+            Arbitrary keyword arguments that are used to initialize the Parameters instance.
+        """
         super().__init__(**parameters)
         logging.info("Initializing [magenta1][b]MLClassifier[/b][/magenta1]")
         self._is_multi_class = None
         self.start_mlflow_experiment_run()
 
     def log_stored_parameters(self):
+        """
+        Log the stored parameters to MLflow.
+        """
         if hasattr(self, '_stored_parameters'):
             for name, value in self.parameters.items():
                 mlflow.log_param(name, value)
 
     def name(self):
-        # Get the name of the enclosing folder of the subclass
+        """
+        Get the name of the classifier.
+
+        Returns
+        -------
+        str
+            The name of the classifier, which is a combination of the enclosing folder name and the class name.
+        """
         subclass_file = inspect.getfile(self.__class__)
         folder_name = os.path.basename(os.path.dirname(subclass_file))
-        # Concatenate the folder name and the class name to create the data_filename
         computed_name = folder_name + "_" + self.__class__.__name__
         logging.info(f"Classifier name: {computed_name}")
         return computed_name
 
     def start_mlflow_experiment_run(self):
+        """
+        Start an MLflow experiment run and log common parameters.
+        """
         experiment_name = f"{self.parameters.scorecard_name} - {self.parameters.score_name}"
         if os.getenv('MLFLOW_EXPERIMENT_NAME'):
             experiment_name = experiment_name + " - " + os.getenv('MLFLOW_EXPERIMENT_NAME')
@@ -89,13 +138,20 @@ class MLClassifier(Score):
 
         mlflow.log_param("classifier_class", self.__class__.__name__)
 
-        # Log common parameters
         mlflow.log_param("scorecard_name", self.parameters.scorecard_name)
         mlflow.log_param("score_name", self.parameters.score_name)
 
         self.log_stored_parameters()
 
     def log_evaluation_metrics(self, metrics):
+        """
+        Log evaluation metrics to MLflow.
+
+        Parameters
+        ----------
+        metrics : dict
+            Dictionary containing evaluation metrics.
+        """
         mlflow.log_metric("accuracy", metrics["accuracy"])
         mlflow.log_metric("precision", metrics["precision"])
         mlflow.log_metric("recall", metrics["recall"])
@@ -104,8 +160,14 @@ class MLClassifier(Score):
     def load_data(self, *, queries=None, excel=None):
         """
         Load the specified queries from the training data lake, with caching, into a combined DataFrame in the class instance.
-        """
 
+        Parameters
+        ----------
+        queries : list, optional
+            List of queries to load data from the training data lake.
+        excel : str, optional
+            Path to an Excel file to load data from.
+        """
         from plexus.DataCache import DataCache
         data_cache = DataCache(os.environ['PLEXUS_TRAINING_DATA_LAKE_DATABASE_NAME'],
             os.environ['PLEXUS_TRAINING_DATA_LAKE_ATHENA_RESULTS_BUCKET_NAME'],
@@ -119,9 +181,11 @@ class MLClassifier(Score):
         self.analyze_dataset()
 
     def analyze_dataset(self):
+        """
+        Analyze the loaded dataset and display various summaries and breakdowns.
+        """
         panels = []
 
-        # Answer Breakdown Table
         answer_breakdown_table = Table(
             title="[royal_blue1][b]Answer Breakdown[/b][/royal_blue1]",
             header_style="sky_blue1",
@@ -143,7 +207,6 @@ class MLClassifier(Score):
 
         panels.append(Panel(answer_breakdown_table, border_style="royal_blue1"))
 
-        # Dataframe Summary Table
         dataframe_summary_title = "[royal_blue1][b]Dataframe Summary[/b][/royal_blue1]"
         dataframe_summary_table = Table(
             title=dataframe_summary_title,
@@ -165,7 +228,6 @@ class MLClassifier(Score):
             dataframe_summary_table.add_row("Total Balanced Count", str(total_balanced_count), style="magenta1 bold")
         panels.append(Panel(dataframe_summary_table, border_style="royal_blue1"))
 
-        # Column Names Table
         column_names_table = Table(
             title="[royal_blue1][b]Column Names[/b][/royal_blue1]",
             header_style="sky_blue1",
@@ -177,22 +239,18 @@ class MLClassifier(Score):
 
         panels.append(Panel(column_names_table, border_style="royal_blue1"))
 
-        # Combine all panels into columns
         columns = Columns(panels)
         header_text = f"[bold royal_blue1]{self.parameters.score_name}[/bold royal_blue1]"
 
-        # Display the combined panels
         rich_print(Panel(columns, title=header_text, border_style="magenta1"))
 
     def process_data(self):
         """
         Handle any pre-processing of the training data, including the training/validation splits.
         """
-
         if 'processors' in self.parameters.data:
             console.print(Text("Running configured processors...", style="royal_blue1"))
 
-            # Instantiate all processors once
             processors = []
             for processor in self.parameters.data['processors']:
                 processor_class = processor['class']
@@ -201,7 +259,6 @@ class MLClassifier(Score):
                 processor_instance = ProcessorFactory.create_processor(processor_class, **processor_parameters)
                 processors.append(processor_instance)
 
-            # Process the entire dataframe
             first_transcript_before = self.dataframe["Transcription"].iloc[0]
 
             for processor in processors:
@@ -227,9 +284,6 @@ class MLClassifier(Score):
         console.print(Text("Processed dataframe:", style="royal_blue1"))
         self.analyze_dataset()
 
-        #############
-        # Subsample the data
-
         before_subsample_count = len(self.dataframe)
         self.dataframe = self.dataframe.sample(frac=self.parameters.data['percentage'] / 100, random_state=42)
         after_subsample_count = len(self.dataframe)
@@ -245,39 +299,28 @@ class MLClassifier(Score):
 
         console.print(Panel(subsample_comparison_table, border_style="royal_blue1"))
 
-        #############
-        # Balance data
-
         if 'balance' in self.parameters.data and not self.parameters.data['balance']:
             logging.info("data->balance: [red][b]false.[/b][/red]  Skipping data balancing.")
             return
 
-        # Check the distribution of labels
         print("\nDistribution of labels in the dataframe:")
         print(self.dataframe[self.parameters.score_name].value_counts(dropna=False))
 
-        # Get the unique labels
         unique_labels = self.dataframe[self.parameters.score_name].unique()
 
-        # Create a dictionary to store the dataframes for each label
         label_dataframes = {label: self.dataframe[self.dataframe[self.parameters.score_name] == label] for label in unique_labels}
 
-        # Determine the smallest class size
         smallest_class_size = min(len(df) for df in label_dataframes.values())
 
-        # Sample from each class to match the number of instances in the smallest class
         balanced_dataframes = []
         for label, dataframe in label_dataframes.items():
             print(f"Sampling {smallest_class_size} instances from the '{label}' class...")
             balanced_dataframes.append(dataframe.sample(n=smallest_class_size, random_state=42))
 
-        # Concatenate the balanced dataframes
         balanced_dataframe = pd.concat(balanced_dataframes)
 
-        # Shuffle the data
         balanced_dataframe = balanced_dataframe.sample(frac=1, random_state=42)
 
-        # Check the distribution of labels
         print("\nDistribution of labels in the balanced dataframe:")
         print(balanced_dataframe[self.parameters.score_name].value_counts())
 
@@ -291,14 +334,19 @@ class MLClassifier(Score):
         """
         Train the model on the training data.
 
-        :return: The trained model.
+        Returns
+        -------
+        object
+            The trained model.
         """
         pass
 
     @abstractmethod
     def predict_validation(self):
         """
-        Abstract method for subclasses to implement the prediction logic on the validation set.
+        Predict on the validation set.
+
+        This method should be implemented by subclasses to provide the prediction logic on the validation set.
         """
         pass
 
@@ -306,26 +354,25 @@ class MLClassifier(Score):
         """
         Evaluate the model on the validation data.
 
-        :return: The evaluation results.
+        Returns
+        -------
+        dict
+            Dictionary containing evaluation metrics.
         """
         print("Generating evaluation metrics...")
 
-        # Call the subclass's prediction method
         self.predict_validation()
 
         logging.info(f"val_labels type: {type(self.val_labels)}, shape: {self.val_labels.shape}, sample: {self.val_labels[:5]}")
         logging.info(f"val_predictions type: {type(self.val_predictions)}, shape: {self.val_predictions.shape}, sample: {self.val_predictions[:5]}")
         
-        # Ensure val_predictions_labels contains string labels
         self.val_predictions_labels = self.val_predictions
 
-        # Compute evaluation metrics
         accuracy = accuracy_score(self.val_labels, self.val_predictions_labels)
         f1 = f1_score(self.val_labels, self.val_predictions_labels, average='weighted')
         recall = recall_score(self.val_labels, self.val_predictions_labels, average='weighted')
         precision = precision_score(self.val_labels, self.val_predictions_labels, average='weighted')
 
-        # Log evaluation metrics to MLflow
         mlflow.log_metric("validation_f1_score", f1)
         mlflow.log_metric("validation_recall", recall)
         mlflow.log_metric("validation_precision", precision)
@@ -353,7 +400,6 @@ class MLClassifier(Score):
         self._plot_training_history()
         self._plot_calibration_curve()
 
-        # Create a combined metrics hash and log it.
         metrics = {
             "validation_accuracy": accuracy,
             "validation_f1_score": f1,
@@ -369,7 +415,6 @@ class MLClassifier(Score):
             })
         self._record_metrics(metrics)
 
-        # End MLflow run
         mlflow.end_run()
 
     @abstractmethod
@@ -389,81 +434,119 @@ class MLClassifier(Score):
     def load_context(self, context):
         """
         Load the trained model and any necessary artifacts based on the MLflow context.
+
+        Parameters
+        ----------
+        context : mlflow.pyfunc.PythonModelContext
+            The context object containing artifacts and other information.
         """
         self.model = mlflow.keras.load_model(context.artifacts["model"])
-        # Load any other necessary artifacts
 
     class ModelInput(BaseModel):
+        """
+        Model input data structure.
+
+        Attributes
+        ----------
+        transcript : str
+            The transcript text to be classified.
+        """
         transcript: str
 
     class ModelOutput(BaseModel):
+        """
+        Model output data structure.
+
+        Attributes
+        ----------
+        classification : str
+            The predicted classification label.
+        """
         classification: str
-        confidence: float
 
     @abstractmethod
     def predict(self, model_input: ModelInput):
         """
         Make predictions on the input data.
 
-        :param model_input: The input data for making predictions, which conforms to MLClassifier.ModelInput.
-        :return: The predictions, which can be one of the supported output types (numpy.ndarray, pandas.Series,
-                 pandas.DataFrame, List, Dict, pyspark.sql.DataFrame).
+        Parameters
+        ----------
+        model_input : MLClassifier.ModelInput
+            The input data for making predictions.
+
+        Returns
+        -------
+        dict
+            The predictions, which can be one of the supported output types (numpy.ndarray, pandas.Series,
+            pandas.DataFrame, List, Dict, pyspark.sql.DataFrame).
         """
         pass
 
     def is_relevant(self, text):
         """
-        Implement the is_relevant method using the predict method for ML classifiers.
+        Determine if the given text is relevant using the predict method.
+
+        Parameters
+        ----------
+        text : str
+            The text to be classified.
+
+        Returns
+        -------
+        bool
+            True if the text is classified as relevant, False otherwise.
         """
-        # Ensure text is a single line by replacing newlines and stripping whitespace
         clean_text = text.replace('\n', ' ').strip()
-        # Create a DataFrame with the cleaned text
         model_input = pd.DataFrame([clean_text], columns=['text'])
-        # Call the predict method with the model_input DataFrame
         prediction = self.predict(model_input)['prediction'].iloc[0]
         return prediction == '__label__relevant'
 
-    #############
-    # Private stuff for visualizations.
-
-    # Colors for visualizations.    
     _sky_blue = (0.012, 0.635, 0.996)
     _fuchsia = (0.815, 0.2, 0.51)
     _red = '#DD3333'
     _green = '#339933'
 
     def _generate_model_diagram(self):
+        """
+        Generate and save a diagram of the model architecture.
+        """
         file_name = self.report_file_name("model_diagram.png")
         plot_model(self.model, to_file=file_name, show_shapes=True, show_layer_names=True, rankdir='TB')
         mlflow.log_artifact(file_name)
 
     def setup_label_map(self, labels):
+        """
+        Set up a mapping from labels to integers.
+
+        Parameters
+        ----------
+        labels : list
+            List of unique labels.
+        """
         unique_labels = sorted(set(labels))
         self.label_map = {label: i for i, label in enumerate(unique_labels)}
         logging.info(f"Label map: {self.label_map}")
 
     def _generate_confusion_matrix(self):
+        """
+        Generate and save a confusion matrix plot.
+        """
         file_name = self.report_file_name("confusion_matrix.png")
 
-        # Ensure all classes are represented in label_to_int
         all_classes = set(self.label_map.values())
         all_classes.update(set(self.val_labels))
         all_classes.update(set(self.val_predictions))
         
-        # Convert all labels to strings
         all_classes = set(str(label) for label in all_classes)
         
-        # Create a sorted list of unique labels
         sorted_labels = sorted(all_classes)
         
-        # Create label_to_int mapping
         label_to_int = {label: i for i, label in enumerate(sorted_labels)}
         logging.info(f"Label to int mapping: {label_to_int}")
 
         val_labels_int = np.array([label_to_int[str(label)] for label in self.val_labels])
         val_predictions_int = np.array([label_to_int[str(pred)] for pred in self.val_predictions])
 
-        # Generate confusion matrix using only the relevant labels
         relevant_labels = [label_to_int[label] for label in self.label_map.keys()]
         logging.info(f"Relevant labels: {relevant_labels}")
         cm = confusion_matrix(val_labels_int, val_predictions_int, labels=relevant_labels)
@@ -482,58 +565,75 @@ class MLClassifier(Score):
 
         mlflow.log_artifact(file_name)
         
-        # Log the confusion matrix as text
         cm_text = np.array2string(cm, separator=', ')
         logging.info(f"Confusion matrix: {cm_text}")
 
-        # Log class distribution
         class_distribution = Counter(self.val_labels)
         logging.info(f"Class distribution in validation set: {dict(class_distribution)}")
 
     def train_model(self, X_train, y_train, X_val, y_val):
-        # Set the positive class weight
+        """
+        Train the XGBoost model with the specified positive class weight.
+
+        Parameters
+        ----------
+        X_train : numpy.ndarray
+            Training data features.
+        y_train : numpy.ndarray
+            Training data labels.
+        X_val : numpy.ndarray
+            Validation data features.
+        y_val : numpy.ndarray
+            Validation data labels.
+        """
         scale_pos_weight = self.params.positive_class_weight
 
-        # Train the XGBoost model with the specified positive class weight
         self.model = xgb.XGBClassifier(scale_pos_weight=scale_pos_weight)
         self.model.fit(X_train, y_train, eval_set=[(X_val, y_val)], early_stopping_rounds=10)
 
     def predict(self, X):
-        # Get the decision threshold
+        """
+        Make predictions on the input data.
+
+        Parameters
+        ----------
+        X : numpy.ndarray
+            Input data features.
+
+        Returns
+        -------
+        numpy.ndarray
+            Predicted labels.
+        """
         decision_threshold = self.params.decision_threshold
 
-        # Predict probabilities
         y_proba = self.model.predict_proba(X)[:, 1]
 
-        # Apply the decision threshold
         y_pred = (y_proba >= decision_threshold).astype(int)
         return y_pred
 
     def _plot_roc_curve(self):
+        """
+        Generate and save a ROC curve plot.
+        """
         file_name = self.report_file_name("roc_curve.png")
 
-        # Ensure all classes are represented
         all_classes = set(self.label_map.values())
         all_classes.update(set(self.val_labels))
         all_classes.update(set(self.val_predictions))
         
-        # Convert all labels to strings
         all_classes = set(str(label) for label in all_classes)
         
-        # Create a sorted list of unique labels
         sorted_labels = sorted(all_classes)
         
-        # Create label_to_int mapping
         label_to_int = {label: i for i, label in enumerate(sorted_labels)}
 
         val_labels_int = np.array([label_to_int[str(label)] for label in self.val_labels])
 
-        # Ensure val_confidence_scores is 1D
         if self.val_confidence_scores.ndim == 2:
             if self.val_confidence_scores.shape[1] == 1:
                 val_confidence_scores = self.val_confidence_scores.ravel()
             else:
-                # For multi-class, use the scores for the positive class
                 positive_class_index = self.label_map['Yes']
                 val_confidence_scores = self.val_confidence_scores[:, positive_class_index]
         else:
@@ -559,35 +659,32 @@ class MLClassifier(Score):
         mlflow.log_artifact(file_name)
         mlflow.log_metric("roc_auc", roc_auc)
 
-        # Log additional information for debugging
         logging.info(f"Number of unique labels: {len(sorted_labels)}")
         logging.info(f"Shape of val_confidence_scores: {val_confidence_scores.shape}")
         logging.info(f"Shape of val_labels_int: {val_labels_int.shape}")
         logging.info(f"label_to_int mapping: {label_to_int}")
 
     def _plot_precision_recall_curve(self):
+        """
+        Generate and save a precision-recall curve plot.
+        """
         file_name = self.report_file_name("precision_and_recall_curve.png")
 
         plt.figure()
 
-        # Ensure all classes are represented
         all_classes = set(self.label_map.values())
         all_classes.update(set(self.val_labels))
         all_classes.update(set(self.val_predictions))
         
-        # Convert all labels to strings
         all_classes = set(str(label) for label in all_classes)
         
-        # Create a sorted list of unique labels
         sorted_labels = sorted(all_classes)
         
-        # Create label_to_int mapping
         label_to_int = {label: i for i, label in enumerate(sorted_labels)}
 
         val_labels_int = np.array([label_to_int[str(label)] for label in self.val_labels])
         val_predictions_int = np.array([label_to_int[str(pred)] for pred in self.val_predictions])
 
-        # Remove any instances with unknown labels
         valid_indices = (val_labels_int != -1) & (val_predictions_int != -1)
         val_labels_int = val_labels_int[valid_indices]
         val_predictions_int = val_predictions_int[valid_indices]
@@ -597,7 +694,6 @@ class MLClassifier(Score):
             lb = LabelBinarizer()
             val_labels_one_hot = lb.fit_transform(val_labels_int)
             
-            # Ensure val_confidence_scores is in the correct format for multi-class
             if val_confidence_scores.ndim == 1:
                 temp_scores = np.zeros((len(val_confidence_scores), len(label_to_int)))
                 temp_scores[np.arange(len(val_predictions_int)), val_predictions_int] = val_confidence_scores
@@ -623,8 +719,17 @@ class MLClassifier(Score):
         plt.savefig(file_name)
         plt.close()
         mlflow.log_artifact(file_name)
-
     def _plot_training_history(self):
+        """
+        Plot and save the training history of the model.
+
+        This method generates a plot of the training history, including learning rate, loss, and accuracy over epochs.
+        The plot is saved as a PNG file in the report directory.
+
+        Returns
+        -------
+        None
+        """
         file_name = self.report_file_name("training_history.png")
 
         plt.figure(figsize=(12, 9))  # Adjusted for a 4x3 aspect ratio with three subplots
@@ -682,6 +787,21 @@ class MLClassifier(Score):
         mlflow.log_artifact(file_name)
 
     def _plot_calibration_curve(self, *, target_accuracy=0.90):
+        """
+        Plot and save the calibration curve of the model.
+
+        This method generates a calibration curve, showing the accuracy of predictions by confidence bucket.
+        The plot is saved as a PNG file in the report directory.
+
+        Parameters
+        ----------
+        target_accuracy : float, optional
+            The target accuracy for determining the confidence threshold, by default 0.90
+
+        Returns
+        -------
+        None
+        """
         file_name = self.report_file_name("calibration_curve.png")
 
         confidences = self.val_confidence_scores.flatten()
@@ -790,7 +910,7 @@ class MLClassifier(Score):
         print(f"Min confidence: {np.min(confidences):.2%}")
         print(f"Max confidence: {np.max(confidences):.2%}")
         print(f"Mean confidence: {np.mean(confidences):.2%}")
-        print(f"Overall accuracy: {np.mean(predicted_labels_numeric == true_labels_numeric):.2%}")
+        print(f"Overall accuracy: {np.mean(predicted_labels_numeric == true_labels_numeric)::.2%}")
         print(f"\nConfidence threshold for {target_accuracy:.0%} accuracy: {confidence_threshold:.2%}")
         print(f"Predictions above threshold: {np.sum(confidences > confidence_threshold)}")
         print(f"Predictions at or below threshold: {np.sum(confidences <= confidence_threshold)}")
@@ -822,8 +942,14 @@ class MLClassifier(Score):
         """
         Record the provided metrics dictionary as a JSON file in the appropriate report folder for this model.
 
-        :param metrics: Dictionary containing the metrics to be recorded.
-        :type metrics: dict
+        Parameters
+        ----------
+        metrics : dict
+            Dictionary containing the metrics to be recorded.
+
+        Returns
+        -------
+        None
         """
         file_name = self.report_file_name("metrics.json")
 
@@ -832,6 +958,16 @@ class MLClassifier(Score):
 
     @property
     def is_multi_class(self):
+        """
+        Determine if the classification problem is multi-class.
+
+        This property checks the unique labels in the dataframe to determine if the problem is multi-class.
+
+        Returns
+        -------
+        bool
+            True if the problem is multi-class, False otherwise.
+        """
         if self._is_multi_class is None:
             unique_labels = self.dataframe[self.parameters.score_name].unique()
             self._is_multi_class = len(unique_labels) > 2
