@@ -6,7 +6,7 @@ import numpy as np
 import inspect
 import functools
 from pydantic import BaseModel, ValidationError, field_validator
-from typing import Optional
+from typing import Optional, Union
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -97,10 +97,10 @@ class Score(ABC, mlflow.pyfunc.PythonModel):
 
         Attributes
         ----------
-        classification : str
+        classification : Union[str, bool]
             The predicted classification label.
         """
-        classification: str
+        classification: Union[str, bool]
     
     def __init__(self, **parameters):
         """

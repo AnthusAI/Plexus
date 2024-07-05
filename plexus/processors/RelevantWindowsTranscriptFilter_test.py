@@ -19,7 +19,7 @@ class MockClassifier(Score):
         pass
     def predict(self, model_input: Score.ModelInput):
         # Use word boundaries to ensure 'relevant' is a whole word
-        return bool(re.search(r'\brelevant\b', model_input.transcript, re.IGNORECASE))
+        return Score.ModelOutput(classification=bool(re.search(r'\brelevant\b', model_input.transcript, re.IGNORECASE)))
 
 class TestTranscriptFilter(unittest.TestCase):
 
