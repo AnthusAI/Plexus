@@ -115,7 +115,7 @@ scores:
 
 ### Score Interface Standard
 
-Each `Score` implementation must follow the [standard](documentation/classifier-interface-standard.md), based on the MLFLow standard for model interface.  Standard MLFlow models handle inference through a `predict()` function, and Plexus specifies standard  `ModelInput` and `ModelOutput` Pydantic classes that are extensible for custom models.  For example, the standard `MLClassifier.ModelInput` class contains fields for the classification and the confidence of the classification, whereas the `ExplainableClassifier` extends that to include an explanation field.
+Each `Score` implementation must follow the [standard](documentation/classifier-interface-standard.md), based on the MLFLow standard for model interface.  Standard MLFlow models handle inference through a `predict()` function, and Plexus specifies standard  `ModelInput` and `ModelOutput` Pydantic classes that are extensible for custom models.  For example, the standard `Score.ModelInput` class contains fields for the classification and the confidence of the classification, whereas the `ExplainableClassifier` extends that to include an explanation field.
 
 ## Functionality
 

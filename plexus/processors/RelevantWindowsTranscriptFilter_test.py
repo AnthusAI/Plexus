@@ -5,13 +5,19 @@ import unittest
 from plexus.processors.RelevantWindowsTranscriptFilter import RelevantWindowsTranscriptFilter
 from plexus.scores.Score import Score
 from plexus.scores.KeywordClassifier import KeywordClassifier
-from plexus.scores.MLClassifier import MLClassifier
+from plexus.scores.Score import Score
 
 # Mock classifier for testing purposes
 class MockClassifier(Score):
+    def predict_validation(self):
+        pass
+    def register_model(self):
+        pass
+    def save_model(self):
+        pass
     def load_context(self, context):
         pass
-    def predict(self, model_input: MLClassifier.ModelInput):
+    def predict(self, model_input: Score.ModelInput):
         # Use word boundaries to ensure 'relevant' is a whole word
         return bool(re.search(r'\brelevant\b', model_input.transcript, re.IGNORECASE))
 

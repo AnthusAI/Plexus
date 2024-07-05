@@ -2,7 +2,7 @@ import pandas as pd
 import nltk.data
 
 from .DataframeProcessor import DataframeProcessor
-from plexus.scores.MLClassifier import MLClassifier
+from plexus.scores.Score import Score
 from plexus.CustomLogging import logging
 
 class RelevantWindowsTranscriptFilter(DataframeProcessor):
@@ -17,7 +17,7 @@ class RelevantWindowsTranscriptFilter(DataframeProcessor):
             sentences = transcript.split('\n')
             relevance_flags = [
                 self.classifier.predict(
-                    model_input = MLClassifier.ModelInput(transcript=sentence)
+                    model_input = Score.ModelInput(transcript=sentence)
                 ) for sentence in sentences
             ]
             include_flags = self.compute_inclusion_flags(relevance_flags)
