@@ -461,11 +461,8 @@ class MLClassifier(Score):
         ----------
         classification : str
             The predicted classification label.
-        confidence : float
-            The confidence score of the prediction.
         """
         classification: str
-        confidence: float
 
     @abstractmethod
     def predict(self, model_input: ModelInput):
