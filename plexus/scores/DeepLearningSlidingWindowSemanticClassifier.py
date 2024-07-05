@@ -12,7 +12,7 @@ import nltk
 nltk.download('punkt')
 from rich.progress import Progress
 from plexus.CustomLogging import logging, console
-from plexus.scores.MLClassifier import MLClassifier
+from plexus.scores.Score import Score
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras import mixed_precision
 from sklearn.preprocessing import LabelBinarizer
