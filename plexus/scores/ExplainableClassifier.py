@@ -355,8 +355,10 @@ class ExplainableClassifier(MLClassifier):
         """
         pass
 
-    # New subclass for ModelOutput
-    class ExplainableModelOutput(MLClassifier.ModelOutput):
+    class ModelOutput(MLClassifier.ModelOutput):
+        """
+        This Score has an additional output attribute, explanation, which is a string
+        """
         explanation: str
 
     # New method to vectorize a single transcript
@@ -390,7 +392,7 @@ class ExplainableClassifier(MLClassifier):
         prediction_label = list(self.label_map.keys())[list(self.label_map.values()).index(prediction)]
         logging.debug(f"Prediction: {prediction_label}, Confidence: {confidence_score:.4f}")
         
-        return self.ExplainableModelOutput(
+        return self.ModelOutput(
             classification=prediction_label,
             confidence=confidence_score,
             explanation=explanation

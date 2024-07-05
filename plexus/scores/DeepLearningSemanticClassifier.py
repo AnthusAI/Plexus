@@ -481,6 +481,12 @@ class DeepLearningSemanticClassifier(MLClassifier):
         """
         pass
 
+    class ModelOutput(MLClassifier.ModelOutput):
+        """
+        This Score has an additional output attribute, confidence, which is a float
+        """
+        confidence: float
+
     def predict(self, context, model_input: MLClassifier.ModelInput):
         logging.info(f"Received input: {model_input}")
 
