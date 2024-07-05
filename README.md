@@ -4,9 +4,9 @@ An orchestration system for AI/ML classification at scale.
 
 ## Purpose
 
-When you need to do AI/ML classification at scale, you need a way to configure classifiers, manage hyperparameters for training, handle training and evaluation, and deploy models to production.
+When you need to do AI/ML classification at scale, you need a way to select appropriate models from a toolbox, configure setup and hyperparameters for training, handle training and evaluation, and deploy models to production.
 
-Whether you're scoring call center transcripts for QA, ranking content items, or detecting objects in security footage, you need an orchestration platform. Plexus provides a way to run sequences of LLM API requests, machine-learning models for inference, and numerical or heuristic methods for scoring.
+Whether you're scoring call center transcripts for QA, ranking content items, or detecting objects in security footage, you need an orchestration platform for training and deploying your models. Plexus provides tools built around classic machine-learning models, others builts on agentic processes using sequences of LLM API requests, and others based on numerical or heuristic methods for scoring.
 
 ## Opinions
 
