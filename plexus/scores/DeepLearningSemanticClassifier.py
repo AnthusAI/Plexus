@@ -1,6 +1,6 @@
 import os
 import mlflow
-from plexus.scores import Score, MLClassifier
+from plexus.scores import Score
 from pydantic import BaseModel, validator, ValidationError
 import numpy as np
 import pandas as pd
@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from plexus.CustomLogging import logging, console
 import matplotlib.pyplot as plt
 
-class DeepLearningSemanticClassifier(MLClassifier):
+class DeepLearningSemanticClassifier(Score):
     """
     A text classifier that uses HuggingFace transformer embeddings from language models like BERT.
     The model attaches a classification head to the embedding model.
@@ -29,7 +29,7 @@ class DeepLearningSemanticClassifier(MLClassifier):
     with smaller models, like DistilBERT.
     """
 
-    class Parameters(MLClassifier.Parameters):
+    class Parameters(Score.Parameters):
         ...
         embeddings_model: str
         embeddings_model_trainable_layers: int = 3
@@ -481,13 +481,13 @@ class DeepLearningSemanticClassifier(MLClassifier):
         """
         pass
 
-    class ModelOutput(MLClassifier.ModelOutput):
+    class ModelOutput(Score.ModelOutput):
         """
         This Score has an additional output attribute, confidence, which is a float
         """
         confidence: float
 
-    def predict(self, context, model_input: MLClassifier.ModelInput):
+    def predict(self, context, model_input: Score.ModelInput):
         logging.info(f"Received input: {model_input}")
 
         transcript = model_input.transcript

@@ -18,7 +18,7 @@ setup(
         'python-dotenv==1.0.0',
         'typer[all]==0.9.0',
         'pandas==2.1.4',
-        'openai==1.6.1',
+        'openai==1.35.10',
         'tenacity==8.2.3',
         'nltk',
         'pybind11',
@@ -47,7 +47,13 @@ setup(
         'imbalanced-learn==0.12.3',
         'imblearn==0.0',
         'shap==0.45.1',
-        'contractions==0.1.73'
+        'contractions==0.1.73',
+        'langchain==0.2.6',
+        'langchain-core==0.2.11',
+        'langgraph==0.1.5',
+        'langchain-aws==0.1.9',
+        'langchain-openai==0.1.14',
+        'langchain-google-vertexai==1.0.6',
     ],
     dependency_links=[
         'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator'

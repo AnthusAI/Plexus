@@ -10,13 +10,13 @@ from sklearn.metrics import confusion_matrix
 import mlflow
 import mlflow.pyfunc
 
-from plexus.scores.MLClassifier import MLClassifier
+from plexus.scores.Score import Score
 
 fasttext.FastText.eprint = lambda x: None
 
-class FastTextClassifier(MLClassifier):
+class FastTextClassifier(Score):
 
-    class Parameters(MLClassifier.Parameters):
+    class Parameters(Score.Parameters):
         ...
         learning_rate: float = 0.1
         dimension: int = 100
@@ -234,7 +234,7 @@ class FastTextClassifier(MLClassifier):
         return f"fasttext_model_{self.name()}"
 
     def _record_metrics(self, metrics):
-        # Use the existing implementation from MLClassifier
+        # Use the existing implementation from Score
         super()._record_metrics(metrics)
 
     # This visualization doesn't work for fastText, so leave it out.
