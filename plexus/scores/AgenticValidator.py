@@ -1,15 +1,12 @@
-from typing import Dict, List, Any, Literal, Optional, TypedDict, Union
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Dict, List, Any, Literal, Optional, Union, Tuple
+from pydantic import ConfigDict
 from plexus.scores.Score import Score
 from plexus.CustomLogging import logging
 import mlflow
-from langchain_core.chat_history import InMemoryChatMessageHistory
-from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.runnables.retry import RunnableRetry
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import Tool
 
 from langchain_aws import ChatBedrock
@@ -51,10 +48,6 @@ class ValidationState:
             f"messages={self.messages})"
         )
 
-class StepOutput(BaseModel):
-    result: str = Field(description="The validation result (e.g., 'Yes', 'No', 'Unclear')")
-    explanation: Optional[str] = Field(default=None, description="Explanation for the result")
-
 class AgenticValidator(Score):
     """
     An agentic validator that uses LangGraph and advanced LangChain components to validate education information,
@@ -74,14 +67,7 @@ class AgenticValidator(Score):
         max_tokens: int = 500
 
     def __init__(self, **parameters):
-        """
-        Initialize the AgenticValidator with the given parameters.
-
-        Args:
-            **parameters: Keyword arguments for configuring the validator.
-        """
         super().__init__(**parameters)
-        self.current_state = {}
         self.llm = None
         self.workflow = None
         self.retry_config = RunnableRetry(
@@ -89,15 +75,31 @@ class AgenticValidator(Score):
             wait_exponential_jitter=True,
             bound=RunnablePassthrough()
         )
-        self.current_state = {}  # Initialize current_state
+        self.react_agent = None
 
     def train_model(self):
-        """
-        Initialize the language model and create the workflow for validation.
-        This method also logs the model parameters using MLflow.
-        """
         self.llm = self._initialize_model()
         self.workflow = self._create_workflow()
+        
+        tools = [
+            Tool(
+                name="validate_school",
+                description="Validate if the school is mentioned in the transcript",
+                func=lambda x: f"Validation result for query: {x}"
+            ),
+            Tool(
+                name="validate_degree",
+                description="Validate if the degree is mentioned in the transcript",
+                func=lambda x: f"Validation result for query: {x}"
+            ),
+            Tool(
+                name="validate_modality",
+                description="Validate if the modality is mentioned in the transcript",
+                func=lambda x: f"Validation result for query: {x}"
+            )
+        ]
+        
+        self.react_agent = create_react_agent(self.llm, tools)
         
         mlflow.log_param("model_provider", self.parameters.model_provider)
         mlflow.log_param("model_name", self.parameters.model_name)
@@ -140,198 +142,105 @@ class AgenticValidator(Score):
             raise ValueError(f"Unsupported model provider: {self.parameters.model_provider}")
 
     def _create_workflow(self):
-        tools = [
-            Tool(
-                name="validate_school",
-                func=self._validate_school,
-                description="Validate if the given school is mentioned in the transcript."
-            ),
-            Tool(
-                name="validate_degree",
-                func=self._validate_degree,
-                description="Validate if the given degree or a close equivalent is mentioned in the transcript."
-            ),
-            Tool(
-                name="validate_modality",
-                func=self._validate_modality,
-                description="Validate if the given modality or a close synonym is mentioned in the transcript."
-            ),
-        ]
-
-        react_agent = create_react_agent(self.llm, tools)
-
         workflow = StateGraph(ValidationState)
 
-        def validate_step(state: Dict[str, Any], step: str) -> Dict[str, Any]:
-            print(f"Validating step: {step}")
-            print(f"Input state: {state}")
-            
-            # If the state doesn't contain all expected keys, it might be a partial update
-            # In this case, we need to merge it with the previous state
-            if 'transcript' not in state or 'metadata' not in state:
-                # Assume these are stored as class attributes
-                state = {**self.current_state, **state}
-            
-            current_state = ValidationState(**state)
-            
-            human_message = HumanMessage(content=f"Validate the {step} using the transcript: {current_state.transcript}. {step.capitalize()}: {current_state.metadata[step]}")
-            current_state.messages.append(human_message)
-            
-            result = react_agent.invoke({
-                "messages": current_state.messages,
-                "input": current_state  # Pass the entire state to the agent
-            })
-            print(f"React agent result: {result}")
-            
-            # Extract the last AIMessage from the result
-            ai_messages = [msg for msg in result['messages'] if isinstance(msg, AIMessage)]
-            if ai_messages:
-                last_ai_message = ai_messages[-1]
-                content = last_ai_message.content
-            else:
-                content = f"Unable to validate {step}. Please check the input and try again."
-            
-            validation_result = self._parse_validation_result(content)
-            
-            # Update the state
-            current_state.current_step = step
-            current_state.validation_results[step] = validation_result
-            current_state.messages = result['messages']
-            
-            # Store the current state as a class attribute
-            self.current_state = current_state.__dict__
-            
-            print(f"Updated state: {current_state}")
-            return current_state.__dict__
+        # Define validation steps
+        workflow.add_node("validate_school", lambda state: self._validate_step(state, "school"))
+        workflow.add_node("validate_degree", lambda state: self._validate_step(state, "degree"))
+        workflow.add_node("validate_modality", lambda state: self._validate_step(state, "modality"))
 
-        workflow.add_node("validate_school", lambda state: validate_step(state, "school"))
-        workflow.add_node("validate_degree", lambda state: validate_step(state, "degree"))
-        workflow.add_node("validate_modality", lambda state: validate_step(state, "modality"))
-
-        def router(state: Dict[str, Any]) -> Dict[str, str]:
-            print(f"Router input state: {state}")
-            current_step = state.get('current_step', '')
-            if current_step == "":
-                return {"current_step": "validate_school"}
-            elif current_step == "validate_school":
-                return {"current_step": "validate_degree"}
-            elif current_step == "validate_degree":
-                return {"current_step": "validate_modality"}
-            else:
-                # Instead of ending, return the final state
-                return {"current_step": "final"}
-
+        # Define finalization step
         def finalize(state: Dict[str, Any]) -> Dict[str, Any]:
-            # Determine overall validity
+            logging.info(f"Finalizing state: {state}")
             validation_results = state.get('validation_results', {})
             overall_validity = self._determine_overall_validity(validation_results)
             state['overall_validity'] = overall_validity
+            logging.info(f"Final state: {state}")
             return state
 
-        workflow.add_node("router", router)
-        workflow.add_node("final", finalize)
-        
-        # Add edges
-        workflow.add_edge("validate_school", "router")
-        workflow.add_edge("validate_degree", "router")
-        workflow.add_edge("validate_modality", "router")
-        workflow.add_edge("final", END)
-        workflow.add_conditional_edges(
-            "router",
-            lambda state: state['current_step']
-        )
+        workflow.add_node("finalize", finalize)
 
-        workflow.set_entry_point("router")
+        # Add edges to create the workflow
+        workflow.add_edge("validate_school", "validate_degree")
+        workflow.add_edge("validate_degree", "validate_modality")
+        workflow.add_edge("validate_modality", "finalize")
+
+        # Set the entry point
+        workflow.set_entry_point("validate_school")
 
         return workflow.compile()
 
+    def _validate_step(self, state: Dict[str, Any], step: str) -> Dict[str, Any]:
+        current_state = ValidationState(**state)
+        
+        prompt = f"Is the {step} '{current_state.metadata[step]}' mentioned in the following transcript? Transcript: {current_state.transcript}. Answer with YES or NO, followed by your reasoning."
+        
+        tools = [
+            Tool(
+                name="validate_" + step,
+                description=f"Validate if the {step} is mentioned in the transcript",
+                func=lambda x: f"Validation result for query: {x}"
+            )
+        ]
+        
+        react_agent = create_react_agent(self.llm, tools)
+        
+        result = react_agent.invoke({
+            "messages": [HumanMessage(content=prompt)],
+                "input": current_state
+            })
+        
+        ai_messages = [msg for msg in result['messages'] if isinstance(msg, AIMessage)]
+        if ai_messages:
+            last_ai_message = ai_messages[-1]
+            content = last_ai_message.content
+        else:
+            content = f"Unable to validate {step}. Please check the input and try again."
+        
+        validation_result, explanation = self._parse_validation_result(content)
+        
+        current_state.current_step = step
+        current_state.validation_results[step] = validation_result
+        current_state.explanation += f"{step.capitalize()}: {validation_result}\n\nReasoning:\n{explanation}\n\n"
+        current_state.messages = result['messages']
+        
+        print(f"\nValidated {step}: {validation_result}")
+        
+        return current_state.__dict__
+
     def _determine_overall_validity(self, validation_results: Dict[str, str]) -> str:
         valid_count = sum(1 for result in validation_results.values() if result == "Valid")
-        if valid_count == 3:
+        total_count = len(validation_results)
+        if total_count == 0:
+            return "Unknown"
+        elif valid_count == total_count:
             return "Valid"
         elif valid_count == 0:
             return "Invalid"
         else:
             return "Partial"
     
-    
-    def parse_llm_response(self, response: AIMessage) -> StepOutput:
-        """
-        Parse the response from the language model into a structured StepOutput.
-
-        Args:
-            response (AIMessage): The response from the language model.
-
-        Returns:
-            StepOutput: A structured output containing the result and explanation.
-        """
-        content = response.content.strip()
-        logging.info(f"Parsing response: {content}")
-        
-        # Split the response into result and explanation
-        parts = content.split(':', 1)
-        result = parts[0].strip().lower()
-        explanation = parts[1].strip() if len(parts) > 1 else ""
-        
-        result = "Yes" if result.startswith("yes") else "No" if result.startswith("no") else "Unclear"
-        logging.info(f"Extracted result: {result}")
-        logging.info(f"Extracted explanation: {explanation}")
-        
-        return StepOutput(result=result, explanation=explanation)
-
-    def _parse_validation_result(self, output: str) -> str:
+    def _parse_validation_result(self, output: str) -> Tuple[str, str]:
         output_lower = output.lower()
-        if "yes" in output_lower or "valid" in output_lower:
-            return "Valid"
-        elif "no" in output_lower or "invalid" in output_lower:
-            return "Invalid"
+        first_word = output_lower.split()[0] if output_lower else ""
+
+        if first_word == "yes":
+            result = "Valid"
+        elif first_word == "no":
+            result = "Invalid"
         else:
-            return "Unclear"
+            # If it doesn't start with yes or no, search for them in the text
+            if "yes" in output_lower:
+                result = "Valid"
+            elif "no" in output_lower:
+                result = "Invalid"
+            else:
+                result = "Unclear"
 
-    def _validate_school(self, state_or_query: Union[ValidationState, str]) -> str:
-        """
-        Validate if the given school is mentioned in the transcript.
+        # Extract explanation (everything after the first word)
+        explanation = ' '.join(output.split()[1:]).strip()
 
-        Args:
-            state_or_query (Union[ValidationState, str]): The current validation state or a query string.
-
-        Returns:
-            str: A string indicating the validation result for the school.
-        """
-        if isinstance(state_or_query, str):
-            return self._validate_step_string(state_or_query)
-        else:
-            return self._validate_step(state_or_query, "school", f"Is the school '{state_or_query.metadata['school']}' mentioned in the transcript?")
-
-    def _validate_degree(self, state_or_query: Union[ValidationState, str]) -> str:
-        """
-        Validate if the given degree or a close equivalent is mentioned in the transcript.
-
-        Args:
-            state_or_query (Union[ValidationState, str]): The current validation state or a query string.
-
-        Returns:
-            str: A string indicating the validation result for the degree.
-        """
-        if isinstance(state_or_query, str):
-            return self._validate_step_string(state_or_query)
-        else:
-            return self._validate_step(state_or_query, "degree", f"Is the degree '{state_or_query.metadata['degree']}' or a very close equivalent mentioned in the transcript?")
-
-    def _validate_modality(self, state_or_query: Union[ValidationState, str]) -> str:
-        """
-        Validate if the given modality or a close synonym is mentioned in the transcript.
-
-        Args:
-            state_or_query (Union[ValidationState, str]): The current validation state or a query string.
-
-        Returns:
-            str: A string indicating the validation result for the modality.
-        """
-        if isinstance(state_or_query, str):
-            return self._validate_step_string(state_or_query)
-        else:
-            return self._validate_step(state_or_query, "modality", f"Is the modality '{state_or_query.metadata['modality']}' or a very close synonym mentioned in the transcript?")
+        return result, explanation
 
     def _validate_step_string(self, query: str) -> str:
         """
@@ -347,169 +256,39 @@ class AgenticValidator(Score):
         # For now, we'll just return the query as is
         return f"Validation result for query: {query}"
 
-    def _call_llm(self, input):
-        """
-        Call the language model with retry logic.
-
-        Args:
-            input: The input to be passed to the language model.
-
-        Returns:
-            The response from the language model.
-        """
-        return self.retry_config.invoke(self.llm.invoke)(input)
-
-    def _validate_step(self, state: ValidationState, step_name: str, prompt: str) -> ValidationState:
-        """
-        Perform a single validation step using the language model.
-
-        Args:
-            state (ValidationState): The current validation state.
-            step_name (str): The name of the validation step.
-            prompt (str): The prompt to be sent to the language model.
-
-        Returns:
-            ValidationState: The updated validation state after the step.
-        """
-        chain = self._create_chain(
-            "You are an expert in validating educational information. Carefully examine the entire transcript for the requested information. Respond with 'Yes' or 'No', followed by a brief explanation.",
-            prompt
-        )
-        
-        # Normalize the input by converting to lowercase
-        normalized_metadata = state.metadata[step_name.lower()].lower()
-        normalized_transcript = state.transcript.lower()
-        
-        input_data = {
-            "input": f"Carefully examine this transcript: '{normalized_transcript}'\n\nQuestion: {prompt.format(**{step_name.lower(): normalized_metadata})}",
-            step_name.lower(): normalized_metadata,
-            "transcript": normalized_transcript,
-        }
-        
-        # Log the input to the model
-        logging.info(f"Validating {step_name}:")
-        logging.info(f"Input: {input_data['input']}")
-        
-        try:
-            response = chain.invoke(
-                input_data,
-                config={"configurable": {"session_id": step_name}},
-            )
-            
-            # Log the raw response from the model
-            logging.info(f"Raw model response: {response.content}")
-            
-            parsed_result = self.parse_llm_response(response)
-            state.validation_results[step_name] = f"{parsed_result.result}"
-            
-            # Log the parsed result
-            logging.info(f"Parsed result: {parsed_result}")
-            
-        except Exception as e:
-            logging.error(f"Error in _validate_step for {step_name}: {str(e)}")
-            state.validation_results[step_name] = "Error"
-        
-        return state
-
     def predict(self, model_input: Score.ModelInput) -> Score.ModelOutput:
-        """
-        Predict the validity of the educational information based on the transcript and metadata.
-
-        Args:
-            model_input (Score.ModelInput): The input containing the transcript and metadata.
-
-        Returns:
-            Score.ModelOutput: The prediction result including the classification.
-        """
-        print(f"Predict method input: {model_input}")
+        logging.info(f"Predict method input: {model_input}")
         initial_state = ValidationState(
             transcript=model_input.transcript,
             metadata=model_input.metadata
         )
-        print(f"Initial state: {initial_state}")
+        logging.info(f"Initial state: {initial_state}")
 
-        self.current_state = initial_state.__dict__  # Store the initial state
-        final_state = self.workflow.invoke(self.current_state)
-        print(f"Final state: {final_state}")
+        final_state = self.workflow.invoke(initial_state.__dict__)
+        logging.info(f"Final state: {final_state}")
 
-        # Ensure final_state is a dictionary
         if isinstance(final_state, ValidationState):
             final_state = final_state.__dict__
 
-        classification = self._combine_results(final_state.get('validation_results', {}))
-        classification["overall_validity"] = final_state.get('overall_validity', 'Unknown')
+        classification = {
+            'school_validation': final_state.get('validation_results', {}).get('school', 'Unclear'),
+            'degree_validation': final_state.get('validation_results', {}).get('degree', 'Unclear'),
+            'modality_validation': final_state.get('validation_results', {}).get('modality', 'Unclear'),
+            'overall_validity': final_state.get('overall_validity', 'Unknown'),
+            'explanation': final_state.get('explanation', '')
+        }
 
-        print(f"Classification: {classification}")
+        logging.info("\nValidation Results:")
+        logging.info(f"School: {classification['school_validation']}")
+        logging.info(f"Degree: {classification['degree_validation']}")
+        logging.info(f"Modality: {classification['modality_validation']}")
+        logging.info(f"Overall Validity: {classification['overall_validity']}")
+        logging.info("\nExplanation:")
+        logging.info(classification['explanation'])
+
         return self.ModelOutput(
             classification=classification,
         )
-
-    def _create_chain(self, system_message: str, human_message: str):
-        """
-        Create a chain for processing messages with the language model.
-
-        Args:
-            system_message (str): The system message to be used in the prompt.
-            human_message (str): The human message to be used in the prompt.
-
-        Returns:
-            RunnableWithMessageHistory: A chain that can process messages with history.
-        """
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_message),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", human_message)
-        ])
-
-        chain = prompt | self.llm
-
-        def get_session_history(session_id: str) -> InMemoryChatMessageHistory:
-            return InMemoryChatMessageHistory()
-
-        return RunnableWithMessageHistory(
-            chain,
-            get_session_history,
-            input_messages_key="input",
-            history_messages_key="chat_history"
-        )
-
-    def _combine_results(self, validation_results: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Combine the results of individual validations into an overall classification.
-
-        Args:
-            validation_results (Dict[str, Any]): The validation results from the agent.
-
-        Returns:
-            Dict[str, Any]: A dictionary containing the overall classification and explanation.
-        """
-        classification = {
-            "school_validation": "Unclear",
-            "degree_validation": "Unclear",
-            "modality_validation": "Unclear",
-            "overall_validity": "Unknown",
-            "explanation": ""
-        }
-
-        for key, value in validation_results.items():
-            if "school" in key:
-                classification["school_validation"] = value
-            elif "degree" in key:
-                classification["degree_validation"] = value
-            elif "modality" in key:
-                classification["modality_validation"] = value
-
-        valid_count = sum(1 for val in [classification['school_validation'], classification['degree_validation'], classification['modality_validation']] if val == "Valid")
-        if valid_count == 3:
-            classification['overall_validity'] = "Valid"
-        elif valid_count == 0:
-            classification['overall_validity'] = "Invalid"
-        else:
-            classification['overall_validity'] = "Partial"
-
-        classification['explanation'] = f"{valid_count} out of 3 validations were successful."
-
-        return classification
 
     def is_relevant(self, transcript, metadata):
         """
@@ -571,8 +350,3 @@ class AgenticValidator(Score):
         Model output containing the classification results.
         """
         classification: Dict[str, Any]
-
-class AgentState(TypedDict):
-    messages: List[AnyMessage]
-    agent_outcome: Literal["CONTINUE", "FINISH"]
-    validation_results: Dict[str, Any]
