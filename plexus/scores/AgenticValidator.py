@@ -13,7 +13,7 @@ from langchain_aws import ChatBedrock
 from langchain_openai import AzureChatOpenAI
 from langchain_google_vertexai import ChatVertexAI
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import create_react_agent
 
 from langchain_core.messages import AIMessage
@@ -208,22 +208,19 @@ class AgenticValidator(Score):
 
         # Define finalization step
         def finalize(state: Dict[str, Any]) -> Dict[str, Any]:
-            logging.info(f"Finalizing state: {state}")
             validation_results = state.get('validation_results', {})
             overall_validity = self._determine_overall_validity(validation_results)
             state['overall_validity'] = overall_validity
-            logging.info(f"Final state: {state}")
             return state
 
         workflow.add_node("finalize", finalize)
 
         # Add edges to create the workflow
+        workflow.add_edge(START, "validate_school")
         workflow.add_edge("validate_school", "validate_degree")
         workflow.add_edge("validate_degree", "validate_modality")
         workflow.add_edge("validate_modality", "finalize")
-
-        # Set the entry point
-        workflow.set_entry_point("validate_school")
+        workflow.add_edge("finalize", END)
 
         return workflow.compile()
 
@@ -346,9 +343,6 @@ class AgenticValidator(Score):
 
         final_state = self.workflow.invoke(initial_state.__dict__)
         logging.info(f"Final state: {final_state}")
-
-        if isinstance(final_state, ValidationState):
-            final_state = final_state.__dict__
 
         classification = {
             'school_validation': final_state.get('validation_results', {}).get('school', 'Unclear'),
