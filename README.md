@@ -185,7 +185,7 @@ And then go to [http://localhost:8000](http://localhost:8000)
 
 ## Documentation 
 
-We build the Sphinx documentation at [https://anthus-ai.github.io/plexus/](https://anthus-ai.github.io/plexus/) with the files in the `documentation/` folder.
+We build the Sphinx documentation at [https://anthusai.github.io/Plexus/](https://anthusai.github.io/Plexus/) with the files in the `documentation/` folder.
 
 ## Contributing
 
