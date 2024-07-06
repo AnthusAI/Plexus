@@ -327,20 +327,6 @@ class AgenticValidator(Score):
 
         return result, explanation
 
-    def _validate_step_string(self, query: str) -> str:
-        """
-        Validate a step based on a string query.
-
-        Args:
-            query (str): The query string to validate.
-
-        Returns:
-            str: A string indicating the validation result.
-        """
-        # Here you would implement the logic to validate the query string
-        # For now, we'll just return the query as is
-        return f"Validation result for query: {query}"
-
     def predict(self, model_input: Score.ModelInput) -> Score.ModelOutput:
         """
         Predict the validity of the education information based on the transcript and metadata.
