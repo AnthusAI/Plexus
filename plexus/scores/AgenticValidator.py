@@ -37,8 +37,14 @@ class AgenticValidator(Score):
     """
     An agentic validator that uses LangGraph and advanced LangChain components to validate education information,
     specifically for school, degree, and modality, using both transcript and metadata.
+
+    This validator uses a language model to analyze transcripts and validate educational claims.
     """
+
     class Parameters(Score.Parameters):
+        """
+        Parameters for configuring the AgenticValidator.
+        """
         model_config = ConfigDict(protected_namespaces=())
         model_provider: Literal["AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "AzureChatOpenAI"
         model_name: Optional[str] = None
@@ -46,6 +52,12 @@ class AgenticValidator(Score):
         max_tokens: int = 500
 
     def __init__(self, **parameters):
+        """
+        Initialize the AgenticValidator with the given parameters.
+
+        Args:
+            **parameters: Keyword arguments for configuring the validator.
+        """
         super().__init__(**parameters)
         self.llm = None
         self.workflow = None
@@ -57,6 +69,10 @@ class AgenticValidator(Score):
         self.current_state = None  # Initialize current_state
 
     def train_model(self):
+        """
+        Initialize the language model and create the workflow for validation.
+        This method also logs the model parameters using MLflow.
+        """
         self.llm = self._initialize_model()
         self.workflow = self._create_workflow()
         
@@ -65,6 +81,15 @@ class AgenticValidator(Score):
         mlflow.log_param("temperature", self.parameters.temperature)
 
     def _initialize_model(self) -> BaseLanguageModel:
+        """
+        Initialize and return the appropriate language model based on the configured provider.
+
+        Returns:
+            BaseLanguageModel: The initialized language model.
+
+        Raises:
+            ValueError: If an unsupported model provider is specified.
+        """
         max_tokens = self.parameters.max_tokens
 
         if self.parameters.model_provider == "AzureChatOpenAI":
@@ -92,6 +117,12 @@ class AgenticValidator(Score):
             raise ValueError(f"Unsupported model provider: {self.parameters.model_provider}")
 
     def _create_workflow(self):
+        """
+        Create and return the workflow for the validation process using LangGraph.
+
+        Returns:
+            StateGraph: The compiled workflow for validation.
+        """
         tools = [
             Tool(
                 name="validate_school",
@@ -145,6 +176,15 @@ class AgenticValidator(Score):
             return state
 
         def _parse_validation_result(self, content: str) -> str:
+            """
+            Parse the validation result from the content of the language model's response.
+
+            Args:
+                content (str): The content of the language model's response.
+
+            Returns:
+                str: The parsed validation result.
+            """
             result = "Valid" if "yes" in content else "Invalid" if "no" in content else "Unclear"
             return f"{result}"
 
@@ -163,6 +203,15 @@ class AgenticValidator(Score):
         return workflow.compile()
     
     def parse_llm_response(self, response: AIMessage) -> StepOutput:
+        """
+        Parse the response from the language model into a structured StepOutput.
+
+        Args:
+            response (AIMessage): The response from the language model.
+
+        Returns:
+            StepOutput: A structured output containing the result and explanation.
+        """
         content = response.content.strip()
         logging.info(f"Parsing response: {content}")
         
@@ -178,7 +227,15 @@ class AgenticValidator(Score):
         return StepOutput(result=result, explanation=explanation)
 
     def _validate_school(self, school: str) -> str:
-        """Validate if the given school is mentioned in the transcript."""
+        """
+        Validate if the given school is mentioned in the transcript.
+
+        Args:
+            school (str): The name of the school to validate.
+
+        Returns:
+            str: A string indicating the validation result for the school.
+        """
         state = ValidationState(
             transcript=self.current_state.transcript,
             metadata=self.current_state.metadata,
@@ -188,7 +245,15 @@ class AgenticValidator(Score):
         return f"School validation result: {result.validation_results['school']}"
 
     def _validate_degree(self, degree: str) -> str:
-        """Validate if the given degree or a close equivalent is mentioned in the transcript."""
+        """
+        Validate if the given degree or a close equivalent is mentioned in the transcript.
+
+        Args:
+            degree (str): The name of the degree to validate.
+
+        Returns:
+            str: A string indicating the validation result for the degree.
+        """
         state = ValidationState(
             transcript=self.current_state.transcript,
             metadata=self.current_state.metadata,
@@ -198,7 +263,15 @@ class AgenticValidator(Score):
         return f"Degree validation result: {result.validation_results['degree']}"
 
     def _validate_modality(self, modality: str) -> str:
-        """Validate if the given modality or a close synonym is mentioned in the transcript."""
+        """
+        Validate if the given modality or a close synonym is mentioned in the transcript.
+
+        Args:
+            modality (str): The modality to validate.
+
+        Returns:
+            str: A string indicating the validation result for the modality.
+        """
         state = ValidationState(
             transcript=self.current_state.transcript,
             metadata=self.current_state.metadata,
@@ -208,9 +281,29 @@ class AgenticValidator(Score):
         return f"Modality validation result: {result.validation_results['modality']}"
 
     def _call_llm(self, input):
+        """
+        Call the language model with retry logic.
+
+        Args:
+            input: The input to be passed to the language model.
+
+        Returns:
+            The response from the language model.
+        """
         return self.retry_config.invoke(self.llm.invoke)(input)
 
     def _validate_step(self, state: ValidationState, step_name: str, prompt: str) -> ValidationState:
+        """
+        Perform a single validation step using the language model.
+
+        Args:
+            state (ValidationState): The current validation state.
+            step_name (str): The name of the validation step.
+            prompt (str): The prompt to be sent to the language model.
+
+        Returns:
+            ValidationState: The updated validation state after the step.
+        """
         chain = self._create_chain(
             "You are an expert in validating educational information. Carefully examine the entire transcript for the requested information. Respond with 'Yes' or 'No', followed by a brief explanation.",
             prompt
@@ -252,6 +345,15 @@ class AgenticValidator(Score):
         return state
 
     def predict(self, model_input: Score.ModelInput) -> Score.ModelOutput:
+        """
+        Predict the validity of the educational information based on the transcript and metadata.
+
+        Args:
+            model_input (Score.ModelInput): The input containing the transcript and metadata.
+
+        Returns:
+            Score.ModelOutput: The prediction result including the classification.
+        """
         self.current_state = ValidationState(
             transcript=model_input.transcript.lower(),  # Convert transcript to lowercase
             metadata={k: v.lower() for k, v in model_input.metadata.items()},  # Convert metadata values to lowercase
@@ -275,6 +377,16 @@ class AgenticValidator(Score):
         )
 
     def _validate_single_item(self, item_type: str, item_value: str) -> Dict[str, Any]:
+        """
+        Validate a single item (school, degree, or modality) against the transcript.
+
+        Args:
+            item_type (str): The type of item being validated (school, degree, or modality).
+            item_value (str): The value of the item to validate.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the validation result and explanation.
+        """
         if self.current_state is None:
             self.current_state = ValidationState(transcript="", metadata={}, current_step="")
         
@@ -316,6 +428,16 @@ No: The transcript does not mention '{item_value}' or any close synonyms."""
         }
 
     def _create_chain(self, system_message: str, human_message: str):
+        """
+        Create a chain for processing messages with the language model.
+
+        Args:
+            system_message (str): The system message to be used in the prompt.
+            human_message (str): The human message to be used in the prompt.
+
+        Returns:
+            RunnableWithMessageHistory: A chain that can process messages with history.
+        """
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_message),
             MessagesPlaceholder(variable_name="chat_history"),
@@ -335,6 +457,17 @@ No: The transcript does not mention '{item_value}' or any close synonyms."""
         )
 
     def _combine_results(self, school_result: Dict[str, Any], degree_result: Dict[str, Any], modality_result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Combine the results of individual validations into an overall classification.
+
+        Args:
+            school_result (Dict[str, Any]): The validation result for the school.
+            degree_result (Dict[str, Any]): The validation result for the degree.
+            modality_result (Dict[str, Any]): The validation result for the modality.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the overall classification and explanation.
+        """
         classification = {**school_result, **degree_result, **modality_result}
         
         valid_count = sum(1 for key, val in classification.items() if key.endswith('_validation') and val == "Yes")
@@ -350,6 +483,15 @@ No: The transcript does not mention '{item_value}' or any close synonyms."""
         return classification
 
     def _parse_agent_output(self, validation_results: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Parse the output from the agent into a structured classification.
+
+        Args:
+            validation_results (Dict[str, Any]): The validation results from the agent.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the overall classification and explanation.
+        """
         classification = {
             "school_validation": "Unclear",
             "degree_validation": "Unclear",
@@ -379,11 +521,24 @@ No: The transcript does not mention '{item_value}' or any close synonyms."""
         return classification
 
     def is_relevant(self, transcript, metadata):
+        """
+        Determine if the given transcript and metadata are relevant based on the overall validity.
+
+        Args:
+            transcript: The transcript to be validated.
+            metadata: The metadata containing school, degree, and modality information.
+
+        Returns:
+            bool: True if the overall validity is "valid" or "partial", False otherwise.
+        """
         model_input = self.ModelInput(transcript=transcript, metadata=metadata)
         result = self.predict(model_input)
         return result.classification["overall_validity"].lower() in ["valid", "partial"]
 
     def predict_validation(self):
+        """
+        Predict the validation results for the entire dataframe and store the predictions.
+        """
         self.val_labels = self.dataframe[self.parameters.score_name]
         self.val_predictions = []
 
@@ -400,20 +555,30 @@ No: The transcript does not mention '{item_value}' or any close synonyms."""
             self.val_predictions.append(prediction.classification)
 
     def register_model(self):
-        # Implement model registration logic here
+        """
+        Register the model with MLflow.
+        """
         mlflow.log_param("model_type", "AgenticValidator")
         mlflow.log_param("model_provider", self.parameters.model_provider)
         mlflow.log_param("model_name", self.parameters.model_name)
 
     def save_model(self):
-        # Implement model saving logic here
+        """
+        Save the model to a specified path and log it as an artifact with MLflow.
+        """
         model_path = f"models/AgenticValidator_{self.parameters.model_provider}_{self.parameters.model_name}"
         mlflow.log_artifact(model_path)
 
     class ModelInput(Score.ModelInput):
+        """
+        Model input containing the transcript and metadata.
+        """
         metadata: Dict[str, str]
 
     class ModelOutput(Score.ModelOutput):
+        """
+        Model output containing the classification results.
+        """
         classification: Dict[str, Any]
 
 class AgentState(TypedDict):
