@@ -19,6 +19,22 @@ from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import AIMessage
 
 class ValidationState:
+    """
+    Represents the state of the validation process at any given point.
+
+    This class encapsulates all the information needed to track the progress
+    and results of the validation workflow.
+
+    Attributes:
+        transcript (str): The transcript being validated.
+        metadata (Dict[str, str]): Metadata about the education claim being validated.
+        current_step (str): The current step in the validation process.
+        validation_results (Dict[str, Any]): Results of individual validation steps.
+        overall_validity (str): The overall validity status of the education claim.
+        explanation (str): Detailed explanation of the validation results.
+        messages (List[Union[HumanMessage, AIMessage]]): History of messages in the validation process.
+    """
+
     def __init__(
         self,
         transcript: str,
@@ -29,6 +45,18 @@ class ValidationState:
         explanation: str = "",
         messages: List[Union[HumanMessage, AIMessage]] = None
     ):
+        """
+        Initialize a ValidationState instance.
+
+        Args:
+            transcript (str): The transcript to be validated.
+            metadata (Dict[str, str]): Metadata about the education claim.
+            current_step (str, optional): The current validation step. Defaults to "".
+            validation_results (Dict[str, Any], optional): Results of validation steps. Defaults to None.
+            overall_validity (str, optional): Overall validity status. Defaults to "Unknown".
+            explanation (str, optional): Detailed explanation of results. Defaults to "".
+            messages (List[Union[HumanMessage, AIMessage]], optional): Message history. Defaults to None.
+        """
         self.transcript = transcript
         self.metadata = metadata
         self.current_step = current_step
@@ -38,6 +66,12 @@ class ValidationState:
         self.messages = messages or []
 
     def __repr__(self):
+        """
+        Return a string representation of the ValidationState.
+
+        Returns:
+            str: A string representation of the ValidationState instance.
+        """
         return (
             f"ValidationState(transcript='{self.transcript}', "
             f"metadata={self.metadata}, "
@@ -53,12 +87,19 @@ class AgenticValidator(Score):
     An agentic validator that uses LangGraph and advanced LangChain components to validate education information,
     specifically for school, degree, and modality, using both transcript and metadata.
 
-    This validator uses a language model to analyze transcripts and validate educational claims.
+    This validator uses a language model to analyze transcripts and validate educational claims through a multi-step
+    workflow implemented with LangGraph.
     """
 
     class Parameters(Score.Parameters):
         """
         Parameters for configuring the AgenticValidator.
+
+        Attributes:
+            model_provider (Literal): The provider of the language model to use.
+            model_name (Optional[str]): The specific model name to use (if applicable).
+            temperature (float): The temperature setting for the language model.
+            max_tokens (int): The maximum number of tokens for model output.
         """
         model_config = ConfigDict(protected_namespaces=())
         model_provider: Literal["AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "AzureChatOpenAI"
@@ -67,6 +108,12 @@ class AgenticValidator(Score):
         max_tokens: int = 500
 
     def __init__(self, **parameters):
+        """
+        Initialize the AgenticValidator with the given parameters.
+
+        Args:
+            **parameters: Keyword arguments for configuring the validator.
+        """
         super().__init__(**parameters)
         self.llm = None
         self.workflow = None
@@ -78,6 +125,10 @@ class AgenticValidator(Score):
         self.react_agent = None
 
     def train_model(self):
+        """
+        Initialize the language model, create the workflow, and set up the REACT agent.
+        This method also logs relevant parameters to MLflow.
+        """
         self.llm = self._initialize_model()
         self.workflow = self._create_workflow()
         
@@ -142,6 +193,12 @@ class AgenticValidator(Score):
             raise ValueError(f"Unsupported model provider: {self.parameters.model_provider}")
 
     def _create_workflow(self):
+        """
+        Create and return the LangGraph workflow for the validation process.
+
+        Returns:
+            StateGraph: The compiled workflow graph.
+        """
         workflow = StateGraph(ValidationState)
 
         # Define validation steps
@@ -171,6 +228,16 @@ class AgenticValidator(Score):
         return workflow.compile()
 
     def _validate_step(self, state: Dict[str, Any], step: str) -> Dict[str, Any]:
+        """
+        Perform validation for a specific step (school, degree, or modality).
+
+        Args:
+            state (Dict[str, Any]): The current state of the validation process.
+            step (str): The step to validate ('school', 'degree', or 'modality').
+
+        Returns:
+            Dict[str, Any]: The updated state after validation.
+        """
         current_state = ValidationState(**state)
         
         prompt = f"Is the {step} '{current_state.metadata[step]}' mentioned in the following transcript? Transcript: {current_state.transcript}. Answer with YES or NO, followed by your reasoning."
@@ -209,6 +276,15 @@ class AgenticValidator(Score):
         return current_state.__dict__
 
     def _determine_overall_validity(self, validation_results: Dict[str, str]) -> str:
+        """
+        Determine the overall validity based on individual validation results.
+
+        Args:
+            validation_results (Dict[str, str]): The results of individual validations.
+
+        Returns:
+            str: The overall validity status ('Valid', 'Invalid', 'Partial', or 'Unknown').
+        """
         valid_count = sum(1 for result in validation_results.values() if result == "Valid")
         total_count = len(validation_results)
         if total_count == 0:
@@ -221,6 +297,15 @@ class AgenticValidator(Score):
             return "Partial"
     
     def _parse_validation_result(self, output: str) -> Tuple[str, str]:
+        """
+        Parse the output from the language model to determine the validation result and explanation.
+
+        Args:
+            output (str): The raw output from the language model.
+
+        Returns:
+            Tuple[str, str]: A tuple containing the validation result and explanation.
+        """
         output_lower = output.lower()
         first_word = output_lower.split()[0] if output_lower else ""
 
@@ -257,6 +342,15 @@ class AgenticValidator(Score):
         return f"Validation result for query: {query}"
 
     def predict(self, model_input: Score.ModelInput) -> Score.ModelOutput:
+        """
+        Predict the validity of the education information based on the transcript and metadata.
+
+        Args:
+            model_input (Score.ModelInput): The input containing the transcript and metadata.
+
+        Returns:
+            Score.ModelOutput: The output containing the classification results.
+        """
         logging.info(f"Predict method input: {model_input}")
         initial_state = ValidationState(
             transcript=model_input.transcript,
@@ -295,8 +389,8 @@ class AgenticValidator(Score):
         Determine if the given transcript and metadata are relevant based on the overall validity.
 
         Args:
-            transcript: The transcript to be validated.
-            metadata: The metadata containing school, degree, and modality information.
+            transcript (str): The transcript to be validated.
+            metadata (Dict[str, str]): The metadata containing school, degree, and modality information.
 
         Returns:
             bool: True if the overall validity is "valid" or "partial", False otherwise.
@@ -308,6 +402,7 @@ class AgenticValidator(Score):
     def predict_validation(self):
         """
         Predict the validation results for the entire dataframe and store the predictions.
+        This method populates the val_labels and val_predictions attributes.
         """
         self.val_labels = self.dataframe[self.parameters.score_name]
         self.val_predictions = []
@@ -326,7 +421,7 @@ class AgenticValidator(Score):
 
     def register_model(self):
         """
-        Register the model with MLflow.
+        Register the model with MLflow by logging relevant parameters.
         """
         mlflow.log_param("model_type", "AgenticValidator")
         mlflow.log_param("model_provider", self.parameters.model_provider)
@@ -342,11 +437,18 @@ class AgenticValidator(Score):
     class ModelInput(Score.ModelInput):
         """
         Model input containing the transcript and metadata.
+
+        Attributes:
+            metadata (Dict[str, str]): A dictionary containing school, degree, and modality information.
         """
         metadata: Dict[str, str]
 
     class ModelOutput(Score.ModelOutput):
         """
         Model output containing the classification results.
+
+        Attributes:
+            classification (Dict[str, Any]): A dictionary containing validation results for school, degree, modality,
+                                             overall validity, and explanation.
         """
         classification: Dict[str, Any]
