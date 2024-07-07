@@ -123,8 +123,9 @@ class AgenticValidator(Score):
             bound=RunnablePassthrough()
         )
         self.react_agent = None
+        self.create_validation_agent()
 
-    def train_model(self):
+    def create_validation_agent(self):
         """
         Initialize the language model, create the workflow, and set up the REACT agent.
         This method also logs relevant parameters to MLflow.
@@ -432,3 +433,10 @@ class AgenticValidator(Score):
                                              overall validity, and explanation.
         """
         classification: Dict[str, Any]
+
+    def train_model(self):
+        """
+        Placeholder method to satisfy the base class requirement.
+        This validator doesn't require traditional training.
+        """
+        pass
