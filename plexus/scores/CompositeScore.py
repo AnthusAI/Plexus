@@ -272,6 +272,13 @@ class CompositeScore(Score):
                     }
                     elements.append(element)
                 return elements
+            
+            def predict_validation(self):
+                pass
+            def register_model(self):
+                pass
+            def save_model(self):
+                pass
 
         # Register the created class with the score_registry
         scorecard.score_registry.register(score_name)(CompositeScoreFromMarkdown)
