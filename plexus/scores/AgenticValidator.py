@@ -2,10 +2,9 @@ from typing import Dict, List, Any, Literal, Optional, Union, Tuple
 from pydantic import ConfigDict
 from plexus.scores.Score import Score
 from plexus.CustomLogging import logging
-import mlflow
+
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.runnables.retry import RunnableRetry
+from langchain_core.runnables import RunnableLambda
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import Tool
 
@@ -16,7 +15,8 @@ from langchain_google_vertexai import ChatVertexAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import create_react_agent
 
-from langchain_core.messages import AIMessage
+import mlflow
+import time
 
 class ValidationState:
     """
@@ -117,13 +117,19 @@ class AgenticValidator(Score):
         super().__init__(**parameters)
         self.llm = None
         self.workflow = None
-        self.retry_config = RunnableRetry(
-            max_attempts=3,
-            wait_exponential_jitter=True,
-            bound=RunnablePassthrough()
-        )
         self.react_agent = None
         self.create_validation_agent()
+
+    def _log_retry(self, attempt: int, error: Exception):
+        """
+        Log retry attempts and errors.
+
+        Args:
+            attempt (int): The current attempt number.
+            error (Exception): The error that triggered the retry.
+        """
+        logging.warning(f"Retry attempt {attempt} due to error: {error}")
+        time.sleep(2 ** attempt)  # Exponential backoff
 
     def create_validation_agent(self):
         """
@@ -227,7 +233,7 @@ class AgenticValidator(Score):
 
     def _validate_step(self, state: Dict[str, Any], step: str) -> Dict[str, Any]:
         """
-        Perform validation for a specific step (school, degree, or modality).
+        Perform validation for a specific step (school, degree, or modality) with retry mechanism.
 
         Args:
             state (Dict[str, Any]): The current state of the validation process.
@@ -250,11 +256,26 @@ class AgenticValidator(Score):
         
         react_agent = create_react_agent(self.llm, tools)
         
-        result = react_agent.invoke({
-            "messages": [HumanMessage(content=prompt)],
+        def _run_agent(input_data):
+            return react_agent.invoke(input_data)
+        
+        runnable_agent = RunnableLambda(_run_agent)
+        
+        retry_agent = runnable_agent.with_retry(
+            retry_if_exception_type=(Exception,),  # Retry on any exception
+            wait_exponential_jitter=True,
+            stop_after_attempt=3
+        )
+        
+        try:
+            result = retry_agent.invoke({
+                "messages": [HumanMessage(content=prompt)],
                 "input": current_state
             })
-        
+        except Exception as e:
+            logging.error(f"Failed to validate {step} after all retry attempts: {e}")
+            return self._handle_validation_failure(current_state, step)
+
         ai_messages = [msg for msg in result['messages'] if isinstance(msg, AIMessage)]
         if ai_messages:
             last_ai_message = ai_messages[-1]
@@ -272,6 +293,23 @@ class AgenticValidator(Score):
         print(f"\nValidated {step}: {validation_result}")
         
         return current_state.__dict__
+    
+    def _handle_validation_failure(self, state: ValidationState, step: str) -> Dict[str, Any]:
+        """
+        Handle the case when validation fails after all retry attempts.
+
+        Args:
+            state (ValidationState): The current validation state.
+            step (str): The step that failed validation.
+
+        Returns:
+            Dict[str, Any]: The updated state after handling the failure.
+        """
+        state.current_step = step
+        state.validation_results[step] = "Unclear"
+        state.explanation += f"{step.capitalize()}: Validation failed due to technical issues.\n\n"
+        print(f"\nFailed to validate {step}")
+        return state.__dict__
 
     def _determine_overall_validity(self, validation_results: Dict[str, str]) -> str:
         """
