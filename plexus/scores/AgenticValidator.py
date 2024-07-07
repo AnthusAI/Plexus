@@ -333,7 +333,7 @@ class AgenticValidator(Score):
             model_input (Score.ModelInput): The input containing the transcript and metadata.
 
         Returns:
-            Score.ModelOutput: The output containing the classification results.
+            Score.ModelOutput: The output containing the validation results.
         """
         logging.info(f"Predict method input: {model_input}")
         initial_state = ValidationState(
@@ -345,24 +345,24 @@ class AgenticValidator(Score):
         final_state = self.workflow.invoke(initial_state.__dict__)
         logging.info(f"Final state: {final_state}")
 
-        classification = {
-            'school_validation': final_state.get('validation_results', {}).get('school', 'Unclear'),
-            'degree_validation': final_state.get('validation_results', {}).get('degree', 'Unclear'),
-            'modality_validation': final_state.get('validation_results', {}).get('modality', 'Unclear'),
-            'overall_validity': final_state.get('overall_validity', 'Unknown'),
-            'explanation': final_state.get('explanation', '')
-        }
+        validation_results = final_state.get('validation_results', {})
+        overall_validity = final_state.get('overall_validity', 'Unknown')
+        explanation = final_state.get('explanation', '')
 
         logging.info("\nValidation Results:")
-        logging.info(f"School: {classification['school_validation']}")
-        logging.info(f"Degree: {classification['degree_validation']}")
-        logging.info(f"Modality: {classification['modality_validation']}")
-        logging.info(f"Overall Validity: {classification['overall_validity']}")
+        logging.info(f"School: {validation_results.get('school', 'Unclear')}")
+        logging.info(f"Degree: {validation_results.get('degree', 'Unclear')}")
+        logging.info(f"Modality: {validation_results.get('modality', 'Unclear')}")
+        logging.info(f"Overall Validity: {overall_validity}")
         logging.info("\nExplanation:")
-        logging.info(classification['explanation'])
+        logging.info(explanation)
 
         return self.ModelOutput(
-            classification=classification,
+            score=overall_validity,
+            school_validation=validation_results.get('school', 'Unclear'),
+            degree_validation=validation_results.get('degree', 'Unclear'),
+            modality_validation=validation_results.get('modality', 'Unclear'),
+            explanation=explanation
         )
 
     def is_relevant(self, transcript, metadata):
@@ -378,7 +378,7 @@ class AgenticValidator(Score):
         """
         model_input = self.ModelInput(transcript=transcript, metadata=metadata)
         result = self.predict(model_input)
-        return result.classification["overall_validity"].lower() in ["valid", "partial"]
+        return result.score.lower() in ["valid", "partial"]
 
     def predict_validation(self):
         """
@@ -398,7 +398,13 @@ class AgenticValidator(Score):
                 }
             )
             prediction = self.predict(model_input)
-            self.val_predictions.append(prediction.classification)
+            self.val_predictions.append({
+                'score': prediction.score,
+                'school_validation': prediction.school_validation,
+                'degree_validation': prediction.degree_validation,
+                'modality_validation': prediction.modality_validation,
+                'explanation': prediction.explanation
+            })
 
     def register_model(self):
         """
@@ -426,13 +432,19 @@ class AgenticValidator(Score):
 
     class ModelOutput(Score.ModelOutput):
         """
-        Model output containing the classification results.
+        Model output containing the validation results.
 
         Attributes:
-            classification (Dict[str, Any]): A dictionary containing validation results for school, degree, modality,
-                                             overall validity, and explanation.
+            score (str): The overall validity score ('Valid', 'Invalid', 'Partial', or 'Unknown').
+            school_validation (str): Validation result for the school.
+            degree_validation (str): Validation result for the degree.
+            modality_validation (str): Validation result for the modality.
+            explanation (str): Detailed explanation of the validation results.
         """
-        classification: Dict[str, Any]
+        school_validation: str
+        degree_validation: str
+        modality_validation: str
+        explanation: str
 
     def train_model(self):
         """
