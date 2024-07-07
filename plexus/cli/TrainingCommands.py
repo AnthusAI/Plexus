@@ -9,10 +9,15 @@ from plexus.cli.console import console
 from plexus.Registries import scorecard_registry
 
 @click.command()
+@click.command(help="Train and evaluate a scorecard or specific score within a scorecard.")
 @click.option('--scorecard-name', required=True, help='The name of the scorecard.')
 @click.option('--score-name', help='The name of the score to train.')
 def train(scorecard_name, score_name):
-    """Some classifiers use machine-learning models that require training."""
+    """
+    This command will handle dispatching to the :func:`plexus.cli.TrainingCommands.train_score` function
+    for each score in the scorecard if a scorecard is specified, or for a
+    single score if a score is specified.
+    """
     logging.info(f"Training Scorecard [magenta1][b]{scorecard_name}[/b][/magenta1]...")
 
     plexus.Scorecard.load_and_register_scorecards('scorecards/')
@@ -32,6 +37,9 @@ def train(scorecard_name, score_name):
             train_score(score_name, scorecard_class)
 
 def train_score(score_name, scorecard_class):
+    """
+    This function will train and evaluate a single score.
+    """
     logging.info(f"Training Score [magenta1][b]{score_name}[/b][/magenta1]...")
     score_to_train_configuration = scorecard_class.scores[score_name]
 
