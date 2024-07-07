@@ -97,10 +97,10 @@ class Score(ABC, mlflow.pyfunc.PythonModel):
 
         Attributes
         ----------
-        classification : str
-            The predicted classification label.
+        score : str
+            The predicted score label.
         """
-        classification: str
+        score: str
     
     def __init__(self, **parameters):
         """
