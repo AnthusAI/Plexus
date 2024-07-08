@@ -21,10 +21,7 @@ class DataCache(ABC):
             The name of the data cache class.
         """
         # "class" is a reserved keyword in Python, so we use "class_name" instead.
-        class_name: str = Field(alias='class')
-
-        class Config:
-            allow_population_by_field_name = True
+        class_name: str = Field(alias='class', default='DataCache')
             
     def __init__(self, **parameters):
         """

@@ -108,7 +108,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         score : str
             The predicted score label.
         """
-        score: str
+        score: Union[str, bool]
     
     def __init__(self, **parameters):
         """
