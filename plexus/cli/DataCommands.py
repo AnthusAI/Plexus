@@ -9,8 +9,8 @@ import plexus
 import nltk
 from nltk.corpus import stopwords
 from tqdm import tqdm
-from plexus.DataCache import DataCache
-from rich import print as rich_print
+from plexus.data.DataCache import DataCache
+import rich
 from rich.table import Table
 from plexus.CustomLogging import logging
 from rich.layout import Layout
@@ -142,11 +142,11 @@ def analyze_scorecard(
 
     logging.info("Generating summary of the dataframe")
     dataframe_summary = dataframe.describe()
-    rich_print(Panel(dataframe_summary.to_string(), title="Dataframe Summary", border_style="cyan"))
+    rich.print(Panel(dataframe_summary.to_string(), title="Dataframe Summary", border_style="cyan"))
 
     logging.info("Displaying the first few rows of the dataframe")
     dataframe_head = dataframe.head()
-    rich_print(Panel(dataframe_head.to_string(), title="Dataframe Head", border_style="green"))
+    rich.print(Panel(dataframe_head.to_string(), title="Dataframe Head", border_style="green"))
 
     if (score_name or all_questions):
         grid = Table.grid(expand=True)
@@ -179,7 +179,7 @@ def analyze_scorecard(
         outer_panel = Panel(grid,
             title=f"[royal_blue1][b]Scorecard: {scorecard_name}[/b][/royal_blue1]", border_style="magenta1")
 
-        rich_print(outer_panel)
+        rich.print(outer_panel)
     else:
         dataframe_summary_title = f"[royal_blue1][b]Dataframe Summary[/b][/royal_blue1]\nfor [purple][b]Scorecard ID: {scorecard_id}[/b][/purple]"
         dataframe_summary_table = Table(
@@ -204,7 +204,7 @@ def analyze_scorecard(
             Columns([dataframe_summary_table, column_names_table]),
             title=f"[royal_blue1][b]Scorecard: {scorecard_name}[/b][/royal_blue1]", border_style="magenta1")
 
-        rich_print(outer_panel)
+        rich.print(outer_panel)
 
 def analyze_question(
         scorecard_id,

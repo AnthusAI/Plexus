@@ -31,7 +31,6 @@ def load_configuration_from_yaml_file(configuration_file_path):
 @click.option('--scorecard-name', 'scorecard_name', default=None, help='Name of the scorecard to evaluate')
 def accuracy(
     scorecard_name: str,
-    scorecard_folder: str = 'scorecards/TermLifeAI',
     number_of_transcripts_to_sample: int = 1,
     sampling_method: str = 'random',
     random_seed: int = None,
@@ -51,6 +50,8 @@ def accuracy(
         logging.error("Scorecard not specified")
         sys.exit(1)
 
+    scorecard_folder = os.path.join('scorecards', scorecard_name)
+
     labeled_samples_filename = os.path.join(scorecard_folder, 'experiments/labeled-samples.csv')
     override_folder: str = os.path.join(scorecard_folder, 'experiments/calibrations')
 
@@ -69,7 +70,7 @@ def accuracy(
         logging.error(f"Scorecard with name '{scorecard_name}' not found.")
         return
     # Instantiate the scorecard type and tell it where to find the score definition files.
-    scorecard_instance = scorecard_type(scorecard_folder_path=scorecard_folder)
+    scorecard_instance = scorecard_type(scorecard_name=scorecard_name)
     logging.info(f"  Using scorecard {scorecard_name} with class {scorecard_instance.__class__.__name__}")
 
     with AccuracyExperiment(

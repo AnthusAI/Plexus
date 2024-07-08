@@ -17,7 +17,7 @@ from plexus.CustomLogging import logging
 from plexus.scores.Score import Score
 from plexus.scores.core.utils import ensure_report_directory_exists
 import xgboost as xgb
-from rich import print as rich_print
+import rich
 from rich.panel import Panel
 from rich.columns import Columns
 from rich.table import Table
@@ -249,7 +249,7 @@ class ExplainableClassifier(Score):
         shapley_analysis_table.add_column("Negative Features", justify="center")
         shapley_analysis_table.add_row(positive_features, negative_features)
 
-        rich_print(Panel(shapley_analysis_table, title="[b]SHAP Analysis[/b]", style="sky_blue1"))
+        rich.print(Panel(shapley_analysis_table, title="[b]SHAP Analysis[/b]", style="sky_blue1"))
 
         # Rich table
         ##########
