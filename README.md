@@ -197,6 +197,10 @@ That will generate a folder called `htmlcov` with an HTML coverage report.  One 
 
 And then go to [http://localhost:8000](http://localhost:8000)
 
+Run tests with watch:
+
+    ptw
+
 ## Documentation 
 
 We build the Sphinx documentation at [https://anthusai.github.io/Plexus/](https://anthusai.github.io/Plexus/) with the files in the `documentation/` folder.

@@ -18,7 +18,7 @@ class RelevantWindowsTranscriptFilter(DataframeProcessor):
             relevance_flags = [
                 self.classifier.predict(
                     model_input = Score.ModelInput(transcript=sentence)
-                ).classification for sentence in sentences
+                ).score for sentence in sentences
             ]
             include_flags = self.compute_inclusion_flags(relevance_flags)
 
