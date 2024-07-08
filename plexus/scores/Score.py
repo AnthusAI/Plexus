@@ -128,7 +128,6 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             self.parameters = self.Parameters(**parameters)
             logging.info("Initializing [magenta1][b]Score[/b][/magenta1]")
             self._is_multi_class = None
-            self.start_mlflow_experiment_run()
         except ValidationError as e:
             Score.log_validation_errors(e)
             raise
