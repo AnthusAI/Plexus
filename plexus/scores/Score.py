@@ -19,15 +19,13 @@ import matplotlib.ticker as ticker
 from rich.table import Table
 from rich.panel import Panel
 from rich.columns import Columns
-from rich import print as rich_print
 from rich.text import Text
-from plexus.cli.console import console
-from plexus.CustomLogging import logging
+from plexus.CustomLogging import logging, console
 from sklearn.preprocessing import LabelBinarizer
 from collections import Counter
 import xgboost as xgb
 
-from plexus.scores.core.data import ScoreData
+from plexus.scores.core.ScoreData import ScoreData
 from plexus.scores.core.visualization import ScoreVisualization
 from plexus.scores.core.MLFlow import ScoreMLFlow
 from plexus.scores.core.utils import ensure_report_directory_exists

@@ -55,7 +55,7 @@ class FastTextClassifier(Score):
         sanitized_score_name = sanitize_string(self.score_name)
         return os.path.join(
             "./tmp",
-            self.name() + '_' + sanitized_scorecard_name + '_' + sanitized_score_name + '_' +
+            self.__class__.__name__ + '_' + sanitized_scorecard_name + '_' + sanitized_score_name + '_' +
             "data.txt"
         )
 

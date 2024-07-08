@@ -25,20 +25,18 @@ class Scorecard:
 
     Attributes:
         score_registry (ScoreRegistry): Registry holding all available scores.
-        scorecard_folder_path (str): Path to the folder containing score configurations.
     """
         
     score_registry = ScoreRegistry()
-    scorecard_folder_path = None
     
-    def __init__(self, *, scorecard_folder_path):
+    def __init__(self, *, scorecard_name):
         """
         Initializes a new instance of the Scorecard class.
 
         Args:
-            scorecard_folder_path (str): The file system path to the folder containing score configurations.
+            scorecard_name (str): The name of the scorecard.
         """
-        self.scorecard_folder_path = scorecard_folder_path
+        self.scorecard_name = scorecard_name
         # Accumulators for tracking the total expenses.
         self.prompt_tokens = 0
         self.completion_tokens = 0
@@ -113,7 +111,6 @@ class Scorecard:
         scorecard_class = type(scorecard_name, (Scorecard,), {
             'name':                  scorecard_properties['name'],
             'metadata':              scorecard_properties['metadata'],
-            'scorecard_folder_path': scorecard_properties['scorecard_folder_path'],
             'scores':                scorecard_properties['scores'],
             'foreign_id':            property(lambda cls: cls.metadata['foreign_id'])
         })
@@ -140,7 +137,7 @@ class Scorecard:
         for score_name in cls.score_names_to_process():
             normalized_score_name = cls.normalize_score_name(score_name)
             markdown_file_path = os.path.join(
-                cls.scorecard_folder_path, f"{normalized_score_name}.md")
+                'scorecards', score_name, f"{normalized_score_name}.md")
 
             score_class = CompositeScore.create_from_markdown(
                 scorecard=cls,

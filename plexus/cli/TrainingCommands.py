@@ -8,7 +8,13 @@ from plexus.CustomLogging import logging
 from plexus.cli.console import console
 from plexus.Registries import scorecard_registry
 
-@click.command()
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.columns import Columns
+from rich.text import Text
+from rich.pretty import pprint
+
 @click.command(help="Train and evaluate a scorecard or specific score within a scorecard.")
 @click.option('--scorecard-name', required=True, help='The name of the scorecard.')
 @click.option('--score-name', help='The name of the score to train.')

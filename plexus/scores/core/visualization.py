@@ -1,10 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.metrics import roc_curve, auc, precision_recall_curve
+from sklearn.metrics import roc_curve, auc, precision_recall_curve, confusion_matrix
 from sklearn.preprocessing import LabelBinarizer
 import mlflow
 from plexus.CustomLogging import logging
 import matplotlib.ticker as ticker
+import seaborn as sns
+from collections import Counter
 
 class ScoreVisualization:
 
@@ -350,7 +352,7 @@ class ScoreVisualization:
         print(f"Min confidence: {np.min(confidences):.2%}")
         print(f"Max confidence: {np.max(confidences):.2%}")
         print(f"Mean confidence: {np.mean(confidences):.2%}")
-        print(f"Overall accuracy: {np.mean(predicted_labels_numeric == true_labels_numeric)::.2%}")
+        print(f"Overall accuracy: {np.mean(predicted_labels_numeric == true_labels_numeric):.2%}")
         print(f"\nConfidence threshold for {target_accuracy:.0%} accuracy: {confidence_threshold:.2%}")
         print(f"Predictions above threshold: {np.sum(confidences > confidence_threshold)}")
         print(f"Predictions at or below threshold: {np.sum(confidences <= confidence_threshold)}")

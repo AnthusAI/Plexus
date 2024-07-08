@@ -1,10 +1,14 @@
+import os
 import pandas as pd
+import importlib
+import rich
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.columns import Columns
 from rich.text import Text
 from rich.pretty import pprint
+from plexus.CustomLogging import logging, console
 
 class ScoreData:
 
@@ -19,17 +23,22 @@ class ScoreData:
         excel : str, optional
             Path to an Excel file to load data from.
         """
-        from plexus.DataCache import DataCache
-        data_cache = DataCache(os.environ['PLEXUS_TRAINING_DATA_LAKE_DATABASE_NAME'],
-            os.environ['PLEXUS_TRAINING_DATA_LAKE_ATHENA_RESULTS_BUCKET_NAME'],
-            os.environ['PLEXUS_TRAINING_DATA_LAKE_BUCKET_NAME'])
-        if queries:
-            self.dataframe = data_cache.load_dataframe_from_queries(queries=queries)
-        elif excel:
-            self.dataframe = data_cache.load_dataframe_from_excel(excel=excel)
+        data_cache = self._load_data_cache()
+
+        self.dataframe = data_cache.load_dataframe(queries=queries)
 
         console.print(Text("Loaded dataframe from training data lake:", style="royal_blue1"))
         self.analyze_dataset()
+
+    def _load_data_cache(self):
+        data_cache_class_name = self.parameters.data['class']
+        try:
+            # Try to import the class from the plexus.data module
+            module = importlib.import_module('plexus.data')
+            data_cache_class = getattr(module, data_cache_class_name)
+        except AttributeError:
+            raise ImportError(f"Cannot find class {data_cache_class_name} in module plexus.data")
+        return data_cache_class(**self.parameters.data)
 
     def analyze_dataset(self):
         """
@@ -93,7 +102,7 @@ class ScoreData:
         columns = Columns(panels)
         header_text = f"[bold royal_blue1]{self.parameters.score_name}[/bold royal_blue1]"
 
-        rich_print(Panel(columns, title=header_text, border_style="magenta1"))
+        rich.print(Panel(columns, title=header_text, border_style="magenta1"))
 
     def process_data(self):
         """
