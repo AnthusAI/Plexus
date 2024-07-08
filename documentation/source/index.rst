@@ -8,6 +8,7 @@ An AI/ML orchestration system for managing classification, extraction and other 
    :caption: Contents:
 
    plexus
+   plexus.data
    plexus.scores
    plexus.processors
    plexus.storage
