@@ -1,5 +1,7 @@
 from typing import Dict, List, Any, Literal, Optional, Union, Tuple
 from pydantic import ConfigDict
+from PIL import Image
+
 from plexus.scores.Score import Score
 from plexus.CustomLogging import logging
 
@@ -7,6 +9,7 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.runnables import RunnableLambda
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import Tool
+from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeColors
 
 from langchain_aws import ChatBedrock
 from langchain_openai import AzureChatOpenAI
@@ -17,6 +20,10 @@ from langgraph.prebuilt import create_react_agent
 
 import mlflow
 import time
+import io
+
+import networkx as nx
+import matplotlib.pyplot as plt
 
 class ValidationState:
     """
@@ -200,36 +207,160 @@ class AgenticValidator(Score):
             raise ValueError(f"Unsupported model provider: {self.parameters.model_provider}")
 
     def _create_workflow(self):
-        """
-        Create and return the LangGraph workflow for the validation process.
-
-        Returns:
-            StateGraph: The compiled workflow graph.
-        """
         workflow = StateGraph(ValidationState)
 
-        # Define validation steps
-        workflow.add_node("validate_school", lambda state: self._validate_step(state, "school"))
-        workflow.add_node("validate_degree", lambda state: self._validate_step(state, "degree"))
-        workflow.add_node("validate_modality", lambda state: self._validate_step(state, "modality"))
+        # Define nodes
+        for step in ["school", "degree", "modality"]:
+            workflow.add_node(f"validate_{step}", lambda state, s=step: self._validate_step(state, s))
+            workflow.add_node(f"confirm_{step}", lambda state, s=step: self._confirm_step(state, s))
+        workflow.add_node("finalize", self._finalize)
 
-        # Define finalization step
-        def finalize(state: Dict[str, Any]) -> Dict[str, Any]:
-            validation_results = state.get('validation_results', {})
-            overall_validity = self._determine_overall_validity(validation_results)
-            state['overall_validity'] = overall_validity
-            return state
+        # Define edges
+        steps = ["school", "degree", "modality"]
+        for i, step in enumerate(steps):
+            next_step = steps[i + 1] if i < len(steps) - 1 else "finalize"
+            
+            # Add edge from validate to confirm
+            workflow.add_edge(f"validate_{step}", f"confirm_{step}")
+            
+            # Add edge from confirm to next validate or finalize
+            workflow.add_edge(f"confirm_{step}", f"validate_{next_step}" if next_step != "finalize" else "finalize")
 
-        workflow.add_node("finalize", finalize)
-
-        # Add edges to create the workflow
-        workflow.add_edge(START, "validate_school")
-        workflow.add_edge("validate_school", "validate_degree")
-        workflow.add_edge("validate_degree", "validate_modality")
-        workflow.add_edge("validate_modality", "finalize")
-        workflow.add_edge("finalize", END)
+        # Set entry and exit points
+        workflow.set_entry_point("validate_school")
+        workflow.set_finish_point("finalize")
 
         return workflow.compile()
+
+    def _finalize(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        validation_results = state.get('validation_results', {})
+        overall_validity = self._determine_overall_validity(validation_results)
+        state['overall_validity'] = overall_validity
+        return state
+
+    def _confirm_step(self, state: Dict[str, Any], step: str) -> Dict[str, Any]:
+        """
+        Confirm the validation result for a specific step by reviewing the chat history and transcript.
+
+        Args:
+            state (Dict[str, Any]): The current state of the validation process.
+            step (str): The step to confirm ('school', 'degree', or 'modality').
+
+        Returns:
+            Dict[str, Any]: The updated state after confirmation.
+        """
+        current_state = ValidationState(**state)
+        
+        # Extract the relevant parts of the chat history
+        relevant_messages = [msg for msg in current_state.messages if step in msg.content]
+        chat_history = "\n".join([f"{msg.__class__.__name__}: {msg.content}" for msg in relevant_messages])
+        
+        prompt = f"""Review the following chat history and the original transcript to confirm if the {step} '{current_state.metadata[step]}' was correctly found as present in the transcript.
+
+    Chat History:
+    {chat_history}
+
+    Original Transcript:
+    {current_state.transcript}
+
+    Based on this review, confirm if the decision to confirm the {step} as present was correct. Answer with YES or NO, followed by your reasoning."""
+
+        tools = [
+            Tool(
+                name="confirm_" + step,
+                description=f"Confirm the validation of the {step}",
+                func=lambda x: f"Confirmation result for query: {x}"
+            )
+        ]
+        
+        react_agent = create_react_agent(self.llm, tools)
+        
+        def _run_agent(input_data):
+            return react_agent.invoke(input_data)
+        
+        runnable_agent = RunnableLambda(_run_agent)
+        
+        retry_agent = runnable_agent.with_retry(
+            retry_if_exception_type=(Exception,),
+            wait_exponential_jitter=True,
+            stop_after_attempt=3
+        )
+        
+        try:
+            result = retry_agent.invoke({
+                "messages": [HumanMessage(content=prompt)],
+                "input": current_state
+            })
+        except Exception as e:
+            logging.error(f"Failed to confirm {step} after all retry attempts: {e}")
+            return self._handle_confirmation_failure(current_state, step)
+
+        ai_messages = [msg for msg in result['messages'] if isinstance(msg, AIMessage)]
+        if ai_messages:
+            last_ai_message = ai_messages[-1]
+            content = last_ai_message.content
+        else:
+            content = f"Unable to confirm {step}. Please check the input and try again."
+        
+        confirmation_result, explanation = self._parse_confirmation_result(content)
+        
+        current_state.current_step = f"confirm_{step}"
+        if confirmation_result == "No":
+            current_state.validation_results[step] = "Invalid"
+        current_state.explanation += f"Confirmation of {step}: {confirmation_result}\n\nReasoning:\n{explanation}\n\n"
+        current_state.messages.extend(result['messages'])
+        
+        print(f"\nConfirmed {step}: {confirmation_result}")
+        
+        return current_state.__dict__
+
+    def _handle_confirmation_failure(self, state: ValidationState, step: str) -> Dict[str, Any]:
+        """
+        Handle the case when confirmation fails after all retry attempts.
+
+        Args:
+            state (ValidationState): The current validation state.
+            step (str): The step that failed confirmation.
+
+        Returns:
+            Dict[str, Any]: The updated state after handling the failure.
+        """
+        state.current_step = f"confirm_{step}"
+        state.validation_results[step] = "Unclear"
+        state.explanation += f"Confirmation of {step}: Failed due to technical issues.\n\n"
+        print(f"\nFailed to confirm {step}")
+        return state.__dict__
+
+    def _parse_confirmation_result(self, output: str) -> Tuple[str, str]:
+        """
+        Parse the output from the language model to determine the confirmation result and explanation.
+
+        Args:
+            output (str): The raw output from the language model.
+
+        Returns:
+            Tuple[str, str]: A tuple containing the confirmation result and explanation.
+        """
+        output_lower = output.lower()
+        first_word = output_lower.split()[0] if output_lower else ""
+
+        if first_word == "yes":
+            result = "Yes"
+        elif first_word == "no":
+            result = "No"
+        else:
+            # If it doesn't start with yes or no, search for them in the text
+            if "yes" in output_lower:
+                result = "Yes"
+            elif "no" in output_lower:
+                result = "No"
+            else:
+                result = "Unclear"
+
+        # Extract explanation (everything after the first word)
+        explanation = ' '.join(output.split()[1:]).strip()
+
+        return result, explanation
 
     def _validate_step(self, state: Dict[str, Any], step: str) -> Dict[str, Any]:
         """
@@ -394,6 +525,19 @@ class AgenticValidator(Score):
         logging.info(f"Overall Validity: {overall_validity}")
         logging.info("\nExplanation:")
         logging.info(explanation)
+
+        G = nx.DiGraph()
+        for edge in self.workflow.get_graph().edges:
+            G.add_edge(edge[0], edge[1])
+        
+        pos = nx.spring_layout(G)
+        nx.draw(G, pos, with_labels=True, node_color='lightblue', node_size=3000, font_size=8, font_weight='bold')
+        edge_labels = {(u, v): '' for u, v in G.edges()}
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+        
+        plt.title("Workflow Graph")
+        plt.savefig('workflow_graph_networkx.png', dpi=300, bbox_inches='tight')
+        plt.close()
 
         return self.ModelOutput(
             score=overall_validity,
