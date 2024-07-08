@@ -105,10 +105,10 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
 
         Attributes
         ----------
-        classification : Union[str, bool]
-            The predicted classification label.
+        score : str
+            The predicted score label.
         """
-        classification: Union[str, bool]
+        score: str
     
     def __init__(self, **parameters):
         """
