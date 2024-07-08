@@ -4,9 +4,21 @@ An orchestration system for AI/ML classification at scale.
 
 ## Purpose
 
-When you need to do AI/ML classification at scale, you need a way to select appropriate models from a toolbox, configure setup and hyperparameters for training, handle training and evaluation, and deploy models to production.
+Maybe you need to comb through a million telephone call transcripts, looking for customers saying, "Take me off your list and don't call me again".
 
-Whether you're scoring call center transcripts for QA, ranking content items, or detecting objects in security footage, you need an orchestration platform for training and deploying your models. Plexus provides tools built around classic machine-learning models, others builts on agentic processes using sequences of LLM API requests, and others based on numerical or heuristic methods for scoring.
+Maybe you need to detect Russian land mines in images.
+
+Maybe you need to rank a million content items in a search engine.
+
+Maybe you need to detect bored telephone operators speaking in a monotone voice in audio recordings.
+
+Building classifiers is easy, but wrangling lots of them at scale is hard.  You can find a Jupyter notebook in a few minutes that you can use to train a machine-learning model.  But you need to get your training data into it.  You'll need to fiddle with your model's parameters to get good performance.  You'll need to be able to evaluate it to see how well it's doing.  You'll need to be able to deploy it to production and operate it.  You'll need to make notes somewhere about how you did that since you'll have to repeat the process over and over and over.
+
+Plexus is not technology for helping you build models.  It's technology for helping you manage models at scale.  In biology, a "plexus" is an interconnected structure that fans out into many branches, and this Plexus is a way to fan out classification on a massive scale through standardization.
+
+To do classification at scale, you'll need a way to select appropriate models from a toolbox, configure setup and hyperparameters for training, handle training and evaluation, and deploy models to production.  You'll need a process for implementing a solution for each new classification problem using as many reusable tools as possible.  And you'll need to be able to repeat that process over and over again.
+
+Plexus provides some tools built around classic machine-learning models, others builts on agentic processes using sequences of LLM API requests, and others based on numerical or heuristic methods for scoring.  And most importantly, it provides a standard framework where you can plug in your own custom models.
 
 ## Opinions
 
@@ -74,6 +86,7 @@ scores:
     l2_regularization_strength: 0.001
     dropout_rate: 0.05
     data:
+      class: AWSDataLakeCache
       queries:
         - scorecard-id: 012
           score-id: 1234
@@ -99,6 +112,7 @@ scores:
     ngram_range: "1,4"
     scale_pos_weight_index: 1
     data:
+      class: AWSDataLakeCache
       queries:
         - scorecard-id: 012
           score-id: 5678
