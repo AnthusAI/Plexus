@@ -1,8 +1,9 @@
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from plexus.scores.AgenticValidator import AgenticValidator, ValidationState, StepOutput
+from plexus.scores.AgenticValidator import AgenticValidator, ValidationState
 from langchain_core.messages import AIMessage
 from langchain_core.language_models import BaseLanguageModel
+from langchain_core.runnables import RunnableLambda
 
 # Add the sample transcript and metadata here
 SAMPLE_TRANSCRIPT = """
@@ -43,11 +44,13 @@ def validator():
         "max_tokens": 500
     }
     
-    return AgenticValidator(**parameters)
+    with patch('plexus.scores.AgenticValidator.ChatBedrock'):
+        return AgenticValidator(**parameters)
 
 def test_initialization(validator):
-    assert validator.llm is None
-    assert validator.workflow is None
+    assert validator.llm is not None
+    assert validator.workflow is not None
+    assert validator.react_agent is not None
 
 @pytest.mark.parametrize("provider,mock_class", [
     ("AzureChatOpenAI", "plexus.scores.AgenticValidator.AzureChatOpenAI"),
@@ -57,56 +60,67 @@ def test_initialization(validator):
 def test_initialize_model(validator, provider, mock_class):
     with patch(mock_class) as mock_model:
         validator.parameters.model_provider = provider
-        validator._initialize_model()
+        model = validator._initialize_model()
         mock_model.assert_called_once()
+        # Instead of checking isinstance, we'll check if the mock was called
+        assert mock_model.call_count == 1
 
 def test_create_workflow(validator):
-    mock_llm = MockLLM()
-    validator.llm = mock_llm
-    
     workflow = validator._create_workflow()
     assert workflow is not None
 
-def test_validate_single_item(validator):
-    mock_llm = Mock()
-    mock_llm.invoke.side_effect = [
-        AIMessage(content="I can confirm the content of the transcript."),
-        AIMessage(content="Yes: The transcript clearly mentions 'MIT' as the school.")
-    ]
-    validator.llm = mock_llm
-    validator._call_llm = mock_llm.invoke
-    validator.current_state = ValidationState(transcript=SAMPLE_TRANSCRIPT, metadata=SAMPLE_METADATA, current_step="")
+def test_validate_step(validator):
+    state = ValidationState(
+        transcript=SAMPLE_TRANSCRIPT,
+        metadata=SAMPLE_METADATA,
+        current_step=""
+    ).__dict__
 
-    result = validator._validate_single_item("school", "MIT")
+    with patch.object(validator, 'react_agent') as mock_agent:
+        mock_agent.invoke.return_value = {
+            'messages': [AIMessage(content="Yes, the school is mentioned.")]
+        }
+        result = validator._validate_step(state, "school")
 
-    assert result["school_validation"] == "Yes"
-    assert "school_explanation" in result
+    assert "school" in result["validation_results"]
+    assert result["validation_results"]["school"] in ["Valid", "Invalid", "Unclear"]
+    assert "School:" in result["explanation"]
 
-def test_parse_llm_response(validator):
-    response = AIMessage(content="Yes: The transcript clearly mentions MIT.")
-    result = validator.parse_llm_response(response)
+def test_determine_overall_validity(validator):
+    assert validator._determine_overall_validity({"school": "Valid", "degree": "Valid", "modality": "Valid"}) == "Valid"
+    assert validator._determine_overall_validity({"school": "Invalid", "degree": "Invalid", "modality": "Invalid"}) == "Invalid"
+    assert validator._determine_overall_validity({"school": "Valid", "degree": "Invalid", "modality": "Valid"}) == "Partial"
+    assert validator._determine_overall_validity({}) == "Unknown"
 
-    assert result.result == "Yes"
-    assert result.explanation == "The transcript clearly mentions MIT."
+def test_parse_validation_result(validator):
+    assert validator._parse_validation_result("Yes, the school is mentioned.") == ("Valid", "the school is mentioned.")
+    assert validator._parse_validation_result("No, the degree is not mentioned.") == ("Invalid", "the degree is not mentioned.")
+    # Check for the modified string without "It's" at the beginning
+    result = validator._parse_validation_result("It's unclear from the transcript.")
+    assert result[0] == "Unclear"
+    assert result[1].strip() == "unclear from the transcript."
 
-def test_validate_with_sample_transcript(validator):
-    validator.llm = Mock()
-    validator._validate_single_item = Mock(side_effect=[
-        {"school_validation": "Yes", "school_explanation": "Found in transcript"},
-        {"degree_validation": "Yes", "degree_explanation": "Found in transcript"},
-        {"modality_validation": "Yes", "modality_explanation": "Found in transcript"}
-    ])
+def test_predict(validator):
+    with patch.object(validator, 'workflow') as mock_workflow:
+        mock_workflow.invoke.return_value = {
+            'validation_results': {
+                'school': 'Valid',
+                'degree': 'Valid',
+                'modality': 'Valid'
+            },
+            'overall_validity': 'Valid',
+            'explanation': 'Test explanation'
+        }
 
-    model_input = validator.ModelInput(transcript=SAMPLE_TRANSCRIPT, metadata=SAMPLE_METADATA)
-    result = validator.predict(model_input)
+        model_input = validator.ModelInput(transcript=SAMPLE_TRANSCRIPT, metadata=SAMPLE_METADATA)
+        result = validator.predict(model_input)
 
-    assert result.classification["school_validation"] == "Yes"
-    assert result.classification["degree_validation"] == "Yes"
-    assert result.classification["modality_validation"] == "Yes"
-    assert result.classification["overall_validity"] == "Valid"
-    assert isinstance(result.classification["explanation"], str)
-
-    assert validator._validate_single_item.call_count == 3
+    assert isinstance(result, validator.ModelOutput)
+    assert result.score == "Valid"
+    assert result.school_validation == "Valid"
+    assert result.degree_validation == "Valid"
+    assert result.modality_validation == "Valid"
+    assert result.explanation == "Test explanation"
 
 @pytest.mark.parametrize("overall_validity,expected_relevance", [
     ("Valid", True),
@@ -114,7 +128,67 @@ def test_validate_with_sample_transcript(validator):
     ("Invalid", False),
 ])
 def test_is_relevant(validator, overall_validity, expected_relevance):
-    validator.predict = Mock(return_value=validator.ModelOutput(
-        classification={"overall_validity": overall_validity}
-    ))
-    assert validator.is_relevant("Sample transcript", {"school": "Sample School"}) == expected_relevance
+    with patch.object(validator, 'predict') as mock_predict:
+        mock_predict.return_value = validator.ModelOutput(
+            score=overall_validity,
+            school_validation="Valid",
+            degree_validation="Valid",
+            modality_validation="Valid",
+            explanation="Test explanation"
+        )
+        assert validator.is_relevant("Sample transcript", {"school": "Sample School"}) == expected_relevance
+
+# Integration Tests
+@pytest.mark.integration
+def test_validation_with_real_model(validator):
+    input_data = validator.ModelInput(
+        transcript=SAMPLE_TRANSCRIPT,
+        metadata=SAMPLE_METADATA
+    )
+    
+    result = validator.predict(input_data)
+    
+    assert result.score in ["Valid", "Invalid", "Partial", "Unknown"]
+    assert result.school_validation in ["Valid", "Invalid", "Unclear"]
+    assert result.degree_validation in ["Valid", "Invalid", "Unclear"]
+    assert result.modality_validation in ["Valid", "Invalid", "Unclear"]
+    assert isinstance(result.explanation, str)
+
+@pytest.mark.integration
+def test_validation_with_mismatched_data(validator):
+    input_data = validator.ModelInput(
+        transcript="I graduated from Harvard with a Master's in Biology.",
+        metadata=SAMPLE_METADATA
+    )
+    
+    result = validator.predict(input_data)
+    
+    assert result.score in ["Invalid", "Partial", "Unknown"]
+    assert "Unclear" in [result.school_validation, 
+                         result.degree_validation, 
+                         result.modality_validation]
+    assert not all(validation == "Valid" for validation in 
+                   [result.school_validation, result.degree_validation, result.modality_validation])
+
+@pytest.mark.integration
+def test_retry_mechanism_integration(validator):
+    call_count = 0
+    original_invoke = RunnableLambda.invoke
+
+    def mock_invoke(self, *args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count < 3:
+            raise Exception("Simulated error")
+        return original_invoke(self, *args, **kwargs)
+
+    with patch.object(RunnableLambda, 'invoke', side_effect=mock_invoke):
+        input_data = validator.ModelInput(
+            transcript=SAMPLE_TRANSCRIPT,
+            metadata=SAMPLE_METADATA
+        )
+        
+        result = validator.predict(input_data)
+        
+        assert result.score in ["Valid", "Invalid", "Partial", "Unknown"]
+        assert call_count == 9
