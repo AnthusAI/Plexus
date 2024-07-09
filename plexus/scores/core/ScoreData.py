@@ -163,28 +163,29 @@ class ScoreData:
             logging.info("data->balance: [red][b]false.[/b][/red]  Skipping data balancing.")
             return
 
-        print("\nDistribution of labels in the dataframe:")
-        print(self.dataframe[self.parameters.score_name].value_counts(dropna=False))
+        if self.parameters.score_name in self.dataframe.columns:
+            print("\nDistribution of labels in the dataframe:")
+            print(self.dataframe[self.parameters.score_name].value_counts(dropna=False))
 
-        unique_labels = self.dataframe[self.parameters.score_name].unique()
+            unique_labels = self.dataframe[self.parameters.score_name].unique()
 
-        label_dataframes = {label: self.dataframe[self.dataframe[self.parameters.score_name] == label] for label in unique_labels}
+            label_dataframes = {label: self.dataframe[self.dataframe[self.parameters.score_name] == label] for label in unique_labels}
 
-        smallest_class_size = min(len(df) for df in label_dataframes.values())
+            smallest_class_size = min(len(df) for df in label_dataframes.values())
 
-        balanced_dataframes = []
-        for label, dataframe in label_dataframes.items():
-            print(f"Sampling {smallest_class_size} instances from the '{label}' class...")
-            balanced_dataframes.append(dataframe.sample(n=smallest_class_size, random_state=42))
+            balanced_dataframes = []
+            for label, dataframe in label_dataframes.items():
+                print(f"Sampling {smallest_class_size} instances from the '{label}' class...")
+                balanced_dataframes.append(dataframe.sample(n=smallest_class_size, random_state=42))
 
-        balanced_dataframe = pd.concat(balanced_dataframes)
+            balanced_dataframe = pd.concat(balanced_dataframes)
 
-        balanced_dataframe = balanced_dataframe.sample(frac=1, random_state=42)
+            balanced_dataframe = balanced_dataframe.sample(frac=1, random_state=42)
 
-        print("\nDistribution of labels in the balanced dataframe:")
-        print(balanced_dataframe[self.parameters.score_name].value_counts())
+            print("\nDistribution of labels in the balanced dataframe:")
+            print(balanced_dataframe[self.parameters.score_name].value_counts())
 
-        self.dataframe = balanced_dataframe
+            self.dataframe = balanced_dataframe
 
-        console.print(Text("Final, balanced dataframe:", style="royal_blue1"))
-        self.analyze_dataset()
+            console.print(Text("Final, balanced dataframe:", style="royal_blue1"))
+            self.analyze_dataset()
