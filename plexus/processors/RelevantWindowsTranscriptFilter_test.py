@@ -5,7 +5,6 @@ import unittest
 from plexus.processors.RelevantWindowsTranscriptFilter import RelevantWindowsTranscriptFilter
 from plexus.scores.Score import Score
 from plexus.scores.KeywordClassifier import KeywordClassifier
-from plexus.scores.Score import Score
 
 # Mock classifier for testing purposes
 class MockClassifier(Score):

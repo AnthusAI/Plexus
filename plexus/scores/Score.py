@@ -26,8 +26,8 @@ from collections import Counter
 import xgboost as xgb
 
 from plexus.scores.core.ScoreData import ScoreData
-from plexus.scores.core.visualization import ScoreVisualization
-from plexus.scores.core.MLFlow import ScoreMLFlow
+from plexus.scores.core.ScoreVisualization import ScoreVisualization
+from plexus.scores.core.ScoreMLFlow import ScoreMLFlow
 from plexus.scores.core.utils import ensure_report_directory_exists
 
 class Score(ABC, mlflow.pyfunc.PythonModel,
