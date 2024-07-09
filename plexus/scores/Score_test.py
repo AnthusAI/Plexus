@@ -32,10 +32,12 @@ def test_invalid_parameters():
     with pytest.raises(ValidationError):
         ConcreteScore(scorecard_name=123, score_name=None)
 
-def test_report_directory_creation():
+def test_report_directory_creation(tmp_path):
     score = ConcreteScore(scorecard_name="Test scorecard", score_name="Test score")
-    report_directory = score.report_directory_path()
-    assert os.path.exists(report_directory)
+    report_directory = tmp_path / "reports" / "Test_scorecard" / "Test_score"
+    score.report_directory_path = lambda: str(report_directory)
+    score.report_file_name("test_file.txt")
+    assert report_directory.exists()
 
 def test_report_file_name():
     score = ConcreteScore(scorecard_name="Test scorecard", score_name="Test score")
