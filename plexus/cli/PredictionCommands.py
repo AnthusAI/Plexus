@@ -19,7 +19,8 @@ from rich.pretty import pprint
 @click.command(help="Predict a scorecard or specific score within a scorecard, using one random sample from the training data.")
 @click.option('--scorecard-name', required=True, help='The name of the scorecard.')
 @click.option('--score-name', help='The name of the score to train.')
-def predict(scorecard_name, score_name):
+@click.option('--content-id', help='The ID of a specific sample to use.')
+def predict(scorecard_name, score_name, content_id):
     """
     This command will handle dispatching to the :func:`plexus.cli.TrainingCommands.train_score` function
     for each score in the scorecard if a scorecard is specified, or for a
@@ -37,13 +38,13 @@ def predict(scorecard_name, score_name):
     logging.info(f"Found registered Scorecard named [magenta1][b]{scorecard_class.name}[/b][/magenta1] implemented in Python class [magenta1][b]{scorecard_class.__name__}[/b][/magenta1]")
 
     if score_name:
-        predict_score(score_name, scorecard_class)
+        predict_score(score_name, scorecard_class, content_id)
     else:
         logging.info(f"No score name provided. Predicting all scores for Scorecard [magenta1][b]{scorecard_class.name}[/b][/magenta1]...")
         for score_name in scorecard_class.scores.keys():
-            predict_score(score_name, scorecard_class)
+            predict_score(score_name, scorecard_class, content_id)
 
-def predict_score(score_name, scorecard_class):
+def predict_score(score_name, scorecard_class, content_id):
     """
     This function will train and evaluate a single score.
     """
@@ -80,8 +81,13 @@ def predict_score(score_name, scorecard_class):
     score_instance.load_data(queries=data_queries)
     score_instance.process_data()
 
-    random_row = score_instance.dataframe.sample(n=1)
-    row_dictionary = random_row.iloc[0].to_dict()
+    if content_id:
+        sample_row = score_instance.dataframe[score_instance.dataframe['report_id'] == content_id]
+    else:
+        sample_row = score_instance.dataframe.sample(n=1)
+    row_dictionary = sample_row.iloc[0].to_dict()
+    logging.info(f"Sample Row: {row_dictionary}")
+
     transcript = row_dictionary['Transcription'] # TODO: Eliminate this by making it be the first column.
     model_input_class = getattr(score_class, 'ModelInput')
     prediction_result = score_instance.predict(
