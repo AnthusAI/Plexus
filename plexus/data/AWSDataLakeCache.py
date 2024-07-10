@@ -172,8 +172,14 @@ class AWSDataLakeCache(DataCache):
                 try:
                     report_metadata, report_transcript_txt = self.download_report(scorecard_id, report_id)
                     report_row = {'report_id': report_id}
+
                     for score in report_metadata.get('scores', []):
                         report_row[score['name']] = score['answer']
+
+                    if 'score' in query_params:
+                        for score_name, score_value in query_params['score'].items():
+                            report_row[score_name] = score_value
+
                     report_row['Transcription'] = report_transcript_txt
                     return report_row
                 except self.s3_client.exceptions.NoSuchKey:
