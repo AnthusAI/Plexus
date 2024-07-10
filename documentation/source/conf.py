@@ -31,8 +31,8 @@ sys.path.insert(0, basedir)
 
 autodoc_default_options = {
     'members': True,
-    'undoc-members': True,
-    'show-inheritance': True,
+    'undoc-members': False,
+    'show-inheritance': False,
     'special-members': '__init__',
 }
 autoclass_content = 'both'
