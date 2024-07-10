@@ -29,9 +29,8 @@ class ValidationState:
         transcript (str): The transcript being validated.
         metadata (Dict[str, str]): Metadata about the education claim being validated.
         current_step (str): The current step in the validation process.
-        validation_results (Dict[str, Any]): Results of individual validation steps.
-        overall_validity (str): The overall validity status of the education claim.
-        explanation (str): Detailed explanation of the validation results.
+        validation_result (str): Result of the degree validation.
+        explanation (str): Detailed explanation of the validation result.
         messages (List[Union[HumanMessage, AIMessage]]): History of messages in the validation process.
     """
 
@@ -40,8 +39,7 @@ class ValidationState:
         transcript: str,
         metadata: Dict[str, str],
         current_step: str = "",
-        validation_results: Dict[str, Any] = None,
-        overall_validity: str = "Unknown",
+        validation_result: str = "Unknown",
         explanation: str = "",
         messages: List[Union[HumanMessage, AIMessage]] = None
     ):
@@ -52,16 +50,14 @@ class ValidationState:
             transcript (str): The transcript to be validated.
             metadata (Dict[str, str]): Metadata about the education claim.
             current_step (str, optional): The current validation step. Defaults to "".
-            validation_results (Dict[str, Any], optional): Results of validation steps. Defaults to None.
-            overall_validity (str, optional): Overall validity status. Defaults to "Unknown".
-            explanation (str, optional): Detailed explanation of results. Defaults to "".
+            validation_result (str, optional): Result of the degree validation. Defaults to "Unknown".
+            explanation (str, optional): Detailed explanation of the result. Defaults to "".
             messages (List[Union[HumanMessage, AIMessage]], optional): Message history. Defaults to None.
         """
         self.transcript = transcript
         self.metadata = metadata
         self.current_step = current_step
-        self.validation_results = validation_results or {}
-        self.overall_validity = overall_validity
+        self.validation_result = validation_result
         self.explanation = explanation
         self.messages = messages or []
 
@@ -76,8 +72,7 @@ class ValidationState:
             f"ValidationState(transcript='{self.transcript}', "
             f"metadata={self.metadata}, "
             f"current_step='{self.current_step}', "
-            f"validation_results={self.validation_results}, "
-            f"overall_validity='{self.overall_validity}', "
+            f"validation_result='{self.validation_result}', "
             f"explanation='{self.explanation}', "
             f"messages={self.messages})"
         )
@@ -85,7 +80,7 @@ class ValidationState:
 class AgenticValidator(Score):
     """
     An agentic validator that uses LangGraph and advanced LangChain components to validate education information,
-    specifically for school, degree, and modality, using both transcript and metadata.
+    specifically for degree, using both transcript and metadata.
 
     This validator uses a language model to analyze transcripts and validate educational claims through a multi-step
     workflow implemented with LangGraph.
@@ -177,36 +172,22 @@ class AgenticValidator(Score):
         """
         workflow = StateGraph(ValidationState)
 
-        # Define validation steps
-        workflow.add_node("validate_school", lambda state: self._validate_step(state, "school_id"))
-        workflow.add_node("validate_degree", lambda state: self._validate_step(state, "degree_of_interest"))
-        workflow.add_node("validate_modality", lambda state: self._validate_step(state, "modality"))
-
-        # Define finalization step
-        def finalize(state: Dict[str, Any]) -> Dict[str, Any]:
-            validation_results = state.get('validation_results', {})
-            overall_validity = self._determine_overall_validity(validation_results)
-            state['overall_validity'] = overall_validity
-            return state
-
-        workflow.add_node("finalize", finalize)
+        # Define only the degree validation step
+        workflow.add_node("run_validation", lambda state: self._validate_step(state, "degree_of_interest"))
 
         # Add edges to create the workflow
-        workflow.add_edge(START, "validate_school")
-        workflow.add_edge("validate_school", "validate_degree")
-        workflow.add_edge("validate_degree", "validate_modality")
-        workflow.add_edge("validate_modality", "finalize")
-        workflow.add_edge("finalize", END)
+        workflow.add_edge(START, "run_validation")
+        workflow.add_edge("run_validation", END)
 
         return workflow.compile()
 
     def _validate_step(self, state: Dict[str, Any], step: str) -> Dict[str, Any]:
         """
-        Perform validation for a specific step (school, degree, or modality) with retry mechanism.
+        Perform validation for a specific step (degree) with retry mechanism.
 
         Args:
             state (Dict[str, Any]): The current state of the validation process.
-            step (str): The step to validate ('school', 'degree', or 'modality').
+            step (str): The step to validate.
 
         Returns:
             Dict[str, Any]: The updated state after validation.
@@ -255,8 +236,8 @@ class AgenticValidator(Score):
         validation_result, explanation = self._parse_validation_result(content)
         
         current_state.current_step = step
-        current_state.validation_results[step] = validation_result
-        current_state.explanation += f"{step.capitalize()}: {validation_result}\n\nReasoning:\n{explanation}\n\n"
+        current_state.validation_result = validation_result
+        current_state.explanation = explanation
         current_state.messages = result['messages']
         
         print(f"\nValidated {step}: {validation_result}")
@@ -275,32 +256,11 @@ class AgenticValidator(Score):
             Dict[str, Any]: The updated state after handling the failure.
         """
         state.current_step = step
-        state.validation_results[step] = "Unclear"
-        state.explanation += f"{step.capitalize()}: Validation failed due to technical issues.\n\n"
+        state.validation_result = "Unclear"
+        state.explanation = f"{step.capitalize()}: Validation failed due to technical issues.\n\n"
         print(f"\nFailed to validate {step}")
         return state.__dict__
 
-    def _determine_overall_validity(self, validation_results: Dict[str, str]) -> str:
-        """
-        Determine the overall validity based on individual validation results.
-
-        Args:
-            validation_results (Dict[str, str]): The results of individual validations.
-
-        Returns:
-            str: The overall validity status ('Valid', 'Invalid', 'Partial', or 'Unknown').
-        """
-        valid_count = sum(1 for result in validation_results.values() if result == "Valid")
-        total_count = len(validation_results)
-        if total_count == 0:
-            return "Unknown"
-        elif valid_count == total_count:
-            return "Valid"
-        elif valid_count == 0:
-            return "Invalid"
-        else:
-            return "Partial"
-    
     def _parse_validation_result(self, output: str) -> Tuple[str, str]:
         """
         Parse the output from the language model to determine the validation result and explanation.
@@ -340,7 +300,7 @@ class AgenticValidator(Score):
             model_input (Score.ModelInput): The input containing the transcript and metadata.
 
         Returns:
-            Score.ModelOutput: The output containing the validation results.
+            Score.ModelOutput: The output containing the validation result.
         """
         logging.info(f"Predict method input: {model_input}")
         initial_state = ValidationState(
@@ -352,40 +312,33 @@ class AgenticValidator(Score):
         final_state = self.workflow.invoke(initial_state.__dict__)
         logging.info(f"Final state: {final_state}")
 
-        validation_results = final_state.get('validation_results', {})
-        overall_validity = final_state.get('overall_validity', 'Unknown')
+        validation_result = final_state.get('validation_result', 'Unknown')
         explanation = final_state.get('explanation', '')
 
-        logging.info("\nValidation Results:")
-        logging.info(f"School: {validation_results.get('school', 'Unclear')}")
-        logging.info(f"Degree: {validation_results.get('degree', 'Unclear')}")
-        logging.info(f"Modality: {validation_results.get('modality', 'Unclear')}")
-        logging.info(f"Overall Validity: {overall_validity}")
+        logging.info("\nValidation Result:")
+        logging.info(f"Degree: {validation_result}")
         logging.info("\nExplanation:")
         logging.info(explanation)
 
         return self.ModelOutput(
-            score=overall_validity,
-            school_validation=validation_results.get('school', 'Unclear'),
-            degree_validation=validation_results.get('degree', 'Unclear'),
-            modality_validation=validation_results.get('modality', 'Unclear'),
+            score=validation_result,
             explanation=explanation
         )
 
     def is_relevant(self, transcript, metadata):
         """
-        Determine if the given transcript and metadata are relevant based on the overall validity.
+        Determine if the given transcript and metadata are relevant based on the degree validation.
 
         Args:
             transcript (str): The transcript to be validated.
-            metadata (Dict[str, str]): The metadata containing school, degree, and modality information.
+            metadata (Dict[str, str]): The metadata containing degree information.
 
         Returns:
-            bool: True if the overall validity is "valid" or "partial", False otherwise.
+            bool: True if the validation result is "Valid", False otherwise.
         """
         model_input = self.ModelInput(transcript=transcript, metadata=metadata)
         result = self.predict(model_input)
-        return result.score.lower() in ["valid", "partial"]
+        return result.score == "Valid"
 
     def predict_validation(self):
         """
@@ -399,17 +352,12 @@ class AgenticValidator(Score):
             model_input = self.ModelInput(
                 transcript=row['Transcription'],
                 metadata={
-                    'school': row['School'],
-                    'degree': row['Degree'],
-                    'modality': row['Modality']
+                    'degree': row['Degree']
                 }
             )
             prediction = self.predict(model_input)
             self.val_predictions.append({
                 'score': prediction.score,
-                'school_validation': prediction.school_validation,
-                'degree_validation': prediction.degree_validation,
-                'modality_validation': prediction.modality_validation,
                 'explanation': prediction.explanation
             })
 
@@ -433,24 +381,19 @@ class AgenticValidator(Score):
         Model input containing the transcript and metadata.
 
         Attributes:
-            metadata (Dict[str, str]): A dictionary containing school, degree, and modality information.
+            metadata (Dict[str, str]): A dictionary containing degree information.
         """
         metadata: Dict[str, str]
 
     class ModelOutput(Score.ModelOutput):
         """
-        Model output containing the validation results.
+        Model output containing the validation result.
 
         Attributes:
-            score (str): The overall validity score ('Valid', 'Invalid', 'Partial', or 'Unknown').
-            school_validation (str): Validation result for the school.
-            degree_validation (str): Validation result for the degree.
-            modality_validation (str): Validation result for the modality.
-            explanation (str): Detailed explanation of the validation results.
+            score (str): Validation result for the degree.
+            explanation (str): Detailed explanation of the validation result.
         """
-        school_validation: str
-        degree_validation: str
-        modality_validation: str
+        score: str
         explanation: str
 
     def train_model(self):
