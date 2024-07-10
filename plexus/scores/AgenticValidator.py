@@ -95,12 +95,16 @@ class AgenticValidator(Score):
             model_name (Optional[str]): The specific model name to use (if applicable).
             temperature (float): The temperature setting for the language model.
             max_tokens (int): The maximum number of tokens for model output.
+            label (str): The label of the metadata to validate.
+            prompt (str): The custom prompt to use for validation.
         """
         model_config = ConfigDict(protected_namespaces=())
-        model_provider: Literal["AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "AzureChatOpenAI"
+        model_provider: Literal["AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "BedrockChat"
         model_name: Optional[str] = None
         temperature: float = 0.1
         max_tokens: int = 500
+        label: str = ""
+        prompt: str = ""
 
     def __init__(self, **parameters):
         """
@@ -126,6 +130,9 @@ class AgenticValidator(Score):
         mlflow.log_param("model_provider", self.parameters.model_provider)
         mlflow.log_param("model_name", self.parameters.model_name)
         mlflow.log_param("temperature", self.parameters.temperature)
+        mlflow.log_param("max_tokens", self.parameters.max_tokens)
+        mlflow.log_param("prompt", self.parameters.prompt)
+        mlflow.log_param("label", self.parameters.label)
 
     def _initialize_model(self) -> BaseLanguageModel:
         """
@@ -173,11 +180,11 @@ class AgenticValidator(Score):
         workflow = StateGraph(ValidationState)
 
         # Define only the degree validation step
-        workflow.add_node("run_validation", lambda state: self._validate_step(state, "degree_of_interest"))
+        workflow.add_node("run_prediction", lambda state: self._validate_step(state, self.parameters.label))
 
         # Add edges to create the workflow
-        workflow.add_edge(START, "run_validation")
-        workflow.add_edge("run_validation", END)
+        workflow.add_edge(START, "run_prediction")
+        workflow.add_edge("run_prediction", END)
 
         return workflow.compile()
 
@@ -194,7 +201,13 @@ class AgenticValidator(Score):
         """
         current_state = ValidationState(**state)
         
-        prompt = f"Is '{current_state.metadata[step].lower()}' or anything close mentioned in the following? Transcript: {current_state.transcript.lower()}. Answer with YES or NO, followed by your reasoning."
+        if not self.parameters.prompt:
+            raise ValueError(f"Prompt is required in the scorecard for the '{step}' validation step. Please add a 'prompt' field to the score configuration in the YAML file.")
+        
+        prompt = self.parameters.prompt.format(
+            metadata_value=current_state.metadata[step].lower(),
+            transcript=current_state.transcript.lower()
+        )
         
         tools = [
             Tool(
