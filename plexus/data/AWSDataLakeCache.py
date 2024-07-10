@@ -176,9 +176,11 @@ class AWSDataLakeCache(DataCache):
                     for score in report_metadata.get('scores', []):
                         report_row[score['name']] = score['answer']
 
-                    if 'score' in query_params:
-                        for score_name, score_value in query_params['score'].items():
-                            report_row[score_name] = score_value
+                    if 'school' in report_metadata and isinstance(report_metadata['school'], list) and len(report_metadata['school']) > 0:
+                        school_info = report_metadata['school'][0]
+                        if isinstance(school_info, dict):
+                            for key, value in school_info.items():
+                                report_row[key] = value
 
                     report_row['Transcription'] = report_transcript_txt
                     return report_row
