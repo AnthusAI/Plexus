@@ -209,8 +209,8 @@ class AgenticValidator(Score):
         workflow = StateGraph(ValidationState)
 
         # Define validation steps
-        workflow.add_node("validate_school", lambda state: self._validate_step(state, "school"))
-        workflow.add_node("validate_degree", lambda state: self._validate_step(state, "degree"))
+        workflow.add_node("validate_school", lambda state: self._validate_step(state, "school_id"))
+        workflow.add_node("validate_degree", lambda state: self._validate_step(state, "degree_of_interest"))
         workflow.add_node("validate_modality", lambda state: self._validate_step(state, "modality"))
 
         # Define finalization step
@@ -430,7 +430,7 @@ class AgenticValidator(Score):
             model_input = self.ModelInput(
                 transcript=row['Transcription'],
                 metadata={
-                    'school': row['School'],
+                    'school': row['school_id'],
                     'degree': row['Degree'],
                     'modality': row['Modality']
                 }
