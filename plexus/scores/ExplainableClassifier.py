@@ -312,7 +312,7 @@ class ExplainableClassifier(Score):
         for i in range(self.X_test.shape[0]):
             sample = self.X_test[i].toarray().flatten()
             result = self.predict(None, sample, i, positive_log_count, negative_log_count)
-            self.val_predictions.append(result.classification)
+            self.val_predictions.append(result.score)
             self.val_confidence_scores.append(result.confidence)
             self.val_explanations.append(result.explanation)
 
@@ -394,9 +394,9 @@ class ExplainableClassifier(Score):
         logging.debug(f"Prediction: {prediction_label}, Confidence: {confidence_score:.4f}")
         
         return self.ModelOutput(
-            classification=prediction_label,
-            confidence=confidence_score,
-            explanation=explanation
+            score =       prediction_label,
+            confidence =  confidence_score,
+            explanation = explanation
         )
 
     def _prepare_input(self, model_input):
