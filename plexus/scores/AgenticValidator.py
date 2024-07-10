@@ -139,25 +139,25 @@ class AgenticValidator(Score):
         self.llm = self._initialize_model()
         self.workflow = self._create_workflow()
         
-        tools = [
-            Tool(
-                name="validate_school",
-                description="Validate if the school is mentioned in the transcript",
-                func=lambda x: f"Validation result for query: {x}"
-            ),
-            Tool(
-                name="validate_degree",
-                description="Validate if the degree is mentioned in the transcript",
-                func=lambda x: f"Validation result for query: {x}"
-            ),
-            Tool(
-                name="validate_modality",
-                description="Validate if the modality is mentioned in the transcript",
-                func=lambda x: f"Validation result for query: {x}"
-            )
-        ]
+        # tools = [
+        #     Tool(
+        #         name="validate_school",
+        #         description="Validate if the school is mentioned in the transcript",
+        #         func=lambda x: f"Validation result for query: {x}"
+        #     ),
+        #     Tool(
+        #         name="validate_degree",
+        #         description="Validate if the degree is mentioned in the transcript",
+        #         func=lambda x: f"Validation result for query: {x}"
+        #     ),
+        #     Tool(
+        #         name="validate_modality",
+        #         description="Validate if the modality is mentioned in the transcript",
+        #         func=lambda x: f"Validation result for query: {x}"
+        #     )
+        # ]
         
-        self.react_agent = create_react_agent(self.llm, tools)
+        # self.react_agent = create_react_agent(self.llm, tools)
         
         mlflow.log_param("model_provider", self.parameters.model_provider)
         mlflow.log_param("model_name", self.parameters.model_name)
@@ -244,12 +244,12 @@ class AgenticValidator(Score):
         """
         current_state = ValidationState(**state)
         
-        prompt = f"Is the {step} '{current_state.metadata[step]}' mentioned in the following transcript? Transcript: {current_state.transcript}. Answer with YES or NO, followed by your reasoning."
+        prompt = f"Is '{current_state.metadata[step].lower()}' or anything close mentioned in the following? Transcript: {current_state.transcript.lower()}. Answer with YES or NO, followed by your reasoning."
         
         tools = [
             Tool(
                 name="validate_" + step,
-                description=f"Validate if the {step} is mentioned in the transcript",
+                description=f"Is {current_state.metadata[step].lower()} or anything close mentioned in the transcript",
                 func=lambda x: f"Validation result for query: {x}"
             )
         ]
@@ -430,7 +430,7 @@ class AgenticValidator(Score):
             model_input = self.ModelInput(
                 transcript=row['Transcription'],
                 metadata={
-                    'school': row['school_id'],
+                    'school': row['School'],
                     'degree': row['Degree'],
                     'modality': row['Modality']
                 }
