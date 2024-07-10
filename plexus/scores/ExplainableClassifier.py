@@ -306,20 +306,14 @@ class ExplainableClassifier(Score):
         self.val_explanations = []
         self.val_labels = self.y_test
 
-        positive_log_count = 0
-        negative_log_count = 0
-
         for i in range(self.X_test.shape[0]):
-            sample = self.X_test[i].toarray().flatten()
-            result = self.predict(None, sample, i, positive_log_count, negative_log_count)
+            # Create a ModelInput object with the transcript
+            model_input = self.ModelInput(transcript=self.val_input_ids[i])
+            
+            result = self.predict(model_input)
             self.val_predictions.append(result.score)
             self.val_confidence_scores.append(result.confidence)
             self.val_explanations.append(result.explanation)
-
-            if result.classification == 'Yes':
-                positive_log_count += 1
-            else:
-                negative_log_count += 1
 
         self.val_predictions = np.array(self.val_predictions)
         self.val_confidence_scores = np.array(self.val_confidence_scores)
@@ -360,6 +354,7 @@ class ExplainableClassifier(Score):
         """
         This Score has an additional output attribute, explanation, which is a string
         """
+        confidence: float
         explanation: str
 
     # New method to vectorize a single transcript
@@ -375,10 +370,16 @@ class ExplainableClassifier(Score):
         
         return selected
 
-    def predict(self, context, model_input, sample_index=0, positive_log_count=0, negative_log_count=0):
+    def predict(self, model_input: Score.ModelInput) -> ModelOutput:
         logging.debug(f"predict() called with input type: {type(model_input)}")
         
-        prepared_input = self._prepare_input(model_input)
+        # Extract the transcript from the ModelInput
+        transcript = model_input.transcript
+        
+        # Vectorize the transcript
+        vectorized_input = self.vectorize_transcript(transcript)
+        
+        prepared_input = self._prepare_input(vectorized_input)
         logging.debug(f"Prepared input shape: {prepared_input.shape}")
         
         probabilities = self._calculate_probabilities(prepared_input)
@@ -386,17 +387,16 @@ class ExplainableClassifier(Score):
         confidence_score = np.max(probabilities)
         
         shap_values = self._extract_shap_values(prepared_input)
-        explanation = self._generate_single_explanation(prepared_input, prediction, confidence_score, shap_values, 
-                                                        sample_index, positive_log_count, negative_log_count)
+        explanation = self._generate_single_explanation(prepared_input, prediction, confidence_score, shap_values)
 
         # Convert numeric prediction to string label using label_map
         prediction_label = list(self.label_map.keys())[list(self.label_map.values()).index(prediction)]
         logging.debug(f"Prediction: {prediction_label}, Confidence: {confidence_score:.4f}")
         
         return self.ModelOutput(
-            score =       prediction_label,
-            confidence =  confidence_score,
-            explanation = explanation
+            score=prediction_label,
+            confidence=confidence_score,
+            explanation=explanation
         )
 
     def _prepare_input(self, model_input):
@@ -451,9 +451,8 @@ class ExplainableClassifier(Score):
                 negative_log_count += 1
         return explanations
 
-    def _generate_single_explanation(self, prepared_input, prediction, confidence_score, shap_values, 
-                                    sample_index, positive_log_count, negative_log_count):
-        logging.debug(f"Generating explanation for sample {sample_index}")
+    def _generate_single_explanation(self, prepared_input, prediction, confidence_score, shap_values):
+        logging.debug(f"Generating explanation")
         logging.debug(f"Prediction: {prediction}, Confidence: {confidence_score}")
         
         sample = prepared_input[0]  # Get the first (and only) sample
@@ -465,7 +464,7 @@ class ExplainableClassifier(Score):
         logging.debug(f"Number of non-zero features: {len(non_zero_indices)}")
         
         if len(non_zero_indices) == 0:
-            logging.warning(f"Sample {sample_index}: No non-zero features found.")
+            logging.warning(f"No non-zero features found.")
             return "Unable to generate explanation due to lack of non-zero features."
 
         sample_features = [self.feature_names[i] for i in non_zero_indices]
@@ -493,11 +492,6 @@ class ExplainableClassifier(Score):
 
         top_features = sorted_features[:10]
         top_shap_values = sorted_shap_values[:10]
-
-        should_log = (prediction == 1 and positive_log_count < 3) or (prediction == 0 and negative_log_count < 3)
-        if should_log:
-            self._log_sample_explanation(sample_index, prediction, confidence_score,
-                                        top_features, top_shap_values)
 
         return "\n".join([f"{feature} ({shap_value:.4f})" for feature, shap_value in zip(top_features, top_shap_values)])
 
