@@ -118,46 +118,15 @@ class AgenticValidator(Score):
         self.llm = None
         self.workflow = None
         self.react_agent = None
-        self.create_validation_agent()
+        self.initialize_validation_workflow()
 
-    def _log_retry(self, attempt: int, error: Exception):
-        """
-        Log retry attempts and errors.
-
-        Args:
-            attempt (int): The current attempt number.
-            error (Exception): The error that triggered the retry.
-        """
-        logging.warning(f"Retry attempt {attempt} due to error: {error}")
-        time.sleep(2 ** attempt)  # Exponential backoff
-
-    def create_validation_agent(self):
+    def initialize_validation_workflow(self):
         """
         Initialize the language model, create the workflow, and set up the REACT agent.
         This method also logs relevant parameters to MLflow.
         """
         self.llm = self._initialize_model()
         self.workflow = self._create_workflow()
-        
-        # tools = [
-        #     Tool(
-        #         name="validate_school",
-        #         description="Validate if the school is mentioned in the transcript",
-        #         func=lambda x: f"Validation result for query: {x}"
-        #     ),
-        #     Tool(
-        #         name="validate_degree",
-        #         description="Validate if the degree is mentioned in the transcript",
-        #         func=lambda x: f"Validation result for query: {x}"
-        #     ),
-        #     Tool(
-        #         name="validate_modality",
-        #         description="Validate if the modality is mentioned in the transcript",
-        #         func=lambda x: f"Validation result for query: {x}"
-        #     )
-        # ]
-        
-        # self.react_agent = create_react_agent(self.llm, tools)
         
         mlflow.log_param("model_provider", self.parameters.model_provider)
         mlflow.log_param("model_name", self.parameters.model_name)
