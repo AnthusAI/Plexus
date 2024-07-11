@@ -4,19 +4,21 @@ from plexus.scores.Score import Score
 from plexus.CustomLogging import logging
 
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.runnables import RunnableLambda
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.tools import Tool
+from langchain_core.runnables import RunnableSequence
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import PromptTemplate
 
 from langchain_aws import ChatBedrock
 from langchain_openai import AzureChatOpenAI
 from langchain_google_vertexai import ChatVertexAI
 
 from langgraph.graph import StateGraph, START, END
-from langgraph.prebuilt import create_react_agent
 
+from openai_cost_calculator.openai_cost_calculator import calculate_cost
+
+import tiktoken
 import mlflow
-import time
 
 class ValidationState:
     """
@@ -115,16 +117,25 @@ class AgenticValidator(Score):
         """
         super().__init__(**parameters)
         self.llm = None
+        self.llm_with_retry = None
+        self.agent = None
         self.workflow = None
-        self.react_agent = None
+        self.total_tokens = 0
+        self.total_cost = 0
         self.initialize_validation_workflow()
+        self.encoding = tiktoken.get_encoding("cl100k_base")
 
     def initialize_validation_workflow(self):
         """
-        Initialize the language model, create the workflow, and set up the REACT agent.
+        Initialize the language model and create the workflow.
         This method also logs relevant parameters to MLflow.
         """
         self.llm = self._initialize_model()
+        self.llm_with_retry = self.llm.with_retry(
+            retry_if_exception_type=(Exception,),  # Retry on any exception
+            wait_exponential_jitter=True,
+            stop_after_attempt=3
+        )
         self.workflow = self._create_workflow()
         
         mlflow.log_param("model_provider", self.parameters.model_provider)
@@ -158,14 +169,14 @@ class AgenticValidator(Score):
                 model_kwargs={
                     "temperature": self.parameters.temperature,
                     "max_tokens": max_tokens
-                },
+                }
             )
         elif self.parameters.model_provider == "ChatVertexAI":
             model_name = self.parameters.model_name or "gemini-1.5-flash-001"
             return ChatVertexAI(
                 model=model_name,
                 temperature=self.parameters.temperature,
-                max_output_tokens=max_tokens,
+                max_output_tokens=max_tokens
             )
         else:
             raise ValueError(f"Unsupported model provider: {self.parameters.model_provider}")
@@ -179,7 +190,7 @@ class AgenticValidator(Score):
         """
         workflow = StateGraph(ValidationState)
 
-        # Define only the degree validation step
+        # Add the validation step
         workflow.add_node("run_prediction", lambda state: self._validate_step(state, self.parameters.label))
 
         # Add edges to create the workflow
@@ -190,7 +201,7 @@ class AgenticValidator(Score):
 
     def _validate_step(self, state: Dict[str, Any], step: str) -> Dict[str, Any]:
         """
-        Perform validation for a specific step (degree) with retry mechanism.
+        Perform validation for a specific step (degree) using the LLM.
 
         Args:
             state (Dict[str, Any]): The current state of the validation process.
@@ -204,59 +215,51 @@ class AgenticValidator(Score):
         if not self.parameters.prompt:
             raise ValueError(f"Prompt is required in the scorecard for the '{step}' validation step. Please add a 'prompt' field to the score configuration in the YAML file.")
         
-        prompt = self.parameters.prompt.format(
-            metadata_value=current_state.metadata[step].lower(),
-            transcript=current_state.transcript.lower()
+        prompt_template = PromptTemplate(
+            input_variables=["label_value", "transcript"],
+            template=self.parameters.prompt
         )
         
-        tools = [
-            Tool(
-                name="validate_" + step,
-                description=f"Is {current_state.metadata[step].lower()} or anything close mentioned in the transcript",
-                func=lambda x: f"Validation result for query: {x}"
-            )
-        ]
-        
-        react_agent = create_react_agent(self.llm, tools)
-        
-        def _run_agent(input_data):
-            return react_agent.invoke(input_data)
-        
-        runnable_agent = RunnableLambda(_run_agent)
-        
-        retry_agent = runnable_agent.with_retry(
-            retry_if_exception_type=(Exception,),  # Retry on any exception
-            wait_exponential_jitter=True,
-            stop_after_attempt=3
+        chain = RunnableSequence(
+            prompt_template,
+            self.llm_with_retry,
+            StrOutputParser()
         )
         
         try:
-            result = retry_agent.invoke({
-                "messages": [HumanMessage(content=prompt)],
-                "input": current_state
+            input_text = prompt_template.format(
+                label_value=current_state.metadata[step].lower(),
+                transcript=current_state.transcript.lower()
+            )
+            result = chain.invoke({
+                "label_value": current_state.metadata[step].lower(),
+                "transcript": current_state.transcript.lower()
             })
+            
+            # Count tokens and log cost
+            self._log_tokens_and_cost(input_text, result)
+
         except Exception as e:
             logging.error(f"Failed to validate {step} after all retry attempts: {e}")
             return self._handle_validation_failure(current_state, step)
 
-        ai_messages = [msg for msg in result['messages'] if isinstance(msg, AIMessage)]
-        if ai_messages:
-            last_ai_message = ai_messages[-1]
-            content = last_ai_message.content
-        else:
-            content = f"Unable to validate {step}. Please check the input and try again."
-        
-        validation_result, explanation = self._parse_validation_result(content)
+        validation_result, explanation = self._parse_validation_result(result)
         
         current_state.current_step = step
         current_state.validation_result = validation_result
         current_state.explanation = explanation
-        current_state.messages = result['messages']
+        current_state.messages = [
+            HumanMessage(content=prompt_template.format(
+                label_value=current_state.metadata[step].lower(),
+                transcript=current_state.transcript.lower()
+            )),
+            AIMessage(content=result)
+        ]
         
         print(f"\nValidated {step}: {validation_result}")
         
         return current_state.__dict__
-    
+
     def _handle_validation_failure(self, state: ValidationState, step: str) -> Dict[str, Any]:
         """
         Handle the case when validation fails after all retry attempts.
@@ -305,6 +308,32 @@ class AgenticValidator(Score):
 
         return result, explanation
 
+    def _count_tokens(self, text: str) -> int:
+        return len(self.encoding.encode(text))
+
+    def _log_tokens_and_cost(self, input_text: str, output_text: str):
+        """Log the token usage and cost."""
+        prompt_tokens = self._count_tokens(input_text)
+        completion_tokens = self._count_tokens(output_text)
+        total_tokens = prompt_tokens + completion_tokens
+        self.total_tokens += total_tokens
+        
+        cost_info = calculate_cost(
+            model_name=self.parameters.model_name,
+            input_tokens=prompt_tokens,
+            output_tokens=completion_tokens
+        )
+        
+        self.total_cost += cost_info['total_cost']
+        
+        logging.info(f"Prompt tokens: {prompt_tokens}, Completion tokens: {completion_tokens}")
+        mlflow.log_metric("prompt_tokens", prompt_tokens)
+        mlflow.log_metric("completion_tokens", completion_tokens)
+        mlflow.log_metric("total_tokens", self.total_tokens)
+        mlflow.log_metric("input_cost", float(cost_info['input_cost']))
+        mlflow.log_metric("output_cost", float(cost_info['output_cost']))
+        mlflow.log_metric("total_cost", float(self.total_cost))
+
     def predict(self, model_input: Score.ModelInput) -> Score.ModelOutput:
         """
         Predict the validity of the education information based on the transcript and metadata.
@@ -328,51 +357,21 @@ class AgenticValidator(Score):
         validation_result = final_state.get('validation_result', 'Unknown')
         explanation = final_state.get('explanation', '')
 
-        logging.info("\nValidation Result:")
-        logging.info(f"Degree: {validation_result}")
+        # Get the current step
+        current_step = final_state.get('current_step', 'Unknown')
+
+        logging.info(f"{current_step.capitalize()}: {validation_result}")
         logging.info("\nExplanation:")
         logging.info(explanation)
+
+        # Log final token and cost metrics
+        mlflow.log_metric("final_total_tokens", self.total_tokens)
+        mlflow.log_metric("final_total_cost", self.total_cost)
 
         return self.ModelOutput(
             score=validation_result,
             explanation=explanation
         )
-
-    def is_relevant(self, transcript, metadata):
-        """
-        Determine if the given transcript and metadata are relevant based on the degree validation.
-
-        Args:
-            transcript (str): The transcript to be validated.
-            metadata (Dict[str, str]): The metadata containing degree information.
-
-        Returns:
-            bool: True if the validation result is "Valid", False otherwise.
-        """
-        model_input = self.ModelInput(transcript=transcript, metadata=metadata)
-        result = self.predict(model_input)
-        return result.score == "Valid"
-
-    def predict_validation(self):
-        """
-        Predict the validation results for the entire dataframe and store the predictions.
-        This method populates the val_labels and val_predictions attributes.
-        """
-        self.val_labels = self.dataframe[self.parameters.score_name]
-        self.val_predictions = []
-
-        for _, row in self.dataframe.iterrows():
-            model_input = self.ModelInput(
-                transcript=row['Transcription'],
-                metadata={
-                    'degree': row['Degree']
-                }
-            )
-            prediction = self.predict(model_input)
-            self.val_predictions.append({
-                'score': prediction.score,
-                'explanation': prediction.explanation
-            })
 
     def register_model(self):
         """
@@ -410,6 +409,13 @@ class AgenticValidator(Score):
         explanation: str
 
     def train_model(self):
+        """
+        Placeholder method to satisfy the base class requirement.
+        This validator doesn't require traditional training.
+        """
+        pass
+
+    def predict_validation(self):
         """
         Placeholder method to satisfy the base class requirement.
         This validator doesn't require traditional training.
