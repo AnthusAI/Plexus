@@ -6,23 +6,25 @@ from plexus.CustomLogging import logging
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate
-from langchain.agents import AgentExecutor, create_react_agent
+from langchain_core.runnables.graph import MermaidDrawMethod, NodeColors
 from langchain_core.tools import Tool
+from langchain_core.callbacks import BaseCallbackHandler
+
+from langchain.agents import AgentExecutor, create_react_agent
+from langgraph.graph import StateGraph, START, END
 
 from langchain_aws import ChatBedrock
 from langchain_openai import AzureChatOpenAI
 from langchain_google_vertexai import ChatVertexAI
 
-from langgraph.graph import StateGraph, START, END
+from langchain_community.chat_message_histories import ChatMessageHistory
 
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
 import tiktoken
 import mlflow
-
-from langchain.memory import ChatMessageHistory
-
-from langchain.callbacks.base import BaseCallbackHandler
+import os
+import traceback
 
 class ValidationState:
     """
@@ -184,6 +186,46 @@ class AgenticValidator(Score):
         mlflow.log_param("max_tokens", self.parameters.max_tokens)
         mlflow.log_param("prompt", self.parameters.prompt)
         mlflow.log_param("label", self.parameters.label)
+
+        # Generate and save the graph visualization
+        self.generate_graph_visualization()
+
+    def generate_graph_visualization(self, output_path: str = "./tmp/workflow_graph.png"):
+        """
+        Generate and save a PNG visualization of the workflow graph.
+
+        Args:
+            output_path (str): The path where the PNG file will be saved.
+        """
+        try:
+            # Get the graph
+            graph = self.workflow.get_graph()
+
+            graph_png = graph.draw_mermaid_png(
+                draw_method=MermaidDrawMethod.API,
+                node_colors=NodeColors(
+                    start="#f086bb",
+                    end="#68c0f2",
+                    other="#ffffff"
+                ),
+                background_color="#e8ebed",
+                padding=10
+            )
+
+            # Ensure the directory exists
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+            # Save the PNG file
+            with open(output_path, "wb") as f:
+                f.write(graph_png)
+
+            logging.info(f"Graph visualization saved to {output_path}")
+            
+            # Log the graph as an artifact in MLflow
+            mlflow.log_artifact(output_path)
+        except Exception as e:
+            error_msg = f"Failed to generate graph visualization: {str(e)}\n{traceback.format_exc()}"
+            logging.error(error_msg)
 
     def _initialize_model(self) -> BaseLanguageModel:
         """
@@ -378,9 +420,9 @@ class AgenticValidator(Score):
         first_word = output.split(',')[0].strip().upper()
         
         if first_word == "YES":
-            validation_result = "Valid"
+            validation_result = "Yes"
         elif first_word == "NO":
-            validation_result = "Invalid"
+            validation_result = "No"
         else:
             validation_result = "Unclear"
 
