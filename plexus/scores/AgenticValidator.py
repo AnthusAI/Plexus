@@ -229,7 +229,6 @@ class AgenticValidator(Score):
 
             Use the following format:
 
-            Transcript: [The full transcript will be provided here]
             Question: the input question you must answer
             Thought: you should always think about what to do
             Action: the action to take, should be one of [{tool_names}]
@@ -258,7 +257,7 @@ class AgenticValidator(Score):
         This method is used as a tool by the React agent.
         """
         transcript = self.current_state.transcript
-        return f"Claim to validate: {input_string}\n\nTranscript:\n{transcript}"
+        return f"Claim to validate: {input_string}\n\n"
 
     def _validate_step(self, state: Dict[str, Any], step: str) -> Dict[str, Any]:
         """
