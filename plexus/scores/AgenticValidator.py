@@ -8,6 +8,8 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableSequence
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
+from langchain.agents import AgentExecutor, create_react_agent
+from langchain_core.tools import Tool
 
 from langchain_aws import ChatBedrock
 from langchain_openai import AzureChatOpenAI
@@ -19,6 +21,9 @@ from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
 import tiktoken
 import mlflow
+
+from langchain.memory import ChatMessageHistory
+from langchain.schema import SystemMessage
 
 class ValidationState:
     """
@@ -122,6 +127,9 @@ class AgenticValidator(Score):
         self.workflow = None
         self.total_tokens = 0
         self.total_cost = 0
+        self.agent_executor = None
+        self.current_state = None
+        self.chat_history = ChatMessageHistory()
         self.initialize_validation_workflow()
         self.encoding = tiktoken.get_encoding("cl100k_base")
 
@@ -132,11 +140,12 @@ class AgenticValidator(Score):
         """
         self.llm = self._initialize_model()
         self.llm_with_retry = self.llm.with_retry(
-            retry_if_exception_type=(Exception,),  # Retry on any exception
+            retry_if_exception_type=(Exception,),
             wait_exponential_jitter=True,
             stop_after_attempt=3
         )
         self.workflow = self._create_workflow()
+        self.agent_executor = self.create_react_agent()
         
         mlflow.log_param("model_provider", self.parameters.model_provider)
         mlflow.log_param("model_name", self.parameters.model_name)
@@ -163,7 +172,7 @@ class AgenticValidator(Score):
                 max_tokens=max_tokens
             )
         elif self.parameters.model_provider == "BedrockChat":
-            model_id = self.parameters.model_name or "anthropic.claude-3-haiku-20240307-v1:0"
+            model_id = self.parameters.model_name or "anthropic.claude-3-5-sonnet-20240620-v1:0"
             return ChatBedrock(
                 model_id=model_id,
                 model_kwargs={
@@ -199,66 +208,96 @@ class AgenticValidator(Score):
 
         return workflow.compile()
 
+    def create_react_agent(self):
+        """
+        Create a ReAct agent for validation tasks.
+        """
+        tools = [
+            Tool(
+                name="Validate Claim",
+                func=self._validate_claim,
+                description="Validate a claim against the transcript. Input should be the claim to validate."
+            )
+        ]
+
+        prompt = PromptTemplate.from_template(
+            """You are an AI assistant tasked with validating educational claims based on the provided transcript.
+
+            You have access to the following tools:
+
+            {tools}
+
+            Use the following format:
+
+            Transcript: [The full transcript will be provided here]
+            Question: the input question you must answer
+            Thought: you should always think about what to do
+            Action: the action to take, should be one of [{tool_names}]
+            Action Input: the input to the action
+            Observation: the result of the action
+            ... (this Thought/Action/Action Input/Observation can repeat N times)
+            Thought: I now know the final answer
+            Final Answer: Respond with YES or NO, followed by a comma and then a brief explanation.
+
+            Begin!
+
+            Transcript: {transcript}
+
+            Question: {input}
+            Thought: I have been provided with a transcript and a claim to validate. I will analyze the transcript to find evidence supporting or refuting the claim.
+            {agent_scratchpad}
+            """
+        )
+
+        agent = create_react_agent(self.llm, tools, prompt)
+        return AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True)
+
+    def _validate_claim(self, input_string: str) -> str:
+        """
+        Validate a specific claim against the transcript.
+        This method is used as a tool by the React agent.
+        """
+        transcript = self.current_state.transcript
+        return f"Claim to validate: {input_string}\n\nTranscript:\n{transcript}"
+
     def _validate_step(self, state: Dict[str, Any], step: str) -> Dict[str, Any]:
         """
-        Perform validation for a specific step (degree) using the LLM.
-
-        Args:
-            state (Dict[str, Any]): The current state of the validation process.
-            step (str): The step to validate.
-
-        Returns:
-            Dict[str, Any]: The updated state after validation.
+        Perform validation for a specific step using the ReAct agent.
         """
-        current_state = ValidationState(**state)
-        
-        if not self.parameters.prompt:
-            raise ValueError(f"Prompt is required in the scorecard for the '{step}' validation step. Please add a 'prompt' field to the score configuration in the YAML file.")
-        
-        prompt_template = PromptTemplate(
-            input_variables=["label_value", "transcript"],
-            template=self.parameters.prompt
-        )
-        
-        chain = RunnableSequence(
-            prompt_template,
-            self.llm_with_retry,
-            StrOutputParser()
-        )
+        self.current_state = ValidationState(**state)
         
         try:
-            input_text = prompt_template.format(
-                label_value=current_state.metadata[step].lower(),
-                transcript=current_state.transcript.lower()
-            )
-            result = chain.invoke({
-                "label_value": current_state.metadata[step].lower(),
-                "transcript": current_state.transcript.lower()
+            label_value = self.current_state.metadata[self.parameters.label]
+            input_string = f"Validate the following claim: The {self.parameters.label} is '{label_value}'."
+            agent_input = f"{input_string}\n\nTranscript: {self.current_state.transcript}"
+            
+            result = self.agent_executor.invoke({
+                "input": input_string,
+                "transcript": self.current_state.transcript
             })
             
-            # Count tokens and log cost
-            self._log_tokens_and_cost(input_text, result)
-
+            # Log tokens and cost
+            self._log_tokens_and_cost(agent_input, result['output'])
+            
+            # Parse the result
+            validation_result, explanation = self._parse_validation_result(result['output'])
+            
+            self.current_state.current_step = step
+            self.current_state.validation_result = validation_result
+            self.current_state.explanation = explanation
+            self.current_state.messages = [
+                HumanMessage(content=input_string),
+                AIMessage(content=result['output'])
+            ]
+            
+            logging.info(f"\nValidated {step}: {validation_result}")
+            logging.info(f"Explanation: {explanation}")
+            
         except Exception as e:
-            logging.error(f"Failed to validate {step} after all retry attempts: {e}")
-            return self._handle_validation_failure(current_state, step)
+            logging.error(f"Failed to validate {step}: {e}")
+            return self._handle_validation_failure(self.current_state, step)
 
-        validation_result, explanation = self._parse_validation_result(result)
-        
-        current_state.current_step = step
-        current_state.validation_result = validation_result
-        current_state.explanation = explanation
-        current_state.messages = [
-            HumanMessage(content=prompt_template.format(
-                label_value=current_state.metadata[step].lower(),
-                transcript=current_state.transcript.lower()
-            )),
-            AIMessage(content=result)
-        ]
-        
-        print(f"\nValidated {step}: {validation_result}")
-        
-        return current_state.__dict__
+        return self.current_state.__dict__
 
     def _handle_validation_failure(self, state: ValidationState, step: str) -> Dict[str, Any]:
         """
@@ -274,7 +313,7 @@ class AgenticValidator(Score):
         state.current_step = step
         state.validation_result = "Unclear"
         state.explanation = f"{step.capitalize()}: Validation failed due to technical issues.\n\n"
-        print(f"\nFailed to validate {step}")
+        logging.info(f"\nFailed to validate {step}")
         return state.__dict__
 
     def _parse_validation_result(self, output: str) -> Tuple[str, str]:
@@ -287,52 +326,63 @@ class AgenticValidator(Score):
         Returns:
             Tuple[str, str]: A tuple containing the validation result and explanation.
         """
-        output_lower = output.lower()
-        first_word = output_lower.split()[0] if output_lower else ""
-
-        if first_word == "yes":
-            result = "Valid"
-        elif first_word == "no":
-            result = "Invalid"
+        logging.info(f"Raw output to parse: {output}")
+        
+        # Check if the output starts with YES, NO, or UNCLEAR
+        first_word = output.split(',')[0].strip().upper()
+        
+        if first_word == "YES":
+            validation_result = "Valid"
+        elif first_word == "NO":
+            validation_result = "Invalid"
         else:
-            # If it doesn't start with yes or no, search for them in the text
-            if "yes" in output_lower:
-                result = "Valid"
-            elif "no" in output_lower:
-                result = "Invalid"
-            else:
-                result = "Unclear"
+            validation_result = "Unclear"
 
-        # Extract explanation (everything after the first word)
-        explanation = ' '.join(output.split()[1:]).strip()
+        # Extract explanation (everything after the first comma)
+        explanation = output.split(',', 1)[1].strip() if ',' in output else output
 
-        return result, explanation
+        logging.info(f"Parsed result: {validation_result}")
+        logging.info(f"Parsed explanation: {explanation}")
+
+        return validation_result, explanation
 
     def _count_tokens(self, text: str) -> int:
         return len(self.encoding.encode(text))
 
-    def _log_tokens_and_cost(self, input_text: str, output_text: str):
-        """Log the token usage and cost."""
-        prompt_tokens = self._count_tokens(input_text)
-        completion_tokens = self._count_tokens(output_text)
-        total_tokens = prompt_tokens + completion_tokens
+    def _log_tokens_and_cost(self, agent_input: str, agent_output: str):
+        """
+        Log the number of tokens used and calculate the cost for the React agent.
+        """
+        # Count tokens for input and output separately
+        input_tokens = len(self.encoding.encode(agent_input))
+        output_tokens = len(self.encoding.encode(agent_output))
+        total_tokens = input_tokens + output_tokens
+        
+        # Determine the appropriate model for cost calculation
+        model_name = self.parameters.model_name or "gpt-3.5-turbo"
+        
+        # Calculate cost
+        try:
+            cost_info = calculate_cost(model_name=model_name, input_tokens=input_tokens, output_tokens=output_tokens)
+            total_cost = float(cost_info['total_cost'])
+        except ValueError as e:
+            logging.warning(f"Cost calculation failed: {str(e)}. Using fallback estimation.")
+            # Fallback to a default cost estimation
+            total_cost = (total_tokens * 0.00002)  # Assuming $0.02 per 1000 tokens as a fallback
+        
+        # Update total tokens and cost
         self.total_tokens += total_tokens
+        self.total_cost += total_cost
         
-        cost_info = calculate_cost(
-            model_name=self.parameters.model_name,
-            input_tokens=prompt_tokens,
-            output_tokens=completion_tokens
-        )
+        logging.info(f"Model: {model_name}")
+        logging.info(f"Input tokens: {input_tokens}")
+        logging.info(f"Output tokens: {output_tokens}")
+        logging.info(f"Total tokens: {total_tokens}")
+        logging.info(f"Estimated cost: ${total_cost:.6f}")
         
-        self.total_cost += cost_info['total_cost']
-        
-        logging.info(f"Prompt tokens: {prompt_tokens}, Completion tokens: {completion_tokens}")
-        mlflow.log_metric("prompt_tokens", prompt_tokens)
-        mlflow.log_metric("completion_tokens", completion_tokens)
+        # Log to MLflow
         mlflow.log_metric("total_tokens", self.total_tokens)
-        mlflow.log_metric("input_cost", float(cost_info['input_cost']))
-        mlflow.log_metric("output_cost", float(cost_info['output_cost']))
-        mlflow.log_metric("total_cost", float(self.total_cost))
+        mlflow.log_metric("total_cost", self.total_cost)
 
     def predict(self, model_input: Score.ModelInput) -> Score.ModelOutput:
         """
@@ -351,6 +401,10 @@ class AgenticValidator(Score):
         )
         logging.info(f"Initial state: {initial_state}")
 
+        # Ensure a fresh state for each prediction
+        self.total_tokens = 0
+        self.total_cost = 0
+
         final_state = self.workflow.invoke(initial_state.__dict__)
         logging.info(f"Final state: {final_state}")
 
@@ -361,8 +415,7 @@ class AgenticValidator(Score):
         current_step = final_state.get('current_step', 'Unknown')
 
         logging.info(f"{current_step.capitalize()}: {validation_result}")
-        logging.info("\nExplanation:")
-        logging.info(explanation)
+        logging.info(f"Explanation: {explanation}")
 
         # Log final token and cost metrics
         mlflow.log_metric("final_total_tokens", self.total_tokens)
