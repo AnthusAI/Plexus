@@ -267,7 +267,11 @@ class AgenticValidator(Score):
         
         try:
             label_value = self.current_state.metadata[self.parameters.label]
-            input_string = f"Validate the following claim: The {self.parameters.label} is '{label_value}'."
+            
+            # Use the custom prompt from the YAML file
+            custom_prompt = self.parameters.prompt.format(label_value=label_value)
+            
+            input_string = f"Validate the following: {custom_prompt}"
             agent_input = f"{input_string}\n\nTranscript: {self.current_state.transcript}"
             
             result = self.agent_executor.invoke({
