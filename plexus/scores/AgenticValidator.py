@@ -5,8 +5,6 @@ from plexus.CustomLogging import logging
 
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.runnables import RunnableSequence
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain_core.tools import Tool
@@ -23,7 +21,8 @@ import tiktoken
 import mlflow
 
 from langchain.memory import ChatMessageHistory
-from langchain.schema import SystemMessage
+
+from langchain.callbacks.base import BaseCallbackHandler
 
 class ValidationState:
     """
@@ -84,6 +83,37 @@ class ValidationState:
             f"messages={self.messages})"
         )
 
+class AgentExecutionCallback(BaseCallbackHandler):
+    def __init__(self):
+        self.execution_log = []
+        self.current_thought = ""
+        self.full_output = []
+
+    def on_agent_action(self, action, color=None, **kwargs):
+        if self.current_thought:
+            self.full_output.append(f"Thought: {self.current_thought}")
+            self.current_thought = ""
+        self.full_output.append(f"Action: {action.tool}")
+        self.full_output.append(f"Action Input: {action.tool_input}")
+
+    def on_agent_finish(self, finish, color=None, **kwargs):
+        if self.current_thought:
+            self.full_output.append(f"Thought: {self.current_thought}")
+            self.current_thought = ""
+        self.full_output.append(f"Final Answer: {finish.return_values['output']}")
+
+    def on_tool_end(self, output, color=None, **kwargs):
+        self.full_output.append(f"Observation: {output}")
+
+    def on_text(self, text, color=None, **kwargs):
+        if text.startswith("Thought:"):
+            self.current_thought = text[8:].strip()
+        elif not text.startswith("Human:") and not text.startswith("AI:"):
+            self.full_output.append(text)
+
+    def get_full_output(self):
+        return "\n".join(self.full_output)
+
 class AgenticValidator(Score):
     """
     An agentic validator that uses LangGraph and advanced LangChain components to validate education information,
@@ -130,6 +160,7 @@ class AgenticValidator(Score):
         self.agent_executor = None
         self.current_state = None
         self.chat_history = ChatMessageHistory()
+        self.agent_callback = AgentExecutionCallback()
         self.initialize_validation_workflow()
         self.encoding = tiktoken.get_encoding("cl100k_base")
 
@@ -249,7 +280,13 @@ class AgenticValidator(Score):
         )
 
         agent = create_react_agent(self.llm, tools, prompt)
-        return AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True)
+        return AgentExecutor(
+            agent=agent,
+            tools=tools,
+            verbose=True,
+            handle_parsing_errors=True,
+            callbacks=[self.agent_callback]
+        )
 
     def _validate_claim(self, input_string: str) -> str:
         """
@@ -274,13 +311,19 @@ class AgenticValidator(Score):
             input_string = f"Validate the following: {custom_prompt}"
             agent_input = f"{input_string}\n\nTranscript: {self.current_state.transcript}"
             
+            # Reset the callback log before each invocation
+            self.agent_callback.full_output = []
+            
             result = self.agent_executor.invoke({
                 "input": input_string,
                 "transcript": self.current_state.transcript
             })
             
-            # Log tokens and cost
-            self._log_tokens_and_cost(agent_input, result['output'])
+            # Get the full output including all steps and observations
+            full_output = self.agent_callback.get_full_output()
+            
+            # Log tokens and cost with full agent output
+            self._log_tokens_and_cost(agent_input, full_output)
             
             # Parse the result
             validation_result, explanation = self._parse_validation_result(result['output'])
@@ -290,7 +333,7 @@ class AgenticValidator(Score):
             self.current_state.explanation = explanation
             self.current_state.messages = [
                 HumanMessage(content=input_string),
-                AIMessage(content=result['output'])
+                AIMessage(content=full_output)
             ]
             
             logging.info(f"\nValidated {step}: {validation_result}")
@@ -352,17 +395,17 @@ class AgenticValidator(Score):
     def _count_tokens(self, text: str) -> int:
         return len(self.encoding.encode(text))
 
-    def _log_tokens_and_cost(self, agent_input: str, agent_output: str):
+    def _log_tokens_and_cost(self, agent_input: str, full_output: str):
         """
         Log the number of tokens used and calculate the cost for the React agent.
         """
         # Count tokens for input and output separately
-        input_tokens = len(self.encoding.encode(agent_input))
-        output_tokens = len(self.encoding.encode(agent_output))
+        input_tokens = self._count_tokens(agent_input)
+        output_tokens = self._count_tokens(full_output)
         total_tokens = input_tokens + output_tokens
         
         # Determine the appropriate model for cost calculation
-        model_name = self.parameters.model_name or "gpt-3.5-turbo"
+        model_name = self.parameters.model_name or "anthropic.claude-3-haiku-20240307-v1:0"
         
         # Calculate cost
         try:
@@ -386,6 +429,10 @@ class AgenticValidator(Score):
         # Log to MLflow
         mlflow.log_metric("total_tokens", self.total_tokens)
         mlflow.log_metric("total_cost", self.total_cost)
+
+        # Log full input and output for debugging
+        logging.info(f"Full agent input: {agent_input}")
+        logging.info(f"Full agent output:\n{full_output}")
 
     def predict(self, model_input: Score.ModelInput) -> Score.ModelOutput:
         """
