@@ -201,23 +201,20 @@ class AgenticValidator(Score):
             # Get the graph
             graph = self.workflow.get_graph()
 
-            graph_png = graph.draw_mermaid_png(
-                draw_method=MermaidDrawMethod.API,
-                node_colors=NodeColors(
-                    start="#f086bb",
-                    end="#68c0f2",
-                    other="#ffffff"
-                ),
-                background_color="#e8ebed",
-                padding=10
-            )
-
             # Ensure the directory exists
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-            # Save the PNG file
-            with open(output_path, "wb") as f:
-                f.write(graph_png)
+            graph.draw_mermaid_png(
+                draw_method=MermaidDrawMethod.API,
+                node_colors=NodeColors(
+                    start="#68c0f2",
+                    end="#f086bb",
+                    other="#deeffa"
+                ),
+                background_color="white",
+                padding=10,
+                output_file_path=output_path  # Use the output_file_path parameter
+            )
 
             logging.info(f"Graph visualization saved to {output_path}")
             
