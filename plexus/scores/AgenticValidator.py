@@ -25,6 +25,11 @@ import tiktoken
 import mlflow
 import os
 import traceback
+import time
+
+from langsmith import Client
+from langchain.callbacks.tracers import LangChainTracer
+from langchain.callbacks.manager import CallbackManager
 
 class ValidationState:
     """
@@ -163,6 +168,9 @@ class AgenticValidator(Score):
         self.current_state = None
         self.chat_history = ChatMessageHistory()
         self.agent_callback = AgentExecutionCallback()
+        self.langsmith_client = Client()
+        self.tracer = LangChainTracer(project_name="AgenticValidator")
+        self.callback_manager = CallbackManager([self.tracer])
         self.initialize_validation_workflow()
         self.encoding = tiktoken.get_encoding("cl100k_base")
 
@@ -239,7 +247,8 @@ class AgenticValidator(Score):
         if self.parameters.model_provider == "AzureChatOpenAI":
             return AzureChatOpenAI(
                 temperature=self.parameters.temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                callbacks=[self.tracer]
             )
         elif self.parameters.model_provider == "BedrockChat":
             model_id = self.parameters.model_name or "anthropic.claude-3-5-sonnet-20240620-v1:0"
@@ -248,14 +257,16 @@ class AgenticValidator(Score):
                 model_kwargs={
                     "temperature": self.parameters.temperature,
                     "max_tokens": max_tokens
-                }
+                },
+                callbacks=[self.tracer]
             )
         elif self.parameters.model_provider == "ChatVertexAI":
             model_name = self.parameters.model_name or "gemini-1.5-flash-001"
             return ChatVertexAI(
                 model=model_name,
                 temperature=self.parameters.temperature,
-                max_output_tokens=max_tokens
+                max_output_tokens=max_tokens,
+                callbacks=[self.tracer]
             )
         else:
             raise ValueError(f"Unsupported model provider: {self.parameters.model_provider}")
@@ -324,7 +335,7 @@ class AgenticValidator(Score):
             tools=tools,
             verbose=True,
             handle_parsing_errors=True,
-            callbacks=[self.agent_callback]
+            callbacks=[self.agent_callback, self.tracer]
         )
 
     def _validate_claim(self, input_string: str) -> str:
@@ -360,9 +371,6 @@ class AgenticValidator(Score):
             
             # Get the full output including all steps and observations
             full_output = self.agent_callback.get_full_output()
-            
-            # Log tokens and cost with full agent output
-            self._log_tokens_and_cost(agent_input, full_output)
             
             # Parse the result
             validation_result, explanation = self._parse_validation_result(result['output'])
@@ -434,45 +442,6 @@ class AgenticValidator(Score):
     def _count_tokens(self, text: str) -> int:
         return len(self.encoding.encode(text))
 
-    def _log_tokens_and_cost(self, agent_input: str, full_output: str):
-        """
-        Log the number of tokens used and calculate the cost for the React agent.
-        """
-        # Count tokens for input and output separately
-        input_tokens = self._count_tokens(agent_input)
-        output_tokens = self._count_tokens(full_output)
-        total_tokens = input_tokens + output_tokens
-        
-        # Determine the appropriate model for cost calculation
-        model_name = self.parameters.model_name or "anthropic.claude-3-haiku-20240307-v1:0"
-        
-        # Calculate cost
-        try:
-            cost_info = calculate_cost(model_name=model_name, input_tokens=input_tokens, output_tokens=output_tokens)
-            total_cost = float(cost_info['total_cost'])
-        except ValueError as e:
-            logging.warning(f"Cost calculation failed: {str(e)}. Using fallback estimation.")
-            # Fallback to a default cost estimation
-            total_cost = (total_tokens * 0.00002)  # Assuming $0.02 per 1000 tokens as a fallback
-        
-        # Update total tokens and cost
-        self.total_tokens += total_tokens
-        self.total_cost += total_cost
-        
-        logging.info(f"Model: {model_name}")
-        logging.info(f"Input tokens: {input_tokens}")
-        logging.info(f"Output tokens: {output_tokens}")
-        logging.info(f"Total tokens: {total_tokens}")
-        logging.info(f"Estimated cost: ${total_cost:.6f}")
-        
-        # Log to MLflow
-        mlflow.log_metric("total_tokens", self.total_tokens)
-        mlflow.log_metric("total_cost", self.total_cost)
-
-        # Log full input and output for debugging
-        logging.info(f"Full agent input: {agent_input}")
-        logging.info(f"Full agent output:\n{full_output}")
-
     def predict(self, model_input: Score.ModelInput) -> Score.ModelOutput:
         """
         Predict the validity of the education information based on the transcript and metadata.
@@ -490,11 +459,8 @@ class AgenticValidator(Score):
         )
         logging.info(f"Initial state: {initial_state}")
 
-        # Ensure a fresh state for each prediction
-        self.total_tokens = 0
-        self.total_cost = 0
-
-        final_state = self.workflow.invoke(initial_state.__dict__)
+        # Use the callback_manager for tracing
+        final_state = self.workflow.invoke(initial_state.__dict__, config={"callbacks": [self.tracer]})
         logging.info(f"Final state: {final_state}")
 
         validation_result = final_state.get('validation_result', 'Unknown')
@@ -506,9 +472,52 @@ class AgenticValidator(Score):
         logging.info(f"{current_step.capitalize()}: {validation_result}")
         logging.info(f"Explanation: {explanation}")
 
-        # Log final token and cost metrics
-        mlflow.log_metric("final_total_tokens", self.total_tokens)
-        mlflow.log_metric("final_total_cost", self.total_cost)
+        # Wait a short time to ensure the run is processed
+        time.sleep(2)
+
+        # Fetch the most recent run from LangSmith
+        runs = self.langsmith_client.list_runs(
+            project_name="AgenticValidator",
+            execution_order=1,
+            error=False
+        )
+        
+        latest_run = next(runs, None)
+        
+        if not latest_run:
+            raise ValueError("No successful runs found in LangSmith")
+
+        run_details = self.langsmith_client.read_run(latest_run.id)
+        
+        # Extract token counts directly from run_details
+        prompt_tokens = run_details.prompt_tokens
+        completion_tokens = run_details.completion_tokens
+        total_tokens = run_details.total_tokens
+
+        if prompt_tokens is None or completion_tokens is None or total_tokens is None:
+            raise ValueError("Could not retrieve accurate token counts from LangSmith")
+
+        logging.info(f"Total tokens used: {total_tokens}")
+        logging.info(f"Prompt tokens: {prompt_tokens}")
+        logging.info(f"Completion tokens: {completion_tokens}")
+
+        # Log token metrics
+        mlflow.log_metric("final_total_tokens", total_tokens)
+        mlflow.log_metric("final_prompt_tokens", prompt_tokens)
+        mlflow.log_metric("final_completion_tokens", completion_tokens)
+
+        # Calculate cost
+        try:
+            cost_info = calculate_cost(
+                model_name=self.parameters.model_name,
+                input_tokens=prompt_tokens,
+                output_tokens=completion_tokens
+            )
+            total_cost = cost_info['total_cost']
+            logging.info(f"Total cost: ${total_cost:.6f}")
+            mlflow.log_metric("final_total_cost", float(total_cost))
+        except ValueError as e:
+            raise ValueError(f"Could not calculate cost: {str(e)}")
 
         return self.ModelOutput(
             score=validation_result,
