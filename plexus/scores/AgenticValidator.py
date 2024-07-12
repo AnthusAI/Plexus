@@ -1,5 +1,5 @@
 from typing import Dict, List, Any, Literal, Optional, Union, Tuple
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field, validator
 from plexus.scores.Score import Score
 from plexus.CustomLogging import logging
 
@@ -8,7 +8,8 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables.graph import MermaidDrawMethod, NodeColors
 from langchain_core.tools import Tool
-from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.callbacks import CallbackManager, BaseCallbackHandler
+from langchain_core.tracers import LangChainTracer
 
 from langchain.agents import AgentExecutor, create_react_agent
 from langgraph.graph import StateGraph, START, END
@@ -17,19 +18,15 @@ from langchain_aws import ChatBedrock
 from langchain_openai import AzureChatOpenAI
 from langchain_google_vertexai import ChatVertexAI
 
-from langchain_community.chat_message_histories import ChatMessageHistory
-
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
 import tiktoken
 import mlflow
 import os
 import traceback
-import time
+import math
 
 from langsmith import Client
-from langchain.callbacks.tracers import LangChainTracer
-from langchain.callbacks.manager import CallbackManager
 
 class ValidationState:
     """
@@ -90,36 +87,28 @@ class ValidationState:
             f"messages={self.messages})"
         )
 
-class AgentExecutionCallback(BaseCallbackHandler):
+class TokenCounterCallback(BaseCallbackHandler):
     def __init__(self):
-        self.execution_log = []
-        self.current_thought = ""
-        self.full_output = []
+        self.encoding = tiktoken.get_encoding("cl100k_base")
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
 
-    def on_agent_action(self, action, color=None, **kwargs):
-        if self.current_thought:
-            self.full_output.append(f"Thought: {self.current_thought}")
-            self.current_thought = ""
-        self.full_output.append(f"Action: {action.tool}")
-        self.full_output.append(f"Action Input: {action.tool_input}")
+    def on_llm_start(self, serialized, prompts, **kwargs):
+        prompt_tokens = sum(len(self.encoding.encode(prompt)) for prompt in prompts)
+        self.prompt_tokens += prompt_tokens
+        logging.info(f"Prompt tokens: {prompt_tokens}")
 
-    def on_agent_finish(self, finish, color=None, **kwargs):
-        if self.current_thought:
-            self.full_output.append(f"Thought: {self.current_thought}")
-            self.current_thought = ""
-        self.full_output.append(f"Final Answer: {finish.return_values['output']}")
-
-    def on_tool_end(self, output, color=None, **kwargs):
-        self.full_output.append(f"Observation: {output}")
-
-    def on_text(self, text, color=None, **kwargs):
-        if text.startswith("Thought:"):
-            self.current_thought = text[8:].strip()
-        elif not text.startswith("Human:") and not text.startswith("AI:"):
-            self.full_output.append(text)
-
-    def get_full_output(self):
-        return "\n".join(self.full_output)
+    def on_llm_end(self, response, **kwargs):
+        if hasattr(response, 'generations'):
+            completion_tokens = sum(len(self.encoding.encode(gen.text)) for generation in response.generations for gen in generation)
+            self.completion_tokens += completion_tokens
+            logging.info(f"Completion tokens (from generations): {completion_tokens}")
+        elif hasattr(response, 'llm_output') and response.llm_output:
+            completion_tokens = response.llm_output.get('token_usage', {}).get('completion_tokens', 0)
+            self.completion_tokens += completion_tokens
+            logging.info(f"Completion tokens (from llm_output): {completion_tokens}")
+        else:
+            logging.warning("Unable to determine completion tokens")
 
 class AgenticValidator(Score):
     """
@@ -166,13 +155,11 @@ class AgenticValidator(Score):
         self.total_cost = 0
         self.agent_executor = None
         self.current_state = None
-        self.chat_history = ChatMessageHistory()
-        self.agent_callback = AgentExecutionCallback()
         self.langsmith_client = Client()
         self.tracer = LangChainTracer(project_name="AgenticValidator")
         self.callback_manager = CallbackManager([self.tracer])
+        self.token_counter = TokenCounterCallback()
         self.initialize_validation_workflow()
-        self.encoding = tiktoken.get_encoding("cl100k_base")
 
     def initialize_validation_workflow(self):
         """
@@ -297,7 +284,7 @@ class AgenticValidator(Score):
             Tool(
                 name="Validate Claim",
                 func=self._validate_claim,
-                description="Validate a claim against the transcript. Input should be the claim to validate."
+                description="Answer the question based on the transcript. Input should be the question to answer."
             )
         ]
 
@@ -335,7 +322,7 @@ class AgenticValidator(Score):
             tools=tools,
             verbose=True,
             handle_parsing_errors=True,
-            callbacks=[self.agent_callback, self.tracer]
+            callbacks=[self.tracer, self.token_counter]
         )
 
     def _validate_claim(self, input_string: str) -> str:
@@ -353,16 +340,30 @@ class AgenticValidator(Score):
         self.current_state = ValidationState(**state)
         
         try:
-            label_value = self.current_state.metadata[self.parameters.label]
+            logging.info(f"Metadata Contents: {self.current_state.metadata}")
+
+            # Find all keys that match the pattern school_\d+_{label}
+            matching_keys = [key for key in self.current_state.metadata.keys() 
+                             if key.startswith("school_") and key.endswith(f"_{self.parameters.label}")]
+
+            if not matching_keys:
+                raise ValueError(f"No values found for label '{self.parameters.label}' in the metadata")
+
+            # Extract all values for the matching keys, remove duplicates, and filter out None and empty values
+            label_values = list(set(str(value) for key in matching_keys if (value := self.current_state.metadata.get(key)) not in (None, "", "nan")))
+
+            if not label_values:
+                raise ValueError(f"No valid values found for label '{self.parameters.label}' in the metadata")
+
+            # Join unique values if there's more than one, otherwise use the single value
+            label_value = " and ".join(label_values) if len(label_values) > 1 else label_values[0]
+
+            logging.info(f"Extracted unique label values: {label_value}")
             
             # Use the custom prompt from the YAML file
             custom_prompt = self.parameters.prompt.format(label_value=label_value)
             
-            input_string = f"Validate the following: {custom_prompt}"
-            agent_input = f"{input_string}\n\nTranscript: {self.current_state.transcript}"
-            
-            # Reset the callback log before each invocation
-            self.agent_callback.full_output = []
+            input_string = f"Answer the following: {custom_prompt}"
             
             result = self.agent_executor.invoke({
                 "input": input_string,
@@ -370,10 +371,10 @@ class AgenticValidator(Score):
             })
             
             # Get the full output including all steps and observations
-            full_output = self.agent_callback.get_full_output()
+            full_output = result['output']
             
             # Parse the result
-            validation_result, explanation = self._parse_validation_result(result['output'])
+            validation_result, explanation = self._parse_validation_result(full_output)
             
             self.current_state.current_step = step
             self.current_state.validation_result = validation_result
@@ -439,9 +440,6 @@ class AgenticValidator(Score):
 
         return validation_result, explanation
 
-    def _count_tokens(self, text: str) -> int:
-        return len(self.encoding.encode(text))
-
     def predict(self, model_input: Score.ModelInput) -> Score.ModelOutput:
         """
         Predict the validity of the education information based on the transcript and metadata.
@@ -459,8 +457,11 @@ class AgenticValidator(Score):
         )
         logging.info(f"Initial state: {initial_state}")
 
-        # Use the callback_manager for tracing
-        final_state = self.workflow.invoke(initial_state.__dict__, config={"callbacks": [self.tracer]})
+        # Reset token counter
+        self.token_counter = TokenCounterCallback()
+
+        final_state = self.workflow.invoke(initial_state.__dict__, config={"callbacks": [self.tracer, self.token_counter]})
+
         logging.info(f"Final state: {final_state}")
 
         validation_result = final_state.get('validation_result', 'Unknown')
@@ -472,30 +473,10 @@ class AgenticValidator(Score):
         logging.info(f"{current_step.capitalize()}: {validation_result}")
         logging.info(f"Explanation: {explanation}")
 
-        # Wait a short time to ensure the run is processed
-        time.sleep(2)
-
-        # Fetch the most recent run from LangSmith
-        runs = self.langsmith_client.list_runs(
-            project_name="AgenticValidator",
-            execution_order=1,
-            error=False
-        )
-        
-        latest_run = next(runs, None)
-        
-        if not latest_run:
-            raise ValueError("No successful runs found in LangSmith")
-
-        run_details = self.langsmith_client.read_run(latest_run.id)
-        
-        # Extract token counts directly from run_details
-        prompt_tokens = run_details.prompt_tokens
-        completion_tokens = run_details.completion_tokens
-        total_tokens = run_details.total_tokens
-
-        if prompt_tokens is None or completion_tokens is None or total_tokens is None:
-            raise ValueError("Could not retrieve accurate token counts from LangSmith")
+        # Get token usage from our counter
+        prompt_tokens = self.token_counter.prompt_tokens
+        completion_tokens = self.token_counter.completion_tokens
+        total_tokens = prompt_tokens + completion_tokens
 
         logging.info(f"Total tokens used: {total_tokens}")
         logging.info(f"Prompt tokens: {prompt_tokens}")
@@ -517,7 +498,7 @@ class AgenticValidator(Score):
             logging.info(f"Total cost: ${total_cost:.6f}")
             mlflow.log_metric("final_total_cost", float(total_cost))
         except ValueError as e:
-            raise ValueError(f"Could not calculate cost: {str(e)}")
+            logging.error(f"Could not calculate cost: {str(e)}")
 
         return self.ModelOutput(
             score=validation_result,
@@ -544,9 +525,15 @@ class AgenticValidator(Score):
         Model input containing the transcript and metadata.
 
         Attributes:
-            metadata (Dict[str, str]): A dictionary containing degree information.
+            metadata (Dict[str, Any]): A dictionary containing degree information.
         """
-        metadata: Dict[str, str]
+        metadata: Dict[str, Any] = Field(default_factory=dict)
+
+        @validator('metadata', pre=True, each_item=True)
+        def handle_nan(cls, v):
+            if isinstance(v, float) and math.isnan(v):
+                return None
+            return v
 
     class ModelOutput(Score.ModelOutput):
         """
