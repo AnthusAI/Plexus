@@ -130,6 +130,7 @@ class AgenticValidator(Score):
             max_tokens (int): The maximum number of tokens for model output.
             label (str): The label of the metadata to validate.
             prompt (str): The custom prompt to use for validation.
+            dependency_prompt (Optional[str]): The prompt to use for dependency check, if any.
         """
         model_config = ConfigDict(protected_namespaces=())
         model_provider: Literal["AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "BedrockChat"
@@ -138,6 +139,7 @@ class AgenticValidator(Score):
         max_tokens: int = 500
         label: str = ""
         prompt: str = ""
+        dependency_prompt: Optional[str] = None
 
     def __init__(self, **parameters):
         """
@@ -154,7 +156,7 @@ class AgenticValidator(Score):
         self.total_tokens = 0
         self.total_cost = 0
         self.agent_executor = None
-        self.current_state = None
+        self.current_state = None  # Initialize current_state as None
         self.langsmith_client = Client()
         self.tracer = LangChainTracer(project_name="AgenticValidator")
         self.callback_manager = CallbackManager([self.tracer])
@@ -202,7 +204,7 @@ class AgenticValidator(Score):
             graph.draw_mermaid_png(
                 draw_method=MermaidDrawMethod.API,
                 node_colors=NodeColors(
-                    start="#68c0f2",
+                    start="#73fa97",
                     end="#f086bb",
                     other="#deeffa"
                 ),
@@ -267,14 +269,78 @@ class AgenticValidator(Score):
         """
         workflow = StateGraph(ValidationState)
 
-        # Add the validation step
-        workflow.add_node("run_prediction", lambda state: self._validate_step(state, self.parameters.label))
+        # Add nodes for dependency check and main validation
+        workflow.add_node("check_dependency", self._check_dependency)
+        workflow.add_node("run_prediction", self._validate_step)
 
-        # Add edges to create the workflow
-        workflow.add_edge(START, "run_prediction")
+        # Add conditional edges
+        workflow.add_conditional_edges(
+            START,
+            self._has_dependency_prompt,
+            {
+                True: "check_dependency",
+                False: "run_prediction"
+            }
+        )
+
+        workflow.add_conditional_edges(
+            "check_dependency",
+            self._should_continue_validation,
+            {
+                True: "run_prediction",
+                False: END
+            }
+        )
+
         workflow.add_edge("run_prediction", END)
 
         return workflow.compile()
+
+    def _has_dependency_prompt(self, state: ValidationState) -> bool:
+        """
+        Check if the current validation has a dependency prompt.
+        """
+        return bool(self.parameters.dependency_prompt)
+
+    def _check_dependency(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Perform the dependency check using the dependency prompt.
+        """
+        self.current_state = ValidationState(**state)
+        
+        try:
+            input_string = self.parameters.dependency_prompt
+            
+            result = self.agent_executor.invoke({
+                "input": input_string,
+                "transcript": self.current_state.transcript
+            })
+            
+            validation_result, explanation = self._parse_validation_result(result['output'])
+            
+            self.current_state.current_step = "dependency_check"
+            self.current_state.validation_result = validation_result
+            self.current_state.explanation = explanation
+            self.current_state.messages = [
+                HumanMessage(content=input_string),
+                AIMessage(content=result['output'])
+            ]
+            
+            logging.info(f"\nDependency check result: {validation_result}")
+            logging.info(f"Explanation: {explanation}")
+            
+        except Exception as e:
+            logging.error(f"Failed to perform dependency check: {e}")
+            return self._handle_validation_failure(self.current_state, "dependency_check")
+
+        return self.current_state.__dict__
+
+    def _should_continue_validation(self, state: Dict[str, Any]) -> bool:
+        """
+        Determine if we should continue to the main validation step based on the dependency check result.
+        """
+        current_state = ValidationState(**state)
+        return current_state.validation_result.lower() != "yes"
 
     def create_react_agent(self):
         """
@@ -330,10 +396,13 @@ class AgenticValidator(Score):
         Validate a specific claim against the transcript.
         This method is used as a tool by the React agent.
         """
+        if self.current_state is None or self.current_state.transcript is None:
+            raise ValueError("Current state or transcript is not initialized")
+        
         transcript = self.current_state.transcript
-        return f"Claim to validate: {input_string}\n\n"
+        return f"Claim to validate: {input_string}\n\nTranscript: {transcript}"
 
-    def _validate_step(self, state: Dict[str, Any], step: str) -> Dict[str, Any]:
+    def _validate_step(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Perform validation for a specific step using the ReAct agent.
         """
@@ -376,7 +445,7 @@ class AgenticValidator(Score):
             # Parse the result
             validation_result, explanation = self._parse_validation_result(full_output)
             
-            self.current_state.current_step = step
+            self.current_state.current_step = "main_validation"
             self.current_state.validation_result = validation_result
             self.current_state.explanation = explanation
             self.current_state.messages = [
@@ -384,12 +453,12 @@ class AgenticValidator(Score):
                 AIMessage(content=full_output)
             ]
             
-            logging.info(f"\nValidated {step}: {validation_result}")
+            logging.info(f"\nValidated main step: {validation_result}")
             logging.info(f"Explanation: {explanation}")
             
         except Exception as e:
-            logging.error(f"Failed to validate {step}: {e}")
-            return self._handle_validation_failure(self.current_state, step)
+            logging.error(f"Failed to validate main step: {e}")
+            return self._handle_validation_failure(self.current_state, "main_validation")
 
         return self.current_state.__dict__
 
@@ -455,6 +524,7 @@ class AgenticValidator(Score):
             transcript=model_input.transcript,
             metadata=model_input.metadata
         )
+        self.current_state = initial_state  # Set the initial state
         logging.info(f"Initial state: {initial_state}")
 
         # Reset token counter
