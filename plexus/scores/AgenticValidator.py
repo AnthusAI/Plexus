@@ -376,7 +376,7 @@ class AgenticValidator(Score):
 
     def create_react_agent(self):
         """
-        Create a ReAct agent for validation tasks.
+        Create a ReAct agent for validation tasks that makes only one LLM call.
         """
         tools = [
             Tool(
@@ -395,14 +395,14 @@ class AgenticValidator(Score):
 
             Use the following format:
 
-            Question: the input question you must answer
+            Human: the input question you must answer
             Thought: you should always think about what to do
             Action: the action to take, should be one of [{tool_names}]
             Action Input: the input to the action
             Observation: the result of the action
             ... (this Thought/Action/Action Input/Observation can repeat N times)
             Thought: I now know the final answer
-            Final Answer: Respond with YES or NO, followed by a comma and then a brief explanation.
+            Final Answer: the final answer to the original input question
 
             Begin!
 
@@ -410,8 +410,14 @@ class AgenticValidator(Score):
             {transcript}
             --- End Transcript ---
             
-            Question: {input}
-            Thought: I have been provided with a transcript and a claim to validate. I will analyze the transcript to find evidence supporting or refuting the claim.
+            Human: {input}
+            Thought: I will analyze the transcript to find evidence supporting or refuting the claim.
+            Action: Validate Claim
+            Action Input: {input}
+            Observation: {transcript}
+            Thought: Based on the analysis of the transcript, I can now determine the final answer.
+            Final Answer: 
+
             {agent_scratchpad}
             """
         )
@@ -422,19 +428,18 @@ class AgenticValidator(Score):
             tools=tools,
             verbose=True,
             handle_parsing_errors=True,
-            callbacks=[self.tracer, self.token_counter]
+            callbacks=[self.tracer, self.token_counter],
+            max_iterations=2  # Limit the iterations
         )
 
     def _validate_claim(self, input_string: str) -> str:
         """
-        Validate a specific claim against the transcript.
-        This method is used as a tool by the React agent.
+        This method may not be called in the single-call setup, but we keep it for compatibility.
         """
         if self.current_state is None or self.current_state.transcript is None:
             raise ValueError("Current state or transcript is not initialized")
         
-        transcript = self.current_state.transcript
-        return f"Claim to validate: {input_string}\n\n--- Begin Transcript ---\n{transcript}\n--- End Transcript ---"
+        return self.current_state.transcript
 
     def _validate_step(self, state: ValidationState) -> ValidationState:
         """
@@ -525,18 +530,22 @@ class AgenticValidator(Score):
         """
         logging.info(f"Raw output to parse: {output}")
         
-        # Check if the output starts with YES, NO, or UNCLEAR
-        first_word = output.split(',')[0].strip().upper()
+        # Strip any leading/trailing whitespace and split by the first period
+        parts = output.strip().split('.', 1)
         
-        if first_word == "YES":
-            validation_result = "Yes"
-        elif first_word == "NO":
-            validation_result = "No"
+        # Check if the first part (before the first period) is YES, NO, or UNCLEAR (case-insensitive)
+        first_word = parts[0].strip().lower()
+        if first_word == 'yes':
+            validation_result = 'Yes'
+        elif first_word == 'no':
+            validation_result = 'No'
+        elif first_word == 'unclear':
+            validation_result = 'Unclear'
         else:
-            validation_result = "Unclear"
+            validation_result = 'Unclear'
 
-        # Extract explanation (everything after the first comma)
-        explanation = output.split(',', 1)[1].strip() if ',' in output else output
+        # The explanation is everything after the first period, or the entire string if there's no period
+        explanation = parts[1].strip() if len(parts) > 1 else output.strip()
 
         logging.info(f"Parsed result: {validation_result}")
         logging.info(f"Parsed explanation: {explanation}")
