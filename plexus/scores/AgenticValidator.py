@@ -341,7 +341,7 @@ class AgenticValidator(Score):
 
     def _check_dependency(self, state: ValidationState) -> ValidationState:
         """
-        Perform the dependency check using the dependency prompt.
+        Perform the dependency check using a direct LLM call.
         """
         self.current_state = state
         
@@ -349,20 +349,28 @@ class AgenticValidator(Score):
             if not self.dependency or 'prompt' not in self.dependency:
                 raise ValueError("Dependency prompt is not properly configured")
             
-            input_string = self.dependency['prompt']
+            prompt = self.dependency['prompt']
             
-            result = self.agent_executor.invoke({
-                "input": input_string
-            })
+            # Use the transcript in the prompt if needed
+            full_prompt = f"""
+            Based on the following transcript, {prompt}
             
-            validation_result, explanation = self._parse_validation_result(result['output'])
+            Transcript:
+            {state.transcript}
+            
+            Answer with YES or NO, followed by a brief explanation.
+            """
+            
+            response = self.llm_with_retry.invoke(full_prompt)
+            
+            validation_result, explanation = self._parse_validation_result(response.content)
             
             self.current_state.current_step = "dependency_check"
             self.current_state.validation_result = validation_result
             self.current_state.explanation = explanation
             self.current_state.messages = [
-                HumanMessage(content=input_string),
-                AIMessage(content=result['output'])
+                HumanMessage(content=full_prompt),
+                AIMessage(content=response.content)
             ]
             
             logging.info(f"\nDependency check result: {validation_result}")
