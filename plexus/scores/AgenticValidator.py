@@ -10,6 +10,7 @@ from langchain_core.runnables.graph import MermaidDrawMethod, NodeColors
 from langchain_core.tools import Tool
 from langchain_core.callbacks import CallbackManager, BaseCallbackHandler
 from langchain_core.tracers import LangChainTracer
+from langchain.memory import SimpleMemory
 
 from langchain.agents import AgentExecutor, create_react_agent
 from langgraph.graph import StateGraph, START, END
@@ -291,7 +292,7 @@ class AgenticValidator(Score):
             DEPENDENCY_CHECK = "Dependency Check"
 
         # Add all nodes, including custom start node, new "Has Dependency?" node, and dependency check node
-        workflow.add_node(BEGIN_VALIDATION, lambda x: x)
+        workflow.add_node(BEGIN_VALIDATION, self._initialize_memory)
         workflow.add_node(HAS_DEPENDENCY, self._has_dependency_prompt)
         workflow.add_node(DEPENDENCY_CHECK, self._check_dependency)
         workflow.add_node("Run Prediction", self._validate_step)
@@ -324,6 +325,13 @@ class AgenticValidator(Score):
 
         return workflow.compile()
 
+    def _initialize_memory(self, state: ValidationState) -> ValidationState:
+        """
+        Initialize the agent's memory with the transcript.
+        """
+        self.agent_executor.memory.memories["transcript"] = state.transcript
+        return state
+
     def _has_dependency_prompt(self, state: ValidationState) -> ValidationState:
         """
         Check if the current validation has a dependency prompt and update the state.
@@ -338,15 +346,13 @@ class AgenticValidator(Score):
         self.current_state = state
         
         try:
-            # Check if self.dependency exists and has a 'prompt' key
             if not self.dependency or 'prompt' not in self.dependency:
                 raise ValueError("Dependency prompt is not properly configured")
             
             input_string = self.dependency['prompt']
             
             result = self.agent_executor.invoke({
-                "input": input_string,
-                "transcript": self.current_state.transcript
+                "input": input_string
             })
             
             validation_result, explanation = self._parse_validation_result(result['output'])
@@ -376,13 +382,13 @@ class AgenticValidator(Score):
 
     def create_react_agent(self):
         """
-        Create a ReAct agent for validation tasks that makes only one LLM call.
+        Create a ReAct agent for validation tasks with memory for the transcript.
         """
         tools = [
             Tool(
                 name="Validate Claim",
                 func=self._validate_claim,
-                description="Answer the question based on the transcript. Input should be the question to answer."
+                description="Answer the question based on the transcript stored in memory. Input should be the question to answer."
             )
         ]
 
@@ -395,24 +401,19 @@ class AgenticValidator(Score):
 
             Use the following format:
 
-            Human: the input question you must answer
+            Question: the input question you must answer
             Thought: you should always think about what to do
             Action: the action to take, should be one of [{tool_names}]
             Action Input: the input to the action
             Observation: the result of the action
+            ... (this Thought/Action/Action Input/Observation can repeat N times)
             Thought: I now know the final answer
-            Final Answer: the final answer to the original input question
+            Final Answer: Respond with YES or NO, followed by a comma and then a brief explanation.
 
             Begin!
 
-            Human: {input}
-            Thought: I need to analyze the transcript to validate the claim.
-            Action: Validate Claim
-            Action Input: {input}
-            Observation: {transcript}
-            Thought: Based on the analysis of the transcript, I can now determine the final answer.
-            Final Answer: 
-
+            Question: {input}
+            Thought: I have been provided with a transcript in my memory and a claim to validate. I will analyze the transcript to find evidence supporting or refuting the claim.
             {agent_scratchpad}
             """
         )
@@ -423,15 +424,17 @@ class AgenticValidator(Score):
             tools=tools,
             verbose=True,
             handle_parsing_errors=True,
-            callbacks=[self.tracer, self.token_counter],
-            max_iterations=1  # Limit the iterations to ensure only one LLM call
+            memory=SimpleMemory(memories={"transcript": ""}),  # Initialize empty transcript
+            callbacks=[self.tracer, self.token_counter]
         )
 
     def _validate_claim(self, input_string: str) -> str:
         """
-        This method returns the transcript, which will be inserted into the Observation.
+        Validate a specific claim against the transcript stored in memory.
+        This method is used as a tool by the React agent.
         """
-        return self.current_state.transcript
+        transcript = self.agent_executor.memory.memories.get("transcript", "")
+        return f"Claim to validate: {input_string}\n\n--- Begin Transcript ---\n{transcript}\n--- End Transcript ---"
 
     def _validate_step(self, state: ValidationState) -> ValidationState:
         """
@@ -465,12 +468,8 @@ class AgenticValidator(Score):
             
             input_string = f"Answer the following: {custom_prompt}"
             
-            # Prepare the transcript
-            transcript = self.current_state.transcript if self.current_state.transcript else "No transcript provided."
-            
             result = self.agent_executor.invoke({
-                "input": input_string,
-                "transcript": transcript
+                "input": input_string
             })
             
             # Get the full output including all steps and observations
@@ -525,29 +524,18 @@ class AgenticValidator(Score):
         """
         logging.info(f"Raw output to parse: {output}")
         
-        # Check if the output contains a Final Answer
-        if "Final Answer:" in output:
-            final_answer = output.split("Final Answer:")[-1].strip()
-        else:
-            final_answer = output.strip()
+        # Check if the output starts with YES, NO, or UNCLEAR
+        first_word = output.split(',')[0].strip().upper()
         
-        # Strip any leading/trailing whitespace
-        cleaned_output = final_answer.strip()
-        
-        # Check if the output starts with YES, NO, or UNCLEAR (case-insensitive)
-        lower_output = cleaned_output.lower()
-        if lower_output.startswith('yes'):
-            validation_result = 'Yes'
-            explanation = cleaned_output[3:].lstrip(' .,')
-        elif lower_output.startswith('no'):
-            validation_result = 'No'
-            explanation = cleaned_output[2:].lstrip(' .,')
-        elif lower_output.startswith('unclear'):
-            validation_result = 'Unclear'
-            explanation = cleaned_output[7:].lstrip(' .,')
+        if first_word == "YES":
+            validation_result = "Yes"
+        elif first_word == "NO":
+            validation_result = "No"
         else:
-            validation_result = 'Unclear'
-            explanation = cleaned_output
+            validation_result = "Unclear"
+
+        # Extract explanation (everything after the first comma)
+        explanation = output.split(',', 1)[1].strip() if ',' in output else output
 
         logging.info(f"Parsed result: {validation_result}")
         logging.info(f"Parsed explanation: {explanation}")
