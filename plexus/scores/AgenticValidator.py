@@ -27,7 +27,9 @@ import traceback
 import math
 
 from langsmith import Client
+from dataclasses import dataclass, field
 
+@dataclass
 class ValidationState:
     """
     Represents the state of the validation process at any given point.
@@ -42,34 +44,16 @@ class ValidationState:
         validation_result (str): Result of the degree validation.
         explanation (str): Detailed explanation of the validation result.
         messages (List[Union[HumanMessage, AIMessage]]): History of messages in the validation process.
+        has_dependency (bool): Indicates whether there is a dependency prompt.
     """
 
-    def __init__(
-        self,
-        transcript: str,
-        metadata: Dict[str, str],
-        current_step: str = "",
-        validation_result: str = "Unknown",
-        explanation: str = "",
-        messages: List[Union[HumanMessage, AIMessage]] = None
-    ):
-        """
-        Initialize a ValidationState instance.
-
-        Args:
-            transcript (str): The transcript to be validated.
-            metadata (Dict[str, str]): Metadata about the education claim.
-            current_step (str, optional): The current validation step. Defaults to "".
-            validation_result (str, optional): Result of the degree validation. Defaults to "Unknown".
-            explanation (str, optional): Detailed explanation of the result. Defaults to "".
-            messages (List[Union[HumanMessage, AIMessage]], optional): Message history. Defaults to None.
-        """
-        self.transcript = transcript
-        self.metadata = metadata
-        self.current_step = current_step
-        self.validation_result = validation_result
-        self.explanation = explanation
-        self.messages = messages or []
+    transcript: str
+    metadata: Dict[str, str]
+    current_step: str = ""
+    validation_result: str = "Unknown"
+    explanation: str = ""
+    messages: List[Union[HumanMessage, AIMessage]] = field(default_factory=list)
+    has_dependency: bool = False
 
     def __repr__(self):
         """
@@ -84,7 +68,8 @@ class ValidationState:
             f"current_step='{self.current_step}', "
             f"validation_result='{self.validation_result}', "
             f"explanation='{self.explanation}', "
-            f"messages={self.messages})"
+            f"messages={self.messages}, "
+            f"has_dependency={self.has_dependency})"
         )
 
 class TokenCounterCallback(BaseCallbackHandler):
@@ -130,16 +115,17 @@ class AgenticValidator(Score):
             max_tokens (int): The maximum number of tokens for model output.
             label (str): The label of the metadata to validate.
             prompt (str): The custom prompt to use for validation.
-            dependency_prompt (Optional[str]): The prompt to use for dependency check, if any.
+            dependency (Optional[Dict[str, str]]): The dependency configuration.
         """
         model_config = ConfigDict(protected_namespaces=())
         model_provider: Literal["AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "BedrockChat"
         model_name: Optional[str] = None
+        model_region: Optional[str] = None
         temperature: float = 0.1
         max_tokens: int = 500
         label: str = ""
         prompt: str = ""
-        dependency_prompt: Optional[str] = None
+        dependency: Optional[Dict[str, str]] = None
 
     def __init__(self, **parameters):
         """
@@ -161,6 +147,7 @@ class AgenticValidator(Score):
         self.tracer = LangChainTracer(project_name="AgenticValidator")
         self.callback_manager = CallbackManager([self.tracer])
         self.token_counter = TokenCounterCallback()
+        self.dependency = self.parameters.dependency
         self.initialize_validation_workflow()
 
     def initialize_validation_workflow(self):
@@ -179,6 +166,7 @@ class AgenticValidator(Score):
         
         mlflow.log_param("model_provider", self.parameters.model_provider)
         mlflow.log_param("model_name", self.parameters.model_name)
+        mlflow.log_param("model_region", self.parameters.model_region)
         mlflow.log_param("temperature", self.parameters.temperature)
         mlflow.log_param("max_tokens", self.parameters.max_tokens)
         mlflow.log_param("prompt", self.parameters.prompt)
@@ -201,6 +189,9 @@ class AgenticValidator(Score):
             # Ensure the directory exists
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
+            # Set a larger wrap_label_n_words to accommodate longer node names
+            wrap_label_n_words = 1  # Adjust this value as needed
+
             graph.draw_mermaid_png(
                 draw_method=MermaidDrawMethod.API,
                 node_colors=NodeColors(
@@ -210,7 +201,8 @@ class AgenticValidator(Score):
                 ),
                 background_color="white",
                 padding=10,
-                output_file_path=output_path  # Use the output_file_path parameter
+                output_file_path=output_path,
+                wrap_label_n_words=wrap_label_n_words
             )
 
             logging.info(f"Graph visualization saved to {output_path}")
@@ -241,12 +233,14 @@ class AgenticValidator(Score):
             )
         elif self.parameters.model_provider == "BedrockChat":
             model_id = self.parameters.model_name or "anthropic.claude-3-5-sonnet-20240620-v1:0"
+            model_region = self.parameters.model_region or "us-east-1"
             return ChatBedrock(
                 model_id=model_id,
                 model_kwargs={
                     "temperature": self.parameters.temperature,
                     "max_tokens": max_tokens
                 },
+                region_name=model_region,
                 callbacks=[self.tracer]
             )
         elif self.parameters.model_provider == "ChatVertexAI":
@@ -260,6 +254,21 @@ class AgenticValidator(Score):
         else:
             raise ValueError(f"Unsupported model provider: {self.parameters.model_provider}")
 
+    def _split_name(self, name: str, separator: str = "\n") -> str:
+        """
+        Split a name into two parts, separated by the given separator.
+        
+        Args:
+            name (str): The name to split.
+            separator (str, optional): The separator to use. Defaults to "\n".
+        
+        Returns:
+            str: The name split into two parts.
+        """
+        words = name.replace(":", "").split()
+        mid = len(words) // 2
+        return f"{' '.join(words[:mid])}{separator}{' '.join(words[mid:])}"
+
     def _create_workflow(self):
         """
         Create and return the LangGraph workflow for the validation process.
@@ -269,47 +278,67 @@ class AgenticValidator(Score):
         """
         workflow = StateGraph(ValidationState)
 
-        # Add nodes for dependency check and main validation
-        workflow.add_node("check_dependency", self._check_dependency)
-        workflow.add_node("run_prediction", self._validate_step)
+        # Define custom start node
+        BEGIN_VALIDATION = self._split_name(self.parameters.score_name)
+
+        # Define new "Has Dependency?" node
+        HAS_DEPENDENCY = "Has Dependency?"
+
+        # Define dependency check node
+        if self.parameters.dependency and 'name' in self.parameters.dependency:
+            DEPENDENCY_CHECK = self._split_name(self.parameters.dependency['name'])
+        else:
+            DEPENDENCY_CHECK = "Dependency Check"
+
+        # Add all nodes, including custom start node, new "Has Dependency?" node, and dependency check node
+        workflow.add_node(BEGIN_VALIDATION, lambda x: x)
+        workflow.add_node(HAS_DEPENDENCY, self._has_dependency_prompt)
+        workflow.add_node(DEPENDENCY_CHECK, self._check_dependency)
+        workflow.add_node("Run Prediction", self._validate_step)
 
         # Add conditional edges
+        workflow.add_edge(BEGIN_VALIDATION, HAS_DEPENDENCY)
+        
         workflow.add_conditional_edges(
-            START,
-            self._has_dependency_prompt,
+            HAS_DEPENDENCY,
+            lambda x: x.has_dependency,
             {
-                True: "check_dependency",
-                False: "run_prediction"
+                True: DEPENDENCY_CHECK,
+                False: "Run Prediction"
             }
         )
 
         workflow.add_conditional_edges(
-            "check_dependency",
+            DEPENDENCY_CHECK,
             self._should_continue_validation,
             {
-                True: "run_prediction",
+                True: "Run Prediction",
                 False: END
             }
         )
 
-        workflow.add_edge("run_prediction", END)
+        workflow.add_edge("Run Prediction", END)
+
+        # Set the custom start node
+        workflow.set_entry_point(BEGIN_VALIDATION)
 
         return workflow.compile()
 
-    def _has_dependency_prompt(self, state: ValidationState) -> bool:
+    def _has_dependency_prompt(self, state: ValidationState) -> ValidationState:
         """
-        Check if the current validation has a dependency prompt.
+        Check if the current validation has a dependency prompt and update the state.
         """
-        return bool(self.parameters.dependency_prompt)
+        state.has_dependency = bool(self.parameters.dependency and self.parameters.dependency.get('prompt'))
+        return state
 
-    def _check_dependency(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    def _check_dependency(self, state: ValidationState) -> ValidationState:
         """
         Perform the dependency check using the dependency prompt.
         """
-        self.current_state = ValidationState(**state)
+        self.current_state = state
         
         try:
-            input_string = self.parameters.dependency_prompt
+            input_string = self.dependency['prompt']
             
             result = self.agent_executor.invoke({
                 "input": input_string,
@@ -333,14 +362,13 @@ class AgenticValidator(Score):
             logging.error(f"Failed to perform dependency check: {e}")
             return self._handle_validation_failure(self.current_state, "dependency_check")
 
-        return self.current_state.__dict__
+        return self.current_state
 
-    def _should_continue_validation(self, state: Dict[str, Any]) -> bool:
+    def _should_continue_validation(self, state: ValidationState) -> bool:
         """
         Determine if we should continue to the main validation step based on the dependency check result.
         """
-        current_state = ValidationState(**state)
-        return current_state.validation_result.lower() != "yes"
+        return state.validation_result.lower() != "no"
 
     def create_react_agent(self):
         """
@@ -402,11 +430,11 @@ class AgenticValidator(Score):
         transcript = self.current_state.transcript
         return f"Claim to validate: {input_string}\n\nTranscript: {transcript}"
 
-    def _validate_step(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_step(self, state: ValidationState) -> ValidationState:
         """
         Perform validation for a specific step using the ReAct agent.
         """
-        self.current_state = ValidationState(**state)
+        self.current_state = state
         
         try:
             logging.info(f"Metadata Contents: {self.current_state.metadata}")
@@ -460,9 +488,9 @@ class AgenticValidator(Score):
             logging.error(f"Failed to validate main step: {e}")
             return self._handle_validation_failure(self.current_state, "main_validation")
 
-        return self.current_state.__dict__
+        return self.current_state
 
-    def _handle_validation_failure(self, state: ValidationState, step: str) -> Dict[str, Any]:
+    def _handle_validation_failure(self, state: ValidationState, step: str) -> ValidationState:
         """
         Handle the case when validation fails after all retry attempts.
 
@@ -471,13 +499,13 @@ class AgenticValidator(Score):
             step (str): The step that failed validation.
 
         Returns:
-            Dict[str, Any]: The updated state after handling the failure.
+            ValidationState: The updated state after handling the failure.
         """
         state.current_step = step
         state.validation_result = "Unclear"
         state.explanation = f"{step.capitalize()}: Validation failed due to technical issues.\n\n"
         logging.info(f"\nFailed to validate {step}")
-        return state.__dict__
+        return state
 
     def _parse_validation_result(self, output: str) -> Tuple[str, str]:
         """
@@ -530,15 +558,20 @@ class AgenticValidator(Score):
         # Reset token counter
         self.token_counter = TokenCounterCallback()
 
-        final_state = self.workflow.invoke(initial_state.__dict__, config={"callbacks": [self.tracer, self.token_counter]})
+        final_state = self.workflow.invoke(initial_state, config={"callbacks": [self.tracer, self.token_counter]})
 
         logging.info(f"Final state: {final_state}")
 
-        validation_result = final_state.get('validation_result', 'Unknown')
-        explanation = final_state.get('explanation', '')
+        # Handle the case where final_state is an AddableValuesDict
+        if isinstance(final_state, dict):
+            validation_result = final_state.get('validation_result', 'Unknown')
+            explanation = final_state.get('explanation', '')
+        else:
+            validation_result = final_state.validation_result
+            explanation = final_state.explanation
 
         # Get the current step
-        current_step = final_state.get('current_step', 'Unknown')
+        current_step = final_state.get('current_step', '') if isinstance(final_state, dict) else final_state.current_step
 
         logging.info(f"{current_step.capitalize()}: {validation_result}")
         logging.info(f"Explanation: {explanation}")
@@ -551,6 +584,7 @@ class AgenticValidator(Score):
         logging.info(f"Total tokens used: {total_tokens}")
         logging.info(f"Prompt tokens: {prompt_tokens}")
         logging.info(f"Completion tokens: {completion_tokens}")
+        logging.info(f"Parameters: {self.parameters}")
 
         # Log token metrics
         mlflow.log_metric("final_total_tokens", total_tokens)
