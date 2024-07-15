@@ -338,6 +338,10 @@ class AgenticValidator(Score):
         self.current_state = state
         
         try:
+            # Check if self.dependency exists and has a 'prompt' key
+            if not self.dependency or 'prompt' not in self.dependency:
+                raise ValueError("Dependency prompt is not properly configured")
+            
             input_string = self.dependency['prompt']
             
             result = self.agent_executor.invoke({
@@ -402,8 +406,10 @@ class AgenticValidator(Score):
 
             Begin!
 
-            Transcript: {transcript}
-
+            --- Begin Transcript ---
+            {transcript}
+            --- End Transcript ---
+            
             Question: {input}
             Thought: I have been provided with a transcript and a claim to validate. I will analyze the transcript to find evidence supporting or refuting the claim.
             {agent_scratchpad}
@@ -428,7 +434,7 @@ class AgenticValidator(Score):
             raise ValueError("Current state or transcript is not initialized")
         
         transcript = self.current_state.transcript
-        return f"Claim to validate: {input_string}\n\nTranscript: {transcript}"
+        return f"Claim to validate: {input_string}\n\n--- Begin Transcript ---\n{transcript}\n--- End Transcript ---"
 
     def _validate_step(self, state: ValidationState) -> ValidationState:
         """
