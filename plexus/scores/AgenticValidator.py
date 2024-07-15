@@ -400,18 +400,13 @@ class AgenticValidator(Score):
             Action: the action to take, should be one of [{tool_names}]
             Action Input: the input to the action
             Observation: the result of the action
-            ... (this Thought/Action/Action Input/Observation can repeat N times)
             Thought: I now know the final answer
             Final Answer: the final answer to the original input question
 
             Begin!
 
-            --- Begin Transcript ---
-            {transcript}
-            --- End Transcript ---
-            
             Human: {input}
-            Thought: I will analyze the transcript to find evidence supporting or refuting the claim.
+            Thought: I need to analyze the transcript to validate the claim.
             Action: Validate Claim
             Action Input: {input}
             Observation: {transcript}
@@ -429,16 +424,13 @@ class AgenticValidator(Score):
             verbose=True,
             handle_parsing_errors=True,
             callbacks=[self.tracer, self.token_counter],
-            max_iterations=2  # Limit the iterations
+            max_iterations=1  # Limit the iterations to ensure only one LLM call
         )
 
     def _validate_claim(self, input_string: str) -> str:
         """
-        This method may not be called in the single-call setup, but we keep it for compatibility.
+        This method returns the transcript, which will be inserted into the Observation.
         """
-        if self.current_state is None or self.current_state.transcript is None:
-            raise ValueError("Current state or transcript is not initialized")
-        
         return self.current_state.transcript
 
     def _validate_step(self, state: ValidationState) -> ValidationState:
@@ -473,9 +465,12 @@ class AgenticValidator(Score):
             
             input_string = f"Answer the following: {custom_prompt}"
             
+            # Prepare the transcript
+            transcript = self.current_state.transcript if self.current_state.transcript else "No transcript provided."
+            
             result = self.agent_executor.invoke({
                 "input": input_string,
-                "transcript": self.current_state.transcript
+                "transcript": transcript
             })
             
             # Get the full output including all steps and observations
@@ -530,22 +525,29 @@ class AgenticValidator(Score):
         """
         logging.info(f"Raw output to parse: {output}")
         
-        # Strip any leading/trailing whitespace and split by the first period
-        parts = output.strip().split('.', 1)
+        # Check if the output contains a Final Answer
+        if "Final Answer:" in output:
+            final_answer = output.split("Final Answer:")[-1].strip()
+        else:
+            final_answer = output.strip()
         
-        # Check if the first part (before the first period) is YES, NO, or UNCLEAR (case-insensitive)
-        first_word = parts[0].strip().lower()
-        if first_word == 'yes':
+        # Strip any leading/trailing whitespace
+        cleaned_output = final_answer.strip()
+        
+        # Check if the output starts with YES, NO, or UNCLEAR (case-insensitive)
+        lower_output = cleaned_output.lower()
+        if lower_output.startswith('yes'):
             validation_result = 'Yes'
-        elif first_word == 'no':
+            explanation = cleaned_output[3:].lstrip(' .,')
+        elif lower_output.startswith('no'):
             validation_result = 'No'
-        elif first_word == 'unclear':
+            explanation = cleaned_output[2:].lstrip(' .,')
+        elif lower_output.startswith('unclear'):
             validation_result = 'Unclear'
+            explanation = cleaned_output[7:].lstrip(' .,')
         else:
             validation_result = 'Unclear'
-
-        # The explanation is everything after the first period, or the entire string if there's no period
-        explanation = parts[1].strip() if len(parts) > 1 else output.strip()
+            explanation = cleaned_output
 
         logging.info(f"Parsed result: {validation_result}")
         logging.info(f"Parsed explanation: {explanation}")
