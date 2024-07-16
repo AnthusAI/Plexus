@@ -8,12 +8,15 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables.graph import MermaidDrawMethod, NodeColors
 from langchain_core.tools import Tool
-from langchain_core.callbacks import CallbackManager, BaseCallbackHandler
-from langchain_core.tracers import LangChainTracer
+from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.outputs import LLMResult
 from langchain.memory import SimpleMemory
 
 from langchain.agents import AgentExecutor, create_react_agent
 from langgraph.graph import StateGraph, START, END
+
+from langchain.globals import set_debug
+set_debug(True)
 
 from langchain_aws import ChatBedrock
 from langchain_openai import AzureChatOpenAI
@@ -21,7 +24,6 @@ from langchain_google_vertexai import ChatVertexAI
 
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
-import tiktoken
 import mlflow
 import os
 import traceback
@@ -75,26 +77,49 @@ class ValidationState:
 
 class TokenCounterCallback(BaseCallbackHandler):
     def __init__(self):
-        self.encoding = tiktoken.get_encoding("cl100k_base")
         self.prompt_tokens = 0
         self.completion_tokens = 0
+        self.total_tokens = 0
+        self.llm_calls = 0
 
     def on_llm_start(self, serialized, prompts, **kwargs):
-        prompt_tokens = sum(len(self.encoding.encode(prompt)) for prompt in prompts)
-        self.prompt_tokens += prompt_tokens
-        logging.info(f"Prompt tokens: {prompt_tokens}")
+        self.llm_calls += 1
+        logging.info(f"LLM Call {self.llm_calls} started")
 
-    def on_llm_end(self, response, **kwargs):
-        if hasattr(response, 'generations'):
-            completion_tokens = sum(len(self.encoding.encode(gen.text)) for generation in response.generations for gen in generation)
-            self.completion_tokens += completion_tokens
-            logging.info(f"Completion tokens (from generations): {completion_tokens}")
-        elif hasattr(response, 'llm_output') and response.llm_output:
-            completion_tokens = response.llm_output.get('token_usage', {}).get('completion_tokens', 0)
-            self.completion_tokens += completion_tokens
-            logging.info(f"Completion tokens (from llm_output): {completion_tokens}")
-        else:
-            logging.warning("Unable to determine completion tokens")
+    def on_llm_end(self, response: LLMResult, **kwargs):
+        logging.info(f"LLM Call {self.llm_calls} ended")
+        logging.info(f"Response type: {type(response)}")
+        logging.info(f"Response content: {response}")
+
+        usage = {}
+        if isinstance(response, LLMResult):
+            if response.llm_output:
+                usage = response.llm_output.get("usage", {})
+                logging.info(f"Token usage from llm_output: {usage}")
+            else:
+                logging.info("No llm_output in response")
+                
+            if response.generations and response.generations[0]:
+                generation = response.generations[0][0]
+                if hasattr(generation, 'generation_info') and generation.generation_info:
+                    usage = generation.generation_info.get("token_usage", {})
+                    logging.info(f"Token usage from generation_info: {usage}")
+                elif hasattr(generation, 'message') and hasattr(generation.message, 'usage_metadata'):
+                    usage = generation.message.usage_metadata
+                    logging.info(f"Token usage from usage_metadata: {usage}")
+                else:
+                    logging.info("No token usage information found in generation")
+            else:
+                logging.info("No generations in response")
+
+        self.prompt_tokens += usage.get("input_tokens", 0) or usage.get("prompt_tokens", 0)
+        self.completion_tokens += usage.get("output_tokens", 0) or usage.get("completion_tokens", 0)
+        self.total_tokens += usage.get("total_tokens", 0) or (self.prompt_tokens + self.completion_tokens)
+
+        logging.info(f"Current cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}")
+
+    def on_chain_end(self, outputs, **kwargs):
+        logging.info(f"Chain ended. Cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}")
 
 class AgenticValidator(Score):
     """
@@ -143,10 +168,8 @@ class AgenticValidator(Score):
         self.total_tokens = 0
         self.total_cost = 0
         self.agent_executor = None
-        self.current_state = None  # Initialize current_state as None
+        self.current_state = None
         self.langsmith_client = Client()
-        self.tracer = LangChainTracer(project_name="AgenticValidator")
-        self.callback_manager = CallbackManager([self.tracer])
         self.token_counter = TokenCounterCallback()
         self.dependency = self.parameters.dependency
         self.initialize_validation_workflow()
@@ -161,7 +184,7 @@ class AgenticValidator(Score):
             retry_if_exception_type=(Exception,),
             wait_exponential_jitter=True,
             stop_after_attempt=3
-        )
+        ).with_config(callbacks=[self.token_counter])
         self.workflow = self._create_workflow()
         self.agent_executor = self.create_react_agent()
         
@@ -229,8 +252,7 @@ class AgenticValidator(Score):
         if self.parameters.model_provider == "AzureChatOpenAI":
             return AzureChatOpenAI(
                 temperature=self.parameters.temperature,
-                max_tokens=max_tokens,
-                callbacks=[self.tracer]
+                max_tokens=max_tokens
             )
         elif self.parameters.model_provider == "BedrockChat":
             model_id = self.parameters.model_name or "anthropic.claude-3-5-sonnet-20240620-v1:0"
@@ -241,16 +263,14 @@ class AgenticValidator(Score):
                     "temperature": self.parameters.temperature,
                     "max_tokens": max_tokens
                 },
-                region_name=model_region,
-                callbacks=[self.tracer]
+                region_name=model_region
             )
         elif self.parameters.model_provider == "ChatVertexAI":
             model_name = self.parameters.model_name or "gemini-1.5-flash-001"
             return ChatVertexAI(
                 model=model_name,
                 temperature=self.parameters.temperature,
-                max_output_tokens=max_tokens,
-                callbacks=[self.tracer]
+                max_output_tokens=max_tokens
             )
         else:
             raise ValueError(f"Unsupported model provider: {self.parameters.model_provider}")
@@ -433,7 +453,7 @@ class AgenticValidator(Score):
             verbose=True,
             handle_parsing_errors=True,
             memory=SimpleMemory(memories={"transcript": ""}),  # Initialize empty transcript
-            callbacks=[self.tracer, self.token_counter]
+            callbacks=[self.token_counter]
         )
 
     def _validate_claim(self, input_string: str) -> str:
@@ -476,9 +496,14 @@ class AgenticValidator(Score):
             
             input_string = f"Answer the following: {custom_prompt}"
             
+            logging.info("Starting agent execution")
             result = self.agent_executor.invoke({
                 "input": input_string
             })
+            logging.info("Agent execution completed")
+            
+            logging.info(f"Agent executor result: {result}")
+            logging.info(f"Token usage after agent execution: Prompt: {self.token_counter.prompt_tokens}, Completion: {self.token_counter.completion_tokens}, Total: {self.token_counter.total_tokens}")
             
             # Get the full output including all steps and observations
             full_output = result['output']
@@ -568,10 +593,17 @@ class AgenticValidator(Score):
         self.current_state = initial_state  # Set the initial state
         logging.info(f"Initial state: {initial_state}")
 
-        # Reset token counter
-        self.token_counter = TokenCounterCallback()
+        # Reset token counter before each prediction
+        self.token_counter.prompt_tokens = 0
+        self.token_counter.completion_tokens = 0
+        self.token_counter.total_tokens = 0
+        self.token_counter.llm_calls = 0
 
-        final_state = self.workflow.invoke(initial_state, config={"callbacks": [self.tracer, self.token_counter]})
+        logging.info("Starting workflow invocation")
+        final_state = self.workflow.invoke(initial_state, config={"callbacks": [self.token_counter]})
+        logging.info("Workflow invocation completed")
+        
+        logging.info(f"Token usage after workflow - Prompt: {self.token_counter.prompt_tokens}, Completion: {self.token_counter.completion_tokens}, Total: {self.token_counter.total_tokens}")
 
         logging.info(f"Final state: {final_state}")
 
@@ -592,11 +624,13 @@ class AgenticValidator(Score):
         # Get token usage from our counter
         prompt_tokens = self.token_counter.prompt_tokens
         completion_tokens = self.token_counter.completion_tokens
-        total_tokens = prompt_tokens + completion_tokens
+        total_tokens = self.token_counter.total_tokens
+        llm_calls = self.token_counter.llm_calls
 
-        logging.info(f"Total tokens used: {total_tokens}")
-        logging.info(f"Prompt tokens: {prompt_tokens}")
-        logging.info(f"Completion tokens: {completion_tokens}")
+        logging.info(f"Final token usage - Total LLM calls: {llm_calls}")
+        logging.info(f"Final token usage - Total tokens used: {total_tokens}")
+        logging.info(f"Final token usage - Prompt tokens: {prompt_tokens}")
+        logging.info(f"Final token usage - Completion tokens: {completion_tokens}")
         logging.info(f"Parameters: {self.parameters}")
 
         # Log token metrics
