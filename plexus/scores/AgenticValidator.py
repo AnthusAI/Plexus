@@ -1,6 +1,5 @@
 from typing import Dict, List, Any, Literal, Optional, Union
 from pydantic import ConfigDict, Field, validator
-from plexus.scores.Score import Score
 from plexus.CustomLogging import logging
 from plexus.scores.LangGraphScore import LangGraphScore
 
@@ -80,7 +79,7 @@ class AgenticValidator(LangGraphScore):
     workflow implemented with LangGraph.
     """
 
-    class Parameters(Score.Parameters):
+    class Parameters(LangGraphScore.Parameters):
         """
         Parameters for configuring the AgenticValidator.
 
@@ -444,15 +443,15 @@ class AgenticValidator(LangGraphScore):
         logging.info(f"\nFailed to validate {step}")
         return state
 
-    def predict(self, model_input: Score.ModelInput) -> Score.ModelOutput:
+    def predict(self, model_input: LangGraphScore.ModelInput) -> LangGraphScore.ModelOutput:
         """
         Predict the validity of the education information based on the transcript and metadata.
 
         Args:
-            model_input (Score.ModelInput): The input containing the transcript and metadata.
+            model_input (LangGraphScore.ModelInput): The input containing the transcript and metadata.
 
         Returns:
-            Score.ModelOutput: The output containing the validation result.
+            LangGraphScore.ModelOutput: The output containing the validation result.
         """
         logging.info(f"Predict method input: {model_input}")
         initial_state = ValidationState(
@@ -525,7 +524,7 @@ class AgenticValidator(LangGraphScore):
             explanation=explanation
         )
 
-    class ModelInput(Score.ModelInput):
+    class ModelInput(LangGraphScore.ModelInput):
         """
         Model input containing the transcript and metadata.
 
@@ -540,7 +539,7 @@ class AgenticValidator(LangGraphScore):
                 return None
             return v
 
-    class ModelOutput(Score.ModelOutput):
+    class ModelOutput(LangGraphScore.ModelOutput):
         """
         Model output containing the validation result.
 
