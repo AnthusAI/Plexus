@@ -1,19 +1,17 @@
-from typing import Dict, List, Any, Literal, Optional, Union, Tuple
+from typing import Dict, List, Any, Literal, Optional, Union
 from pydantic import ConfigDict, Field, validator
 from plexus.scores.Score import Score
 from plexus.CustomLogging import logging
+from plexus.scores.LangGraphScore import LangGraphScore
 
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables.graph import MermaidDrawMethod, NodeColors
 from langchain_core.tools import Tool
-from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.outputs import LLMResult
 from langchain.memory import SimpleMemory
 
 from langchain.agents import AgentExecutor, create_react_agent
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph, END
 
 from langchain.globals import set_debug
 set_debug(True)
@@ -25,8 +23,6 @@ from langchain_google_vertexai import ChatVertexAI
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
 import mlflow
-import os
-import traceback
 import math
 
 from langsmith import Client
@@ -75,53 +71,7 @@ class ValidationState:
             f"has_dependency={self.has_dependency})"
         )
 
-class TokenCounterCallback(BaseCallbackHandler):
-    def __init__(self):
-        self.prompt_tokens = 0
-        self.completion_tokens = 0
-        self.total_tokens = 0
-        self.llm_calls = 0
-
-    def on_llm_start(self, serialized, prompts, **kwargs):
-        self.llm_calls += 1
-        logging.info(f"LLM Call {self.llm_calls} started")
-
-    def on_llm_end(self, response: LLMResult, **kwargs):
-        logging.info(f"LLM Call {self.llm_calls} ended")
-        logging.info(f"Response type: {type(response)}")
-        logging.info(f"Response content: {response}")
-
-        usage = {}
-        if isinstance(response, LLMResult):
-            if response.llm_output:
-                usage = response.llm_output.get("usage", {})
-                logging.info(f"Token usage from llm_output: {usage}")
-            else:
-                logging.info("No llm_output in response")
-                
-            if response.generations and response.generations[0]:
-                generation = response.generations[0][0]
-                if hasattr(generation, 'generation_info') and generation.generation_info:
-                    usage = generation.generation_info.get("token_usage", {})
-                    logging.info(f"Token usage from generation_info: {usage}")
-                elif hasattr(generation, 'message') and hasattr(generation.message, 'usage_metadata'):
-                    usage = generation.message.usage_metadata
-                    logging.info(f"Token usage from usage_metadata: {usage}")
-                else:
-                    logging.info("No token usage information found in generation")
-            else:
-                logging.info("No generations in response")
-
-        self.prompt_tokens += usage.get("input_tokens", 0) or usage.get("prompt_tokens", 0)
-        self.completion_tokens += usage.get("output_tokens", 0) or usage.get("completion_tokens", 0)
-        self.total_tokens += usage.get("total_tokens", 0) or (self.prompt_tokens + self.completion_tokens)
-
-        logging.info(f"Current cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}")
-
-    def on_chain_end(self, outputs, **kwargs):
-        logging.info(f"Chain ended. Cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}")
-
-class AgenticValidator(Score):
+class AgenticValidator(LangGraphScore):
     """
     An agentic validator that uses LangGraph and advanced LangChain components to validate education information,
     specifically for degree, using both transcript and metadata.
@@ -161,8 +111,6 @@ class AgenticValidator(Score):
             **parameters: Keyword arguments for configuring the validator.
         """
         super().__init__(**parameters)
-        self.llm = None
-        self.llm_with_retry = None
         self.agent = None
         self.workflow = None
         self.total_tokens = 0
@@ -170,7 +118,6 @@ class AgenticValidator(Score):
         self.agent_executor = None
         self.current_state = None
         self.langsmith_client = Client()
-        self.token_counter = TokenCounterCallback()
         self.dependency = self.parameters.dependency
         self.initialize_validation_workflow()
 
@@ -198,44 +145,6 @@ class AgenticValidator(Score):
 
         # Generate and save the graph visualization
         self.generate_graph_visualization()
-
-    def generate_graph_visualization(self, output_path: str = "./tmp/workflow_graph.png"):
-        """
-        Generate and save a PNG visualization of the workflow graph.
-
-        Args:
-            output_path (str): The path where the PNG file will be saved.
-        """
-        try:
-            # Get the graph
-            graph = self.workflow.get_graph()
-
-            # Ensure the directory exists
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
-            # Set a larger wrap_label_n_words to accommodate longer node names
-            wrap_label_n_words = 1  # Adjust this value as needed
-
-            graph.draw_mermaid_png(
-                draw_method=MermaidDrawMethod.API,
-                node_colors=NodeColors(
-                    start="#73fa97",
-                    end="#f086bb",
-                    other="#deeffa"
-                ),
-                background_color="white",
-                padding=10,
-                output_file_path=output_path,
-                wrap_label_n_words=wrap_label_n_words
-            )
-
-            logging.info(f"Graph visualization saved to {output_path}")
-            
-            # Log the graph as an artifact in MLflow
-            mlflow.log_artifact(output_path)
-        except Exception as e:
-            error_msg = f"Failed to generate graph visualization: {str(e)}\n{traceback.format_exc()}"
-            logging.error(error_msg)
 
     def _initialize_model(self) -> BaseLanguageModel:
         """
@@ -274,21 +183,6 @@ class AgenticValidator(Score):
             )
         else:
             raise ValueError(f"Unsupported model provider: {self.parameters.model_provider}")
-
-    def _split_name(self, name: str, separator: str = "\n") -> str:
-        """
-        Split a name into two parts, separated by the given separator.
-        
-        Args:
-            name (str): The name to split.
-            separator (str, optional): The separator to use. Defaults to "\n".
-        
-        Returns:
-            str: The name split into two parts.
-        """
-        words = name.replace(":", "").split()
-        mid = len(words) // 2
-        return f"{' '.join(words[:mid])}{separator}{' '.join(words[mid:])}"
 
     def _create_workflow(self):
         """
@@ -496,6 +390,11 @@ class AgenticValidator(Score):
             
             input_string = f"Answer the following: {custom_prompt}"
             
+            # Log the agent's memory before execution
+            logging.info("Agent's memory before execution:")
+            for key, value in self.agent_executor.memory.memories.items():
+                logging.info(f"{key}: {value}")
+            
             logging.info("Starting agent execution")
             result = self.agent_executor.invoke({
                 "input": input_string
@@ -544,36 +443,6 @@ class AgenticValidator(Score):
         state.explanation = f"{step.capitalize()}: Validation failed due to technical issues.\n\n"
         logging.info(f"\nFailed to validate {step}")
         return state
-
-    def _parse_validation_result(self, output: str) -> Tuple[str, str]:
-        """
-        Parse the output from the language model to determine the validation result and explanation.
-
-        Args:
-            output (str): The raw output from the language model.
-
-        Returns:
-            Tuple[str, str]: A tuple containing the validation result and explanation.
-        """
-        logging.info(f"Raw output to parse: {output}")
-        
-        # Check if the output starts with YES, NO, or UNCLEAR
-        first_word = output.split(',')[0].strip().upper()
-        
-        if first_word == "YES":
-            validation_result = "Yes"
-        elif first_word == "NO":
-            validation_result = "No"
-        else:
-            validation_result = "Unclear"
-
-        # Extract explanation (everything after the first comma)
-        explanation = output.split(',', 1)[1].strip() if ',' in output else output
-
-        logging.info(f"Parsed result: {validation_result}")
-        logging.info(f"Parsed explanation: {explanation}")
-
-        return validation_result, explanation
 
     def predict(self, model_input: Score.ModelInput) -> Score.ModelOutput:
         """
@@ -655,21 +524,6 @@ class AgenticValidator(Score):
             score=validation_result,
             explanation=explanation
         )
-
-    def register_model(self):
-        """
-        Register the model with MLflow by logging relevant parameters.
-        """
-        mlflow.log_param("model_type", "AgenticValidator")
-        mlflow.log_param("model_provider", self.parameters.model_provider)
-        mlflow.log_param("model_name", self.parameters.model_name)
-
-    def save_model(self):
-        """
-        Save the model to a specified path and log it as an artifact with MLflow.
-        """
-        model_path = f"models/AgenticValidator_{self.parameters.model_provider}_{self.parameters.model_name}"
-        mlflow.log_artifact(model_path)
 
     class ModelInput(Score.ModelInput):
         """
