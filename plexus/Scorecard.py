@@ -118,7 +118,13 @@ class Scorecard:
         scorecard_registry.register(
             scorecard_properties['key'],
             scorecard_properties['family'])(scorecard_class)
-        scorecard_class.load_and_register_scores()
+
+        # Find the path of the Markdown files for individual scores from the file name.
+        file_name = os.path.splitext(os.path.basename(yaml_file_path))[0]
+        markdown_folder_path = os.path.join(
+            'scorecards', file_name)
+
+        scorecard_class.load_and_register_scores(markdown_folder_path)
 
         return scorecard_class
     
@@ -130,14 +136,14 @@ class Scorecard:
                 cls.create_from_yaml(yaml_file_path)
 
     @classmethod
-    def load_and_register_scores(cls):
+    def load_and_register_scores(cls, markdown_folder_path):
         """
         Load and register the scores based on the `scores` dictionary.
         """
         for score_name in cls.score_names_to_process():
             normalized_score_name = cls.normalize_score_name(score_name)
             markdown_file_path = os.path.join(
-                'scorecards', score_name, f"{normalized_score_name}.md")
+                markdown_folder_path, f"{normalized_score_name}.md")
 
             score_class = CompositeScore.create_from_markdown(
                 scorecard=cls,
