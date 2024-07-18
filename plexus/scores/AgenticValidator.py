@@ -9,10 +9,17 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import Tool
 from langchain.memory import SimpleMemory
 
-from langchain.agents import AgentExecutor, create_react_agent
+from langchain.agents import AgentExecutor
+from langchain.agents.format_scratchpad import format_log_to_str
+from langchain.agents.output_parsers import ReActSingleInputOutputParser
+from langchain.tools.render import render_text_description
+
 from langgraph.graph import StateGraph, END
 
 from langchain.globals import set_debug
+from langchain_core.agents import AgentAction, AgentFinish
+from langchain_core.runnables import RunnablePassthrough
+
 set_debug(True)
 
 from langchain_aws import ChatBedrock
@@ -102,6 +109,23 @@ class AgenticValidator(LangGraphScore):
         prompt: str = ""
         dependency: Optional[Dict[str, str]] = None
 
+    class CustomRetryOutputParser(ReActSingleInputOutputParser):
+        def parse(self, text: str) -> Union[AgentAction, AgentFinish]:
+            try:
+                return super().parse(text)
+            except Exception as e:
+                # Log the parsing error
+                logging.error(f"Parsing error: {e}")
+                logging.error(f"Problematic text: {text}")
+
+                # Attempt to salvage a response
+                if "Final Answer:" in text:
+                    final_answer = text.split("Final Answer:")[-1].strip()
+                    return AgentFinish(return_values={"output": final_answer}, log=text)
+                
+                # If we can't salvage a response, raise a more informative error
+                raise ValueError(f"Could not parse LLM output: {text}") from e
+
     def __init__(self, **parameters):
         """
         Initialize the AgenticValidator with the given parameters.
@@ -132,7 +156,7 @@ class AgenticValidator(LangGraphScore):
             stop_after_attempt=3
         ).with_config(callbacks=[self.token_counter])
         self.workflow = self._create_workflow()
-        self.agent_executor = self.create_react_agent()
+        self.agent_executor = self.create_lcel_agent()
         
         mlflow.log_param("model_provider", self.parameters.model_provider)
         mlflow.log_param("model_name", self.parameters.model_name)
@@ -264,7 +288,6 @@ class AgenticValidator(LangGraphScore):
             
             prompt = self.dependency['prompt']
             
-            # Use the transcript in the prompt if needed
             full_prompt = f"""
             Based on the following transcript, {prompt}
             
@@ -276,6 +299,7 @@ class AgenticValidator(LangGraphScore):
             
             response = self.llm_with_retry.invoke(full_prompt)
             
+            # Use the inherited _parse_validation_result method
             validation_result, explanation = self._parse_validation_result(response.content)
             
             self.current_state.current_step = "dependency_check"
@@ -301,9 +325,9 @@ class AgenticValidator(LangGraphScore):
         """
         return state.validation_result.lower() != "no"
 
-    def create_react_agent(self):
+    def create_lcel_agent(self):
         """
-        Create a ReAct agent for validation tasks with memory for the transcript.
+        Create an LCEL-based agent for validation tasks with memory for the transcript.
         """
         tools = [
             Tool(
@@ -339,13 +363,26 @@ class AgenticValidator(LangGraphScore):
             """
         )
 
-        agent = create_react_agent(self.llm, tools, prompt)
+        tool_names = ", ".join([tool.name for tool in tools])
+        prompt = prompt.partial(tools=render_text_description(tools), tool_names=tool_names)
+
+        llm_with_stop = self.llm_with_retry.bind(stop=["\nObservation:", "\nHuman:", "\nQuestion:"])
+
+        agent = (
+            RunnablePassthrough.assign(
+                agent_scratchpad = lambda x: format_log_to_str(x["intermediate_steps"])
+            )
+            | prompt
+            | llm_with_stop
+            | self.CustomRetryOutputParser()
+        )
+
         return AgentExecutor(
             agent=agent,
             tools=tools,
             verbose=True,
             handle_parsing_errors=True,
-            memory=SimpleMemory(memories={"transcript": ""}),  # Initialize empty transcript
+            memory=SimpleMemory(memories={"transcript": ""}),
             callbacks=[self.token_counter]
         )
 
@@ -355,11 +392,11 @@ class AgenticValidator(LangGraphScore):
         This method is used as a tool by the React agent.
         """
         transcript = self.agent_executor.memory.memories.get("transcript", "")
-        return f"Claim to validate: {input_string}\n\n--- Begin Transcript ---\n{transcript}\n--- End Transcript ---"
+        return f"--- Begin Transcript ---\n{transcript}\n--- End Transcript ---\n\n Question: {input_string}"
 
     def _validate_step(self, state: ValidationState) -> ValidationState:
         """
-        Perform validation for a specific step using the ReAct agent.
+        Perform validation for a specific step using the React agent.
         """
         self.current_state = state
         
