@@ -351,9 +351,11 @@ class AgenticValidator(LangGraphScore):
             Action: the action to take, should be one of [{tool_names}]
             Action Input: the input to the action
             Observation: the result of the action
-            ... (this Thought/Action/Action Input/Observation can repeat N times)
+            ... (this Thought/Action/Action Input/Observation can repeat if necessary, but aim to reach a conclusion quickly)
             Thought: I now know the final answer
             Final Answer: Respond with YES or NO, followed by a comma and then a brief explanation.
+
+            Important: Be efficient in your analysis. Aim to reach a conclusion within 1-2 steps if possible. If you have enough information to make a decision, do so without unnecessary additional steps.
 
             Begin!
 
@@ -586,17 +588,3 @@ class AgenticValidator(LangGraphScore):
         """
         score: str
         explanation: str
-
-    def train_model(self):
-        """
-        Placeholder method to satisfy the base class requirement.
-        This validator doesn't require traditional training.
-        """
-        pass
-
-    def predict_validation(self):
-        """
-        Placeholder method to satisfy the base class requirement.
-        This validator doesn't require traditional training.
-        """
-        pass
