@@ -202,18 +202,21 @@ class LangGraphScore(Score):
         """
         logging.info(f"Raw output to parse: {output}")
         
-        # Check if the output starts with YES, NO, or UNCLEAR
-        first_word = output.split(',')[0].strip().upper()
+        # Clean and normalize the output
+        cleaned_output = output.strip().lower()
         
-        if first_word == "YES":
+        # Extract the first word, handling potential punctuation
+        first_word = cleaned_output.split(None, 1)[0].rstrip('.,')
+        
+        if first_word == "yes":
             validation_result = "Yes"
-        elif first_word == "NO":
+        elif first_word == "no":
             validation_result = "No"
         else:
             validation_result = "Unclear"
 
-        # Extract explanation (everything after the first comma)
-        explanation = output.split(',', 1)[1].strip() if ',' in output else output
+        # Extract explanation (everything after the first word)
+        explanation = cleaned_output[len(first_word):].lstrip('., ')
 
         logging.info(f"Parsed result: {validation_result}")
         logging.info(f"Parsed explanation: {explanation}")
