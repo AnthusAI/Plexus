@@ -112,18 +112,19 @@ class AgenticValidator(LangGraphScore):
     class CustomRetryOutputParser(ReActSingleInputOutputParser):
         def parse(self, text: str) -> Union[AgentAction, AgentFinish]:
             try:
-                return super().parse(text)
+                if "Action: Finish" in text:
+                    # Extract the final answer after "Action Input:"
+                    final_answer = text.split("Action Input:")[-1].strip()
+                    return AgentFinish(return_values={"output": final_answer}, log=text)
+                elif "Action:" in text and "Action Input:" in text:
+                    action = text.split("Action:")[-1].split("\n")[0].strip()
+                    action_input = text.split("Action Input:")[-1].strip()
+                    return AgentAction(tool=action, tool_input=action_input, log=text)
+                else:
+                    raise ValueError(f"Could not parse LLM output: {text}")
             except Exception as e:
-                # Log the parsing error
                 logging.error(f"Parsing error: {e}")
                 logging.error(f"Problematic text: {text}")
-
-                # Attempt to salvage a response
-                if "Final Answer:" in text:
-                    final_answer = text.split("Final Answer:")[-1].strip()
-                    return AgentFinish(return_values={"output": final_answer}, log=text)
-                
-                # If we can't salvage a response, raise a more informative error
                 raise ValueError(f"Could not parse LLM output: {text}") from e
 
     def __init__(self, **parameters):
@@ -347,20 +348,22 @@ class AgenticValidator(LangGraphScore):
             Use the following format:
 
             Question: the input question you must answer
-            Thought: you should always think about what to do
+            Observation: observe the initial information provided
             Action: the action to take, should be one of [{tool_names}]
             Action Input: the input to the action
             Observation: the result of the action
-            ... (this Thought/Action/Action Input/Observation can repeat if necessary, but aim to reach a conclusion quickly)
-            Thought: I now know the final answer
-            Final Answer: Respond with YES or NO, followed by a comma and then a detailed 2-3 sentence explanation.
+            Reasoning: analyze the observations and draw conclusions
+            Action: choose to either use a tool again or Finish
+            Action Input: if using a tool, provide the input; if Finish, respond with YES or NO, followed by a comma and then a detailed 2-3 sentence explanation.
 
-            Important: Be efficient in your analysis. Aim to reach a conclusion within 1-2 steps if possible. If you have enough information to make a decision, do so without unnecessary additional steps.
+            Continue this process until you have enough information to provide a final answer.
 
             Begin!
 
             Question: {input}
-            Thought: I have been provided with a transcript in my memory and a claim to validate. I will analyze the transcript to find evidence supporting or refuting the claim.
+            Observation: I have been provided with a transcript in my memory and a claim to validate.
+            Action: Validate Claim
+            Action Input: Analyze the transcript to find evidence supporting or refuting the claim: {input}
             {agent_scratchpad}
             """
         )
