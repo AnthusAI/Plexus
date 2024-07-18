@@ -353,7 +353,7 @@ class AgenticValidator(LangGraphScore):
             Observation: the result of the action
             ... (this Thought/Action/Action Input/Observation can repeat if necessary, but aim to reach a conclusion quickly)
             Thought: I now know the final answer
-            Final Answer: Respond with YES or NO, followed by a comma and then a brief explanation.
+            Final Answer: Respond with YES or NO, followed by a comma and then a detailed 2-3 sentence explanation.
 
             Important: Be efficient in your analysis. Aim to reach a conclusion within 1-2 steps if possible. If you have enough information to make a decision, do so without unnecessary additional steps.
 
