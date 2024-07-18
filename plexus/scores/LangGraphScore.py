@@ -237,3 +237,17 @@ class LangGraphScore(Score):
         """
         model_path = f"models/{self.__class__.__name__}_{self.parameters.model_provider}_{self.parameters.model_name}"
         mlflow.log_artifact(model_path)
+
+    def train_model(self):
+        """
+        Placeholder method to satisfy the base class requirement.
+        This validator doesn't require traditional training.
+        """
+        pass
+
+    def predict_validation(self):
+        """
+        Placeholder method to satisfy the base class requirement.
+        This validator doesn't require traditional training.
+        """
+        pass
