@@ -60,7 +60,8 @@ class ExplainableClassifier(Score):
         logging.info("Vectorizing text data using TF-IDF...")
 
         # Extract the text data and target labels from the sampled dataframe
-        text_data = self.dataframe['Transcription'].tolist()
+        self.original_text_data = self.dataframe['Transcription'].tolist()
+        text_data = self.original_text_data  # We'll use this for vectorization
         y = self.dataframe[self.parameters.score_name]
         logging.info(f"Number of examples: {len(text_data)}")
 
@@ -68,7 +69,9 @@ class ExplainableClassifier(Score):
         logging.info(f"Creating TF-IDF representation with ngram range: {self.parameters.ngram_range}")
         self.vectorizer = TfidfVectorizer(ngram_range=self.ngram_range)
         X = self.vectorizer.fit_transform(text_data)
-                
+        logging.info(f"Vectorized training data shape: {X.shape}")
+        logging.info(f"Sample of vectorized training data:\n{X[:5].toarray()}")
+
         logging.info(f"Number of features before selection: {X.shape[1]}")
 
         # Select top N features based on ANOVA F-value with f_classif
@@ -83,14 +86,20 @@ class ExplainableClassifier(Score):
 
         # Transform the data using the selected features
         X_selected = self.selector.transform(X)
-        
+        logging.info(f"Selected features shape: {X_selected.shape}")
+        logging.info(f"Sample of selected features:\n{X_selected[:5].toarray()}")
+
         logging.info(f"Number of features after selection: {X_selected.shape[1]}")
 
         # Split the data into training and testing sets using the selected features
         logging.info("Splitting data into training and testing sets...")
         test_size_proportion = 0.2
-        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
-            X_selected, y, test_size=test_size_proportion, random_state=42)
+        indices = np.arange(X_selected.shape[0])
+        self.X_train, self.X_test, self.y_train, self.y_test, self.train_indices, self.test_indices = train_test_split(
+            X_selected, y, indices, test_size=test_size_proportion, random_state=42)
+
+        logging.info(f"Train indices: {self.train_indices[:5]} ... (showing first 5)")
+        logging.info(f"Test indices: {self.test_indices[:5]} ... (showing first 5)")
 
         # Log the shape and distribution of the training and testing sets
         logging.info(f"Training set shape: {self.X_train.shape}, Testing set shape: {self.X_test.shape}")
@@ -299,36 +308,54 @@ class ExplainableClassifier(Score):
 
     def predict_validation(self):
         logging.info("predict_validation() called")
-        logging.info(f"X_test shape: {self.X_test.shape}")
+        logging.info(f"Number of test samples: {len(self.test_indices)}")
 
         self.val_predictions = []
         self.val_confidence_scores = []
         self.val_explanations = []
         self.val_labels = self.y_test
 
-        positive_log_count = 0
-        negative_log_count = 0
+        for i, original_index in enumerate(self.test_indices):
+            original_text = self.original_text_data[original_index]
+            true_label = self.val_labels.iloc[i]
 
-        for i in range(self.X_test.shape[0]):
-            sample = self.X_test[i].toarray().flatten()
-            result = self.predict(None, sample, i, positive_log_count, negative_log_count)
+            # Use the actual predict() function
+            result = self.predict(None, original_text)
+
             self.val_predictions.append(result.score)
             self.val_confidence_scores.append(result.confidence)
             self.val_explanations.append(result.explanation)
 
-            if result.classification == 'Yes':
-                positive_log_count += 1
-            else:
-                negative_log_count += 1
+            if i == 0 or result.score != true_label:
+                logging.info(f"{'First sample' if i == 0 else 'Mismatch'} (index {i}):")
+                logging.info(f"Original text:\n{original_text[:500]}...")  # Log first 500 characters
+                logging.info(f"True label: {true_label}")
+                logging.info(f"Prediction: {result.score}")
+                logging.info(f"Confidence: {result.confidence}")
+                logging.info(f"Explanation:\n{result.explanation}")
 
         self.val_predictions = np.array(self.val_predictions)
         self.val_confidence_scores = np.array(self.val_confidence_scores)
 
-        logging.info(f"Generated predictions for {len(self.val_predictions)} samples")
+        accuracy = np.mean(self.val_predictions == self.val_labels)
+        logging.info(f"Validation complete. Processed {len(self.test_indices)} samples.")
+        logging.info(f"Accuracy: {accuracy:.2%}")
+
         logging.info(f"val_predictions shape: {self.val_predictions.shape}")
         logging.info(f"val_confidence_scores shape: {self.val_confidence_scores.shape}")
         logging.info(f"val_labels shape: {self.val_labels.shape}")
         logging.info(f"Number of explanations: {len(self.val_explanations)}")
+
+        # Log a few sample predictions
+        num_samples = min(5, len(self.val_predictions))
+        logging.info(f"Sample predictions (first {num_samples}):")
+        for i in range(num_samples):
+            logging.info(f"  Sample {i}: True: {self.val_labels.iloc[i]}, Predicted: {self.val_predictions[i]}, Confidence: {self.val_confidence_scores[i]:.4f}")
+
+    def preprocess_text(self, text):
+        # Implement any necessary preprocessing steps here
+        # This should mimic the preprocessing done during training
+        return text  # For now, just return the text as-is
 
     def evaluate_model(self):
         # Set the necessary attributes before calling the parent's evaluate_model()
@@ -360,42 +387,39 @@ class ExplainableClassifier(Score):
         """
         This Score has an additional output attribute, explanation, which is a string
         """
+        confidence: float
         explanation: str
 
     # New method to vectorize a single transcript
-    def vectorize_transcript(self, transcript: str):
-        logging.info("vectorize_transcript() called")
-        logging.info(f"Transcript length: {len(transcript)}")
-        
-        vectorized = self.vectorizer.transform([transcript])
-        logging.info(f"Vectorized shape: {vectorized.shape}")
-        
+    def vectorize_transcript(self, transcript: str):        
+        vectorized = self.vectorizer.transform([transcript])        
         selected = self.selector.transform(vectorized)
-        logging.info(f"Selected shape: {selected.shape}")
-        
         return selected
 
-    def predict(self, context, model_input, sample_index=0, positive_log_count=0, negative_log_count=0):
-        logging.debug(f"predict() called with input type: {type(model_input)}")
+    def predict(self, context, model_input):
+        if isinstance(model_input, str):
+            preprocessed_input = self.preprocess_text(model_input)
+            vectorized_input = self.vectorize_transcript(preprocessed_input)
+        else:
+            vectorized_input = model_input
         
-        prepared_input = self._prepare_input(model_input)
-        logging.debug(f"Prepared input shape: {prepared_input.shape}")
-        
+        prepared_input = self._prepare_input(vectorized_input)
         probabilities = self._calculate_probabilities(prepared_input)
         prediction = np.argmax(probabilities)
         confidence_score = np.max(probabilities)
         
-        shap_values = self._extract_shap_values(prepared_input)
-        explanation = self._generate_single_explanation(prepared_input, prediction, confidence_score, shap_values, 
-                                                        sample_index, positive_log_count, negative_log_count)
-
-        # Convert numeric prediction to string label using label_map
         prediction_label = list(self.label_map.keys())[list(self.label_map.values()).index(prediction)]
-        logging.debug(f"Prediction: {prediction_label}, Confidence: {confidence_score:.4f}")
         
+        # Generate a basic explanation
+        feature_importance = self.model.feature_importances_
+        feature_names = self.feature_names
+        sorted_idx = feature_importance.argsort()
+        top_features = [f"{feature_names[i]} ({feature_importance[i]:.4f})" for i in sorted_idx[-10:]]
+        explanation = "\n".join(reversed(top_features))
+
         return self.ModelOutput(
-            score =       prediction_label,
-            confidence =  confidence_score,
+            score = prediction_label,
+            confidence = confidence_score,
             explanation = explanation
         )
 
@@ -494,12 +518,21 @@ class ExplainableClassifier(Score):
         top_features = sorted_features[:10]
         top_shap_values = sorted_shap_values[:10]
 
-        should_log = (prediction == 1 and positive_log_count < 3) or (prediction == 0 and negative_log_count < 3)
+        if not hasattr(self, 'positive_log_count'):
+            self.positive_log_count = 0
+        if not hasattr(self, 'negative_log_count'):
+            self.negative_log_count = 0
+        should_log = (prediction == 1 and self.positive_log_count < 3) or (prediction == 0 and self.negative_log_count < 3)
         if should_log:
             self._log_sample_explanation(sample_index, prediction, confidence_score,
                                         top_features, top_shap_values)
+            if prediction == 1:
+                self.positive_log_count += 1
+            else:
+                self.negative_log_count += 1
 
-        return "\n".join([f"{feature} ({shap_value:.4f})" for feature, shap_value in zip(top_features, top_shap_values)])
+        explanation = "\n".join([f"{feature} ({shap_value:.4f})" for feature, shap_value in zip(top_features, top_shap_values)])
+        return explanation
 
     def _log_sample_explanation(self, sample_index, prediction, confidence, top_features, top_shap_values):
         feature_shap_pairs = list(zip(top_features, top_shap_values))
