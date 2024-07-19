@@ -12,12 +12,16 @@ from plexus.cli.console import console
 
 import rich
 import importlib
-from rich.pretty import pprint
-from plexus.scores.Score import Score
 from collections import Counter
+import concurrent.futures
+import time
+import threading
 
 from dotenv import load_dotenv
 load_dotenv()
+
+# Add this at the top of your file
+console_lock = threading.Lock()
 
 @click.group()
 def evaluate():
@@ -102,18 +106,21 @@ def accuracy(
 
 @evaluate.command()
 @click.option('--scorecard-name', required=True, help='Name of the scorecard to evaluate')
-@click.option('--number-of-samples', default=100, help='Number of samples to evaluate')
+@click.option('--number-of-samples', default=200, help='Number of samples to evaluate')
 @click.option('--subset-of-scores', default='', help='Comma-separated list of score names to evaluate')
+@click.option('--max-workers', default=50, help='Maximum number of parallel workers')
 def distribution(
     scorecard_name: str,
     number_of_samples: int,
-    subset_of_scores: str
+    subset_of_scores: str,
+    max_workers: int
 ):
     """
     Evaluate the distribution of scores for the scorecard using the current configuration.
     This command will generate distribution metrics and artifacts that Plexus will log in MLFlow.
     """
-    logging.info(f"Evaluating distribution for Scorecard [magenta1][b]{scorecard_name}[/b][/magenta1]...")
+    start_time = time.time()
+    console.print(f"[bold magenta]Starting distribution evaluation for Scorecard {scorecard_name} at {time.strftime('%H:%M:%S')}[/bold magenta]")
 
     Scorecard.load_and_register_scorecards('scorecards/')
     scorecard_class = scorecard_registry.get(scorecard_name)
@@ -122,25 +129,33 @@ def distribution(
         logging.error(f"Scorecard with name '{scorecard_name}' not found.")
         return
 
-    logging.info(f"Found registered Scorecard named [magenta1][b]{scorecard_class.name}[/b][/magenta1] implemented in Python class [magenta1][b]{scorecard_class.__name__}[/b][/magenta1]")
-
     scores_to_evaluate = subset_of_scores.split(',') if subset_of_scores else list(scorecard_class.scores.keys())[:10]
     
-    for score_name in scores_to_evaluate:
-        evaluate_score_distribution(score_name, scorecard_class, number_of_samples)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_score = {executor.submit(evaluate_score_distribution, score_name, scorecard_class, number_of_samples): score_name for score_name in scores_to_evaluate}
+        for future in concurrent.futures.as_completed(future_to_score):
+            score_name = future_to_score[future]
+            try:
+                future.result()
+            except Exception as exc:
+                logging.error(f'{score_name} generated an exception: {exc}')
+
+    end_time = time.time()
+    console.print(f"[bold magenta]Finished distribution evaluation at {time.strftime('%H:%M:%S')}. Total time: {end_time - start_time:.2f} seconds[/bold magenta]")
 
 def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
     """
     This function will evaluate the distribution for a single score.
     """
-    logging.info(f"Evaluating distribution for Score [magenta1][b]{score_name}[/b][/magenta1]...")
+    start_time = time.time()
+    with console_lock:
+        console.print(f"[bold blue]Started evaluating distribution for Score {score_name} at {time.strftime('%H:%M:%S')}[/bold blue]")
+    
     score_configuration = scorecard_class.scores.get(score_name)
 
     if not score_configuration:
         logging.error(f"Score with name '{score_name}' not found in scorecard '{scorecard_class.name}'.")
         return
-
-    logging.info(f"Score Configuration: {rich.pretty.pretty_repr(score_configuration)}")
 
     # Score class instance setup
     score_class_name = score_configuration['class']
@@ -161,17 +176,24 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
     score_instance.record_configuration(score_configuration)
 
     # Data processing
+    with console_lock:
+        console.print(f"[yellow]Loading data for {score_name} at {time.strftime('%H:%M:%S')}[/yellow]")
     data_queries = score_configuration['data']['queries']
     score_instance.load_data(queries=data_queries)
+    
+    with console_lock:
+        console.print(f"[yellow]Processing data for {score_name} at {time.strftime('%H:%M:%S')}[/yellow]")
     score_instance.process_data()
 
     # Sample and predict
+    with console_lock:
+        console.print(f"[yellow]Starting predictions for {score_name} at {time.strftime('%H:%M:%S')}[/yellow]")
     sample_rows = score_instance.dataframe.sample(n=number_of_samples)
     predictions = []
 
     for _, row in sample_rows.iterrows():
         row_dictionary = row.to_dict()
-        transcript = row_dictionary['Transcription']  # TODO: Eliminate this by making it be the first column.
+        transcript = row_dictionary['Transcription']
         model_input_class = getattr(score_class, 'ModelInput')
         prediction_result = score_instance.predict(
             model_input_class(
@@ -184,17 +206,19 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
     # Count Yes/No answers
     answer_counts = Counter(pred.score for pred in predictions)
     
-    # Print results
-    console.print(f"\n[bold]Results for {score_name}:[/bold]")
-    console.print(f"Total samples: {number_of_samples}")
-    console.print(f"Yes answers: {answer_counts['Yes']}")
-    console.print(f"No answers: {answer_counts['No']}")
-    
-    # Calculate percentages
-    yes_percentage = (answer_counts['Yes'] / number_of_samples) * 100
-    no_percentage = (answer_counts['No'] / number_of_samples) * 100
-    
-    console.print(f"Yes percentage: {yes_percentage:.2f}%")
-    console.print(f"No percentage: {no_percentage:.2f}%")
+    with console_lock:
+        console.print(f"\n[bold green]Results for {score_name}:[/bold green]")
+        console.print(f"Total samples: {number_of_samples}")
+        console.print(f"Yes answers: {answer_counts['Yes']}")
+        console.print(f"No answers: {answer_counts['No']}")
+        
+        yes_percentage = (answer_counts['Yes'] / number_of_samples) * 100
+        no_percentage = (answer_counts['No'] / number_of_samples) * 100
+        
+        console.print(f"Yes percentage: {yes_percentage:.2f}%")
+        console.print(f"No percentage: {no_percentage:.2f}%")
+        
+        end_time = time.time()
+        console.print(f"[bold blue]Finished {score_name} at {time.strftime('%H:%M:%S')}. Time taken: {end_time - start_time:.2f} seconds[/bold blue]")
 
     # TODO: Add more detailed distribution analysis and MLFlow logging here
