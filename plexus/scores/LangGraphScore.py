@@ -5,7 +5,7 @@ from langchain_core.outputs import LLMResult
 from typing import Tuple, Literal, Optional
 from pydantic import ConfigDict
 
-from langchain_core.runnables.graph import MermaidDrawMethod, NodeColors
+import os
 
 from langchain_aws import ChatBedrock
 from langchain_openai import AzureChatOpenAI
@@ -15,6 +15,8 @@ import mlflow
 import os
 import logging
 import traceback
+
+import graphviz
 
 class LangGraphScore(Score):
     class Parameters(Score.Parameters):
@@ -136,60 +138,6 @@ class LangGraphScore(Score):
         else:
             raise ValueError(f"Unsupported model provider: {self.parameters.model_provider}")
 
-    def _split_name(self, name: str, separator: str = "\n") -> str:
-        """
-        Split a name into two parts, separated by the given separator.
-        
-        Args:
-            name (str): The name to split.
-            separator (str, optional): The separator to use. Defaults to "\n".
-        
-        Returns:
-            str: The name split into two parts.
-        """
-        words = name.replace(":", "").split()
-        mid = len(words) // 2
-        return f"{' '.join(words[:mid])}{separator}{' '.join(words[mid:])}"
-
-    def generate_graph_visualization(self, output_path: str = "./tmp/workflow_graph.png"):
-        """
-        Generate and save a PNG visualization of the workflow graph.
-
-        Args:
-            output_path (str): The path where the PNG file will be saved.
-        """
-        try:
-            # Get the graph
-            graph = self.workflow.get_graph()
-
-            # Ensure the directory exists
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
-            # Set a larger wrap_label_n_words to accommodate longer node names
-            wrap_label_n_words = 1  # Adjust this value as needed
-
-            graph.draw_mermaid_png(
-                draw_method=MermaidDrawMethod.API,
-                node_colors=NodeColors(
-                    start="#73fa97",
-                    end="#f086bb",
-                    other="#deeffa"
-                ),
-                background_color="white",
-                padding=10,
-                output_file_path=output_path,
-                wrap_label_n_words=wrap_label_n_words
-            )
-
-            logging.info(f"Graph visualization saved to {output_path}")
-            
-            # Log the graph as an artifact in MLflow
-            mlflow.log_artifact(output_path)
-        except Exception as e:
-            error_msg = f"Failed to generate graph visualization: {str(e)}\n{traceback.format_exc()}"
-            logging.error(error_msg)
-
-
     def _parse_validation_result(self, output: str) -> Tuple[str, str]:
         """
         Parse the output from the language model to determine the validation result and explanation.
@@ -222,6 +170,62 @@ class LangGraphScore(Score):
         logging.info(f"Parsed explanation: {explanation}")
 
         return validation_result, explanation
+    
+    def generate_graph_visualization(self, output_path: str = "./tmp/workflow_graph"):
+        try:
+            logging.info("Starting graph visualization generation")
+            
+            # Get the graph
+            graph = self.workflow.get_graph()
+            logging.info("Graph obtained from workflow")
+
+            # Ensure the directory exists
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            logging.info(f"Output directory created: {os.path.dirname(output_path)}")
+
+            # Create a new directed graph
+            dot = graphviz.Digraph(comment='Workflow Graph')
+            dot.attr(rankdir='TB', size='8,5', dpi='300')
+            dot.attr('node', shape='rectangle', style='rounded,filled', fontname='Arial', fontsize='10', margin='0.2,0.1')
+            dot.attr('edge', fontname='Arial', fontsize='8')
+
+            # Color scheme
+            colors = {
+                'start': '#73fa97',  # Light green
+                'end': '#f086bb',    # Light pink
+                'other': '#deeffa'   # Light blue
+            }
+
+            # Add nodes
+            for node_id, node in graph.nodes.items():
+                node_label = node_id.replace('\n', '\\n')  # Preserve newlines in labels
+                if node_id == '__start__':
+                    dot.node(node_id, 'Start', fillcolor=colors['start'])
+                elif node_id == '__end__':
+                    dot.node(node_id, 'End', fillcolor=colors['end'])
+                else:
+                    dot.node(node_id, node_label, fillcolor=colors['other'])
+
+            # Add edges
+            for edge in graph.edges:
+                source = edge.source
+                target = edge.target
+                if edge.conditional:
+                    label = str(edge.data)  # Convert edge data to string
+                    dot.edge(source, target, label=label, color='#666666')
+                else:
+                    dot.edge(source, target, color='#666666')
+
+            # Save the graph as a PNG file
+            dot.render(output_path, format='png', cleanup=True)
+            logging.info(f"Graph visualization saved to {output_path}")
+
+            # Log the graph as an artifact in MLflow
+            mlflow.log_artifact(f"{output_path}.png")
+
+        except Exception as e:
+            error_msg = f"Failed to generate graph visualization: {str(e)}\n{traceback.format_exc()}"
+            logging.error(error_msg)
 
     def register_model(self):
         """
