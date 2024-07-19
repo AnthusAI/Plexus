@@ -109,7 +109,7 @@ class AgenticValidator(LangGraphScore):
         prompt: str = ""
         dependency: Optional[Dict[str, str]] = None
 
-    class CustomRetryOutputParser(ReActSingleInputOutputParser):
+    class ReActAgentOutputParser(ReActSingleInputOutputParser):
         def parse(self, text: str) -> Union[AgentAction, AgentFinish]:
             try:
                 if "Action: Finish" in text:
@@ -218,14 +218,14 @@ class AgenticValidator(LangGraphScore):
         workflow = StateGraph(ValidationState)
 
         # Define custom start node
-        BEGIN_VALIDATION = self._split_name(self.parameters.score_name)
+        BEGIN_VALIDATION = self.parameters.score_name
 
         # Define new "Has Dependency?" node
         HAS_DEPENDENCY = "Has Dependency?"
 
         # Define dependency check node
         if self.parameters.dependency and 'name' in self.parameters.dependency:
-            DEPENDENCY_CHECK = self._split_name(self.parameters.dependency['name'])
+            DEPENDENCY_CHECK = self.parameters.dependency['name']
         else:
             DEPENDENCY_CHECK = "Dependency Check"
 
@@ -379,7 +379,7 @@ class AgenticValidator(LangGraphScore):
             )
             | prompt
             | llm_with_stop
-            | self.CustomRetryOutputParser()
+            | self.ReActAgentOutputParser()
         )
 
         return AgentExecutor(
