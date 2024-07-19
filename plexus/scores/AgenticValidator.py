@@ -1,5 +1,5 @@
-from typing import Dict, List, Any, Literal, Optional, Union
-from pydantic import ConfigDict, Field, validator
+from typing import Dict, List, Any, Literal, Optional, Union, TypedDict
+from pydantic import ConfigDict, Field, validator, BaseModel
 from plexus.CustomLogging import logging
 from plexus.scores.LangGraphScore import LangGraphScore
 
@@ -33,6 +33,23 @@ import math
 
 from langsmith import Client
 from dataclasses import dataclass, field
+
+from langchain.output_parsers import PydanticOutputParser
+
+class SchoolInfo(BaseModel):
+    school_name: str = Field(description="Name of the school mentioned")
+    modality: str = Field(description="Modality of the program (e.g., online, on-campus)")
+    degree: str = Field(description="Degree offered (e.g., BS, BA, AA)")
+    level: str = Field(description="Level of the degree (e.g., Associate, Bachelor's, Master's)")
+
+class TranscriptAnalysis(BaseModel):
+    schools: List[SchoolInfo] = Field(description="List of schools with their information")
+
+class GraphState(TypedDict):
+    transcript: str
+    schools_mentioned: List[str]
+    parsed_schools: List[SchoolInfo]
+    all_information_provided: bool
 
 @dataclass
 class ValidationState:
@@ -98,6 +115,7 @@ class AgenticValidator(LangGraphScore):
             label (str): The label of the metadata to validate.
             prompt (str): The custom prompt to use for validation.
             dependency (Optional[Dict[str, str]]): The dependency configuration.
+            agent_type (Literal): The type of agent to use for validation.
         """
         model_config = ConfigDict(protected_namespaces=())
         model_provider: Literal["AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "BedrockChat"
@@ -108,6 +126,7 @@ class AgenticValidator(LangGraphScore):
         label: str = ""
         prompt: str = ""
         dependency: Optional[Dict[str, str]] = None
+        agent_type: Literal["react", "langgraph"] = "react"
 
     class ReActAgentOutputParser(ReActSingleInputOutputParser):
         def parse(self, text: str) -> Union[AgentAction, AgentFinish]:
@@ -143,7 +162,30 @@ class AgenticValidator(LangGraphScore):
         self.current_state = None
         self.langsmith_client = Client()
         self.dependency = self.parameters.dependency
+        self.output_parser = PydanticOutputParser(pydantic_object=TranscriptAnalysis)
+        self.prompt_template = self._create_prompt_template()
         self.initialize_validation_workflow()
+
+    def _create_prompt_template(self):
+        return PromptTemplate(
+            template="""
+            Analyze the following transcript and extract information about schools mentioned:
+
+            {transcript}
+
+            For each valid school mentioned, provide the following information:
+            1. School name
+            2. Modality (online or on-campus)
+            3. Degree offered (e.g., BS, BA, AA)
+            4. Level of degree (e.g., Associate, Bachelor's, Master's)
+
+            Only include schools that are actually being offered to the student. Ignore schools that are mentioned but then corrected or not actually offered.
+
+            {format_instructions}
+            """,
+            input_variables=["transcript"],
+            partial_variables={"format_instructions": self.output_parser.get_format_instructions()}
+        )
 
     def initialize_validation_workflow(self):
         """
@@ -156,8 +198,12 @@ class AgenticValidator(LangGraphScore):
             wait_exponential_jitter=True,
             stop_after_attempt=3
         ).with_config(callbacks=[self.token_counter])
-        self.workflow = self._create_workflow()
-        self.agent_executor = self.create_lcel_agent()
+        
+        if self.parameters.agent_type == "react":
+            self.workflow = self._create_react_workflow()
+            self.agent_executor = self.create_lcel_agent()
+        elif self.parameters.agent_type == "langgraph":
+            self.workflow = self._create_langgraph_workflow()
         
         mlflow.log_param("model_provider", self.parameters.model_provider)
         mlflow.log_param("model_name", self.parameters.model_name)
@@ -208,7 +254,7 @@ class AgenticValidator(LangGraphScore):
         else:
             raise ValueError(f"Unsupported model provider: {self.parameters.model_provider}")
 
-    def _create_workflow(self):
+    def _create_react_workflow(self):
         """
         Create and return the LangGraph workflow for the validation process.
 
@@ -260,6 +306,19 @@ class AgenticValidator(LangGraphScore):
 
         # Set the custom start node
         workflow.set_entry_point(BEGIN_VALIDATION)
+
+        return workflow.compile()
+
+    def _create_langgraph_workflow(self):
+        workflow = StateGraph(GraphState)
+
+        workflow.add_node("extract_school_info", self._extract_school_info)
+        workflow.add_node("evaluate_completeness", self._evaluate_completeness)
+
+        workflow.add_edge("extract_school_info", "evaluate_completeness")
+        workflow.add_edge("evaluate_completeness", END)
+
+        workflow.set_entry_point("extract_school_info")
 
         return workflow.compile()
 
@@ -485,6 +544,34 @@ class AgenticValidator(LangGraphScore):
         logging.info(f"\nFailed to validate {step}")
         return state
 
+    def _extract_school_info(self, state: GraphState) -> GraphState:
+        transcript = state['transcript']
+        
+        formatted_prompt = self.prompt_template.format(transcript=transcript)
+        llm_response = self.llm_with_retry.invoke(formatted_prompt)
+        parsed_response = self.output_parser.parse(llm_response.content)
+        
+        state['parsed_schools'] = parsed_response.schools
+        state['schools_mentioned'] = [school.school_name for school in parsed_response.schools]
+        return state
+
+    def _evaluate_completeness(self, state: GraphState) -> GraphState:
+        schools = state['parsed_schools']
+        all_complete = True
+        
+        for school in schools:
+            if not all([
+                school.school_name,
+                school.modality and school.modality.lower() not in ['unknown', 'n/a', ''],
+                school.degree and school.degree.lower() not in ['unknown', 'n/a', ''],
+                school.level and school.level.lower() not in ['unknown', 'n/a', '']
+            ]):
+                all_complete = False
+                break
+        
+        state['all_information_provided'] = all_complete
+        return state
+
     def predict(self, model_input: LangGraphScore.ModelInput) -> LangGraphScore.ModelOutput:
         """
         Predict the validity of the education information based on the transcript and metadata.
@@ -496,11 +583,21 @@ class AgenticValidator(LangGraphScore):
             LangGraphScore.ModelOutput: The output containing the validation result.
         """
         logging.info(f"Predict method input: {model_input}")
-        initial_state = ValidationState(
-            transcript=model_input.transcript,
-            metadata=model_input.metadata
-        )
-        self.current_state = initial_state  # Set the initial state
+        
+        if self.parameters.agent_type == "react":
+            initial_state = ValidationState(
+                transcript=model_input.transcript,
+                metadata=model_input.metadata
+            )
+        elif self.parameters.agent_type == "langgraph":
+            initial_state = GraphState(
+                transcript=model_input.transcript,
+                schools_mentioned=[],
+                parsed_schools=[],
+                all_information_provided=False
+            )
+        
+        self.current_state = initial_state
         logging.info(f"Initial state: {initial_state}")
 
         # Reset token counter before each prediction
@@ -517,19 +614,35 @@ class AgenticValidator(LangGraphScore):
 
         logging.info(f"Final state: {final_state}")
 
-        # Handle the case where final_state is an AddableValuesDict
-        if isinstance(final_state, dict):
-            validation_result = final_state.get('validation_result', 'Unknown')
-            explanation = final_state.get('explanation', '')
-        else:
-            validation_result = final_state.validation_result
-            explanation = final_state.explanation
+        if self.parameters.agent_type == "react":
+            # Handle the case where final_state is an AddableValuesDict
+            if isinstance(final_state, dict):
+                validation_result = final_state.get('validation_result', 'Unknown')
+                explanation = final_state.get('explanation', '')
+            else:
+                validation_result = final_state.validation_result
+                explanation = final_state.explanation
 
-        # Get the current step
-        current_step = final_state.get('current_step', '') if isinstance(final_state, dict) else final_state.current_step
+            # Get the current step
+            current_step = final_state.get('current_step', '') if isinstance(final_state, dict) else final_state.current_step
 
-        logging.info(f"{current_step.capitalize()}: {validation_result}")
-        logging.info(f"Explanation: {explanation}")
+            logging.info(f"{current_step.capitalize()}: {validation_result}")
+            logging.info(f"Explanation: {explanation}")
+
+        elif self.parameters.agent_type == "langgraph":
+            validation_result = "Yes" if final_state['all_information_provided'] else "No"
+            explanation = "All required information was provided." if final_state['all_information_provided'] else "Some information was missing or unclear."
+            
+            # Create a formatted string of school information
+            school_info = "\n".join([
+                f"School: {school.school_name}\n"
+                f"Modality: {school.modality}\n"
+                f"Degree: {school.degree}\n"
+                f"Level: {school.level}\n"
+                for school in final_state['parsed_schools']
+            ])
+            
+            explanation += f"\n\nExtracted school information:\n{school_info}"
 
         # Get token usage from our counter
         prompt_tokens = self.token_counter.prompt_tokens
