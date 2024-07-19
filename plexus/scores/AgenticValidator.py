@@ -13,6 +13,7 @@ from langchain.agents import AgentExecutor
 from langchain.agents.format_scratchpad import format_log_to_str
 from langchain.agents.output_parsers import ReActSingleInputOutputParser
 from langchain.tools.render import render_text_description
+from langchain.output_parsers import PydanticOutputParser
 
 from langgraph.graph import StateGraph, END
 
@@ -25,21 +26,21 @@ set_debug(True)
 from langchain_aws import ChatBedrock
 from langchain_openai import AzureChatOpenAI
 from langchain_google_vertexai import ChatVertexAI
+from langchain_openai import ChatOpenAI
 
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
 import mlflow
 import math
+import os
 
 from langsmith import Client
 from dataclasses import dataclass, field
 
-from langchain.output_parsers import PydanticOutputParser
-
 class SchoolInfo(BaseModel):
     school_name: str = Field(description="Name of the school mentioned")
     modality: str = Field(description="Modality of the program (e.g., online, on-campus)")
-    degree: str = Field(description="Degree offered (e.g., BS, BA, AA)")
+    program: str = Field(description="Program offered (e.g., Medical Assistant, Information Technology, Nursing)")
     level: str = Field(description="Level of the degree (e.g., Associate, Bachelor's, Master's)")
 
 class TranscriptAnalysis(BaseModel):
@@ -118,7 +119,7 @@ class AgenticValidator(LangGraphScore):
             agent_type (Literal): The type of agent to use for validation.
         """
         model_config = ConfigDict(protected_namespaces=())
-        model_provider: Literal["AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "BedrockChat"
+        model_provider: Literal["AzureChatOpenAI", "BedrockChat", "ChatVertexAI", "ChatOpenAI"] = "BedrockChat"
         model_name: Optional[str] = None
         model_region: Optional[str] = None
         temperature: float = 0.1
@@ -176,7 +177,7 @@ class AgenticValidator(LangGraphScore):
             For each valid school mentioned, provide the following information:
             1. School name
             2. Modality (online or on-campus)
-            3. Degree offered (e.g., BS, BA, AA)
+            3. Program offered (e.g., Medical Assistant, Information Technology, Nursing)
             4. Level of degree (e.g., Associate, Bachelor's, Master's)
 
             Only include schools that are actually being offered to the student. Ignore schools that are mentioned but then corrected or not actually offered.
@@ -230,6 +231,17 @@ class AgenticValidator(LangGraphScore):
 
         if self.parameters.model_provider == "AzureChatOpenAI":
             return AzureChatOpenAI(
+                azure_endpoint=os.environ.get("AZURE_API_BASE"),
+                api_version=os.environ.get("AZURE_API_VERSION"),
+                api_key=os.environ.get("AZURE_API_KEY"),
+                model=self.parameters.model_name,
+                temperature=self.parameters.temperature,
+                max_tokens=max_tokens
+            )
+        elif self.parameters.model_provider == "ChatOpenAI":
+            return ChatOpenAI(
+                model=self.parameters.model_name,
+                api_key=os.environ.get("OPENAI_API_KEY"),
                 temperature=self.parameters.temperature,
                 max_tokens=max_tokens
             )
@@ -562,9 +574,9 @@ class AgenticValidator(LangGraphScore):
         for school in schools:
             if not all([
                 school.school_name,
-                school.modality and school.modality.lower() not in ['unknown', 'n/a', ''],
-                school.degree and school.degree.lower() not in ['unknown', 'n/a', ''],
-                school.level and school.level.lower() not in ['unknown', 'n/a', '']
+                school.modality and school.modality.lower() not in ['unknown', 'n/a', 'not specified', ''],
+                school.program and school.program.lower() not in ['unknown', 'n/a', 'not specified', ''],
+                school.level and school.level.lower() not in ['unknown', 'n/a', 'not specified', '']
             ]):
                 all_complete = False
                 break
@@ -633,15 +645,17 @@ class AgenticValidator(LangGraphScore):
             validation_result = "Yes" if final_state['all_information_provided'] else "No"
             explanation = "All required information was provided." if final_state['all_information_provided'] else "Some information was missing or unclear."
             
-            # Create a formatted string of school information
-            school_info = "\n".join([
+            # Create a formatted string of school information for multiple schools
+            school_info = "\n\n".join([
                 f"School: {school.school_name}\n"
                 f"Modality: {school.modality}\n"
-                f"Degree: {school.degree}\n"
-                f"Level: {school.level}\n"
+                f"Program: {school.program}\n"
+                f"Level: {school.level}"
                 for school in final_state['parsed_schools']
             ])
             
+            num_schools = len(final_state['parsed_schools'])
+            explanation += f"\n\nNumber of schools found: {num_schools}"
             explanation += f"\n\nExtracted school information:\n{school_info}"
 
         # Get token usage from our counter
@@ -700,7 +714,7 @@ class AgenticValidator(LangGraphScore):
 
         Attributes:
             score (str): Validation result for the degree.
-            explanation (str): Detailed explanation of the validation result.
+            explanation (str): Detailed explanation of the validation result, including information about all schools.
         """
         score: str
         explanation: str
