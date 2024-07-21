@@ -19,7 +19,6 @@ from langchain_core.prompts import PromptTemplate
 from langchain.schema import BaseOutputParser, OutputParserException, AIMessage, PromptValue
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.output_parsers import EnumOutputParser
-from langchain_core.output_parsers import StrOutputParser
 
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langchain.globals import set_debug
@@ -192,7 +191,11 @@ class LangGraphClassifier(LangGraphScore):
         chain = prompt_template | self.llm_with_retry | custom_parser
 
         slices = chain.invoke({"text": text})
-        state.update(slices)
+        state.update(slices)  # This will set state['input_text_after_slice']
+        
+        # Remove the full transcript from the state to ensure we're only working with the sliced portion
+        state.pop('transcript', None)
+        
         return state
 
     def _examine(self, state: GraphState) -> GraphState:
@@ -233,40 +236,42 @@ class LangGraphClassifier(LangGraphScore):
         return state
 
     def _classify(self, state: GraphState) -> GraphState:
+        class YesOrNo(Enum):
+            YES = "Yes"
+            NO = "No"
+
+        score_parser = EnumOutputParser(enum=YesOrNo)
+
         prompt = PromptTemplate(
             template="""
+    {format_instructions}
+
     Based on the following reasoning about whether the agent proceeded with the application process without explicitly asking for permission:
 
     <reasoning>
     {reasoning}
     </reasoning>
 
-    Classify the agent's behavior as either "Yes" (the agent did proceed without explicitly asking for permission) or "No" (the agent did not proceed or explicitly asked for permission).
-
-    Consider that proceeding without asking permission can include subtle ways of moving the process forward, not just explicit statements. The agent doesn't need to use specific phrases, but their overall approach should indicate an assumption that the customer is ready to proceed.
-
-    Provide your classification as either "Yes" or "No" at the beginning of your response, followed by a brief explanation of your decision.
-    """
+    Does this reasoning indicate that the agent proceeded without explicitly asking for permission?
+    Provide your answer as either "Yes" or "No".
+    """,
+            input_variables=["reasoning"],
+            partial_variables={"format_instructions": score_parser.get_format_instructions()},
         )
 
-        custom_parser = CustomYesNoParser()
-        str_parser = StrOutputParser()
+        score_chain = prompt | self.llm_with_retry | score_parser
 
-        # Chain for classification and explanation
-        chain = prompt | self.llm_with_retry | str_parser
-
-        result = chain.invoke({"reasoning": state["reasoning"]})
-        
-        try:
-            classification = custom_parser.parse(result)
-            # Extract explanation (everything after Yes/No)
-            explanation = result.split('\n', 1)[1].strip() if '\n' in result else ""
-        except OutputParserException as e:
-            raise OutputParserException(f"Failed to parse classification: {str(e)}\nFull response: {result}")
+        classification = score_chain.invoke({"reasoning": state["reasoning"]})
 
         state["classification"] = classification
         state["is_not_empty"] = classification == YesOrNo.YES
-        state["explanation"] = explanation
+        
+        # Ensure the explanation is a string
+        if isinstance(state["reasoning"], AIMessage):
+            state["explanation"] = state["reasoning"].content
+        else:
+            state["explanation"] = str(state["reasoning"])
+        
         return state
 
     def predict(self, model_input: LangGraphScore.ModelInput) -> LangGraphScore.ModelOutput:
@@ -274,6 +279,7 @@ class LangGraphClassifier(LangGraphScore):
         
         initial_state = GraphState(
             transcript=model_input.transcript,
+            input_text_after_slice="",
             is_not_empty=False,
             explanation=""
         )
