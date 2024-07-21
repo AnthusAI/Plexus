@@ -1,28 +1,26 @@
-from plexus.scores.Score import Score
-from langchain_core.language_models import BaseLanguageModel
-from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.outputs import LLMResult
-from typing import Tuple, Literal, Optional
-from pydantic import ConfigDict
-
-import os
-
-from langchain_aws import ChatBedrock
-from langchain_openai import AzureChatOpenAI, ChatOpenAI
-from langchain_google_vertexai import ChatVertexAI
-from langchain.callbacks import OpenAICallbackHandler
-
 import mlflow
 import os
 import logging
 import traceback
-
 import graphviz
+from typing import Tuple, Literal, Optional
+from pydantic import ConfigDict
+
+from plexus.scores.Score import Score
+
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.outputs import LLMResult
+
+from langchain_aws import ChatBedrock
+from langchain_openai import AzureChatOpenAI, ChatOpenAI
+from langchain_google_vertexai import ChatVertexAI
+from langchain_community.callbacks import OpenAICallbackHandler
 
 class LangGraphScore(Score):
     class Parameters(Score.Parameters):
         model_config = ConfigDict(protected_namespaces=())
-        model_provider: Literal["AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "BedrockChat"
+        model_provider: Literal["ChatOpenAI", "AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "BedrockChat"
         model_name: Optional[str] = None
         model_region: Optional[str] = None
         temperature: float = 0.1
