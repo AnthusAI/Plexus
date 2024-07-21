@@ -102,21 +102,11 @@ class AgenticValidator(LangGraphScore):
         Parameters for configuring the AgenticValidator.
 
         Attributes:
-            model_provider (Literal): The provider of the language model to use.
-            model_name (Optional[str]): The specific model name to use (if applicable).
-            temperature (float): The temperature setting for the language model.
-            max_tokens (int): The maximum number of tokens for model output.
             label (str): The label of the metadata to validate.
             prompt (str): The custom prompt to use for validation.
             dependency (Optional[Dict[str, str]]): The dependency configuration.
             agent_type (Literal): The type of agent to use for validation.
         """
-        model_config = ConfigDict(protected_namespaces=())
-        model_provider: Literal["AzureChatOpenAI", "BedrockChat", "ChatVertexAI", "ChatOpenAI"] = "BedrockChat"
-        model_name: Optional[str] = None
-        model_region: Optional[str] = None
-        temperature: float = 0.1
-        max_tokens: int = 500
         label: str = ""
         prompt: str = ""
         dependency: Optional[Dict[str, str]] = None
@@ -231,7 +221,7 @@ class AgenticValidator(LangGraphScore):
         else:
             DEPENDENCY_CHECK = "Dependency Check"
 
-        # Add all nodes, including custom start node, new "Has Dependency?" node, and dependency check node
+        # Add all nodes
         workflow.add_node(BEGIN_VALIDATION, self._initialize_memory)
         workflow.add_node(HAS_DEPENDENCY, self._has_dependency_prompt)
         workflow.add_node(DEPENDENCY_CHECK, self._check_dependency)
@@ -277,13 +267,6 @@ class AgenticValidator(LangGraphScore):
         workflow.set_entry_point("extract_school_info")
 
         return workflow.compile()
-
-    def _initialize_memory(self, state: ValidationState) -> ValidationState:
-        """
-        Initialize the agent's memory with the transcript.
-        """
-        self.agent_executor.memory.memories["transcript"] = state.transcript
-        return state
 
     def _has_dependency_prompt(self, state: ValidationState) -> ValidationState:
         """
@@ -624,7 +607,7 @@ class AgenticValidator(LangGraphScore):
         except ValueError as e:
             logging.error(f"Could not calculate cost: {str(e)}")
 
-        return self.ModelOutput(
+        return LangGraphScore.ModelOutput(
             score=validation_result,
             explanation=explanation
         )
@@ -643,14 +626,3 @@ class AgenticValidator(LangGraphScore):
             if isinstance(v, float) and math.isnan(v):
                 return None
             return v
-
-    class ModelOutput(LangGraphScore.ModelOutput):
-        """
-        Model output containing the validation result.
-
-        Attributes:
-            score (str): Validation result for the degree.
-            explanation (str): Detailed explanation of the validation result, including information about all schools.
-        """
-        score: str
-        explanation: str

@@ -3,7 +3,7 @@ import os
 import logging
 import traceback
 import graphviz
-from typing import Tuple, Literal, Optional
+from typing import Tuple, Literal, Optional, Any
 from pydantic import ConfigDict
 
 from plexus.scores.Score import Score
@@ -25,6 +25,17 @@ class LangGraphScore(Score):
         model_region: Optional[str] = None
         temperature: float = 0.1
         max_tokens: int = 500
+
+    class ModelOutput(Score.ModelOutput):
+        """
+        Model output containing the validation result.
+
+        Attributes:
+            score (str): Validation result for the degree.
+            explanation (str): Detailed explanation of the validation result.
+        """
+        score: str
+        explanation: str
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
@@ -300,3 +311,11 @@ class LangGraphScore(Score):
             self.token_counter.completion_tokens = 0
             self.token_counter.total_tokens = 0
             self.token_counter.llm_calls = 0
+
+    def _initialize_memory(self, state: Any) -> Any:
+        """
+        Initialize the agent's memory with the transcript.
+        """
+        if hasattr(self, 'agent_executor'):
+            self.agent_executor.memory.memories["transcript"] = state.transcript
+        return state
