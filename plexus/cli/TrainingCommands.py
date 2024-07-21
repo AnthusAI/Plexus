@@ -40,7 +40,10 @@ def train(scorecard_name, score_name):
     else:
         logging.info(f"No score name provided. Training all scores for Scorecard [magenta1][b]{scorecard_class.name}[/b][/magenta1]...")
         for score_name in scorecard_class.scores.keys():
-            train_score(score_name, scorecard_class)
+            try:
+                train_score(score_name, scorecard_class)
+            except Exception as e:
+                logging.error(f"Failed to train score '{score_name}': {str(e)}")
 
 def train_score(score_name, scorecard_class):
     """
