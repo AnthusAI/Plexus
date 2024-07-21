@@ -114,6 +114,17 @@ class LangGraphScore(Score):
 
         if self.parameters.model_provider == "AzureChatOpenAI":
             return AzureChatOpenAI(
+                azure_endpoint=os.environ.get("AZURE_API_BASE"),
+                api_version=os.environ.get("AZURE_API_VERSION"),
+                api_key=os.environ.get("AZURE_API_KEY"),
+                model=self.parameters.model_name,
+                temperature=self.parameters.temperature,
+                max_tokens=max_tokens
+            )
+        elif self.parameters.model_provider == "ChatOpenAI":
+            return ChatOpenAI(
+                model=self.parameters.model_name,
+                api_key=os.environ.get("OPENAI_API_KEY"),
                 temperature=self.parameters.temperature,
                 max_tokens=max_tokens
             )

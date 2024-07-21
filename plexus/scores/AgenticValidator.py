@@ -217,55 +217,6 @@ class AgenticValidator(LangGraphScore):
         # Generate and save the graph visualization
         self.generate_graph_visualization()
 
-    def _initialize_model(self) -> BaseLanguageModel:
-        """
-        Initialize and return the appropriate language model based on the configured provider.
-
-        Returns:
-            BaseLanguageModel: The initialized language model.
-
-        Raises:
-            ValueError: If an unsupported model provider is specified.
-        """
-        max_tokens = self.parameters.max_tokens
-
-        if self.parameters.model_provider == "AzureChatOpenAI":
-            return AzureChatOpenAI(
-                azure_endpoint=os.environ.get("AZURE_API_BASE"),
-                api_version=os.environ.get("AZURE_API_VERSION"),
-                api_key=os.environ.get("AZURE_API_KEY"),
-                model=self.parameters.model_name,
-                temperature=self.parameters.temperature,
-                max_tokens=max_tokens
-            )
-        elif self.parameters.model_provider == "ChatOpenAI":
-            return ChatOpenAI(
-                model=self.parameters.model_name,
-                api_key=os.environ.get("OPENAI_API_KEY"),
-                temperature=self.parameters.temperature,
-                max_tokens=max_tokens
-            )
-        elif self.parameters.model_provider == "BedrockChat":
-            model_id = self.parameters.model_name or "anthropic.claude-3-5-sonnet-20240620-v1:0"
-            model_region = self.parameters.model_region or "us-east-1"
-            return ChatBedrock(
-                model_id=model_id,
-                model_kwargs={
-                    "temperature": self.parameters.temperature,
-                    "max_tokens": max_tokens
-                },
-                region_name=model_region
-            )
-        elif self.parameters.model_provider == "ChatVertexAI":
-            model_name = self.parameters.model_name or "gemini-1.5-flash-001"
-            return ChatVertexAI(
-                model=model_name,
-                temperature=self.parameters.temperature,
-                max_output_tokens=max_tokens
-            )
-        else:
-            raise ValueError(f"Unsupported model provider: {self.parameters.model_provider}")
-
     def _create_react_workflow(self):
         """
         Create and return the LangGraph workflow for the validation process.
