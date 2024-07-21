@@ -521,8 +521,8 @@ class DeepLearningSemanticClassifier(Score):
         logging.info(f"Predicted class: {predicted_class}, Label: {predicted_label}, Confidence: {confidence_score}")
 
         return self.ModelOutput(
-            classification=predicted_label,
-            confidence=confidence_score
+            score =      predicted_label,
+            confidence = confidence_score
         )
 
     def predict_validation(self):
@@ -536,7 +536,7 @@ class DeepLearningSemanticClassifier(Score):
             model_input = self.ModelInput(transcript=transcript)
             result = self.predict(None, model_input)
             
-            self.val_predictions.append(result.classification)
+            self.val_predictions.append(result.score)
             self.val_confidence_scores.append(result.confidence)
 
         self.val_predictions = np.array(self.val_predictions)
