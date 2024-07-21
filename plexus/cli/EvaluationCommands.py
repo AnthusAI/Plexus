@@ -10,7 +10,6 @@ from plexus.Registries import scorecard_registry
 from plexus.Experiment import AccuracyExperiment
 from plexus.cli.console import console
 
-import rich
 import importlib
 from collections import Counter
 import concurrent.futures
