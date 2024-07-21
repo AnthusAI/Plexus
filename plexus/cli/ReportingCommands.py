@@ -31,8 +31,8 @@ def index(scorecard_name):
         return
 
     scorecard_folder = os.path.join('.', 'scorecards', scorecard_name)
-    scorecard_instance = scorecard_class(scorecard_folder_path=scorecard_folder)
-    report_folder = os.path.join('.', 'reports', scorecard_class.name)
+    scorecard_instance = scorecard_class(scorecard_name=scorecard_name)
+    report_folder = os.path.join('.', 'reports', scorecard_class.name.replace(' ', '_'))
     report_filename = os.path.join(report_folder, 'index.html')
 
     logging.info(f"Using scorecard key [purple][b]{scorecard_name}[/b][/purple] with class name [purple][b]{scorecard_instance.__class__.__name__}[/b][/purple]")
@@ -385,7 +385,7 @@ def index(scorecard_name):
     for score in scorecard_instance.scores.items():
         score_name = score[0]
         score_configuration = score[1]
-        score_folder = os.path.join(report_folder, score_name)
+        score_folder = os.path.join(report_folder, score_name.replace(' ', '_'))
 
         classifier_class_name = score_configuration.get('model', {}).get('class', None)
 
