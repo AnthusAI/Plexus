@@ -106,9 +106,9 @@ def accuracy(
 
 @evaluate.command()
 @click.option('--scorecard-name', required=True, help='Name of the scorecard to evaluate')
-@click.option('--number-of-samples', default=200, help='Number of samples to evaluate')
+@click.option('--number-of-samples', default=100, help='Number of samples to evaluate')
 @click.option('--subset-of-scores', default='', help='Comma-separated list of score names to evaluate')
-@click.option('--max-workers', default=50, help='Maximum number of parallel workers')
+@click.option('--max-workers', default=10, help='Maximum number of parallel workers')
 def distribution(
     scorecard_name: str,
     number_of_samples: int,
