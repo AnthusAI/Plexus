@@ -1,36 +1,34 @@
+import mlflow
+import math
 from typing import Dict, List, Any, Literal, Optional, Union, TypedDict
 from pydantic import ConfigDict, Field, validator, BaseModel
+from langsmith import Client
+from dataclasses import dataclass, field
+
 from plexus.CustomLogging import logging
 from plexus.scores.LangGraphScore import LangGraphScore
+
+from openai_cost_calculator.openai_cost_calculator import calculate_cost
+
+from langgraph.graph import StateGraph, END
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import Tool
-from langchain.memory import SimpleMemory
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.agents import AgentAction, AgentFinish
+from langchain_core.runnables import RunnablePassthrough
 
 from langchain.agents import AgentExecutor
 from langchain.agents.format_scratchpad import format_log_to_str
 from langchain.agents.output_parsers import ReActSingleInputOutputParser
-from langchain.tools.render import render_text_description
-from langchain.output_parsers import PydanticOutputParser
 
-from langgraph.graph import StateGraph, END
-
-from langchain.globals import set_debug
-from langchain_core.agents import AgentAction, AgentFinish
-from langchain_core.runnables import RunnablePassthrough
+from langchain.memory import SimpleMemory
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
+from langchain.tools.render import render_text_description
+from langchain.globals import set_debug
 
 set_debug(True)
-
-from openai_cost_calculator.openai_cost_calculator import calculate_cost
-
-import mlflow
-import math
-import os
-
-from langsmith import Client
-from dataclasses import dataclass, field
 
 class SchoolInfo(BaseModel):
     school_name: str = Field(description="Name of the school mentioned")
