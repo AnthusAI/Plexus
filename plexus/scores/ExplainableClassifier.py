@@ -23,6 +23,7 @@ from rich.columns import Columns
 from rich.table import Table
 from rich.console import Console
 import scipy.sparse
+import re
 
 class ExplainableClassifier(Score):
     """
@@ -40,6 +41,7 @@ class ExplainableClassifier(Score):
         decision_threshold: float = 0.5
         scale_pos_weight_index: float = 0
         include_explanations: bool = False
+        keywords: list = None
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
@@ -399,6 +401,24 @@ class ExplainableClassifier(Score):
     def predict(self, context, model_input):
         if isinstance(model_input, str):
             preprocessed_input = self.preprocess_text(model_input)
+            
+            # Check for keyword matches
+            if self.parameters.keywords:
+                for keyword in self.parameters.keywords:
+                    # Use regex to find whole word matches
+                    pattern = r'\b' + re.escape(keyword) + r'\b'
+                    if re.search(pattern, preprocessed_input, re.IGNORECASE):
+                        # Find the sentence containing the keyword
+                        sentences = preprocessed_input.split('.')
+                        matching_sentence = next((s for s in sentences if re.search(pattern, s, re.IGNORECASE)), '')
+                        
+                        explanation = f"Keyword match found: '{keyword}' in the sentence: '{matching_sentence.strip()}'"
+                        return self.ModelOutput(
+                            score="Yes",
+                            confidence=1.0,
+                            explanation=explanation
+                        )
+            
             vectorized_input = self.vectorize_transcript(preprocessed_input)
         else:
             vectorized_input = model_input
