@@ -8,8 +8,9 @@ from pydantic import ConfigDict
 import os
 
 from langchain_aws import ChatBedrock
-from langchain_openai import AzureChatOpenAI
+from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langchain_google_vertexai import ChatVertexAI
+from langchain.callbacks import OpenAICallbackHandler
 
 import mlflow
 import os
@@ -32,6 +33,7 @@ class LangGraphScore(Score):
         self.llm = None
         self.llm_with_retry = None
         self.token_counter = self._create_token_counter()
+        self.openai_callback = None
         self.initialize_model()
 
     def _create_token_counter(self):
@@ -85,11 +87,19 @@ class LangGraphScore(Score):
 
     def initialize_model(self):
         self.llm = self._initialize_model()
-        self.llm_with_retry = self.llm.with_retry(
-            retry_if_exception_type=(Exception,),
-            wait_exponential_jitter=True,
-            stop_after_attempt=3
-        ).with_config(callbacks=[self.token_counter])
+        if isinstance(self.llm, (AzureChatOpenAI, ChatOpenAI)):
+            self.openai_callback = OpenAICallbackHandler()
+            self.llm_with_retry = self.llm.with_retry(
+                retry_if_exception_type=(Exception,),
+                wait_exponential_jitter=True,
+                stop_after_attempt=3
+            ).with_config(callbacks=[self.openai_callback])
+        else:
+            self.llm_with_retry = self.llm.with_retry(
+                retry_if_exception_type=(Exception,),
+                wait_exponential_jitter=True,
+                stop_after_attempt=3
+            ).with_config(callbacks=[self.token_counter])
         
         self.log_model_params()
 
@@ -266,3 +276,29 @@ class LangGraphScore(Score):
         This validator doesn't require traditional training.
         """
         pass
+
+    def get_token_usage(self):
+        if isinstance(self.llm, (AzureChatOpenAI, ChatOpenAI)):
+            return {
+                "prompt_tokens": self.openai_callback.prompt_tokens,
+                "completion_tokens": self.openai_callback.completion_tokens,
+                "total_tokens": self.openai_callback.total_tokens,
+                "successful_requests": self.openai_callback.successful_requests
+            }
+        else:
+            return {
+                "prompt_tokens": self.token_counter.prompt_tokens,
+                "completion_tokens": self.token_counter.completion_tokens,
+                "total_tokens": self.token_counter.total_tokens,
+                "successful_requests": self.token_counter.llm_calls
+            }
+
+    def reset_token_usage(self):
+        if isinstance(self.llm, (AzureChatOpenAI, ChatOpenAI)):
+            self.openai_callback = OpenAICallbackHandler()  # Create a new callback
+            self.llm_with_retry = self.llm_with_retry.with_config(callbacks=[self.openai_callback])
+        else:
+            self.token_counter.prompt_tokens = 0
+            self.token_counter.completion_tokens = 0
+            self.token_counter.total_tokens = 0
+            self.token_counter.llm_calls = 0

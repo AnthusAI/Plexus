@@ -3,7 +3,6 @@ from pydantic import ConfigDict, Field, validator, BaseModel
 from plexus.CustomLogging import logging
 from plexus.scores.LangGraphScore import LangGraphScore
 
-from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import Tool
@@ -20,13 +19,9 @@ from langgraph.graph import StateGraph, END
 from langchain.globals import set_debug
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.runnables import RunnablePassthrough
+from langchain_openai import AzureChatOpenAI, ChatOpenAI
 
 set_debug(True)
-
-from langchain_aws import ChatBedrock
-from langchain_openai import AzureChatOpenAI
-from langchain_google_vertexai import ChatVertexAI
-from langchain_openai import ChatOpenAI
 
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
@@ -563,18 +558,13 @@ class AgenticValidator(LangGraphScore):
         self.current_state = initial_state
         logging.info(f"Initial state: {initial_state}")
 
-        # Reset token counter before each prediction
-        self.token_counter.prompt_tokens = 0
-        self.token_counter.completion_tokens = 0
-        self.token_counter.total_tokens = 0
-        self.token_counter.llm_calls = 0
+        # Reset token usage before each prediction
+        self.reset_token_usage()
 
         logging.info("Starting workflow invocation")
-        final_state = self.workflow.invoke(initial_state, config={"callbacks": [self.token_counter]})
+        final_state = self.workflow.invoke(initial_state, config={"callbacks": [self.openai_callback if isinstance(self.llm, (AzureChatOpenAI, ChatOpenAI)) else self.token_counter]})
         logging.info("Workflow invocation completed")
         
-        logging.info(f"Token usage after workflow - Prompt: {self.token_counter.prompt_tokens}, Completion: {self.token_counter.completion_tokens}, Total: {self.token_counter.total_tokens}")
-
         logging.info(f"Final state: {final_state}")
 
         if self.parameters.agent_type == "react":
@@ -609,29 +599,26 @@ class AgenticValidator(LangGraphScore):
             explanation += f"\n\nNumber of schools found: {num_schools}"
             explanation += f"\n\nExtracted school information:\n{school_info}"
 
-        # Get token usage from our counter
-        prompt_tokens = self.token_counter.prompt_tokens
-        completion_tokens = self.token_counter.completion_tokens
-        total_tokens = self.token_counter.total_tokens
-        llm_calls = self.token_counter.llm_calls
-
-        logging.info(f"Final token usage - Total LLM calls: {llm_calls}")
-        logging.info(f"Final token usage - Total tokens used: {total_tokens}")
-        logging.info(f"Final token usage - Prompt tokens: {prompt_tokens}")
-        logging.info(f"Final token usage - Completion tokens: {completion_tokens}")
+        # Get token usage
+        token_usage = self.get_token_usage()
+        
+        logging.info(f"Final token usage - Total LLM calls: {token_usage['successful_requests']}")
+        logging.info(f"Final token usage - Total tokens used: {token_usage['total_tokens']}")
+        logging.info(f"Final token usage - Prompt tokens: {token_usage['prompt_tokens']}")
+        logging.info(f"Final token usage - Completion tokens: {token_usage['completion_tokens']}")
         logging.info(f"Parameters: {self.parameters}")
 
         # Log token metrics
-        mlflow.log_metric("final_total_tokens", total_tokens)
-        mlflow.log_metric("final_prompt_tokens", prompt_tokens)
-        mlflow.log_metric("final_completion_tokens", completion_tokens)
+        mlflow.log_metric("final_total_tokens", token_usage['total_tokens'])
+        mlflow.log_metric("final_prompt_tokens", token_usage['prompt_tokens'])
+        mlflow.log_metric("final_completion_tokens", token_usage['completion_tokens'])
 
-        # Calculate cost
+        # Calculate cost for all model types
         try:
             cost_info = calculate_cost(
                 model_name=self.parameters.model_name,
-                input_tokens=prompt_tokens,
-                output_tokens=completion_tokens
+                input_tokens=token_usage['prompt_tokens'],
+                output_tokens=token_usage['completion_tokens']
             )
             total_cost = cost_info['total_cost']
             logging.info(f"Total cost: ${total_cost:.6f}")
