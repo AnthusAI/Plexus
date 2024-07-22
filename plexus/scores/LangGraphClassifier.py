@@ -1,11 +1,9 @@
-import mlflow
 from enum import Enum
 from typing import List, Union, TypedDict, Dict, Any
 from pydantic import BaseModel, Field
 from langsmith import Client
 from dataclasses import dataclass, field
-import re
-from difflib import SequenceMatcher
+from rapidfuzz import fuzz, process
 
 from plexus.CustomLogging import logging
 from plexus.scores.LangGraphScore import LangGraphScore
@@ -14,7 +12,7 @@ from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
 from langgraph.graph import StateGraph, END
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.prompts import PromptTemplate
 from langchain.schema import BaseOutputParser, OutputParserException, AIMessage, PromptValue
 from langchain_core.prompts import ChatPromptTemplate
@@ -41,14 +39,14 @@ class CustomOutputParser(BaseOutputParser[dict]):
         return "custom_output_parser"
 
     def get_format_instructions(self):
-        return "Provide an exact quote from the transcript when the agent first presented rate quotes after the health and lifestyle questions."
+        return "Provide a short, exact quote (1-2 sentences) from the transcript where the agent first presents rate quotes as a monthly or yearly cost, after completing all health and lifestyle questions."
 
     def parse(self, output: str) -> Dict[str, Any]:
         # Remove any leading/trailing whitespace and quotes
         output = output.strip().strip('"')
         
         # Remove the prefix and extract the quote
-        prefix = "The agent first presented rate quotes after the health and lifestyle questions with this exact quote from the transcript:"
+        prefix = "Rate quote:"
         if output.startswith(prefix):
             output = output[len(prefix):].strip()
         
@@ -58,57 +56,28 @@ class CustomOutputParser(BaseOutputParser[dict]):
         logging.info(f"Text length: {len(self.text)}")
         logging.info(f"First 100 characters of text: {self.text[:100]}")
         
-        # Try to find an exact match first
-        if output in self.text:
-            start_index = self.text.index(output)
-            logging.info(f"Exact match found at index {start_index}")
-        else:
-            # If no exact match, find the most similar substring
-            best_match = ""
-            best_ratio = 0
-            for i in range(len(self.text) - len(output) + 1):
-                substring = self.text[i:i+len(output)]
-                ratio = SequenceMatcher(None, output, substring).ratio()
-                if ratio > best_ratio:
-                    best_ratio = ratio
-                    best_match = substring
-            
-            logging.info(f"Best match ratio: {best_ratio}")
-            logging.info(f"Best match: {best_match}")
-            
-            if best_ratio > 0.7:  # Lowered the threshold
-                start_index = self.text.index(best_match)
-                logging.info(f"Similar match found at index {start_index}")
-            else:
-                logging.error(f"No similar match found for output: '{output}'")
-                raise OutputParserException(f"No similar match found for output: '{output}'")
-
-        # Include the quote and everything after it
-        input_text_after_slice = self.text[start_index:]
+        # Use RapidFuzz to find the best match
+        result = process.extractOne(
+            output, 
+            [self.text[i:i+len(output)] for i in range(len(self.text) - len(output) + 1)],
+            scorer=fuzz.partial_ratio,
+            score_cutoff=80
+        )
         
+        if result:
+            match, score, start_index = result
+            logging.info(f"Best match found with score {score} at index {start_index}")
+            input_text_after_slice = self.text[start_index:]
+        else:
+            logging.error(f"No similar match found for output: '{output}'")
+            raise OutputParserException(f"No similar match found for output: '{output}'")
+
         logging.info(f"Length of input_text_after_slice: {len(input_text_after_slice)}")
         logging.info(f"First 100 characters of input_text_after_slice: {input_text_after_slice[:100]}")
 
         return {
             "input_text_after_slice": input_text_after_slice
         }
-
-@dataclass
-class ValidationState:
-    transcript: str
-    current_step: str = ""
-    validation_result: str = "Unknown"
-    explanation: str = ""
-    messages: List[Union[HumanMessage, AIMessage]] = field(default_factory=list)
-
-    def __repr__(self):
-        return (
-            f"ValidationState(transcript='{self.transcript}', "
-            f"current_step='{self.current_step}', "
-            f"validation_result='{self.validation_result}', "
-            f"explanation='{self.explanation}', "
-            f"messages={self.messages})"
-        )
 
 class YesOrNo(Enum):
     YES = "Yes"
@@ -129,6 +98,7 @@ class LangGraphClassifier(LangGraphScore):
         label: str = ""
         prompt: str = ""
         agent_type: str = "langgraph"
+        max_tokens: int = 300
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
@@ -145,17 +115,12 @@ class LangGraphClassifier(LangGraphScore):
             retry_if_exception_type=(Exception,),
             wait_exponential_jitter=True,
             stop_after_attempt=3
-        ).with_config(callbacks=[self.token_counter])
+        ).with_config(
+            callbacks=[self.token_counter],
+            max_tokens=self.parameters.max_tokens
+        )
         
         self.workflow = self._create_langgraph_workflow()
-        
-        mlflow.log_param("model_provider", self.parameters.model_provider)
-        mlflow.log_param("model_name", self.parameters.model_name)
-        mlflow.log_param("model_region", self.parameters.model_region)
-        mlflow.log_param("temperature", self.parameters.temperature)
-        mlflow.log_param("max_tokens", self.parameters.max_tokens)
-        mlflow.log_param("prompt", self.parameters.prompt)
-        mlflow.log_param("label", self.parameters.label)
 
         self.generate_graph_visualization()
 
@@ -178,13 +143,18 @@ class LangGraphClassifier(LangGraphScore):
         text = state['transcript']
 
         prompt_template = ChatPromptTemplate.from_messages([
-            ("system", "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to identify the exact moment when the agent first presents rate quotes after completing health and lifestyle questions."),
-            ("human", "Here's a transcript of a conversation between an insurance agent and a customer. Please follow these steps:"),
-            ("human", "1. Identify where the agent completes asking health and lifestyle questions."),
-            ("human", "2. After that point, find the first instance where the agent presents specific rate quotes to the customer."),
-            ("human", "3. Provide the exact quote where the agent first presents these rate quotes. The quote should be word-for-word from the transcript, including any numbers or specific details mentioned."),
-            ("human", "Transcript: {text}"),
-            ("human", "Remember, I need the exact quote from the transcript, not a summary or paraphrase. Only consider rate quotes that come after the health and lifestyle questions. Start your response with 'The agent first presented rate quotes after the health and lifestyle questions with this exact quote from the transcript:'")
+            ("system", "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to identify the exact moment when the agent first presents rate quotes after completing all health and lifestyle questions."),
+            ("human", """Here's a transcript of a conversation between an insurance agent and a customer. Please follow these steps:
+
+1. Carefully identify where the agent completes asking ALL health and lifestyle questions.
+2. After that point, find the first instance where the agent presents specific rate quotes to the customer, given as a monthly or yearly cost.
+3. Provide a short, exact quote (1-2 sentences) where the agent first presents these rate quotes. The quote should be word-for-word from the transcript, including the specific cost mentioned.
+
+<transcript>
+{text}
+</transcript>
+
+Remember, I need a short, exact quote from the transcript, not a summary or paraphrase. Only consider rate quotes that come after ALL health and lifestyle questions and are presented as a monthly or yearly cost. Start your response with 'Rate quote:'""")
         ])
 
         custom_parser = CustomOutputParser(text=text)
@@ -205,24 +175,39 @@ class LangGraphClassifier(LangGraphScore):
 
         prompt = PromptTemplate(
             template="""
-    This is the part of the call after the agent presented rate quotes.
-    <after>
+    Analyze the following transcript excerpt, which begins immediately after the agent has presented rate quotes to the customer:
+
+    <transcript>
     {input_text_after_slice}
-    </after>
+    </transcript>
 
-    After presenting the rates, the agent should proceed with the application process without explicitly asking the customer for permission to do so. The agent should use language and techniques that assume the customer is ready to move forward. This can include, but is not limited to:
+    Question: Did the agent effectively guide the conversation towards closing the deal immediately after presenting the rates?
 
-    1. Guiding the conversation towards the next steps in the application process.
-    2. Mentioning enrollment or moving forward with the policy.
-    3. Discussing the approval process or getting the customer approved.
-    4. Talking about sending or completing application forms.
-    5. Using phrases that imply continuation of the process without directly asking if the customer wants to proceed.
+    Context: 
+    - The agent should assume the customer wants to apply today and guide them into the application process without directly asking for permission.
+    - This should occur immediately following the rate presentation.
+    - The agent should use a closing technique that assumes the customer is ready to proceed.
 
-    The key is that the agent should not ask a direct question like "Do you want to apply?" or "Shall we proceed with the application?" Instead, they should use language that assumes the customer's readiness to move forward.
+    Qualifying examples of effective guidance include:
+    1. "So the next step is to get you approved. I just need to ask a few more questions from the carrier and we can get that started, it usually takes 1-2 months for the approval process."
+    2. "ABC carrier does a phone application, so I'll just get a little more info from you and then get you transferred right over to one of our enrollers who will go through that with you."
+    3. "XYZ carrier uses an online application, so I'll just need to ask a few more questions and then I can have them email the application to you, then you just click the link in the email and fill it out."
 
-    Based on the transcript provided, did the agent continue to proceed with the application process without explicitly asking for permission?
+    Examples that do NOT qualify as effective guidance:
+    1. "Would you want to proceed with that?"
+    2. "Do you want to try and get approved for that?"
+    3. "Do you have time to do the phone interview today?"
+    4. "Do you want to submit an application?"
 
-    Please provide a detailed explanation of your reasoning, citing specific examples from the transcript where possible.
+    Please analyze the transcript and determine if the agent effectively guided the conversation towards closing the deal without explicitly asking for permission. Provide a detailed 2-4 sentence explanation of your reasoning, citing specific examples from the transcript where possible.
+
+    Focus on:
+    1. The agent's immediate actions after presenting the rates.
+    2. Any language that assumes the customer's readiness to proceed.
+    3. Specific steps mentioned for moving forward with the application or enrollment process.
+    4. Absence of direct questions seeking permission.
+
+    Your analysis should clearly state whether the agent did or did not effectively guide the conversation towards closing the deal, based on the criteria provided.
     """
         )
 
@@ -236,15 +221,10 @@ class LangGraphClassifier(LangGraphScore):
         return state
 
     def _classify(self, state: GraphState) -> GraphState:
-        class YesOrNo(Enum):
-            YES = "Yes"
-            NO = "No"
-
         score_parser = EnumOutputParser(enum=YesOrNo)
 
         prompt = PromptTemplate(
             template="""
-    {format_instructions}
 
     Based on the following reasoning about whether the agent proceeded with the application process without explicitly asking for permission:
 
@@ -255,8 +235,7 @@ class LangGraphClassifier(LangGraphScore):
     Does this reasoning indicate that the agent proceeded without explicitly asking for permission?
     Provide your answer as either "Yes" or "No".
     """,
-            input_variables=["reasoning"],
-            partial_variables={"format_instructions": score_parser.get_format_instructions()},
+            input_variables=["reasoning"]
         )
 
         score_chain = prompt | self.llm_with_retry | score_parser
@@ -308,10 +287,6 @@ class LangGraphClassifier(LangGraphScore):
         logging.info(f"Final token usage - Completion tokens: {token_usage['completion_tokens']}")
         logging.info(f"Parameters: {self.parameters}")
 
-        mlflow.log_metric("final_total_tokens", token_usage['total_tokens'])
-        mlflow.log_metric("final_prompt_tokens", token_usage['prompt_tokens'])
-        mlflow.log_metric("final_completion_tokens", token_usage['completion_tokens'])
-
         try:
             cost_info = calculate_cost(
                 model_name=self.parameters.model_name,
@@ -320,7 +295,6 @@ class LangGraphClassifier(LangGraphScore):
             )
             total_cost = cost_info['total_cost']
             logging.info(f"Total cost: ${total_cost:.6f}")
-            mlflow.log_metric("final_total_cost", float(total_cost))
         except ValueError as e:
             logging.error(f"Could not calculate cost: {str(e)}")
 
