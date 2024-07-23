@@ -1,9 +1,10 @@
 from enum import Enum
-from typing import List, TypedDict, Dict, Any, Optional
-from pydantic import BaseModel, Field
+from typing import List, TypedDict, Dict, Any, Optional, Union
+from pydantic import BaseModel, Field, ValidationError
 from langsmith import Client
 from dataclasses import dataclass
 from rapidfuzz import fuzz, process
+from functools import partial
 
 from plexus.CustomLogging import logging
 from plexus.scores.LangGraphScore import LangGraphScore
@@ -90,14 +91,16 @@ class CustomYesNoParser:
         else:
             raise OutputParserException(f"Expected 'Yes' or 'No', got: {text}")
 
-@dataclass
-class SliceConfig:
+class SliceConfig(BaseModel):
     name: str
     system_message: str
     human_message: str
     output_key: str
-    input_key: Optional[str] = 'transcript'
-    remove_input: bool = False
+    input_key: str = Field(default='transcript')
+    remove_input: bool = Field(default=False)
+
+    class Config:
+        arbitrary_types_allowed = True
 
 class TranscriptSlicer:
     def __init__(self, llm):
@@ -183,10 +186,6 @@ Remember, I need a short, exact quote from the transcript, not a summary or para
         self.total_cost = 0
         self.current_state = None
         self.langsmith_client = Client()
-        self.slicer = TranscriptSlicer(self.llm_with_retry)
-        self.initialize_validation_workflow()
-
-    def initialize_validation_workflow(self):
         self.llm = self._initialize_model()
         self.llm_with_retry = self.llm.with_retry(
             retry_if_exception_type=(Exception,),
@@ -196,7 +195,17 @@ Remember, I need a short, exact quote from the transcript, not a summary or para
             callbacks=[self.token_counter],
             max_tokens=self.parameters.max_tokens
         )
+        self.slicer = TranscriptSlicer(self.llm_with_retry)
         
+        # Ensure slice_configs are properly instantiated
+        self.parameters.slice_configs = [
+            SliceConfig(**config) if isinstance(config, dict) else config
+            for config in self.parameters.slice_configs
+        ]
+        
+        self.initialize_validation_workflow()
+
+    def initialize_validation_workflow(self):
         self.workflow = self._create_langgraph_workflow()
 
         self.generate_graph_visualization()
@@ -206,16 +215,18 @@ Remember, I need a short, exact quote from the transcript, not a summary or para
 
         if self.parameters.slice_configs:
             previous_node = None
-            for i, config in enumerate(self.parameters.slice_configs):
+            for config in self.parameters.slice_configs:
                 node_name = config.name
-                workflow.add_node(node_name, lambda state, cfg=config: self.slicer.slice(state, cfg))
+                logging.info(f"Adding node {node_name} with config type: {type(config)}")
+                logging.info(f"Config content: {config}")
+                # Store the SliceConfig in the node's config
+                workflow.add_node(node_name, partial(self._slice_node, slice_config=config))
                 
                 if previous_node:
                     workflow.add_edge(previous_node, node_name)
                 previous_node = node_name
             
-            last_slice_config = self.parameters.slice_configs[-1]
-            workflow.add_node("examine", lambda state: self._examine(state))
+            workflow.add_node("examine", self._examine)
             workflow.add_edge(previous_node, "examine")
             workflow.set_entry_point(self.parameters.slice_configs[0].name)
         else:
@@ -227,7 +238,15 @@ Remember, I need a short, exact quote from the transcript, not a summary or para
         workflow.add_edge("examine", "classify")
         workflow.add_edge("classify", END)
 
-        return workflow.compile()
+        compiled_workflow = workflow.compile()
+        logging.info(f"Compiled workflow: {compiled_workflow}")
+        return compiled_workflow
+
+    def _slice_node(self, state: GraphState, config: Dict[str, Any], slice_config: SliceConfig) -> GraphState:
+        logging.info(f"Received config in _slice_node: {config}")
+        logging.info(f"SliceConfig: {slice_config}")
+        
+        return self.slicer.slice(state, slice_config)
 
     def _examine(self, state: GraphState) -> GraphState:
         logging.info(f"Examining state: {state}")
