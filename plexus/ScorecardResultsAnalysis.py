@@ -133,20 +133,20 @@ class ScorecardResultsAnalysis:
                 for score_result in scorecard_result['results']:
 
                     # Add the session ID to it.
-                    scorecard_result['results'][score_result]['session_id'] = \
+                    scorecard_result['results'][score_result].metadata['session_id'] = \
                         scorecard_result['session_id']
                     
                     # Add this one to the list if it meets the criteria
                     if not (only_incorrect_scores and scorecard_result['results'][score_result]['correct']):
                         results.append(scorecard_result['results'][score_result])
 
-                    if (scorecard_result['results'][score_result]['error'] is None and
-                        scorecard_result['results'][score_result]['decision_tree'] is not None):
+                    if (scorecard_result['results'][score_result].error is None and
+                        scorecard_result['results'][score_result].decision_tree is not None):
                         task = executor.submit(
                             self.visualize_decision_path,
                             score_result=scorecard_result['results'][score_result],
-                            decision_tree=scorecard_result['results'][score_result]['decision_tree'],
-                            element_results=scorecard_result['results'][score_result]['element_results'],
+                            decision_tree=scorecard_result['results'][score_result].decision_tree,
+                            element_results=scorecard_result['results'][score_result].element_results,
                             session_id=scorecard_result['session_id'],
                             score_name=score_result
                         )
@@ -162,7 +162,7 @@ class ScorecardResultsAnalysis:
                 if visualization_image_path is not None:
                     with open(visualization_image_path + '.png', "rb") as image_file:
                         encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-                    scorecard_result['results'][score_result]['visualization_image_base64'] = encoded_string
+                    scorecard_result['results'][score_result].metadata['visualization_image_base64'] = encoded_string
 
         # Extra metadata at the overall experiment level.
         metrics = {}
@@ -204,7 +204,7 @@ class ScorecardResultsAnalysis:
         results.reverse()
 
         for result in results:
-            if 'metadata' not in result:
+            if result.metadata is None:
                 logging.error(f"Result for session ID {result['session_id']} is missing the 'metadata' key")
 
         # Get the absolute path to the directory containing the current file
@@ -242,7 +242,7 @@ class ScorecardResultsAnalysis:
             'na': 'node_na'
         }
 
-        logging.debug(f"Score result: {score_result['value']}")
+        logging.debug(f"Score result: {score_result.value}")
 
         if decision_tree is None:
             logging.error("Decision tree is not provided. Aborting visualization.")
@@ -269,7 +269,7 @@ class ScorecardResultsAnalysis:
         }
 
         # Update the color of the correct outcome node based on the score_result
-        final_outcome = score_result['value'].lower()
+        final_outcome = score_result.value.lower()
         if final_outcome in outcome_colors:
             if final_outcome == 'yes':
                 outcome_colors[final_outcome] = '#339933'  # Green

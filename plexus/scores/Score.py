@@ -63,6 +63,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         data : dict
             Dictionary containing data-related parameters.
         """
+        id: Optional[Union[str, int]] = None
         scorecard_name: str
         score_name: str
         data: Optional[dict] = None
@@ -98,6 +99,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             The transcript text to be classified.
         """
         transcript: str
+        metadata: Optional[dict] = None
 
     class ModelOutput(BaseModel):
         """
@@ -108,6 +110,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         score : str
             The predicted score label.
         """
+        score_name: str
         score: Union[str, bool]
     
     def __init__(self, **parameters):
