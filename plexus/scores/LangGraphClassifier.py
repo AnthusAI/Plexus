@@ -113,10 +113,14 @@ class LangGraphClassifier(LangGraphScore):
         workflow.add_node("classify", self._classify)
         workflow.add_node("set_na_output", self.set_na_output)
 
+        # Define the routing function
+        def route_based_on_rate_quote(x: dict) -> str:
+            return "initial_slice" if x["agent_presented_rate_quote"] == YesOrNo.YES else "set_na_output"
+
         # Add edges with conditional logic
         workflow.add_conditional_edges(
             "agent_presented_rate_quote",
-            lambda x: "initial_slice" if x["agent_presented_rate_quote"] == YesOrNo.YES else "set_na_output"
+            route_based_on_rate_quote
         )
         workflow.add_edge("initial_slice", "rate_quote_slice")
         workflow.add_edge("rate_quote_slice", "examine")
