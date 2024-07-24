@@ -161,10 +161,22 @@ Provide your answer as either "Yes" or "No".
         state["agent_presented_rate_quote"] = result
         return state
 
-    def initial_slice(self, state: GraphState) -> GraphState:
+    def _slice_transcript(self, state: GraphState, system_message: str, human_message: str, slice_key: str) -> GraphState:
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to identify the portion of the conversation where the agent asks the last health and lifestyle question prior to presenting the rate quote."),
-            ("human", """Here's a transcript of a conversation between an insurance agent and a customer. Please follow these steps:
+            ("system", system_message),
+            ("human", human_message)
+        ])
+
+        chain = prompt | self.llm_with_retry | CustomOutputParser(text=state['transcript'])
+        result = chain.invoke({"transcript": state['transcript']})
+        state[slice_key] = result['input_text_after_slice']
+        state['transcript'] = result['input_text_after_slice']  # Update the main transcript
+        logging.info(f"{slice_key.capitalize()}: {state[slice_key][:100]}...")
+        return state
+
+    def initial_slice(self, state: GraphState) -> GraphState:
+        system_message = "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to identify the portion of the conversation where the agent asks the last health and lifestyle question prior to presenting the rate quote."
+        human_message = """Here's a transcript of a conversation between an insurance agent and a customer. Please follow these steps:
 
 1. Identify where the agent asks the last health and lifestyle question.
 2. Provide a short, exact quote (1-2 sentences) where the agent starts this section of questions.
@@ -174,20 +186,12 @@ Provide your answer as either "Yes" or "No".
 {transcript}
 </transcript>
 
-Remember, I need a short, exact quote from the transcript, not a summary or paraphrase. Start your response with 'Quote:'""")
-        ])
-
-        chain = prompt | self.llm_with_retry | CustomOutputParser(text=state['transcript'])
-        result = chain.invoke({"transcript": state['transcript']})
-        state['health_questions_slice'] = result['input_text_after_slice']
-        state['transcript'] = result['input_text_after_slice']  # Update the main transcript
-        logging.info(f"Health questions slice: {state['health_questions_slice'][:100]}...")
-        return state
+Remember, I need a short, exact quote from the transcript, not a summary or paraphrase. Start your response with 'Quote:'"""
+        return self._slice_transcript(state, system_message, human_message, 'health_questions_slice')
 
     def rate_quote_slice(self, state: GraphState) -> GraphState:
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to identify the exact moment when the agent first presents rate quotes after completing all health and lifestyle questions."),
-            ("human", """Here's a transcript of a conversation between an insurance agent and a customer, starting from where health and lifestyle questions begin. Please follow these steps:
+        system_message = "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to identify the exact moment when the agent first presents rate quotes after completing all health and lifestyle questions."
+        human_message = """Here's a transcript of a conversation between an insurance agent and a customer, starting from where health and lifestyle questions begin. Please follow these steps:
 
 1. Carefully identify where the agent completes asking ALL health and lifestyle questions.
 2. After that point, find the first instance where the agent presents specific rate quotes to the customer, given as a monthly or yearly cost.
@@ -197,15 +201,8 @@ Remember, I need a short, exact quote from the transcript, not a summary or para
 {transcript}
 </transcript>
 
-Remember, I need a short, exact quote from the transcript, not a summary or paraphrase. Only consider rate quotes that come after ALL health and lifestyle questions and are presented as a monthly or yearly cost. Start your response with 'Quote:'""")
-        ])
-
-        chain = prompt | self.llm_with_retry | CustomOutputParser(text=state['transcript'])
-        result = chain.invoke({"transcript": state['transcript']})
-        state['rate_quote_slice'] = result['input_text_after_slice']
-        state['transcript'] = result['input_text_after_slice']  # Update the main transcript
-        logging.info(f"Rate quote slice: {state['rate_quote_slice'][:100]}...")
-        return state
+Remember, I need a short, exact quote from the transcript, not a summary or paraphrase. Only consider rate quotes that come after ALL health and lifestyle questions and are presented as a monthly or yearly cost. Start your response with 'Quote:'"""
+        return self._slice_transcript(state, system_message, human_message, 'rate_quote_slice')
 
     def _examine(self, state: GraphState) -> GraphState:
         logging.info(f"Examining state: {state}")
