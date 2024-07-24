@@ -1,6 +1,6 @@
 from enum import Enum
-from typing import List, TypedDict, Dict, Any, Optional, Union
-from pydantic import BaseModel, Field, ValidationError
+from typing import TypedDict, Dict, Any
+from pydantic import Field
 from langsmith import Client
 from rapidfuzz import fuzz, process
 
@@ -13,12 +13,13 @@ from langgraph.graph import StateGraph, END
 
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import PromptTemplate
-from langchain.schema import BaseOutputParser, AIMessage
 from langchain_core.prompts import ChatPromptTemplate
-from langchain.output_parsers import EnumOutputParser
+from langchain_core.output_parsers import BaseOutputParser
+
 
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langchain.globals import set_debug
+from langchain.output_parsers import EnumOutputParser
 
 set_debug(True)
 
@@ -31,6 +32,7 @@ class GraphState(TypedDict):
     classification: str
 
 class CustomOutputParser(BaseOutputParser[dict]):
+    FUZZY_MATCH_SCORE_CUTOFF = 70
     text: str = Field(...)
 
     @property
@@ -55,7 +57,7 @@ class CustomOutputParser(BaseOutputParser[dict]):
             output, 
             [self.text[i:i+len(output)] for i in range(len(self.text) - len(output) + 1)],
             scorer=fuzz.partial_ratio,
-            score_cutoff=70  # Lowered the score cutoff
+            score_cutoff=self.FUZZY_MATCH_SCORE_CUTOFF
         )
         
         if result:
@@ -78,6 +80,8 @@ class YesOrNo(Enum):
     NO = "No"
 
 class LangGraphClassifier(LangGraphScore):
+    MAX_RETRY_ATTEMPTS = 3
+        
     class Parameters(LangGraphScore.Parameters):
         label: str = ""
         prompt: str = ""
@@ -94,7 +98,7 @@ class LangGraphClassifier(LangGraphScore):
         self.llm_with_retry = self.llm.with_retry(
             retry_if_exception_type=(Exception,),
             wait_exponential_jitter=True,
-            stop_after_attempt=3
+            stop_after_attempt=self.MAX_RETRY_ATTEMPTS
         ).with_config(
             callbacks=[self.token_counter],
             max_tokens=self.parameters.max_tokens
@@ -330,6 +334,7 @@ Provide your answer as either "Yes" or "No".
         logging.info(f"Final token usage - Total tokens used: {token_usage['total_tokens']}")
         logging.info(f"Final token usage - Prompt tokens: {token_usage['prompt_tokens']}")
         logging.info(f"Final token usage - Completion tokens: {token_usage['completion_tokens']}")
+        
         logging.info(f"Parameters: {self.parameters}")
 
         try:
