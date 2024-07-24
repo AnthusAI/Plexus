@@ -17,10 +17,6 @@ from plexus.scores.KeywordClassifier import KeywordClassifier
 from plexus.PromptTemplateLoader import PromptTemplateLoader
 from plexus.CustomLogging import logging
 
-class Parameters(BaseModel):
-    scorecard_name: str
-    score_name: str
-    # Add other fields as necessary
 
 class CompositeScore(Score):
     """
@@ -30,7 +26,10 @@ class CompositeScore(Score):
     costs of the individual elements and the composite score.
     """
 
-    def __init__(self, *, scorecard_name, score_name):
+    class Parameters(Score.Parameters):
+        ...
+
+    def __init__(self, **parameters):
         """
         Initializes a new instance of the CompositeScore class.
 
@@ -38,9 +37,7 @@ class CompositeScore(Score):
         token accumulators for tracking API usage costs and preparing the list to store individual
         element results.
         """
-        super().__init__(scorecard_name=scorecard_name, score_name=score_name)
-        self.scorecard_name = scorecard_name
-        self.score_name = score_name
+        super().__init__(**parameters)
 
         # Aggregate reasoning and quote, computed at the end after computing all other elements.
         self.reasoning = []
@@ -177,19 +174,15 @@ class CompositeScore(Score):
 
         # Create a new subclass of CompositeScore
         class CompositeScoreFromMarkdown(base_class):
-            def __init__(self, *, scorecard_name, score_name):
+            def __init__(self, **parameters):
+                parameters['model_name'] = llm_model_name
+                parameters['completion_name'] = completion_name
+                super().__init__(**parameters)
                 self.preprocessing_config = preprocessing_config
                 self.chunking = chunking
-                super().__init__(
-                    scorecard_name=scorecard_name, 
-                    score_name=score_name, 
-                    model_name=llm_model_name, 
-                    completion_name=completion_name
-                )
                 self.decision_tree = decision_tree_config
                 self.prompt_template_loader = PromptTemplateLoader(markdown_content=markdown_content)
                 self.name = score_name
-                self.scorecard_name = scorecard_name
 
                 # Dynamically generate the elements array from the Markdown content
                 self.elements = self.generate_elements_from_markdown()
@@ -202,7 +195,14 @@ class CompositeScore(Score):
                 # Implement the method
                 pass
 
-            def predict(self, context, model_input):
+            class ModelOutput(Score.ModelOutput):
+                """
+                This Score has an additional output attribute, explanation, which is a string
+                """
+                reasoning: str
+                relevant_quote: str
+                
+            def predict(self, context, model_input: Score.ModelInput) -> cls.ModelOutput:
                 """
                 Make predictions on the input data.
 
@@ -211,7 +211,7 @@ class CompositeScore(Score):
                 :return: The predictions.
                 """
                 # Get the transcript from the model input dataframe.
-                transcript = model_input.loc[0, 'transcript']
+                transcript = model_input.transcript
 
                 # Filter that transcript.
                 self.filtered_transcript = self.process_transcript(transcript=transcript)
@@ -247,7 +247,7 @@ class CompositeScore(Score):
 
                 # Use the KeywordClassifier with the combined list of strings and regex patterns
                 filtered_transcript_df = RelevantWindowsTranscriptFilter(
-                    classifier=KeywordClassifier(keyword_patterns, self.scorecard_name, self.score_name)
+                    classifier=KeywordClassifier(keyword_patterns, self.parameters.scorecard_name, self.parameters.score_name)
                 ).process(transcript_df)
 
                 # Extract the filtered transcript from the DataFrame

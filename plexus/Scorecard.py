@@ -4,6 +4,7 @@ import yaml
 import json
 import requests
 import json
+import rich
 import logging
 import pandas as pd
 import importlib.util
@@ -13,8 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from plexus.ScoreResult import ScoreResult
 from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
-from plexus.scores.Score import Score
-from plexus.scores.CompositeScore import CompositeScore
+import plexus.scores
 
 class Scorecard:
     """
@@ -37,6 +37,7 @@ class Scorecard:
             scorecard_name (str): The name of the scorecard.
         """
         self.scorecard_name = scorecard_name
+
         # Accumulators for tracking the total expenses.
         self.prompt_tokens = 0
         self.completion_tokens = 0
@@ -103,18 +104,21 @@ class Scorecard:
         Returns:
             type: A dynamically created Scorecard class.
         """
+        logging.info(f"Loading scorecard from YAML file: {yaml_file_path}")
         with open(yaml_file_path, 'r') as file:
             scorecard_properties = yaml.safe_load(file)
 
         scorecard_name = scorecard_properties['name']
 
         scorecard_class = type(scorecard_name, (Scorecard,), {
+            'properties':            scorecard_properties,
             'name':                  scorecard_properties['name'],
             'metadata':              scorecard_properties['metadata'],
             'scores':                scorecard_properties['scores'],
-            'foreign_id':            property(lambda cls: cls.metadata['foreign_id'])
+            'score_registry':        ScoreRegistry()
         })
 
+        # Register the scorecard class.
         scorecard_registry.register(
             scorecard_properties['key'],
             scorecard_properties['family'])(scorecard_class)
@@ -124,7 +128,15 @@ class Scorecard:
         markdown_folder_path = os.path.join(
             'scorecards', file_name)
 
+        # Register scores that come from Markdown files.
         scorecard_class.load_and_register_scores(markdown_folder_path)
+        # Register any other scores that are in the YAML file.
+        for score_name, score_info in scorecard_properties['scores'].items():
+            if 'class' in score_info:
+                class_name = score_info['class']
+                module = importlib.import_module('plexus.scores')
+                score_class = getattr(module, class_name)
+                scorecard_class.score_registry.register(score_name)(score_class)
 
         return scorecard_class
     
@@ -145,7 +157,7 @@ class Scorecard:
             markdown_file_path = os.path.join(
                 markdown_folder_path, f"{normalized_score_name}.md")
 
-            score_class = CompositeScore.create_from_markdown(
+            score_class = plexus.scores.CompositeScore.create_from_markdown(
                 scorecard=cls,
                 markdown_file_path=markdown_file_path,
                 score_name=score_name
@@ -162,31 +174,47 @@ class Scorecard:
         :param transcript: The transcript.
         :return: The score result.
         """
+        
+        # Get score configuration
+        logging.info(f"Predicting Score [magenta1][b]{score_name}[/b][/magenta1]...")
+        score_configuration = self.scores[score_name]
 
-        score_class = Scorecard.score_registry.get(score_name)
+        if score_name not in self.scores:
+            logging.error(f"Score with name '{score_name}' not found in scorecard '{self.name}'.")
+            return
+
+        logging.info(f"Score Configuration: {rich.pretty.pretty_repr(score_configuration)}")
+
+        score_class = self.score_registry.get(score_name)
         if (score_class is not None):
             logging.info("Found score for question: " + score_name)
 
-            score_instance = score_class(
-                scorecard_name=self.name,
-                score_name=score_name
-            )
+            score_configuration.update({
+                'scorecard_name': self.name,
+                'score_name': score_name
+            })
+            score_instance = score_class(**score_configuration)
 
             score_result = score_instance.predict(
                 context=None,
-                model_input=pd.DataFrame({'transcript': [transcript]}))
-            logging.debug(f"Score result: {score_result}")
+                model_input=plexus.scores.Score.ModelInput(
+                    transcript=transcript,
+                    metadata={}
+                )
+            )
+            logging.info(f"Score result: {score_result}")
 
-            score_total_cost = score_instance.accumulated_expenses()
-            logging.info(f"Total cost: {score_total_cost}")
+            if hasattr(score_instance, 'accumulated_expenses'):
+                score_total_cost = score_instance.accumulated_expenses()
+                logging.info(f"Total cost: {score_total_cost}")
 
-            self.prompt_tokens       += score_total_cost['prompt_tokens']
-            self.completion_tokens   += score_total_cost['completion_tokens']
-            self.input_cost          += score_total_cost['input_cost']
-            self.output_cost         += score_total_cost['output_cost']
-            self.total_cost          += score_total_cost['total_cost']
+                self.prompt_tokens       += score_total_cost['prompt_tokens']
+                self.completion_tokens   += score_total_cost['completion_tokens']
+                self.input_cost          += score_total_cost['input_cost']
+                self.output_cost         += score_total_cost['output_cost']
+                self.total_cost          += score_total_cost['total_cost']
 
-            score_result[0].metadata.update(score_total_cost)
+                score_result[0].metadata.update(score_total_cost)
             return score_result
 
         else:
@@ -195,6 +223,7 @@ class Scorecard:
             return ScoreResult(value="Error", error=error_string)
 
     def score_entire_transcript(self, *, transcript, subset_of_score_names=None, thread_pool_size=25):
+        logging.info(f"score_entire_transcript method. subset_of_score_names: {subset_of_score_names}")
         if subset_of_score_names is None:
             subset_of_score_names = self.score_names_to_process()
 
@@ -205,18 +234,14 @@ class Scorecard:
                 for score_name in subset_of_score_names
             }
             for future in as_completed(future_to_score_name):
-                score_name = future_to_score_name[future]
-                try:
-                    results_list = future.result()
-                    for result in results_list:
-                        score_results_dict[result.name] = result.to_dict()
-                except Exception as e:
-                    logging.exception(f"Exception occurred for score {score_name}: {e}", exc_info=True)
-                    score_results_dict[score_name] = {
-                        'name':  score_name,
-                        'value': "Error",
-                        'error': str(e)
-                    }
+                results_list = future.result()
+                for result in results_list:
+                    score_name = ""
+                    if result.__class__.__name__ == "ScoreResult": 
+                        score_name = result.name
+                    else:
+                        score_name = result.score_name
+                    score_results_dict[score_name] = result
 
         return score_results_dict
 
