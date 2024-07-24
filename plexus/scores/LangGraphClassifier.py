@@ -111,7 +111,7 @@ class LangGraphClassifier(LangGraphScore):
 
         # Add nodes for each operation
         workflow.add_node("agent_presented_rate_quote", self.agent_presented_rate_quote)
-        workflow.add_node("initial_slice", self.initial_slice)
+        workflow.add_node("health_questions_slice", self.health_questions_slice)
         workflow.add_node("rate_quote_slice", self.rate_quote_slice)
         workflow.add_node("examine", self._examine)
         workflow.add_node("classify", self._classify)
@@ -119,14 +119,14 @@ class LangGraphClassifier(LangGraphScore):
 
         # Define the routing function
         def route_based_on_rate_quote(x: dict) -> str:
-            return "initial_slice" if x["agent_presented_rate_quote"] == YesOrNo.YES else "set_na_output"
+            return "health_questions_slice" if x["agent_presented_rate_quote"] == YesOrNo.YES else "set_na_output"
 
         # Add edges with conditional logic
         workflow.add_conditional_edges(
             "agent_presented_rate_quote",
             route_based_on_rate_quote
         )
-        workflow.add_edge("initial_slice", "rate_quote_slice")
+        workflow.add_edge("health_questions_slice", "rate_quote_slice")
         workflow.add_edge("rate_quote_slice", "examine")
         workflow.add_edge("examine", "classify")
         workflow.add_edge("classify", END)
@@ -178,7 +178,7 @@ Provide your answer as either "Yes" or "No".
         logging.info(f"{slice_key.capitalize()}: {state[slice_key][:100]}...")
         return state
 
-    def initial_slice(self, state: GraphState) -> GraphState:
+    def health_questions_slice(self, state: GraphState) -> GraphState:
         system_message = "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to identify the portion of the conversation where the agent asks the last health and lifestyle question prior to presenting the rate quote."
         human_message = """Here's a transcript of a conversation between an insurance agent and a customer. Please follow these steps:
 
