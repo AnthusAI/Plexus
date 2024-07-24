@@ -2,9 +2,7 @@ from enum import Enum
 from typing import List, TypedDict, Dict, Any, Optional, Union
 from pydantic import BaseModel, Field, ValidationError
 from langsmith import Client
-from dataclasses import dataclass
 from rapidfuzz import fuzz, process
-from functools import partial
 
 from plexus.CustomLogging import logging
 from plexus.scores.LangGraphScore import LangGraphScore
@@ -13,9 +11,9 @@ from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
 from langgraph.graph import StateGraph, END
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage
 from langchain_core.prompts import PromptTemplate
-from langchain.schema import BaseOutputParser, OutputParserException, AIMessage, PromptValue
+from langchain.schema import BaseOutputParser, AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.output_parsers import EnumOutputParser
 
@@ -43,7 +41,7 @@ class CustomOutputParser(BaseOutputParser[dict]):
         # Remove any leading/trailing whitespace and quotes
         output = output.strip().strip('"')
         
-        # Remove the prefix and extract the quote
+        # Remove the prefix if it exists
         prefix = "Quote:"
         if output.startswith(prefix):
             output = output[len(prefix):].strip()
@@ -51,15 +49,13 @@ class CustomOutputParser(BaseOutputParser[dict]):
         output = output.strip('"\'')
         
         logging.info(f"Cleaned output: {output}")
-        logging.info(f"Text length: {len(self.text)}")
-        logging.info(f"First 100 characters of text: {self.text[:100]}")
         
         # Use RapidFuzz to find the best match
         result = process.extractOne(
             output, 
             [self.text[i:i+len(output)] for i in range(len(self.text) - len(output) + 1)],
             scorer=fuzz.partial_ratio,
-            score_cutoff=80
+            score_cutoff=70  # Lowered the score cutoff
         )
         
         if result:
@@ -67,8 +63,8 @@ class CustomOutputParser(BaseOutputParser[dict]):
             logging.info(f"Best match found with score {score} at index {start_index}")
             input_text_after_slice = self.text[start_index:]
         else:
-            logging.error(f"No similar match found for output: '{output}'")
-            raise OutputParserException(f"No similar match found for output: '{output}'")
+            logging.warning(f"No exact match found for output: '{output}'. Using the entire remaining text.")
+            input_text_after_slice = self.text
 
         logging.info(f"Length of input_text_after_slice: {len(input_text_after_slice)}")
         logging.info(f"First 100 characters of input_text_after_slice: {input_text_after_slice[:100]}")
@@ -81,103 +77,11 @@ class YesOrNo(Enum):
     YES = "Yes"
     NO = "No"
 
-class CustomYesNoParser:
-    def parse(self, text: str) -> YesOrNo:
-        lowered = text.lower().strip()
-        if lowered.startswith("yes"):
-            return YesOrNo.YES
-        elif lowered.startswith("no"):
-            return YesOrNo.NO
-        else:
-            raise OutputParserException(f"Expected 'Yes' or 'No', got: {text}")
-
-class SliceConfig(BaseModel):
-    name: str
-    system_message: str
-    human_message: str
-    output_key: str
-    input_key: str = Field(default='transcript')
-    remove_input: bool = Field(default=False)
-
-    class Config:
-        arbitrary_types_allowed = True
-
-class TranscriptSlicer:
-    def __init__(self, llm):
-        self.llm = llm
-
-    def slice(self, state: GraphState, config: SliceConfig) -> GraphState:
-        logging.info(f"Slicing with config: {config.name}")
-        logging.info(f"Input state keys: {state.keys()}")
-        
-        # Use the input_key specified in the config, or fall back to 'transcript'
-        text = state.get(config.input_key, state['transcript'])
-        
-        logging.info(f"Input text length: {len(text)}")
-        logging.info(f"First 100 characters of input text: {text[:100]}")
-
-        prompt_template = ChatPromptTemplate.from_messages([
-            ("system", config.system_message),
-            ("human", config.human_message)
-        ])
-
-        custom_parser = CustomOutputParser(text=text)
-        chain = prompt_template | self.llm | custom_parser
-        slices = chain.invoke({"text": text})
-        
-        # Update the 'transcript' key with the sliced text
-        state['transcript'] = slices['input_text_after_slice']
-        
-        # Also update the output_key if it's different from 'transcript'
-        if config.output_key != 'transcript':
-            state[config.output_key] = slices['input_text_after_slice']
-        
-        logging.info(f"Output state keys: {state.keys()}")
-        logging.info(f"Length of sliced text: {len(state['transcript'])}")
-        logging.info(f"First 100 characters of sliced text: {state['transcript'][:100]}")
-        return state
-
 class LangGraphClassifier(LangGraphScore):
     class Parameters(LangGraphScore.Parameters):
         label: str = ""
         prompt: str = ""
-        agent_type: str = "langgraph"
         max_tokens: int = 300
-        slice_configs: List[SliceConfig] = Field(default_factory=lambda: [
-            SliceConfig(
-                name='initial_slice',
-                system_message="You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to identify the portion of the conversation where the agent asks the last health and lifestyle question prior to presenting the rate quote.",
-                human_message="""Here's a transcript of a conversation between an insurance agent and a customer. Please follow these steps:
-
-1. Identify where the agent asks the last health and lifestyle question.
-2. Provide a short, exact quote (1-2 sentences) where the agent starts this section of questions.
-3. The quote should be word-for-word from the transcript.
-
-Transcript: {text}
-
-Remember, I need a short, exact quote from the transcript, not a summary or paraphrase. Start your response with 'Quote:'""",
-                output_key='health_questions_slice',
-                remove_input=False
-            ),
-            SliceConfig(
-                name='rate_quote_slice',
-                system_message="You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to identify the exact moment when the agent first presents rate quotes after completing all health and lifestyle questions.",
-                human_message="""Here's a transcript of a conversation between an insurance agent and a customer, starting from where health and lifestyle questions begin. Please follow these steps:
-
-1. Carefully identify where the agent completes asking ALL health and lifestyle questions.
-2. After that point, find the first instance where the agent presents specific rate quotes to the customer, given as a monthly or yearly cost.
-3. Provide a short, exact quote (1-2 sentences) where the agent first presents these rate quotes. The quote should be word-for-word from the transcript, including the specific cost mentioned.
-
-<transcript>
-{text}
-</transcript>
-
-Remember, I need a short, exact quote from the transcript, not a summary or paraphrase. Only consider rate quotes that come after ALL health and lifestyle questions and are presented as a monthly or yearly cost. Start your response with 'Quote:'""",
-                input_key='health_questions_slice',
-                output_key='rate_quote_slice',
-                remove_input=False
-            ),
-        ])
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
@@ -195,58 +99,109 @@ Remember, I need a short, exact quote from the transcript, not a summary or para
             callbacks=[self.token_counter],
             max_tokens=self.parameters.max_tokens
         )
-        self.slicer = TranscriptSlicer(self.llm_with_retry)
-        
-        # Ensure slice_configs are properly instantiated
-        self.parameters.slice_configs = [
-            SliceConfig(**config) if isinstance(config, dict) else config
-            for config in self.parameters.slice_configs
-        ]
         
         self.initialize_validation_workflow()
 
     def initialize_validation_workflow(self):
-        self.workflow = self._create_langgraph_workflow()
-
-        self.generate_graph_visualization()
-
-    def _create_langgraph_workflow(self):
         workflow = StateGraph(GraphState)
 
-        if self.parameters.slice_configs:
-            previous_node = None
-            for config in self.parameters.slice_configs:
-                node_name = config.name
-                logging.info(f"Adding node {node_name} with config type: {type(config)}")
-                logging.info(f"Config content: {config}")
-                # Store the SliceConfig in the node's config
-                workflow.add_node(node_name, partial(self._slice_node, slice_config=config))
-                
-                if previous_node:
-                    workflow.add_edge(previous_node, node_name)
-                previous_node = node_name
-            
-            workflow.add_node("examine", self._examine)
-            workflow.add_edge(previous_node, "examine")
-            workflow.set_entry_point(self.parameters.slice_configs[0].name)
-        else:
-            # If no slice configs, start with examine node
-            workflow.add_node("examine", self._examine)
-            workflow.set_entry_point("examine")
-
+        # Add nodes for each operation
+        workflow.add_node("agent_presented_rate_quote", self.agent_presented_rate_quote)
+        workflow.add_node("initial_slice", self.initial_slice)
+        workflow.add_node("rate_quote_slice", self.rate_quote_slice)
+        workflow.add_node("examine", self._examine)
         workflow.add_node("classify", self._classify)
+        workflow.add_node("set_na_output", self.set_na_output)
+
+        # Add edges with conditional logic
+        workflow.add_conditional_edges(
+            "agent_presented_rate_quote",
+            lambda x: "initial_slice" if x["agent_presented_rate_quote"] == YesOrNo.YES else "set_na_output"
+        )
+        workflow.add_edge("initial_slice", "rate_quote_slice")
+        workflow.add_edge("rate_quote_slice", "examine")
         workflow.add_edge("examine", "classify")
         workflow.add_edge("classify", END)
+        workflow.add_edge("set_na_output", END)
 
-        compiled_workflow = workflow.compile()
-        logging.info(f"Compiled workflow: {compiled_workflow}")
-        return compiled_workflow
+        workflow.set_entry_point("agent_presented_rate_quote")
 
-    def _slice_node(self, state: GraphState, config: Dict[str, Any], slice_config: SliceConfig) -> GraphState:
-        logging.info(f"Received config in _slice_node: {config}")
-        logging.info(f"SliceConfig: {slice_config}")
-        
-        return self.slicer.slice(state, slice_config)
+        self.workflow = workflow.compile()
+        self.generate_graph_visualization()
+
+    def set_na_output(self, state: GraphState) -> GraphState:
+        state["classification"] = "NA"
+        state["is_not_empty"] = False
+        state["explanation"] = "The agent did not present a rate quote."
+        return state
+
+    def agent_presented_rate_quote(self, state: GraphState) -> GraphState:
+        score_parser = EnumOutputParser(enum=YesOrNo)
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to determine if the agent has presented a rate quote to the customer."),
+            ("human", """Here's a transcript of a conversation between an insurance agent and a customer:
+
+<transcript>
+{transcript}
+</transcript>
+
+Before the agent can move to the application process, the agent must have presented rate quotes to the customer. This typically involves presenting a monthly price for coverage. Did the agent present specific rate quotes?
+Provide your answer as either "Yes" or "No".
+""")
+        ])
+        chain = prompt | self.llm_with_retry | score_parser
+
+        result = chain.invoke({"transcript": state['transcript']})
+
+        state["agent_presented_rate_quote"] = result
+        return state
+
+    def initial_slice(self, state: GraphState) -> GraphState:
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to identify the portion of the conversation where the agent asks the last health and lifestyle question prior to presenting the rate quote."),
+            ("human", """Here's a transcript of a conversation between an insurance agent and a customer. Please follow these steps:
+
+1. Identify where the agent asks the last health and lifestyle question.
+2. Provide a short, exact quote (1-2 sentences) where the agent starts this section of questions.
+3. The quote should be word-for-word from the transcript.
+
+<transcript>
+{transcript}
+</transcript>
+
+Remember, I need a short, exact quote from the transcript, not a summary or paraphrase. Start your response with 'Quote:'""")
+        ])
+
+        chain = prompt | self.llm_with_retry | CustomOutputParser(text=state['transcript'])
+        result = chain.invoke({"transcript": state['transcript']})
+        state['health_questions_slice'] = result['input_text_after_slice']
+        state['transcript'] = result['input_text_after_slice']  # Update the main transcript
+        logging.info(f"Health questions slice: {state['health_questions_slice'][:100]}...")
+        return state
+
+    def rate_quote_slice(self, state: GraphState) -> GraphState:
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to identify the exact moment when the agent first presents rate quotes after completing all health and lifestyle questions."),
+            ("human", """Here's a transcript of a conversation between an insurance agent and a customer, starting from where health and lifestyle questions begin. Please follow these steps:
+
+1. Carefully identify where the agent completes asking ALL health and lifestyle questions.
+2. After that point, find the first instance where the agent presents specific rate quotes to the customer, given as a monthly or yearly cost.
+3. Provide a short, exact quote (1-2 sentences) where the agent first presents these rate quotes. The quote should be word-for-word from the transcript, including the specific cost mentioned.
+
+<transcript>
+{transcript}
+</transcript>
+
+Remember, I need a short, exact quote from the transcript, not a summary or paraphrase. Only consider rate quotes that come after ALL health and lifestyle questions and are presented as a monthly or yearly cost. Start your response with 'Quote:'""")
+        ])
+
+        chain = prompt | self.llm_with_retry | CustomOutputParser(text=state['transcript'])
+        result = chain.invoke({"transcript": state['transcript']})
+        state['rate_quote_slice'] = result['input_text_after_slice']
+        state['transcript'] = result['input_text_after_slice']  # Update the main transcript
+        logging.info(f"Rate quote slice: {state['rate_quote_slice'][:100]}...")
+        return state
 
     def _examine(self, state: GraphState) -> GraphState:
         logging.info(f"Examining state: {state}")
@@ -261,7 +216,7 @@ Remember, I need a short, exact quote from the transcript, not a summary or para
 Analyze the following transcript excerpt, which begins immediately after the agent has presented rate quotes to the customer:
 
 <transcript>
-{examine_input}
+{transcript}
 </transcript>
 
 Question: Did the agent effectively guide the conversation towards closing the deal immediately after presenting the rates?
@@ -298,7 +253,7 @@ Your analysis should clearly state whether the agent did or did not effectively 
 
         state["reasoning"] = score_chain.invoke(
             {
-                "examine_input": examine_input
+                "transcript": state['transcript']
             }
         )
         return state
@@ -344,7 +299,8 @@ Provide your answer as either "Yes" or "No".
             is_not_empty=False,
             explanation="",
             reasoning="",
-            **{config.output_key: "" for config in self.parameters.slice_configs}
+            health_questions_slice="",
+            rate_quote_slice=""
         )
         
         self.current_state = initial_state
@@ -358,7 +314,11 @@ Provide your answer as either "Yes" or "No".
         
         logging.info(f"Final state keys: {final_state.keys()}")
 
-        validation_result = "Yes" if final_state['is_not_empty'] else "No"
+        validation_result = final_state['classification']
+        if validation_result == "NA":
+            score = "NA"
+        else:
+            score = "Yes" if final_state['is_not_empty'] else "No"
         
         # Extract the content from the AIMessage if it's an AIMessage object
         explanation = final_state['explanation'].content if isinstance(final_state['explanation'], AIMessage) else final_state['explanation']
@@ -383,7 +343,7 @@ Provide your answer as either "Yes" or "No".
             logging.error(f"Could not calculate cost: {str(e)}")
 
         return LangGraphScore.ModelOutput(
-            score=validation_result,
+            score=score,
             explanation=explanation
         )
 
