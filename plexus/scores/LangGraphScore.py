@@ -109,15 +109,6 @@ class LangGraphScore(Score):
                 wait_exponential_jitter=True,
                 stop_after_attempt=3
             ).with_config(callbacks=[self.token_counter])
-        
-        self.log_model_params()
-
-    def log_model_params(self):
-        mlflow.log_param("model_provider", self.parameters.model_provider)
-        mlflow.log_param("model_name", self.parameters.model_name)
-        mlflow.log_param("model_region", self.parameters.model_region)
-        mlflow.log_param("temperature", self.parameters.temperature)
-        mlflow.log_param("max_tokens", self.parameters.max_tokens)
 
     def _initialize_model(self) -> BaseLanguageModel:
         """
@@ -201,7 +192,7 @@ class LangGraphScore(Score):
 
         return validation_result, explanation
     
-    def generate_graph_visualization(self, output_path: str = "./tmp/workflow_graph"):
+    def generate_graph_visualization(self, output_path: str = "./tmp/workflow_graph.png"):
         try:
             logging.info("Starting graph visualization generation")
             
@@ -246,12 +237,12 @@ class LangGraphScore(Score):
                 else:
                     dot.edge(source, target, color='#666666')
 
-            # Save the graph as a PNG file
-            dot.render(output_path, format='png', cleanup=True)
-            logging.info(f"Graph visualization saved to {output_path}")
+            # # Save the graph as a PNG file
+            # dot.render(output_path, format='png', cleanup=True)
+            # logging.info(f"Graph visualization saved to {output_path}")
 
-            # Log the graph as an artifact in MLflow
-            mlflow.log_artifact(f"{output_path}.png")
+            # # Log the graph as an artifact in MLflow
+            # mlflow.log_artifact(f"{output_path}.png")
 
         except Exception as e:
             error_msg = f"Failed to generate graph visualization: {str(e)}\n{traceback.format_exc()}"
