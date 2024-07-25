@@ -188,17 +188,10 @@ class AgenticValidator(LangGraphScore):
             self.agent_executor = self.create_lcel_agent()
         elif self.parameters.agent_type == "langgraph":
             self.workflow = self._create_langgraph_workflow()
-        
-        mlflow.log_param("model_provider", self.parameters.model_provider)
-        mlflow.log_param("model_name", self.parameters.model_name)
-        mlflow.log_param("model_region", self.parameters.model_region)
-        mlflow.log_param("temperature", self.parameters.temperature)
-        mlflow.log_param("max_tokens", self.parameters.max_tokens)
-        mlflow.log_param("prompt", self.parameters.prompt)
-        mlflow.log_param("label", self.parameters.label)
 
+        # TODO: Only do this during development/evaluation/etc.  Not production.
         # Generate and save the graph visualization
-        self.generate_graph_visualization()
+        # self.generate_graph_visualization()
 
     def _create_react_workflow(self):
         """
@@ -406,21 +399,24 @@ class AgenticValidator(LangGraphScore):
         try:
             logging.info(f"Metadata Contents: {self.current_state.metadata}")
 
-            # Find all keys that match the pattern school_\d+_{label}
-            matching_keys = [key for key in self.current_state.metadata.keys() 
-                             if key.startswith("school_") and key.endswith(f"_{self.parameters.label}")]
+            if not self.current_state.metadata:
+                label_value = ""
+            else:
+                # Find all keys that match the pattern school_\d+_{label}
+                matching_keys = [key for key in self.current_state.metadata.keys() 
+                                 if key.startswith("school_") and key.endswith(f"_{self.parameters.label}")]
 
-            if not matching_keys:
-                raise ValueError(f"No values found for label '{self.parameters.label}' in the metadata")
+                if not matching_keys:
+                    raise ValueError(f"No values found for label '{self.parameters.label}' in the metadata")
 
-            # Extract all values for the matching keys, remove duplicates, and filter out None and empty values
-            label_values = list(set(str(value) for key in matching_keys if (value := self.current_state.metadata.get(key)) not in (None, "", "nan")))
+                # Extract all values for the matching keys, remove duplicates, and filter out None and empty values
+                label_values = list(set(str(value) for key in matching_keys if (value := self.current_state.metadata.get(key)) not in (None, "", "nan")))
 
-            if not label_values:
-                raise ValueError(f"No valid values found for label '{self.parameters.label}' in the metadata")
+                if not label_values:
+                    raise ValueError(f"No valid values found for label '{self.parameters.label}' in the metadata")
 
-            # Join unique values if there's more than one, otherwise use the single value
-            label_value = " and ".join(label_values) if len(label_values) > 1 else label_values[0]
+                # Join unique values if there's more than one, otherwise use the single value
+                label_value = " and ".join(label_values) if len(label_values) > 1 else label_values[0]
 
             logging.info(f"Extracted unique label values: {label_value}")
             
@@ -511,7 +507,7 @@ class AgenticValidator(LangGraphScore):
         state['all_information_provided'] = all_complete
         return state
 
-    def predict(self, model_input: LangGraphScore.ModelInput) -> LangGraphScore.ModelOutput:
+    def predict(self, context, model_input: LangGraphScore.ModelInput) -> LangGraphScore.ModelOutput:
         """
         Predict the validity of the education information based on the transcript and metadata.
 
@@ -589,11 +585,6 @@ class AgenticValidator(LangGraphScore):
         logging.info(f"Final token usage - Completion tokens: {token_usage['completion_tokens']}")
         logging.info(f"Parameters: {self.parameters}")
 
-        # Log token metrics
-        mlflow.log_metric("final_total_tokens", token_usage['total_tokens'])
-        mlflow.log_metric("final_prompt_tokens", token_usage['prompt_tokens'])
-        mlflow.log_metric("final_completion_tokens", token_usage['completion_tokens'])
-
         # Calculate cost for all model types
         try:
             cost_info = calculate_cost(
@@ -603,14 +594,16 @@ class AgenticValidator(LangGraphScore):
             )
             total_cost = cost_info['total_cost']
             logging.info(f"Total cost: ${total_cost:.6f}")
-            mlflow.log_metric("final_total_cost", float(total_cost))
         except ValueError as e:
             logging.error(f"Could not calculate cost: {str(e)}")
 
-        return LangGraphScore.ModelOutput(
-            score=validation_result,
-            explanation=explanation
-        )
+        return [
+            LangGraphScore.ModelOutput(
+                score_name=self.parameters.score_name,
+                score=validation_result,
+                explanation=explanation
+            )
+        ]
 
     class ModelInput(LangGraphScore.ModelInput):
         """
