@@ -173,34 +173,29 @@ class FastTextClassifier(Score):
 
         actual_labels = [line.split(' ', 1)[0].replace('__label__', '') for line in test_data]
 
-        predicted_labels_and_confidences = []
+        # Create label_map first
+        unique_labels = sorted(set(actual_labels) | set(label.replace('__label__', '') for label in self.model.labels))
+        self.setup_label_map(unique_labels)
+
+        predicted_labels = []
+        confidence_scores = []
+
         for i, line in enumerate(test_data):
             text = line.split(' ', 1)[1].replace('\n', ' ')
             prediction = self.model.predict(text, k=len(self.model.labels))
-            predicted_labels_and_confidences.append(prediction)
-            
+            labels, confs = prediction
+
+            # Store only the confidence score for the top prediction
+            predicted_label = labels[0].replace('__label__', '')
+            predicted_labels.append(predicted_label)
+            confidence_scores.append(confs[0])
+
             if i < 5:  # Log details for the first 5 predictions
                 logging.info(f"Sample {i+1}:")
                 logging.info(f"  Text: {text[:100]}...")  # Log first 100 characters
                 logging.info(f"  Actual label: {actual_labels[i]}")
-                logging.info(f"  Predicted: {prediction}")
-
-        # Log some raw predictions
-        logging.info(f"Sample raw predictions: {predicted_labels_and_confidences[:5]}")
-
-        # Create label_map (include all unique labels from both actual and predicted)
-        unique_labels = sorted(set(actual_labels) | set(label.replace('__label__', '') for labels, _ in predicted_labels_and_confidences for label in labels))
-        self.setup_label_map(unique_labels)
-
-        # Prepare predictions and confidence scores
-        predicted_labels = []
-        confidence_scores = []
-
-        for i, (labels, confs) in enumerate(predicted_labels_and_confidences):
-            predicted_labels.append(labels[0].replace('__label__', ''))
-            # For binary classification, we want the confidence score for the positive class
-            positive_class_index = self.label_map['Yes']
-            confidence_scores.append(confs[positive_class_index])
+                logging.info(f"  Predicted: {predicted_label}")
+                logging.info(f"  Confidence score: {confs[0]}")
 
         # Keep labels as strings
         self.val_labels = np.array(actual_labels)
@@ -215,11 +210,12 @@ class FastTextClassifier(Score):
 
         # Log additional information
         logging.info(f"Shape of val_confidence_scores: {self.val_confidence_scores.shape}")
+        logging.info(f"Shape of val_predictions: {self.val_predictions.shape}")
+        logging.info(f"Shape of val_labels: {self.val_labels.shape}")
         logging.info(f"Number of unique labels in label_map: {len(self.label_map)}")
         logging.info(f"Number of unique predicted labels: {len(set(predicted_labels))}")
         logging.info(f"Sample of val_confidence_scores: {self.val_confidence_scores[:5]}")
-        logging.info(f"label_map: {self.label_map}")
-            
+
     def _log_parameters_recursively(self, params, parent_key=''):
         for key, value in params.items():
             if isinstance(value, dict):
