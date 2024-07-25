@@ -23,8 +23,8 @@ class LangGraphScore(Score):
         model_provider: Literal["ChatOpenAI", "AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "BedrockChat"
         model_name: Optional[str] = None
         model_region: Optional[str] = None
-        temperature: float = 0.1
-        max_tokens: int = 500
+        temperature: Optional[float] = 0.1
+        max_tokens: Optional[int] = 500
 
     class ModelOutput(Score.ModelOutput):
         """
