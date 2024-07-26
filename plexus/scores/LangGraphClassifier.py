@@ -1,8 +1,11 @@
+import re
 from enum import Enum
 from typing import TypedDict, Dict, Any
 from pydantic import Field
 from langsmith import Client
 from rapidfuzz import fuzz, process
+import nltk
+from nltk.tokenize import sent_tokenize
 
 from plexus.CustomLogging import logging
 from plexus.scores.LangGraphScore import LangGraphScore
@@ -16,6 +19,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import BaseOutputParser
 
+from langchain_core.exceptions import OutputParserException
 
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langchain.globals import set_debug
@@ -35,6 +39,10 @@ class CustomOutputParser(BaseOutputParser[dict]):
     FUZZY_MATCH_SCORE_CUTOFF = 70
     text: str = Field(...)
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        nltk.download('punkt', quiet=True)  # Download the punkt tokenizer data
+
     @property
     def _type(self) -> str:
         return "custom_output_parser"
@@ -52,17 +60,21 @@ class CustomOutputParser(BaseOutputParser[dict]):
         
         logging.info(f"Cleaned output: {output}")
         
-        # Use RapidFuzz to find the best match
+        # Tokenize the text into sentences
+        sentences = sent_tokenize(self.text)
+        
+        # Use RapidFuzz to find the best match among sentences
         result = process.extractOne(
-            output, 
-            [self.text[i:i+len(output)] for i in range(len(self.text) - len(output) + 1)],
+            output,
+            sentences,
             scorer=fuzz.partial_ratio,
             score_cutoff=self.FUZZY_MATCH_SCORE_CUTOFF
         )
         
         if result:
-            match, score, start_index = result
-            logging.info(f"Best match found with score {score} at index {start_index}")
+            match, score, index = result
+            logging.info(f"Best match found with score {score} at sentence index {index}")
+            start_index = self.text.index(match)
             input_text_after_slice = self.text[start_index:]
         else:
             logging.warning(f"No exact match found for output: '{output}'. Using the entire remaining text.")
@@ -155,14 +167,36 @@ class LangGraphClassifier(LangGraphScore):
 </transcript>
 
 Before the agent can move to the application process, the agent must have presented rate quotes to the customer. This typically involves presenting a monthly price for coverage. Did the agent present specific rate quotes?
-Provide your answer as either "Yes" or "No".
-""")
+
+Provide your answer as ONLY "Yes" or "No", without any additional explanation.""")
         ])
-        chain = prompt | self.llm_with_retry | score_parser
+        chain = prompt | self.llm_with_retry
 
         result = chain.invoke({"transcript": state['transcript']})
 
-        state["agent_presented_rate_quote"] = result
+        def fallback_parser(response: str) -> YesOrNo:
+            response_lower = response.lower()
+            if "yes" in response_lower:
+                return YesOrNo.YES
+            elif "no" in response_lower:
+                return YesOrNo.NO
+            else:
+                raise ValueError(f"Could not extract Yes or No from: {response}")
+
+        # Extract the content from the AIMessage
+        result_content = result.content if isinstance(result, AIMessage) else result
+
+        try:
+            parsed_result = score_parser.parse(result_content)
+        except OutputParserException:
+            try:
+                parsed_result = fallback_parser(result_content)
+            except ValueError as e:
+                logging.warning(f"Fallback parser failed: {str(e)}")
+                # Default to NO if both parsing attempts fail
+                parsed_result = YesOrNo.NO
+
+        state["agent_presented_rate_quote"] = parsed_result
         return state
 
     def _slice_transcript(self, state: GraphState, system_message: str, human_message: str, slice_key: str) -> GraphState:
@@ -296,7 +330,7 @@ Provide your answer as either "Yes" or "No".
         
         return state
 
-    def predict(self, model_input: LangGraphScore.ModelInput) -> LangGraphScore.ModelOutput:
+    def predict(self, context, model_input: LangGraphScore.ModelInput) -> LangGraphScore.ModelOutput:
         logging.info(f"Predict method input: {model_input}")
         
         initial_state = GraphState(
@@ -348,10 +382,13 @@ Provide your answer as either "Yes" or "No".
         except ValueError as e:
             logging.error(f"Could not calculate cost: {str(e)}")
 
-        return LangGraphScore.ModelOutput(
-            score=score,
-            explanation=explanation
-        )
+        return [
+            LangGraphScore.ModelOutput(
+                score_name=self.parameters.score_name,
+                score=validation_result,
+                explanation=explanation
+            )
+        ]
 
     class ModelInput(LangGraphScore.ModelInput):
         pass
