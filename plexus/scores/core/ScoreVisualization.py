@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc, precision_recall_curve, confusion_matrix
-from sklearn.preprocessing import LabelBinarizer
+from sklearn.preprocessing import LabelBinarizer, label_binarize
+from itertools import cycle
 import mlflow
 from plexus.CustomLogging import logging
 import matplotlib.ticker as ticker
@@ -11,84 +12,100 @@ from collections import Counter
 class ScoreVisualization:
 
     def _plot_confusion_matrix(self):
-        """
-        Generate and save a confusion matrix plot.
-        """
-        file_name = self.report_file_name("confusion_matrix.png")
+        from sklearn.metrics import confusion_matrix
+        import seaborn as sns
+        import matplotlib.pyplot as plt
 
-        all_classes = set(self.label_map.values())
-        all_classes.update(set(self.val_labels))
-        all_classes.update(set(self.val_predictions))
-        
-        all_classes = set(str(label) for label in all_classes)
-        
-        sorted_labels = sorted(all_classes)
-        
-        label_to_int = {label: i for i, label in enumerate(sorted_labels)}
-        logging.info(f"Label to int mapping: {label_to_int}")
+        # Get unique labels from both actual and predicted data
+        unique_labels = sorted(set(self.val_labels) | set(self.val_predictions))
 
-        val_labels_int = np.array([label_to_int[str(label)] for label in self.val_labels])
-        val_predictions_int = np.array([label_to_int[str(pred)] for pred in self.val_predictions])
+        # Create a mapping of labels to integers
+        label_to_int = {label: i for i, label in enumerate(unique_labels)}
 
-        relevant_labels = [label_to_int[label] for label in self.label_map.keys()]
-        logging.info(f"Relevant labels: {relevant_labels}")
-        cm = confusion_matrix(val_labels_int, val_predictions_int, labels=relevant_labels)
-        
+        # Convert string labels to integers
+        y_true = np.array([label_to_int[label] for label in self.val_labels])
+        y_pred = np.array([label_to_int[label] for label in self.val_predictions])
+
+        # Compute confusion matrix
+        cm = confusion_matrix(y_true, y_pred)
+
+        # Create a list of labels that are actually present in the data
+        relevant_labels = [label for label in self.label_map.keys() if label in unique_labels]
+
+        # Get the indices of relevant labels
+        relevant_indices = [label_to_int[label] for label in relevant_labels]
+
+        # Filter confusion matrix to include only relevant labels
+        cm_filtered = cm[relevant_indices][:, relevant_indices]
+
+        # Plot
         plt.figure(figsize=(10, 8))
-        custom_colormap = sns.light_palette(self._fuchsia, as_cmap=True)
-        sns.heatmap(cm, annot=True, fmt='d', cmap=custom_colormap, 
-                    xticklabels=list(self.label_map.keys()), yticklabels=list(self.label_map.keys()))
-        plt.xlabel('Predicted')
-        plt.ylabel('Actual')
+        sns.heatmap(cm_filtered, annot=True, fmt='d', cmap='Blues', 
+                    xticklabels=relevant_labels, yticklabels=relevant_labels)
         plt.title('Confusion Matrix')
-
+        plt.ylabel('True label')
+        plt.xlabel('Predicted label')
         plt.tight_layout()
-        plt.savefig(file_name, dpi=300)
+        plt.savefig(self.report_file_name('confusion_matrix.png'))
         plt.close()
 
-        mlflow.log_artifact(file_name)
-        
-        cm_text = np.array2string(cm, separator=', ')
-        logging.info(f"Confusion matrix: {cm_text}")
-
-        class_distribution = Counter(self.val_labels)
-        logging.info(f"Class distribution in validation set: {dict(class_distribution)}")
+        logging.info(f"Confusion matrix saved as confusion_matrix.png")
 
     def _plot_roc_curve(self):
         """
-        Generate and save a ROC curve plot.
+        Generate and save a ROC curve plot for multi-class classification.
         """
         file_name = self.report_file_name("roc_curve.png")
 
-        all_classes = set(self.label_map.values())
-        all_classes.update(set(self.val_labels))
-        all_classes.update(set(self.val_predictions))
-        
-        all_classes = set(str(label) for label in all_classes)
-        
-        sorted_labels = sorted(all_classes)
-        
-        label_to_int = {label: i for i, label in enumerate(sorted_labels)}
+        # Get unique classes
+        classes = sorted(set(self.label_map.values()))
 
-        val_labels_int = np.array([label_to_int[str(label)] for label in self.val_labels])
+        # Binarize the labels
+        y_test = label_binarize(self.val_labels, classes=classes)
 
-        if self.val_confidence_scores.ndim == 2:
-            if self.val_confidence_scores.shape[1] == 1:
-                val_confidence_scores = self.val_confidence_scores.ravel()
-            else:
-                positive_class_index = self.label_map['Yes']
-                val_confidence_scores = self.val_confidence_scores[:, positive_class_index]
+        # For binary classification
+        if len(classes) == 2:
+            fpr, tpr, _ = roc_curve(y_test, self.val_confidence_scores)
+            roc_auc = auc(fpr, tpr)
+
+            plt.figure(figsize=(10, 8))
+            plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.2f})')
+            plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+            plt.xlim([0.0, 1.0])
+            plt.ylim([0.0, 1.05])
+            plt.xlabel('False Positive Rate')
+            plt.ylabel('True Positive Rate')
+            plt.title('Receiver Operating Characteristic (ROC) Curve')
+            plt.legend(loc="lower right")
         else:
-            val_confidence_scores = self.val_confidence_scores
+            # For multi-class, we need to binarize the output
+            y_score = label_binarize(self.val_predictions, classes=classes)
 
-        pos_label = label_to_int['Yes']
+            # Compute ROC curve and ROC area for each class
+            fpr = dict()
+            tpr = dict()
+            roc_auc = dict()
+            for i in range(len(classes)):
+                fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_score[:, i])
+                roc_auc[i] = auc(fpr[i], tpr[i])
 
-        fpr, tpr, _ = roc_curve(val_labels_int, val_confidence_scores, pos_label=pos_label)
-        roc_auc = auc(fpr, tpr)
+            # Compute micro-average ROC curve and ROC area
+            fpr["micro"], tpr["micro"], _ = roc_curve(y_test.ravel(), y_score.ravel())
+            roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
 
-        plt.figure(figsize=(10, 8))
-        plt.plot(fpr, tpr, color=self._fuchsia, lw=2, label=f'ROC curve (AUC = {roc_auc:.2f})')
-        plt.plot([0, 1], [0, 1], color=self._sky_blue, lw=2, linestyle='--')
+            # Plot ROC curves
+            plt.figure(figsize=(10, 8))
+
+            plt.plot(fpr["micro"], tpr["micro"],
+                     label=f'micro-average ROC curve (AUC = {roc_auc["micro"]:.2f})',
+                     color='deeppink', linestyle=':', linewidth=4)
+
+            colors = cycle(['aqua', 'darkorange', 'cornflowerblue', 'green', 'red', 'purple'])
+            for i, color in zip(range(len(classes)), colors):
+                plt.plot(fpr[i], tpr[i], color=color, lw=2,
+                         label=f'ROC curve of class {classes[i]} (AUC = {roc_auc[i]:.2f})')
+
+        plt.plot([0, 1], [0, 1], 'k--', lw=2)
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.05])
         plt.xlabel('False Positive Rate')
@@ -99,12 +116,15 @@ class ScoreVisualization:
         plt.close()
 
         mlflow.log_artifact(file_name)
-        mlflow.log_metric("roc_auc", roc_auc)
+        if len(classes) == 2:
+            mlflow.log_metric("roc_auc", roc_auc)
+        else:
+            mlflow.log_metric("micro_avg_roc_auc", roc_auc["micro"])
 
-        logging.info(f"Number of unique labels: {len(sorted_labels)}")
-        logging.info(f"Shape of val_confidence_scores: {val_confidence_scores.shape}")
-        logging.info(f"Shape of val_labels_int: {val_labels_int.shape}")
-        logging.info(f"label_to_int mapping: {label_to_int}")
+        logging.info(f"Number of classes: {len(classes)}")
+        logging.info(f"Shape of val_confidence_scores: {self.val_confidence_scores.shape}")
+        logging.info(f"Shape of val_labels: {y_test.shape}")
+        logging.info(f"Classes: {classes}")
 
     def _plot_precision_recall_curve(self):
         """
@@ -246,10 +266,13 @@ class ScoreVisualization:
         """
         file_name = self.report_file_name("calibration_curve.png")
 
-        confidences = self.val_confidence_scores.flatten()
+        confidences = self.val_confidence_scores
         predicted_labels = self.val_predictions
         true_labels = self.val_labels
 
+        logging.info(f"Calibration curve - Shape of confidences: {confidences.shape}")
+        logging.info(f"Calibration curve - Shape of predicted_labels: {predicted_labels.shape}")
+        logging.info(f"Calibration curve - Shape of true_labels: {true_labels.shape}")
         logging.info(f"Calibration curve - Unique values in predicted_labels: {set(predicted_labels)}")
         logging.info(f"Calibration curve - Unique values in true_labels: {set(true_labels)}")
         logging.info(f"Calibration curve - label_map: {self.label_map}")

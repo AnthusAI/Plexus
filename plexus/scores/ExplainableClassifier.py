@@ -1,5 +1,4 @@
 import os
-import mlflow
 import pandas as pd
 from plexus.scores.Score import Score
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -19,7 +18,6 @@ from plexus.scores.core.utils import ensure_report_directory_exists
 import xgboost as xgb
 import rich
 from rich.panel import Panel
-from rich.columns import Columns
 from rich.table import Table
 from rich.console import Console
 import scipy.sparse
@@ -322,7 +320,7 @@ class ExplainableClassifier(Score):
             true_label = self.val_labels.iloc[i]
 
             # Use the actual predict() function
-            result = self.predict(None, original_text)
+            result = self.predict(None, original_text)[0]
 
             self.val_predictions.append(result.score)
             self.val_confidence_scores.append(result.confidence)
@@ -437,11 +435,14 @@ class ExplainableClassifier(Score):
         top_features = [f"{feature_names[i]} ({feature_importance[i]:.4f})" for i in sorted_idx[-10:]]
         explanation = "\n".join(reversed(top_features))
 
-        return self.ModelOutput(
-            score = prediction_label,
-            confidence = confidence_score,
-            explanation = explanation
-        )
+        return [
+            self.ModelOutput(
+                score_name = self.parameters.score_name,
+                score = prediction_label,
+                confidence = confidence_score,
+                explanation = explanation
+            )
+        ]
 
     def _prepare_input(self, model_input):
         logging.debug(f"Preparing input of type: {type(model_input)}")

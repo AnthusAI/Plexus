@@ -1,93 +1,133 @@
 from plexus.scores.Score import Score
 from plexus.CustomLogging import logging
-import pandas as pd
-
+from plexus.scores.LangGraphScore import LangGraphScore
+from typing import Dict, TypedDict, Optional, Literal, Annotated
+from langchain.output_parsers import ResponseSchema, StructuredOutputParser
+from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
+from langchain_core.messages import HumanMessage, AIMessage
+from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
-from typing import Dict, TypedDict, Optional, Literal
+from langgraph.graph.message import add_messages, AnyMessage
 
-class GraphState(TypedDict):
-    init_input: Optional[str]
-    recruiter_name: Optional[str]
-    final_result: Optional[str]
+# Logging.
+from langchain.globals import set_debug
+set_debug(True)
 
-class AgenticExtractor(Score):
+class ExtractorState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+    transcript: str
+    entity: Optional[str]
+    quote: Optional[str]
+    validation_error: Optional[str]
+    
+class AgenticExtractor(LangGraphScore):
+    
+    class Parameters(LangGraphScore.Parameters):
+        ...
+        prompt: str
+
     def __init__(self, scorecard_name, score_name, **kwargs):
         super().__init__(scorecard_name=scorecard_name, score_name=score_name, **kwargs)
 
-    transcript_df = pd.DataFrame({"Transcription": ["Hello, this is recruiter Johnny Bravo speaking."]})
-
     def load_context(self, context):
-        # Implement any context loading logic here
         pass
 
-    def predict(self, model_input):
-        #self.model_input = self.transcript_df
-        if isinstance(model_input, pd.DataFrame) and 'Transcription' in model_input.columns:
-            logging.info(f"Transcription: {model_input['Transcription']}")
-            return self.process_transcript(model_input['Transcription'].iloc[0])
-        else:
-            logging.error(f"Invalid input type: {type(model_input)}")
-            return None
+    def predict(self, context, model_input: Score.ModelInput):
+        transcript = model_input.transcript
 
-    def process_transcript(self, transcript):
-        def input_first(state: GraphState) -> Dict[str, str]:
-            logging.info("start input_first()")
-            words = transcript.split()
-            try:
-                recruiter_index = words.index("recruiter")
-                recruiter_name = words[recruiter_index + 1] + " " + words[recruiter_index + 2]
-                return {"recruiter_name": recruiter_name}
-            except (ValueError, IndexError):
-                return {"recruiter_name": "error"}
+        def _extract_entity_node(state: ExtractorState) -> Dict[str, str]:
+            logging.info("start _extract_entity_node()")
+            logging.info(f"Transcript: {state['transcript']}")
+            
+            response_schemas = [
+                ResponseSchema(name="entity", description="entity in the transcript"),
+                ResponseSchema(name="quote", description="related quote(s) from the transcript that include the entity"),
+            ]
+            output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
 
-        def complete_word(state: GraphState) -> Dict[str, str]:
-            logging.info("start complete_word()")
-            if state.get("recruiter_name") == "error":
-                return {"final_result": "error"}
-            return {"final_result": f"Recruiter name: {state['recruiter_name']}"}
 
-        def error(state: GraphState) -> Dict[str, str]:
-            logging.info("start error()")
-            return {"final_result": "error", "recruiter_name": "error"}
+            template_string = """
+{format_instructions}
 
-        def continue_next(state: GraphState) -> Literal["to_complete_word", "to_error"]:
-            logging.info(f"continue_next: state: {state}")
-            if state.get("recruiter_name") != "error":
-                logging.info("- continue to_complete_word")
-                return "to_complete_word"
+This is the transcript of a call center phone call that we're reviewing for QA purposes:
+{transcript}
+
+{prompt}
+"""
+            prompt = PromptTemplate(
+                template=template_string,
+                input_variables=["transcript", "prompt"]
+            )
+            
+            if state["validation_error"] is not None:
+                messages = [
+                    template_string,
+                    state['messages'][-1],
+                    HumanMessage(content=state["validation_error"])
+                ]
+                prompt = ChatPromptTemplate.from_messages(
+                    messages=messages
+                )
+
+            model = ChatOpenAI(temperature=0)
+            chain = prompt | model
+        
+            output = chain.invoke({
+                "transcript": model_input.transcript, 
+                "prompt": self.parameters.prompt,
+                "format_instructions": output_parser.get_format_instructions()
+            })
+            
+            result = output_parser.invoke(output)
+
+            return {
+                "messages": output,
+                "entity":   result["entity"],
+                "quote":    result["quote"]
+            }
+        
+        def _verify_entity_node(state: ExtractorState) -> Dict[str, str]:
+            entity = state.get("entity", "")
+            transcript = state.get("transcript", "")
+
+            if entity and entity not in transcript:
+                return {"validation_error": f"No, that's not possible: The string \"{entity}\" does not exist within the transcript."}
             else:
-                logging.info("- continue to_error")
-                return "to_error"
+                return {"validation_error": None}
 
-        # Create a state graph
-        workflow = StateGraph(GraphState)
+        def _next_after_verify_entity(state: ExtractorState) -> Dict[str, str]:
+            if state["validation_error"] is not None:
+                return "extract_entity"
+            return END
 
-        # Add nodes to the state graph
-        workflow.add_node("input_first", input_first)
-        workflow.add_node("complete_word", complete_word)
-        workflow.add_node("error", error)
+        workflow = StateGraph(ExtractorState)
 
-        # Set entry point
-        workflow.set_entry_point("input_first")
+        workflow.add_node("extract_entity", _extract_entity_node)
+        workflow.set_entry_point("extract_entity")
+        workflow.add_edge("extract_entity", "verify_entity")
+        
+        workflow.add_node("verify_entity", _verify_entity_node)
+        workflow.add_conditional_edges("verify_entity", _next_after_verify_entity)
 
-        # Add edges to the state graph
-        workflow.add_edge("complete_word", END)
-        workflow.add_edge("error", END)
-
-        # Add conditional edges
-        workflow.add_conditional_edges(
-            "input_first",  # start node name
-            continue_next,  # decision of what to do next AFTER start-node
-            {  # keys: return of continue_next, values: next node to continue
-                "to_complete_word": "complete_word",
-                "to_error": "error",
-            },
-        )
-
-        # Compile the workflow
         app = workflow.compile()
 
-        # Process the transcript
-        result = app.invoke({"init_input": transcript.lower()})
+        result = app.invoke({"transcript": transcript.lower()})
         logging.info(f"LangGraph result: {result}")
-        return result
+
+        return [
+            LangGraphScore.ModelOutput(
+                score_name =  self.parameters.score_name,
+                score =       result["entity"],
+                explanation = AgenticExtractor.clean_quote(result["quote"])
+            )
+        ]
+
+    @staticmethod
+    def clean_quote(quote: str) -> str:
+        quote = ' '.join(quote.split())  # Condense any whitespace into single characters
+        if not (quote.startswith('“') and quote.endswith('”')):
+            if quote.startswith("'") and quote.endswith("'"):
+                quote = f'“{quote[1:-1]}”'
+            elif not (quote.startswith('"') and quote.endswith('"')):
+                quote = f'“{quote}”'
+        return quote
