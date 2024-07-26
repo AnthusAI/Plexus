@@ -92,7 +92,7 @@ class YesOrNo(Enum):
     NO = "No"
 
 class LangGraphClassifier(LangGraphScore):
-    MAX_RETRY_ATTEMPTS = 3
+    MAX_RETRY_ATTEMPTS = 20
         
     class Parameters(LangGraphScore.Parameters):
         label: str = ""
@@ -264,27 +264,14 @@ Context:
 - The agent should assume the customer wants to apply today and guide them into the application process without directly asking for permission.
 - This should occur immediately following the rate presentation.
 - The agent should use a closing technique that assumes the customer is ready to proceed.
+- Effective guidance includes:
+  * Directly moving to the next steps of the application process
+  * Mentioning medical approval or underwriting as the next step
+  * Discussing enrollment or transferring to an enroller
+  * Explaining the application process (e.g., phone interview, online application)
+- Ineffective guidance includes asking if the customer wants to proceed, submit an application, or has time for the next steps.
 
-Qualifying examples of effective guidance include:
-1. "So the next step is to get you approved. I just need to ask a few more questions from the carrier and we can get that started, it usually takes 1-2 months for the approval process."
-2. "ABC carrier does a phone application, so I'll just get a little more info from you and then get you transferred right over to one of our enrollers who will go through that with you."
-3. "XYZ carrier uses an online application, so I'll just need to ask a few more questions and then I can have them email the application to you, then you just click the link in the email and fill it out."
-
-Examples that do NOT qualify as effective guidance:
-1. "Would you want to proceed with that?"
-2. "Do you want to try and get approved for that?"
-3. "Do you have time to do the phone interview today?"
-4. "Do you want to submit an application?"
-
-Please analyze the transcript and determine if the agent effectively guided the conversation towards closing the deal without explicitly asking for permission. Provide a detailed 2-4 sentence explanation of your reasoning, citing specific examples from the transcript where possible.
-
-Focus on:
-1. The agent's immediate actions after presenting the rates.
-2. Any language that assumes the customer's readiness to proceed.
-3. Specific steps mentioned for moving forward with the application or enrollment process.
-4. Absence of direct questions seeking permission.
-
-Your analysis should clearly state whether the agent did or did not effectively guide the conversation towards closing the deal, based on the criteria provided.
+Provide a concise analysis (2-3 sentences) stating whether the agent effectively guided the conversation towards closing the deal, based on the criteria provided. If possible, include a brief quote from the transcript to support your conclusion.
 """
         )
 
