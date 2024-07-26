@@ -109,26 +109,26 @@ class LangGraphScore(Score):
         """
         max_tokens = self.parameters.max_tokens
 
-        if self.parameters.model_provider == "AzureChatOpenAI":
-            base_model = AzureChatOpenAI(
-                azure_endpoint=os.environ.get("AZURE_API_BASE"),
-                api_version=os.environ.get("AZURE_API_VERSION"),
-                api_key=os.environ.get("AZURE_API_KEY"),
-                model=self.parameters.model_name,
-                temperature=self.parameters.temperature,
-                max_tokens=max_tokens
-            )
+        if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
             self.openai_callback = OpenAICallbackHandler()
             callbacks = [self.openai_callback]
-        elif self.parameters.model_provider == "ChatOpenAI":
-            base_model = ChatOpenAI(
-                model=self.parameters.model_name,
-                api_key=os.environ.get("OPENAI_API_KEY"),
-                temperature=self.parameters.temperature,
-                max_tokens=max_tokens
-            )
-            self.openai_callback = OpenAICallbackHandler()
-            callbacks = [self.openai_callback]
+            
+            if self.parameters.model_provider == "AzureChatOpenAI":
+                base_model = AzureChatOpenAI(
+                    azure_endpoint=os.environ.get("AZURE_API_BASE"),
+                    api_version=os.environ.get("AZURE_API_VERSION"),
+                    api_key=os.environ.get("AZURE_API_KEY"),
+                    model=self.parameters.model_name,
+                    temperature=self.parameters.temperature,
+                    max_tokens=max_tokens
+                )
+            else:  # ChatOpenAI
+                base_model = ChatOpenAI(
+                    model=self.parameters.model_name,
+                    api_key=os.environ.get("OPENAI_API_KEY"),
+                    temperature=self.parameters.temperature,
+                    max_tokens=max_tokens
+                )
         elif self.parameters.model_provider == "BedrockChat":
             base_model = ChatBedrock(
                 model_id=self.parameters.model_name or "anthropic.claude-3-5-sonnet-20240620-v1:0",
@@ -269,7 +269,7 @@ class LangGraphScore(Score):
         pass
 
     def get_token_usage(self):
-        if isinstance(self.llm, (AzureChatOpenAI, ChatOpenAI)):
+        if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
             return {
                 "prompt_tokens": self.openai_callback.prompt_tokens,
                 "completion_tokens": self.openai_callback.completion_tokens,
@@ -293,27 +293,17 @@ class LangGraphScore(Score):
                   'llm_request_count', 'prompt_tokens', 'completion_tokens', 'input_cost', 'output_cost', 'total_cost'
         """
 
-        usage = {}
-        if isinstance(self.llm, (AzureChatOpenAI, ChatOpenAI)):
-            usage = {
-                "prompt_tokens": self.openai_callback.prompt_tokens,
-                "completion_tokens": self.openai_callback.completion_tokens,
-                "total_tokens": self.openai_callback.total_tokens,
-                "successful_requests": self.openai_callback.successful_requests
-            }
-        else:
-            usage = {
-                "prompt_tokens": self.token_counter.prompt_tokens,
-                "completion_tokens": self.token_counter.completion_tokens,
-                "total_tokens": self.token_counter.total_tokens,
-                "successful_requests": self.token_counter.llm_calls
-            }        
+        usage = self.get_token_usage()
 
-        cost_info = calculate_cost(
-            model_name=self.parameters.model_name,
-            input_tokens=usage['prompt_tokens'],
-            output_tokens=usage['completion_tokens']
-        )
+        try:
+            cost_info = calculate_cost(
+                model_name=self.parameters.model_name,
+                input_tokens=usage['prompt_tokens'],
+                output_tokens=usage['completion_tokens']
+            )
+        except ValueError as e:
+            logging.error(f"Error calculating cost: {str(e)}")
+            cost_info = {"input_cost": 0, "output_cost": 0, "total_cost": 0}
 
         return {
             "prompt_tokens":     usage['prompt_tokens'],
@@ -326,8 +316,8 @@ class LangGraphScore(Score):
         }
 
     def reset_token_usage(self):
-        if isinstance(self.llm, (AzureChatOpenAI, ChatOpenAI)):
-            self.openai_callback = OpenAICallbackHandler()  # Create a new callback
+        if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
+            self.openai_callback = OpenAICallbackHandler()
             self.llm = self.llm.with_config(callbacks=[self.openai_callback])
         else:
             self.token_counter.prompt_tokens = 0
