@@ -174,7 +174,7 @@ class AgenticValidator(LangGraphScore):
         """
         Initialize the language model and create the workflow.
         """
-        self.llm = self._initialize_model()
+        self.model = self._initialize_model()
         
         if self.parameters.agent_type == "react":
             self.workflow = self._create_react_workflow()
@@ -282,7 +282,7 @@ class AgenticValidator(LangGraphScore):
             Answer with YES or NO, followed by a brief explanation.
             """
             
-            response = self.llm.invoke(full_prompt)
+            response = self.model.invoke(full_prompt)
             
             # Use the inherited _parse_validation_result method
             validation_result, explanation = self._parse_validation_result(response.content)
@@ -355,7 +355,7 @@ class AgenticValidator(LangGraphScore):
         tool_names = ", ".join([tool.name for tool in tools])
         prompt = prompt.partial(tools=render_text_description(tools), tool_names=tool_names)
 
-        llm_with_stop = self.llm.bind(stop=["\nObservation:", "\nHuman:", "\nQuestion:"])
+        llm_with_stop = self.model.bind(stop=["\nObservation:", "\nHuman:", "\nQuestion:"])
 
         agent = (
             RunnablePassthrough.assign(
@@ -476,7 +476,7 @@ class AgenticValidator(LangGraphScore):
         transcript = state['transcript']
         
         formatted_prompt = self.prompt_template.format(transcript=transcript)
-        llm_response = self.llm.invoke(formatted_prompt)
+        llm_response = self.model.invoke(formatted_prompt)
         parsed_response = self.output_parser.parse(llm_response.content)
         
         state['parsed_schools'] = parsed_response.schools
@@ -532,7 +532,7 @@ class AgenticValidator(LangGraphScore):
         self.reset_token_usage()
 
         logging.info("Starting workflow invocation")
-        final_state = self.workflow.invoke(initial_state, config={"callbacks": [self.openai_callback if isinstance(self.llm, (AzureChatOpenAI, ChatOpenAI)) else self.token_counter]})
+        final_state = self.workflow.invoke(initial_state, config={"callbacks": [self.openai_callback if isinstance(self.model, (AzureChatOpenAI, ChatOpenAI)) else self.token_counter]})
         logging.info("Workflow invocation completed")
         
         logging.info(f"Final state: {final_state}")
