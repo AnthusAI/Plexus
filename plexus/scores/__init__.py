@@ -12,3 +12,4 @@ from plexus.scores.FastTextClassifier import FastTextClassifier
 from plexus.scores.ExplainableClassifier import ExplainableClassifier
 from plexus.scores.AgenticExtractor import AgenticExtractor
 from plexus.scores.AgenticValidator import AgenticValidator
+from plexus.scores.LangGraphClassifier import LangGraphClassifier
