@@ -17,7 +17,7 @@ class MockScore:
         # Mock computation, return a dummy result wrapped in an object with a 'value' attribute
         return MockScoreResult(42)
 
-    def accumulated_expenses(self):
+    def get_accumulated_costs(self):
         # Mock expenses, return dummy values
         return {
             'prompt_tokens': 10,

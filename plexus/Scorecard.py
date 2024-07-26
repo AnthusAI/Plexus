@@ -204,8 +204,8 @@ class Scorecard:
             )
             logging.info(f"Score result: {score_result}")
 
-            if hasattr(score_instance, 'accumulated_expenses'):
-                score_total_cost = score_instance.accumulated_expenses()
+            if hasattr(score_instance, 'get_accumulated_costs'):
+                score_total_cost = score_instance.get_accumulated_costs()
                 logging.info(f"Total cost: {score_total_cost}")
 
                 self.prompt_tokens       += score_total_cost['prompt_tokens']
@@ -245,7 +245,7 @@ class Scorecard:
 
         return score_results_dict
 
-    def accumulated_expenses(self):
+    def get_accumulated_costs(self):
         return {
             'prompt_tokens': self.prompt_tokens,
             'completion_tokens': self.completion_tokens,
