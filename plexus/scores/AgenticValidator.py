@@ -1,4 +1,3 @@
-import mlflow
 import math
 from typing import Dict, List, Any, Literal, Optional, Union, TypedDict
 from pydantic import ConfigDict, Field, validator, BaseModel
@@ -174,14 +173,8 @@ class AgenticValidator(LangGraphScore):
     def initialize_validation_workflow(self):
         """
         Initialize the language model and create the workflow.
-        This method also logs relevant parameters to MLflow.
         """
         self.llm = self._initialize_model()
-        self.llm_with_retry = self.llm.with_retry(
-            retry_if_exception_type=(Exception,),
-            wait_exponential_jitter=True,
-            stop_after_attempt=3
-        ).with_config(callbacks=[self.token_counter])
         
         if self.parameters.agent_type == "react":
             self.workflow = self._create_react_workflow()
@@ -289,7 +282,7 @@ class AgenticValidator(LangGraphScore):
             Answer with YES or NO, followed by a brief explanation.
             """
             
-            response = self.llm_with_retry.invoke(full_prompt)
+            response = self.llm.invoke(full_prompt)
             
             # Use the inherited _parse_validation_result method
             validation_result, explanation = self._parse_validation_result(response.content)
@@ -362,7 +355,7 @@ class AgenticValidator(LangGraphScore):
         tool_names = ", ".join([tool.name for tool in tools])
         prompt = prompt.partial(tools=render_text_description(tools), tool_names=tool_names)
 
-        llm_with_stop = self.llm_with_retry.bind(stop=["\nObservation:", "\nHuman:", "\nQuestion:"])
+        llm_with_stop = self.llm.bind(stop=["\nObservation:", "\nHuman:", "\nQuestion:"])
 
         agent = (
             RunnablePassthrough.assign(
@@ -483,7 +476,7 @@ class AgenticValidator(LangGraphScore):
         transcript = state['transcript']
         
         formatted_prompt = self.prompt_template.format(transcript=transcript)
-        llm_response = self.llm_with_retry.invoke(formatted_prompt)
+        llm_response = self.llm.invoke(formatted_prompt)
         parsed_response = self.output_parser.parse(llm_response.content)
         
         state['parsed_schools'] = parsed_response.schools
