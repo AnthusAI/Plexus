@@ -56,6 +56,7 @@ setup(
         'langchain-aws==0.1.9',
         'langchain-openai==0.1.14',
         'langchain-google-vertexai==1.0.6',
+        'openpyxl==3.1.5'
     ],
     dependency_links=[
         'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator'
