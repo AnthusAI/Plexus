@@ -17,10 +17,12 @@ from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langchain_google_vertexai import ChatVertexAI
 from langchain_community.callbacks import OpenAICallbackHandler
 
+from openai_cost_calculator.openai_cost_calculator import calculate_cost
+
 class LangGraphScore(Score):
     class Parameters(Score.Parameters):
         model_config = ConfigDict(protected_namespaces=())
-        model_provider: Literal["ChatOpenAI", "AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "BedrockChat"
+        model_provider: Literal["ChatOpenAI", "AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "AzureChatOpenAI"
         model_name: Optional[str] = None
         model_region: Optional[str] = None
         temperature: Optional[float] = 0.1
@@ -292,6 +294,47 @@ class LangGraphScore(Score):
                 "total_tokens": self.token_counter.total_tokens,
                 "successful_requests": self.token_counter.llm_calls
             }
+
+    def get_accumulated_costs(self):
+        """
+        Get the expenses that have been accumulated over all the computed elements.
+
+        Returns:
+            dict: A dictionary containing the accumulated expenses:
+                  'llm_request_count', 'prompt_tokens', 'completion_tokens', 'input_cost', 'output_cost', 'total_cost'
+        """
+
+        usage = {}
+        if isinstance(self.llm, (AzureChatOpenAI, ChatOpenAI)):
+            usage = {
+                "prompt_tokens": self.openai_callback.prompt_tokens,
+                "completion_tokens": self.openai_callback.completion_tokens,
+                "total_tokens": self.openai_callback.total_tokens,
+                "successful_requests": self.openai_callback.successful_requests
+            }
+        else:
+            usage = {
+                "prompt_tokens": self.token_counter.prompt_tokens,
+                "completion_tokens": self.token_counter.completion_tokens,
+                "total_tokens": self.token_counter.total_tokens,
+                "successful_requests": self.token_counter.llm_calls
+            }        
+
+        cost_info = calculate_cost(
+            model_name=self.parameters.model_name,
+            input_tokens=usage['prompt_tokens'],
+            output_tokens=usage['completion_tokens']
+        )
+
+        return {
+            "prompt_tokens":     usage['prompt_tokens'],
+            "completion_tokens": usage['completion_tokens'],
+            "total_tokens":      usage['total_tokens'],
+            "llm_calls":         usage['successful_requests'],
+            "input_cost":        cost_info['input_cost'],
+            "output_cost":       cost_info['output_cost'],
+            "total_cost":        cost_info['total_cost']
+        }
 
     def reset_token_usage(self):
         if isinstance(self.llm, (AzureChatOpenAI, ChatOpenAI)):

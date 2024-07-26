@@ -277,7 +277,7 @@ class AccuracyExperiment(Experiment):
             analysis.generate_question_accuracy_csv(output_file="tmp/question_accuracy_report.csv")
             mlflow.log_artifact("tmp/question_accuracy_report.csv")
 
-        expenses = self.scorecard.accumulated_expenses()
+        expenses = self.scorecard.get_accumulated_costs()
         expenses['cost_per_transcript'] = expenses['total_cost'] / len(selected_sample_rows)    
 
         # Create a thread pool executor
