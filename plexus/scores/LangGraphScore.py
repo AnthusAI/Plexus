@@ -1,8 +1,8 @@
-import mlflow
 import os
 import logging
 import traceback
 import graphviz
+from langsmith import Client
 from typing import Tuple, Literal, Optional, Any
 from pydantic import ConfigDict
 
@@ -20,6 +20,8 @@ from langchain_community.callbacks import OpenAICallbackHandler
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
 class LangGraphScore(Score):
+    MAX_RETRY_ATTEMPTS = 20
+    
     class Parameters(Score.Parameters):
         model_config = ConfigDict(protected_namespaces=())
         model_provider: Literal["ChatOpenAI", "AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "AzureChatOpenAI"
@@ -41,11 +43,10 @@ class LangGraphScore(Score):
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
-        self.llm = None
-        self.llm_with_retry = None
         self.token_counter = self._create_token_counter()
         self.openai_callback = None
-        self.initialize_model()
+        self.langsmith_client = Client()
+        self.llm = self._initialize_model()
 
     def _create_token_counter(self):
         class TokenCounterCallback(BaseCallbackHandler):
@@ -96,28 +97,12 @@ class LangGraphScore(Score):
 
         return TokenCounterCallback()
 
-    def initialize_model(self):
-        self.llm = self._initialize_model()
-        if isinstance(self.llm, (AzureChatOpenAI, ChatOpenAI)):
-            self.openai_callback = OpenAICallbackHandler()
-            self.llm_with_retry = self.llm.with_retry(
-                retry_if_exception_type=(Exception,),
-                wait_exponential_jitter=True,
-                stop_after_attempt=3
-            ).with_config(callbacks=[self.openai_callback])
-        else:
-            self.llm_with_retry = self.llm.with_retry(
-                retry_if_exception_type=(Exception,),
-                wait_exponential_jitter=True,
-                stop_after_attempt=3
-            ).with_config(callbacks=[self.token_counter])
-
     def _initialize_model(self) -> BaseLanguageModel:
         """
         Initialize and return the appropriate language model based on the configured provider.
 
         Returns:
-            BaseLanguageModel: The initialized language model.
+            BaseLanguageModel: The initialized language model with retry logic.
 
         Raises:
             ValueError: If an unsupported model provider is specified.
@@ -125,7 +110,7 @@ class LangGraphScore(Score):
         max_tokens = self.parameters.max_tokens
 
         if self.parameters.model_provider == "AzureChatOpenAI":
-            return AzureChatOpenAI(
+            base_model = AzureChatOpenAI(
                 azure_endpoint=os.environ.get("AZURE_API_BASE"),
                 api_version=os.environ.get("AZURE_API_VERSION"),
                 api_key=os.environ.get("AZURE_API_KEY"),
@@ -133,33 +118,45 @@ class LangGraphScore(Score):
                 temperature=self.parameters.temperature,
                 max_tokens=max_tokens
             )
+            self.openai_callback = OpenAICallbackHandler()
+            callbacks = [self.openai_callback]
         elif self.parameters.model_provider == "ChatOpenAI":
-            return ChatOpenAI(
+            base_model = ChatOpenAI(
                 model=self.parameters.model_name,
                 api_key=os.environ.get("OPENAI_API_KEY"),
                 temperature=self.parameters.temperature,
                 max_tokens=max_tokens
             )
+            self.openai_callback = OpenAICallbackHandler()
+            callbacks = [self.openai_callback]
         elif self.parameters.model_provider == "BedrockChat":
-            model_id = self.parameters.model_name or "anthropic.claude-3-5-sonnet-20240620-v1:0"
-            model_region = self.parameters.model_region or "us-east-1"
-            return ChatBedrock(
-                model_id=model_id,
+            base_model = ChatBedrock(
+                model_id=self.parameters.model_name or "anthropic.claude-3-5-sonnet-20240620-v1:0",
                 model_kwargs={
                     "temperature": self.parameters.temperature,
                     "max_tokens": max_tokens
                 },
-                region_name=model_region
+                region_name=self.parameters.model_region or "us-east-1"
             )
+            callbacks = [self.token_counter]
         elif self.parameters.model_provider == "ChatVertexAI":
-            model_name = self.parameters.model_name or "gemini-1.5-flash-001"
-            return ChatVertexAI(
-                model=model_name,
+            base_model = ChatVertexAI(
+                model=self.parameters.model_name or "gemini-1.5-flash-001",
                 temperature=self.parameters.temperature,
                 max_output_tokens=max_tokens
             )
+            callbacks = [self.token_counter]
         else:
             raise ValueError(f"Unsupported model provider: {self.parameters.model_provider}")
+
+        return base_model.with_retry(
+            retry_if_exception_type=(Exception,),
+            wait_exponential_jitter=True,
+            stop_after_attempt=self.MAX_RETRY_ATTEMPTS
+        ).with_config(
+            callbacks=callbacks,
+            max_tokens=max_tokens
+        )
 
     def _parse_validation_result(self, output: str) -> Tuple[str, str]:
         """
@@ -243,27 +240,19 @@ class LangGraphScore(Score):
             # dot.render(output_path, format='png', cleanup=True)
             # logging.info(f"Graph visualization saved to {output_path}")
 
-            # # Log the graph as an artifact in MLflow
-            # mlflow.log_artifact(f"{output_path}.png")
-
         except Exception as e:
             error_msg = f"Failed to generate graph visualization: {str(e)}\n{traceback.format_exc()}"
             logging.error(error_msg)
 
     def register_model(self):
         """
-        Register the model with MLflow by logging relevant parameters.
+        Register the model.
         """
-        mlflow.log_param("model_type", self.__class__.__name__)
-        mlflow.log_param("model_provider", self.parameters.model_provider)
-        mlflow.log_param("model_name", self.parameters.model_name)
 
     def save_model(self):
         """
-        Save the model to a specified path and log it as an artifact with MLflow.
+        Save the model.
         """
-        model_path = f"models/{self.__class__.__name__}_{self.parameters.model_provider}_{self.parameters.model_name}"
-        mlflow.log_artifact(model_path)
 
     def train_model(self):
         """
@@ -339,7 +328,7 @@ class LangGraphScore(Score):
     def reset_token_usage(self):
         if isinstance(self.llm, (AzureChatOpenAI, ChatOpenAI)):
             self.openai_callback = OpenAICallbackHandler()  # Create a new callback
-            self.llm_with_retry = self.llm_with_retry.with_config(callbacks=[self.openai_callback])
+            self.llm = self.llm.with_config(callbacks=[self.openai_callback])
         else:
             self.token_counter.prompt_tokens = 0
             self.token_counter.completion_tokens = 0

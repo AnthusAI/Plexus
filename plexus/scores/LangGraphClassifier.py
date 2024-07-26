@@ -2,7 +2,6 @@ import re
 from enum import Enum
 from typing import TypedDict, Dict, Any
 from pydantic import Field
-from langsmith import Client
 from rapidfuzz import fuzz, process
 import nltk
 from nltk.tokenize import sent_tokenize
@@ -92,7 +91,6 @@ class YesOrNo(Enum):
     NO = "No"
 
 class LangGraphClassifier(LangGraphScore):
-    MAX_RETRY_ATTEMPTS = 20
         
     class Parameters(LangGraphScore.Parameters):
         label: str = ""
@@ -105,16 +103,6 @@ class LangGraphClassifier(LangGraphScore):
         self.total_tokens = 0
         self.total_cost = 0
         self.current_state = None
-        self.langsmith_client = Client()
-        self.llm = self._initialize_model()
-        self.llm_with_retry = self.llm.with_retry(
-            retry_if_exception_type=(Exception,),
-            wait_exponential_jitter=True,
-            stop_after_attempt=self.MAX_RETRY_ATTEMPTS
-        ).with_config(
-            callbacks=[self.token_counter],
-            max_tokens=self.parameters.max_tokens
-        )
         
         self.initialize_validation_workflow()
 
@@ -170,7 +158,7 @@ Before the agent can move to the application process, the agent must have presen
 
 Provide your answer as ONLY "Yes" or "No", without any additional explanation.""")
         ])
-        chain = prompt | self.llm_with_retry
+        chain = prompt | self.llm
 
         result = chain.invoke({"transcript": state['transcript']})
 
@@ -205,7 +193,7 @@ Provide your answer as ONLY "Yes" or "No", without any additional explanation.""
             ("human", human_message)
         ])
 
-        chain = prompt | self.llm_with_retry | CustomOutputParser(text=state['transcript'])
+        chain = prompt | self.llm | CustomOutputParser(text=state['transcript'])
         result = chain.invoke({"transcript": state['transcript']})
         state[slice_key] = result['input_text_after_slice']
         state['transcript'] = result['input_text_after_slice']  # Update the main transcript
@@ -275,7 +263,7 @@ Provide a concise analysis (2-3 sentences) stating whether the agent effectively
 """
         )
 
-        score_chain = prompt | self.llm_with_retry
+        score_chain = prompt | self.llm
 
         state["reasoning"] = score_chain.invoke(
             {
@@ -305,7 +293,7 @@ Provide your answer as either "Yes" or "No".
             input_variables=["reasoning"]
         )
 
-        score_chain = prompt | self.llm_with_retry | score_parser
+        score_chain = prompt | self.llm | score_parser
 
         classification = score_chain.invoke({"reasoning": reasoning_content})
 
