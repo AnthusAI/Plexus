@@ -69,8 +69,7 @@ This is the transcript of a call center phone call that we're reviewing for QA p
                     messages=messages
                 )
 
-            model = ChatOpenAI(temperature=0)
-            chain = prompt | model
+            chain = prompt | self.model
         
             output = chain.invoke({
                 "transcript": model_input.transcript, 

@@ -46,7 +46,7 @@ class LangGraphScore(Score):
         self.token_counter = self._create_token_counter()
         self.openai_callback = None
         self.langsmith_client = Client()
-        self.llm = self._initialize_model()
+        self.model = self._initialize_model()
 
     def _create_token_counter(self):
         class TokenCounterCallback(BaseCallbackHandler):
@@ -269,7 +269,7 @@ class LangGraphScore(Score):
         pass
 
     def get_token_usage(self):
-        if isinstance(self.llm, (AzureChatOpenAI, ChatOpenAI)):
+        if isinstance(self.model, (AzureChatOpenAI, ChatOpenAI)):
             return {
                 "prompt_tokens": self.openai_callback.prompt_tokens,
                 "completion_tokens": self.openai_callback.completion_tokens,
@@ -294,7 +294,7 @@ class LangGraphScore(Score):
         """
 
         usage = {}
-        if isinstance(self.llm, (AzureChatOpenAI, ChatOpenAI)):
+        if isinstance(self.model, (AzureChatOpenAI, ChatOpenAI)):
             usage = {
                 "prompt_tokens": self.openai_callback.prompt_tokens,
                 "completion_tokens": self.openai_callback.completion_tokens,
@@ -326,9 +326,9 @@ class LangGraphScore(Score):
         }
 
     def reset_token_usage(self):
-        if isinstance(self.llm, (AzureChatOpenAI, ChatOpenAI)):
+        if isinstance(self.model, (AzureChatOpenAI, ChatOpenAI)):
             self.openai_callback = OpenAICallbackHandler()  # Create a new callback
-            self.llm = self.llm.with_config(callbacks=[self.openai_callback])
+            self.model = self.model.with_config(callbacks=[self.openai_callback])
         else:
             self.token_counter.prompt_tokens = 0
             self.token_counter.completion_tokens = 0

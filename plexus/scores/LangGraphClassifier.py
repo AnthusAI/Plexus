@@ -158,7 +158,7 @@ Before the agent can move to the application process, the agent must have presen
 
 Provide your answer as ONLY "Yes" or "No", without any additional explanation.""")
         ])
-        chain = prompt | self.llm
+        chain = prompt | self.model
 
         result = chain.invoke({"transcript": state['transcript']})
 
@@ -193,7 +193,7 @@ Provide your answer as ONLY "Yes" or "No", without any additional explanation.""
             ("human", human_message)
         ])
 
-        chain = prompt | self.llm | CustomOutputParser(text=state['transcript'])
+        chain = prompt | self.model | CustomOutputParser(text=state['transcript'])
         result = chain.invoke({"transcript": state['transcript']})
         state[slice_key] = result['input_text_after_slice']
         state['transcript'] = result['input_text_after_slice']  # Update the main transcript
@@ -263,7 +263,7 @@ Provide a concise analysis (2-3 sentences) stating whether the agent effectively
 """
         )
 
-        score_chain = prompt | self.llm
+        score_chain = prompt | self.model
 
         state["reasoning"] = score_chain.invoke(
             {
@@ -293,7 +293,7 @@ Provide your answer as either "Yes" or "No".
             input_variables=["reasoning"]
         )
 
-        score_chain = prompt | self.llm | score_parser
+        score_chain = prompt | self.model | score_parser
 
         classification = score_chain.invoke({"reasoning": reasoning_content})
 
@@ -323,7 +323,7 @@ Provide your answer as either "Yes" or "No".
         self.reset_token_usage()
 
         logging.info("Starting workflow invocation")
-        final_state = self.workflow.invoke(initial_state, config={"callbacks": [self.openai_callback if isinstance(self.llm, (AzureChatOpenAI, ChatOpenAI)) else self.token_counter]})
+        final_state = self.workflow.invoke(initial_state, config={"callbacks": [self.openai_callback if isinstance(self.model, (AzureChatOpenAI, ChatOpenAI)) else self.token_counter]})
         logging.info("Workflow invocation completed")
         
         logging.info(f"Final state keys: {final_state.keys()}")
