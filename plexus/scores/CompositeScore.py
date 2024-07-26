@@ -604,7 +604,7 @@ class CompositeScore(Score):
         """
         return not self.filtered_transcript
 
-    def accumulated_expenses(self):
+    def get_accumulated_costs(self):
         """
         Get the expenses that have been accumulated over all the computed elements.
 

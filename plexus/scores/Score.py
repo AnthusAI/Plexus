@@ -420,3 +420,16 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             unique_labels = self.dataframe[self.parameters.score_name].unique()
             self._is_multi_class = len(unique_labels) > 2
         return self._is_multi_class
+
+    def get_accumulated_costs(self):
+        """
+        Get the expenses that have been accumulated over all the computed elements.
+
+        Returns:
+            dict: A dictionary containing only one accumulated expense:
+                  'total_cost'
+        """
+
+        return {
+            "total_cost":  0
+        }
