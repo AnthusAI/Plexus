@@ -500,15 +500,15 @@ class AgenticValidator(LangGraphScore):
         state['all_information_provided'] = all_complete
         return state
 
-    def predict(self, context, model_input: LangGraphScore.ModelInput) -> LangGraphScore.ModelOutput:
+    def predict(self, context, model_input: LangGraphScore.ScoreInput) -> LangGraphScore.ScoreResult:
         """
         Predict the validity of the education information based on the transcript and metadata.
 
         Args:
-            model_input (LangGraphScore.ModelInput): The input containing the transcript and metadata.
+            model_input (LangGraphScore.ScoreInput): The input containing the transcript and metadata.
 
         Returns:
-            LangGraphScore.ModelOutput: The output containing the validation result.
+            LangGraphScore.ScoreResult: The output containing the validation result.
         """
         logging.info(f"Predict method input: {model_input}")
         
@@ -591,14 +591,14 @@ class AgenticValidator(LangGraphScore):
             logging.error(f"Could not calculate cost: {str(e)}")
 
         return [
-            LangGraphScore.ModelOutput(
+            LangGraphScore.ScoreResult(
                 score_name=self.parameters.score_name,
                 score=validation_result,
                 explanation=explanation
             )
         ]
 
-    class ModelInput(LangGraphScore.ModelInput):
+    class ScoreInput(LangGraphScore.ScoreInput):
         """
         Model input containing the transcript and metadata.
 

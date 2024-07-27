@@ -13,7 +13,7 @@ class ConcreteScore(Score):
         pass
     def load_context(self, context):
         pass
-    def predict(self, model_input: Score.ModelInput):
+    def predict(self, model_input: Score.ScoreInput):
         return "computed score"
 
 def test_compute_score_result():
@@ -22,7 +22,7 @@ def test_compute_score_result():
         score_name="Test score"
     )
     result = score.predict(
-        Score.ModelInput(
+        Score.ScoreInput(
             transcript="Test transcript"
         )
     )
