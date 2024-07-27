@@ -54,14 +54,14 @@ class KeywordClassifier(Score):
         """
         pass
 
-    def predict(self, model_input: Score.ScoreInput):
+    def predict(self, model_input: Score.Input):
         """
         Make predictions on the input data.
 
-        :param model_input: The input data for making predictions, which conforms to Score.ScoreInput.
+        :param model_input: The input data for making predictions, which conforms to Score.Input.
         :return: The predictions, which can be one of the supported output types (numpy.ndarray, pandas.Series, pandas.DataFrame, List, Dict, pyspark.sql.DataFrame).
         """
-        return Score.ScoreResult(
+        return Score.Result(
             score_name = self.parameters.score_name,
             score = self.is_relevant(model_input.transcript)
         )

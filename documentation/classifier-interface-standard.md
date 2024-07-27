@@ -14,10 +14,10 @@ The specific details of the standard are:
 
 Every `Score` in Plexus derives from `mlflow.pyfunc.PythonModel` and must implement a `predict()` method.
 
-### `predict()` must accept a `ScoreInput`
+### `predict()` must accept a `Input`
 
-This method must accept a `ScoreInput` object instance.  The `ScoreInput` classis defined in the `plexus.MLClassifier` module.
+This method must accept a `Input` object instance.  The `Input` classis defined in the `plexus.MLClassifier` module.
 
-### `predict()` must return a `ScoreResult`
+### `predict()` must return a `Result`
 
-The `predict()` method must return a `ScoreResult`.  The `ScoreResult` is defined in the `plexus.MLClassifier` module, and each classifier can optionally define additional `ScoreResult` subclasses to support additional features.
+The `predict()` method must return a `Result`.  The `Result` is defined in the `plexus.MLClassifier` module, and each classifier can optionally define additional `Result` subclasses to support additional features.

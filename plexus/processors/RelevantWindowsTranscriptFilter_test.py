@@ -16,9 +16,9 @@ class MockClassifier(Score):
         pass
     def load_context(self, context):
         pass
-    def predict(self, model_input: Score.ScoreInput):
+    def predict(self, model_input: Score.Input):
         # Use word boundaries to ensure 'relevant' is a whole word
-        return Score.ScoreResult(
+        return Score.Result(
             score_name = "Test score",
             score =      bool(re.search(r'\brelevant\b', model_input.transcript, re.IGNORECASE))
         )

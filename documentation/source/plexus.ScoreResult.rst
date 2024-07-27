@@ -1,7 +1,7 @@
-plexus.ScoreResult module
+plexus.Result module
 =========================
 
-.. automodule:: plexus.ScoreResult
+.. automodule:: plexus.Result
    :members:
    :undoc-members:
    :show-inheritance:

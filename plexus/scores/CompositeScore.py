@@ -17,7 +17,6 @@ from plexus.scores.KeywordClassifier import KeywordClassifier
 from plexus.PromptTemplateLoader import PromptTemplateLoader
 from plexus.CustomLogging import logging
 
-
 class CompositeScore(Score):
     """
     A composite score is a score that is composed of multiple elements, each of which is a score.
@@ -25,9 +24,6 @@ class CompositeScore(Score):
     combining them into a single composite score.  It also handles the work of computing the
     costs of the individual elements and the composite score.
     """
-
-    class Parameters(Score.Parameters):
-        ...
 
     def __init__(self, **parameters):
         """
@@ -195,14 +191,14 @@ class CompositeScore(Score):
                 # Implement the method
                 pass
 
-            class ScoreResult(Score.ScoreResult):
+            class Result(Score.Result):
                 """
                 This Score has an additional output attribute, explanation, which is a string
                 """
                 reasoning: str
                 relevant_quote: str
                 
-            def predict(self, context, model_input: Score.ScoreInput) -> cls.ScoreResult:
+            def predict(self, context, model_input: Score.Input) -> Score.Result:
                 """
                 Make predictions on the input data.
 

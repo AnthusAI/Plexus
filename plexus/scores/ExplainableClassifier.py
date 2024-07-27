@@ -383,7 +383,7 @@ class ExplainableClassifier(Score):
         """
         pass
 
-    class ScoreResult(Score.ScoreResult):
+    class Result(Score.Result):
         """
         This Score has an additional output attribute, explanation, which is a string
         """
@@ -412,7 +412,7 @@ class ExplainableClassifier(Score):
                         
                         explanation = f"Keyword match found: '{keyword}' in the sentence: '{matching_sentence.strip()}'"
                         return [
-                            self.ScoreResult(
+                            self.Result(
                                 score_name=self.parameters.score_name,
                                 score="Yes",
                                 confidence=1.0,
@@ -439,7 +439,7 @@ class ExplainableClassifier(Score):
         explanation = "\n".join(reversed(top_features))
 
         return [
-            self.ScoreResult(
+            self.Result(
                 score_name = self.parameters.score_name,
                 score = prediction_label,
                 confidence = confidence_score,

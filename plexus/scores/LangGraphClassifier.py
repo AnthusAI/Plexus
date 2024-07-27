@@ -305,7 +305,7 @@ Provide your answer as either "Yes" or "No".
         
         return state
 
-    def predict(self, context, model_input: LangGraphScore.ScoreInput) -> LangGraphScore.ScoreResult:
+    def predict(self, context, model_input: LangGraphScore.Input) -> LangGraphScore.Result:
         logging.info(f"Predict method input: {model_input}")
         
         initial_state = GraphState(
@@ -358,12 +358,12 @@ Provide your answer as either "Yes" or "No".
             logging.error(f"Could not calculate cost: {str(e)}")
 
         return [
-            LangGraphScore.ScoreResult(
+            LangGraphScore.Result(
                 score_name=self.parameters.score_name,
                 score=validation_result,
                 explanation=explanation
             )
         ]
 
-    class ScoreInput(LangGraphScore.ScoreInput):
+    class Input(LangGraphScore.Input):
         pass

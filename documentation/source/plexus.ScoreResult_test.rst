@@ -1,4 +1,4 @@
-plexus.ScoreResult\_test module
+plexus.Result\_test module
 ===============================
 
 .. automodule:: plexus.ScoreResult_test

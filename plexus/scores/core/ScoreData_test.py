@@ -19,7 +19,7 @@ class ConcreteScore(Score):
         pass
     def load_context(self, context):
         pass
-    def predict(self, model_input: Score.ScoreInput):
+    def predict(self, model_input: Score.Input):
         return "computed score"
 
 # @patch('plexus.scores.core.ScoreData.console')
