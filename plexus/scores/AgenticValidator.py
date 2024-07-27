@@ -35,11 +35,11 @@ class SchoolInfo(BaseModel):
     program: str = Field(description="Program offered (e.g., Medical Assistant, Information Technology, Nursing)")
     level: str = Field(description="Level of the degree (e.g., Associate, Bachelor's, Master's)")
 
-class TranscriptAnalysis(BaseModel):
+class TextAnalysis(BaseModel):
     schools: List[SchoolInfo] = Field(description="List of schools with their information")
 
 class GraphState(TypedDict):
-    transcript: str
+    text: str
     schools_mentioned: List[str]
     parsed_schools: List[SchoolInfo]
     all_information_provided: bool
@@ -53,7 +53,7 @@ class ValidationState:
     and results of the validation workflow.
 
     Attributes:
-        transcript (str): The transcript being validated.
+        text (str): The text being validated.
         metadata (Dict[str, str]): Metadata about the education claim being validated.
         current_step (str): The current step in the validation process.
         validation_result (str): Result of the degree validation.
@@ -62,7 +62,7 @@ class ValidationState:
         has_dependency (bool): Indicates whether there is a dependency prompt.
     """
 
-    transcript: str
+    text: str
     metadata: Dict[str, str]
     current_step: str = ""
     validation_result: str = "Unknown"
@@ -78,7 +78,7 @@ class ValidationState:
             str: A string representation of the ValidationState instance.
         """
         return (
-            f"ValidationState(transcript='{self.transcript}', "
+            f"ValidationState(text='{self.text}', "
             f"metadata={self.metadata}, "
             f"current_step='{self.current_step}', "
             f"validation_result='{self.validation_result}', "
@@ -145,7 +145,7 @@ class AgenticValidator(LangGraphScore):
         self.current_state = None
         self.langsmith_client = Client()
         self.dependency = self.parameters.dependency
-        self.output_parser = PydanticOutputParser(pydantic_object=TranscriptAnalysis)
+        self.output_parser = PydanticOutputParser(pydantic_object=TextAnalysis)
         self.prompt_template = self._create_prompt_template()
         self.initialize_validation_workflow()
 
@@ -154,7 +154,7 @@ class AgenticValidator(LangGraphScore):
             template="""
             Analyze the following transcript and extract information about schools mentioned:
 
-            {transcript}
+            {text}
 
             For each valid school mentioned, provide the following information:
             1. School name
@@ -166,7 +166,7 @@ class AgenticValidator(LangGraphScore):
 
             {format_instructions}
             """,
-            input_variables=["transcript"],
+            input_variables=["text"],
             partial_variables={"format_instructions": self.output_parser.get_format_instructions()}
         )
 
@@ -277,7 +277,7 @@ class AgenticValidator(LangGraphScore):
             Based on the following transcript, {prompt}
             
             Transcript:
-            {state.transcript}
+            {state.text}
             
             Answer with YES or NO, followed by a brief explanation.
             """
@@ -371,17 +371,17 @@ class AgenticValidator(LangGraphScore):
             tools=tools,
             verbose=True,
             handle_parsing_errors=True,
-            memory=SimpleMemory(memories={"transcript": ""}),
+            memory=SimpleMemory(memories={"text": ""}),
             callbacks=[self.token_counter]
         )
 
     def _validate_claim(self, input_string: str) -> str:
         """
-        Validate a specific claim against the transcript stored in memory.
+        Validate a specific claim against the text stored in memory.
         This method is used as a tool by the React agent.
         """
-        transcript = self.agent_executor.memory.memories.get("transcript", "")
-        return f"--- Begin Transcript ---\n{transcript}\n--- End Transcript ---\n\n Question: {input_string}"
+        text = self.agent_executor.memory.memories.get("text", "")
+        return f"--- Begin Transcript ---\n{text}\n--- End Transcript ---\n\n Question: {input_string}"
 
     def _validate_step(self, state: ValidationState) -> ValidationState:
         """
@@ -473,9 +473,9 @@ class AgenticValidator(LangGraphScore):
         return state
 
     def _extract_school_info(self, state: GraphState) -> GraphState:
-        transcript = state['transcript']
+        text = state['text']
         
-        formatted_prompt = self.prompt_template.format(transcript=transcript)
+        formatted_prompt = self.prompt_template.format(text=text)
         llm_response = self.model.invoke(formatted_prompt)
         parsed_response = self.output_parser.parse(llm_response.content)
         
@@ -514,12 +514,12 @@ class AgenticValidator(LangGraphScore):
         
         if self.parameters.agent_type == "react":
             initial_state = ValidationState(
-                transcript=model_input.transcript,
+                text=model_input.text,
                 metadata=model_input.metadata
             )
         elif self.parameters.agent_type == "langgraph":
             initial_state = GraphState(
-                transcript=model_input.transcript,
+                text=model_input.text,
                 schools_mentioned=[],
                 parsed_schools=[],
                 all_information_provided=False
