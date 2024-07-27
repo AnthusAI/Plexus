@@ -197,7 +197,7 @@ class Scorecard:
 
             score_result = score_instance.predict(
                 context=None,
-                model_input=plexus.scores.Score.ModelInput(
+                model_input=plexus.scores.Score.ScoreInput(
                     transcript=transcript,
                     metadata={}
                 )

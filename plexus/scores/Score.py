@@ -89,7 +89,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
                 value['percentage'] = 100.0
             return value
 
-    class ModelInput(BaseModel):
+    class ScoreInput(BaseModel):
         """
         Model input data structure.
 
@@ -101,7 +101,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         text: str
         metadata: Optional[dict] = None
 
-    class ModelOutput(BaseModel):
+    class ScoreResult(BaseModel):
         """
         Model output data structure.
 
@@ -291,13 +291,13 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         self.model = mlflow.keras.load_model(context.artifacts["model"])
 
     @abstractmethod
-    def predict(self, model_input: ModelInput):
+    def predict(self, model_input: ScoreInput):
         """
         Make predictions on the input data.
 
         Parameters
         ----------
-        model_input : Score.ModelInput
+        model_input : Score.ScoreInput
             The input data for making predictions.
 
         Returns

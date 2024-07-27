@@ -195,14 +195,14 @@ class CompositeScore(Score):
                 # Implement the method
                 pass
 
-            class ModelOutput(Score.ModelOutput):
+            class ScoreResult(Score.ScoreResult):
                 """
                 This Score has an additional output attribute, explanation, which is a string
                 """
                 reasoning: str
                 relevant_quote: str
                 
-            def predict(self, context, model_input: Score.ModelInput) -> cls.ModelOutput:
+            def predict(self, context, model_input: Score.ScoreInput) -> cls.ScoreResult:
                 """
                 Make predictions on the input data.
 

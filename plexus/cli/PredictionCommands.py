@@ -166,7 +166,7 @@ def predict_score(score_name, scorecard_class, sample_row):
     logging.info(f"Sample Row: {row_dictionary}")
 
     text = row_dictionary['text']
-    model_input_class = getattr(score_class, 'ModelInput')
+    model_input_class = getattr(score_class, 'ScoreInput')
     prediction_result = score_instance.predict(
         context = {},
         model_input = model_input_class(
