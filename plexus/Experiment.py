@@ -326,7 +326,7 @@ class AccuracyExperiment(Experiment):
     )
     def score_text(self, row):
         session_id = row['Session ID']
-        text = row['text']
+        text = row['Transcription']
         logging.info(f"Text content: {text}")
         
         # Some of our test data has escaped newlines, so we need to replace them with actual newlines.
@@ -349,7 +349,9 @@ class AccuracyExperiment(Experiment):
                 # This is where we evaluate the score by comparing it against human labels.
 
                 # Normalize the score result value for comparison
-                score_result_value = str(score_result.get('value', 'na')).strip().lower()
+                score_result_value = score_result.score.strip().lower()
+                if not score_result_value:
+                    score_result_value = 'na'
 
                 # Apply overrides if available
                 if session_id in self.override_data:
