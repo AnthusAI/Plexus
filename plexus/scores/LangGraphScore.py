@@ -20,6 +20,13 @@ from langchain_community.callbacks import OpenAICallbackHandler
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
 class LangGraphScore(Score):
+    """
+    A Score class that uses language models to perform text classification.
+
+    This class initializes and manages a language model for processing text inputs,
+    tracks token usage, and provides methods for text classification and cost calculation.
+    """
+
     MAX_RETRY_ATTEMPTS = 20
     
     class Parameters(Score.Parameters):
@@ -34,14 +41,21 @@ class LangGraphScore(Score):
         """
         Model output containing the validation result.
 
-        Attributes:
-            score (str): Validation result for the degree.
-            explanation (str): Detailed explanation of the validation result.
+        :param score: Validation result for the text.
+        :param explanation: Detailed explanation of the validation result.
         """
         score: str
         explanation: str
 
     def __init__(self, **parameters):
+        """
+        Initialize the LangGraphScore.
+
+        This method sets up the score parameters, initializes the token counter,
+        and sets up the language model specified in the configuration.
+
+        :param parameters: Configuration parameters for the score and language model.
+        """
         super().__init__(**parameters)
         self.token_counter = self._create_token_counter()
         self.openai_callback = None
@@ -49,6 +63,15 @@ class LangGraphScore(Score):
         self.model = self._initialize_model()
 
     def _create_token_counter(self):
+        """
+        Create and return a token counter callback.
+
+        This method sets up a custom callback handler to track token usage
+        across different language model providers. It logs detailed information
+        about each LLM call and accumulates token counts.
+
+        :return: An instance of TokenCounterCallback.
+        """
         class TokenCounterCallback(BaseCallbackHandler):
             def __init__(self):
                 self.prompt_tokens = 0
@@ -101,11 +124,12 @@ class LangGraphScore(Score):
         """
         Initialize and return the appropriate language model based on the configured provider.
 
-        Returns:
-            BaseLanguageModel: The initialized language model with retry logic.
+        This method sets up the specified language model with retry logic and callbacks
+        for token counting. It supports various model providers including OpenAI, Azure,
+        Amazon Bedrock, and Google Vertex AI.
 
-        Raises:
-            ValueError: If an unsupported model provider is specified.
+        :return: An initialized BaseLanguageModel with retry logic and callbacks.
+        :raises ValueError: If an unsupported model provider is specified.
         """
         max_tokens = self.parameters.max_tokens
 
@@ -162,11 +186,11 @@ class LangGraphScore(Score):
         """
         Parse the output from the language model to determine the validation result and explanation.
 
-        Args:
-            output (str): The raw output from the language model.
+        This method processes the raw output from the language model, extracting
+        the validation result (Yes, No, or Unclear) and the accompanying explanation.
 
-        Returns:
-            Tuple[str, str]: A tuple containing the validation result and explanation.
+        :param output: The raw output string from the language model.
+        :return: A tuple containing the validation result and explanation.
         """
         logging.info(f"Raw output to parse: {output}")
         
@@ -192,6 +216,15 @@ class LangGraphScore(Score):
         return validation_result, explanation
     
     def generate_graph_visualization(self, output_path: str = "./tmp/workflow_graph.png"):
+        """
+        Generate and save a visual representation of the workflow graph.
+
+        This method creates a graphical visualization of the workflow using Graphviz.
+        It represents nodes and edges of the workflow, with different colors for
+        start, end, and intermediate nodes.
+
+        :param output_path: The file path where the graph image will be saved.
+        """
         try:
             logging.info("Starting graph visualization generation")
             
@@ -269,6 +302,14 @@ class LangGraphScore(Score):
         pass
 
     def get_token_usage(self):
+        """
+        Retrieve the current token usage statistics.
+
+        This method returns a dictionary containing the number of prompt tokens,
+        completion tokens, total tokens, and successful requests made to the language model.
+
+        :return: A dictionary with token usage statistics.
+        """
         if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
             return {
                 "prompt_tokens": self.openai_callback.prompt_tokens,
@@ -286,13 +327,13 @@ class LangGraphScore(Score):
 
     def get_accumulated_costs(self):
         """
-        Get the expenses that have been accumulated over all the computed elements.
+        Calculate and return the accumulated costs for all computed elements.
 
-        Returns:
-            dict: A dictionary containing the accumulated expenses:
-                  'llm_request_count', 'prompt_tokens', 'completion_tokens', 'input_cost', 'output_cost', 'total_cost'
+        This method computes the costs based on the token usage and the specific
+        model being used. It includes input costs, output costs, and total costs.
+
+        :return: A dictionary containing cost and usage information.
         """
-
         usage = self.get_token_usage()
 
         try:
@@ -316,6 +357,12 @@ class LangGraphScore(Score):
         }
 
     def reset_token_usage(self):
+        """
+        Reset the token usage counters.
+
+        This method resets all token usage statistics to zero, allowing for
+        fresh tracking of token usage in subsequent operations.
+        """
         if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
             self.openai_callback = OpenAICallbackHandler()
             self.model = self.model.with_config(callbacks=[self.openai_callback])
