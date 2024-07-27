@@ -270,7 +270,7 @@ class DeepLearningSemanticClassifier(Score):
 
             return encoded_windows_ragged, attention_masks_ragged
 
-        texts = self.dataframe['Transcription'].tolist()
+        texts = self.dataframe['text'].tolist()
         labels = self.dataframe[self.parameters.score_name].tolist()
         unique_labels = self.dataframe[self.parameters.score_name].unique()
 
@@ -497,11 +497,11 @@ class DeepLearningSemanticClassifier(Score):
     def predict(self, context, model_input: Score.ModelInput):
         logging.info(f"Received input: {model_input}")
 
-        transcript = model_input.transcript
-        logging.info(f"Processing transcript (first 100 chars): {transcript[:100]}...")
+        text = model_input.text
+        logging.info(f"Processing text (first 100 chars): {text[:100]}...")
 
         try:
-            encoded_input = self.encode_input([transcript])
+            encoded_input = self.encode_input([text])
             logging.info(f"Encoded input shapes: input_ids={encoded_input['input_ids'].shape}, attention_mask={encoded_input['attention_mask'].shape}")
 
             predictions = self.model.predict([encoded_input['input_ids'], encoded_input['attention_mask']])
@@ -541,10 +541,10 @@ class DeepLearningSemanticClassifier(Score):
         self.val_predictions = []
         self.val_confidence_scores = []
 
-        for i, transcript in enumerate(self.val_texts):
+        for i, text in enumerate(self.val_texts):
             logging.info(f"Processing validation sample {i+1}/{len(self.val_texts)}")
             
-            model_input = self.ModelInput(transcript=transcript)
+            model_input = self.ModelInput(text=text)
             result = self.predict(None, model_input)
             
             self.val_predictions.append(result.score)

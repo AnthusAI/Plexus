@@ -243,7 +243,7 @@ class CompositeScore(Score):
                                 keyword_patterns.append(keyword)
 
                 # Convert the transcript string into a DataFrame
-                transcript_df = pd.DataFrame({"Transcription": [transcript]})
+                transcript_df = pd.DataFrame({'text': [transcript]})
 
                 # Use the KeywordClassifier with the combined list of strings and regex patterns
                 filtered_transcript_df = RelevantWindowsTranscriptFilter(
@@ -251,7 +251,7 @@ class CompositeScore(Score):
                 ).process(transcript_df)
 
                 # Extract the filtered transcript from the DataFrame
-                filtered_transcript = filtered_transcript_df["Transcription"].iloc[0]
+                filtered_transcript = filtered_transcript_df['text'].iloc[0]
 
                 return filtered_transcript
 

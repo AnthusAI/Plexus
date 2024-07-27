@@ -11,7 +11,7 @@ class ColumnDatasetFilter(DataframeProcessor):
     def process(self, dataframe: pd.DataFrame) -> pd.DataFrame:
         self.before_summary = f"Number of columns: {len(dataframe.columns)}"
         if self.filter_type == 'include':
-            columns_to_include = self.columns + ['Transcription']
+            columns_to_include = self.columns + ['text']
             dataframe = dataframe[columns_to_include]
         elif self.filter_type == 'exclude':
             dataframe = dataframe.drop(columns=self.columns, errors='ignore')

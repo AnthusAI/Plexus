@@ -15,7 +15,7 @@ set_debug(True)
 
 class ExtractorState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
-    transcript: str
+    text: str
     entity: Optional[str]
     quote: Optional[str]
     validation_error: Optional[str]
@@ -33,15 +33,15 @@ class AgenticExtractor(LangGraphScore):
         pass
 
     def predict(self, context, model_input: Score.ModelInput):
-        transcript = model_input.transcript
+        text = model_input.text
 
         def _extract_entity_node(state: ExtractorState) -> Dict[str, str]:
             logging.info("start _extract_entity_node()")
-            logging.info(f"Transcript: {state['transcript']}")
+            logging.info(f"text: {state['text']}")
             
             response_schemas = [
-                ResponseSchema(name="entity", description="entity in the transcript"),
-                ResponseSchema(name="quote", description="related quote(s) from the transcript that include the entity"),
+                ResponseSchema(name="entity", description="entity in the text"),
+                ResponseSchema(name="quote", description="related quote(s) from the text that include the entity"),
             ]
             output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
 
@@ -49,14 +49,14 @@ class AgenticExtractor(LangGraphScore):
             template_string = """
 {format_instructions}
 
-This is the transcript of a call center phone call that we're reviewing for QA purposes:
-{transcript}
+This is the text of a call center phone call that we're reviewing for QA purposes:
+{text}
 
 {prompt}
 """
             prompt = PromptTemplate(
                 template=template_string,
-                input_variables=["transcript", "prompt"]
+                input_variables=["text", "prompt"]
             )
             
             if state["validation_error"] is not None:
@@ -72,7 +72,7 @@ This is the transcript of a call center phone call that we're reviewing for QA p
             chain = prompt | self.model
         
             output = chain.invoke({
-                "transcript": model_input.transcript, 
+                "text": model_input.text, 
                 "prompt": self.parameters.prompt,
                 "format_instructions": output_parser.get_format_instructions()
             })
@@ -87,10 +87,10 @@ This is the transcript of a call center phone call that we're reviewing for QA p
         
         def _verify_entity_node(state: ExtractorState) -> Dict[str, str]:
             entity = state.get("entity", "")
-            transcript = state.get("transcript", "")
+            text = state.get("text", "")
 
-            if entity and entity.lower() not in transcript.lower():
-                return {"validation_error": f"No, that's not possible: The string \"{entity}\" does not exist within the transcript."}
+            if entity and entity.lower() not in text.lower():
+                return {"validation_error": f"No, that's not possible: The string \"{entity}\" does not exist within the text."}
             else:
                 return {"validation_error": None}
 
@@ -110,7 +110,7 @@ This is the transcript of a call center phone call that we're reviewing for QA p
 
         app = workflow.compile()
 
-        result = app.invoke({"transcript": transcript.lower()})
+        result = app.invoke({"text": text.lower()})
         logging.info(f"LangGraph result: {result}")
 
         return [

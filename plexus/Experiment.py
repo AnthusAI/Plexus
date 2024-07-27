@@ -35,7 +35,7 @@ class Experiment:
     def __init__(self, *,
         scorecard: Scorecard,
         labeled_samples_filename: str,
-        number_of_transcripts_to_sample = 1,
+        number_of_texts_to_sample = 1,
         sampling_method = 'random',
         random_seed = None,
         session_ids_to_sample = None,
@@ -44,7 +44,7 @@ class Experiment:
     ):
         self.scorecard = scorecard
         self.labeled_samples_filename = labeled_samples_filename
-        self.number_of_transcripts_to_sample = number_of_transcripts_to_sample
+        self.number_of_texts_to_sample = number_of_texts_to_sample
         self.sampling_method = sampling_method
         self.random_seed = random_seed
         
@@ -95,7 +95,7 @@ class Experiment:
     
     def log_parameters(self):
         mlflow.log_param("sampling_method", self.sampling_method)
-        mlflow.log_param("number_of_transcripts_to_sample", self.number_of_transcripts_to_sample)
+        mlflow.log_param("number_of_texts_to_sample", self.number_of_texts_to_sample)
 
     def score_names(self):
         return self.subset_of_score_names if self.subset_of_score_names is not None else self.scorecard.score_names()
@@ -114,11 +114,11 @@ class Experiment:
             result = func(self, *args, **kwargs)
             end_time = time.time()
             execution_time = end_time - start_time
-            time_per_transcript = execution_time / self.number_of_transcripts_to_sample if self.number_of_transcripts_to_sample else 0
+            time_per_text = execution_time / self.number_of_texts_to_sample if self.number_of_texts_to_sample else 0
             mlflow.log_metric("execution_time", execution_time)
-            mlflow.log_metric("time_per_transcript", time_per_transcript)
+            mlflow.log_metric("time_per_text", time_per_text)
             print(f"{func.__name__} executed in {execution_time:.2f} seconds.")
-            logging.info(f"Average time per transcript: {time_per_transcript:.2f} seconds.")
+            logging.info(f"Average time per text: {time_per_text:.2f} seconds.")
             return result
         return wrapper
 
@@ -170,22 +170,22 @@ class AccuracyExperiment(Experiment):
         elif self.sampling_method == 'random':
             if hasattr(self, 'random_seed'):
                 random.seed(self.random_seed)
-            selected_sample_indices = random.sample(range(len(df)), self.number_of_transcripts_to_sample)
+            selected_sample_indices = random.sample(range(len(df)), self.number_of_texts_to_sample)
             selected_sample_rows = df.iloc[selected_sample_indices]
         elif self.sampling_method == 'all':
             selected_sample_rows = df
         else:
-            selected_sample_rows = df.head(self.number_of_transcripts_to_sample)
+            selected_sample_rows = df.head(self.number_of_texts_to_sample)
 
-        # Iterate over the randomly selected DataFrame rows and classify each transcript
+        # Iterate over the randomly selected DataFrame rows and classify each text
         results = []
         max_thread_pool_size = 10
 
         # Create a thread pool executor
         with ThreadPoolExecutor(max_workers=max_thread_pool_size) as executor:
-            # Submit tasks to the executor to score each transcript in parallel
+            # Submit tasks to the executor to score each text in parallel
             future_to_index = {
-                executor.submit(self.score_transcript, row): index
+                executor.submit(self.score_text, row): index
                 for index, row in selected_sample_rows.iterrows()
             }
 
@@ -200,11 +200,11 @@ class AccuracyExperiment(Experiment):
                 index = future_to_index[future]
                 # try:
                 result = future.result()
-                logging.info(f"Transcript {index} classified.")
+                logging.info(f"text {index} classified.")
                 logging.debug(f"Result: {result}")
                 results.append(result)
                 # except Exception as e:
-                #     logging.exception(f"Error processing transcript at index {index}: {e}")
+                #     logging.exception(f"Error processing text at index {index}: {e}")
 
         # pretty_printer = pprint.PrettyPrinter()
         # print("Final all scorecard results:\n")
@@ -278,7 +278,7 @@ class AccuracyExperiment(Experiment):
             mlflow.log_artifact("tmp/question_accuracy_report.csv")
 
         expenses = self.scorecard.get_accumulated_costs()
-        expenses['cost_per_transcript'] = expenses['total_cost'] / len(selected_sample_rows)    
+        expenses['cost_per_text'] = expenses['total_cost'] / len(selected_sample_rows)    
 
         # Create a thread pool executor
         with ThreadPoolExecutor() as executor:
@@ -306,36 +306,36 @@ class AccuracyExperiment(Experiment):
         mlflow.log_metric("overall_accuracy", overall_accuracy)
 
         # Log the results to MLflow
-        mlflow.log_metric("number_of_transcripts", len(selected_sample_rows))
+        mlflow.log_metric("number_of_texts", len(selected_sample_rows))
         mlflow.log_metric("number_of_scores", len(self.score_names()))
         mlflow.log_metric("total_cost", expenses['total_cost'])
-        mlflow.log_metric("cost_per_transcript", expenses['cost_per_transcript'])
+        mlflow.log_metric("cost_per_text", expenses['cost_per_text'])
 
         logging.info(f"Expenses: {expenses}")
-        logging.info(f"Number of transcripts to sample: {len(selected_sample_rows)}")
+        logging.info(f"Number of texts to sample: {len(selected_sample_rows)}")
         logging.info(f"Total cost: {expenses['total_cost']}")
-        logging.info(f"Cost per transcript: {expenses['cost_per_transcript']}")
+        logging.info(f"Cost per text: {expenses['cost_per_text']}")
         logging.info(f"Overall accuracy: {overall_accuracy:.2f}%")
 
-    # Function to classify a single transcript and collect metrics
+    # Function to classify a single text and collect metrics
     @retry(
         wait=wait_fixed(2),          # wait 2 seconds between attempts
         stop=stop_after_attempt(5),  # stop after 5 attempts
         before=before_log(logging.getLogger(), logging.INFO),       # log before retry
         retry=retry_if_exception_type((Timeout, RequestException))  # retry on specific exceptions
     )
-    def score_transcript(self, row):
+    def score_text(self, row):
         session_id = row['Session ID']
-        transcript = row['Transcription']
-        logging.info(f"Transcript content: {transcript}")
+        text = row['text']
+        logging.info(f"Text content: {text}")
         
         # Some of our test data has escaped newlines, so we need to replace them with actual newlines.
-        transcript = transcript.replace("\\n", "\n")
+        text = text.replace("\\n", "\n")
 
-        logging.debug(f"Fixed transcript content: {transcript}")
+        logging.debug(f"Fixed text content: {text}")
 
-        scorecard_results = self.scorecard.score_entire_transcript(
-            transcript=transcript,
+        scorecard_results = self.scorecard.score_entire_text(
+            text=text,
             subset_of_score_names=self.score_names_to_process()
         )
 
@@ -369,8 +369,8 @@ class AccuracyExperiment(Experiment):
                 if not score_result['correct']:
                     logging.warning(f"Human label '{human_label}' does not match score '{score_result_value}' for question '{question_name}' in session '{session_id}'")
 
-                # Also, add the full transcript to the score result.
-                score_result['transcript'] = transcript
+                # Also, add the full text to the score result.
+                score_result['text'] = text
 
                 logging.debug(f"Score result for {question_name}: {score_result}")
 
@@ -400,10 +400,10 @@ class AccuracyExperiment(Experiment):
         return report
 
 class ConsistencyExperiment(Experiment):
-    def __init__(self, *, number_of_times_to_sample_each_transcript, **kwargs):
+    def __init__(self, *, number_of_times_to_sample_each_text, **kwargs):
         super().__init__(**kwargs)
-        self.number_of_times_to_sample_each_transcript = number_of_times_to_sample_each_transcript
+        self.number_of_times_to_sample_each_text = number_of_times_to_sample_each_text
     
     def log_parameters(self):
         super().log_parameters()
-        mlflow.log_param("number_of_times_to_sample_each_transcript", self.number_of_times_to_sample_each_transcript)
+        mlflow.log_param("number_of_times_to_sample_each_text", self.number_of_times_to_sample_each_text)

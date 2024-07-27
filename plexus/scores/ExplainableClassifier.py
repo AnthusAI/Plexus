@@ -60,7 +60,7 @@ class ExplainableClassifier(Score):
         logging.info("Vectorizing text data using TF-IDF...")
 
         # Extract the text data and target labels from the sampled dataframe
-        self.original_text_data = self.dataframe['Transcription'].tolist()
+        self.original_text_data = self.dataframe['text'].tolist()
         text_data = self.original_text_data  # We'll use this for vectorization
         y = self.dataframe[self.parameters.score_name]
         logging.info(f"Number of examples: {len(text_data)}")
@@ -359,7 +359,7 @@ class ExplainableClassifier(Score):
 
     def evaluate_model(self):
         # Set the necessary attributes before calling the parent's evaluate_model()
-        self.val_input_ids = self.dataframe['Transcription']
+        self.val_input_ids = self.dataframe['text']
         self.val_attention_mask = None  # Set this if applicable to your model
 
         super().evaluate_model()
@@ -411,11 +411,14 @@ class ExplainableClassifier(Score):
                         matching_sentence = next((s for s in sentences if re.search(pattern, s, re.IGNORECASE)), '')
                         
                         explanation = f"Keyword match found: '{keyword}' in the sentence: '{matching_sentence.strip()}'"
-                        return self.ModelOutput(
-                            score="Yes",
-                            confidence=1.0,
-                            explanation=explanation
-                        )
+                        return [
+                            self.ModelOutput(
+                                score_name=self.parameters.score_name,
+                                score="Yes",
+                                confidence=1.0,
+                                explanation=explanation
+                            )
+                        ]
             
             vectorized_input = self.vectorize_transcript(preprocessed_input)
         else:
