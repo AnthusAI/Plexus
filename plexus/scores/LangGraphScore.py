@@ -37,7 +37,7 @@ class LangGraphScore(Score):
         temperature: Optional[float] = 0.1
         max_tokens: Optional[int] = 500
 
-    class ModelOutput(Score.ModelOutput):
+    class ScoreResult(Score.ScoreResult):
         """
         Model output containing the validation result.
 

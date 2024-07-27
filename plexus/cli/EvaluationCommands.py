@@ -193,7 +193,7 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
     for _, row in sample_rows.iterrows():
         row_dictionary = row.to_dict()
         text = row_dictionary['text']
-        model_input_class = getattr(score_class, 'ModelInput')
+        model_input_class = getattr(score_class, 'ScoreInput')
         prediction_result = score_instance.predict(
             model_input_class(
                 text=text,

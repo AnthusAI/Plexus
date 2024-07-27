@@ -43,7 +43,7 @@ Based on the principle of formulating the problem in terms that the model can so
 
 ### Custom Classifiers
 
-For the best results, you can also build custom classifiers.  Plexus provides a framework for doing that, and it's designed to be easy to use.  You can define your own classifier by subclassing the `Score` class and following the [standard](documentation/classifier-interface-standard.md) `ModelInput` and `ModelOutput` Pydantic classes.  And you can define your own data processors by subclassing the `Processor` class.  You can then use your custom classifier and processor in your scorecard.
+For the best results, you can also build custom classifiers.  Plexus provides a framework for doing that, and it's designed to be easy to use.  You can define your own classifier by subclassing the `Score` class and following the [standard](documentation/classifier-interface-standard.md) `ScoreInput` and `ScoreResult` Pydantic classes.  And you can define your own data processors by subclassing the `Processor` class.  You can then use your custom classifier and processor in your scorecard.
 
 ### Classifier Commodification 
 To avoid when-you-have-a-hammer-everything-looks-like-a-nail syndrome, Plexus makes it easy to swap out different types of machine-learning or computational or AI classifiers for different scores, so that users can experiment to find the ideal configuration for their own scorecards.
@@ -129,7 +129,7 @@ scores:
 
 ### Score Interface Standard
 
-Each `Score` implementation must follow the [standard](documentation/classifier-interface-standard.md), based on the MLFLow standard for model interface.  Standard MLFlow models handle inference through a `predict()` function, and Plexus specifies standard  `ModelInput` and `ModelOutput` Pydantic classes that are extensible for custom models.  For example, the standard `Score.ModelInput` class contains fields for the classification and the confidence of the classification, whereas the `ExplainableClassifier` extends that to include an explanation field.
+Each `Score` implementation must follow the [standard](documentation/classifier-interface-standard.md), based on the MLFLow standard for model interface.  Standard MLFlow models handle inference through a `predict()` function, and Plexus specifies standard  `ScoreInput` and `ScoreResult` Pydantic classes that are extensible for custom models.  For example, the standard `Score.ScoreInput` class contains fields for the classification and the confidence of the classification, whereas the `ExplainableClassifier` extends that to include an explanation field.
 
 ## Functionality
 

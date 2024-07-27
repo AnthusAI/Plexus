@@ -32,7 +32,7 @@ class AgenticExtractor(LangGraphScore):
     def load_context(self, context):
         pass
 
-    def predict(self, context, model_input: Score.ModelInput):
+    def predict(self, context, model_input: Score.ScoreInput):
         text = model_input.text
 
         def _extract_entity_node(state: ExtractorState) -> Dict[str, str]:
@@ -114,7 +114,7 @@ This is the text of a call center phone call that we're reviewing for QA purpose
         logging.info(f"LangGraph result: {result}")
 
         return [
-            LangGraphScore.ModelOutput(
+            LangGraphScore.ScoreResult(
                 score_name =  self.parameters.score_name,
                 score =       result["entity"],
                 explanation = AgenticExtractor.clean_quote(result["quote"])

@@ -19,7 +19,7 @@ class AWSComprehendEntityExtractor(Score):
         self.comprehend_client = boto3.client('comprehend', region_name=os.environ.get('AWS_REGION_NAME'))
         nltk.download('punkt', quiet=True)  # Download the necessary data for the tokenizer
 
-    class ModelOutput(Score.ModelOutput):
+    class ScoreResult(Score.ScoreResult):
         """
         Model output data structure.
 
@@ -31,7 +31,7 @@ class AWSComprehendEntityExtractor(Score):
         ...
         explanation: str
                 
-    def predict(self, context, model_input: Score.ModelInput):
+    def predict(self, context, model_input: Score.ScoreInput):
         rich.print("[b][magenta1]AWSComprehendEntityExtractor[/magenta1][/b]")
         rich.print(model_input)
 
@@ -40,7 +40,7 @@ class AWSComprehendEntityExtractor(Score):
         quotes = self.extract_quotes_that_include_first_person_entity(model_input.transcript, first_named_entity)
 
         return [
-            self.ModelOutput(
+            self.ScoreResult(
                 score_name=self.parameters.score_name,
                 score=first_named_entity,
                 explanation=f"First person entity extracted: {first_named_entity}. Relevant quotes: {quotes}"
