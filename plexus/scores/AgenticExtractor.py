@@ -89,7 +89,7 @@ This is the transcript of a call center phone call that we're reviewing for QA p
             entity = state.get("entity", "")
             transcript = state.get("transcript", "")
 
-            if entity and entity not in transcript:
+            if entity and entity.lower() not in transcript.lower():
                 return {"validation_error": f"No, that's not possible: The string \"{entity}\" does not exist within the transcript."}
             else:
                 return {"validation_error": None}
