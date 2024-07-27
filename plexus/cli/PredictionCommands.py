@@ -49,9 +49,13 @@ def predict(scorecard_name, score_name, content_id, number, excel):
         if number > 1:
             logging.info(f"Iteration {iteration + 1} of {number}")
         
+        # Select a single sample for all scores in this iteration
+        sample_row, used_content_id = select_sample(scorecard_class, score_names[0], content_id)
+        
         row_result = {}
         for single_score_name in score_names:
-            transcript, predictions, costs = predict_score(single_score_name, scorecard_class, content_id)
+            transcript, predictions, costs = predict_score(single_score_name, scorecard_class, sample_row)
+            row_result['content_id'] = used_content_id
             row_result['text'] = transcript
             row_result[f'{single_score_name}_score'] = predictions[0].score
             row_result[f'{single_score_name}_explanation'] = predictions[0].explanation
@@ -71,7 +75,7 @@ def predict(scorecard_name, score_name, content_id, number, excel):
 def output_excel(results, score_names, scorecard_name):
     df = pd.DataFrame(results)
     
-    columns = ['text']
+    columns = ['content_id', 'text']
     for name in score_names:
         columns.extend([f'{name}_score', f'{name}_explanation', f'{name}_cost'])
     if len(score_names) > 1:
@@ -102,10 +106,29 @@ def output_excel(results, score_names, scorecard_name):
 
     logging.info(f"Excel file '{filename}' has been created with the prediction results.")
 
-def predict_score(score_name, scorecard_class, content_id):
-    """
-    This function will train and evaluate a single score.
-    """
+def select_sample(scorecard_class, score_name, content_id):
+    score_configuration = scorecard_class.scores[score_name]
+    score_class_name = score_configuration['class']
+    score_module_path = f'plexus.scores.{score_class_name}'
+    score_module = importlib.import_module(score_module_path)
+    score_class = getattr(score_module, score_class_name)
+
+    score_configuration['scorecard_name'] = scorecard_class.name
+    score_configuration['score_name'] = score_name
+    score_instance = score_class(**score_configuration)
+
+    score_instance.load_data(queries=score_configuration['data']['queries'])
+    score_instance.process_data()
+
+    if content_id:
+        sample_row = score_instance.dataframe[score_instance.dataframe['report_id'] == content_id]
+    else:
+        sample_row = score_instance.dataframe.sample(n=1)
+    
+    used_content_id = sample_row.iloc[0]['report_id']
+    return sample_row, used_content_id
+
+def predict_score(score_name, scorecard_class, sample_row):
     logging.info(f"Predicting Score [magenta1][b]{score_name}[/b][/magenta1]...")
     score_configuration = scorecard_class.scores[score_name]
 
@@ -139,14 +162,10 @@ def predict_score(score_name, scorecard_class, content_id):
     score_instance.load_data(queries=data_queries)
     score_instance.process_data()
 
-    if content_id:
-        sample_row = score_instance.dataframe[score_instance.dataframe['report_id'] == content_id]
-    else:
-        sample_row = score_instance.dataframe.sample(n=1)
     row_dictionary = sample_row.iloc[0].to_dict()
     logging.info(f"Sample Row: {row_dictionary}")
 
-    transcript = row_dictionary['Transcription'] # TODO: Eliminate this by making it be the first column.
+    transcript = row_dictionary['Transcription']
     model_input_class = getattr(score_class, 'ModelInput')
     prediction_result = score_instance.predict(
         context = {},
