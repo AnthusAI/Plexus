@@ -41,7 +41,7 @@ def load_configuration_from_yaml_file(configuration_file_path):
 @click.option('--scorecard-name', 'scorecard_name', default=None, help='Name of the scorecard to evaluate')
 def accuracy(
     scorecard_name: str,
-    number_of_transcripts_to_sample: int = 1,
+    number_of_texts_to_sample: int = 1,
     sampling_method: str = 'random',
     random_seed: int = None,
     session_ids_to_sample: str = '',
@@ -67,7 +67,7 @@ def accuracy(
 
     sampling_method = config.get('sampling_method', sampling_method)
     random_seed = config.get('random_seed', random_seed)
-    number_of_transcripts_to_sample = config.get('number_of_transcripts_to_sample', number_of_transcripts_to_sample)
+    number_of_texts_to_sample = config.get('number_of_texts_to_sample', number_of_texts_to_sample)
     session_ids_to_sample = config.get('session_ids_to_sample', session_ids_to_sample)
     subset_of_score_names = config.get('subset_of_score_names', subset_of_score_names)
     experiment_label = config.get('experiment_label', experiment_label)
@@ -90,7 +90,7 @@ def accuracy(
         override_folder = override_folder,
     
         # Randomly sample some number of transcripts
-        number_of_transcripts_to_sample = number_of_transcripts_to_sample,
+        number_of_texts_to_sample = number_of_texts_to_sample,
 
         # Sampling: Random or Sequential?
         sampling_method = sampling_method,  # Set to 'random' or 'sequential'
