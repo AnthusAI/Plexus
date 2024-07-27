@@ -360,7 +360,7 @@ def compute_shap_feature_importances(
     logging.info(f"Number of sampled examples: {sampled_dataframe.shape[0]}")
     
     # Extract the text data and target labels from the sampled dataframe
-    text_data = sampled_dataframe['Transcription'].tolist()
+    text_data = sampled_dataframe['text'].tolist()
     y = sampled_dataframe[score_name]
     
     logging.info(f"Number of examples: {len(text_data)}")

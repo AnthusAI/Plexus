@@ -74,7 +74,7 @@ class FastTextClassifier(Score):
         # Split the conversations into individual utterances and label each utterance
         fasttext_data = []
         for _, row in self.dataframe.iterrows():
-            conversation = row['Transcription'].replace('\n', '__NEWLINE__')
+            conversation = row['text'].replace('\n', '__NEWLINE__')
             label = re.sub(r'\W+', '_', row[self.score_name])
             fasttext_data.append(f"__label__{label} {conversation}")
 
@@ -279,12 +279,12 @@ class FastTextClassifier(Score):
         return local_model_path
 
     def predict(self, model_input):
-        if isinstance(model_input, pd.DataFrame) and 'Transcription' in model_input.columns:
-            texts = model_input['Transcription'].tolist()
+        if isinstance(model_input, pd.DataFrame) and text in model_input.columns:
+            texts = model_input[text].tolist()
             logging.debug(f"Running inference on texts: {texts}")
         else:
-            logging.error("Model input should be a DataFrame with a 'Transcription' column.")
-            raise ValueError("Model input should be a DataFrame with a 'Transcription' column.")
+            logging.error("Model input should be a DataFrame with a text column.")
+            raise ValueError("Model input should be a DataFrame with a text column.")
 
         predictions = []
         confidence_scores = []

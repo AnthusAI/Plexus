@@ -121,11 +121,11 @@ def select_sample(scorecard_class, score_name, content_id):
     score_instance.process_data()
 
     if content_id:
-        sample_row = score_instance.dataframe[score_instance.dataframe['report_id'] == content_id]
+        sample_row = score_instance.dataframe[score_instance.dataframe['content_id'] == content_id]
     else:
         sample_row = score_instance.dataframe.sample(n=1)
     
-    used_content_id = sample_row.iloc[0]['report_id']
+    used_content_id = sample_row.iloc[0]['content_id']
     return sample_row, used_content_id
 
 def predict_score(score_name, scorecard_class, sample_row):
@@ -165,16 +165,16 @@ def predict_score(score_name, scorecard_class, sample_row):
     row_dictionary = sample_row.iloc[0].to_dict()
     logging.info(f"Sample Row: {row_dictionary}")
 
-    transcript = row_dictionary['Transcription']
+    text = row_dictionary['text']
     model_input_class = getattr(score_class, 'ModelInput')
     prediction_result = score_instance.predict(
         context = {},
         model_input = model_input_class(
-            transcript = transcript,
+            text = text,
             metadata = row_dictionary
         )
     )
     costs = score_instance.get_accumulated_costs()
     logging.info(f"Prediction result: {prediction_result}")
     logging.info(f"Costs: {costs}")
-    return transcript, prediction_result, costs
+    return text, prediction_result, costs

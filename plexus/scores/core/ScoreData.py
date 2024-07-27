@@ -119,12 +119,12 @@ class ScoreData:
                 processor_instance = ProcessorFactory.create_processor(processor_class, **processor_parameters)
                 processors.append(processor_instance)
 
-            first_transcript_before = self.dataframe["Transcription"].iloc[0]
+            first_transcript_before = self.dataframe['text'].iloc[0]
 
             for processor in processors:
                 self.dataframe = processor.process(self.dataframe)
 
-            first_transcript_after = self.dataframe["Transcription"].iloc[0]
+            first_transcript_after = self.dataframe['text'].iloc[0]
 
             if first_transcript_before and first_transcript_after:
                 first_transcript_before_truncated = first_transcript_before[:1000] + '...'

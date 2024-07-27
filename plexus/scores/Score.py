@@ -95,10 +95,10 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
 
         Attributes
         ----------
-        transcript : str
-            The transcript text to be classified.
+        text : str
+            The text to be classified.
         """
-        transcript: str
+        text: str
         metadata: Optional[dict] = None
 
     class ModelOutput(BaseModel):

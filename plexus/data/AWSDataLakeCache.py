@@ -75,40 +75,37 @@ class AWSDataLakeCache(DataCache):
             logging.error(f"Query failed with state: {query_execution_state}. Error: {error_message}")
             raise Exception(f"Query failed with state: {query_execution_state}. Error: {error_message}")
 
-    def download_report(self, scorecard_id, report_id):
-        metadata_key = f"scorecard_id={scorecard_id}/report_id={report_id}/metadata.json"
-        transcript_key = f"scorecard_id={scorecard_id}/report_id={report_id}/transcript.json"
-        transcript_txt_key = f"scorecard_id={scorecard_id}/report_id={report_id}/transcript.txt"
+    def download_content_item(self, scorecard_id, content_id):
+        prefix = f"scorecard_id={scorecard_id}/report_id={content_id}/"
+        
+        s3_objects = self.s3_client.list_objects_v2(Bucket=self.s3_bucket, Prefix=prefix)
+        
+        content_data = {}
+        
+        for obj in s3_objects.get('Contents', []):
+            key = obj['Key']
+            file_name = os.path.basename(key)
+            local_path = os.path.join(self.local_cache_directory, 'content_items', key)
+            
+            if os.path.exists(local_path):
+                logging.debug(f"{file_name} already exists locally at {local_path}")
+                with open(local_path, 'r') as file:
+                    content_data[file_name] = file.read()
+            else:
+                logging.info(f"Downloading {file_name} from S3 bucket {self.s3_bucket}")
+                s3_obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=key)
+                file_content = s3_obj['Body'].read().decode('utf-8')
+                
+                if file_content.strip() == "":
+                    logging.warning(f"Downloaded {file_name} is empty.")
+                
+                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                with open(local_path, 'w') as file:
+                    file.write(file_content)
+                
+                content_data[file_name] = file_content
 
-        metadata_local_path = os.path.join(self.local_cache_directory, 'reports', metadata_key)
-        transcript_local_path = os.path.join(self.local_cache_directory, 'reports', transcript_key)
-        transcript_txt_local_path = os.path.join(self.local_cache_directory, 'reports', transcript_txt_key)
-
-        if os.path.exists(metadata_local_path):
-            logging.debug("Metadata already exists locally at {}".format(metadata_local_path))
-            with open(metadata_local_path, 'r') as metadata_file:
-                metadata = json.load(metadata_file)
-        else:
-            logging.debug("Downloading metadata from S3 bucket {}".format(self.s3_bucket))
-            metadata_obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=metadata_key)
-            metadata = json.loads(metadata_obj['Body'].read().decode('utf-8'))
-            os.makedirs(os.path.dirname(metadata_local_path), exist_ok=True)
-            with open(metadata_local_path, 'w') as metadata_file:
-                json.dump(metadata, metadata_file)
-
-        if os.path.exists(transcript_txt_local_path):
-            logging.debug("Transcript text already exists locally at {}".format(transcript_txt_local_path))
-            with open(transcript_txt_local_path, 'r') as transcript_txt_file:
-                transcript_txt = transcript_txt_file.read()
-        else:
-            logging.info("Downloading transcript text from S3 bucket {}".format(self.s3_bucket))
-            transcript_txt_obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=transcript_txt_key)
-            transcript_txt = transcript_txt_obj['Body'].read().decode('utf-8')
-            os.makedirs(os.path.dirname(transcript_txt_local_path), exist_ok=True)
-            with open(transcript_txt_local_path, 'w') as transcript_txt_file:
-                transcript_txt_file.write(transcript_txt)
-
-        return metadata, transcript_txt
+        return content_data
 
     def load_dataframe(self, *, queries):
         dataframes = []
@@ -125,7 +122,14 @@ class AWSDataLakeCache(DataCache):
         cached_dataframe_path = os.path.join(self.local_cache_directory, 'dataframes', cached_dataframe_filename)
         if os.path.exists(cached_dataframe_path):
             logging.info("Loading cached dataframe from {}".format(cached_dataframe_path))
-            return pd.read_hdf(cached_dataframe_path)
+            dataframe = pd.read_hdf(cached_dataframe_path)
+            
+            # Check for NaN values in the 'text' column and log a warning
+            if dataframe['text'].isna().any():
+                nan_count = dataframe['text'].isna().sum()
+                logging.warning(f"Loaded dataframe contains {nan_count} rows with NaN values in the 'text' column.")
+            
+            return dataframe
 
         logging.info("Loading dataframe with queries: {}".format(queries))
         
@@ -167,39 +171,50 @@ class AWSDataLakeCache(DataCache):
             query_results = self.get_query_results(query_execution_id)
             
             report_ids = [row['Data'][0]['VarCharValue'] for row in query_results[1:]]
-            
-            def process_report(report_id):
+
+            def process_content_item(content_id):
                 try:
-                    report_metadata, report_transcript_txt = self.download_report(scorecard_id, report_id)
-                    report_row = {'report_id': report_id}
+                    content_data = self.download_content_item(scorecard_id, content_id)
+                    content_row = {'content_id': content_id}
 
-                    for score in report_metadata.get('scores', []):
-                        report_row[score['name']] = score['answer']
+                    if 'metadata.json' in content_data:
+                        metadata = json.loads(content_data['metadata.json'])
+                        for score in metadata.get('scores', []):
+                            content_row[score['name']] = score['answer']
 
-                    if 'school' in report_metadata and isinstance(report_metadata['school'], list):
-                        for index, school_info in enumerate(report_metadata['school']):
-                            if isinstance(school_info, dict):
-                                for key, value in school_info.items():
-                                    report_row[f"school_{index}_{key}"] = value
+                        if 'school' in metadata and isinstance(metadata['school'], list):
+                            for index, school_info in enumerate(metadata['school']):
+                                if isinstance(school_info, dict):
+                                    for key, value in school_info.items():
+                                        content_row[f"school_{index}_{key}"] = value
 
-                    report_row['Transcription'] = report_transcript_txt
-                    return report_row
+                    if 'transcript.txt' in content_data:
+                        text_content = content_data['transcript.txt']
+                        if text_content.strip() == "":
+                            logging.warning(f"Content item {content_id} has an empty text file.")
+                            return None
+                        content_row['text'] = text_content
+                    else:
+                        logging.warning(f"Content item {content_id} does not have a text file.")
+                        return None
+                    
+                    return content_row
                 except self.s3_client.exceptions.NoSuchKey:
-                    logging.warning(f"Report with ID {report_id} not found in S3 bucket.")
+                    logging.warning(f"Content item with ID {content_id} not found in S3 bucket.")
                     return None
             
             with ThreadPoolExecutor() as executor:
                 with Progress() as progress:
-                    task = progress.add_task("[cyan]Processing reports...", total=len(report_ids))
-                    report_data_futures = [executor.submit(process_report, report_id) for report_id in report_ids]
-                    report_data = []
-                    for future in report_data_futures:
+                    task = progress.add_task("[cyan]Processing content items...", total=len(report_ids))
+                    content_data_futures = [executor.submit(process_content_item, report_id) for report_id in report_ids]
+                    content_data = []
+                    for future in content_data_futures:
                         result = future.result()
                         if result is not None:
-                            report_data.append(result)
+                            content_data.append(result)
                         progress.update(task, advance=1)  
     
-            dataframe = pd.DataFrame(report_data)
+            dataframe = pd.DataFrame(content_data)
             dataframes.append(dataframe)
         
         combined_dataframe = pd.concat(dataframes, ignore_index=True)

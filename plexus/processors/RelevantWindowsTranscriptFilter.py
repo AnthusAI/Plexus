@@ -38,7 +38,7 @@ class RelevantWindowsTranscriptFilter(DataframeProcessor):
             logging.debug(f"Filtered transcript: {result}")
             return result
 
-        dataframe["Transcription"] = dataframe["Transcription"].apply(filter_transcript)
+        dataframe['text'] = dataframe['text'].apply(filter_transcript)
         self.display_summary()
         return dataframe
 
