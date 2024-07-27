@@ -17,7 +17,7 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 
 from plexus.scores.CompositeScore import CompositeScore
 from plexus.scores.Score import Score
-from plexus.ScoreResult import ScoreResult
+from plexus.Result import Result
 from plexus.Registries import scorecard_registry
 
 # logging.getLogger("openai._base_client").setLevel(logging.INFO)
@@ -109,11 +109,11 @@ class GoogleGeminiCompositeScore(CompositeScore):
             # TODO: Make this more robust, possibly by breaking the chunk into sub-chunks and attempting to process
             # each sub-chunk separately, so that we will discard less transcript data if any sub-chunk fails.
             score_result_metadata['value'] = "No"
-            return ScoreResult(value="No", metadata=score_result_metadata)
+            return Result(value="No", metadata=score_result_metadata)
 
         if response.choices[0]['finish_reason'] == 'content_filter':
             score_result_metadata['value'] = "No"
-            return ScoreResult(value="No", metadata=score_result_metadata)
+            return Result(value="No", metadata=score_result_metadata)
 
         # Add a log of this chat history including the response to the score result metadata.
         messages.append(
@@ -179,7 +179,7 @@ class GoogleGeminiCompositeScore(CompositeScore):
         logging.info(f"Total token counts:  Input: {self.prompt_tokens}  Output: {self.completion_tokens}")
         logging.info(f"Total costs for score:  Input: {self.input_cost}, Output: {self.output_cost}, Total: {self.total_cost}")
 
-        return ScoreResult(value=score_result_metadata['value'], metadata=score_result_metadata)
+        return Result(value=score_result_metadata['value'], metadata=score_result_metadata)
 
     def clarify_yes_or_no(self, *, name, messages, top_p=0.2):
         """
@@ -588,5 +588,5 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
         logging.info(f"Total costs for score:  Input: {self.input_cost}, Output: {self.output_cost}, Total: {self.total_cost}")
 
         self.element_results.append(
-            ScoreResult(value='summarized', metadata=result_metadata)
+            Result(value='summarized', metadata=result_metadata)
         )

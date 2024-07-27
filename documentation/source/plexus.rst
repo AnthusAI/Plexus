@@ -34,7 +34,7 @@ Submodules
    plexus.Registries
    plexus.Registries_test
    plexus.Score
-   plexus.ScoreResult
+   plexus.Result
    plexus.ScoreResult_test
    plexus.Score_test
    plexus.Scorecard
