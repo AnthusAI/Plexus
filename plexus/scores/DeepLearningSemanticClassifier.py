@@ -488,13 +488,13 @@ class DeepLearningSemanticClassifier(Score):
         """
         pass
 
-    class ModelOutput(Score.ModelOutput):
+    class ScoreResult(Score.ScoreResult):
         """
         This Score has an additional output attribute, confidence, which is a float
         """
         confidence: float
 
-    def predict(self, context, model_input: Score.ModelInput):
+    def predict(self, context, model_input: Score.ScoreInput):
         logging.info(f"Received input: {model_input}")
 
         text = model_input.text
@@ -525,7 +525,7 @@ class DeepLearningSemanticClassifier(Score):
             predicted_label = self.inverse_label_map[predicted_class]
             logging.info(f"Predicted label: {predicted_label}")
 
-            return self.ModelOutput(
+            return self.ScoreResult(
                 score_name = self.parameters.score_name,
                 score = predicted_label,
                 confidence = confidence_score
@@ -544,7 +544,7 @@ class DeepLearningSemanticClassifier(Score):
         for i, text in enumerate(self.val_texts):
             logging.info(f"Processing validation sample {i+1}/{len(self.val_texts)}")
             
-            model_input = self.ModelInput(text=text)
+            model_input = self.ScoreInput(text=text)
             result = self.predict(None, model_input)
             
             self.val_predictions.append(result.score)

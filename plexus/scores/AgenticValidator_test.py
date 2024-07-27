@@ -162,20 +162,20 @@ def test_predict(validator, agent_type, final_state, expected_result):
         }
         mock_calculate_cost.return_value = {'total_cost': 0.001}
 
-        model_input = validator.ModelInput(transcript=SAMPLE_TRANSCRIPT, metadata=SAMPLE_METADATA)
+        model_input = validator.ScoreInput(transcript=SAMPLE_TRANSCRIPT, metadata=SAMPLE_METADATA)
         context = {}
         result = validator.predict(context, model_input)
 
     assert isinstance(result, list)
     assert len(result) == 1
-    assert isinstance(result[0], validator.ModelOutput)
+    assert isinstance(result[0], validator.ScoreResult)
     assert result[0].score == expected_result[0]
     assert expected_result[1] in result[0].explanation
 
 # Integration Tests
 @pytest.mark.integration
 def test_validation_with_real_model(validator):
-    input_data = validator.ModelInput(
+    input_data = validator.ScoreInput(
         transcript=SAMPLE_TRANSCRIPT,
         metadata=SAMPLE_METADATA
     )
@@ -192,7 +192,7 @@ def test_validation_with_real_model(validator):
 
 @pytest.mark.integration
 def test_validation_with_mismatched_data(validator):
-    input_data = validator.ModelInput(
+    input_data = validator.ScoreInput(
         transcript="I graduated from Harvard with a Master's in Biology.",
         metadata=SAMPLE_METADATA
     )
