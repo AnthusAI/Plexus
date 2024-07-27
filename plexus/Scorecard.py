@@ -165,7 +165,7 @@ class Scorecard:
 
             cls.score_registry.register(score_name, score_class)
     
-    def get_score_result(self, *, score_name=None, transcript):
+    def get_score_result(self, *, score_name=None, text):
         """
         Get a result for a score by looking up a Score instance for that question name and calling its
         compute_score_result method with the provided transcript.
@@ -198,7 +198,7 @@ class Scorecard:
             score_result = score_instance.predict(
                 context=None,
                 model_input=plexus.scores.Score.Input(
-                    transcript=transcript,
+                    text=text,
                     metadata={}
                 )
             )
@@ -214,7 +214,9 @@ class Scorecard:
                 self.output_cost         += score_total_cost['output_cost']
                 self.total_cost          += score_total_cost['total_cost']
 
-                score_result[0].metadata.update(score_total_cost)
+                # TODO: Find a different way of passing the costs with the score result.
+                # Maybe add support for `costs` and `metadata` in Score.Result?
+                # score_result[0].metadata.update(score_total_cost)
             return score_result
 
         else:
@@ -222,15 +224,15 @@ class Scorecard:
             logging.info(error_string)
             return ScoreResult(value="Error", error=error_string)
 
-    def score_entire_transcript(self, *, transcript, subset_of_score_names=None, thread_pool_size=25):
-        logging.info(f"score_entire_transcript method. subset_of_score_names: {subset_of_score_names}")
+    def score_entire_text(self, *, text, subset_of_score_names=None, thread_pool_size=25):
+        logging.info(f"score_entire_text method. subset_of_score_names: {subset_of_score_names}")
         if subset_of_score_names is None:
             subset_of_score_names = self.score_names_to_process()
 
         score_results_dict = {}
         with ThreadPoolExecutor(max_workers=thread_pool_size) as executor:
             future_to_score_name = {
-                executor.submit(self.get_score_result, score_name=score_name, transcript=transcript): score_name
+                executor.submit(self.get_score_result, score_name=score_name, text=text): score_name
                 for score_name in subset_of_score_names
             }
             for future in as_completed(future_to_score_name):
