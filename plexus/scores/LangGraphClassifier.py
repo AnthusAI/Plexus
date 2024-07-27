@@ -27,7 +27,7 @@ from langchain.output_parsers import EnumOutputParser
 set_debug(True)
 
 class GraphState(TypedDict):
-    transcript: str
+    text: str
     is_not_empty: bool
     explanation: str
     input_text_after_slice: str
@@ -151,7 +151,7 @@ class LangGraphClassifier(LangGraphScore):
             ("human", """Here's a transcript of a conversation between an insurance agent and a customer:
 
 <transcript>
-{transcript}
+{text}
 </transcript>
 
 Before the agent can move to the application process, the agent must have presented rate quotes to the customer. This typically involves presenting a monthly price for coverage. Did the agent present specific rate quotes?
@@ -160,7 +160,7 @@ Provide your answer as ONLY "Yes" or "No", without any additional explanation.""
         ])
         chain = prompt | self.model
 
-        result = chain.invoke({"transcript": state['transcript']})
+        result = chain.invoke({"text": state['text']})
 
         def fallback_parser(response: str) -> YesOrNo:
             response_lower = response.lower()
@@ -187,16 +187,16 @@ Provide your answer as ONLY "Yes" or "No", without any additional explanation.""
         state["agent_presented_rate_quote"] = parsed_result
         return state
 
-    def _slice_transcript(self, state: GraphState, system_message: str, human_message: str, slice_key: str) -> GraphState:
+    def _slice_text(self, state: GraphState, system_message: str, human_message: str, slice_key: str) -> GraphState:
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_message),
             ("human", human_message)
         ])
 
-        chain = prompt | self.model | CustomOutputParser(text=state['transcript'])
-        result = chain.invoke({"transcript": state['transcript']})
+        chain = prompt | self.model | CustomOutputParser(text=state['text'])
+        result = chain.invoke({"text": state['text']})
         state[slice_key] = result['input_text_after_slice']
-        state['transcript'] = result['input_text_after_slice']  # Update the main transcript
+        state['text'] = result['input_text_after_slice']  # Update the main text
         logging.info(f"{slice_key.capitalize()}: {state[slice_key][:100]}...")
         return state
 
@@ -209,11 +209,11 @@ Provide your answer as ONLY "Yes" or "No", without any additional explanation.""
 3. The quote should be word-for-word from the transcript.
 
 <transcript>
-{transcript}
+{text}
 </transcript>
 
 Remember, I need a short, exact quote from the transcript, not a summary or paraphrase. Start your response with 'Quote:'"""
-        return self._slice_transcript(state, system_message, human_message, 'health_questions_slice')
+        return self._slice_text(state, system_message, human_message, 'health_questions_slice')
 
     def rate_quote_slice(self, state: GraphState) -> GraphState:
         system_message = "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to identify the exact moment when the agent first presents rate quotes after completing all health and lifestyle questions."
@@ -224,16 +224,16 @@ Remember, I need a short, exact quote from the transcript, not a summary or para
 3. Provide a short, exact quote (1-2 sentences) where the agent first presents these rate quotes. The quote should be word-for-word from the transcript, including the specific cost mentioned.
 
 <transcript>
-{transcript}
+{text}
 </transcript>
 
 Remember, I need a short, exact quote from the transcript, not a summary or paraphrase. Only consider rate quotes that come after ALL health and lifestyle questions and are presented as a monthly or yearly cost. Start your response with 'Quote:'"""
-        return self._slice_transcript(state, system_message, human_message, 'rate_quote_slice')
+        return self._slice_text(state, system_message, human_message, 'rate_quote_slice')
 
     def _examine(self, state: GraphState) -> GraphState:
         logging.info(f"Examining state: {state}")
         
-        examine_input = state['transcript']
+        examine_input = state['text']
         
         logging.info(f"Length of examine input: {len(examine_input)}")
         logging.info(f"First 100 characters of examine input: {examine_input[:100]}")
@@ -243,7 +243,7 @@ Remember, I need a short, exact quote from the transcript, not a summary or para
 Analyze the following transcript excerpt, which begins immediately after the agent has presented rate quotes to the customer:
 
 <transcript>
-{transcript}
+{text}
 </transcript>
 
 Question: Did the agent effectively guide the conversation towards closing the deal immediately after presenting the rates?
@@ -267,7 +267,7 @@ Provide a concise analysis (2-3 sentences) stating whether the agent effectively
 
         state["reasoning"] = score_chain.invoke(
             {
-                "transcript": state['transcript']
+                "text": state['text']
             }
         )
         return state
@@ -309,7 +309,7 @@ Provide your answer as either "Yes" or "No".
         logging.info(f"Predict method input: {model_input}")
         
         initial_state = GraphState(
-            transcript=model_input.transcript,
+            text=model_input.text,
             is_not_empty=False,
             explanation="",
             reasoning="",

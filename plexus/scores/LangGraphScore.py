@@ -374,8 +374,8 @@ class LangGraphScore(Score):
 
     def _initialize_memory(self, state: Any) -> Any:
         """
-        Initialize the agent's memory with the transcript.
+        Initialize the agent's memory with the text.
         """
         if hasattr(self, 'agent_executor'):
-            self.agent_executor.memory.memories["transcript"] = state.transcript
+            self.agent_executor.memory.memories["text"] = state.text
         return state
