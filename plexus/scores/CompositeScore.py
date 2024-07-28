@@ -35,9 +35,9 @@ class CompositeScore(Score):
         """
         super().__init__(**parameters)
 
-        # Aggregate reasoning and quote, computed at the end after computing all other elements.
-        self.reasoning = []
-        self.relevant_quotes = []
+        # Aggregate explanation and quote, computed at the end after computing all other elements.
+        self.explanation = []
+        self.quote = []
 
         # Accumulators for tracking the total expenses.
         self.input_cost =  Decimal('0.0')
@@ -55,9 +55,9 @@ class CompositeScore(Score):
 
     def to_dict(self):
         return {
-            'transcript': self.transcript,
-            'reasoning': self.reasoning,
-            'relevant_quotes': self.relevant_quotes,
+            'text': self.text,
+            'explanation': self.explanation,
+            'quote': self.quote,
             'llm_request_count': self.llm_request_count,
             'prompt_tokens': self.prompt_tokens,
             'completion_tokens': self.completion_tokens,
@@ -65,7 +65,7 @@ class CompositeScore(Score):
             'output_cost': str(self.output_cost),
             'total_cost': str(self.total_cost),
             'element_results': [result.to_dict() for result in self.element_results],
-            'filtered_transcript': self.filtered_transcript,
+            'filtered_text': self.filtered_text,
             'chat_history': self.chat_history
         }
 
@@ -93,8 +93,8 @@ class CompositeScore(Score):
         instance = cls(scorecard_name=data['scorecard_name'], score_name=data['score_name'])
 
         # Set the instance attributes from the data
-        instance.reasoning = data['reasoning']
-        instance.relevant_quotes = data['relevant_quotes']
+        instance.explanation = data['explanation']
+        instance.quote = data['quote']
         instance.llm_request_count = data['llm_request_count']
         instance.prompt_tokens = data['prompt_tokens']
         instance.completion_tokens = data['completion_tokens']
@@ -102,7 +102,7 @@ class CompositeScore(Score):
         instance.output_cost = Decimal(data['output_cost'])
         instance.total_cost = Decimal(data['total_cost'])
         instance.element_results = [ScoreResult.from_dict(result) for result in data['element_results']]
-        instance.filtered_transcript = data['filtered_transcript']
+        instance.filtered_text = data['filtered_text']
         instance.chat_history = data['chat_history']
 
         return instance
@@ -195,8 +195,8 @@ class CompositeScore(Score):
                 """
                 This Score has an additional output attribute, explanation, which is a string
                 """
-                reasoning: str
-                relevant_quote: str
+                explanation: str
+                quote: str
                 
             def predict(self, context, model_input: Score.Input) -> Score.Result:
                 """
@@ -206,19 +206,18 @@ class CompositeScore(Score):
                 :param model_input: The input data for making predictions.
                 :return: The predictions.
                 """
-                # Get the transcript from the model input dataframe.
-                transcript = model_input.transcript
+                # Get the text from the model input dataframe.
+                text = model_input.text
 
-                # Filter that transcript.
-                self.filtered_transcript = self.process_transcript(transcript=transcript)
+                self.filtered_text = self.process_text(text=text)
 
                 # Run the decision tree.
                 return self.compute_result()
 
-            def process_transcript(self, *, transcript):
+            def process_text(self, *, text):
                 # Initialize an empty list to hold both strings and compiled regex patterns
                 if not self.chunking:
-                    return transcript
+                    return text
 
                 keyword_patterns = []
 
@@ -238,18 +237,18 @@ class CompositeScore(Score):
                                 # If keyword is already a compiled regex, add it directly
                                 keyword_patterns.append(keyword)
 
-                # Convert the transcript string into a DataFrame
-                transcript_df = pd.DataFrame({'text': [transcript]})
+                # Convert the text string into a DataFrame
+                text_df = pd.DataFrame({'text': [text]})
 
                 # Use the KeywordClassifier with the combined list of strings and regex patterns
-                filtered_transcript_df = RelevantWindowsTranscriptFilter(
+                filtered_text_df = RelevantWindowsTranscriptFilter(
                     classifier=KeywordClassifier(keyword_patterns, self.parameters.scorecard_name, self.parameters.score_name)
-                ).process(transcript_df)
+                ).process(text_df)
 
-                # Extract the filtered transcript from the DataFrame
-                filtered_transcript = filtered_transcript_df['text'].iloc[0]
+                # Extract the filtered text from the DataFrame
+                filtered_text = filtered_text_df['text'].iloc[0]
 
-                return filtered_transcript
+                return filtered_text
 
             def generate_elements_from_markdown(self):
                 elements = []
@@ -282,10 +281,10 @@ class CompositeScore(Score):
         return CompositeScoreFromMarkdown
 
     @abstractmethod
-    def construct_system_prompt(self, *, transcript):
+    def construct_system_prompt(self, *, text):
         """
         Defines the system prompt used at the start of the chat history.  This system prompt
-        includes minimal, basic instructions, and the transcript.
+        includes minimal, basic instructions, and the text.
         """
 
     @abstractmethod
@@ -298,14 +297,14 @@ class CompositeScore(Score):
         pass
 
     @abstractmethod
-    def compute_element(self, *, name, transcript=None):
+    def compute_element(self, *, name, text=None):
         """
         Compute the result for a single element of the composite score.  This method is
         called by the `element` method and should be implemented by concrete subclasses.
 
         Args:
             name (str): The name of the element to compute the result for.
-            transcript (str): The transcript text to use for computing the result.
+            text (str): The text text to use for computing the result.
 
         Returns:
             ScoreResult: The result of the element classification.
@@ -368,15 +367,15 @@ class CompositeScore(Score):
             total_token_count += len(encoded_message.tokens)
         return total_token_count
 
-    def compute_reasoning_and_relevant_quote(compute_result_method):
+    def compute_explanation_and_relevant_quote(compute_result_method):
         def wrapper(self, *, value, result_index=0, **kwargs):
             
             grouped_results = self.group_element_results_by_name()
             selected_results = self.select_element_results_to_include(grouped_results)
             concatenated_chat_history = self.concatenate_chat_history(selected_results)
   
-            # Accumulate the reasoning and relevant quotes.
-            self._compute_reasoning_and_relevant_quote_implementation(
+            # Accumulate the explanation and relevant quotes.
+            self._compute_explanation_and_relevant_quote_implementation(
                 chat_history=concatenated_chat_history,
                 value=value,
                 result_index=result_index)
@@ -385,48 +384,48 @@ class CompositeScore(Score):
             return compute_result_method(self, value=value, result_index=result_index, **kwargs)
         return wrapper
 
-    def _compute_reasoning_and_relevant_quote_implementation(self, *, chat_history, value, result_index):
-        # This method should be implemented by subclasses if they need to compute reasoning and quote.
+    def _compute_explanation_and_relevant_quote_implementation(self, *, chat_history, value, result_index):
+        # This method should be implemented by subclasses if they need to compute explanation and quote.
         # The underscore prefix indicates that it's an internal method.
         pass
 
-    def break_transcript_into_chunks(self, transcript, max_chunk_size=2000):
+    def break_text_into_chunks(self, text, max_chunk_size=2000):
         chunks = []
-        while len(transcript) > max_chunk_size:
+        while len(text) > max_chunk_size:
             # Find the last occurrence of the delimiter before the max_chunk_size
-            break_point = transcript.rfind("\n...\n", 0, max_chunk_size)
+            break_point = text.rfind("\n...\n", 0, max_chunk_size)
             if break_point != -1:
-                # If found, split the transcript at the delimiter, excluding it from the chunk
-                chunk = transcript[:break_point]
+                # If found, split the text at the delimiter, excluding it from the chunk
+                chunk = text[:break_point]
             else:
-                # If no delimiter is found, split the transcript at max_chunk_size
-                chunk = transcript[:max_chunk_size]
+                # If no delimiter is found, split the text at max_chunk_size
+                chunk = text[:max_chunk_size]
             
             # Trim the chunk to ensure no trailing spaces are included
             chunk = chunk.rstrip()
             chunks.append(chunk)
             
-            # Update the transcript to start after the delimiter or the chunk
-            transcript = transcript[break_point + 5:] if break_point != -1 else transcript[max_chunk_size:]
+            # Update the text to start after the delimiter or the chunk
+            text = text[break_point + 5:] if break_point != -1 else text[max_chunk_size:]
         
-        # Ensure the last part of the transcript is also trimmed before adding
-        if transcript:
-            chunks.append(transcript.rstrip())
+        # Ensure the last part of the text is also trimmed before adding
+        if text:
+            chunks.append(text.rstrip())
         return chunks
 
-    def _process_transcript_chunk(self, name, transcript_chunk):
+    def _process_text_chunk(self, name, text_chunk):
         """
-        Process a single chunk of transcript and compute the score result.
+        Process a single chunk of text and compute the score result.
 
         Args:
             name (str): The name of the element to compute the score for.
-            transcript (str): The chunk of transcript text to use for computing the score.
+            text (str): The chunk of text text to use for computing the score.
 
         Returns:
             The score result for the chunk.
         """
-        truncated_transcript_preview = transcript_chunk[:64] + "..." if len(transcript_chunk) > 64 else transcript_chunk
-        logging.debug(f"Transcript chunk:\n{truncated_transcript_preview}")
+        truncated_text_preview = text_chunk[:64] + "..." if len(text_chunk) > 64 else text_chunk
+        logging.debug(f"Transcript chunk:\n{truncated_text_preview}")
 
         element = self.get_element_by_name(name=name)
         prompt = element['prompt']
@@ -436,7 +435,7 @@ class CompositeScore(Score):
             name=name,
             element_type='prompt',
             prompt=prompt,
-            chunk=transcript_chunk
+            chunk=text_chunk
         )
 
         rules = element.get('rules')
@@ -454,34 +453,35 @@ class CompositeScore(Score):
                 # Add the previous response content to the chat history.
                 previous_messages=previous_messages,
                 prompt=rules,
-                chunk=transcript_chunk
+                chunk=text_chunk
             )
 
             logging.debug(f'Clarification result for {name} rules: {score_result}')
 
             # If the clarification result is no then it overrides the yes result.
             if clarification_result.is_no():
-                clarification_result.metadata['clarification_reasoning'] = clarification_result.metadata['reasoning']
-                clarification_result.metadata['reasoning'] = score_result.metadata['reasoning']
+                clarification_result.explanation = clarification_result.explanation
+                clarification_result.quote = clarification_result.quote
                 self.element_results.append(clarification_result)
                 return clarification_result
 
             score_result.metadata['chat_history'] = clarification_result.metadata['chat_history']
-            score_result.metadata['clarification_reasoning'] = clarification_result.metadata['reasoning']
+            score_result.explanation = clarification_result.explanation
+            score_result.quote = clarification_result.quote
 
         logging.debug(f'Element result for {name}: {score_result}')
 
         self.element_results.append(score_result)
         return score_result
 
-    def compute_element(self, *, name, transcript=None):
+    def compute_element(self, *, name, text=None):
         """
         Compute the result for a single element of the composite score by processing
-        the filtered transcript in chunks and aggregating the results.
+        the filtered text in chunks and aggregating the results.
 
         Args:
             name (str): The name of the element to compute the score for.
-            transcript (str, optional): The transcript text to use for computing the score.
+            text (str, optional): The text text to use for computing the score.
 
         Returns:
             A boolean value that indicates whether the score result was "Yes" or not.
@@ -495,13 +495,13 @@ class CompositeScore(Score):
 
         logging.info(f"Chunking: {self.chunking}")
         if not self.chunking:
-            chunks = [self.filtered_transcript]
+            chunks = [self.filtered_text]
         else:
-            # Break the transcript into chunks to process them in parallel.
-            chunks = self.break_transcript_into_chunks(self.filtered_transcript)
+            # Break the text into chunks to process them in parallel.
+            chunks = self.break_text_into_chunks(self.filtered_text)
 
-        logging.debug(f"Filtered transcript:\n{self.filtered_transcript}")
-        logging.info(f"Number of transcript chunks: {len(chunks)}")
+        logging.debug(f"Filtered text:\n{self.filtered_text}")
+        logging.info(f"Number of text chunks: {len(chunks)}")
         for index, chunk in enumerate(chunks, start=1):
             logging.debug(f"Chunk {index}:\n{chunk}")
 
@@ -520,7 +520,7 @@ class CompositeScore(Score):
         if max_threads > 1:
             # Parallel processing with ThreadPoolExecutor
             with ThreadPoolExecutor(max_workers=max_threads) as executor:
-                futures = [executor.submit(self._process_transcript_chunk, name, chunk) for chunk in chunks]
+                futures = [executor.submit(self._process_text_chunk, name, chunk) for chunk in chunks]
                 for future in as_completed(futures):
                     result = future.result()
                     chunk_results.append(result)
@@ -529,14 +529,14 @@ class CompositeScore(Score):
         else:
             # Sequential processing with immediate short-circuiting
             for chunk in chunks:
-                result = self._process_transcript_chunk(name, chunk)
+                result = self._process_text_chunk(name, chunk)
                 chunk_results.append(result)
                 if result.is_yes():
                     return True
 
         # The most interesting chunks will be the ones that had clarification, so return the result of the first chunk that had clarification.
         for chunk_result in chunk_results:
-            if "completion_reasoning" in chunk_result.metadata:
+            if "completion_explanation" in chunk_result.metadata:
                 return chunk_result.is_yes()
 
         # This fallback happens when there are no clarifications.  Just pick the first no.
@@ -578,7 +578,7 @@ class CompositeScore(Score):
         Returns:
             dict or function or None: The element dictionary if an element with the given name exists, a function pointer if a valid function name is specified and found, or None if no match is found.
         """
-        allowed_function_names = ['filtered_transcript_is_empty']
+        allowed_function_names = ['filtered_text_is_empty']
         
         # First, try to find a matching element
         for element in self.elements:
@@ -592,13 +592,13 @@ class CompositeScore(Score):
         # Return None if no element or allowed function name matches
         return None
 
-    def filtered_transcript_is_empty(self):
+    def filtered_text_is_empty(self):
         """
-        A common decision used at the start of decision trees.  If the filtered transcript is blank
-        then it means that nothing in the transcript was judged to be relevant to the classification,
+        A common decision used at the start of decision trees.  If the filtered text is blank
+        then it means that nothing in the text was judged to be relevant to the classification,
         and we can skip any further processing for that chunk.
         """
-        return not self.filtered_transcript
+        return not self.filtered_text
 
     def get_accumulated_costs(self):
         """
@@ -621,10 +621,10 @@ class CompositeScore(Score):
     # logic in the `compute_score_result()` functions in the concrete implementations.
     # They are not strictly necessary, but they make the code more readable.
 
-    @compute_reasoning_and_relevant_quote
+    @compute_explanation_and_relevant_quote
     def return_result_with_context(self, *, value, name=None, result_index=0):
         """
-        Return the result with the reasoning and relevant quote.
+        Return the result with the explanation and relevant quote.
         """
 
         # Find the name unless the `multiple()` function needed to explicitly set it.
@@ -641,13 +641,13 @@ class CompositeScore(Score):
             llm_request_history = self.llm_request_history
             decision_tree = self.decision_tree
 
-        return Result(
-            name     = name,
-            value    = value,
+        return self.Result(
+            name        = name,
+            value       = value,
+            explanation = self.explanation[result_index],
+            quote       = self.quote[result_index],
             metadata = {
                 "overall_question": self.overall_questions[result_index],
-                "reasoning": self.reasoning[result_index],
-                "relevant_quote": self.relevant_quotes[result_index],
                 "element_results": element_results,
                 "llm_request_history": llm_request_history,
                 "decision_tree": decision_tree
