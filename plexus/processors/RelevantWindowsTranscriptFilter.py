@@ -13,32 +13,32 @@ class RelevantWindowsTranscriptFilter(DataframeProcessor):
         self.next_count = parameters.get("next_count", 1)
 
     def process(self, dataframe: pd.DataFrame) -> pd.DataFrame:
-        def filter_transcript(transcript):
-            sentences = transcript.split('\n')
+        def filter_text(text):
+            sentences = text.split('\n')
             relevance_flags = [
                 self.classifier.predict(
-                    model_input = Score.Input(transcript=sentence)
-                ).score for sentence in sentences
+                    model_input = Score.Input(text=sentence)
+                ).value for sentence in sentences
             ]
             include_flags = self.compute_inclusion_flags(relevance_flags)
 
-            filtered_transcript = []
+            filtered_text = []
             for i in range(len(sentences)):
                 if include_flags[i]:
-                    filtered_transcript.append(sentences[i])
+                    filtered_text.append(sentences[i])
                 elif self.should_insert_ellipsis(i, include_flags, sentences):
-                    filtered_transcript.append("...")
+                    filtered_text.append("...")
 
-            combined_transcript = self.combine_consecutive_ellipses(filtered_transcript)
-            result = '\n'.join(combined_transcript).strip()
+            combined_text = self.combine_consecutive_ellipses(filtered_text)
+            result = '\n'.join(combined_text).strip()
 
             if result == "...":
                 return ""
 
-            logging.debug(f"Filtered transcript: {result}")
+            logging.debug(f"Filtered text: {result}")
             return result
 
-        dataframe['text'] = dataframe['text'].apply(filter_transcript)
+        dataframe['text'] = dataframe['text'].apply(filter_text)
         self.display_summary()
         return dataframe
 
@@ -59,10 +59,10 @@ class RelevantWindowsTranscriptFilter(DataframeProcessor):
         next_included = index < len(include_flags) - 1 and include_flags[index + 1]
         return not include_flags[index] and (prev_included or next_included)
 
-    def combine_consecutive_ellipses(self, filtered_transcript):
-        combined_transcript = []
-        for sentence in filtered_transcript:
-            if sentence == "..." and combined_transcript and combined_transcript[-1] == "...":
+    def combine_consecutive_ellipses(self, filtered_text):
+        combined_text = []
+        for sentence in filtered_text:
+            if sentence == "..." and combined_text and combined_text[-1] == "...":
                 continue
-            combined_transcript.append(sentence)
-        return combined_transcript
+            combined_text.append(sentence)
+        return combined_text

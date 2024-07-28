@@ -63,7 +63,7 @@ class KeywordClassifier(Score):
         """
         return Score.Result(
             name  = self.parameters.score_name,
-            value = self.is_relevant(model_input.transcript)
+            value = self.is_relevant(model_input.text)
         )
 
     def predict_validation(self):

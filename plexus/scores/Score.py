@@ -114,7 +114,20 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         value:    Union[str, bool]
         metadata: dict = {}
         error:    Optional[str] = None
-    
+
+        def __eq__(self, other):
+            if isinstance(other, Score.Result):
+                return self.value.lower() == other.value.lower()
+            elif isinstance(other, str):
+                return self.value.lower() == other.lower()
+            return NotImplemented
+        
+        def is_yes(self):
+            return self.value.lower() == 'yes'
+
+        def is_no(self):
+            return self.value.lower() == 'no'
+
     def __init__(self, **parameters):
         """
         Initialize the Score instance with the given parameters.

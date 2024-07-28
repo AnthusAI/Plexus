@@ -55,7 +55,7 @@ class LLMClassifier(CompositeScore):
         {
             "type": "function",
             "function": {
-            "name": "classify_yes_no_with_reasoning",
+            "name": "classify_yes_no_with_explanation",
             "description": "Provide a clear 'yes', 'no' as structured data.",
             "parameters": {
                 "type": "object",
@@ -65,27 +65,27 @@ class LLMClassifier(CompositeScore):
                         "enum": ["yes", "no"],
                         "description": "Valid values: 'yes', 'no'.  Required."
                     },
-                    "reasoning": {
+                    "explanation": {
                         "type": "string",
-                        "description": "The reasoning behind the answer. Required!"
+                        "description": "The explanation behind the answer. Required!"
                     },
                     "relevant_quote": {
                         "type": "string",
                         "description": "Any relevant quote from the transcript that supports the answer. Optional."
                     }
                 },
-                "required": ["answer", "reasoning"]
+                "required": ["answer", "explanation"]
                 }
             }
         }
     ]
 
-    @retry(
-        wait=wait_random_exponential(multiplier=10, max=600),
-        retry=retry_if_exception_type(ValueError),
-        stop=stop_after_attempt(20),
-        before_sleep=before_sleep_log(logging, logging.INFO)
-    )
+    # @retry(
+    #     wait=wait_random_exponential(multiplier=10, max=600),
+    #     retry=retry_if_exception_type(ValueError),
+    #     stop=stop_after_attempt(20),
+    #     before_sleep=before_sleep_log(logging, logging.INFO)
+    # )
     def compute_element_for_chunk(self, *, name, element_type, previous_messages=None, prompt, chunk):
         """
         The orchestration framework in CompositeScore calls this function to do the OpenAI work.
@@ -143,11 +143,17 @@ class LLMClassifier(CompositeScore):
             # TODO: Make this more robust, possibly by breaking the chunk into sub-chunks and attempting to process
             # each sub-chunk separately, so that we will discard less transcript data if any sub-chunk fails.
             score_result_metadata['value'] = "No"
-            return Result(value="No", metadata=score_result_metadata)
+            return Score.Result(
+                value="No",
+                metadata=score_result_metadata
+            )
 
         if response.choices[0]['finish_reason'] == 'content_filter':
             score_result_metadata['value'] = "No"
-            return Result(value="No", metadata=score_result_metadata)
+            return Score.Result(
+                value="No",
+                metadata=score_result_metadata
+            )
 
         # Add a log of this chat history including the response to the score result metadata.
         messages.append(
@@ -164,27 +170,25 @@ class LLMClassifier(CompositeScore):
         # If the first word is a yes/no then call that the answer.
         if first_word in ["yes", "no"]:
             answer = first_word
-            reasoning = response_content[len(first_word):].strip()
+            explanation = response_content[len(first_word):].strip()
 
-            if reasoning and reasoning[0].islower():
-                reasoning = reasoning.capitalize()
+            if explanation and explanation[0].islower():
+                explanation = explanation.capitalize()
 
         # If not then ask for clarification.
         else:
-            reasoning = response_content
+            explanation = response_content
             yes_or_no = self.clarify_yes_or_no(name=name, messages=messages)
             answer = yes_or_no['answer']
             messages.extend(yes_or_no['messages'])
 
         #logging.info(f"Response:  {response_content}")
         #logging.info(f"Value:     {answer}")
-        #logging.info(f"Reasoning: {reasoning}")
+        #logging.info(f"Reasoning: {explanation}")
 
-        # The answer result and the reasoning.
+        # The answer result and the explanation.
         score_result_metadata['response_content'] = response_content
         score_result_metadata['value'] =     answer
-        
-        score_result_metadata['reasoning'] = reasoning
 
         # The API tokens used.
         score_result_metadata['prompt_tokens'] =     response.usage.prompt_tokens
@@ -213,11 +217,15 @@ class LLMClassifier(CompositeScore):
         logging.info(f"Total token counts:  Input: {self.prompt_tokens}  Output: {self.completion_tokens}")
         logging.info(f"Total costs for score:  Input: {self.input_cost}, Output: {self.output_cost}, Total: {self.total_cost}")
 
-        self.element_results.append(
-            Result(value=score_result_metadata['value'], metadata=score_result_metadata)
+        result = self.Result(
+            name        = name,
+            value       = score_result_metadata['value'],
+            explanation = explanation,
+            quote       = "",
+            metadata    = score_result_metadata
         )
-
-        return Result(value=score_result_metadata['value'], metadata=score_result_metadata)
+        self.element_results.append(result)
+        return result
 
     def clarify_yes_or_no(self, *, name, messages, top_p=0.2):
         """
@@ -337,7 +345,7 @@ class LLMClassifier(CompositeScore):
 You're part of a text classification system for call center audio transcriptions.
 
 Goal:
-Your job is to examine chunks of text and make yes-or-no classifications, and also to provide your reasoning in terms of the question and the rules presented to you, and also to extract relevant quotes when applicable.
+Your job is to examine chunks of text and make yes-or-no classifications, and also to provide your explanation in terms of the question and the rules presented to you, and also to extract relevant quotes when applicable.
 
 Background:
 The system transcribes phone calls that are about 25 minutes long, filters them to find chunks that might possibly be relevant.  The chunks will be out of context and that might start with someone confusingly speaking an answer to a question that was trimmed out of the chunk of text.  Not all parts of the filtered transcript will necessarily apply to the question, you will almost always see extra noise.  Don't assume that statements you see without clear context are relevant to the question.  If you see a "Yes, we do", or, "No, I don't", then don't assume that it's about the question we're asking.  If you see someone talk about a question, don't assume it's about the question we're asking.  The agent will be filling out a form so they will be talking about questions in the call but that's different from our question that we're trying to answer here.  There will be a lot of irrelevant distractions in the transcripts, so understand that you'll hear stray things, and disregard anything without clear applicability to the question at hand.
@@ -366,7 +374,7 @@ Context:
 
         Args:
             element_response: The response from the user to the element prompt.  A dictionary
-                              with the elements: "answer", "reasoning", "relevant_quote".
+                              with the elements: "answer", "explanation", "relevant_quote".
         """
 
         if 'relevant_quote' not in element_response:
@@ -378,38 +386,38 @@ Context:
             "role": "assistant",
             "content": f"""
 {element_response['answer']}
-{element_response['reasoning']}
+{element_response['explanation']}
 Relevant quote: "{element_response['relevant_quote']}"
 """
     }
 
     # Define the tool for yes/no answer.
-    reasoning_and_relevant_quote_tool = [
+    explanation_and_relevant_quote_tool = [
         {
             "type": "function",
             "function": {
-            "name": "provide_reasoning_and_relevant_quote",
-            "description": "Provide the reasoning for the overall answer and if possible also a relevant quote from the transcript.",
+            "name": "provide_explanation_and_relevant_quote",
+            "description": "Provide the explanation for the overall answer and if possible also a relevant quote from the transcript.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                        "reasoning": {
+                        "explanation": {
                         "type": "string",
-                        "description": "The reasoning behind the answer. Required!"
+                        "description": "The explanation behind the answer. Required!"
                     },
                     "relevant_quote": {
                         "type": "string",
                         "description": "Any relevant quote from the transcript that supports the answer. Optional."
                     }
                 },
-                "required": ["reasoning", "relevant_quote"]
+                "required": ["explanation", "relevant_quote"]
                 }
             }
         }
     ]
-    def _compute_reasoning_and_relevant_quote_implementation(self, *, chat_history, value, result_index):
+    def _compute_explanation_and_relevant_quote_implementation(self, *, chat_history, value, result_index):
         """
-        Computes the reasoning and relevant quote for a specific result at a given index.
+        Computes the explanation and relevant quote for a specific result at a given index.
 
         This method is designed to handle a single result and should be called with the
         value of the result and the index of that result in the context of the overall
@@ -417,13 +425,13 @@ Relevant quote: "{element_response['relevant_quote']}"
         questions.
 
         Args:
-            value: The result for which reasoning and quote are to be computed.
+            value: The result for which explanation and quote are to be computed.
             result_index: The index of the result. This is used to select the corresponding
                         overall question if there are multiple. For a single overall question,
                         this should be 0.
 
         Returns:
-            A tuple containing the reasoning and the relevant quote for the specific result.
+            A tuple containing the explanation and the relevant quote for the specific result.
 
         Raises:
             AttributeError: If the 'overall_question' attribute is not defined.
@@ -431,7 +439,7 @@ Relevant quote: "{element_response['relevant_quote']}"
             ValueError: If 'result_index' is not 0 when 'overall_question' is a single value.
 
         Note:
-            This method updates the 'reasoning' and 'relevant_quotes' lists with the new
+            This method updates the 'explanation' and 'relevant_quotes' lists with the new
             computed values for the specific result.
         """        
         # Check if overall_question is a list and the result_index is valid
@@ -446,25 +454,25 @@ Relevant quote: "{element_response['relevant_quote']}"
 
         # Extract decision element results
         decision_element_results = self.element_results
-        # Filter results where the answer was 'yes' and collect reasoning
-        yes_reasoning = [elem.metadata.get('reasoning', '') for elem in decision_element_results if elem.metadata.get('value', '').lower() == 'yes']
-        # Use reasoning from 'yes' answers if available, otherwise use from 'no' answers
-        if yes_reasoning:
-            decision_reasoning = " ".join(yes_reasoning)
+        # Filter results where the answer was 'yes' and collect explanation
+        yes_explanation = [elem.metadata.get('explanation', '') for elem in decision_element_results if elem.metadata.get('value', '').lower() == 'yes']
+        # Use explanation from 'yes' answers if available, otherwise use from 'no' answers
+        if yes_explanation:
+            decision_explanation = " ".join(yes_explanation)
         else:
-            no_reasoning = [elem.metadata.get('reasoning', '') for elem in decision_element_results if elem.metadata.get('value', '').lower() == 'no']
-            decision_reasoning = " ".join(no_reasoning)
+            no_explanation = [elem.metadata.get('explanation', '') for elem in decision_element_results if elem.metadata.get('value', '').lower() == 'no']
+            decision_explanation = " ".join(no_explanation)
 
-        # Compute the reasoning and relevant quote for the specific result
-        self.compute_single_reasoning_and_relevant_quote(
+        # Compute the explanation and relevant quote for the specific result
+        self.compute_single_explanation_and_relevant_quote(
             chat_history=chat_history,
-            question=question + " " + decision_reasoning,
+            question=question + " " + decision_explanation,
             result=value)
 
-        # Return the reasoning and relevant quote for this specific result
-        return self.reasoning[-1], self.relevant_quotes[-1]
+        # Return the explanation and relevant quote for this specific result
+        return self.explanation[-1], self.quote[-1]
 
-    def compute_single_reasoning_and_relevant_quote(self, *, chat_history, question, result):
+    def compute_single_explanation_and_relevant_quote(self, *, chat_history, question, result):
         # Define the before_retry function within this function for better organization
         def before_sleep(retry_state):
             # This function now acts after a failure but before the next attempt
@@ -493,7 +501,7 @@ Relevant quote: "{element_response['relevant_quote']}"
             chat_history, question, result,
             is_retry=False,attempt_count=0, error=None, original_message=None, exception=None):
 
-            return self._compute_single_reasoning_and_relevant_quote(
+            return self._compute_single_explanation_and_relevant_quote(
                 chat_history=chat_history,
                 question=question,
                 result=result,
@@ -507,14 +515,14 @@ Relevant quote: "{element_response['relevant_quote']}"
         # Call the inner function with initial parameters
         inner_function(chat_history=chat_history, question=question, result=result)
 
-    def _compute_single_reasoning_and_relevant_quote(self, *,
+    def _compute_single_explanation_and_relevant_quote(self, *,
          chat_history, question, result,
          is_retry=False, attempt_count=0, error=None, original_message=None, exception=None):
         """
         Use the accumulated chat history to ask the model a new question, asking
-        it to condense the reasoning into a single sentence and to provide one
+        it to condense the explanation into a single sentence and to provide one
         relevant quote, in a structured format.  The end result is to set
-        # self.reasoning and self.relevant_quote.
+        # self.explanation and self.relevant_quote.
         """
  
         # Compute the next prompt in the chat history and add it to the history.
@@ -526,11 +534,11 @@ The overall question we're trying to answer through those previous questions is:
 
 Our logic concludes, based on the sub-questions, that the overall answer is: {result}.
 
-We need to provide reasoning for that answer.  Please look through the chat history at your responses for each chunk of transcript, which contain reasoning.  Sometimes they also provide relevant quotes.
+We need to provide explanation for that answer.  Please look through the chat history at your responses for each chunk of transcript, which contain explanation.  Sometimes they also provide relevant quotes.
 
-Please try to summarize your overall reasoning based on your own responses in the chat history.  If there are any relevant quotes in your responses in the chat history that would help explain your summary of your reasoning then please include a brief quote or two.  Do not imagine quotes that don't exist in this chat history.
+Please try to summarize your overall explanation based on your own responses in the chat history.  If there are any relevant quotes in your responses in the chat history that would help explain your summary of your explanation then please include a brief quote or two.  Do not imagine quotes that don't exist in this chat history.
 
-Provide your reasoning and if the quote using the `reasoning_and_relevant_quote_tool()` function.
+Provide your explanation and if the quote using the `explanation_and_relevant_quote_tool()` function.
 
 The relevant quotes should be short, succinct.  Just one or two lines.  Don't provide any quotes if the answer is no.  Only provide quotes that are in the transcript, from your responses, don't offer quotes that were examples from the prompts from the user.
 """
@@ -570,7 +578,7 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
             name='summary',
             element_type=element_type,
             messages=new_chat_history,
-            tools=self.reasoning_and_relevant_quote_tool,
+            tools=self.explanation_and_relevant_quote_tool,
             max_tokens=2048
         )
 
@@ -596,14 +604,13 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
                 exception=e,
                 tool_arguments=tool_call.function.arguments
             )
-        #logging.info(f"Reasoning: {tool_results.get('reasoning', '')}")
+        #logging.info(f"Reasoning: {tool_results.get('explanation', '')}")
         #logging.info(f"Relevant quote: {tool_results.get('relevant_quote', '')}")
 
-        # Store the reasoning and quote.
-        reasoning = tool_results.get('reasoning', "")
-        self.reasoning.append(reasoning)
-        relevant_quotes = tool_results.get('relevant_quote', "")
-        self.relevant_quotes.append(relevant_quotes)
+        explanation = tool_results.get('explanation', "")
+        self.explanation.append(explanation)
+        quote = tool_results.get('relevant_quote', "")
+        self.quote.append(quote)
 
         # Calculate costs
         cost_details = calculate_cost(
@@ -621,8 +628,6 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
             'input_cost':        cost_details['input_cost'],
             'output_cost':       cost_details['output_cost'],
             'total_cost':        cost_details['total_cost'],
-            'reasoning':         reasoning,
-            'relevant_quotes':   relevant_quotes,
             'chat_history':      new_chat_history
         }
 
@@ -643,5 +648,11 @@ The relevant quotes should be short, succinct.  Just one or two lines.  Don't pr
         logging.info(f"Total costs for score:  Input: {self.input_cost}, Output: {self.output_cost}, Total: {self.total_cost}")
 
         self.element_results.append(
-            Result(value='summarized', metadata=result_metadata)
+            self.Result(
+                name        = 'summary',
+                value       = 'summarized',
+                explanation = explanation,
+                quote       = quote,
+                metadata    = result_metadata
+            )
         )
