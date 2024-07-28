@@ -128,7 +128,7 @@ class ScorecardResultsAnalysis:
         expenses=None
         ):
 
-        # We need to compute a `results` list containing the ScoreResult for each score,
+        # We need to compute a `results` list containing the Score.Result for each score,
         # as a long, flat list, over all scorecard results.
         results = []
         visualization_tasks = []

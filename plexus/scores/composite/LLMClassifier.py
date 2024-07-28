@@ -17,7 +17,6 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 
 from plexus.scores.CompositeScore import CompositeScore
 from plexus.scores.Score import Score
-from plexus.ScoreResult import ScoreResult
 from plexus.Registries import scorecard_registry
 
 # logging.getLogger("openai._base_client").setLevel(logging.INFO)
