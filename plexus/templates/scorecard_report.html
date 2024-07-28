@@ -359,7 +359,7 @@
                         </div>
                     </div>
                 </div>
-                {% if result.element_results %}
+                {% if result.metadata.element_results %}
                 <div>
                     <b>Decision Elements:</b>
                     <div class="collapsible_section">
@@ -367,7 +367,7 @@
                         <input type="checkbox" class="collapsible_toggle">
                         <div class="collapsible_content">
                             <elements class="collapsible_content">
-                                {% for element in result.element_results %}
+                                {% for element in result.metadata.element_results %}
                                     <element>
                                         <i class="{{ 'fa-solid fa-circle-question icon' if 'clarification_reasoning' in element.metadata else 'fa-circle-question fa-regular icon' }}"></i>
                                         <div style="display: flex; flex-direction: column; gap: 1em;">
@@ -379,7 +379,7 @@
                                                 <div class="label {{ 'correct' if element.metadata['value'].lower() == 'yes' else 'incorrect' }}">{{ element.metadata['value']|upper }}</div>
                                             </div>
                                             <div class="reasoning">
-                                                <b>Reasoning</b> <span>{{ element.metadata['reasoning']|replace("\n", "<br/>") }}</span>
+                                                <b>Reasoning</b> <span>{{ element.metadata['response_content']|replace("\n", "<br/>") }}</span>
                                             </div>
                                             {% if 'clarification_reasoning' in element.metadata %}
                                                 <div class="reasoning"><b>Reasoning about rules</b> <span>{{ element.metadata['clarification_reasoning']|replace("\n", "<br/>") }}</span></div>
