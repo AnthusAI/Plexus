@@ -359,9 +359,9 @@ Provide your answer as either "Yes" or "No".
 
         return [
             LangGraphScore.Result(
-                score_name=self.parameters.score_name,
-                score=validation_result,
-                explanation=explanation
+                name        = self.parameters.score_name,
+                value       = validation_result,
+                explanation = explanation
             )
         ]
 

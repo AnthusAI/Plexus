@@ -41,9 +41,9 @@ class AWSComprehendEntityExtractor(Score):
 
         return [
             self.Result(
-                score_name=self.parameters.score_name,
-                score=first_named_entity,
-                explanation=f"First person entity extracted: {first_named_entity}. Relevant quotes: {quotes}"
+                name =        self.parameters.score_name,
+                value =       first_named_entity,
+                explanation = f"First person entity extracted: {first_named_entity}. Relevant quotes: {quotes}"
             )
         ]
 

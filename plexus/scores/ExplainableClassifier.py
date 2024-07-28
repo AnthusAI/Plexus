@@ -413,13 +413,13 @@ class ExplainableClassifier(Score):
                         explanation = f"Keyword match found: '{keyword}' in the sentence: '{matching_sentence.strip()}'"
                         return [
                             self.Result(
-                                score_name=self.parameters.score_name,
-                                score="Yes",
-                                confidence=1.0,
-                                explanation=explanation
+                                name =        self.parameters.score_name,
+                                value =       "Yes",
+                                confidence =  1.0,
+                                explanation = explanation
                             )
                         ]
-            
+
             vectorized_input = self.vectorize_transcript(preprocessed_input)
         else:
             vectorized_input = model_input
@@ -440,9 +440,9 @@ class ExplainableClassifier(Score):
 
         return [
             self.Result(
-                score_name = self.parameters.score_name,
-                score = prediction_label,
-                confidence = confidence_score,
+                name =        self.parameters.score_name,
+                value =       prediction_label,
+                confidence =  confidence_score,
                 explanation = explanation
             )
         ]
