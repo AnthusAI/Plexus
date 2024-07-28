@@ -115,8 +115,8 @@ This is the text of a call center phone call that we're reviewing for QA purpose
 
         return [
             LangGraphScore.Result(
-                score_name =  self.parameters.score_name,
-                score =       result["entity"],
+                name  =       self.parameters.score_name,
+                value =       result["entity"],
                 explanation = AgenticExtractor.clean_quote(result["quote"])
             )
         ]

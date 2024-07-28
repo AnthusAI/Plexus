@@ -526,8 +526,8 @@ class DeepLearningSemanticClassifier(Score):
             logging.info(f"Predicted label: {predicted_label}")
 
             return self.Result(
-                score_name = self.parameters.score_name,
-                score = predicted_label,
+                name =       self.parameters.score_name,
+                value =      predicted_label,
                 confidence = confidence_score
             )
         except Exception as e:

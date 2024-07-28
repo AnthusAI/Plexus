@@ -227,10 +227,12 @@ class AccuracyExperiment(Experiment):
         # Count the number correct out of all questions.
         for result in results:
             for question in self.score_names():
-                score_label = str(result['results'][question].get('value', 'NA')).lower()
-                human_label = str(result['results'][question].get('human_label', 'NA')).lower()
-                logging.info(f"Question: {question}, score Label: {score_label}, Human Label: {human_label}")
-                is_match = 1 if result['results'][question].get('correct', False) else 0
+                score_value = str(result['results'][question].value).lower()
+                if not score_value or score_value.strip() == "":
+                    score_value = "na"
+                human_label = str(result['results'][question].metadata['human_label']).lower()
+                logging.info(f"Question: {question}, score Label: {score_value}, Human Label: {human_label}")
+                is_match = 1 if result['results'][question].metadata['correct'] else 0
                 total_correct += is_match
                 total_questions += 1
 
@@ -349,7 +351,7 @@ class AccuracyExperiment(Experiment):
                 # This is where we evaluate the score by comparing it against human labels.
 
                 # Normalize the score result value for comparison
-                score_result_value = score_result.score.strip().lower()
+                score_result_value = score_result.value.strip().lower()
                 if not score_result_value:
                     score_result_value = 'na'
 
@@ -364,15 +366,15 @@ class AccuracyExperiment(Experiment):
                 if human_label == 'nan':
                     human_label = 'na'
 
-                score_result['human_label'] = human_label
-                score_result['correct'] = score_result_value == human_label
+                score_result.metadata['human_label'] = human_label
+                score_result.metadata['correct'] = score_result_value == human_label
 
                 # Log warnings for mismatches and append to incorrect results
-                if not score_result['correct']:
+                if not score_result.metadata['correct']:
                     logging.warning(f"Human label '{human_label}' does not match score '{score_result_value}' for question '{question_name}' in session '{session_id}'")
 
                 # Also, add the full text to the score result.
-                score_result['text'] = text
+                score_result.metadata['text'] = text
 
                 logging.debug(f"Score result for {question_name}: {score_result}")
 

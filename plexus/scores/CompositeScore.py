@@ -641,18 +641,18 @@ class CompositeScore(Score):
             llm_request_history = self.llm_request_history
             decision_tree = self.decision_tree
 
-        return ScoreResult(
-            name=name,
-            value=value,
-            metadata={
+        return Result(
+            name     = name,
+            value    = value,
+            metadata = {
                 "overall_question": self.overall_questions[result_index],
                 "reasoning": self.reasoning[result_index],
-                "relevant_quote": self.relevant_quotes[result_index]
-            },
+                "relevant_quote": self.relevant_quotes[result_index],
+                "element_results": element_results,
+                "llm_request_history": llm_request_history,
+                "decision_tree": decision_tree
 
-            element_results=element_results,
-            llm_request_history=llm_request_history,
-            decision_tree=decision_tree
+            },
         )
 
     def yes(self):

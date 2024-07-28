@@ -31,7 +31,7 @@ class ScorecardResultsAnalysis:
         for entry in self.scorecard_results.data:
             for score_detail in entry['results'].values():
                 total_scores += 1
-                if score_detail.get('correct', False):
+                if score_detail.metadata.get('correct', False):
                     total_correct_scores += 1
         overall_accuracy_percentage = (total_correct_scores / total_scores * 100) if total_scores else 0
         return {
@@ -44,7 +44,7 @@ class ScorecardResultsAnalysis:
         total_cost = 0
         for scorecard_result in self.scorecard_results.data:
             for score_result in scorecard_result.get('results', {}).values():
-                for element_result in score_result.get('element_results', []):
+                for element_result in score_result.metadata.get('element_results', []):
                     # try:
                         element_metadata = element_result.metadata
                         if mode == 'production' and element_metadata.get('element_name') == 'summary':
@@ -59,7 +59,7 @@ class ScorecardResultsAnalysis:
         total_scores = 0
         for score_detail in entry['results'].values():
             total_scores += 1
-            if score_detail.get('correct', False):
+            if score_detail.metadata.get('correct', False):
                 total_correct_scores += 1
         row_accuracy_percentage = (total_correct_scores / total_scores * 100) if total_scores else 0
         return row_accuracy_percentage
@@ -73,11 +73,15 @@ class ScorecardResultsAnalysis:
                 data_row = []
                 annotation_row = []
                 for question in self._extract_score_names():
-                    score_label = str(result['results'][question].get('value', 'NA')).lower()
-                    human_label = str(result['results'][question].get('human_label', 'NA')).lower()
-                    logging.info(f"Question: {question}, score Label: {score_label}, Human Label: {human_label}")
-                    data_row.append(result['results'][question].get('correct', False))  # Use 1 for match, 0 for mismatch for the heatmap
-                    annotation_row.append(f"{score_label}\nh:{human_label}")
+                    score_value = str(result['results'][question].value).lower()
+                    if not score_value or score_value.strip() == "":
+                        score_value = 'na'
+                    human_label = str(result['results'][question].metadata['human_label']).lower()
+                    if not human_label or human_label.strip() == "":
+                        human_label = 'na'
+                    logging.info(f"Question: {question}, score Label: {score_value}, Human Label: {human_label}")
+                    data_row.append(result['results'][question].metadata.get('correct', False))  # Use 1 for match, 0 for mismatch for the heatmap
+                    annotation_row.append(f"{score_value}\nh:{human_label}")
                 heatmap_data.append(data_row)
                 annotations.append(annotation_row)
             return heatmap_data, annotations
@@ -137,16 +141,17 @@ class ScorecardResultsAnalysis:
                         scorecard_result['session_id']
                     
                     # Add this one to the list if it meets the criteria
-                    if not (only_incorrect_scores and scorecard_result['results'][score_result]['correct']):
+                    if not (only_incorrect_scores and scorecard_result['results'][score_result].metadata['correct']):
                         results.append(scorecard_result['results'][score_result])
 
                     if (scorecard_result['results'][score_result].error is None and
-                        scorecard_result['results'][score_result].decision_tree is not None):
+                        'decision_tree' in scorecard_result['results'][score_result].metadata and
+                        scorecard_result['results'][score_result].metadata['decision_tree'] is not None):
                         task = executor.submit(
                             self.visualize_decision_path,
                             score_result=scorecard_result['results'][score_result],
-                            decision_tree=scorecard_result['results'][score_result].decision_tree,
-                            element_results=scorecard_result['results'][score_result].element_results,
+                            decision_tree=scorecard_result['results'][score_result].metadata['decision_tree'],
+                            element_results=scorecard_result['results'][score_result].metadata['element_results'],
                             session_id=scorecard_result['session_id'],
                             score_name=score_result
                         )
@@ -386,9 +391,8 @@ class ScorecardResultsAnalysis:
                         total_input_costs[score_name] = 0
                         total_output_costs[score_name] = 0
                         
-                    metadata = score_result.get('metadata', {})
-                    total_input_costs[score_name] += float(metadata.get('input_cost', 0))
-                    total_output_costs[score_name] += float(metadata.get('output_cost', 0))
+                    total_input_costs[score_name] += float(score_result.metadata.get('input_cost', 0))
+                    total_output_costs[score_name] += float(score_result.metadata.get('output_cost', 0))
 
             score_names = list(total_input_costs.keys())
             input_costs = [total_input_costs[name] for name in score_names]
@@ -417,7 +421,7 @@ class ScorecardResultsAnalysis:
             for result in results:
                 result_total_cost = 0
                 for score_result in result['results'].values():
-                    for element_result in score_result.get('element_results', []):
+                    for element_result in score_result.metadata.get('element_results', []):
                         result_total_cost += element_result.metadata.get('total_cost', 0)
                 total_costs.append(result_total_cost)
 
@@ -436,8 +440,8 @@ class ScorecardResultsAnalysis:
 
             for result in results:
                 for score_name, score_result in result['results'].items():
-                    metadata = score_result.get('metadata', {})
-                    total_input_costs[score_name] = total_input_costs.get(score_name, 0) + float(metadata.get('input_cost', 0))
+                    total_input_costs[score_name] = \
+                        total_input_costs.get(score_name, 0) + float(score_result.metadata.get('input_cost', 0))
 
             score_names = list(total_input_costs.keys())
             input_costs = [total_input_costs[name] for name in score_names]
@@ -455,7 +459,7 @@ class ScorecardResultsAnalysis:
 
             for result in results:
                 for score_name, score_result in result['results'].items():
-                    for element_result in score_result.get('llm_request_history', []):
+                    for element_result in score_result.metadata.get('llm_request_history', []):
                         element_type = element_result.get('element_type', 'unknown')
                         total_costs[element_type] = element_result.get('total_cost', 0)
 
@@ -475,8 +479,7 @@ class ScorecardResultsAnalysis:
 
             for result in results:
                 for score_name, score_result in result['results'].items():
-                    metadata = score_result.get('metadata', {})
-                    llm_calls = int(metadata.get('llm_request_count', 0))
+                    llm_calls = int(score_result.metadata.get('llm_request_count', 0))
                     total_llm_calls[score_name] = total_llm_calls.get(score_name, 0) + llm_calls
 
             score_names = list(total_llm_calls.keys())
@@ -507,8 +510,8 @@ class ScorecardResultsAnalysis:
 
         for scorecard_result in results:
             for question_name, score_result in scorecard_result['results'].items():
-                if score_result['correct'] != True:
-                    report += f"{scorecard_result['session_id']}, {question_name}, {score_result['human_label']}, {score_result['value']}, ,\n"
+                if score_result.metadata['correct'] != True:
+                    report += f"{scorecard_result['session_id']}, {question_name}, {score_result.metadata['human_label']}, {score_result.value}, ,\n"
                         
         return report
     
@@ -518,7 +521,7 @@ class ScorecardResultsAnalysis:
 
         for result in self.scorecard_results.data:
             for question in self._extract_score_names():
-                correct = result['results'][question].get('correct', False)
+                correct = result['results'][question].metadata['correct']
                 question_total_counts[question] += 1
                 if correct:
                     question_correct_counts[question] += 1

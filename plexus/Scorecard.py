@@ -238,12 +238,7 @@ class Scorecard:
             for future in as_completed(future_to_score_name):
                 results_list = future.result()
                 for result in results_list:
-                    score_name = ""
-                    if result.__class__.__name__ == "ScoreResult": 
-                        score_name = result.name
-                    else:
-                        score_name = result.score_name
-                    score_results_dict[score_name] = result
+                    score_results_dict[result.name] = result
 
         return score_results_dict
 

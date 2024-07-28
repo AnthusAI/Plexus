@@ -98,8 +98,8 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         text : str
             The text to be classified.
         """
-        text: str
-        metadata: Optional[dict] = None
+        text:     str
+        metadata: dict = {}
 
     class Result(BaseModel):
         """
@@ -107,11 +107,13 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
 
         Attributes
         ----------
-        score : str
-            The predicted score label.
+        value : str
+            The predicted score value.
         """
-        score_name: str
-        score: Union[str, bool]
+        name:     str
+        value:    Union[str, bool]
+        metadata: dict = {}
+        error:    Optional[str] = None
     
     def __init__(self, **parameters):
         """
@@ -177,7 +179,6 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         """
         return os.path.join(self.report_directory_path(), file_name).replace(' ', '_')
 
-    @abstractmethod
     def train_model(self):
         """
         Train the model on the training data.
@@ -189,7 +190,6 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         """
         pass
 
-    @abstractmethod
     def predict_validation(self):
         """
         Predict on the validation set.
@@ -265,14 +265,12 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
 
         mlflow.end_run()
 
-    @abstractmethod
     def register_model(self):
         """
         Register the model with the model registry.
         """
         pass
 
-    @abstractmethod
     def save_model(self):
         """
         Save the model to the model registry.
@@ -291,7 +289,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         self.model = mlflow.keras.load_model(context.artifacts["model"])
 
     @abstractmethod
-    def predict(self, model_input: Input):
+    def predict(self, context, model_input: Input):
         """
         Make predictions on the input data.
 
@@ -370,7 +368,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         """
         pass
 
-    def predict(self, X):
+    def predict(self, context, model_input: Input) -> Result:
         """
         Make predictions on the input data.
 

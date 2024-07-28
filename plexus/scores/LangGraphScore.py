@@ -41,10 +41,9 @@ class LangGraphScore(Score):
         """
         Model output containing the validation result.
 
-        :param score: Validation result for the text.
         :param explanation: Detailed explanation of the validation result.
         """
-        score: str
+        ...
         explanation: str
 
     def __init__(self, **parameters):

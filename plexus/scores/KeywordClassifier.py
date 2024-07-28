@@ -62,8 +62,8 @@ class KeywordClassifier(Score):
         :return: The predictions, which can be one of the supported output types (numpy.ndarray, pandas.Series, pandas.DataFrame, List, Dict, pyspark.sql.DataFrame).
         """
         return Score.Result(
-            score_name = self.parameters.score_name,
-            score = self.is_relevant(model_input.transcript)
+            name  = self.parameters.score_name,
+            value = self.is_relevant(model_input.transcript)
         )
 
     def predict_validation(self):
