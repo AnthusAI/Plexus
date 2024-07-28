@@ -255,7 +255,7 @@
 
 {% set context = namespace(current_session_id='', section_opened=false) %}
 {% for result in results %}
-    {% if result.session_id != context.current_session_id %}
+    {% if result.metadata['session_id'] != context.current_session_id %}
         {% if context.section_opened %}
             <!-- Close the previous section if it's not the first iteration -->
             </section>
@@ -268,16 +268,16 @@
                         <div style="display: flex; justify-content: space-between; gap: 2em;">
                             <div style="flex: 3; display: flex; flex-direction: column; gap: 1em;">    
                                 <i class="fas fa-phone icon"></i>
-                                <h2>Call Session <span class="fixed">{{ result.session_id }}</span></h2>
+                                <h2>Call Session <span class="fixed">{{ result.metadata['session_id'] }}</span></h2>
                             </div>
                         </div>
                     </div>
                 </metadata>
             </score>
-        {% set context.current_session_id = result.session_id %}
+        {% set context.current_session_id = result.metadata['session_id'] %}
         {% set context.section_opened = true %}
     {% endif %}
-    <score class="{{ 'correct' if include_evaluation and result.correct else 'incorrect' if include_evaluation else '' }}">
+    <score class="{{ 'correct' if include_evaluation and result.metadata['correct'] else 'incorrect' if include_evaluation else '' }}">
 
         <metadata>
             <div style="display: flex; flex-direction: column; gap: 1em;">
@@ -285,7 +285,7 @@
                     <div style="flex: 3; display: flex; flex-direction: column; gap: 1em;">
                         <div><h2>Score: {{ result.name }}</h2></div>
                         {% if result.metadata and include_evaluation %}
-                            <div><b>Overall question:</b> {{ result.metadata.overall_question }}</div>
+                            <div><b>Overall question:</b> {{ result.metadata['overall_question'] }}</div>
                         {% endif %}
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); font-weight: bold; margin: 0 10%; gap: 3em;">
                             <div>AI Answer</div>
@@ -297,23 +297,21 @@
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 3em; margin: 0 10%;">
                             <div class="label">{{ result.value|upper }}</div>
                             {% if include_evaluation %}
-                            <div class="label">{{ result.human_label|upper }}</div>
-                            <div class="label {{ 'correct' if result.correct else 'incorrect' }}">{{ 'YES' if result.correct else 'NO' }}</div>
+                            <div class="label">{{ result.metadata['human_label']|upper }}</div>
+                            <div class="label {{ 'correct' if result.metadata['correct'] else 'incorrect' }}">{{ 'YES' if result.metadata['correct'] else 'NO' }}</div>
                             {% endif %}
                         </div>
-                        {% if result.metadata %}
-                            <div><b>Reasoning:</b> {{ result.metadata.reasoning|replace("\n", "<br/>") }}</div>
-                            {% if result.metadata.relevant_quote|trim %}
-                            <div><b>Relevant quote:</b> <i>"{{ result.metadata.relevant_quote }}"</i></div>
-                            {% endif %}
+                        <div><b>Explanation:</b> {{ result.explanation|replace("\n", "<br/>") }}</div>
+                        {% if result.quote|trim %}
+                        <div><b>Quote:</b> <i>"{{ result.quote }}"</i></div>
                         {% endif %}
                         {% if result.error %}
                             <div><b>Error:</b> {{ result.error }}</div>
                         {% endif %}
                     </div>
-                    {% if result.visualization_image_base64 %}
+                    {% if result.metadata['visualization_image_base64'] %}
                     <div style="flex: 2; display: flex; justify-content: center; align-items: start;">
-                        <img onclick="enlargeImage(this.src)" style="width: 100%; height: auto; max-width: 500px; margin-top: 2em;" src="data:image/png;base64,{{ result.visualization_image_base64 }}" alt="Decision Path Visualization">
+                        <img onclick="enlargeImage(this.src)" style="width: 100%; height: auto; max-width: 500px; margin-top: 2em;" src="data:image/png;base64,{{ result.metadata['visualization_image_base64'] }}" alt="Decision Path Visualization">
                     </div>
                     {% endif %}
                 </div>
@@ -351,13 +349,13 @@
                 </div>
                 {% endif %}
                 <div>
-                    <b>Full Transcript:</b>
+                    <b>Full Text:</b>
                     <div class="collapsible_section">
                         <label for="collapsible">Click to expand</label>
                         <input type="checkbox" class="collapsible_toggle">
                         <div class="collapsible_content">
                             <br/>
-                            {{ result.transcript|replace("\n", "<br/>")|default("No transcript available", true) }}
+                            {{ result.metadata['text']|replace("\n", "<br/>")|default("No text available", true) }}
                         </div>
                     </div>
                 </div>
