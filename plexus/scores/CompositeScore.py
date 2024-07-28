@@ -11,7 +11,6 @@ import pandas as pd
 
 from plexus.processors.RelevantWindowsTranscriptFilter import RelevantWindowsTranscriptFilter
 from plexus.scores.Score import Score
-from plexus.ScoreResult import ScoreResult
 from plexus.Registries import scorecard_registry
 from plexus.scores.KeywordClassifier import KeywordClassifier
 from plexus.PromptTemplateLoader import PromptTemplateLoader
@@ -101,7 +100,7 @@ class CompositeScore(Score):
         instance.input_cost = Decimal(data['input_cost'])
         instance.output_cost = Decimal(data['output_cost'])
         instance.total_cost = Decimal(data['total_cost'])
-        instance.element_results = [ScoreResult.from_dict(result) for result in data['element_results']]
+        instance.element_results = [Score.Result.from_dict(result) for result in data['element_results']]
         instance.filtered_text = data['filtered_text']
         instance.chat_history = data['chat_history']
 
@@ -307,7 +306,7 @@ class CompositeScore(Score):
             text (str): The text text to use for computing the result.
 
         Returns:
-            ScoreResult: The result of the element classification.
+            Score.Result: The result of the element classification.
         """
         pass
 

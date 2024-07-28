@@ -11,7 +11,6 @@ import importlib.util
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from plexus.ScoreResult import ScoreResult
 from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
 import plexus.scores
@@ -222,7 +221,7 @@ class Scorecard:
         else:
             error_string = f"No score found for question: \"{score_name}\""
             logging.info(error_string)
-            return ScoreResult(value="Error", error=error_string)
+            return Score.Result(value="Error", error=error_string)
 
     def score_entire_text(self, *, text, subset_of_score_names=None, thread_pool_size=25):
         logging.info(f"score_entire_text method. subset_of_score_names: {subset_of_score_names}")

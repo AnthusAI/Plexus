@@ -7,4 +7,3 @@ from .PromptTemplateLoader import PromptTemplateLoader
 from .Scorecard import Scorecard
 from .ScorecardResults import ScorecardResults
 from .ScorecardResultsAnalysis import ScorecardResultsAnalysis
-from .ScoreResult import ScoreResult

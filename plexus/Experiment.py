@@ -26,7 +26,6 @@ from graphviz import Digraph
 from jinja2 import Template
 
 from plexus.scores.CompositeScore import CompositeScore
-from .ScoreResult import ScoreResult
 from .Scorecard import Scorecard
 from .ScorecardResults import ScorecardResults
 from .ScorecardResultsAnalysis import ScorecardResultsAnalysis
@@ -384,7 +383,7 @@ class AccuracyExperiment(Experiment):
                 if isinstance(e, requests.exceptions.HTTPError):
                     logging.error(f"HTTPError: {e.response.text}")
 
-                score_result = ScoreResult(value="Error", error=str(e))
+                score_result = Score.Result(value="Error", error=str(e))
 
         # logging.info(f"Total score results: {len(self.all_score_results)}")
         # logging.info(f"Total incorrect score results: {len(self.incorrect_score_results)}")
