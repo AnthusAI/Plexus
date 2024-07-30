@@ -3,8 +3,9 @@ import logging
 import traceback
 import graphviz
 from langsmith import Client
-from typing import Tuple, Literal, Optional, Any
-from pydantic import ConfigDict
+from typing import Tuple, Literal, Optional, Any, TypedDict, List, Dict
+from pydantic import BaseModel, ConfigDict, create_model
+from typing import Type
 
 from plexus.scores.Score import Score
 
@@ -17,7 +18,13 @@ from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langchain_google_vertexai import ChatVertexAI
 from langchain_community.callbacks import OpenAICallbackHandler
 
+from langgraph.graph import StateGraph, END
+
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
+
+# Logging.
+from langchain.globals import set_debug
+set_debug(True)
 
 class LangGraphScore(Score):
     """
@@ -36,6 +43,7 @@ class LangGraphScore(Score):
         model_region: Optional[str] = None
         temperature: Optional[float] = 0.1
         max_tokens: Optional[int] = 500
+        graph: Optional[list[dict]] = None
 
     class Result(Score.Result):
         """
@@ -45,6 +53,13 @@ class LangGraphScore(Score):
         """
         ...
         explanation: str
+
+    class GraphState(BaseModel):
+        text: str
+        is_not_empty: Optional[bool]
+        value: Optional[str]
+        explanation: Optional[str]
+        reasoning: Optional[str]
 
     def __init__(self, **parameters):
         """
@@ -378,3 +393,87 @@ class LangGraphScore(Score):
         if hasattr(self, 'agent_executor'):
             self.agent_executor.memory.memories["text"] = state.text
         return state
+
+    def create_combined_graphstate_class(self, instances: list) -> Type['LangGraphScore.GraphState']:
+        """
+        Dynamically create a combined GraphState class based on all nodes in the workflow.
+        """
+        attributes: Dict[str, Any] = {}
+        for instance in instances:
+            for attr_name, attr_type in instance.GraphState.__annotations__.items():
+                if attr_name in attributes:
+                    if attributes[attr_name] != attr_type:
+                        raise TypeError(f"Inconsistent type for attribute '{attr_name}': "
+                                        f"{attributes[attr_name]} != {attr_type}")
+                else:
+                    attributes[attr_name] = attr_type
+
+        CombinedGraphState = create_model("CombinedGraphState", **{k: (v, None) for k, v in attributes.items()}, __base__=LangGraphScore.GraphState)
+        return CombinedGraphState
+
+    def build_compiled_workflow(self):
+        """
+        Build the LangGraph workflow.
+        """
+        def _import_class(class_name):
+            default_module_path = 'plexus.scores.nodes.'
+            full_class_name = default_module_path + class_name
+            components = full_class_name.split('.')
+            module_path = '.'.join(components[:-1])
+            class_name = components[-1]
+            module = __import__(module_path, fromlist=[class_name])
+            imported_class = getattr(module, class_name)
+            logging.info(f"Imported {imported_class} from {module_path}")
+            return imported_class
+
+        # First pass: Collect node instances
+        node_instances = []
+        node_names = []
+        if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
+            for node_config in self.parameters.graph:
+                if 'class' in node_config and 'name' in node_config:
+                    node_class_name = node_config['class']
+                    node_name = node_config['name']
+                    node_class = _import_class(node_class_name)
+                    logging.info(f"Node class: {node_class}")
+                    node_instance = node_class(**node_config)
+                    node_instances.append((node_name, node_instance))
+                    node_names.append(node_name)
+        else:
+            raise ValueError("Invalid or missing graph configuration in parameters.")
+
+        # Create the combined GraphState class
+        combined_graphstate_class = self.create_combined_graphstate_class([instance for _, instance in node_instances])
+
+        # Second pass: Create workflow and add nodes
+        workflow = StateGraph(combined_graphstate_class)
+        for node_name, node_instance in node_instances:
+            workflow.add_node(node_name,
+                node_instance.build_compiled_workflow(
+                    graph_state_class=combined_graphstate_class))
+            if len(workflow.nodes) > 1:
+                previous_node = list(workflow.nodes.keys())[-2]
+                workflow.add_edge(previous_node, node_name)
+
+        if workflow.nodes:
+            workflow.set_entry_point(next(iter(workflow.nodes)))
+            last_node = list(workflow.nodes.keys())[-1]
+            workflow.add_edge(last_node, END)
+
+        return workflow.compile()
+
+    def predict(self, context, model_input: Score.Input):
+        text = model_input.text
+
+        app = self.build_compiled_workflow()
+
+        result = app.invoke({"text": text.lower()})
+        logging.info(f"LangGraph result: {result}")
+
+        return [
+            LangGraphScore.Result(
+                name  =       self.parameters.score_name,
+                value =       result["before"],
+                explanation = result["after"]
+            )
+        ]
