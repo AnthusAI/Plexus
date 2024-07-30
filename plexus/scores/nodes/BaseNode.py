@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-
 from langgraph.graph import StateGraph
+from typing import Type
+from plexus.scores.LangGraphScore import LangGraphScore
 
 class BaseNode(ABC):
     """
@@ -12,8 +13,19 @@ class BaseNode(ABC):
     the larger graph structure.
     """
 
+    class Parameters(LangGraphScore.Parameters):
+        """
+        Parameters for this node.  Based on the LangGraphScore.Parameters class.
+        """
+
+    class GraphState(LangGraphScore.GraphState):
+        pass
+
+    def __init__(self, **kwargs):
+        self.parameters = kwargs
+
     @abstractmethod
-    def build_compiled_workflow(self) -> StateGraph:
+    def build_compiled_workflow(self, graph_state_class: Type[LangGraphScore.GraphState]) -> StateGraph:
         """
         Build and return a compiled LangGraph workflow.
 
