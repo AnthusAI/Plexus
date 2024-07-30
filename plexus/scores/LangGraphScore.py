@@ -3,8 +3,8 @@ import logging
 import traceback
 import graphviz
 from langsmith import Client
-from typing import Tuple, Literal, Optional, Any
-from pydantic import ConfigDict
+from typing import Tuple, Literal, Optional, Any, Dict
+from pydantic import ConfigDict, Field
 
 from plexus.scores.Score import Score
 
@@ -36,6 +36,7 @@ class LangGraphScore(Score):
         model_region: Optional[str] = None
         temperature: Optional[float] = 0.1
         max_tokens: Optional[int] = 500
+        model_overrides: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
 
     class Result(Score.Result):
         """
@@ -60,6 +61,7 @@ class LangGraphScore(Score):
         self.openai_callback = None
         self.langsmith_client = Client()
         self.model = self._initialize_model()
+        self.model_overrides = parameters.get('model_overrides', {})
 
     def _create_token_counter(self):
         """
@@ -119,58 +121,68 @@ class LangGraphScore(Score):
 
         return TokenCounterCallback()
 
-    def _initialize_model(self) -> BaseLanguageModel:
+    def _initialize_model(self, model_key: Optional[str] = None) -> BaseLanguageModel:
         """
         Initialize and return the appropriate language model based on the configured provider.
-
-        This method sets up the specified language model with retry logic and callbacks
-        for token counting. It supports various model providers including OpenAI, Azure,
-        Amazon Bedrock, and Google Vertex AI.
-
+        
+        :param model_key: Optional key to use a specific model override
         :return: An initialized BaseLanguageModel with retry logic and callbacks.
-        :raises ValueError: If an unsupported model provider is specified.
         """
-        max_tokens = self.parameters.max_tokens
+        if model_key and model_key in self.model_overrides:
+            override = self.model_overrides[model_key]
+            provider = override.get('model_provider', self.parameters.model_provider)
+            model_name = override.get('model_name', self.parameters.model_name)
+            temperature = override.get('temperature', self.parameters.temperature)
+            max_tokens = override.get('max_tokens', self.parameters.max_tokens)
+            model_region = override.get('model_region', self.parameters.model_region)
+        else:
+            provider = self.parameters.model_provider
+            model_name = self.parameters.model_name
+            temperature = self.parameters.temperature
+            max_tokens = self.parameters.max_tokens
+            model_region = self.parameters.model_region
 
-        if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
+        logging.info(f"Initializing model for key '{model_key}' with provider: {provider}, model: {model_name}")
+
+        if provider in ["AzureChatOpenAI", "ChatOpenAI"]:
             self.openai_callback = OpenAICallbackHandler()
             callbacks = [self.openai_callback]
             
-            if self.parameters.model_provider == "AzureChatOpenAI":
+            if provider == "AzureChatOpenAI":
                 base_model = AzureChatOpenAI(
                     azure_endpoint=os.environ.get("AZURE_API_BASE"),
                     api_version=os.environ.get("AZURE_API_VERSION"),
                     api_key=os.environ.get("AZURE_API_KEY"),
-                    model=self.parameters.model_name,
-                    temperature=self.parameters.temperature,
+                    model=model_name,
+                    temperature=temperature,
                     max_tokens=max_tokens
                 )
             else:  # ChatOpenAI
                 base_model = ChatOpenAI(
-                    model=self.parameters.model_name,
+                    model=model_name,
                     api_key=os.environ.get("OPENAI_API_KEY"),
-                    temperature=self.parameters.temperature,
+                    temperature=temperature,
                     max_tokens=max_tokens
                 )
-        elif self.parameters.model_provider == "BedrockChat":
+        elif provider == "BedrockChat":
             base_model = ChatBedrock(
-                model_id=self.parameters.model_name or "anthropic.claude-3-5-sonnet-20240620-v1:0",
+                model_id=model_name or "anthropic.claude-3-5-sonnet-20240620-v1:0",
                 model_kwargs={
-                    "temperature": self.parameters.temperature,
+                    "temperature": temperature,
                     "max_tokens": max_tokens
                 },
-                region_name=self.parameters.model_region or "us-east-1"
+                region_name=model_region or "us-east-1"
             )
             callbacks = [self.token_counter]
-        elif self.parameters.model_provider == "ChatVertexAI":
+        elif provider == "ChatVertexAI":
             base_model = ChatVertexAI(
-                model=self.parameters.model_name or "gemini-1.5-flash-001",
-                temperature=self.parameters.temperature,
+                model=model_name or "gemini-1.5-flash-001",
+                temperature=temperature,
                 max_output_tokens=max_tokens
             )
             callbacks = [self.token_counter]
         else:
-            raise ValueError(f"Unsupported model provider: {self.parameters.model_provider}")
+            raise ValueError(f"Unsupported model provider: {provider}")
 
         return base_model.with_retry(
             retry_if_exception_type=(Exception,),

@@ -21,10 +21,11 @@ from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.exceptions import OutputParserException
 
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
-from langchain.globals import set_debug
+from langchain.globals import set_debug, set_verbose
 from langchain.output_parsers import EnumOutputParser
 
 set_debug(True)
+set_verbose(True)
 
 class GraphState(TypedDict):
     text: str
@@ -96,6 +97,8 @@ class LangGraphClassifier(LangGraphScore):
         label: str = ""
         prompt: str = ""
         max_tokens: int = 300
+        prompts: Dict[str, Any] = Field(default_factory=dict)
+        model_overrides: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
@@ -103,6 +106,7 @@ class LangGraphClassifier(LangGraphScore):
         self.total_tokens = 0
         self.total_cost = 0
         self.current_state = None
+        self.model_overrides = parameters.get('model_overrides', {})
         
         self.initialize_validation_workflow()
 
@@ -112,7 +116,7 @@ class LangGraphClassifier(LangGraphScore):
         workflow.add_node("check_rate_quote_presented", self.check_rate_quote_presented)
         workflow.add_node("slice_health_questions", self.slice_health_questions)
         workflow.add_node("slice_rate_quote", self.slice_rate_quote)
-        workflow.add_node("analyze_agent_assumptive_close", self.analyze_agent_assumptive_close)
+        workflow.add_node("analyze_main_question", self.analyze_main_question)
         workflow.add_node("classify_reasoning_as_yes_or_no", self.classify_reasoning_as_yes_or_no)
         workflow.add_node("set_na_output", self.set_na_output)
 
@@ -127,8 +131,8 @@ class LangGraphClassifier(LangGraphScore):
         workflow.set_entry_point("check_rate_quote_presented")
 
         workflow.add_edge("slice_health_questions", "slice_rate_quote")
-        workflow.add_edge("slice_rate_quote", "analyze_agent_assumptive_close")
-        workflow.add_edge("analyze_agent_assumptive_close", "classify_reasoning_as_yes_or_no")
+        workflow.add_edge("slice_rate_quote", "analyze_main_question")
+        workflow.add_edge("analyze_main_question", "classify_reasoning_as_yes_or_no")
         workflow.add_edge("classify_reasoning_as_yes_or_no", END)
         workflow.add_edge("set_na_output", END)
 
@@ -145,18 +149,13 @@ class LangGraphClassifier(LangGraphScore):
         score_parser = EnumOutputParser(enum=YesOrNo)
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to determine if the agent has presented a rate quote to the customer."),
-            ("human", """Here's a transcript of a conversation between an insurance agent and a customer:
-
-<transcript>
-{text}
-</transcript>
-
-Before the agent can move to the application process, the agent must have presented rate quotes to the customer. This typically involves presenting a monthly price for coverage. Did the agent present specific rate quotes?
-
-Provide your answer as ONLY "Yes" or "No", without any additional explanation.""")
+            ("system", self.parameters.prompts["check_rate_quote_presented"]["system"]),
+            ("human", self.parameters.prompts["check_rate_quote_presented"]["human"])
         ])
-        chain = prompt | self.model
+        
+        # Use a specific model for this step if defined in model_overrides
+        model = self._initialize_model("check_rate_quote_presented")
+        chain = prompt | model
 
         result = chain.invoke({"text": state['text']})
 
@@ -185,13 +184,15 @@ Provide your answer as ONLY "Yes" or "No", without any additional explanation.""
         state["rate_quote_presented"] = parsed_result
         return state
 
-    def _slice_text(self, state: GraphState, system_message: str, human_message: str, slice_key: str) -> GraphState:
+    def _slice_text(self, state: GraphState, prompt_key: str, slice_key: str) -> GraphState:
         prompt = ChatPromptTemplate.from_messages([
-            ("system", system_message),
-            ("human", human_message)
+            ("system", self.parameters.prompts[prompt_key]["system"]),
+            ("human", self.parameters.prompts[prompt_key]["human"])
         ])
 
-        chain = prompt | self.model | CustomOutputParser(text=state['text'])
+        # Use a specific model for this step if defined in model_overrides
+        model = self._initialize_model(prompt_key)
+        chain = prompt | model | CustomOutputParser(text=state['text'])
         result = chain.invoke({"text": state['text']})
         state[slice_key] = result['input_text_after_slice']
         state['text'] = result['input_text_after_slice']  # Update the main text
@@ -199,36 +200,12 @@ Provide your answer as ONLY "Yes" or "No", without any additional explanation.""
         return state
 
     def slice_health_questions(self, state: GraphState) -> GraphState:
-        system_message = "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to identify the portion of the conversation where the agent asks the last health and lifestyle question prior to presenting the rate quote."
-        human_message = """Here's a transcript of a conversation between an insurance agent and a customer. Please follow these steps:
-
-1. Identify where the agent asks the last health and lifestyle question.
-2. Provide a short, exact quote (1-2 sentences) where the agent starts this section of questions.
-3. The quote should be word-for-word from the transcript.
-
-<transcript>
-{text}
-</transcript>
-
-Remember, I need a short, exact quote from the transcript, not a summary or paraphrase. Start your response with 'Quote:'"""
-        return self._slice_text(state, system_message, human_message, 'health_questions_slice')
+        return self._slice_text(state, "slice_health_questions", 'health_questions_slice')
 
     def slice_rate_quote(self, state: GraphState) -> GraphState:
-        system_message = "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to identify the exact moment when the agent first presents rate quotes after completing all health and lifestyle questions."
-        human_message = """Here's a transcript of a conversation between an insurance agent and a customer, starting from where health and lifestyle questions begin. Please follow these steps:
+        return self._slice_text(state, "slice_rate_quote", 'rate_quote_slice')
 
-1. Carefully identify where the agent completes asking ALL health and lifestyle questions.
-2. After that point, find the first instance where the agent presents specific rate quotes to the customer, given as a monthly or yearly cost.
-3. Provide a short, exact quote (1-2 sentences) where the agent first presents these rate quotes. The quote should be word-for-word from the transcript, including the specific cost mentioned.
-
-<transcript>
-{text}
-</transcript>
-
-Remember, I need a short, exact quote from the transcript, not a summary or paraphrase. Only consider rate quotes that come after ALL health and lifestyle questions and are presented as a monthly or yearly cost. Start your response with 'Quote:'"""
-        return self._slice_text(state, system_message, human_message, 'rate_quote_slice')
-
-    def analyze_agent_assumptive_close(self, state: GraphState) -> GraphState:
+    def analyze_main_question(self, state: GraphState) -> GraphState:
         logging.info(f"Examining state: {state}")
         
         examine_input = state['text']
@@ -237,28 +214,7 @@ Remember, I need a short, exact quote from the transcript, not a summary or para
         logging.info(f"First 100 characters of examine input: {examine_input[:100]}")
 
         prompt = PromptTemplate(
-            template="""
-Analyze the following transcript excerpt, which begins after the agent has presented rate quotes to the customer:
-
-<transcript>
-{text}
-</transcript>
-
-Question: Did the agent effectively guide the conversation towards closing the deal without asking the customers permission?
-
-Context: 
-- The agent should assume the customer wants to apply today by trying to guide them into the application process without directly asking for permission.
-- The agent should use a closing technique that assumes the customer is ready to proceed.
-- Effective guidance includes:
-  * Directly moving to the next steps of the application process
-  * Mentioning medical approval or underwriting as the next step
-  * Discussing enrollment or transferring to an enroller
-  * Explaining the application process (e.g., phone interview, online application)
-  * A statement about starting the application or enrollment process without question.
-- Ineffective guidance includes asking if the customer wants to proceed, submit an application, or has time for the next steps.
-
-Provide a concise analysis (2-3 sentences) stating whether the agent effectively guided the conversation towards closing the deal, based on the criteria provided. If possible, include a brief quote from the transcript to support your conclusion.
-"""
+            template=self.parameters.prompts["analyze_main_question"]["template"]
         )
 
         score_chain = prompt | self.model
@@ -274,20 +230,13 @@ Provide a concise analysis (2-3 sentences) stating whether the agent effectively
         reasoning_content = state["reasoning"].content if isinstance(state["reasoning"], AIMessage) else state["reasoning"]
 
         prompt = PromptTemplate(
-            template="""
-Based on the following reasoning about whether the agent proceeded with the application process without explicitly asking for permission:
-
-<reasoning>
-{reasoning}
-</reasoning>
-
-Does this reasoning indicate that the agent proceeded without explicitly asking for permission?
-Provide your answer as either "Yes" or "No".
-""",
+            template=self.parameters.prompts["classify_reasoning_as_yes_or_no"]["template"],
             input_variables=["reasoning"]
         )
 
-        score_chain = prompt | self.model
+        # Use a specific model for this step if defined in model_overrides
+        model = self._initialize_model("classify_reasoning_as_yes_or_no")
+        score_chain = prompt | model
 
         result = score_chain.invoke({"reasoning": reasoning_content})
 
