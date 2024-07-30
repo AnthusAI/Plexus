@@ -10,6 +10,7 @@ class YesOrNoClassifier(BaseNode):
     
     class GraphState(BaseNode.GraphState):
         classification: Optional[str]
+        quote: Optional[str]
 
     def __init__(self, prompt: str, **kwargs):
         super().__init__(**kwargs)
@@ -31,18 +32,13 @@ class YesOrNoClassifier(BaseNode):
         else:
             return 'unknown'
 
-    def build_compiled_workflow(self, graph_state_class: Type[LangGraphScore.GraphState]):
-        """
-        Build the workflow for the YesOrNoClassifier node.
-        """
-        def classify_node(state):
+    def add_core_nodes(self, workflow: StateGraph) -> StateGraph:
+
+        def classify(state):
             classification = self.classify(state.text)
             state.classification = classification
+            state.quote = "This is a test quote"
             return state
 
-        workflow = StateGraph(graph_state_class)
-        workflow.add_node("classify", classify_node)
-        workflow.set_entry_point("classify")
-        workflow.add_edge("classify", END)
-
-        return workflow.compile()
+        workflow.add_node("classify", classify)
+        return workflow

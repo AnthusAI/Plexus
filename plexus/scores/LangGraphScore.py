@@ -3,9 +3,9 @@ import logging
 import traceback
 import graphviz
 from langsmith import Client
-from typing import Tuple, Literal, Optional, Any, TypedDict, List, Dict
+from types import FunctionType
+from typing import Type, Tuple, Literal, Optional, Any, TypedDict, List, Dict
 from pydantic import BaseModel, ConfigDict, create_model
-from typing import Type
 
 from plexus.scores.Score import Score
 
@@ -44,6 +44,8 @@ class LangGraphScore(Score):
         temperature: Optional[float] = 0.1
         max_tokens: Optional[int] = 500
         graph: Optional[list[dict]] = None
+        input: Optional[dict] = None
+        output: Optional[dict] = None
 
     class Result(Score.Result):
         """
@@ -399,6 +401,8 @@ class LangGraphScore(Score):
         Dynamically create a combined GraphState class based on all nodes in the workflow.
         """
         attributes: Dict[str, Any] = {}
+        output_aliases: Dict[str, str] = {}
+
         for instance in instances:
             for attr_name, attr_type in instance.GraphState.__annotations__.items():
                 if attr_name in attributes:
@@ -408,8 +412,48 @@ class LangGraphScore(Score):
                 else:
                     attributes[attr_name] = attr_type
 
+            # Collect output aliases from node instances
+            if 'output' in instance.parameters:
+                for alias, original in instance.parameters['output'].items():
+                    if original in attributes:
+                        output_aliases[alias] = attributes[original]
+                    else:
+                        raise ValueError(f"Original attribute '{original}' not found in GraphState")
+
+        # Collect output aliases from main LangGraphScore parameter
+        if hasattr(self.parameters, 'output'):
+            for alias, original in self.parameters.output.items():
+                if original in attributes:
+                    output_aliases[alias] = attributes[original]
+                else:
+                    raise ValueError(f"Original attribute '{original}' not found in GraphState")
+
+        # Add output aliases to attributes
+        for alias, attr_type in output_aliases.items():
+            attributes[alias] = attr_type
+
         CombinedGraphState = create_model("CombinedGraphState", **{k: (v, None) for k, v in attributes.items()}, __base__=LangGraphScore.GraphState)
         return CombinedGraphState
+
+    @staticmethod
+    def generate_input_aliasing_function(input_mapping: dict) -> FunctionType:
+        def input_aliasing(state):
+            logging.info(f"Input aliasing: {input_mapping}")
+            for alias, original in input_mapping.items():
+                if hasattr(state, original):
+                    setattr(state, alias, getattr(state, original))
+            return state
+        return input_aliasing
+
+    @staticmethod
+    def generate_output_aliasing_function(output_mapping: dict) -> FunctionType:
+        def output_aliasing(state):
+            logging.info(f"Output aliasing: {output_mapping}")
+            for alias, original in output_mapping.items():
+                if hasattr(state, original):
+                    setattr(state, alias, getattr(state, original))
+            return state
+        return output_aliasing
 
     def build_compiled_workflow(self):
         """
@@ -447,6 +491,13 @@ class LangGraphScore(Score):
 
         # Second pass: Create workflow and add nodes
         workflow = StateGraph(combined_graphstate_class)
+
+        # Add input aliasing function if needed
+        if hasattr(self.parameters, 'input') and self.parameters.input is not None:
+            input_aliasing_function = LangGraphScore.generate_input_aliasing_function(self.parameters.input)
+            workflow.add_node('input_aliasing', input_aliasing_function)
+
+        current_node = None
         for node_name, node_instance in node_instances:
             workflow.add_node(node_name,
                 node_instance.build_compiled_workflow(
@@ -454,18 +505,34 @@ class LangGraphScore(Score):
             if len(workflow.nodes) > 1:
                 previous_node = list(workflow.nodes.keys())[-2]
                 workflow.add_edge(previous_node, node_name)
+            current_node = node_name
 
+        # Add output aliasing function if needed
+        if hasattr(self.parameters, 'output') and self.parameters.output is not None:
+            output_aliasing_function = LangGraphScore.generate_output_aliasing_function(self.parameters.output)
+            workflow.add_node('output_aliasing', output_aliasing_function)
+            workflow.add_edge(current_node, 'output_aliasing')
+
+        # Start at the first node in the list.  End at the last node.
         if workflow.nodes:
             workflow.set_entry_point(next(iter(workflow.nodes)))
             last_node = list(workflow.nodes.keys())[-1]
             workflow.add_edge(last_node, END)
 
-        return workflow.compile()
+        app = workflow.compile()
+
+        logging.info(f"Graph for {self.__class__.__name__}:")
+        app.get_graph().print_ascii()
+
+        return app
 
     def predict(self, context, model_input: Score.Input):
         text = model_input.text
 
         app = self.build_compiled_workflow()
+        
+        # TODO: Remove this truncation.  It's for debugging.
+        text = text[:100]
 
         result = app.invoke({"text": text.lower()})
         logging.info(f"LangGraph result: {result}")
