@@ -90,11 +90,7 @@ class BeforeAfterSlicer(BaseNode):
             "before": "BEFORE",
             "after": "AFTER"
         }
-
-    def build_compiled_workflow(self, graph_state_class: Type[LangGraphScore.GraphState]):
-        workflow = StateGraph(graph_state_class)
+    
+    def add_core_nodes(self, workflow: StateGraph) -> StateGraph:
         workflow.add_node("slice", self.slice)
-        workflow.set_entry_point("slice")
-        workflow.add_edge("slice", END)
-
-        return workflow.compile()
+        return workflow
