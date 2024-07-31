@@ -1,9 +1,13 @@
+from types import FunctionType
+import pydantic
 from pydantic import Field
 from langgraph.graph import StateGraph, END
+from langchain_core.output_parsers import BaseOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 from plexus.LangChainUser import LangChainUser
 from plexus.scores.LangGraphScore import LangGraphScore
 from plexus.scores.nodes.BaseNode import BaseNode
-from typing import Type, Optional
+from typing import Type, Optional, Dict, Any
 
 class YesOrNoClassifier(BaseNode, LangChainUser):
     """
@@ -11,40 +15,54 @@ class YesOrNoClassifier(BaseNode, LangChainUser):
     """
     
     class Parameters(LangChainUser.Parameters):
-        prompt: str = Field(...)
-    
-    class GraphState(BaseNode.GraphState):
-        classification: Optional[str]
-        quote: Optional[str]
+        prompt: str
 
     def __init__(self, **parameters):
-        super().__init__(**parameters)
+        # We intentionally override super().__init__() to allow for a carefully-crafted Pydantic model here.
+        combined_parameters_model = pydantic.create_model(
+            "CombinedParameters",
+            __base__=(YesOrNoClassifier.Parameters, LangChainUser.Parameters))
+        self.parameters = combined_parameters_model(**parameters)
         self.openai_callback = None
         self.model = self._initialize_model()
 
-    def classify(self, text: str) -> str:
-        """
-        Classify the input text as 'yes' or 'no'.
+    class GraphState(BaseNode.GraphState):
+        classification: Optional[str]
+        explanation: Optional[str]
 
-        :param text: The input text to classify.
-        :return: 'yes' or 'no' based on the classification.
-        """
-        # Implement the classification logic here
-        # For now, we will use a simple keyword-based approach
-        if 'yes' in text.lower():
-            return 'yes'
-        elif 'no' in text.lower():
-            return 'no'
-        else:
-            return 'unknown'
+    class ClassificationOutputParser(BaseOutputParser[dict]):
+        def parse(self, output: str) -> Dict[str, Any]:
+            output = output.strip().strip('"')
+            if 'yes' in output.lower():
+                return {
+                    "classification": "yes",
+                    "explanation": output
+                }
+            elif 'no' in output.lower():
+                return {
+                    "classification": "no",
+                    "explanation": output
+                }
+            else:
+                return {
+                    "classification": "unknown",
+                    "explanation": output
+                }
+
+    def get_classifier_node(self) -> FunctionType:
+        model = self.model
+        prompt = self.parameters.prompt
+
+        def classifier_node(state):
+            
+            chain = ChatPromptTemplate.from_messages([
+                ("system", prompt)
+            ]) | model | self.ClassificationOutputParser()
+            
+            return chain.invoke({"text": state.text})
+
+        return classifier_node
 
     def add_core_nodes(self, workflow: StateGraph) -> StateGraph:
-
-        def classify(state):
-            classification = self.classify(state.text)
-            state.classification = classification
-            state.quote = "This is a test quote"
-            return state
-
-        workflow.add_node("classify", classify)
+        workflow.add_node("classify", self.get_classifier_node())
         return workflow
