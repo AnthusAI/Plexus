@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
 from langgraph.graph import StateGraph
-from typing import Type
+from typing import Type, Optional, Literal
+import pydantic
+from pydantic import ConfigDict, BaseModel
 from plexus.CustomLogging import logging
+from plexus.LangChainUser import LangChainUser
 from plexus.scores.LangGraphScore import LangGraphScore
 from langgraph.graph import StateGraph, END
 
@@ -15,16 +18,17 @@ class BaseNode(ABC):
     the larger graph structure.
     """
 
-    class Parameters(LangGraphScore.Parameters):
-        """
-        Parameters for this node.  Based on the LangGraphScore.Parameters class.
-        """
-
     class GraphState(LangGraphScore.GraphState):
         pass
 
-    def __init__(self, **kwargs):
-        self.parameters = kwargs
+    class Parameters(BaseModel):
+        ...
+        input:  Optional[dict] = None
+        output: Optional[dict] = None
+
+    def __init__(self, **parameters):
+        combined_parameters_model = pydantic.create_model("CombinedParameters", __base__=(LangChainUser.Parameters, BaseNode.Parameters))
+        self.parameters = combined_parameters_model(**parameters)
 
     @abstractmethod
     def add_core_nodes(self, workflow: StateGraph) -> StateGraph:
@@ -47,8 +51,8 @@ class BaseNode(ABC):
         workflow = StateGraph(graph_state_class)
 
         # Add input aliasing function if needed
-        if 'input' in self.parameters and self.parameters['input'] is not None:
-            input_aliasing_function = LangGraphScore.generate_input_aliasing_function(self.parameters['input'])
+        if hasattr(self.parameters, 'input') and self.parameters.input is not None:
+            input_aliasing_function = LangGraphScore.generate_input_aliasing_function(self.parameters.input)
             workflow.add_node('input_aliasing', input_aliasing_function)
 
         workflow = self.add_core_nodes(workflow)
@@ -59,8 +63,8 @@ class BaseNode(ABC):
             workflow.add_edge(first_node, second_node)
 
         # Add output aliasing function if needed
-        if 'output' in self.parameters and self.parameters['output'] is not None:
-            output_aliasing_function = LangGraphScore.generate_output_aliasing_function(self.parameters['output'])
+        if hasattr(self.parameters, 'output') and self.parameters.output is not None:
+            output_aliasing_function = LangGraphScore.generate_output_aliasing_function(self.parameters.output)
             workflow.add_node('output_aliasing', output_aliasing_function)
             workflow.add_edge(list(workflow.nodes.keys())[-2], 'output_aliasing')
 
