@@ -1,25 +1,38 @@
 from typing import Dict, Any, Optional, Type
 import nltk
+from types import FunctionType
+import pydantic
 from pydantic import Field
 from nltk.tokenize import sent_tokenize
 from rapidfuzz import fuzz, process
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import BaseOutputParser
+from langgraph.graph import StateGraph, END
 from plexus.scores.nodes.BaseNode import BaseNode
 from plexus.CustomLogging import logging
-from plexus.scores.LangGraphScore import LangGraphScore
-from langgraph.graph import StateGraph, END
+from plexus.LangChainUser import LangChainUser
 
-class BeforeAfterSlicer(BaseNode):
+class BeforeAfterSlicer(BaseNode, LangChainUser):
     """
     A node that slices text input into 'before' and 'after' based on the provided prompt.
     """
 
+    class Parameters(LangChainUser.Parameters):
+        system_message: str
+        human_message: str
+        input: Optional[dict] = None
+        output: Optional[dict] = None
+
+    def __init__(self, **parameters):
+        # We intentionally override super().__init__() to allow for a carefully-crafted Pydantic model here.
+        combined_parameters_model = pydantic.create_model("CombinedParameters", __base__=(BeforeAfterSlicer.Parameters, LangChainUser.Parameters))
+        self.parameters = combined_parameters_model(**parameters)
+        self.openai_callback = None
+        self.model = self._initialize_model()
+
     class GraphState(BaseNode.GraphState):
         before: Optional[str]
         after: Optional[str]
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
 
     class SlicingOutputParser(BaseOutputParser[dict]):
         FUZZY_MATCH_SCORE_CUTOFF = 70
@@ -74,23 +87,25 @@ class BeforeAfterSlicer(BaseNode):
             logging.info(f"First 100 characters of input_text_after_slice: {input_text_after_slice[:100]}")
 
             return {
-                "input_text_before_slice": input_text_before_slice,
-                "input_text_after_slice": input_text_after_slice
+                "before": input_text_before_slice,
+                "after": input_text_after_slice
             }
 
-    @staticmethod
-    def slice(state: GraphState) -> GraphState:
-        """
-        Slice the input text into 'before' and 'after' based on the provided prompt.
+    def get_slicer_node(self) -> FunctionType:
+        model = self.model
+        system_message = self.parameters.system_message
+        human_message =  self.parameters.human_message
 
-        :param text: The input text to slice.
-        :return: 'before' or 'after' based on the slicing.
-        """
-        return {
-            "before": "BEFORE",
-            "after": "AFTER"
-        }
+        def slicer_node(state):
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", system_message),
+                ("human",  human_message)
+            ])
+            chain = prompt | model | self.SlicingOutputParser(text=state.text)
+            return chain.invoke({"text": state.text})
+
+        return slicer_node
     
     def add_core_nodes(self, workflow: StateGraph) -> StateGraph:
-        workflow.add_node("slice", self.slice)
+        workflow.add_node("slicer", self.get_slicer_node())
         return workflow
