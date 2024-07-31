@@ -25,7 +25,9 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
 
     def __init__(self, **parameters):
         # We intentionally override super().__init__() to allow for a carefully-crafted Pydantic model here.
-        combined_parameters_model = pydantic.create_model("CombinedParameters", __base__=(BeforeAfterSlicer.Parameters, LangChainUser.Parameters))
+        combined_parameters_model = pydantic.create_model(
+            "CombinedParameters",
+            __base__=(BeforeAfterSlicer.Parameters, LangChainUser.Parameters))
         self.parameters = combined_parameters_model(**parameters)
         self.openai_callback = None
         self.model = self._initialize_model()

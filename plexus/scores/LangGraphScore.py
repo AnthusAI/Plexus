@@ -415,7 +415,7 @@ class LangGraphScore(Score, LangChainUser):
         return [
             LangGraphScore.Result(
                 name  =       self.parameters.score_name,
-                value =       result["before"],
-                explanation = result["after"]
+                value =       result["value"],
+                explanation = result["explanation"]
             )
         ]
