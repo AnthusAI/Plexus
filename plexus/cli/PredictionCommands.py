@@ -50,9 +50,9 @@ def predict(scorecard_name, score_name, content_id, number, excel):
             transcript, predictions, costs = predict_score(single_score_name, scorecard_class, sample_row, used_content_id)
             row_result['content_id'] = used_content_id
             row_result['text'] = transcript
-            row_result[f'{single_score_name}_value'] = predictions[0].value if predictions else None
-            row_result[f'{single_score_name}_explanation'] = predictions[0].explanation if predictions else None
-            row_result[f'{single_score_name}_cost'] = float(costs['total_cost']) if costs else None
+            for attribute, value in predictions[0].__dict__.items():
+                row_result[attribute] = value
+            row_result['total_cost'] = float(costs['total_cost'])
         
         if len(score_names) > 1:
             row_result['match?'] = len(set(row_result[f'{name}_value'] for name in score_names if row_result[f'{name}_value'] is not None)) == 1
