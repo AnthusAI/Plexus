@@ -32,11 +32,13 @@ class AgenticExtractor(LangGraphScore):
     def load_context(self, context):
         pass
 
-    def predict(self, context, model_input: Score.Input):
-        text = model_input.text
+    def build_compiled_workflow(self, *, model_input: Score.Input):
+        """
+        Build the LangGraph workflow.
+        """
 
-        def _extract_entity_node(state: ExtractorState) -> Dict[str, str]:
-            logging.info("start _extract_entity_node()")
+        def extract_entity_node(state: ExtractorState) -> Dict[str, str]:
+            logging.info("start extract_entity_node()")
             logging.info(f"text: {state['text']}")
             
             response_schemas = [
@@ -85,7 +87,7 @@ This is the text of a call center phone call that we're reviewing for QA purpose
                 "quote":    result["quote"]
             }
         
-        def _verify_entity_node(state: ExtractorState) -> Dict[str, str]:
+        def verify_entity_node(state: ExtractorState) -> Dict[str, str]:
             entity = state.get("entity", "")
             text = state.get("text", "")
 
@@ -94,21 +96,26 @@ This is the text of a call center phone call that we're reviewing for QA purpose
             else:
                 return {"validation_error": None}
 
-        def _next_after_verify_entity(state: ExtractorState) -> Dict[str, str]:
+        def next_after_verify_entity(state: ExtractorState) -> Dict[str, str]:
             if state["validation_error"] is not None:
                 return "extract_entity"
             return END
 
         workflow = StateGraph(ExtractorState)
 
-        workflow.add_node("extract_entity", _extract_entity_node)
+        workflow.add_node("extract_entity", extract_entity_node)
         workflow.set_entry_point("extract_entity")
         workflow.add_edge("extract_entity", "verify_entity")
         
-        workflow.add_node("verify_entity", _verify_entity_node)
-        workflow.add_conditional_edges("verify_entity", _next_after_verify_entity)
+        workflow.add_node("verify_entity", verify_entity_node)
+        workflow.add_conditional_edges("verify_entity", next_after_verify_entity)
 
-        app = workflow.compile()
+        return workflow.compile()
+
+    def predict(self, context, model_input: Score.Input):
+        text = model_input.text
+
+        app = self.build_compiled_workflow(model_input=model_input)
 
         result = app.invoke({"text": text.lower()})
         logging.info(f"LangGraph result: {result}")
