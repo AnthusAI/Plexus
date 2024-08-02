@@ -1,25 +1,15 @@
 import rich
 import click
-import importlib
 import plexus
-import copy
+import os
 import pandas as pd
-from openpyxl import Workbook
 from openpyxl.styles import Font
 
 from plexus.CustomLogging import logging
-from plexus.cli.console import console
 from plexus.Registries import scorecard_registry
-from plexus.scores.Score import Score
 
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich.columns import Columns
-from rich.text import Text
-from rich.pretty import pprint
 
-@click.command(help="Predict a scorecard or specific score(s) within a scorecard, using one random sample from the training data.")
+@click.command(help="Predict a scorecard or specific score(s) within a scorecard.")
 @click.option('--scorecard-name', required=True, help='The name of the scorecard.')
 @click.option('--score-name', '--score-names', help='The name(s) of the score(s) to predict, separated by commas.')
 @click.option('--content-id', help='The ID of a specific sample to use.')
@@ -49,12 +39,15 @@ def predict(scorecard_name, score_name, content_id, number, excel):
         if number > 1:
             logging.info(f"Iteration {iteration + 1} of {number}")
         
-        # Select a single sample for all scores in this iteration
-        sample_row, used_content_id = select_sample(scorecard_class, score_names[0], content_id)
+        try:
+            sample_row, used_content_id = select_sample(scorecard_class, score_names[0], content_id)
+        except Exception as e:
+            logging.error(f"Failed to select sample: {str(e)}")
+            continue
         
         row_result = {}
         for single_score_name in score_names:
-            transcript, predictions, costs = predict_score(single_score_name, scorecard_class, sample_row)
+            transcript, predictions, costs = predict_score(single_score_name, scorecard_class, sample_row, used_content_id)
             row_result['content_id'] = used_content_id
             row_result['text'] = transcript
             for attribute, value in predictions[0].__dict__.items():
@@ -62,7 +55,7 @@ def predict(scorecard_name, score_name, content_id, number, excel):
             row_result['total_cost'] = float(costs['total_cost'])
         
         if len(score_names) > 1:
-            row_result['match?'] = len(set(row_result[f'{name}_value'] for name in score_names)) == 1
+            row_result['match?'] = len(set(row_result[f'{name}_value'] for name in score_names if row_result[f'{name}_value'] is not None)) == 1
         
         results.append(row_result)
 
@@ -107,74 +100,116 @@ def output_excel(results, score_names, scorecard_name):
     logging.info(f"Excel file '{filename}' has been created with the prediction results.")
 
 def select_sample(scorecard_class, score_name, content_id):
-    score_configuration = scorecard_class.scores[score_name]
-    score_class_name = score_configuration['class']
-    score_module_path = f'plexus.scores.{score_class_name}'
-    score_module = importlib.import_module(score_module_path)
-    score_class = getattr(score_module, score_class_name)
+
+    score_configuration = scorecard_class.scores.get(score_name, {})
+    
+    # Check if the score uses the new data-driven approach
+    if 'data' in score_configuration:
+        return select_sample_data_driven(scorecard_class, score_name, content_id, score_configuration)
+    else:
+        # Use labeled-samples.csv for old scores
+        scorecard_key = scorecard_class.properties.get('key')        
+        csv_path = os.path.join('scorecards', scorecard_key, 'experiments', 'labeled-samples.csv')
+        return select_sample_csv(csv_path, content_id)
+
+def select_sample_data_driven(scorecard_class, score_name, content_id, score_configuration):
+    score_class = scorecard_class.score_registry.get(score_name)
+    if score_class is None:
+        logging.error(f"Score class for '{score_name}' not found in the registry.")
+        raise ValueError(f"Score class for '{score_name}' not found in the registry.")
 
     score_configuration['scorecard_name'] = scorecard_class.name
     score_configuration['score_name'] = score_name
-    score_instance = score_class(**score_configuration)
 
-    score_instance.load_data(queries=score_configuration['data']['queries'])
-    score_instance.process_data()
+    try:
+        score_instance = score_class(**score_configuration)
+        score_instance.load_data(queries=score_configuration['data'].get('queries'))
+        score_instance.process_data()
 
-    if content_id:
-        sample_row = score_instance.dataframe[score_instance.dataframe['content_id'] == content_id]
-    else:
-        sample_row = score_instance.dataframe.sample(n=1)
-    
-    used_content_id = sample_row.iloc[0]['content_id']
-    return sample_row, used_content_id
+        if content_id:
+            sample_row = score_instance.dataframe[score_instance.dataframe['content_id'] == content_id]
+            if sample_row.empty:
+                logging.warning(f"Content ID '{content_id}' not found in the data. Selecting a random sample.")
+                sample_row = score_instance.dataframe.sample(n=1)
+        else:
+            sample_row = score_instance.dataframe.sample(n=1)
+        
+        used_content_id = sample_row.iloc[0]['content_id']
+        return sample_row, used_content_id
+    except Exception as e:
+        logging.error(f"Failed to load or process data for '{score_name}': {str(e)}")
+        raise
 
-def predict_score(score_name, scorecard_class, sample_row):
+def select_sample_csv(csv_path, content_id):
+    if not os.path.exists(csv_path):
+        logging.error(f"labeled-samples.csv not found at {csv_path}")
+        raise FileNotFoundError(f"labeled-samples.csv not found at {csv_path}")
+
+    try:
+        df = pd.read_csv(csv_path)
+        if content_id:
+            sample_row = df[df['id'] == content_id]
+            if sample_row.empty:
+                logging.warning(f"ID '{content_id}' not found in {csv_path}. Selecting a random sample.")
+                sample_row = df.sample(n=1)
+        else:
+            sample_row = df.sample(n=1)
+        
+        used_content_id = sample_row.iloc[0]['id']
+        return sample_row, used_content_id
+    except Exception as e:
+        logging.error(f"Failed to load or process data from {csv_path}: {str(e)}")
+        raise
+
+def predict_score(score_name, scorecard_class, sample_row, content_id):
     logging.info(f"Predicting Score [magenta1][b]{score_name}[/b][/magenta1]...")
-    score_configuration = scorecard_class.scores[score_name]
+    score_configuration = scorecard_class.scores.get(score_name, {})
 
     if score_name not in scorecard_class.scores:
         logging.error(f"Score with name '{score_name}' not found in scorecard '{scorecard_class.name}'.")
-        return
+        return None, None, None
 
     logging.info(f"Score Configuration: {rich.pretty.pretty_repr(score_configuration)}")
 
-    # Score class instance setup
+    score_class = scorecard_class.score_registry.get(score_name)
+    if score_class is None:
+        logging.error(f"Score class for '{score_name}' not found in the registry.")
+        return None, None, None
 
-    score_class_name = score_configuration['class']
-    score_module_path = f'plexus.scores.{score_class_name}'
-    score_module = importlib.import_module(score_module_path)
-    score_class = getattr(score_module, score_class_name)
-
-    if not isinstance(score_class, type):
-        logging.error(f"{score_class_name} is not a class.")
-        return
-
-    # Add the scorecard name and score name to the parameters.
     score_configuration['scorecard_name'] = scorecard_class.name
     score_configuration['score_name'] = score_name
-    score_instance = score_class(**score_configuration)
 
-    # Use the new instance to log its own configuration.
+    try:
+        score_instance = score_class(**score_configuration)
+    except Exception as e:
+        logging.error(f"Failed to instantiate score class for '{score_name}': {str(e)}")
+        return None, None, None
+
     score_instance.record_configuration(score_configuration)
 
-    # Data processing
-    data_queries = score_configuration['data']['queries']
-    score_instance.load_data(queries=data_queries)
-    score_instance.process_data()
+    model_input_class = getattr(score_class, 'Input', None)
+    if model_input_class is None:
+        logging.warning(f"Input class not found for score '{score_name}'. Using a default input.")
+        model_input = {'id': content_id, 'text': ""}
+    else:
+        if sample_row is not None:
+            row_dictionary = sample_row.iloc[0].to_dict()
+            logging.info(f"Sample Row: {row_dictionary}")
+            text = row_dictionary.get('Transcription', '')
+            model_input = model_input_class(text=text, metadata=row_dictionary)
+        else:
+            model_input = model_input_class(id=content_id, text="")
 
-    row_dictionary = sample_row.iloc[0].to_dict()
-    logging.info(f"Sample Row: {row_dictionary}")
-
-    text = row_dictionary['text']
-    model_input_class = getattr(score_class, 'Input')
-    prediction_result = score_instance.predict(
-        context = {},
-        model_input = model_input_class(
-            text = text,
-            metadata = row_dictionary
+    try:
+        prediction_result = score_instance.predict(
+            context={},
+            model_input=model_input
         )
-    )
-    costs = score_instance.get_accumulated_costs()
+        costs = score_instance.get_accumulated_costs()
+    except Exception as e:
+        logging.error(f"Prediction failed for score '{score_name}': {str(e)}")
+        return None, None, None
+
     logging.info(f"Prediction result: {prediction_result}")
     logging.info(f"Costs: {costs}")
-    return text, prediction_result, costs
+    return text if sample_row is not None else "", prediction_result, costs
