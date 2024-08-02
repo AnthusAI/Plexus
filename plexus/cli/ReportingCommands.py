@@ -367,7 +367,7 @@ def index(scorecard_name):
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1em;">
                                 {% for artifact in artifacts %}
                                     <div style="display: flex; justify-content: center; align-items: start;">
-                                        <img onclick="enlargeImage(this.src)" style="width: 100%; height: auto; max-width: 500px; margin-top: 2em;" src="{{ score_name }}/{{ artifact }}">
+                                        <img onclick="enlargeImage(this.src)" style="width: 100%; height: auto; max-width: 500px; margin-top: 2em;" src="{{ score_name.replace(' ', '_') }}/{{ artifact }}">
                                     </div>
                                 {% endfor %}
                             </div>
