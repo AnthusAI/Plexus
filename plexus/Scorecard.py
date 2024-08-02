@@ -129,6 +129,7 @@ class Scorecard:
 
         # Register scores that come from Markdown files.
         scorecard_class.load_and_register_scores(markdown_folder_path)
+
         # Register any other scores that are in the YAML file.
         for score_name, score_info in scorecard_properties['scores'].items():
             if 'class' in score_info:
