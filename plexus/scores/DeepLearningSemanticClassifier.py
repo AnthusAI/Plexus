@@ -547,7 +547,7 @@ class DeepLearningSemanticClassifier(Score):
             model_input = self.Input(text=text)
             result = self.predict(None, model_input)
             
-            self.val_predictions.append(result.score)
+            self.val_predictions.append(result.value)
             self.val_confidence_scores.append(result.confidence)
 
         self.val_predictions = np.array(self.val_predictions)
