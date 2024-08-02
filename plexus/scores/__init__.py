@@ -14,3 +14,5 @@ from plexus.scores.AgenticExtractor import AgenticExtractor
 from plexus.scores.AgenticValidator import AgenticValidator
 from plexus.scores.AWSComprehendEntityExtractor import AWSComprehendEntityExtractor
 from plexus.scores.LangGraphClassifier import LangGraphClassifier
+from plexus.scores.LLMClassifier import LLMClassifier
+from plexus.scores.LangGraphScore import LangGraphScore
