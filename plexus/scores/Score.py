@@ -380,22 +380,6 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             Validation data labels.
         """
         pass
-
-    def predict(self, context, model_input: Input) -> Result:
-        """
-        Make predictions on the input data.
-
-        Parameters
-        ----------
-        X : numpy.ndarray
-            Input data features.
-
-        Returns
-        -------
-        numpy.ndarray
-            Predicted labels.
-        """
-        pass
             
     def _record_metrics(self, metrics):
         """
