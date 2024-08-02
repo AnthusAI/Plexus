@@ -133,7 +133,15 @@ This is the text of a call center phone call that we're reviewing for QA purpose
         quote = ' '.join(quote.split())  # Condense any whitespace into single characters
         if not (quote.startswith('“') and quote.endswith('”')):
             if quote.startswith("'") and quote.endswith("'"):
-                quote = f'“{quote[1:-1]}”'
+                quote = f'"{quote[1:-1]}"'
             elif not (quote.startswith('"') and quote.endswith('"')):
-                quote = f'“{quote}”'
+                quote = f'"{quote}"'
         return quote
+
+    def evaluate_model(self):
+        """
+        This is a placeholder for the validation process.  It doesn't make sense to implement this
+        yet, because we don't yet have any ground-truth labels to use for validation for any
+        extractor. #YAGNI
+        """
+        pass
