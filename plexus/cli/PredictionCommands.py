@@ -195,7 +195,7 @@ def predict_score(score_name, scorecard_class, sample_row, content_id):
         if sample_row is not None:
             row_dictionary = sample_row.iloc[0].to_dict()
             logging.info(f"Sample Row: {row_dictionary}")
-            text = row_dictionary.get('Transcription', '')
+            text = row_dictionary.get('text', '')
             model_input = model_input_class(text=text, metadata=row_dictionary)
         else:
             model_input = model_input_class(id=content_id, text="")
