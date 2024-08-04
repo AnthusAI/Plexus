@@ -72,7 +72,7 @@ class AgenticExtractor(BaseNode, LangChainUser):
 
             prompt = ChatPromptTemplate.from_messages([
                 ("system", system_message),
-                ("human", user_message)
+                ("user", user_message)
             ])
             chain = prompt | model | self.ExtractionOutputParser()
             
