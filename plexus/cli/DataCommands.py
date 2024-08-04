@@ -119,7 +119,7 @@ def analyze_scorecard(
         return
 
     scorecard_folder = os.path.join('.', 'scorecards', scorecard_name)
-    scorecard_instance = scorecard_class(scorecard_folder_path=scorecard_folder)
+    scorecard_instance = scorecard_class(scorecard_name=scorecard_name)
     report_folder = os.path.join('.', 'reports', scorecard_class.name)
     logging.info(f"Using scorecard key [purple][b]{scorecard_name}[/b][/purple] with class name [purple][b]{scorecard_instance.__class__.__name__}[/b][/purple]")
     scorecard_id = scorecard_class.metadata['foreign_id']
