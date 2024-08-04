@@ -3,6 +3,7 @@ import re
 import sys
 import click
 import yaml
+import pandas as pd
 
 from plexus.CustomLogging import logging
 from plexus.Scorecard import Scorecard
@@ -48,7 +49,7 @@ def accuracy(
     subset_of_score_names: str = '',
     experiment_label: str = ''):
     """
-    Evaluate the accuracy of the scorecard using the current configuration against a labeled samples file.
+    Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
     These experiment runs will generate metrics and artifacts that Plexus will log in MLFLow.
     The scoring reports from evaluation will include accuracy metrics.
     """
@@ -62,7 +63,6 @@ def accuracy(
 
     scorecard_folder = os.path.join('scorecards', scorecard_name)
 
-    labeled_samples_filename = os.path.join(scorecard_folder, 'experiments/labeled-samples.csv')
     override_folder: str = os.path.join(scorecard_folder, 'experiments/calibrations')
 
     sampling_method = config.get('sampling_method', sampling_method)
@@ -73,7 +73,6 @@ def accuracy(
     experiment_label = config.get('experiment_label', experiment_label)
 
     logging.info('Running accuracy experiment...')
-    logging.info(f'  Using labeled samples from {labeled_samples_filename}')
     Scorecard.load_and_register_scorecards('scorecards/')
     scorecard_type = scorecard_registry.get(scorecard_name)
     if scorecard_type is None:
@@ -83,25 +82,75 @@ def accuracy(
     scorecard_instance = scorecard_type(scorecard_name=scorecard_name)
     logging.info(f"  Using scorecard {scorecard_name} with class {scorecard_instance.__class__.__name__}")
 
-    with AccuracyExperiment(
-        scorecard = scorecard_instance,
-        
-        labeled_samples_filename = labeled_samples_filename,
-        override_folder = override_folder,
-    
-        # Randomly sample some number of transcripts
-        number_of_texts_to_sample = number_of_texts_to_sample,
+    # Check if any score in the scorecard uses the data-driven approach
+    uses_data_driven = any('data' in score_config for score_config in scorecard_instance.scores.values())
 
-        # Sampling: Random or Sequential?
-        sampling_method = sampling_method,  # Set to 'random' or 'sequential'
-        random_seed = random_seed,
+    if uses_data_driven:
+        labeled_samples = []
+        for score_name, score_config in scorecard_instance.scores.items():
+            if 'data' in score_config:
+                labeled_samples.extend(get_data_driven_samples(scorecard_instance, score_name, score_config))
+    else:
+        labeled_samples_filename = os.path.join('scorecards', scorecard_instance.properties.get('key'), 'experiments', 'labeled-samples.csv')
 
-        session_ids_to_sample = re.split(r',\s+', session_ids_to_sample.strip()) if session_ids_to_sample.strip() else None,
-        subset_of_score_names = re.split(r',\s+', subset_of_score_names.strip()) if subset_of_score_names.strip() else None,
+    experiment_args = {
+        'scorecard': scorecard_instance,
+        'override_folder': override_folder,
+        'number_of_texts_to_sample': number_of_texts_to_sample,
+        'sampling_method': sampling_method,
+        'random_seed': random_seed,
+        'session_ids_to_sample': re.split(r',\s+', session_ids_to_sample.strip()) if session_ids_to_sample.strip() else None,
+        'subset_of_score_names': re.split(r',\s+', subset_of_score_names.strip()) if subset_of_score_names.strip() else None,
+        'experiment_label': experiment_label
+    }
 
-        experiment_label = experiment_label
-    ) as experiment:
+    if uses_data_driven:
+        experiment_args['labeled_samples'] = labeled_samples
+    else:
+        experiment_args['labeled_samples_filename'] = labeled_samples_filename
+
+    with AccuracyExperiment(**experiment_args) as experiment:
         experiment.run()
+
+def get_data_driven_samples(scorecard_instance, score_name, score_config):
+    score_class_name = score_config['class']
+    score_module_path = f'plexus.scores.{score_class_name}'
+    score_module = importlib.import_module(score_module_path)
+    score_class = getattr(score_module, score_class_name)
+
+    score_config['scorecard_name'] = scorecard_instance.name
+    score_config['score_name'] = score_name
+    score_instance = score_class(**score_config)
+
+    score_instance.load_data(queries=score_config['data'].get('queries'))
+    score_instance.process_data()
+
+    # Log dataframe information
+    logging.info(f"Dataframe info for score {score_name}:")
+    logging.info(f"Columns: {score_instance.dataframe.columns.tolist()}")
+    logging.info(f"Shape: {score_instance.dataframe.shape}")
+    logging.info(f"Sample data:\n{score_instance.dataframe.head().to_string()}")
+
+    samples = score_instance.dataframe.to_dict('records')
+    
+    return [{
+        'text': sample.get('text', ''),
+        f'{score_name}_label': sample.get(score_name, ''),
+        'content_id': sample.get('content_id', ''),
+        'metadata': {k: v for k, v in sample.items() if k not in ['text', score_name, 'content_id']}
+    } for sample in samples]
+
+def get_csv_samples(csv_filename):
+    if not os.path.exists(csv_filename):
+        logging.error(f"labeled-samples.csv not found at {csv_filename}")
+        return []
+
+    try:
+        df = pd.read_csv(csv_filename)
+        return df.to_dict('records')
+    except Exception as e:
+        logging.error(f"Failed to load or process data from {csv_filename}: {str(e)}")
+        return []
 
 @evaluate.command()
 @click.option('--scorecard-name', required=True, help='Name of the scorecard to evaluate')

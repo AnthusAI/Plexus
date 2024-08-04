@@ -50,12 +50,16 @@ class YesOrNoClassifier(BaseNode, LangChainUser):
                     "explanation": output
                 }
 
+    def get_prompt_templates(self):
+        system_message = self.parameters.system_message
+        user_message = self.parameters.user_message
+        return f"{system_message}\n\n{user_message}"
+
     def get_classifier_node(self) -> FunctionType:
         model = self.model
-        prompt = BaseNode.get_prompt_templates()
+        prompt = self.get_prompt_templates()  # Use self here
 
         def classifier_node(state):
-            
             chain = ChatPromptTemplate.from_messages([
                 ("system", prompt)
             ]) | model | self.ClassificationOutputParser()
