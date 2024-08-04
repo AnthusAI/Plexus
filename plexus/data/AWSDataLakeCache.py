@@ -133,6 +133,41 @@ class AWSDataLakeCache(DataCache):
 
         logging.info("Loading dataframe with queries: {}".format(queries))
         
+        all_scores = set()
+
+        def process_content_item(content_id):
+            try:
+                content_data = self.download_content_item(scorecard_id, content_id)
+                content_row = {'content_id': content_id}
+
+                if 'metadata.json' in content_data:
+                    metadata = json.loads(content_data['metadata.json'])
+                    for score in metadata.get('scores', []):
+                        score_name = score['name']
+                        all_scores.add(score_name)
+                        content_row[score_name] = score['answer']
+
+                        if 'school' in metadata and isinstance(metadata['school'], list):
+                            for index, school_info in enumerate(metadata['school']):
+                                if isinstance(school_info, dict):
+                                    for key, value in school_info.items():
+                                        content_row[f"school_{index}_{key}"] = value
+
+                if 'transcript.txt' in content_data:
+                    text_content = content_data['transcript.txt']
+                    if text_content.strip() == "":
+                        logging.warning(f"Content item {content_id} has an empty text file.")
+                        return None
+                    content_row['text'] = text_content
+                else:
+                    logging.warning(f"Content item {content_id} does not have a text file.")
+                    return None
+                
+                return content_row
+            except self.s3_client.exceptions.NoSuchKey:
+                logging.warning(f"Content item with ID {content_id} not found in S3 bucket.")
+                return None
+            
         for query_params in queries:
             scorecard_id = query_params['scorecard-id']
             if 'score-id' in query_params and ('value' in query_params or 'values' in query_params):
@@ -172,37 +207,6 @@ class AWSDataLakeCache(DataCache):
             
             report_ids = [row['Data'][0]['VarCharValue'] for row in query_results[1:]]
 
-            def process_content_item(content_id):
-                try:
-                    content_data = self.download_content_item(scorecard_id, content_id)
-                    content_row = {'content_id': content_id}
-
-                    if 'metadata.json' in content_data:
-                        metadata = json.loads(content_data['metadata.json'])
-                        for score in metadata.get('scores', []):
-                            content_row[score['name']] = score['answer']
-
-                        if 'school' in metadata and isinstance(metadata['school'], list):
-                            for index, school_info in enumerate(metadata['school']):
-                                if isinstance(school_info, dict):
-                                    for key, value in school_info.items():
-                                        content_row[f"school_{index}_{key}"] = value
-
-                    if 'transcript.txt' in content_data:
-                        text_content = content_data['transcript.txt']
-                        if text_content.strip() == "":
-                            logging.warning(f"Content item {content_id} has an empty text file.")
-                            return None
-                        content_row['text'] = text_content
-                    else:
-                        logging.warning(f"Content item {content_id} does not have a text file.")
-                        return None
-                    
-                    return content_row
-                except self.s3_client.exceptions.NoSuchKey:
-                    logging.warning(f"Content item with ID {content_id} not found in S3 bucket.")
-                    return None
-            
             with ThreadPoolExecutor() as executor:
                 with Progress() as progress:
                     task = progress.add_task("[cyan]Processing content items...", total=len(report_ids))
@@ -215,6 +219,12 @@ class AWSDataLakeCache(DataCache):
                         progress.update(task, advance=1)  
     
             dataframe = pd.DataFrame(content_data)
+            
+            # Ensure all possible score columns are included
+            for score in all_scores:
+                if score not in dataframe.columns:
+                    dataframe[score] = None
+
             dataframes.append(dataframe)
         
         combined_dataframe = pd.concat(dataframes, ignore_index=True)

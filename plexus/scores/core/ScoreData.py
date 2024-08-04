@@ -171,12 +171,16 @@ class ScoreData:
 
             label_dataframes = {label: self.dataframe[self.dataframe[self.parameters.score_name] == label] for label in unique_labels}
 
-            smallest_class_size = min(len(df) for df in label_dataframes.values())
+            for label, df in label_dataframes.items():
+                print(f"Label '{label}' has {len(df)} instances.")
+
+            smallest_class_size = min(len(df) for df in label_dataframes.values() if len(df) > 0)
 
             balanced_dataframes = []
             for label, dataframe in label_dataframes.items():
-                print(f"Sampling {smallest_class_size} instances from the '{label}' class...")
-                balanced_dataframes.append(dataframe.sample(n=smallest_class_size, random_state=42))
+                if len(dataframe) > 0:
+                    print(f"Sampling {smallest_class_size} instances from the '{label}' class...")
+                    balanced_dataframes.append(dataframe.sample(n=smallest_class_size, random_state=42))
 
             balanced_dataframe = pd.concat(balanced_dataframes)
 

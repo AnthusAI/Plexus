@@ -6,6 +6,7 @@ from .EvaluationCommands import evaluate
 from .TrainingCommands import train
 from .ReportingCommands import report
 from .PredictionCommands import predict
+from .TuningCommands import tuning
 from  .console import console
 
 from dotenv import load_dotenv
@@ -39,3 +40,4 @@ main.add_command(evaluate)
 main.add_command(train)
 main.add_command(report)
 main.add_command(predict)
+main.add_command(tuning)

@@ -328,20 +328,49 @@ class LangGraphScore(Score, LangChainUser):
             return state
         return output_aliasing
 
+    @staticmethod
+    def _import_class(class_name):
+        default_module_path = 'plexus.scores.nodes.'
+        full_class_name = default_module_path + class_name
+        components = full_class_name.split('.')
+        module_path = '.'.join(components[:-1])
+        class_name = components[-1]
+        module = __import__(module_path, fromlist=[class_name])
+        imported_class = getattr(module, class_name)
+        logging.info(f"Imported {imported_class} from {module_path}")
+        return imported_class
+
+    def get_prompt_templates(self):
+        """
+        Get the prompt templates for the score by iterating over the graph nodes and asking each node for its prompt templates.
+        """
+        # First pass: Collect node instances
+        node_instances = []
+        node_templates = []
+        if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
+            for node_configuration_entry in self.parameters.graph:
+
+                for attribute in ['model_provider', 'model_name', 'model_region', 'temperature', 'max_tokens']:
+                    if attribute not in node_configuration_entry:
+                        node_configuration_entry[attribute] = getattr(self.parameters, attribute)
+
+                if 'class' in node_configuration_entry and 'name' in node_configuration_entry:
+                    node_class_name = node_configuration_entry['class']
+                    node_name = node_configuration_entry['name']
+                    node_class = LangGraphScore._import_class(node_class_name)
+                    logging.info(f"Node class: {node_class}")
+                    node_instance = node_class(**node_configuration_entry)
+                    node_instances.append((node_name, node_instance))
+                    node_templates.append(node_instance.get_prompt_templates())
+        else:
+            raise ValueError("Invalid or missing graph configuration in parameters.")
+        
+        return node_templates
+
     def build_compiled_workflow(self):
         """
         Build the LangGraph workflow.
         """
-        def _import_class(class_name):
-            default_module_path = 'plexus.scores.nodes.'
-            full_class_name = default_module_path + class_name
-            components = full_class_name.split('.')
-            module_path = '.'.join(components[:-1])
-            class_name = components[-1]
-            module = __import__(module_path, fromlist=[class_name])
-            imported_class = getattr(module, class_name)
-            logging.info(f"Imported {imported_class} from {module_path}")
-            return imported_class
 
         # First pass: Collect node instances
         node_instances = []
@@ -356,7 +385,7 @@ class LangGraphScore(Score, LangChainUser):
                 if 'class' in node_configuration_entry and 'name' in node_configuration_entry:
                     node_class_name = node_configuration_entry['class']
                     node_name = node_configuration_entry['name']
-                    node_class = _import_class(node_class_name)
+                    node_class = LangGraphScore._import_class(node_class_name)
                     logging.info(f"Node class: {node_class}")
                     node_instance = node_class(**node_configuration_entry)
                     node_instances.append((node_name, node_instance))

@@ -18,8 +18,8 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
     """
 
     class Parameters(LangChainUser.Parameters):
-        system_message: str
-        human_message: str
+        system_message: Optional[str] = None
+        user_message: Optional[str] = None
         input: Optional[dict] = None
         output: Optional[dict] = None
 
@@ -95,19 +95,14 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
 
     def get_slicer_node(self) -> FunctionType:
         model = self.model
-        system_message = self.parameters.system_message
-        human_message =  self.parameters.human_message
 
         def slicer_node(state):
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", system_message),
-                ("human",  human_message)
-            ])
+            prompt = BaseNode.get_prompt_templates()
             chain = prompt | model | self.SlicingOutputParser(text=state.text)
             return chain.invoke({"text": state.text})
 
         return slicer_node
-    
+
     def add_core_nodes(self, workflow: StateGraph) -> StateGraph:
         workflow.add_node("slicer", self.get_slicer_node())
         return workflow

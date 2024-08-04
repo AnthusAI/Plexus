@@ -15,7 +15,8 @@ class YesOrNoClassifier(BaseNode, LangChainUser):
     """
     
     class Parameters(LangChainUser.Parameters):
-        prompt: str
+        system_message: Optional[str] = None
+        user_message: Optional[str] = None
 
     def __init__(self, **parameters):
         # We intentionally override super().__init__() to allow for a carefully-crafted Pydantic model here.
@@ -51,7 +52,7 @@ class YesOrNoClassifier(BaseNode, LangChainUser):
 
     def get_classifier_node(self) -> FunctionType:
         model = self.model
-        prompt = self.parameters.prompt
+        prompt = BaseNode.get_prompt_templates()
 
         def classifier_node(state):
             
