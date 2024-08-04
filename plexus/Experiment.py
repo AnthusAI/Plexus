@@ -26,6 +26,7 @@ from graphviz import Digraph
 from jinja2 import Template
 
 from plexus.scores.CompositeScore import CompositeScore
+from plexus.scores.Score import Score
 from .Scorecard import Scorecard
 from .ScorecardResults import ScorecardResults
 from .ScorecardResultsAnalysis import ScorecardResultsAnalysis
@@ -33,7 +34,8 @@ from .ScorecardResultsAnalysis import ScorecardResultsAnalysis
 class Experiment:
     def __init__(self, *,
         scorecard: Scorecard,
-        labeled_samples_filename: str,
+        labeled_samples_filename: str = None,
+        labeled_samples: list = None,
         number_of_texts_to_sample = 1,
         sampling_method = 'random',
         random_seed = None,
@@ -43,6 +45,7 @@ class Experiment:
     ):
         self.scorecard = scorecard
         self.labeled_samples_filename = labeled_samples_filename
+        self.labeled_samples = labeled_samples
         self.number_of_texts_to_sample = number_of_texts_to_sample
         self.sampling_method = sampling_method
         self.random_seed = random_seed
@@ -126,10 +129,12 @@ class Experiment:
         pass
 
 class AccuracyExperiment(Experiment):
-    def __init__(self, *, override_folder=None, **kwargs):
+    def __init__(self, *, override_folder=None, labeled_samples=None, labeled_samples_filename=None, **kwargs):
         super().__init__(**kwargs)
         self.override_folder = override_folder
         self.override_data = self.load_override_data() if self.override_folder else {}
+        self.labeled_samples = labeled_samples
+        self.labeled_samples_filename = labeled_samples_filename
 
     def load_override_data(self):
         override_data = {}
@@ -157,12 +162,26 @@ class AccuracyExperiment(Experiment):
         # Configure logging
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-        # Load the CSV file into a DataFrame
-        df = pd.read_csv(self.labeled_samples_filename)
+        if self.labeled_samples:
+            df = pd.DataFrame(self.labeled_samples)
+        else:
+            df = pd.read_csv(self.labeled_samples_filename)
         logging.info(f"CSV file loaded into DataFrame: {self.labeled_samples_filename}")
         logging.info(f"  DataFrame shape: {df.shape}")
         logging.info(f"  DataFrame columns: {df.columns}")
         logging.info(f"  DataFrame head: {df.head()}")
+
+        # Ensure we have the necessary columns
+        if 'text' not in df.columns:
+            raise ValueError("The dataframe must contain a 'text' column")
+
+        if 'content_id' not in df.columns:
+            logging.warning("'content_id' column not found. Using index as content_id.")
+            df['content_id'] = df.index.astype(str)
+
+        if 'Session ID' not in df.columns:
+            logging.warning("'Session ID' column not found. Using content_id as Session ID.")
+            df['Session ID'] = df['content_id']
 
         if hasattr(self, 'session_ids_to_sample') and self.session_ids_to_sample:
             selected_sample_rows = df[df['Session ID'].isin(self.session_ids_to_sample)]
@@ -326,14 +345,13 @@ class AccuracyExperiment(Experiment):
         retry=retry_if_exception_type((Timeout, RequestException))  # retry on specific exceptions
     )
     def score_text(self, row):
-        session_id = row['Session ID']
-        text = row['Transcription']
-        logging.info(f"Text content: {text}")
-        
-        # Some of our test data has escaped newlines, so we need to replace them with actual newlines.
-        text = text.replace("\\n", "\n")
+        logging.info(f"Columns available in this row: {row.index.tolist()}")
 
-        logging.debug(f"Fixed text content: {text}")
+        text = row['text']
+        content_id = row.get('content_id', '')
+        session_id = row.get('Session ID', content_id)
+
+        logging.info(f"Processing text for content_id: {content_id}, session_id: {session_id}")
 
         scorecard_results = self.scorecard.score_entire_text(
             text=text,
@@ -341,13 +359,20 @@ class AccuracyExperiment(Experiment):
         )
 
         # Extract human labels for each question from the DataFrame row
-        human_labels = {question_name: row[question_name] for question_name in scorecard_results.keys()}
+        human_labels = {}
+        for question_name in scorecard_results.keys():
+            label_column = question_name + '_label'
+            if label_column in row.index:
+                human_labels[question_name] = row[label_column]
+            elif question_name in row.index:
+                human_labels[question_name] = row[question_name]
+            else:
+                logging.warning(f"Neither '{question_name}' nor '{label_column}' found in the row. Available columns: {row.index.tolist()}")
+                human_labels[question_name] = 'N/A'
 
         for question_name in scorecard_results.keys():
             try:
                 score_result = scorecard_results[question_name]
-
-                # This is where we evaluate the score by comparing it against human labels.
 
                 # Normalize the score result value for comparison
                 score_result_value = score_result.value.strip().lower()
@@ -385,10 +410,8 @@ class AccuracyExperiment(Experiment):
 
                 score_result = Score.Result(value="Error", error=str(e))
 
-        # logging.info(f"Total score results: {len(self.all_score_results)}")
-        # logging.info(f"Total incorrect score results: {len(self.incorrect_score_results)}")
-
         return {
+            'content_id': content_id,
             'session_id': session_id,
             'results': scorecard_results,
             'human_labels': human_labels
