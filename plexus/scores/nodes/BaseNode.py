@@ -7,6 +7,7 @@ from plexus.CustomLogging import logging
 from plexus.LangChainUser import LangChainUser
 from plexus.scores.LangGraphScore import LangGraphScore
 from langgraph.graph import StateGraph, END
+from langchain_core.prompts import ChatPromptTemplate
 
 class BaseNode(ABC):
     """
@@ -29,6 +30,25 @@ class BaseNode(ABC):
     def __init__(self, **parameters):
         combined_parameters_model = pydantic.create_model("CombinedParameters", __base__=(LangChainUser.Parameters, BaseNode.Parameters))
         self.parameters = combined_parameters_model(**parameters)
+
+    def get_prompt_templates(self):
+        """
+        Get a list of prompt templates for the node, by looking for the "system" parameter for
+        a system message, and the "human" parameter for a human message.  If either is missing or
+        empty, the method will skip that template.
+        """
+        message_types = ['system_message', 'user_message']
+        messages = []
+        for message_type in message_types:
+            if hasattr(self.parameters, message_type) and getattr(self.parameters, message_type):
+                content = getattr(self.parameters, message_type)
+                role = message_type.split('_')[0]
+                messages.append((role, content))
+        
+        if messages:
+            return [ChatPromptTemplate.from_messages(messages)]
+        else:
+            return []
 
     @abstractmethod
     def add_core_nodes(self, workflow: StateGraph) -> StateGraph:

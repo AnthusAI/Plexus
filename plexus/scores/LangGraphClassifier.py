@@ -187,10 +187,10 @@ Provide your answer as ONLY "Yes" or "No", without any additional explanation.""
         state["agent_presented_rate_quote"] = parsed_result
         return state
 
-    def _slice_text(self, state: GraphState, system_message: str, human_message: str, slice_key: str) -> GraphState:
+    def _slice_text(self, state: GraphState, system_message: str, user_message: str, slice_key: str) -> GraphState:
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_message),
-            ("human", human_message)
+            ("human", user_message)
         ])
 
         chain = prompt | self.model | CustomOutputParser(text=state['text'])
@@ -202,7 +202,7 @@ Provide your answer as ONLY "Yes" or "No", without any additional explanation.""
 
     def health_questions_slice(self, state: GraphState) -> GraphState:
         system_message = "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to identify the portion of the conversation where the agent asks the last health and lifestyle question prior to presenting the rate quote."
-        human_message = """Here's a transcript of a conversation between an insurance agent and a customer. Please follow these steps:
+        user_message = """Here's a transcript of a conversation between an insurance agent and a customer. Please follow these steps:
 
 1. Identify where the agent asks the last health and lifestyle question.
 2. Provide a short, exact quote (1-2 sentences) where the agent starts this section of questions.
@@ -213,11 +213,11 @@ Provide your answer as ONLY "Yes" or "No", without any additional explanation.""
 </transcript>
 
 Remember, I need a short, exact quote from the transcript, not a summary or paraphrase. Start your response with 'Quote:'"""
-        return self._slice_text(state, system_message, human_message, 'health_questions_slice')
+        return self._slice_text(state, system_message, user_message, 'health_questions_slice')
 
     def rate_quote_slice(self, state: GraphState) -> GraphState:
         system_message = "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to identify the exact moment when the agent first presents rate quotes after completing all health and lifestyle questions."
-        human_message = """Here's a transcript of a conversation between an insurance agent and a customer, starting from where health and lifestyle questions begin. Please follow these steps:
+        user_message = """Here's a transcript of a conversation between an insurance agent and a customer, starting from where health and lifestyle questions begin. Please follow these steps:
 
 1. Carefully identify where the agent completes asking ALL health and lifestyle questions.
 2. After that point, find the first instance where the agent presents specific rate quotes to the customer, given as a monthly or yearly cost.
@@ -228,7 +228,7 @@ Remember, I need a short, exact quote from the transcript, not a summary or para
 </transcript>
 
 Remember, I need a short, exact quote from the transcript, not a summary or paraphrase. Only consider rate quotes that come after ALL health and lifestyle questions and are presented as a monthly or yearly cost. Start your response with 'Quote:'"""
-        return self._slice_text(state, system_message, human_message, 'rate_quote_slice')
+        return self._slice_text(state, system_message, user_message, 'rate_quote_slice')
 
     def _examine(self, state: GraphState) -> GraphState:
         logging.info(f"Examining state: {state}")

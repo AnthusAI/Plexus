@@ -15,7 +15,7 @@ class AgenticExtractor(BaseNode, LangChainUser):
     
     class Parameters(LangChainUser.Parameters):
         system_message: str
-        human_message: str
+        user_message: str
         input: Optional[dict] = None
         output: Optional[dict] = None
 
@@ -60,7 +60,7 @@ class AgenticExtractor(BaseNode, LangChainUser):
     def get_extractor_node(self) -> Callable:
         model = self.model
         system_message = self.parameters.system_message
-        human_message = self.parameters.human_message
+        user_message = self.parameters.user_message
 
         def extractor_node(state):
             logging.info(f"Extractor node received state: {state}")
@@ -72,7 +72,7 @@ class AgenticExtractor(BaseNode, LangChainUser):
 
             prompt = ChatPromptTemplate.from_messages([
                 ("system", system_message),
-                ("human", human_message)
+                ("human", user_message)
             ])
             chain = prompt | model | self.ExtractionOutputParser()
             
