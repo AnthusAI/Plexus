@@ -56,11 +56,13 @@ class YesOrNoClassifier(BaseNode, LangChainUser):
 
         def classifier_node(state):
             
-            chain = ChatPromptTemplate.from_messages([
-                ("system", prompt)
-            ]) | model | self.ClassificationOutputParser()
+            chain = prompt | model | self.ClassificationOutputParser()
             
-            return chain.invoke({"text": state.text})
+            return chain.invoke(
+                {
+                    "text": state.text
+                }
+            )
 
         return classifier_node
 
