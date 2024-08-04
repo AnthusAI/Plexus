@@ -148,7 +148,7 @@ class LangGraphClassifier(LangGraphScore):
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", "You are an AI assistant tasked with analyzing a transcript of a conversation between an insurance agent and a customer. Your job is to determine if the agent has presented a rate quote to the customer."),
-            ("human", """Here's a transcript of a conversation between an insurance agent and a customer:
+            ("user", """Here's a transcript of a conversation between an insurance agent and a customer:
 
 <transcript>
 {text}
@@ -190,7 +190,7 @@ Provide your answer as ONLY "Yes" or "No", without any additional explanation.""
     def _slice_text(self, state: GraphState, system_message: str, user_message: str, slice_key: str) -> GraphState:
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_message),
-            ("human", user_message)
+            ("user", user_message)
         ])
 
         chain = prompt | self.model | CustomOutputParser(text=state['text'])

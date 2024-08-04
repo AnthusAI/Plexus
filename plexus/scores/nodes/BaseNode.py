@@ -33,8 +33,8 @@ class BaseNode(ABC):
 
     def get_prompt_templates(self):
         """
-        Get a list of prompt templates for the node, by looking for the "system" parameter for
-        a system message, and the "human" parameter for a human message.  If either is missing or
+        Get a list of prompt templates for the node, by looking for the "system_message" parameter for
+        a system message, and the "user_message" parameter for a human message.  If either is missing or
         empty, the method will skip that template.
         """
         message_types = ['system_message', 'user_message']

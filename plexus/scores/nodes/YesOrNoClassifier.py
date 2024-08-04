@@ -51,19 +51,19 @@ class YesOrNoClassifier(BaseNode, LangChainUser):
                 }
 
     def get_prompt_templates(self):
-        system_message = self.parameters.system_message
-        user_message = self.parameters.user_message
-        return f"{system_message}\n\n{user_message}"
+        system_message = self.parameters.system_message or "You are a helpful assistant."
+        user_message = self.parameters.user_message or "Please classify the following text as either 'yes' or 'no': {text}"
+        return ChatPromptTemplate.from_messages([
+            ("system", system_message),
+            ("human", user_message)
+        ])
 
     def get_classifier_node(self) -> FunctionType:
         model = self.model
-        prompt = self.get_prompt_templates()  # Use self here
+        prompt = self.get_prompt_templates()
 
         def classifier_node(state):
-            chain = ChatPromptTemplate.from_messages([
-                ("system", prompt)
-            ]) | model | self.ClassificationOutputParser()
-            
+            chain = prompt | model | self.ClassificationOutputParser()
             return chain.invoke({"text": state.text})
 
         return classifier_node
