@@ -87,6 +87,12 @@ class LangChainUser:
 
         return TokenCounterCallback()
 
+    def __init__(self, **parameters):
+        self.parameters = self.Parameters(**parameters)
+        self.token_counter = self._create_token_counter()
+        self.openai_callback = None
+        self.model = self._initialize_model()
+
     def _initialize_model(self) -> BaseLanguageModel:
         """
         Initialize and return the appropriate language model based on the configured provider.
@@ -102,7 +108,7 @@ class LangChainUser:
 
         if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
             self.openai_callback = OpenAICallbackHandler()
-            callbacks = [self.openai_callback]
+            callbacks = [self.openai_callback, self.token_counter]
             
             if self.parameters.model_provider == "AzureChatOpenAI":
                 base_model = AzureChatOpenAI(
@@ -148,3 +154,19 @@ class LangChainUser:
             callbacks=callbacks,
             max_tokens=max_tokens
         )
+
+    def get_token_usage(self):
+        if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
+            return {
+                "prompt_tokens": self.openai_callback.prompt_tokens,
+                "completion_tokens": self.openai_callback.completion_tokens,
+                "total_tokens": self.openai_callback.total_tokens,
+                "successful_requests": self.openai_callback.successful_requests
+            }
+        else:
+            return {
+                "prompt_tokens": self.token_counter.prompt_tokens,
+                "completion_tokens": self.token_counter.completion_tokens,
+                "total_tokens": self.token_counter.total_tokens,
+                "successful_requests": self.token_counter.llm_calls
+            }
