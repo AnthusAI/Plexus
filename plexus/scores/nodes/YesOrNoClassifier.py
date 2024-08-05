@@ -33,13 +33,16 @@ class YesOrNoClassifier(BaseNode, LangChainUser):
 
     class ClassificationOutputParser(BaseOutputParser[dict]):
         def parse(self, output: str) -> Dict[str, Any]:
-            output = output.strip().strip('"')
-            if 'yes' in output.lower():
+            cleaned_output = ''.join(char.lower() for char in output if char.isalnum() or char.isspace())
+            words = cleaned_output.split()
+            last_word = words[-1] if words else ""
+            
+            if last_word == "yes":
                 return {
                     "classification": "yes",
                     "explanation": output
                 }
-            elif 'no' in output.lower():
+            elif last_word == "no":
                 return {
                     "classification": "no",
                     "explanation": output
@@ -49,14 +52,6 @@ class YesOrNoClassifier(BaseNode, LangChainUser):
                     "classification": "unknown",
                     "explanation": output
                 }
-
-    def get_prompt_templates(self):
-        system_message = self.parameters.system_message or "You are a helpful assistant."
-        user_message = self.parameters.user_message or "Please classify the following text as either 'yes' or 'no': {text}"
-        return ChatPromptTemplate.from_messages([
-            ("system", system_message),
-            ("human", user_message)
-        ])
 
     def get_classifier_node(self) -> FunctionType:
         model = self.model
