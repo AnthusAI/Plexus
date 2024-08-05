@@ -1,3 +1,4 @@
+import re
 import rich
 import click
 import plexus
@@ -6,6 +7,10 @@ import json
 import pandas as pd
 from openpyxl.styles import Font
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage
+from langchain_core.output_parsers import BaseOutputParser
+from langchain.chat_models import ChatOpenAI
+import tiktoken
 
 from plexus.CustomLogging import logging
 from plexus.Registries import scorecard_registry
@@ -15,12 +20,40 @@ def tuning():
     """Commands for fine-tuning models."""
     pass
 
+def get_output_dir(scorecard_name, score_name, subsampled=False, max_tokens=None):
+    base_dir = f"tuning/{scorecard_name}/{score_name}"
+    if subsampled and max_tokens:
+        return f"{base_dir}/{max_tokens}_tokens"
+    return base_dir
+
+def get_file_path(output_dir, file_type):
+    return f"{output_dir}/{file_type}.jsonl"
+
+def get_id_file_path(output_dir, file_type):
+    return f"{output_dir}/{file_type}_ids.txt"
+
 @tuning.command(help="Generate JSON-L files for training and validation.")
-@click.option('--model-name', required=True, help='The name of the model.')
 @click.option('--scorecard-name', required=True, help='The name of the scorecard.')
 @click.option('--score-name', help='The name of the score to generate JSON-L for.')
-@click.option('--number', type=int, default=100, help='Number of samples, total.')
-def data(model_name, scorecard_name, score_name, number):
+@click.option('--maximum-number', type=int, default=100, help='Maximum number of samples, total.')
+@click.option('--generate-completions', is_flag=True, help='Generate completions using an LLM.')
+@click.option('--verbose', is_flag=True, help='Verbose output.')
+def generate_examples(scorecard_name, score_name, maximum_number, generate_completions, verbose):
+    """
+    Generate JSON-L files that include a specified number of examples, using the prompt templates
+    from the score configuration combined with data and ground-truth labels.
+
+    :param scorecard_name: The name of the scorecard.
+    :type scorecard_name: str
+    :param score_name: The name of the score to generate JSON-L for.
+    :type score_name: str
+    :param maximum_number: Maximum number of samples, total.
+    :type maximum_number: int
+    :param generate_completions: Generate completions using an LLM.
+    :type generate_completions: bool
+    :param verbose: Verbose output.
+    :type verbose: bool
+    """
     logging.info(f"Generating JSON-L for [magenta1][b]{score_name}[/b][/magenta1] on [magenta1][b]{scorecard_name}[/b][/magenta1]...")
 
     # Find the scorecard
@@ -52,14 +85,14 @@ def data(model_name, scorecard_name, score_name, number):
     score_instance.process_data()
 
     total_rows = len(score_instance.dataframe)
-    if number > total_rows:
-        logging.warning(f"Requested sample size ({number}) is larger than available data ({total_rows}). Using all available data.")
+    if maximum_number > total_rows:
+        logging.warning(f"Requested sample size ({maximum_number}) is larger than available data ({total_rows}). Using all available data.")
         sample_rows = score_instance.dataframe
     else:
-        sample_rows = score_instance.dataframe.sample(n=number)
+        sample_rows = score_instance.dataframe.sample(n=maximum_number)
 
-    # Log sample rows
-    # logging.info(f"Sample rows: {sample_rows.to_dict('records')}")
+    if verbose:
+        logging.info(f"First few sample rows: {sample_rows.to_dict('records')[:5]}")
 
     # Calculate the number of training samples
     num_training_samples = int(len(sample_rows) * 0.8)
@@ -70,34 +103,79 @@ def data(model_name, scorecard_name, score_name, number):
     validation_ids = []
 
     # Get templates
-    templates = score_instance.get_prompt_templates()
-    logging.info(f"Templates: {templates}")
+    nodes = score_instance.get_prompt_templates()
+    logging.info(f"Nodes: {nodes}")
 
     # Loop through the sample rows and generate JSON-L
+    messages = []
     for index, row in sample_rows.iterrows():
         formatted_messages = []
-        for template in templates:
-            if isinstance(template, ChatPromptTemplate):
-                try:
-                    messages = template.format_messages(text=row['text'])
-                    formatted_messages.extend([
-                        {
-                            "role": "user" if message.type == "human" else message.type, 
-                            "content": message.content
-                        }
-                        for message in messages
-                    ])
-                except Exception as e:
-                    logging.error(f"Error formatting messages for row {index}: {e}")
+        for node_templates in nodes:
+            for template in node_templates:
+                if isinstance(template, ChatPromptTemplate):
+                    try:
+                        messages = template.format_messages(text=row['text'])
+                        formatted_messages.extend([
+                            {
+                                "role": "user" if message.type == "human" else message.type, 
+                                "content": message.content
+                            }
+                            for message in messages
+                        ])
+                    except Exception as e:
+                        logging.error(f"Error formatting messages for row {index}: {e}")
 
         if not formatted_messages:
             logging.warning(f"No formatted messages for row {index}. Skipping.")
             continue
 
-        # logging.info(f"Formatted messages for row {index}: {formatted_messages}")
+        if verbose:
+            logging.info(f"Formatted messages for row {index}: {formatted_messages}")
 
-        completion = row[score_name]
-        # logging.info(f"Completion for row {index}: {completion}")
+        def generate_completion_with_retry(messages, correct_answer, max_attempts=5):
+            class CompletionOutputParser(BaseOutputParser[dict]):
+                def parse(self, output: str) -> dict:
+                    def extract_last_word(text):
+                        cleaned_text = re.sub(r'[^\w\s]', '', text)
+                        words = cleaned_text.split()
+                        return words[-1] if words else ""
+
+                    answer = extract_last_word(output)
+                    return {
+                        "answer": answer,
+                        "completion": output.strip(),
+                    }
+
+            output_parser = CompletionOutputParser()
+            
+            for attempt in range(max_attempts):
+                temperature = min(0.2 * attempt, 1.0)
+                model = ChatOpenAI(temperature=temperature)
+                
+                chat_prompt = ChatPromptTemplate.from_messages(messages)
+                chain = chat_prompt | model | output_parser
+                result = chain.invoke({"text": row['text']})
+                
+                if result['answer'].lower() == correct_answer.lower():
+                    return result['completion']
+                
+                if verbose:
+                    logging.info(f"Attempt {attempt + 1}: Generated answer '{result['answer']}' "
+                                 f"does not match correct answer '{correct_answer}'. "
+                                 f"Retrying with temperature {temperature:.2f}")
+            
+            logging.warning(f"Failed to generate matching completion after {max_attempts} attempts. "
+                            f"Using the last generated completion.")
+            return result['completion']
+
+        if generate_completions:
+            messages_with_hint = messages + [
+                HumanMessage(content=f"<hint>The correct answer is {row[score_name]}</hint>")
+            ]
+            completion = generate_completion_with_retry(messages_with_hint, row[score_name])
+        else:
+            completion = row[score_name]
+
         formatted_messages.append({"role": "assistant", "content": completion})
 
         message = {"messages": formatted_messages}
@@ -113,25 +191,80 @@ def data(model_name, scorecard_name, score_name, number):
     logging.info(f"Number of validation samples: {len(validation_data)}")
 
     # Ensure the directory exists
-    output_dir = f"tuning/{scorecard_name}/{score_name}"
+    output_dir = get_output_dir(scorecard_name, score_name)
     os.makedirs(output_dir, exist_ok=True)
     
     # Save to JSON-L files
-    with open(f"{output_dir}/{model_name}_training.jsonl", "w") as train_file:
+    with open(get_file_path(output_dir, "training"), "w") as train_file:
         for entry in training_data:
             train_file.write(f"{json.dumps(entry)}\n")
     
-    with open(f"{output_dir}/{model_name}_validation.jsonl", "w") as val_file:
+    with open(get_file_path(output_dir, "validation"), "w") as val_file:
         for entry in validation_data:
             val_file.write(f"{json.dumps(entry)}\n")
 
     # Save content IDs to txt files
-    with open(f"{output_dir}/{model_name}_training_ids.txt", "w") as train_id_file:
+    with open(get_id_file_path(output_dir, "training"), "w") as train_id_file:
         for content_id in training_ids:
             train_id_file.write(f"{content_id}\n")
 
-    with open(f"{output_dir}/{model_name}_validation_ids.txt", "w") as val_id_file:
+    with open(get_id_file_path(output_dir, "validation"), "w") as val_id_file:
         for content_id in validation_ids:
             val_id_file.write(f"{content_id}\n")
 
     logging.info(f"Generated JSON-L and ID files in {output_dir}")
+
+@tuning.command(help="Subsample JSON-L files based on token count estimates.")
+@click.option('--scorecard-name', required=True, help='The name of the scorecard.')
+@click.option('--score-name', help='The name of the score to subsample JSON-L for.')
+@click.option('--maximum-tokens', type=int, default=2000000, help='Maximum number of tokens.')
+@click.option('--verbose', is_flag=True, help='Verbose output.')
+def subsample_examples(scorecard_name, score_name, maximum_tokens, verbose):
+    logging.info(f"Subsampling examples for [magenta1][b]{score_name}[/b][/magenta1] on [magenta1][b]{scorecard_name}[/b][/magenta1] with a max token limit of {maximum_tokens}...")
+
+    input_dir = get_output_dir(scorecard_name, score_name)
+    training_file_path = get_file_path(input_dir, "training")
+
+    if not os.path.exists(training_file_path):
+        logging.error(f"Training file not found in {input_dir}.")
+        return
+
+    def load_jsonl(file_path):
+        with open(file_path, 'r') as file:
+            return [json.loads(line) for line in file]
+
+    training_data = load_jsonl(training_file_path)
+
+    if verbose:
+        logging.info(f"Loaded {len(training_data)} training examples.")
+
+    def subsample_data(data, max_tokens):
+        encoder = tiktoken.encoding_for_model("gpt-4o")
+        subsampled_data = []
+        current_tokens = 0
+
+        for entry in data:
+            entry_tokens = sum(len(encoder.encode(message['content'])) for message in entry['messages'])
+            if current_tokens + entry_tokens > max_tokens:
+                break
+            subsampled_data.append(entry)
+            current_tokens += entry_tokens
+            if verbose:
+                logging.info(f"Subsampled entry tokens: [magenta1]{entry_tokens:>10,}[/magenta1]   "
+                             f"Current tokens: [magenta1]{current_tokens:>10,}[/magenta1]")
+
+        return subsampled_data
+
+    training_data = subsample_data(training_data, maximum_tokens)
+
+    output_dir = get_output_dir(scorecard_name, score_name, subsampled=True, max_tokens=maximum_tokens)
+    os.makedirs(output_dir, exist_ok=True)
+
+    def save_jsonl(data, file_path):
+        with open(file_path, 'w') as file:
+            for entry in data:
+                file.write(f"{json.dumps(entry)}\n")
+
+    save_jsonl(training_data, get_file_path(output_dir, "training"))
+
+    logging.info(f"Subsampled JSON-L files saved in {output_dir}")
