@@ -58,7 +58,7 @@ class YesOrNoClassifier(BaseNode, LangChainUser):
         prompt = self.get_prompt_templates()
 
         def classifier_node(state):
-            chain = prompt | model | self.ClassificationOutputParser()
+            chain = prompt[0] | model | self.ClassificationOutputParser()
             return chain.invoke({"text": state.text})
 
         return classifier_node
