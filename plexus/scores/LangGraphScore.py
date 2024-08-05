@@ -2,7 +2,7 @@ import os
 import logging
 import traceback
 import graphviz
-from langsmith import Client
+#from langsmith import Client
 from types import FunctionType
 from typing import Type, Tuple, Literal, Optional, Any, TypedDict, List, Dict
 from pydantic import BaseModel, ConfigDict, create_model
@@ -68,7 +68,7 @@ class LangGraphScore(Score, LangChainUser):
         super().__init__(**parameters)
         self.token_counter = self._create_token_counter()
         self.openai_callback = None
-        self.langsmith_client = Client()
+        #self.langsmith_client = Client()
         self.model = self._initialize_model()
 
     def _parse_validation_result(self, output: str) -> Tuple[str, str]:
@@ -199,20 +199,19 @@ class LangGraphScore(Score, LangChainUser):
 
         :return: A dictionary with token usage statistics.
         """
-        if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
-            return {
-                "prompt_tokens": self.openai_callback.prompt_tokens,
-                "completion_tokens": self.openai_callback.completion_tokens,
-                "total_tokens": self.openai_callback.total_tokens,
-                "successful_requests": self.openai_callback.successful_requests
-            }
-        else:
-            return {
-                "prompt_tokens": self.token_counter.prompt_tokens,
-                "completion_tokens": self.token_counter.completion_tokens,
-                "total_tokens": self.token_counter.total_tokens,
-                "successful_requests": self.token_counter.llm_calls
-            }
+        total_usage = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "successful_requests": 0
+        }
+
+        for node_name, node_instance in self.node_instances:
+            node_usage = node_instance.get_token_usage()
+            for key in total_usage:
+                total_usage[key] += node_usage[key]
+
+        return total_usage
 
     def get_accumulated_costs(self):
         """
@@ -430,6 +429,9 @@ class LangGraphScore(Score, LangChainUser):
 
         logging.info(f"Graph for {self.__class__.__name__}:")
         app.get_graph().print_ascii()
+
+        # Store node instances for later token usage calculation
+        self.node_instances = node_instances
 
         return app
 

@@ -24,6 +24,7 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
         output: Optional[dict] = None
 
     def __init__(self, **parameters):
+        LangChainUser.__init__(self, **parameters)
         # We intentionally override super().__init__() to allow for a carefully-crafted Pydantic model here.
         combined_parameters_model = pydantic.create_model(
             "CombinedParameters",

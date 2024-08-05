@@ -9,7 +9,7 @@ from plexus.scores.LangGraphScore import LangGraphScore
 from langgraph.graph import StateGraph, END
 from langchain_core.prompts import ChatPromptTemplate
 
-class BaseNode(ABC):
+class BaseNode(ABC, LangChainUser):
     """
     Abstract base class for nodes in a LangGraph workflow.
 
@@ -28,6 +28,7 @@ class BaseNode(ABC):
         output: Optional[dict] = None
 
     def __init__(self, **parameters):
+        LangChainUser.__init__(self, **parameters)
         combined_parameters_model = pydantic.create_model("CombinedParameters", __base__=(LangChainUser.Parameters, BaseNode.Parameters))
         self.parameters = combined_parameters_model(**parameters)
 
