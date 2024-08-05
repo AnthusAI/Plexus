@@ -188,8 +188,12 @@ class AccuracyExperiment(Experiment):
         elif self.sampling_method == 'random':
             if hasattr(self, 'random_seed'):
                 random.seed(self.random_seed)
-            selected_sample_indices = random.sample(range(len(df)), self.number_of_texts_to_sample)
-            selected_sample_rows = df.iloc[selected_sample_indices]
+            try:
+                selected_sample_indices = random.sample(range(len(df)), self.number_of_texts_to_sample)
+                selected_sample_rows = df.iloc[selected_sample_indices]
+            except ValueError as e:
+                logging.error(f"Sampling error: {e}")
+                selected_sample_rows = df
         elif self.sampling_method == 'all':
             selected_sample_rows = df
         else:
@@ -259,43 +263,64 @@ class AccuracyExperiment(Experiment):
         )
 
         def log_accuracy_heatmap():
-            analysis.plot_accuracy_heatmap()
-            mlflow.log_artifact('tmp/accuracy_heatmap.png')
+            try:
+                analysis.plot_accuracy_heatmap()
+                mlflow.log_artifact('tmp/accuracy_heatmap.png')
+            except Exception as e:
+                logging.error(f"Failed to log accuracy heatmap: {e}")
 
         def log_html_report():
-            html_report_content = analysis.generate_html_report(expenses=expenses)
-            with open("tmp/scorecard_report.html", "w") as file:
-                file.write(html_report_content)
-            mlflow.log_artifact("tmp/scorecard_report.html")
+            try:
+                html_report_content = analysis.generate_html_report(expenses=expenses)
+                with open("tmp/scorecard_report.html", "w") as file:
+                    file.write(html_report_content)
+                mlflow.log_artifact("tmp/scorecard_report.html")
+            except Exception as e:
+                logging.error(f"Failed to log HTML report: {e}")
 
         def log_incorrect_scores_report():
-            html_report_content = analysis.generate_html_report(only_incorrect_scores=True, expenses=expenses)
-            with open("tmp/scorecard_report_incorrect_scores.html", "w") as file:
-                file.write(html_report_content)
-            mlflow.log_artifact("tmp/scorecard_report_incorrect_scores.html")
+            try:
+                html_report_content = analysis.generate_html_report(only_incorrect_scores=True, expenses=expenses)
+                with open("tmp/scorecard_report_incorrect_scores.html", "w") as file:
+                    file.write(html_report_content)
+                mlflow.log_artifact("tmp/scorecard_report_incorrect_scores.html")
+            except Exception as e:
+                logging.error(f"Failed to log incorrect scores report: {e}")
 
         def log_no_costs_report():
-            html_report_content = analysis.generate_html_report(redact_cost_information=True)
-            with open("tmp/scorecard_report_no_costs.html", "w") as file:
-                file.write(html_report_content)
-            mlflow.log_artifact("tmp/scorecard_report_no_costs.html")
+            try:
+                html_report_content = analysis.generate_html_report(redact_cost_information=True)
+                with open("tmp/scorecard_report_no_costs.html", "w") as file:
+                    file.write(html_report_content)
+                mlflow.log_artifact("tmp/scorecard_report_no_costs.html")
+            except Exception as e:
+                logging.error(f"Failed to log no costs report: {e}")
 
         def log_scorecard_costs():
-            analysis.plot_scorecard_costs(results=results)
-            mlflow.log_artifact('tmp/scorecard_input_output_costs.png')
-            mlflow.log_artifact('tmp/histogram_of_total_costs.png')
-            mlflow.log_artifact('tmp/distribution_of_input_costs.png')
-            mlflow.log_artifact('tmp/total_llm_calls_by_score.png')
-            mlflow.log_artifact('tmp/distribution_of_input_costs_by_element_type.png')
+            try:
+                analysis.plot_scorecard_costs(results=results)
+                mlflow.log_artifact('tmp/scorecard_input_output_costs.png')
+                mlflow.log_artifact('tmp/histogram_of_total_costs.png')
+                mlflow.log_artifact('tmp/distribution_of_input_costs.png')
+                mlflow.log_artifact('tmp/total_llm_calls_by_score.png')
+                mlflow.log_artifact('tmp/distribution_of_input_costs_by_element_type.png')
+            except Exception as e:
+                logging.error(f"Failed to log scorecard costs: {e}")
 
         def log_csv_report():
-            with open("tmp/scorecard_report_for_incorrect_results.csv", "w") as file:
-                file.write(analysis.generate_csv_scorecard_report(results=results))
-            mlflow.log_artifact("tmp/scorecard_report_for_incorrect_results.csv")
+            try:
+                with open("tmp/scorecard_report_for_incorrect_results.csv", "w") as file:
+                    file.write(analysis.generate_csv_scorecard_report(results=results))
+                mlflow.log_artifact("tmp/scorecard_report_for_incorrect_results.csv")
+            except Exception as e:
+                logging.error(f"Failed to log CSV report: {e}")
 
         def log_question_accuracy_csv():
-            analysis.generate_question_accuracy_csv(output_file="tmp/question_accuracy_report.csv")
-            mlflow.log_artifact("tmp/question_accuracy_report.csv")
+            try:
+                analysis.generate_question_accuracy_csv(output_file="tmp/question_accuracy_report.csv")
+                mlflow.log_artifact("tmp/question_accuracy_report.csv")
+            except Exception as e:
+                logging.error(f"Failed to log question accuracy CSV: {e}")
 
         expenses = self.scorecard.get_accumulated_costs()
         expenses['cost_per_text'] = expenses['total_cost'] / len(selected_sample_rows)    

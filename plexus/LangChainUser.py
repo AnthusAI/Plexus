@@ -22,6 +22,7 @@ class LangChainUser:
         model_config = ConfigDict(protected_namespaces=())
         model_provider: Literal["ChatOpenAI", "AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "AzureChatOpenAI"
         model_name: Optional[str] = None
+        base_model_name: Optional[str] = None
         model_region: Optional[str] = None
         temperature: Optional[float] = 0.1
         max_tokens: Optional[int] = 500

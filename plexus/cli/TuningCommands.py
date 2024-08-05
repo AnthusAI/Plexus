@@ -59,7 +59,7 @@ def data(model_name, scorecard_name, score_name, number):
         sample_rows = score_instance.dataframe.sample(n=number)
 
     # Log sample rows
-    logging.info(f"Sample rows: {sample_rows.to_dict('records')}")
+    # logging.info(f"Sample rows: {sample_rows.to_dict('records')}")
 
     # Calculate the number of training samples
     num_training_samples = int(len(sample_rows) * 0.8)
@@ -76,29 +76,28 @@ def data(model_name, scorecard_name, score_name, number):
     # Loop through the sample rows and generate JSON-L
     for index, row in sample_rows.iterrows():
         formatted_messages = []
-        for node_templates in templates:
-            for template in node_templates:
-                if isinstance(template, ChatPromptTemplate):
-                    try:
-                        messages = template.format_messages(text=row['text'])
-                        formatted_messages.extend([
-                            {
-                                "role": "user" if message.type == "human" else message.type, 
-                                "content": message.content
-                            }
-                            for message in messages
-                        ])
-                    except Exception as e:
-                        logging.error(f"Error formatting messages for row {index}: {e}")
+        for template in templates:
+            if isinstance(template, ChatPromptTemplate):
+                try:
+                    messages = template.format_messages(text=row['text'])
+                    formatted_messages.extend([
+                        {
+                            "role": "user" if message.type == "human" else message.type, 
+                            "content": message.content
+                        }
+                        for message in messages
+                    ])
+                except Exception as e:
+                    logging.error(f"Error formatting messages for row {index}: {e}")
 
         if not formatted_messages:
             logging.warning(f"No formatted messages for row {index}. Skipping.")
             continue
 
-        logging.info(f"Formatted messages for row {index}: {formatted_messages}")
+        # logging.info(f"Formatted messages for row {index}: {formatted_messages}")
 
         completion = row[score_name]
-        logging.info(f"Completion for row {index}: {completion}")
+        # logging.info(f"Completion for row {index}: {completion}")
         formatted_messages.append({"role": "assistant", "content": completion})
 
         message = {"messages": formatted_messages}

@@ -89,7 +89,7 @@ def accuracy(
         labeled_samples = []
         for score_name, score_config in scorecard_instance.scores.items():
             if 'data' in score_config:
-                labeled_samples.extend(get_data_driven_samples(scorecard_instance, score_name, score_config))
+                labeled_samples.extend(get_data_driven_samples(scorecard_instance, scorecard_name, score_name, score_config))
     else:
         labeled_samples_filename = os.path.join('scorecards', scorecard_instance.properties.get('key'), 'experiments', 'labeled-samples.csv')
 
@@ -112,7 +112,7 @@ def accuracy(
     with AccuracyExperiment(**experiment_args) as experiment:
         experiment.run()
 
-def get_data_driven_samples(scorecard_instance, score_name, score_config):
+def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, score_config):
     score_class_name = score_config['class']
     score_module_path = f'plexus.scores.{score_class_name}'
     score_module = importlib.import_module(score_module_path)
@@ -133,6 +133,15 @@ def get_data_driven_samples(scorecard_instance, score_name, score_config):
 
     samples = score_instance.dataframe.to_dict('records')
     
+    # Filter out rows that were included in fine-tuning training exmaples,
+    # if a file exists.
+    content_ids_to_exclude_filename = f"tuning/{scorecard_name}/{score_name}/{score_config['base_model_name']}_training_ids.txt"
+    if os.path.exists(content_ids_to_exclude_filename):
+        with open(content_ids_to_exclude_filename, 'r') as file:
+            content_ids_to_exclude = file.read().splitlines()
+        samples = [sample for sample in samples if sample['content_id'] not in content_ids_to_exclude]
+        logging.info(f"Number of samples after filtering: {len(samples)}")
+
     return [{
         'text': sample.get('text', ''),
         f'{score_name}_label': sample.get(score_name, ''),
