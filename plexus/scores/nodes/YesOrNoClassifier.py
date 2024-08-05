@@ -9,7 +9,7 @@ from plexus.scores.LangGraphScore import LangGraphScore
 from plexus.scores.nodes.BaseNode import BaseNode
 from typing import Type, Optional, Dict, Any
 
-class YesOrNoClassifier(BaseNode, LangChainUser):
+class YesOrNoClassifier(BaseNode):
     """
     A node that classifies text input as 'yes' or 'no' based on the provided prompt.
     """
@@ -19,12 +19,14 @@ class YesOrNoClassifier(BaseNode, LangChainUser):
         user_message: Optional[str] = None
 
     def __init__(self, **parameters):
+        LangChainUser.__init__(self, **parameters)
         # We intentionally override super().__init__() to allow for a carefully-crafted Pydantic model here.
         combined_parameters_model = pydantic.create_model(
             "CombinedParameters",
             __base__=(YesOrNoClassifier.Parameters, LangChainUser.Parameters))
         self.parameters = combined_parameters_model(**parameters)
-        self.openai_callback = None
+        
+        # Initialize the model using LangChainUser's method
         self.model = self._initialize_model()
 
     class GraphState(BaseNode.GraphState):
@@ -55,10 +57,12 @@ class YesOrNoClassifier(BaseNode, LangChainUser):
 
     def get_classifier_node(self) -> FunctionType:
         model = self.model
-        prompt = self.get_prompt_templates()
+        prompt_templates = self.get_prompt_templates()
 
         def classifier_node(state):
-            chain = prompt[0] | model | self.ClassificationOutputParser()
+            prompt = prompt_templates[0]
+
+            chain = prompt | model | self.ClassificationOutputParser()
             return chain.invoke({"text": state.text})
 
         return classifier_node
