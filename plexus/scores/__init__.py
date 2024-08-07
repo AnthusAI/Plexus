@@ -16,3 +16,4 @@ from plexus.scores.AWSComprehendEntityExtractor import AWSComprehendEntityExtrac
 from plexus.scores.LangGraphClassifier import LangGraphClassifier
 from plexus.scores.LLMClassifier import LLMClassifier
 from plexus.scores.LangGraphScore import LangGraphScore
+from plexus.scores.OpenAIEmbeddingsClassifier import OpenAIEmbeddingsClassifier
