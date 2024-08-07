@@ -40,8 +40,10 @@ def load_configuration_from_yaml_file(configuration_file_path):
 
 @evaluate.command()
 @click.option('--scorecard-name', 'scorecard_name', default=None, help='Name of the scorecard to evaluate')
+@click.option('--use-langsmith-trace', is_flag=True, default=False, help='Activate LangSmith trace client for LangGraphScore')
 def accuracy(
     scorecard_name: str,
+    use_langsmith_trace: bool,
     number_of_texts_to_sample: int = 1,
     sampling_method: str = 'random',
     random_seed: int = None,
@@ -53,6 +55,14 @@ def accuracy(
     These experiment runs will generate metrics and artifacts that Plexus will log in MLFLow.
     The scoring reports from evaluation will include accuracy metrics.
     """
+
+    # Set LANGCHAIN_TRACING_V2 environment variable if use_langsmith_trace is True
+    if use_langsmith_trace:
+        os.environ['LANGCHAIN_TRACING_V2'] = 'true'
+        logging.info("LangSmith tracing enabled")
+    else:
+        os.environ.pop('LANGCHAIN_TRACING_V2', None)
+        logging.info("LangSmith tracing disabled")
 
     config = load_configuration_from_yaml_file('./config.yaml')
     scorecard_name = scorecard_name or config.get('scorecard')

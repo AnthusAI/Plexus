@@ -1,7 +1,7 @@
+import os
 import rich
 import click
 import plexus
-import os
 import pandas as pd
 from openpyxl.styles import Font
 
@@ -15,7 +15,16 @@ from plexus.Registries import scorecard_registry
 @click.option('--content-id', help='The ID of a specific sample to use.')
 @click.option('--number', type=int, default=1, help='Number of times to iterate over the list of scores.')
 @click.option('--excel', is_flag=True, help='Output results to an Excel file.')
-def predict(scorecard_name, score_name, content_id, number, excel):
+@click.option('--use-langsmith-trace', is_flag=True, default=False, help='Activate LangSmith trace client for LangChain components')
+def predict(scorecard_name, score_name, content_id, number, excel, use_langsmith_trace):
+    # Set LANGCHAIN_TRACING_V2 environment variable if use_langsmith_trace is True
+    if use_langsmith_trace:
+        os.environ['LANGCHAIN_TRACING_V2'] = 'true'
+        logging.info("LangSmith tracing enabled")
+    else:
+        os.environ.pop('LANGCHAIN_TRACING_V2', None)
+        logging.info("LangSmith tracing disabled")
+
     logging.info(f"Predicting Scorecard [magenta1][b]{scorecard_name}[/b][/magenta1]...")
 
     plexus.Scorecard.load_and_register_scorecards('scorecards/')

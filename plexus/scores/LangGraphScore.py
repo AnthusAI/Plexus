@@ -2,7 +2,6 @@ import os
 import logging
 import traceback
 import graphviz
-#from langsmith import Client
 from types import FunctionType
 from typing import Type, Tuple, Literal, Optional, Any, TypedDict, List, Dict
 from pydantic import BaseModel, ConfigDict, create_model
@@ -68,7 +67,6 @@ class LangGraphScore(Score, LangChainUser):
         super().__init__(**parameters)
         self.token_counter = self._create_token_counter()
         self.openai_callback = None
-        #self.langsmith_client = Client()
         self.model = self._initialize_model()
 
     def _parse_validation_result(self, output: str) -> Tuple[str, str]:
