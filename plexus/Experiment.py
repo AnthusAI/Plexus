@@ -362,6 +362,22 @@ class AccuracyExperiment(Experiment):
         logging.info(f"Cost per text: {expenses['cost_per_text']}")
         logging.info(f"Overall accuracy: {overall_accuracy:.2f}%")
 
+        # Collect mismatches for the Excel report
+        mismatches = []
+        for result in results:
+            for question in self.score_names():
+                if not result['results'][question].metadata['correct']:
+                     mismatches.append({
+                        'report_id': result['session_id'],
+                        'correct_answer': result['results'][question].metadata['human_label'],
+                        'predicted_answer': result['results'][question].value,
+                        'reasoning': result['results'][question].explanation,
+                        'original_text': result['results'][question].metadata['text']
+                    })
+
+        # Generate the Excel report
+        self.generate_excel_report(mismatches)
+
     # Function to classify a single text and collect metrics
     @retry(
         wait=wait_fixed(2),          # wait 2 seconds between attempts
@@ -374,7 +390,7 @@ class AccuracyExperiment(Experiment):
 
         text = row['text']
         content_id = row.get('content_id', '')
-        session_id = row.get('Session ID', content_id)
+        session_id = row.get('Session ID', content_id)        
 
         logging.info(f"Processing text for content_id: {content_id}, session_id: {session_id}")
 
@@ -449,6 +465,14 @@ class AccuracyExperiment(Experiment):
             report += f"{result['session_id']}, {result['question_name']}, {result['human_label']}, {result['result']['value']}, ,\n"
         
         return report
+
+    def generate_excel_report(self, mismatches):
+        df_mismatches = pd.DataFrame(mismatches)
+        excel_file_path = "tmp/mismatches_report.xlsx"
+        df_mismatches.to_excel(excel_file_path, index=False)
+        mlflow.log_artifact(excel_file_path)
+
+        logging.info(f"Excel report generated at {excel_file_path}")
 
 class ConsistencyExperiment(Experiment):
     def __init__(self, *, number_of_times_to_sample_each_text, **kwargs):
