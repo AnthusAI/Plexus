@@ -41,15 +41,21 @@ def load_configuration_from_yaml_file(configuration_file_path):
 @evaluate.command()
 @click.option('--scorecard-name', 'scorecard_name', default=None, help='Name of the scorecard to evaluate')
 @click.option('--use-langsmith-trace', is_flag=True, default=False, help='Activate LangSmith trace client for LangGraphScore')
+@click.option('--number-of-texts-to-sample', default=1, type=int, help='Number of texts to sample')
+@click.option('--sampling-method', default='random', type=str, help='Method for sampling texts')
+@click.option('--random-seed', default=None, type=int, help='Random seed for sampling')
+@click.option('--session-ids-to-sample', default='', type=str, help='Comma-separated list of session IDs to sample')
+@click.option('--subset-of-score-names', default='', type=str, help='Comma-separated list of score names to evaluate')
+@click.option('--experiment-label', default='', type=str, help='Label for the experiment')
 def accuracy(
     scorecard_name: str,
     use_langsmith_trace: bool,
-    number_of_texts_to_sample: int = 1,
-    sampling_method: str = 'random',
-    random_seed: int = None,
-    session_ids_to_sample: str = '',
-    subset_of_score_names: str = '',
-    experiment_label: str = ''):
+    number_of_texts_to_sample: int,
+    sampling_method: str,
+    random_seed: int,
+    session_ids_to_sample: str,
+    subset_of_score_names: str,
+    experiment_label: str):
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
     These experiment runs will generate metrics and artifacts that Plexus will log in MLFLow.
@@ -72,15 +78,7 @@ def accuracy(
         sys.exit(1)
 
     scorecard_folder = os.path.join('scorecards', scorecard_name)
-
     override_folder: str = os.path.join(scorecard_folder, 'experiments/calibrations')
-
-    sampling_method = config.get('sampling_method', sampling_method)
-    random_seed = config.get('random_seed', random_seed)
-    number_of_texts_to_sample = config.get('number_of_texts_to_sample', number_of_texts_to_sample)
-    session_ids_to_sample = config.get('session_ids_to_sample', session_ids_to_sample)
-    subset_of_score_names = config.get('subset_of_score_names', subset_of_score_names)
-    experiment_label = config.get('experiment_label', experiment_label)
 
     logging.info('Running accuracy experiment...')
     Scorecard.load_and_register_scorecards('scorecards/')
