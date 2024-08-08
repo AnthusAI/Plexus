@@ -222,7 +222,7 @@ class Scorecard:
         else:
             error_string = f"No score found for question: \"{score_name}\""
             logging.info(error_string)
-            return Score.Result(value="Error", error=error_string)
+            return plexus.scores.Score.Result(value="Error", error=error_string)
 
     def score_entire_text(self, *, text, subset_of_score_names=None, thread_pool_size=25):
         logging.info(f"score_entire_text method. subset_of_score_names: {subset_of_score_names}")
