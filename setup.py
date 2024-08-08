@@ -24,7 +24,7 @@ setup(
         'nltk',
         'pybind11',
         'fasttext',
-        'tiktoken',
+        'tiktoken==0.7.0',
         'transformers',
         'seaborn',
         'pydot==2.0.0',
