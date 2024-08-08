@@ -362,21 +362,8 @@ class AccuracyExperiment(Experiment):
         logging.info(f"Cost per text: {expenses['cost_per_text']}")
         logging.info(f"Overall accuracy: {overall_accuracy:.2f}%")
 
-        # Collect mismatches for the Excel report
-        mismatches = []
-        for result in results:
-            for question in self.score_names():
-                if not result['results'][question].metadata['correct']:
-                     mismatches.append({
-                        'report_id': result['session_id'],
-                        'correct_answer': result['results'][question].metadata['human_label'],
-                        'predicted_answer': result['results'][question].value,
-                        'reasoning': result['results'][question].explanation,
-                        'original_text': result['results'][question].metadata['text']
-                    })
-
         # Generate the Excel report
-        self.generate_excel_report(mismatches)
+        self.generate_excel_report(results)
 
     # Function to classify a single text and collect metrics
     @retry(
@@ -390,9 +377,10 @@ class AccuracyExperiment(Experiment):
 
         text = row['text']
         content_id = row.get('content_id', '')
-        session_id = row.get('Session ID', content_id)        
+        session_id = row.get('Session ID', content_id)
+        form_id = row.get('metadata', {}).get('form_id', '')
 
-        logging.info(f"Processing text for content_id: {content_id}, session_id: {session_id}")
+        logging.info(f"Processing text for content_id: {content_id}, session_id: {session_id}, form_id: {form_id}")
 
         scorecard_results = self.scorecard.score_entire_text(
             text=text,
@@ -454,6 +442,7 @@ class AccuracyExperiment(Experiment):
         return {
             'content_id': content_id,
             'session_id': session_id,
+            'form_id': form_id,
             'results': scorecard_results,
             'human_labels': human_labels
         }
@@ -466,10 +455,26 @@ class AccuracyExperiment(Experiment):
         
         return report
 
-    def generate_excel_report(self, mismatches):
-        df_mismatches = pd.DataFrame(mismatches)
-        excel_file_path = "tmp/mismatches_report.xlsx"
-        df_mismatches.to_excel(excel_file_path, index=False)
+    def generate_excel_report(self, results):
+        records = []
+        for result in results:
+            for question in self.score_names():
+                score_result = result['results'][question]
+                is_mismatch = not score_result.metadata['correct']
+                records.append({
+                    'session_id': result['session_id'],
+                    'form_id': result['form_id'],
+                    'question_name': question,
+                    'human_label': score_result.metadata['human_label'],
+                    'predicted_answer': score_result.value,
+                    'reasoning': score_result.explanation,
+                    'original_text': score_result.metadata['text'],
+                    'is_mismatch': is_mismatch
+                })
+
+        df_records = pd.DataFrame(records)
+        excel_file_path = "tmp/evaluation_report.xlsx"
+        df_records.to_excel(excel_file_path, index=False)
         mlflow.log_artifact(excel_file_path)
 
         logging.info(f"Excel report generated at {excel_file_path}")
