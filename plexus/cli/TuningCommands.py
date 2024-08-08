@@ -104,13 +104,13 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
 
     # Get templates
     nodes = score_instance.get_prompt_templates()
+    example_refinement_nodes = score_instance.get_example_refinement_templates()
     logging.info(f"Nodes: {nodes}")
 
     # Loop through the sample rows and generate JSON-L
-    messages = []
     for index, row in sample_rows.iterrows():
         formatted_messages = []
-        for node_templates in nodes:
+        for node_templates, example_refinement_template in zip(nodes, example_refinement_nodes):
             for template in node_templates:
                 if isinstance(template, ChatPromptTemplate):
                     try:
@@ -152,12 +152,20 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
                 temperature = min(0.2 * attempt, 1.0)
                 model = ChatOpenAI(temperature=temperature)
                 
-                chat_prompt = ChatPromptTemplate.from_messages(messages)
-                chain = chat_prompt | model | output_parser
-                result = chain.invoke({"text": row['text']})
-                
+                prompt = ChatPromptTemplate.from_messages(messages)
+                answer_chain = prompt | model | output_parser
+                result = answer_chain.invoke({"text": row['text']})
+
+                # Use the example_refinement_template to refine the answer, if there is one.
+                if example_refinement_template:
+                    prompt.append(
+                        HumanMessage(content=example_refinement_template)
+                    )
+                    refinement_chain = prompt | model | output_parser
+                    result = refinement_chain.invoke({"text": row['text']})
+
                 if result['answer'].lower() == correct_answer.lower():
-                    return result['completion']
+                    return result
                 
                 if verbose:
                     logging.info(f"Attempt {attempt + 1}: Generated answer '{result['answer']}' "
@@ -166,7 +174,7 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
             
             logging.warning(f"Failed to generate matching completion after {max_attempts} attempts. "
                             f"Using the last generated completion.")
-            return result['completion']
+            return result
 
         if generate_completions:
             messages_with_hint = messages + [

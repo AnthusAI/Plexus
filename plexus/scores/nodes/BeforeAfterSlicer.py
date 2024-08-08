@@ -17,12 +17,6 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
     A node that slices text input into 'before' and 'after' based on the provided prompt.
     """
 
-    class Parameters(LangChainUser.Parameters):
-        system_message: Optional[str] = None
-        user_message: Optional[str] = None
-        input: Optional[dict] = None
-        output: Optional[dict] = None
-
     def __init__(self, **parameters):
         LangChainUser.__init__(self, **parameters)
         # We intentionally override super().__init__() to allow for a carefully-crafted Pydantic model here.
