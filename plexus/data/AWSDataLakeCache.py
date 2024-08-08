@@ -142,6 +142,9 @@ class AWSDataLakeCache(DataCache):
 
                 if 'metadata.json' in content_data:
                     metadata = json.loads(content_data['metadata.json'])
+
+                    content_row['form_id'] = metadata.get('form_id')
+
                     for score in metadata.get('scores', []):
                         score_name = score['name']
                         all_scores.add(score_name)
