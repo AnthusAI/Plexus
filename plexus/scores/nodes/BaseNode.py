@@ -22,10 +22,13 @@ class BaseNode(ABC, LangChainUser):
     class GraphState(LangGraphScore.GraphState):
         pass
 
-    class Parameters(BaseModel):
+    class Parameters(LangChainUser.Parameters):
         ...
         input:  Optional[dict] = None
         output: Optional[dict] = None
+        system_message: Optional[str] = None
+        user_message: Optional[str] = None
+        example_refinement_message: Optional[str] = None
 
     def __init__(self, **parameters):
         LangChainUser.__init__(self, **parameters)
@@ -50,6 +53,12 @@ class BaseNode(ABC, LangChainUser):
             return [ChatPromptTemplate.from_messages(messages)]
         else:
             return []
+
+    def get_example_refinement_template(self):
+        """
+        Get the example refinement message for the node.
+        """
+        return self.parameters.example_refinement_message
 
     @abstractmethod
     def add_core_nodes(self, workflow: StateGraph) -> StateGraph:

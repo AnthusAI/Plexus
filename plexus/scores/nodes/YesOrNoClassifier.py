@@ -13,10 +13,6 @@ class YesOrNoClassifier(BaseNode):
     """
     A node that classifies text input as 'yes' or 'no' based on the provided prompt.
     """
-    
-    class Parameters(LangChainUser.Parameters):
-        system_message: Optional[str] = None
-        user_message: Optional[str] = None
 
     def __init__(self, **parameters):
         LangChainUser.__init__(self, **parameters)

@@ -14,8 +14,7 @@ class MultiClassClassifier(BaseNode):
     """
     
     class Parameters(LangChainUser.Parameters):
-        system_message: Optional[str] = None
-        user_message: Optional[str] = None
+        ...
         valid_classes: List[str] = Field(default_factory=list)
 
     def __init__(self, **parameters):

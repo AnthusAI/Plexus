@@ -364,6 +364,33 @@ class LangGraphScore(Score, LangChainUser):
         
         return node_templates
 
+    def get_example_refinement_templates(self):
+        """
+        Get the example refinement templates for the score by iterating over the graph nodes and asking each node for its example refinement template.
+        """
+        # First pass: Collect node instances
+        node_instances = []
+        example_refinement_templates = []
+        if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
+            for node_configuration_entry in self.parameters.graph:
+
+                for attribute in ['model_provider', 'model_name', 'model_region', 'temperature', 'max_tokens']:
+                    if attribute not in node_configuration_entry:
+                        node_configuration_entry[attribute] = getattr(self.parameters, attribute)
+
+                if 'class' in node_configuration_entry and 'name' in node_configuration_entry:
+                    node_class_name = node_configuration_entry['class']
+                    node_name = node_configuration_entry['name']
+                    node_class = LangGraphScore._import_class(node_class_name)
+                    logging.info(f"Node class: {node_class}")
+                    node_instance = node_class(**node_configuration_entry)
+                    node_instances.append((node_name, node_instance))
+                    example_refinement_templates.append(node_instance.get_example_refinement_template())
+        else:
+            raise ValueError("Invalid or missing graph configuration in parameters.")
+        
+        return example_refinement_templates
+
     def build_compiled_workflow(self):
         """
         Build the LangGraph workflow.
