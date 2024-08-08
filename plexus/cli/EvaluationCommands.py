@@ -41,20 +41,20 @@ def load_configuration_from_yaml_file(configuration_file_path):
 @evaluate.command()
 @click.option('--scorecard-name', 'scorecard_name', default=None, help='Name of the scorecard to evaluate')
 @click.option('--use-langsmith-trace', is_flag=True, default=False, help='Activate LangSmith trace client for LangGraphScore')
-@click.option('--number-of-texts-to-sample', default=1, type=int, help='Number of texts to sample')
+@click.option('--number-of-samples', default=1, type=int, help='Number of texts to sample')
 @click.option('--sampling-method', default='random', type=str, help='Method for sampling texts')
 @click.option('--random-seed', default=None, type=int, help='Random seed for sampling')
 @click.option('--session-ids-to-sample', default='', type=str, help='Comma-separated list of session IDs to sample')
-@click.option('--subset-of-score-names', default='', type=str, help='Comma-separated list of score names to evaluate')
+@click.option('--score-name', '--score-names', default='', type=str, help='Comma-separated list of score names to evaluate')
 @click.option('--experiment-label', default='', type=str, help='Label for the experiment')
 def accuracy(
     scorecard_name: str,
     use_langsmith_trace: bool,
-    number_of_texts_to_sample: int,
+    number_of_samples: int,
     sampling_method: str,
     random_seed: int,
     session_ids_to_sample: str,
-    subset_of_score_names: str,
+    score_name: str,
     experiment_label: str):
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
@@ -69,9 +69,6 @@ def accuracy(
     else:
         os.environ.pop('LANGCHAIN_TRACING_V2', None)
         logging.info("LangSmith tracing disabled")
-
-    config = load_configuration_from_yaml_file('./config.yaml')
-    scorecard_name = scorecard_name or config.get('scorecard')
 
     if not scorecard_name:
         logging.error("Scorecard not specified")
@@ -93,22 +90,31 @@ def accuracy(
     # Check if any score in the scorecard uses the data-driven approach
     uses_data_driven = any('data' in score_config for score_config in scorecard_instance.scores.values())
 
+    labeled_samples = []
     if uses_data_driven:
-        labeled_samples = []
-        for score_name, score_config in scorecard_instance.scores.items():
-            if 'data' in score_config:
-                labeled_samples.extend(get_data_driven_samples(scorecard_instance, scorecard_name, score_name, score_config))
+        # To pull data for evaluation from the `data:` configuration in the scorecard,
+        # we need to pick one score configuration to use.
+
+        # If the user specified a score name, we'll use that one.
+        # Otherwise, we'll just use the first one that has `data:` in its configuration.
+        if score_name:
+            labeled_samples.extend(get_data_driven_samples(scorecard_instance, scorecard_name, score_name, scorecard_instance.scores[score_name]))
+        else:
+            for score_name, score_config in scorecard_instance.scores.items():
+                if 'data' in score_config:
+                    labeled_samples.extend(get_data_driven_samples(scorecard_instance, scorecard_name, score_name, score_config))
+                    break
     else:
         labeled_samples_filename = os.path.join('scorecards', scorecard_instance.properties.get('key'), 'experiments', 'labeled-samples.csv')
 
     experiment_args = {
         'scorecard': scorecard_instance,
         'override_folder': override_folder,
-        'number_of_texts_to_sample': number_of_texts_to_sample,
+        'number_of_texts_to_sample': number_of_samples,
         'sampling_method': sampling_method,
         'random_seed': random_seed,
         'session_ids_to_sample': re.split(r',\s+', session_ids_to_sample.strip()) if session_ids_to_sample.strip() else None,
-        'subset_of_score_names': re.split(r',\s+', subset_of_score_names.strip()) if subset_of_score_names.strip() else None,
+        'subset_of_score_names': re.split(r',\s+', score_name.strip()) if score_name.strip() else None,
         'experiment_label': experiment_label
     }
 
