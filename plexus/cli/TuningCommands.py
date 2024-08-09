@@ -162,7 +162,8 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
                         HumanMessage(content=example_refinement_template)
                     )
                     refinement_chain = prompt | model | output_parser
-                    result = refinement_chain.invoke({"text": row['text']})
+                    refined_result = refinement_chain.invoke({"text": row['text']})
+                    result = re.sub(r'\n+', '\n', refined_result['completion'])
 
                 if result['answer'].lower() == correct_answer.lower():
                     return result
