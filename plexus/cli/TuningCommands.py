@@ -9,7 +9,7 @@ from openpyxl.styles import Font
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import BaseOutputParser
-from langchain.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 import tiktoken
 
 from plexus.CustomLogging import logging
