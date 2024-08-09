@@ -299,14 +299,27 @@ class AWSDataLakeCache(DataCache):
                 
                 report_ids = [row['Data'][0]['VarCharValue'] for row in query_results[1:]]
 
-                content_data = []
-                for report_id in report_ids:
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+
+                def process_report(report_id):
                     content_row = self.process_content_item(scorecard_id, report_id)
                     if content_row:
-                        content_data.append(content_row)
-                        all_scores.update(content_row.keys())
+                        return content_row
                     else:
                         logging.warning(f"Failed to process content item: content_id={report_id}, scorecard_id={scorecard_id}")
+                        return None
+
+                content_data = []
+                all_scores = set()
+                thread_count = 64
+
+                with ThreadPoolExecutor(max_workers=thread_count) as executor:
+                    future_to_report = {executor.submit(process_report, report_id): report_id for report_id in report_ids}
+                    for future in as_completed(future_to_report):
+                        content_row = future.result()
+                        if content_row:
+                            content_data.append(content_row)
+                            all_scores.update(content_row.keys())
 
                 dataframe = pd.DataFrame(content_data)
                 
