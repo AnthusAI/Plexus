@@ -43,6 +43,35 @@ class AWSDataLakeCache(DataCache):
         logging.info("Query: {}".format(query))
         return query_execution_response['QueryExecutionId']
 
+    def split_into_batches(self, form_ids, batch_size=2000):
+        for i in range(0, len(form_ids), batch_size):
+            yield form_ids[i:i + batch_size]
+
+    def execute_batch_athena_queries(self, metadata_item, values):
+        all_query_results = []
+        total_batches = len(list(self.split_into_batches(values)))
+        for batch_index, values_batch in enumerate(self.split_into_batches(values), start=1):
+            batch_size = len(values_batch)
+            logging.info(f"Processing batch {batch_index} of {total_batches} with {batch_size} items.")
+            
+            # Check if the values are integers or strings
+            if isinstance(values_batch[0], int):
+                values_list = ', '.join(str(value) for value in values_batch)
+            else:
+                values_list = ', '.join(f"'{value}'" for value in values_batch)
+            
+            query = f"""
+                SELECT report_id, scorecard_id
+                FROM "{self.athena_database}"
+                WHERE "{metadata_item}" IN ({values_list})
+            """
+            
+            logging.info(f"Executing query for batch {batch_index} of {total_batches}...")
+            query_execution_id = self.execute_athena_query(query)
+            query_results = self.get_query_results(query_execution_id)
+            all_query_results.extend(query_results[1:])  # Skip header row
+        return all_query_results
+
     def get_query_results(self, query_execution_id):
         import time
         
@@ -107,19 +136,89 @@ class AWSDataLakeCache(DataCache):
 
         return content_data
 
-    def load_dataframe(self, *, queries):
+    def process_content_item(self, scorecard_id, content_id):
+        try:
+            content_data = self.download_content_item(scorecard_id, content_id)
+            content_row = {'content_id': content_id, 'scorecard_id': scorecard_id}
+
+            if not content_data:
+                logging.warning(f"No content data found for content_id={content_id}, scorecard_id={scorecard_id}")
+                return None
+
+            if 'metadata.json' in content_data:
+                metadata = json.loads(content_data['metadata.json'])
+
+                content_row['form_id'] = metadata.get('form_id')
+
+                for score in metadata.get('scores', []):
+                    score_name = score['name']
+                    content_row[score_name] = score['answer']
+
+                if 'school' in metadata and isinstance(metadata['school'], list):
+                    for index, school_info in enumerate(metadata['school']):
+                        if isinstance(school_info, dict):
+                            for key, value in school_info.items():
+                                content_row[f"school_{index}_{key}"] = value
+
+            if 'transcript.txt' in content_data:
+                text_content = content_data['transcript.txt']
+                if text_content.strip() == "":
+                    logging.warning(f"Empty text file for content_id={content_id}, scorecard_id={scorecard_id}")
+                    return None
+                content_row['text'] = text_content
+            else:
+                logging.warning(f"No text file found for content_id={content_id}, scorecard_id={scorecard_id}")
+                return None
+            
+            return content_row
+        except Exception as e:
+            logging.error(f"Error processing content_id={content_id}, scorecard_id={scorecard_id}: {str(e)}")
+            return None
+
+    def load_dataframe(self, *, data):
         dataframes = []
+        
+        searches = data.get('searches')
+        queries = data.get('queries')
+        item_list_filename = searches[0].get('item_list_filename', None) if searches else None
+        column_name = searches[0].get('column_name', None) if searches else None
+        metadata_item = searches[0].get('metadata_item', None) if searches else None
 
-        filename_components = []
-        for query_param in queries:
-            scorecard_id = query_param['scorecard-id']
-            score_id = query_param.get('score-id', 'all')
-            value = query_param.get('value', 'all')
-            number = query_param.get('number', 'all')
-            filename_components.append(f"scorecard_id={scorecard_id}-score_id={score_id}-value={value}-number={number}")
-        cached_dataframe_filename = "_".join(filename_components) + '.h5'
+        def load_values_from_file(item_list_filename, column_name):
+            if item_list_filename.endswith('.csv'):
+                df = pd.read_csv(item_list_filename)
+            elif item_list_filename.endswith('.xlsx'):
+                df = pd.read_excel(item_list_filename)
+            else:
+                raise ValueError("Unsupported file format. Only CSV and Excel files are supported.")
+            
+            if column_name not in df.columns:
+                raise ValueError(f"Column '{column_name}' not found in the file.")
+            
+            return df[column_name].dropna().unique().tolist()
 
+        if item_list_filename and column_name:
+            values = load_values_from_file(item_list_filename, column_name)
+        else:
+            values = None
+
+        # Create a unique filename for the cached dataframe based on queries or item list filename
+        if values:
+            identifier = os.path.basename(item_list_filename).replace('.', '_')
+        else:
+            filename_components = []
+            for query_param in queries:
+                scorecard_id = query_param['scorecard-id']
+                score_id = query_param.get('score-id', 'all')
+                value = query_param.get('value', 'all')
+                number = query_param.get('number', 'all')
+                filename_components.append(f"scorecard_id={scorecard_id}-score_id={score_id}-value={value}-number={number}")
+            identifier = "_".join(filename_components)
+        
+        cached_dataframe_filename = f"{identifier}.h5"
         cached_dataframe_path = os.path.join(self.local_cache_directory, 'dataframes', cached_dataframe_filename)
+
+        # Check if the cached dataframe exists
         if os.path.exists(cached_dataframe_path):
             logging.info("Loading cached dataframe from {}".format(cached_dataframe_path))
             dataframe = pd.read_hdf(cached_dataframe_path)
@@ -131,109 +230,97 @@ class AWSDataLakeCache(DataCache):
             
             return dataframe
 
-        logging.info("Loading dataframe with queries: {}".format(queries))
-        
-        all_scores = set()
+        # Build the dataframe
+        if values:
+            all_query_results = self.execute_batch_athena_queries(metadata_item, values)
 
-        def process_content_item(content_id):
-            try:
-                content_data = self.download_content_item(scorecard_id, content_id)
-                content_row = {'content_id': content_id}
+            if not all_query_results:
+                logging.error("No non-deprecated content items found in the database.")
+                return pd.DataFrame()
 
-                if 'metadata.json' in content_data:
-                    metadata = json.loads(content_data['metadata.json'])
-
-                    content_row['form_id'] = metadata.get('form_id')
-
-                    for score in metadata.get('scores', []):
-                        score_name = score['name']
-                        all_scores.add(score_name)
-                        content_row[score_name] = score['answer']
-
-                        if 'school' in metadata and isinstance(metadata['school'], list):
-                            for index, school_info in enumerate(metadata['school']):
-                                if isinstance(school_info, dict):
-                                    for key, value in school_info.items():
-                                        content_row[f"school_{index}_{key}"] = value
-
-                if 'transcript.txt' in content_data:
-                    text_content = content_data['transcript.txt']
-                    if text_content.strip() == "":
-                        logging.warning(f"Content item {content_id} has an empty text file.")
-                        return None
-                    content_row['text'] = text_content
+            content_data = []
+            for row in all_query_results:
+                content_id = row['Data'][0]['VarCharValue']
+                scorecard_id = row['Data'][1]['VarCharValue']
+                logging.info(f"Processing content item: content_id={content_id}, scorecard_id={scorecard_id}")
+                
+                content_row = self.process_content_item(scorecard_id, content_id)
+                if content_row:
+                    content_data.append(content_row)
                 else:
-                    logging.warning(f"Content item {content_id} does not have a text file.")
-                    return None
-                
-                return content_row
-            except self.s3_client.exceptions.NoSuchKey:
-                logging.warning(f"Content item with ID {content_id} not found in S3 bucket.")
-                return None
-            
-        for query_params in queries:
-            scorecard_id = query_params['scorecard-id']
-            if 'score-id' in query_params and ('value' in query_params or 'values' in query_params):
-                score_id = query_params['score-id']
-                values = query_params['values'] if 'values' in query_params else [query_params['value']]
-                number = query_params.get('number')
-                
-                values_list = ', '.join(f"'{value}'" for value in values)
-                
-                query = f"""
-                    SELECT report_id
-                    FROM (
-                        SELECT report_id, MIN(CASE WHEN t.score.id = {score_id} THEN t.score.answer END) AS value
-                        FROM "{self.athena_database}"
-                        CROSS JOIN UNNEST(scores) AS t(score)
-                        GROUP BY report_id
-                    )
-                    WHERE value IN ({values_list})
-                """
-                if number:
-                    query += f" LIMIT {number}"
-            elif 'scorecard-id' in query_params:
-                number = query_params.get('number')
-                
-                query = f"""
-                    SELECT DISTINCT report_id
-                    FROM "{self.athena_database}"
-                    WHERE scorecard_id = '{scorecard_id}'
-                """
-                if number:
-                    query += f" LIMIT {number}"
-            else:
-                raise ValueError("Invalid query parameters. Each query must contain 'scorecard-id'.")
-            
-            query_execution_id = self.execute_athena_query(query)
-            query_results = self.get_query_results(query_execution_id)
-            
-            report_ids = [row['Data'][0]['VarCharValue'] for row in query_results[1:]]
+                    logging.warning(f"Failed to process content item: content_id={content_id}, scorecard_id={scorecard_id}")
 
-            with ThreadPoolExecutor() as executor:
-                with Progress() as progress:
-                    task = progress.add_task("[cyan]Processing content items...", total=len(report_ids))
-                    content_data_futures = [executor.submit(process_content_item, report_id) for report_id in report_ids]
-                    content_data = []
-                    for future in content_data_futures:
-                        result = future.result()
-                        if result is not None:
-                            content_data.append(result)
-                        progress.update(task, advance=1)  
-    
+            if not content_data:
+                logging.error("No valid content items were processed. Unable to create dataframe.")
+                return pd.DataFrame()
+
             dataframe = pd.DataFrame(content_data)
-            
-            # Ensure all possible score columns are included
-            for score in all_scores:
-                if score not in dataframe.columns:
-                    dataframe[score] = None
-
             dataframes.append(dataframe)
-        
+        else:
+            # Existing logic for queries
+            all_scores = set()
+            
+            for query_params in queries:
+                scorecard_id = query_params['scorecard-id']
+                if 'score-id' in query_params and ('value' in query_params or 'values' in query_params):
+                    score_id = query_params['score-id']
+                    values = query_params['values'] if 'values' in query_params else [query_params['value']]
+                    number = query_params.get('number')
+                    
+                    values_list = ', '.join(f"'{value}'" for value in values)
+                    
+                    query = f"""
+                        SELECT report_id
+                        FROM (
+                            SELECT report_id, MIN(CASE WHEN t.score.id = {score_id} THEN t.score.answer END) AS value
+                            FROM "{self.athena_database}"
+                            CROSS JOIN UNNEST(scores) AS t(score)
+                            GROUP BY report_id
+                        )
+                        WHERE value IN ({values_list})
+                    """
+                    if number:
+                        query += f" LIMIT {number}"
+                elif 'scorecard-id' in query_params:
+                    number = query_params.get('number')
+                    
+                    query = f"""
+                        SELECT DISTINCT report_id
+                        FROM "{self.athena_database}"
+                        WHERE scorecard_id = '{scorecard_id}'
+                    """
+                    if number:
+                        query += f" LIMIT {number}"
+                else:
+                    raise ValueError("Invalid query parameters. Each query must contain 'scorecard-id'.")
+                
+                query_execution_id = self.execute_athena_query(query)
+                query_results = self.get_query_results(query_execution_id)
+                
+                report_ids = [row['Data'][0]['VarCharValue'] for row in query_results[1:]]
+
+                content_data = []
+                for report_id in report_ids:
+                    content_row = self.process_content_item(scorecard_id, report_id)
+                    if content_row:
+                        content_data.append(content_row)
+                        all_scores.update(content_row.keys())
+                    else:
+                        logging.warning(f"Failed to process content item: content_id={report_id}, scorecard_id={scorecard_id}")
+
+                dataframe = pd.DataFrame(content_data)
+                
+                # Ensure all possible score columns are included
+                for score in all_scores:
+                    if score not in dataframe.columns:
+                        dataframe[score] = None
+
+                dataframes.append(dataframe)
+
         combined_dataframe = pd.concat(dataframes, ignore_index=True)
-        
         logging.info(f"Loaded dataframe with {len(combined_dataframe)} rows and columns: {', '.join(combined_dataframe.columns)}")
-        
+
+        # Cache the dataframe
         dataframe_storage_directory = os.path.join(self.local_cache_directory, 'dataframes')
         os.makedirs(dataframe_storage_directory, exist_ok=True)
         dataframe_file_path = os.path.join(dataframe_storage_directory, cached_dataframe_filename)

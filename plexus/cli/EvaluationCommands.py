@@ -136,7 +136,7 @@ def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, scor
     score_config['score_name'] = score_name
     score_instance = score_class(**score_config)
 
-    score_instance.load_data(queries=score_config['data'].get('queries'))
+    score_instance.load_data(data=score_config['data'])
     score_instance.process_data()
 
     # Log dataframe information
@@ -249,8 +249,7 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
     # Data processing
     with console_lock:
         console.print(f"[yellow]Loading data for {score_name} at {time.strftime('%H:%M:%S')}[/yellow]")
-    data_queries = score_configuration['data']['queries']
-    score_instance.load_data(queries=data_queries)
+    score_instance.load_data(data=score_configuration['data'])
     
     with console_lock:
         console.print(f"[yellow]Processing data for {score_name} at {time.strftime('%H:%M:%S')}[/yellow]")
