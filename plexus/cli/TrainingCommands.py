@@ -78,8 +78,7 @@ def train_score(score_name, scorecard_class):
     score_instance.record_configuration(score_to_train_configuration)
 
     # Data processing
-    data_queries = score_to_train_configuration['data']['queries']
-    score_instance.load_data(queries=data_queries)
+    score_instance.load_data(data=score_to_train_configuration['data'])
     score_instance.process_data()
 
     # Training

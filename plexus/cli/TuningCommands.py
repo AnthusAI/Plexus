@@ -81,7 +81,7 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
     # Get data
     sample_rows = None
     score_instance = score_class(**score_configuration)
-    score_instance.load_data(queries=score_configuration['data'].get('queries'))
+    score_instance.load_data(data=score_configuration['data'])
     score_instance.process_data()
 
     total_rows = len(score_instance.dataframe)

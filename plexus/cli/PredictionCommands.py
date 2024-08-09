@@ -132,7 +132,7 @@ def select_sample_data_driven(scorecard_class, score_name, content_id, score_con
 
     try:
         score_instance = score_class(**score_configuration)
-        score_instance.load_data(queries=score_configuration['data'].get('queries'))
+        score_instance.load_data(data=score_configuration['data'])
         score_instance.process_data()
 
         if content_id:

@@ -12,20 +12,20 @@ from plexus.CustomLogging import logging, console
 
 class ScoreData:
 
-    def load_data(self, *, queries=None, excel=None):
+    def load_data(self, *, data=None, excel=None):
         """
-        Load the specified queries from the training data lake, with caching, into a combined DataFrame in the class instance.
+        Load the specified data from the training data lake, with caching, into a combined DataFrame in the class instance.
 
         Parameters
         ----------
-        queries : list, optional
-            List of queries to load data from the training data lake.
+        data : dict, optional
+            Dictionary of data to load from the training data lake.
         excel : str, optional
             Path to an Excel file to load data from.
         """
         data_cache = self._load_data_cache()
 
-        self.dataframe = data_cache.load_dataframe(queries=queries)
+        self.dataframe = data_cache.load_dataframe(data=data)
 
         console.print(Text("Loaded dataframe from training data lake:", style="royal_blue1"))
         self.analyze_dataset()
