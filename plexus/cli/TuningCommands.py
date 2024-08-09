@@ -150,7 +150,7 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
             
             for attempt in range(max_attempts):
                 temperature = min(0.2 * attempt, 1.0)
-                model = ChatOpenAI(model_name="gpt-4o", temperature=temperature)
+                model = ChatOpenAI(model_name="gpt-4o-2024-08-06", temperature=temperature)
                 
                 prompt = ChatPromptTemplate.from_messages(messages)
                 answer_chain = prompt | model | output_parser
