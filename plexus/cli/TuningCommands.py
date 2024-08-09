@@ -170,7 +170,7 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
                     logging.info(f"Refined completion: {result['completion']}")
 
                 if result['answer'].lower() == correct_answer.lower():
-                    return result
+                    return result['completion']
                 
                 if verbose:
                     logging.info(f"Attempt {attempt + 1}: Generated answer '{result['answer']}' "
@@ -178,14 +178,16 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
                                  f"Retrying with temperature {temperature:.2f}")
             
             logging.warning(f"Failed to generate matching completion after {max_attempts} attempts. "
-                            f"Using the last generated completion.")
-            return result['completion']
+                            f"Skipping item.")
+            return None
 
         if generate_completions:
             messages_with_hint = messages + [
                 HumanMessage(content=f"<hint>The correct answer is {row[score_name]}</hint>")
             ]
             completion = generate_completion_with_retry(messages_with_hint, row[score_name])
+            if completion is None:
+                continue
         else:
             completion = row[score_name]
 
