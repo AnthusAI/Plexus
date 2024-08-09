@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.scores.CompositeScore module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="_static/jquery.js?v=5d32c60e"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="_static/documentation_options.js?v=2709fde1"></script>
+        <script src="_static/doctools.js?v=9a2dae69"></script>
+        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="plexus.html">plexus package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">plexus.scores.CompositeScore module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.CompositeScore.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="plexus-scores-compositescore-module">
+<h1>plexus.scores.CompositeScore module<a class="headerlink" href="#plexus-scores-compositescore-module" title="Link to this heading"></a></h1>
+<dl class="py class" id="module-plexus.scores.CompositeScore">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.scores.CompositeScore.</span></span><span class="sig-name descname"><span class="pre">CompositeScore</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score" title="plexus.scores.Score.Score"><code class="xref py py-class docutils literal notranslate"><span class="pre">Score</span></code></a></p>
+<p>A composite score is a score that is composed of multiple elements, each of which is a score.
+This class handles the work of computing the values of each individual element and then
+combining them into a single composite score.  It also handles the work of computing the
+costs of the individual elements and the composite score.</p>
+<p>Initializes a new instance of the CompositeScore class.</p>
+<p>This constructor sets up the initial state of the CompositeScore object, including initializing
+token accumulators for tracking API usage costs and preparing the list to store individual
+element results.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initializes a new instance of the CompositeScore class.</p>
+<p>This constructor sets up the initial state of the CompositeScore object, including initializing
+token accumulators for tracking API usage costs and preparing the list to store individual
+element results.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.break_text_into_chunks">
+<span class="sig-name descname"><span class="pre">break_text_into_chunks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">text</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_chunk_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2000</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.break_text_into_chunks" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.compute_element">
+<span class="sig-name descname"><span class="pre">compute_element</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.compute_element" title="Link to this definition"></a></dt>
+<dd><p>Compute the result for a single element of the composite score by processing
+the filtered text in chunks and aggregating the results.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>name (str): The name of the element to compute the score for.
+text (str, optional): The text text to use for computing the score.</p>
+</dd>
+<dt>Returns:</dt><dd><p>A boolean value that indicates whether the score result was “Yes” or not.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.compute_element_for_chunk">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">compute_element_for_chunk</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">element_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">previous_messages</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prompt</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.compute_element_for_chunk" title="Link to this definition"></a></dt>
+<dd><p>The orchestration framework in CompositeScore calls this function to do the work specific to a composite score element.</p>
+<p>This method must be implemented by subclasses.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.compute_explanation_and_relevant_quote">
+<span class="sig-name descname"><span class="pre">compute_explanation_and_relevant_quote</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.compute_explanation_and_relevant_quote" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.compute_result">
+<span class="sig-name descname"><span class="pre">compute_result</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tree</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.compute_result" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.concatenate_chat_history">
+<span class="sig-name descname"><span class="pre">concatenate_chat_history</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">selected_results</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.concatenate_chat_history" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.construct_system_prompt">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">construct_system_prompt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">text</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.construct_system_prompt" title="Link to this definition"></a></dt>
+<dd><p>Defines the system prompt used at the start of the chat history.  This system prompt
+includes minimal, basic instructions, and the text.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.create_from_markdown">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">create_from_markdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">markdown_file_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.create_from_markdown" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.extract_yaml_section">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">extract_yaml_section</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">markdown_content</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">section_name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.extract_yaml_section" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.filtered_text_is_empty">
+<span class="sig-name descname"><span class="pre">filtered_text_is_empty</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.filtered_text_is_empty" title="Link to this definition"></a></dt>
+<dd><p>A common decision used at the start of decision trees.  If the filtered text is blank
+then it means that nothing in the text was judged to be relevant to the classification,
+and we can skip any further processing for that chunk.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.get_accumulated_costs">
+<span class="sig-name descname"><span class="pre">get_accumulated_costs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.get_accumulated_costs" title="Link to this definition"></a></dt>
+<dd><p>Get the expenses that have been accumulated over all the computed elements.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>dict: A dictionary containing the accumulated expenses:</dt><dd><p>‘llm_request_count’, ‘prompt_tokens’, ‘completion_tokens’, ‘input_cost’, ‘output_cost’, ‘total_cost’</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.get_element_by_name">
+<span class="sig-name descname"><span class="pre">get_element_by_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.get_element_by_name" title="Link to this definition"></a></dt>
+<dd><p>Get the element by name from the list of elements or a function pointer if the name matches a whitelist of allowed function names.
+If the name does not match an element or an allowed function name, return None.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>name (str): The name of the element to retrieve from the composite score’s elements or the name of the function.</p>
+</dd>
+<dt>Returns:</dt><dd><p>dict or function or None: The element dictionary if an element with the given name exists, a function pointer if a valid function name is specified and found, or None if no match is found.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.get_total_token_count">
+<span class="sig-name descname"><span class="pre">get_total_token_count</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chat_history</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.get_total_token_count" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.group_element_results_by_name">
+<span class="sig-name descname"><span class="pre">group_element_results_by_name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.group_element_results_by_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.load_results_from_json">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">load_results_from_json</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_directory_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.load_results_from_json" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.multiple">
+<span class="sig-name descname"><span class="pre">multiple</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ordered_results</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.multiple" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.na">
+<span class="sig-name descname"><span class="pre">na</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.na" title="Link to this definition"></a></dt>
+<dd><p>A shorthand function for returning a ‘NA’ score result, with the element results
+for the individual elements of the composite score.  This helps keep the code minimal
+in the concrete implementations.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.no">
+<span class="sig-name descname"><span class="pre">no</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.no" title="Link to this definition"></a></dt>
+<dd><p>A shorthand function for returning a ‘No’ score result, with the element results
+for the individual elements of the composite score.  This helps keep the code minimal
+in the concrete implementations.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.normalize_element_name">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">normalize_element_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.normalize_element_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.return_result_with_context">
+<span class="sig-name descname"><span class="pre">return_result_with_context</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">result_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.return_result_with_context" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.save_results_to_json">
+<span class="sig-name descname"><span class="pre">save_results_to_json</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_directory_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.save_results_to_json" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.select_element_results_to_include">
+<span class="sig-name descname"><span class="pre">select_element_results_to_include</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grouped_results</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.select_element_results_to_include" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.to_dict" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.scores.CompositeScore.CompositeScore.yes">
+<span class="sig-name descname"><span class="pre">yes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.scores.CompositeScore.CompositeScore.yes" title="Link to this definition"></a></dt>
+<dd><p>A shorthand function for returning a ‘Yes’ score result, with the element results
+for the individual elements of the composite score.  This helps keep the code minimal
+in the concrete implementations.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
