@@ -7,7 +7,7 @@ import json
 import pandas as pd
 from openpyxl.styles import Font
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_openai import ChatOpenAI
 import tiktoken
@@ -158,12 +158,13 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
 
                 # Use the example_refinement_template to refine the answer, if there is one.
                 if example_refinement_template:
-                    prompt.append(
+                    prompt.extend([
+                        AIMessage(content=result['completion']),
                         HumanMessage(content=example_refinement_template)
-                    )
+                    ])
                     refinement_chain = prompt | model | output_parser
                     refined_result = refinement_chain.invoke({"text": row['text']})
-                    result = re.sub(r'\n+', '\n', refined_result['completion'])
+                    result['completion'] = re.sub(r'\n+', '\n', refined_result['completion'])
 
                 if result['answer'].lower() == correct_answer.lower():
                     return result
@@ -175,7 +176,7 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
             
             logging.warning(f"Failed to generate matching completion after {max_attempts} attempts. "
                             f"Using the last generated completion.")
-            return result
+            return result['completion']
 
         if generate_completions:
             messages_with_hint = messages + [
