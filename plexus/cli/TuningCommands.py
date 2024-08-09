@@ -158,6 +158,8 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
 
                 # Use the example_refinement_template to refine the answer, if there is one.
                 if example_refinement_template:
+                    logging.info(f"Refining completion with template: {example_refinement_template}")
+                    logging.info(f"Raw completion: {result['completion']}")
                     prompt.extend([
                         AIMessage(content=result['completion']),
                         HumanMessage(content=example_refinement_template)
@@ -165,6 +167,7 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
                     refinement_chain = prompt | model | output_parser
                     refined_result = refinement_chain.invoke({"text": row['text']})
                     result['completion'] = re.sub(r'\n+', '\n', refined_result['completion'])
+                    logging.info(f"Refined completion: {result['completion']}")
 
                 if result['answer'].lower() == correct_answer.lower():
                     return result
