@@ -189,8 +189,12 @@ class AccuracyExperiment(Experiment):
             if hasattr(self, 'random_seed'):
                 random.seed(self.random_seed)
             try:
-                selected_sample_indices = random.sample(range(len(df)), self.number_of_texts_to_sample)
-                selected_sample_rows = df.iloc[selected_sample_indices]
+                if self.number_of_texts_to_sample > len(df):
+                    logging.warning("Requested number of samples is larger than the dataframe size. Using the entire dataframe.")
+                    selected_sample_rows = df
+                else:
+                    selected_sample_indices = random.sample(range(len(df)), self.number_of_texts_to_sample)
+                    selected_sample_rows = df.iloc[selected_sample_indices]
             except ValueError as e:
                 logging.error(f"Sampling error: {e}")
                 selected_sample_rows = df
