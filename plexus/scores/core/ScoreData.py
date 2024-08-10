@@ -108,6 +108,11 @@ class ScoreData:
         """
         Handle any pre-processing of the training data, including the training/validation splits.
         """
+
+        # Drop NaN values in the column specified by score_name
+        if self.parameters.score_name in self.dataframe.columns:
+            self.dataframe = self.dataframe.dropna(subset=[self.parameters.score_name])
+
         if 'processors' in self.parameters.data:
             console.print(Text("Running configured processors...", style="royal_blue1"))
 
