@@ -31,9 +31,8 @@ class BaseNode(ABC, LangChainUser):
         example_refinement_message: Optional[str] = None
 
     def __init__(self, **parameters):
-        LangChainUser.__init__(self, **parameters)
-        combined_parameters_model = pydantic.create_model("CombinedParameters", __base__=(LangChainUser.Parameters, BaseNode.Parameters))
-        self.parameters = combined_parameters_model(**parameters)
+        super().__init__(**parameters)
+        self.parameters = self.Parameters(**parameters)
 
     def get_prompt_templates(self):
         """
