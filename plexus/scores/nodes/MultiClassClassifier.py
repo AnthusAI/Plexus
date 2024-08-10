@@ -13,17 +13,12 @@ class MultiClassClassifier(BaseNode):
     A node that classifies text input as one of multiple classes based on the provided prompt.
     """
     
-    class Parameters(LangChainUser.Parameters):
-        ...
+    class Parameters(BaseNode.Parameters):
         valid_classes: List[str] = Field(default_factory=list)
 
     def __init__(self, **parameters):
-        LangChainUser.__init__(self, **parameters)
-        # We intentionally override super().__init__() to allow for a carefully-crafted Pydantic model here.
-        combined_parameters_model = pydantic.create_model(
-            "CombinedParameters",
-            __base__=(MultiClassClassifier.Parameters, LangChainUser.Parameters))
-        self.parameters = combined_parameters_model(**parameters)
+        super().__init__(**parameters)
+        self.parameters = MultiClassClassifier.Parameters(**parameters)
         
         # Initialize the model using LangChainUser's method
         self.model = self._initialize_model()
