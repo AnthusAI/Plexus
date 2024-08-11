@@ -106,7 +106,7 @@ class BaseNode(ABC, LangChainUser):
 
         app = workflow.compile()
 
-        logging.info(f"Graph for {self.__class__.__name__}:")
-        app.get_graph().print_ascii()
+        # logging.info(f"Graph for {self.__class__.__name__}:")
+        # app.get_graph().print_ascii()
 
         return app

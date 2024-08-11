@@ -1,13 +1,16 @@
 import os
 import boto3
+from botocore.config import Config
 import json
 import pandas as pd
-from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures
 from pydantic import Field
 from plexus.CustomLogging import logging
 from plexus.cli.console import console
 from rich.progress import Progress
 from .DataCache import DataCache
+
+boto3.set_stream_logger('', logging.WARNING)
 
 class AWSDataLakeCache(DataCache):
     """
@@ -25,7 +28,11 @@ class AWSDataLakeCache(DataCache):
         self.s3_bucket =             os.environ['PLEXUS_TRAINING_DATA_LAKE_BUCKET_NAME']
         self.aws_region =            os.environ['AWS_REGION_NAME']
         self.athena_client =         boto3.client('athena', region_name=self.aws_region)
-        self.s3_client =             boto3.client('s3',     region_name=self.aws_region)
+        config = Config(
+            retries = {'max_attempts': 10, 'mode': 'adaptive'},
+            max_pool_connections = 25
+        )
+        self.s3_client =             boto3.client('s3', region_name=self.aws_region, config=config)
 
         os.makedirs(self.local_cache_directory, exist_ok=True)
         logging.info("Initialized AWSDataLakeCache with local cache directory at {}".format(self.local_cache_directory))
@@ -121,7 +128,7 @@ class AWSDataLakeCache(DataCache):
                 with open(local_path, 'r') as file:
                     content_data[file_name] = file.read()
             else:
-                logging.info(f"Downloading {file_name} from S3 bucket {self.s3_bucket}")
+                logging.debug(f"Downloading {file_name} from S3 bucket {self.s3_bucket}")
                 s3_obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=key)
                 file_content = s3_obj['Body'].read().decode('utf-8')
                 
@@ -175,7 +182,7 @@ class AWSDataLakeCache(DataCache):
             logging.error(f"Error processing content_id={content_id}, scorecard_id={scorecard_id}: {str(e)}")
             return None
 
-    def load_dataframe(self, *, data):
+    def load_dataframe(self, *, data, fresh=False):
         dataframes = []
         
         searches = data.get('searches')
@@ -219,7 +226,7 @@ class AWSDataLakeCache(DataCache):
         cached_dataframe_path = os.path.join(self.local_cache_directory, 'dataframes', cached_dataframe_filename)
 
         # Check if the cached dataframe exists
-        if os.path.exists(cached_dataframe_path):
+        if os.path.exists(cached_dataframe_path) and not fresh:
             logging.info("Loading cached dataframe from {}".format(cached_dataframe_path))
             dataframe = pd.read_hdf(cached_dataframe_path)
             
@@ -238,17 +245,29 @@ class AWSDataLakeCache(DataCache):
                 logging.error("No non-deprecated content items found in the database.")
                 return pd.DataFrame()
 
-            content_data = []
-            for row in all_query_results:
+            def process_content_item_wrapper(row):
                 content_id = row['Data'][0]['VarCharValue']
                 scorecard_id = row['Data'][1]['VarCharValue']
-                logging.info(f"Processing content item: content_id={content_id}, scorecard_id={scorecard_id}")
+                logging.debug(f"Processing content item: content_id={content_id}, scorecard_id={scorecard_id}")
                 
                 content_row = self.process_content_item(scorecard_id, content_id)
                 if content_row:
-                    content_data.append(content_row)
+                    return content_row
                 else:
                     logging.warning(f"Failed to process content item: content_id={content_id}, scorecard_id={scorecard_id}")
+                    return None
+
+            content_data = []
+            thread_count = 64
+
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            with ThreadPoolExecutor(max_workers=thread_count) as executor:
+                future_to_row = {executor.submit(process_content_item_wrapper, row): row for row in all_query_results}
+                for future in concurrent.futures.as_completed(future_to_row):
+                    content_row = future.result()
+                    if content_row:
+                        content_data.append(content_row)
 
             if not content_data:
                 logging.error("No valid content items were processed. Unable to create dataframe.")
