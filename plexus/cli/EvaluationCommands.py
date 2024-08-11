@@ -149,7 +149,7 @@ def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, scor
     
     # Filter out rows that were included in fine-tuning training exmaples,
     # if a file exists.
-    content_ids_to_exclude_filename = f"tuning/{scorecard_name}/{score_name}/{score_config['base_model_name']}_training_ids.txt"
+    content_ids_to_exclude_filename = f"tuning/{scorecard_name}/{score_name}/training_ids.txt"
     if os.path.exists(content_ids_to_exclude_filename):
         with open(content_ids_to_exclude_filename, 'r') as file:
             content_ids_to_exclude = file.read().splitlines()
