@@ -37,8 +37,9 @@ def get_id_file_path(output_dir, file_type):
 @click.option('--score-name', help='The name of the score to generate JSON-L for.')
 @click.option('--maximum-number', type=int, default=100, help='Maximum number of samples, total.')
 @click.option('--generate-completions', is_flag=True, help='Generate completions using an LLM.')
+@click.option('--retry-mismatches', is_flag=True, help='Retry when generated answer does not match the label.')
 @click.option('--verbose', is_flag=True, help='Verbose output.')
-def generate_examples(scorecard_name, score_name, maximum_number, generate_completions, verbose):
+def generate_examples(scorecard_name, score_name, maximum_number, generate_completions, retry_mismatches, verbose):
     """
     Generate JSON-L files that include a specified number of examples, using the prompt templates
     from the score configuration combined with data and ground-truth labels.
@@ -51,6 +52,8 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
     :type maximum_number: int
     :param generate_completions: Generate completions using an LLM.
     :type generate_completions: bool
+    :param retry_mismatches: Retry when generated answer does not match the label.
+    :type retry_mismatches: bool
     :param verbose: Verbose output.
     :type verbose: bool
     """
@@ -108,7 +111,11 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
     logging.info(f"Nodes: {nodes}")
 
     # Loop through the sample rows and generate JSON-L
-    for index, row in sample_rows.iterrows():
+    processed_count = 0
+    while processed_count < maximum_number and sample_rows.shape[0] > 0:
+        row = sample_rows.iloc[0]
+        sample_rows = sample_rows.iloc[1:]
+
         formatted_messages = []
         for node_templates, example_refinement_template in zip(nodes, example_refinement_nodes):
             for template in node_templates:
@@ -123,14 +130,14 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
                             for message in messages
                         ])
                     except Exception as e:
-                        logging.error(f"Error formatting messages for row {index}: {e}")
+                        logging.error(f"Error formatting messages for row {row.name}: {e}")
 
         if not formatted_messages:
-            logging.warning(f"No formatted messages for row {index}. Skipping.")
+            logging.warning(f"No formatted messages for row {row.name}. Skipping.")
             continue
 
         if verbose:
-            logging.info(f"Formatted messages for row {index}: {formatted_messages}")
+            logging.info(f"Formatted messages for row {row.name}: {formatted_messages}")
 
         def generate_completion_with_retry(messages, correct_answer, max_attempts=5):
             class CompletionOutputParser(BaseOutputParser[dict]):
@@ -172,6 +179,11 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
                 if result['answer'].lower() == correct_answer.lower():
                     return result['completion']
                 
+                if not retry_mismatches:
+                    if verbose:
+                        logging.info(f"Generated answer '{result['answer']}' does not match correct answer '{correct_answer}'. Skipping.")
+                    return None
+
                 if verbose:
                     logging.info(f"Attempt {attempt + 1}: Generated answer '{result['answer']}' "
                                  f"does not match correct answer '{correct_answer}'. "
@@ -201,6 +213,8 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
         else:
             validation_data.append(message)
             validation_ids.append(row['content_id'])
+
+        processed_count += 1
 
     logging.info(f"Number of training samples: {len(training_data)}")
     logging.info(f"Number of validation samples: {len(validation_data)}")
