@@ -110,136 +110,141 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
     example_refinement_nodes = score_instance.get_example_refinement_templates()
     logging.info(f"Nodes: {nodes}")
 
-    # Loop through the sample rows and generate JSON-L
-    processed_count = 0
-    while processed_count < maximum_number and sample_rows.shape[0] > 0:
-        row = sample_rows.iloc[0]
-        sample_rows = sample_rows.iloc[1:]
-
-        formatted_messages = []
-        for node_templates, example_refinement_template in zip(nodes, example_refinement_nodes):
-            for template in node_templates:
-                if isinstance(template, ChatPromptTemplate):
-                    try:
-                        messages = template.format_messages(text=row['text'])
-                        formatted_messages.extend([
-                            {
-                                "role": "user" if message.type == "human" else message.type, 
-                                "content": message.content
-                            }
-                            for message in messages
-                        ])
-                    except Exception as e:
-                        logging.error(f"Error formatting messages for row {row.name}: {e}")
-
-        if not formatted_messages:
-            logging.warning(f"No formatted messages for row {row.name}. Skipping.")
-            continue
-
-        if verbose:
-            logging.info(f"Formatted messages for row {row.name}: {formatted_messages}")
-
-        def generate_completion_with_retry(messages, correct_answer, max_attempts=5):
-            class CompletionOutputParser(BaseOutputParser[dict]):
-                def parse(self, output: str) -> dict:
-                    def extract_last_word(text):
-                        cleaned_text = re.sub(r'[^\w\s]', '', text)
-                        words = cleaned_text.split()
-                        return words[-1] if words else ""
-
-                    answer = extract_last_word(output)
-                    return {
-                        "answer": answer,
-                        "completion": output.strip(),
-                    }
-
-            output_parser = CompletionOutputParser()
-            
-            for attempt in range(max_attempts):
-                temperature = min(0.2 * attempt, 1.0)
-                model = ChatOpenAI(model_name="gpt-4o-2024-08-06", temperature=temperature)
-                
-                prompt = ChatPromptTemplate.from_messages(messages)
-                answer_chain = prompt | model | output_parser
-                result = answer_chain.invoke({"text": row['text']})
-
-                # Use the example_refinement_template to refine the answer, if there is one.
-                if example_refinement_template:
-                    logging.info(f"Refining completion with template: {example_refinement_template}")
-                    logging.info(f"Raw completion: {result['completion']}")
-                    prompt.extend([
-                        AIMessage(content=result['completion']),
-                        HumanMessage(content=example_refinement_template)
-                    ])
-                    refinement_chain = prompt | model | output_parser
-                    refined_result = refinement_chain.invoke({"text": row['text']})
-                    result['completion'] = re.sub(r'\n+', '\n', refined_result['completion'])
-                    logging.info(f"Refined completion: {result['completion']}")
-
-                if result['answer'].lower() == correct_answer.lower():
-                    return result['completion']
-                
-                if not retry_mismatches:
-                    if verbose:
-                        logging.info(f"Generated answer '{result['answer']}' does not match correct answer '{correct_answer}'. Skipping.")
-                    return None
-
-                if verbose:
-                    logging.info(f"Attempt {attempt + 1}: Generated answer '{result['answer']}' "
-                                 f"does not match correct answer '{correct_answer}'. "
-                                 f"Retrying with temperature {temperature:.2f}")
-            
-            logging.warning(f"Failed to generate matching completion after {max_attempts} attempts. "
-                            f"Skipping item.")
-            return None
-
-        if generate_completions:
-            messages_with_hint = messages + [
-                HumanMessage(content=f"<hint>The correct answer is {row[score_name]}</hint>")
-            ]
-            completion = generate_completion_with_retry(messages_with_hint, row[score_name])
-            if completion is None:
-                continue
-        else:
-            completion = row[score_name]
-
-        formatted_messages.append({"role": "assistant", "content": completion})
-
-        message = {"messages": formatted_messages}
-
-        if len(training_data) < num_training_samples:
-            training_data.append(message)
-            training_ids.append(row['content_id'])
-        else:
-            validation_data.append(message)
-            validation_ids.append(row['content_id'])
-
-        processed_count += 1
-
-    logging.info(f"Number of training samples: {len(training_data)}")
-    logging.info(f"Number of validation samples: {len(validation_data)}")
-
-    # Ensure the directory exists
+    # Open files at the beginning
     output_dir = get_output_dir(scorecard_name, score_name)
     os.makedirs(output_dir, exist_ok=True)
     
-    # Save to JSON-L files
-    with open(get_file_path(output_dir, "training"), "w") as train_file:
-        for entry in training_data:
-            train_file.write(f"{json.dumps(entry)}\n")
-    
-    with open(get_file_path(output_dir, "validation"), "w") as val_file:
-        for entry in validation_data:
-            val_file.write(f"{json.dumps(entry)}\n")
+    train_file = open(get_file_path(output_dir, "training"), "w")
+    val_file = open(get_file_path(output_dir, "validation"), "w")
+    train_id_file = open(get_id_file_path(output_dir, "training"), "w")
+    val_id_file = open(get_id_file_path(output_dir, "validation"), "w")
 
-    # Save content IDs to txt files
-    with open(get_id_file_path(output_dir, "training"), "w") as train_id_file:
-        for content_id in training_ids:
-            train_id_file.write(f"{content_id}\n")
+    try:
+        # Loop through the sample rows and generate JSON-L
+        processed_count = 0
+        while processed_count < maximum_number and sample_rows.shape[0] > 0:
+            row = sample_rows.iloc[0]
+            sample_rows = sample_rows.iloc[1:]
 
-    with open(get_id_file_path(output_dir, "validation"), "w") as val_id_file:
-        for content_id in validation_ids:
-            val_id_file.write(f"{content_id}\n")
+            formatted_messages = []
+            for node_templates, example_refinement_template in zip(nodes, example_refinement_nodes):
+                for template in node_templates:
+                    if isinstance(template, ChatPromptTemplate):
+                        try:
+                            messages = template.format_messages(text=row['text'])
+                            formatted_messages.extend([
+                                {
+                                    "role": "user" if message.type == "human" else message.type, 
+                                    "content": message.content
+                                }
+                                for message in messages
+                            ])
+                        except Exception as e:
+                            logging.error(f"Error formatting messages for row {row.name}: {e}")
+
+            if not formatted_messages:
+                logging.warning(f"No formatted messages for row {row.name}. Skipping.")
+                continue
+
+            if verbose:
+                logging.info(f"Formatted messages for row {row.name}: {formatted_messages}")
+
+            def generate_completion_with_retry(messages, correct_answer, max_attempts=5):
+                class CompletionOutputParser(BaseOutputParser[dict]):
+                    def parse(self, output: str) -> dict:
+                        def extract_last_word(text):
+                            cleaned_text = re.sub(r'[^\w\s]', '', text)
+                            words = cleaned_text.split()
+                            return words[-1] if words else ""
+
+                        answer = extract_last_word(output)
+                        return {
+                            "answer": answer,
+                            "completion": output.strip(),
+                        }
+
+                output_parser = CompletionOutputParser()
+                
+                for attempt in range(max_attempts):
+                    temperature = min(0.2 * attempt, 1.0)
+                    model = ChatOpenAI(model_name="gpt-4o-2024-08-06", temperature=temperature)
+                    
+                    prompt = ChatPromptTemplate.from_messages(messages)
+                    answer_chain = prompt | model | output_parser
+                    result = answer_chain.invoke({"text": row['text']})
+
+                    # Use the example_refinement_template to refine the answer, if there is one.
+                    if example_refinement_template:
+                        logging.info(f"Refining completion with template: {example_refinement_template}")
+                        logging.info(f"Raw completion: {result['completion']}")
+                        prompt.extend([
+                            AIMessage(content=result['completion']),
+                            HumanMessage(content=example_refinement_template)
+                        ])
+                        refinement_chain = prompt | model | output_parser
+                        refined_result = refinement_chain.invoke({"text": row['text']})
+                        result['completion'] = re.sub(r'\n+', '\n', refined_result['completion'])
+                        logging.info(f"Refined completion: {result['completion']}")
+
+                    if result['answer'].lower() == correct_answer.lower():
+                        return result['completion']
+                    
+                    if not retry_mismatches:
+                        if verbose:
+                            logging.info(f"Generated answer '{result['answer']}' does not match correct answer '{correct_answer}'. Skipping.")
+                        return None
+
+                    if verbose:
+                        logging.info(f"Attempt {attempt + 1}: Generated answer '{result['answer']}' "
+                                     f"does not match correct answer '{correct_answer}'. "
+                                     f"Retrying with temperature {temperature:.2f}")
+                
+                logging.warning(f"Failed to generate matching completion after {max_attempts} attempts. "
+                                f"Skipping item.")
+                return None
+
+            if generate_completions:
+                messages_with_hint = messages + [
+                    HumanMessage(content=f"<hint>The correct answer is {row[score_name]}</hint>")
+                ]
+                completion = generate_completion_with_retry(messages_with_hint, row[score_name])
+                if completion is None:
+                    continue
+            else:
+                completion = row[score_name]
+
+            formatted_messages.append({"role": "assistant", "content": completion})
+
+            message = {"messages": formatted_messages}
+
+            if len(training_data) < num_training_samples:
+                json.dump(message, train_file)
+                train_file.write("\n")
+                train_file.flush()
+                train_id_file.write(f"{row['content_id']}\n")
+                train_id_file.flush()
+                training_data.append(message)
+                training_ids.append(row['content_id'])
+            else:
+                json.dump(message, val_file)
+                val_file.write("\n")
+                val_file.flush()
+                val_id_file.write(f"{row['content_id']}\n")
+                val_id_file.flush()
+                validation_data.append(message)
+                validation_ids.append(row['content_id'])
+
+            processed_count += 1
+
+        logging.info(f"Number of training samples: {len(training_data)}")
+        logging.info(f"Number of validation samples: {len(validation_data)}")
+
+    finally:
+        # Close files
+        train_file.close()
+        val_file.close()
+        train_id_file.close()
+        val_id_file.close()
 
     logging.info(f"Generated JSON-L and ID files in {output_dir}")
 
