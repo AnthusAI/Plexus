@@ -37,9 +37,10 @@ def get_id_file_path(output_dir, file_type):
 @click.option('--score-name', help='The name of the score to generate JSON-L for.')
 @click.option('--maximum-number', type=int, default=100, help='Maximum number of samples, total.')
 @click.option('--generate-completions', is_flag=True, help='Generate completions using an LLM.')
+@click.option('--completion-model', default='gpt-4o-mini-2024-07-18', help='The model to use for generating completions.')
 @click.option('--retry-mismatches', is_flag=True, help='Retry when generated answer does not match the label.')
 @click.option('--verbose', is_flag=True, help='Verbose output.')
-def generate_examples(scorecard_name, score_name, maximum_number, generate_completions, retry_mismatches, verbose):
+def generate_examples(scorecard_name, score_name, maximum_number, generate_completions, completion_model, retry_mismatches, verbose):
     """
     Generate JSON-L files that include a specified number of examples, using the prompt templates
     from the score configuration combined with data and ground-truth labels.
@@ -52,6 +53,8 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
     :type maximum_number: int
     :param generate_completions: Generate completions using an LLM.
     :type generate_completions: bool
+    :param completion_model: The model to use for generating completions.
+    :type completion_model: str
     :param retry_mismatches: Retry when generated answer does not match the label.
     :type retry_mismatches: bool
     :param verbose: Verbose output.
@@ -167,7 +170,7 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
                 
                 for attempt in range(max_attempts):
                     temperature = min(0.2 * attempt, 1.0)
-                    model = ChatOpenAI(model_name="gpt-4o-2024-08-06", temperature=temperature)
+                    model = ChatOpenAI(model_name=completion_model, temperature=temperature)
                     
                     prompt = ChatPromptTemplate.from_messages(messages)
                     answer_chain = prompt | model | output_parser
