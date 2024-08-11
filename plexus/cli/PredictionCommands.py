@@ -16,7 +16,8 @@ from plexus.Registries import scorecard_registry
 @click.option('--number', type=int, default=1, help='Number of times to iterate over the list of scores.')
 @click.option('--excel', is_flag=True, help='Output results to an Excel file.')
 @click.option('--use-langsmith-trace', is_flag=True, default=False, help='Activate LangSmith trace client for LangChain components')
-def predict(scorecard_name, score_name, content_id, number, excel, use_langsmith_trace):
+@click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
+def predict(scorecard_name, score_name, content_id, number, excel, use_langsmith_trace, fresh):
     # Set LANGCHAIN_TRACING_V2 environment variable if use_langsmith_trace is True
     if use_langsmith_trace:
         os.environ['LANGCHAIN_TRACING_V2'] = 'true'
@@ -49,7 +50,7 @@ def predict(scorecard_name, score_name, content_id, number, excel, use_langsmith
             logging.info(f"Iteration {iteration + 1} of {number}")
         
         try:
-            sample_row, used_content_id = select_sample(scorecard_class, score_names[0], content_id)
+            sample_row, used_content_id = select_sample(scorecard_class, score_names[0], content_id, fresh)
         except Exception as e:
             logging.error(f"Failed to select sample: {str(e)}")
             continue
@@ -108,20 +109,20 @@ def output_excel(results, score_names, scorecard_name):
 
     logging.info(f"Excel file '{filename}' has been created with the prediction results.")
 
-def select_sample(scorecard_class, score_name, content_id):
+def select_sample(scorecard_class, score_name, content_id, fresh):
 
     score_configuration = scorecard_class.scores.get(score_name, {})
     
     # Check if the score uses the new data-driven approach
     if 'data' in score_configuration:
-        return select_sample_data_driven(scorecard_class, score_name, content_id, score_configuration)
+        return select_sample_data_driven(scorecard_class, score_name, content_id, score_configuration, fresh)
     else:
         # Use labeled-samples.csv for old scores
         scorecard_key = scorecard_class.properties.get('key')        
         csv_path = os.path.join('scorecards', scorecard_key, 'experiments', 'labeled-samples.csv')
         return select_sample_csv(csv_path, content_id)
 
-def select_sample_data_driven(scorecard_class, score_name, content_id, score_configuration):
+def select_sample_data_driven(scorecard_class, score_name, content_id, score_configuration, fresh):
     score_class = scorecard_class.score_registry.get(score_name)
     if score_class is None:
         logging.error(f"Score class for '{score_name}' not found in the registry.")
@@ -132,7 +133,7 @@ def select_sample_data_driven(scorecard_class, score_name, content_id, score_con
 
     try:
         score_instance = score_class(**score_configuration)
-        score_instance.load_data(data=score_configuration['data'])
+        score_instance.load_data(data=score_configuration['data'], fresh=fresh)
         score_instance.process_data()
 
         if content_id:

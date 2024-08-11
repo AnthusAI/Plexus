@@ -18,7 +18,8 @@ from rich.pretty import pprint
 @click.command(help="Train and evaluate a scorecard or specific score within a scorecard.")
 @click.option('--scorecard-name', required=True, help='The name of the scorecard.')
 @click.option('--score-name', help='The name of the score to train.')
-def train(scorecard_name, score_name):
+@click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
+def train(scorecard_name, score_name, fresh):
     """
     This command will handle dispatching to the :func:`plexus.cli.TrainingCommands.train_score` function
     for each score in the scorecard if a scorecard is specified, or for a
@@ -36,7 +37,7 @@ def train(scorecard_name, score_name):
     logging.info(f"Found registered Scorecard named [magenta1][b]{scorecard_class.name}[/b][/magenta1] implemented in Python class [magenta1][b]{scorecard_class.__name__}[/b][/magenta1]")
 
     if score_name:
-        train_score(score_name, scorecard_class)
+        train_score(score_name, scorecard_class, fresh)
     else:
         logging.info(f"No score name provided. Training all scores for Scorecard [magenta1][b]{scorecard_class.name}[/b][/magenta1]...")
         for score_name in scorecard_class.scores.keys():
@@ -45,7 +46,7 @@ def train(scorecard_name, score_name):
             except Exception as e:
                 logging.error(f"Failed to train score '{score_name}': {str(e)}")
 
-def train_score(score_name, scorecard_class):
+def train_score(score_name, scorecard_class, fresh):
     """
     This function will train and evaluate a single score.
     """
@@ -78,7 +79,7 @@ def train_score(score_name, scorecard_class):
     score_instance.record_configuration(score_to_train_configuration)
 
     # Data processing
-    score_instance.load_data(data=score_to_train_configuration['data'])
+    score_instance.load_data(data=score_to_train_configuration['data'], fresh=fresh)
     score_instance.process_data()
 
     # Training
