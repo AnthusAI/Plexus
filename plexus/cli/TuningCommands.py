@@ -41,8 +41,9 @@ def get_id_file_path(output_dir, file_type):
 @click.option('--generate-completions', is_flag=True, help='Generate completions using an LLM.')
 @click.option('--completion-model', default='gpt-4o-mini-2024-07-18', help='The model to use for generating completions.')
 @click.option('--retry-mismatches', is_flag=True, help='Retry when generated answer does not match the label.')
+@click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 @click.option('--verbose', is_flag=True, help='Verbose output.')
-def generate_examples(scorecard_name, score_name, maximum_number, generate_completions, completion_model, retry_mismatches, verbose):
+def generate_examples(scorecard_name, score_name, maximum_number, generate_completions, completion_model, retry_mismatches, fresh, verbose):
     """
     Generate JSON-L files that include a specified number of examples, using the prompt templates
     from the score configuration combined with data and ground-truth labels.
@@ -99,7 +100,7 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
         # Get data
         sample_rows = None
         score_instance = score_class(**score_configuration)
-        score_instance.load_data(data=score_configuration['data'])
+        score_instance.load_data(data=score_configuration['data'], fresh=fresh)
         score_instance.process_data()
 
         total_rows = len(score_instance.dataframe)

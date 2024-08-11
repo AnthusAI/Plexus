@@ -47,6 +47,7 @@ def load_configuration_from_yaml_file(configuration_file_path):
 @click.option('--session-ids-to-sample', default='', type=str, help='Comma-separated list of session IDs to sample')
 @click.option('--score-name', '--score-names', default='', type=str, help='Comma-separated list of score names to evaluate')
 @click.option('--experiment-label', default='', type=str, help='Label for the experiment')
+@click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 def accuracy(
     scorecard_name: str,
     use_langsmith_trace: bool,
@@ -55,7 +56,9 @@ def accuracy(
     random_seed: int,
     session_ids_to_sample: str,
     score_name: str,
-    experiment_label: str):
+    experiment_label: str,
+    fresh: bool
+    ):
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
     These experiment runs will generate metrics and artifacts that Plexus will log in MLFLow.
@@ -98,11 +101,13 @@ def accuracy(
         # If the user specified a score name, we'll use that one.
         # Otherwise, we'll just use the first one that has `data:` in its configuration.
         if score_name:
-            labeled_samples.extend(get_data_driven_samples(scorecard_instance, scorecard_name, score_name, scorecard_instance.scores[score_name]))
+            labeled_samples.extend(get_data_driven_samples(
+                scorecard_instance, scorecard_name, score_name, scorecard_instance.scores[score_name], fresh))
         else:
             for score_name, score_config in scorecard_instance.scores.items():
                 if 'data' in score_config:
-                    labeled_samples.extend(get_data_driven_samples(scorecard_instance, scorecard_name, score_name, score_config))
+                    labeled_samples.extend(get_data_driven_samples(
+                        scorecard_instance, scorecard_name, score_name, score_config, fresh))
                     break
     else:
         labeled_samples_filename = os.path.join('scorecards', scorecard_instance.properties.get('key'), 'experiments', 'labeled-samples.csv')
@@ -126,7 +131,7 @@ def accuracy(
     with AccuracyExperiment(**experiment_args) as experiment:
         experiment.run()
 
-def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, score_config):
+def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, score_config, fresh):
     score_class_name = score_config['class']
     score_module_path = f'plexus.scores.{score_class_name}'
     score_module = importlib.import_module(score_module_path)
@@ -136,7 +141,7 @@ def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, scor
     score_config['score_name'] = score_name
     score_instance = score_class(**score_config)
 
-    score_instance.load_data(data=score_config['data'])
+    score_instance.load_data(data=score_config['data'], fresh=fresh)
     score_instance.process_data()
 
     # Log dataframe information
@@ -175,6 +180,9 @@ def get_csv_samples(csv_filename):
         logging.error(f"Failed to load or process data from {csv_filename}: {str(e)}")
         return []
 
+from rich.progress import Progress, TextColumn, BarColumn, TaskID
+from rich.live import Live
+
 @evaluate.command()
 @click.option('--scorecard-name', required=True, help='Name of the scorecard to evaluate')
 @click.option('--number-of-samples', default=100, help='Number of samples to evaluate')
@@ -201,26 +209,32 @@ def distribution(
         return
 
     scores_to_evaluate = subset_of_scores.split(',') if subset_of_scores else list(scorecard_class.scores.keys())[:10]
-    
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_score = {executor.submit(evaluate_score_distribution, score_name, scorecard_class, number_of_samples): score_name for score_name in scores_to_evaluate}
-        for future in concurrent.futures.as_completed(future_to_score):
-            score_name = future_to_score[future]
-            try:
-                future.result()
-            except Exception as exc:
-                logging.error(f'{score_name} generated an exception: {exc}')
+    total_scores = len(scores_to_evaluate)
+
+    progress = Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+    )
+
+    with Live(progress, refresh_per_second=10) as live:
+        overall_task = progress.add_task("[green]Overall Progress", total=total_scores)
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_score = {executor.submit(evaluate_score_distribution, score_name, scorecard_class, number_of_samples, live, progress, overall_task): score_name for score_name in scores_to_evaluate}
+            for future in concurrent.futures.as_completed(future_to_score):
+                score_name = future_to_score[future]
+                try:
+                    future.result()
+                except Exception as exc:
+                    logging.error(f'{score_name} generated an exception: {exc}')
 
     end_time = time.time()
     console.print(f"[bold magenta]Finished distribution evaluation at {time.strftime('%H:%M:%S')}. Total time: {end_time - start_time:.2f} seconds[/bold magenta]")
 
-def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
-    """
-    This function will evaluate the distribution for a single score.
-    """
+def evaluate_score_distribution(score_name, scorecard_class, number_of_samples, live, progress, overall_task):
     start_time = time.time()
-    with console_lock:
-        console.print(f"[bold blue]Started evaluating distribution for Score {score_name} at {time.strftime('%H:%M:%S')}[/bold blue]")
+    live.console.print(f"[bold blue]Started evaluating distribution for Score {score_name} at {time.strftime('%H:%M:%S')}[/bold blue]")
     
     score_configuration = scorecard_class.scores.get(score_name)
 
@@ -291,4 +305,5 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
         end_time = time.time()
         console.print(f"[bold blue]Finished {score_name} at {time.strftime('%H:%M:%S')}. Time taken: {end_time - start_time:.2f} seconds[/bold blue]")
 
-    # TODO: Add more detailed distribution analysis and MLFlow logging here
+    # Update the overall progress
+    progress.update(overall_task, advance=1)

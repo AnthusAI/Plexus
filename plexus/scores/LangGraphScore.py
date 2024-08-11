@@ -33,7 +33,7 @@ class LangGraphScore(Score, LangChainUser):
         model_provider: Literal["ChatOpenAI", "AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "AzureChatOpenAI"
         model_name: Optional[str] = None
         model_region: Optional[str] = None
-        temperature: Optional[float] = 0.1
+        temperature: Optional[float] = 0.03
         max_tokens: Optional[int] = 500
         graph: Optional[list[dict]] = None
         input: Optional[dict] = None
@@ -452,8 +452,8 @@ class LangGraphScore(Score, LangChainUser):
 
         app = workflow.compile()
 
-        logging.info(f"Graph for {self.__class__.__name__}:")
-        app.get_graph().print_ascii()
+        # logging.info(f"Graph for {self.__class__.__name__}:")
+        # app.get_graph().print_ascii()
 
         # Store node instances for later token usage calculation
         self.node_instances = node_instances
