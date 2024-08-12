@@ -160,7 +160,7 @@ class AccuracyExperiment(Experiment):
     def run(self):
 
         # Configure logging
-        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+        # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
         if self.labeled_samples:
             df = pd.DataFrame(self.labeled_samples)

@@ -10,7 +10,7 @@ from plexus.cli.console import console
 from rich.progress import Progress
 from .DataCache import DataCache
 
-boto3.set_stream_logger('', logging.WARNING)
+# boto3.set_stream_logger('', logging.WARNING)
 
 class AWSDataLakeCache(DataCache):
     """
