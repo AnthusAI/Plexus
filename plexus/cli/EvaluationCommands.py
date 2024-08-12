@@ -180,9 +180,6 @@ def get_csv_samples(csv_filename):
         logging.error(f"Failed to load or process data from {csv_filename}: {str(e)}")
         return []
 
-from rich.progress import Progress, TextColumn, BarColumn, TaskID
-from rich.live import Live
-
 @evaluate.command()
 @click.option('--scorecard-name', required=True, help='Name of the scorecard to evaluate')
 @click.option('--number-of-samples', default=100, help='Number of samples to evaluate')
@@ -194,12 +191,8 @@ def distribution(
     subset_of_scores: str,
     max_workers: int
 ):
-    """
-    Evaluate the distribution of scores for the scorecard using the current configuration.
-    This command will generate distribution metrics and artifacts that Plexus will log in MLFlow.
-    """
     start_time = time.time()
-    console.print(f"[bold magenta]Starting distribution evaluation for Scorecard {scorecard_name} at {time.strftime('%H:%M:%S')}[/bold magenta]")
+    logging.info(f"Starting distribution evaluation for Scorecard {scorecard_name} at {time.strftime('%H:%M:%S')}")
 
     Scorecard.load_and_register_scorecards('scorecards/')
     scorecard_class = scorecard_registry.get(scorecard_name)
@@ -211,30 +204,21 @@ def distribution(
     scores_to_evaluate = subset_of_scores.split(',') if subset_of_scores else list(scorecard_class.scores.keys())[:10]
     total_scores = len(scores_to_evaluate)
 
-    progress = Progress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-    )
-
-    with Live(progress, refresh_per_second=10) as live:
-        overall_task = progress.add_task("[green]Overall Progress", total=total_scores)
-        
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_score = {executor.submit(evaluate_score_distribution, score_name, scorecard_class, number_of_samples, live, progress, overall_task): score_name for score_name in scores_to_evaluate}
-            for future in concurrent.futures.as_completed(future_to_score):
-                score_name = future_to_score[future]
-                try:
-                    future.result()
-                except Exception as exc:
-                    logging.error(f'{score_name} generated an exception: {exc}')
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_score = {executor.submit(evaluate_score_distribution, score_name, scorecard_class, number_of_samples): score_name for score_name in scores_to_evaluate}
+        for future in concurrent.futures.as_completed(future_to_score):
+            score_name = future_to_score[future]
+            try:
+                future.result()
+            except Exception as exc:
+                logging.error(f'{score_name} generated an exception: {exc}')
 
     end_time = time.time()
-    console.print(f"[bold magenta]Finished distribution evaluation at {time.strftime('%H:%M:%S')}. Total time: {end_time - start_time:.2f} seconds[/bold magenta]")
+    logging.info(f"Finished distribution evaluation at {time.strftime('%H:%M:%S')}. Total time: {end_time - start_time:.2f} seconds")
 
-def evaluate_score_distribution(score_name, scorecard_class, number_of_samples, live, progress, overall_task):
+def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
     start_time = time.time()
-    live.console.print(f"[bold blue]Started evaluating distribution for Score {score_name} at {time.strftime('%H:%M:%S')}[/bold blue]")
+    logging.info(f"Started evaluating distribution for Score {score_name} at {time.strftime('%H:%M:%S')}")
     
     score_configuration = scorecard_class.scores.get(score_name)
 
@@ -242,7 +226,6 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples, 
         logging.error(f"Score with name '{score_name}' not found in scorecard '{scorecard_class.name}'.")
         return
 
-    # Score class instance setup
     score_class_name = score_configuration['class']
     score_module_path = f'plexus.scores.{score_class_name}'
     score_module = importlib.import_module(score_module_path)
@@ -252,26 +235,19 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples, 
         logging.error(f"{score_class_name} is not a class.")
         return
 
-    # Add the scorecard name and score name to the parameters.
     score_configuration['scorecard_name'] = scorecard_class.name
     score_configuration['score_name'] = score_name
     score_instance = score_class(**score_configuration)
 
-    # Use the new instance to log its own configuration.
     score_instance.record_configuration(score_configuration)
 
-    # Data processing
-    with console_lock:
-        console.print(f"[yellow]Loading data for {score_name} at {time.strftime('%H:%M:%S')}[/yellow]")
+    logging.info(f"Loading data for {score_name} at {time.strftime('%H:%M:%S')}")
     score_instance.load_data(data=score_configuration['data'])
     
-    with console_lock:
-        console.print(f"[yellow]Processing data for {score_name} at {time.strftime('%H:%M:%S')}[/yellow]")
+    logging.info(f"Processing data for {score_name} at {time.strftime('%H:%M:%S')}")
     score_instance.process_data()
 
-    # Sample and predict
-    with console_lock:
-        console.print(f"[yellow]Starting predictions for {score_name} at {time.strftime('%H:%M:%S')}[/yellow]")
+    logging.info(f"Starting predictions for {score_name} at {time.strftime('%H:%M:%S')}")
     sample_rows = score_instance.dataframe.sample(n=number_of_samples)
     predictions = []
 
@@ -287,23 +263,18 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples, 
         )
         predictions.append(prediction_result)
 
-    # Count Yes/No answers
     answer_counts = Counter(pred.score for pred in predictions)
     
-    with console_lock:
-        console.print(f"\n[bold green]Results for {score_name}:[/bold green]")
-        console.print(f"Total samples: {number_of_samples}")
-        console.print(f"Yes answers: {answer_counts['Yes']}")
-        console.print(f"No answers: {answer_counts['No']}")
-        
-        yes_percentage = (answer_counts['Yes'] / number_of_samples) * 100
-        no_percentage = (answer_counts['No'] / number_of_samples) * 100
-        
-        console.print(f"Yes percentage: {yes_percentage:.2f}%")
-        console.print(f"No percentage: {no_percentage:.2f}%")
-        
-        end_time = time.time()
-        console.print(f"[bold blue]Finished {score_name} at {time.strftime('%H:%M:%S')}. Time taken: {end_time - start_time:.2f} seconds[/bold blue]")
-
-    # Update the overall progress
-    progress.update(overall_task, advance=1)
+    logging.info(f"\nResults for {score_name}:")
+    logging.info(f"Total samples: {number_of_samples}")
+    logging.info(f"Yes answers: {answer_counts['Yes']}")
+    logging.info(f"No answers: {answer_counts['No']}")
+    
+    yes_percentage = (answer_counts['Yes'] / number_of_samples) * 100
+    no_percentage = (answer_counts['No'] / number_of_samples) * 100
+    
+    logging.info(f"Yes percentage: {yes_percentage:.2f}%")
+    logging.info(f"No percentage: {no_percentage:.2f}%")
+    
+    end_time = time.time()
+    logging.info(f"Finished {score_name} at {time.strftime('%H:%M:%S')}. Time taken: {end_time - start_time:.2f} seconds")
