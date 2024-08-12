@@ -42,7 +42,8 @@ class Experiment:
         random_seed = None,
         session_ids_to_sample = None,
         subset_of_score_names = None,
-        experiment_label = None
+        experiment_label = None,
+        threads = 1
     ):
         self.scorecard_name = scorecard_name
         self.scorecard = scorecard
@@ -57,6 +58,7 @@ class Experiment:
         self.subset_of_score_names = subset_of_score_names
 
         self.experiment_label = experiment_label
+        self.threads = threads
 
     def __enter__(self):
         self.start_mlflow_run()
@@ -168,9 +170,10 @@ class AccuracyExperiment(Experiment):
         if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
             score_instance = Score.from_name(self.scorecard_name, self.subset_of_score_names[0])
             report_folder_path = score_instance.report_directory_path()
+            report_folder_path = report_folder_path.rstrip('/')
         else:
             scorecard_name = self.scorecard.name.replace(' ', '_')
-            report_folder_path = f"./reports/{scorecard_name}/combined/"
+            report_folder_path = f"./reports/{scorecard_name}/combined"
 
         # Ensure the report folder exists
         os.makedirs(report_folder_path, exist_ok=True)
@@ -220,7 +223,7 @@ class AccuracyExperiment(Experiment):
 
         # Iterate over the randomly selected DataFrame rows and classify each text
         results = []
-        max_thread_pool_size = 10
+        max_thread_pool_size = self.threads
 
         # Create a thread pool executor
         with ThreadPoolExecutor(max_workers=max_thread_pool_size) as executor:
@@ -434,7 +437,8 @@ class AccuracyExperiment(Experiment):
                             logging.info(f"OVERRIDING human label for question '{override_question_name}' in session '{session_id}' from '{human_labels[override_question_name]}' to '{correct_value}'")
                             human_labels[override_question_name] = correct_value
 
-                human_label = str(human_labels[question_name]).lower()
+                column_name = question_name
+                human_label = str(human_labels[column_name]).lower()
                 if human_label == 'nan':
                     human_label = 'na'
 

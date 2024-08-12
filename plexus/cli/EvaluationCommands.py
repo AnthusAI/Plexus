@@ -47,6 +47,7 @@ def load_configuration_from_yaml_file(configuration_file_path):
 @click.option('--session-ids-to-sample', default='', type=str, help='Comma-separated list of session IDs to sample')
 @click.option('--score-name', '--score-names', default='', type=str, help='Comma-separated list of score names to evaluate')
 @click.option('--experiment-label', default='', type=str, help='Label for the experiment')
+@click.option('--threads', default=1, type=int, help='Number of threads to use')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 def accuracy(
     scorecard_name: str,
@@ -57,6 +58,7 @@ def accuracy(
     session_ids_to_sample: str,
     score_name: str,
     experiment_label: str,
+    threads: int,
     fresh: bool
     ):
     """
@@ -121,7 +123,8 @@ def accuracy(
         'random_seed': random_seed,
         'session_ids_to_sample': re.split(r',\s+', session_ids_to_sample.strip()) if session_ids_to_sample.strip() else None,
         'subset_of_score_names': re.split(r',\s+', score_name.strip()) if score_name.strip() else None,
-        'experiment_label': experiment_label
+        'experiment_label': experiment_label,
+        'threads': threads
     }
 
     if uses_data_driven:
@@ -162,9 +165,13 @@ def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, scor
         samples = [sample for sample in samples if sample['content_id'] not in content_ids_to_exclude]
         logging.info(f"Number of samples after filtering: {len(samples)}")
 
+    score_name_column_name = score_name
+    if score_config.get('label_field'):
+        score_name_column_name = f"{score_name} {score_config['label_field']}"
+
     return [{
         'text': sample.get('text', ''),
-        f'{score_name}_label': sample.get(score_name, ''),
+        f'{score_name}_label': sample.get(score_name_column_name, ''),
         'content_id': sample.get('content_id', ''),
         'metadata': {k: v for k, v in sample.items() if k not in ['text', score_name, 'content_id']}
     } for sample in samples]

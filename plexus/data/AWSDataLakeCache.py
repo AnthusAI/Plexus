@@ -160,6 +160,8 @@ class AWSDataLakeCache(DataCache):
                 for score in metadata.get('scores', []):
                     score_name = score['name']
                     content_row[score_name] = score['answer']
+                    if 'comment' in score:
+                        content_row[f"{score_name} comment"] = score['comment']
 
                 if 'school' in metadata and isinstance(metadata['school'], list):
                     for index, school_info in enumerate(metadata['school']):
