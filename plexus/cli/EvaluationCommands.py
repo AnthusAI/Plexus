@@ -113,6 +113,7 @@ def accuracy(
         labeled_samples_filename = os.path.join('scorecards', scorecard_instance.properties.get('key'), 'experiments', 'labeled-samples.csv')
 
     experiment_args = {
+        'scorecard_name': scorecard_name,
         'scorecard': scorecard_instance,
         'override_folder': override_folder,
         'number_of_texts_to_sample': number_of_samples,

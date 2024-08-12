@@ -33,6 +33,7 @@ from .ScorecardResultsAnalysis import ScorecardResultsAnalysis
 
 class Experiment:
     def __init__(self, *,
+        scorecard_name: str,
         scorecard: Scorecard,
         labeled_samples_filename: str = None,
         labeled_samples: list = None,
@@ -43,6 +44,7 @@ class Experiment:
         subset_of_score_names = None,
         experiment_label = None
     ):
+        self.scorecard_name = scorecard_name
         self.scorecard = scorecard
         self.labeled_samples_filename = labeled_samples_filename
         self.labeled_samples = labeled_samples
@@ -162,6 +164,19 @@ class AccuracyExperiment(Experiment):
         # Configure logging
         # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
+        # Determine the correct report folder
+        if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
+            score_instance = Score.from_name(self.scorecard_name, self.subset_of_score_names[0])
+            report_folder_path = score_instance.report_directory_path()
+        else:
+            scorecard_name = self.scorecard.name.replace(' ', '_')
+            report_folder_path = f"./reports/{scorecard_name}/combined/"
+
+        # Ensure the report folder exists
+        os.makedirs(report_folder_path, exist_ok=True)
+
+        logging.info(f"Report folder set to: {report_folder_path}")
+
         if self.labeled_samples:
             df = pd.DataFrame(self.labeled_samples)
         else:
@@ -236,13 +251,13 @@ class AccuracyExperiment(Experiment):
         # print("Final all scorecard results:\n")
         # pretty_printer.pprint(results)
 
-        if not os.path.exists("./tmp/"):
-            os.makedirs("./tmp/")
+        if not os.path.exists(report_folder_path):
+            os.makedirs(report_folder_path)
 
         # Log the raw results data as an artifact in MLFlow.
         scorecard_results = ScorecardResults(results)
-        scorecard_results.save_to_file("tmp/scorecard_results.json")
-        mlflow.log_artifact("tmp/scorecard_results.json")
+        scorecard_results.save_to_file(f"{report_folder_path}/scorecard_results.json")
+        mlflow.log_artifact(f"{report_folder_path}/scorecard_results.json")
 
         logging.info("Scoring completed.")
 
@@ -269,60 +284,60 @@ class AccuracyExperiment(Experiment):
         def log_accuracy_heatmap():
             try:
                 analysis.plot_accuracy_heatmap()
-                mlflow.log_artifact('tmp/accuracy_heatmap.png')
+                mlflow.log_artifact(f"{report_folder_path}/accuracy_heatmap.png")
             except Exception as e:
                 logging.error(f"Failed to log accuracy heatmap: {e}")
 
         def log_html_report():
             try:
                 html_report_content = analysis.generate_html_report(expenses=expenses)
-                with open("tmp/scorecard_report.html", "w") as file:
+                with open(f"{report_folder_path}/scorecard_report.html", "w") as file:
                     file.write(html_report_content)
-                mlflow.log_artifact("tmp/scorecard_report.html")
+                mlflow.log_artifact(f"{report_folder_path}/scorecard_report.html")
             except Exception as e:
                 logging.error(f"Failed to log HTML report: {e}")
 
         def log_incorrect_scores_report():
             try:
                 html_report_content = analysis.generate_html_report(only_incorrect_scores=True, expenses=expenses)
-                with open("tmp/scorecard_report_incorrect_scores.html", "w") as file:
+                with open(f"{report_folder_path}/scorecard_report_incorrect_scores.html", "w") as file:
                     file.write(html_report_content)
-                mlflow.log_artifact("tmp/scorecard_report_incorrect_scores.html")
+                mlflow.log_artifact(f"{report_folder_path}/scorecard_report_incorrect_scores.html")
             except Exception as e:
                 logging.error(f"Failed to log incorrect scores report: {e}")
 
         def log_no_costs_report():
             try:
                 html_report_content = analysis.generate_html_report(redact_cost_information=True)
-                with open("tmp/scorecard_report_no_costs.html", "w") as file:
+                with open(f"{report_folder_path}/scorecard_report_no_costs.html", "w") as file:
                     file.write(html_report_content)
-                mlflow.log_artifact("tmp/scorecard_report_no_costs.html")
+                mlflow.log_artifact(f"{report_folder_path}/scorecard_report_no_costs.html")
             except Exception as e:
                 logging.error(f"Failed to log no costs report: {e}")
 
         def log_scorecard_costs():
             try:
                 analysis.plot_scorecard_costs(results=results)
-                mlflow.log_artifact('tmp/scorecard_input_output_costs.png')
-                mlflow.log_artifact('tmp/histogram_of_total_costs.png')
-                mlflow.log_artifact('tmp/distribution_of_input_costs.png')
-                mlflow.log_artifact('tmp/total_llm_calls_by_score.png')
-                mlflow.log_artifact('tmp/distribution_of_input_costs_by_element_type.png')
+                mlflow.log_artifact(f"{report_folder_path}/scorecard_input_output_costs.png")
+                mlflow.log_artifact(f"{report_folder_path}/histogram_of_total_costs.png")
+                mlflow.log_artifact(f"{report_folder_path}/distribution_of_input_costs.png")
+                mlflow.log_artifact(f"{report_folder_path}/total_llm_calls_by_score.png")
+                mlflow.log_artifact(f"{report_folder_path}/distribution_of_input_costs_by_element_type.png")
             except Exception as e:
                 logging.error(f"Failed to log scorecard costs: {e}")
 
         def log_csv_report():
             try:
-                with open("tmp/scorecard_report_for_incorrect_results.csv", "w") as file:
+                with open(f"{report_folder_path}/scorecard_report_for_incorrect_results.csv", "w") as file:
                     file.write(analysis.generate_csv_scorecard_report(results=results))
-                mlflow.log_artifact("tmp/scorecard_report_for_incorrect_results.csv")
+                mlflow.log_artifact(f"{report_folder_path}/scorecard_report_for_incorrect_results.csv")
             except Exception as e:
                 logging.error(f"Failed to log CSV report: {e}")
 
         def log_question_accuracy_csv():
             try:
-                analysis.generate_question_accuracy_csv(output_file="tmp/question_accuracy_report.csv")
-                mlflow.log_artifact("tmp/question_accuracy_report.csv")
+                analysis.generate_question_accuracy_csv(output_file=f"{report_folder_path}/question_accuracy_report.csv")
+                mlflow.log_artifact(f"{report_folder_path}/question_accuracy_report.csv")
             except Exception as e:
                 logging.error(f"Failed to log question accuracy CSV: {e}")
 
@@ -367,7 +382,7 @@ class AccuracyExperiment(Experiment):
         logging.info(f"Overall accuracy: {overall_accuracy:.2f}%")
 
         # Generate the Excel report
-        self.generate_excel_report(results)
+        self.generate_excel_report(report_folder_path, results)
 
     # Function to classify a single text and collect metrics
     @retry(
@@ -459,25 +474,28 @@ class AccuracyExperiment(Experiment):
         
         return report
 
-    def generate_excel_report(self, results):
+    def generate_excel_report(self, report_folder_path, results):
         records = []
+        score_names = self.score_names()
+        all_score_names = "_".join(score_names).replace(" ", "_")
+        filename_safe_score_names = "".join(c for c in all_score_names if c.isalnum() or c in "_-")
         for result in results:
-            for question in self.score_names():
+            for question in score_names:
                 score_result = result['results'][question]
-                is_mismatch = not score_result.metadata['correct']
+                match = score_result.metadata['correct']
                 records.append({
                     'session_id': result['session_id'],
                     'form_id': result['form_id'],
                     'question_name': question,
                     'human_label': score_result.metadata['human_label'],
                     'predicted_answer': score_result.value,
+                    'match': match,
                     'reasoning': score_result.explanation,
                     'original_text': score_result.metadata['text'],
-                    'is_mismatch': is_mismatch
                 })
 
         df_records = pd.DataFrame(records)
-        excel_file_path = "tmp/evaluation_report.xlsx"
+        excel_file_path = f"{report_folder_path}/Evaluation Report for {filename_safe_score_names}.xlsx"
         df_records.to_excel(excel_file_path, index=False)
         mlflow.log_artifact(excel_file_path)
 

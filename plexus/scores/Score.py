@@ -25,6 +25,7 @@ from sklearn.preprocessing import LabelBinarizer
 from collections import Counter
 import xgboost as xgb
 
+from plexus.Registries import scorecard_registry
 from plexus.scores.core.ScoreData import ScoreData
 from plexus.scores.core.ScoreVisualization import ScoreVisualization
 from plexus.scores.core.ScoreMLFlow import ScoreMLFlow
@@ -428,3 +429,21 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         return {
             "total_cost":  0
         }
+
+    @classmethod
+    def from_name(cls, scorecard_name, score_name):
+        
+        scorecard_class = scorecard_registry.get(scorecard_name)
+        if not scorecard_class:
+            raise ValueError(f"Scorecard '{scorecard_name}' not found")
+        
+        score_configuration = scorecard_class.scores.get(score_name, {})
+        score_class = scorecard_class.score_registry.get(score_name)
+        
+        if not score_class:
+            raise ValueError(f"Score '{score_name}' not found in scorecard '{scorecard_name}'")
+        
+        score_configuration['scorecard_name'] = scorecard_name
+        score_configuration['score_name'] = score_name
+        
+        return score_class(**score_configuration)
