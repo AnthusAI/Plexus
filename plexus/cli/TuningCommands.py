@@ -291,55 +291,97 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
 
 @tuning.command(help="Subsample JSON-L files based on token count estimates.")
 @click.option('--scorecard-name', required=True, help='The name of the scorecard.')
-@click.option('--score-name', help='The name of the score to subsample JSON-L for.')
-@click.option('--maximum-tokens', type=int, default=2000000, help='Maximum number of tokens.')
+@click.option('--score-name', help='The name of the score to subsample JSON-L for. If not provided, all scores will be processed.')
+@click.option('--maximum-tokens', type=int, default=2000000, help='Maximum number of tokens for each of training and validation.')
 @click.option('--verbose', is_flag=True, help='Verbose output.')
 def subsample_examples(scorecard_name, score_name, maximum_tokens, verbose):
-    logging.info(f"Subsampling examples for [magenta1][b]{score_name}[/b][/magenta1] on [magenta1][b]{scorecard_name}[/b][/magenta1] with a max token limit of {maximum_tokens}...")
+    logging.info(f"Subsampling examples for [magenta1][b]{scorecard_name}[/b][/magenta1] with a max token limit of {maximum_tokens} for each of training and validation...")
 
-    input_dir = get_output_dir(scorecard_name, score_name)
-    training_file_path = get_file_path(input_dir, "training")
-
-    if not os.path.exists(training_file_path):
-        logging.error(f"Training file not found in {input_dir}.")
-        return
-
+    encoder = tiktoken.encoding_for_model("gpt-4o")
+    
     def load_jsonl(file_path):
         with open(file_path, 'r') as file:
             return [json.loads(line) for line in file]
 
-    training_data = load_jsonl(training_file_path)
+    if score_name:
+        score_names = [score_name]
+    else:
+        base_dir = f"tuning/{scorecard_name}"
+        # Exclude 'combined' and any directories that don't contain both training and validation files
+        score_names = []
+        for d in os.listdir(base_dir):
+            if d != 'combined' and os.path.isdir(os.path.join(base_dir, d)):
+                input_dir = get_output_dir(scorecard_name, d)
+                if (os.path.exists(get_file_path(input_dir, "training")) and 
+                    os.path.exists(get_file_path(input_dir, "validation"))):
+                    score_names.append(d)
+        logging.info(f"Processing scores: {score_names}")
 
-    if verbose:
-        logging.info(f"Loaded {len(training_data)} training examples.")
+    score_files = []
+    for score in score_names:
+        input_dir = get_output_dir(scorecard_name, score)
+        for file_type in ["training", "validation"]:
+            file_path = get_file_path(input_dir, file_type)
+            if os.path.exists(file_path):
+                score_files.append((score, file_path, file_type))
+            else:
+                logging.warning(f"{file_type.capitalize()} file not found for score {score} in {input_dir}.")
 
-    def subsample_data(data, max_tokens):
-        encoder = tiktoken.encoding_for_model("gpt-4o")
-        subsampled_data = []
-        current_tokens = 0
+    if not score_files:
+        logging.error("No valid files found.")
+        return
 
-        for entry in data:
-            entry_tokens = sum(len(encoder.encode(message['content'])) for message in entry['messages'])
-            if current_tokens + entry_tokens > max_tokens:
+    subsampled_data = {"training": [], "validation": []}
+    current_tokens = {"training": 0, "validation": 0}
+    file_iterators = [iter(load_jsonl(file_path)) for _, file_path, _ in score_files]
+
+    while file_iterators:
+        for i in range(len(file_iterators)):
+            if i >= len(file_iterators):
                 break
-            subsampled_data.append(entry)
-            current_tokens += entry_tokens
+            try:
+                entry = next(file_iterators[i])
+                file_type = score_files[i][2]
+                
+                if current_tokens[file_type] >= maximum_tokens:
+                    continue  # Skip this file type if we've reached its limit
+                
+                entry_tokens = sum(len(encoder.encode(message['content'])) for message in entry['messages'])
+                
+                if current_tokens[file_type] + entry_tokens <= maximum_tokens:
+                    subsampled_data[file_type].append(entry)
+                    current_tokens[file_type] += entry_tokens
+                    if verbose:
+                        logging.info(f"Added {file_type} entry from {score_files[i][0]}. "
+                                     f"Entry tokens: [magenta1]{entry_tokens:>10,}[/magenta1]   "
+                                     f"Current {file_type} tokens: [magenta1]{current_tokens[file_type]:>10,}[/magenta1]")
+                else:
+                    if verbose:
+                        logging.info(f"Reached token limit for {file_type}. Skipping further {file_type} entries.")
+            except StopIteration:
+                if verbose:
+                    logging.info(f"Finished processing {score_files[i][0]} {score_files[i][2]}")
+                file_iterators.pop(i)
+                score_files.pop(i)
+                i -= 1  # Adjust index after removal
+        
+        # Check if we've reached the limit for both types
+        if current_tokens["training"] >= maximum_tokens and current_tokens["validation"] >= maximum_tokens:
             if verbose:
-                logging.info(f"Subsampled entry tokens: [magenta1]{entry_tokens:>10,}[/magenta1]   "
-                             f"Current tokens: [magenta1]{current_tokens:>10,}[/magenta1]")
+                logging.info("Reached token limit for both training and validation. Stopping.")
+            break
 
-        return subsampled_data
-
-    training_data = subsample_data(training_data, maximum_tokens)
-
-    output_dir = get_output_dir(scorecard_name, score_name, subsampled=True, max_tokens=maximum_tokens)
+    output_dir = get_output_dir(scorecard_name, "combined" if len(score_names) > 1 else score_names[0], subsampled=True, max_tokens=maximum_tokens)
     os.makedirs(output_dir, exist_ok=True)
 
-    def save_jsonl(data, file_path):
-        with open(file_path, 'w') as file:
-            for entry in data:
-                file.write(f"{json.dumps(entry)}\n")
+    for file_type in ["training", "validation"]:
+        output_file_path = get_file_path(output_dir, file_type)
+        with open(output_file_path, 'w') as file:
+            for entry in subsampled_data[file_type]:
+                json.dump(entry, file)
+                file.write('\n')
+        logging.info(f"Subsampled {file_type} JSON-L file saved in {output_file_path}")
+        logging.info(f"Total {file_type} examples: {len(subsampled_data[file_type])}")
+        logging.info(f"Total {file_type} tokens: {current_tokens[file_type]:,}")
 
-    save_jsonl(training_data, get_file_path(output_dir, "training"))
-
-    logging.info(f"Subsampled JSON-L files saved in {output_dir}")
+    logging.info(f"Total examples: {sum(len(data) for data in subsampled_data.values())}")
