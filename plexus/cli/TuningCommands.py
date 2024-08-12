@@ -292,10 +292,10 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
 @tuning.command(help="Subsample JSON-L files based on token count estimates.")
 @click.option('--scorecard-name', required=True, help='The name of the scorecard.')
 @click.option('--score-name', help='The name of the score to subsample JSON-L for. If not provided, all scores will be processed.')
-@click.option('--maximum-tokens', type=int, default=2000000, help='Maximum number of tokens.')
+@click.option('--maximum-tokens', type=int, default=2000000, help='Maximum number of tokens for each of training and validation.')
 @click.option('--verbose', is_flag=True, help='Verbose output.')
 def subsample_examples(scorecard_name, score_name, maximum_tokens, verbose):
-    logging.info(f"Subsampling examples for [magenta1][b]{score_name}[/b][/magenta1] on [magenta1][b]{scorecard_name}[/b][/magenta1] with a max token limit of {maximum_tokens}...")
+    logging.info(f"Subsampling examples for [magenta1][b]{scorecard_name}[/b][/magenta1] with a max token limit of {maximum_tokens} for each of training and validation...")
 
     encoder = tiktoken.encoding_for_model("gpt-4o")
     
@@ -306,63 +306,82 @@ def subsample_examples(scorecard_name, score_name, maximum_tokens, verbose):
     if score_name:
         score_names = [score_name]
     else:
-        # Get all score directories
         base_dir = f"tuning/{scorecard_name}"
-        score_names = [d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]
-        logging.info(f"Processing all scores: {score_names}")
+        # Exclude 'combined' and any directories that don't contain both training and validation files
+        score_names = []
+        for d in os.listdir(base_dir):
+            if d != 'combined' and os.path.isdir(os.path.join(base_dir, d)):
+                input_dir = get_output_dir(scorecard_name, d)
+                if (os.path.exists(get_file_path(input_dir, "training")) and 
+                    os.path.exists(get_file_path(input_dir, "validation"))):
+                    score_names.append(d)
+        logging.info(f"Processing scores: {score_names}")
 
     score_files = []
     for score in score_names:
         input_dir = get_output_dir(scorecard_name, score)
-        training_file_path = get_file_path(input_dir, "training")
-        if os.path.exists(training_file_path):
-            score_files.append((score, training_file_path))
-        else:
-            logging.warning(f"Training file not found for score {score} in {input_dir}.")
+        for file_type in ["training", "validation"]:
+            file_path = get_file_path(input_dir, file_type)
+            if os.path.exists(file_path):
+                score_files.append((score, file_path, file_type))
+            else:
+                logging.warning(f"{file_type.capitalize()} file not found for score {score} in {input_dir}.")
 
     if not score_files:
-        logging.error("No valid training files found.")
+        logging.error("No valid files found.")
         return
 
-    subsampled_data = []
-    current_tokens = 0
-    file_iterators = [iter(load_jsonl(file_path)) for _, file_path in score_files]
+    subsampled_data = {"training": [], "validation": []}
+    current_tokens = {"training": 0, "validation": 0}
+    file_iterators = [iter(load_jsonl(file_path)) for _, file_path, _ in score_files]
 
-    while current_tokens < maximum_tokens and file_iterators:
-        for i, iterator in enumerate(file_iterators):
+    while file_iterators:
+        for i in range(len(file_iterators)):
+            if i >= len(file_iterators):
+                break
             try:
-                entry = next(iterator)
+                entry = next(file_iterators[i])
+                file_type = score_files[i][2]
+                
+                if current_tokens[file_type] >= maximum_tokens:
+                    continue  # Skip this file type if we've reached its limit
+                
                 entry_tokens = sum(len(encoder.encode(message['content'])) for message in entry['messages'])
                 
-                if current_tokens + entry_tokens <= maximum_tokens:
-                    subsampled_data.append(entry)
-                    current_tokens += entry_tokens
+                if current_tokens[file_type] + entry_tokens <= maximum_tokens:
+                    subsampled_data[file_type].append(entry)
+                    current_tokens[file_type] += entry_tokens
                     if verbose:
-                        logging.info(f"Added entry from {score_files[i][0]}. "
+                        logging.info(f"Added {file_type} entry from {score_files[i][0]}. "
                                      f"Entry tokens: [magenta1]{entry_tokens:>10,}[/magenta1]   "
-                                     f"Current tokens: [magenta1]{current_tokens:>10,}[/magenta1]")
+                                     f"Current {file_type} tokens: [magenta1]{current_tokens[file_type]:>10,}[/magenta1]")
                 else:
                     if verbose:
-                        logging.info(f"Reached token limit. Stopping.")
-                    break
+                        logging.info(f"Reached token limit for {file_type}. Skipping further {file_type} entries.")
             except StopIteration:
-                file_iterators.pop(i)
                 if verbose:
-                    logging.info(f"Finished processing {score_files[i][0]}")
-                break
-        else:
-            continue
-        break
+                    logging.info(f"Finished processing {score_files[i][0]} {score_files[i][2]}")
+                file_iterators.pop(i)
+                score_files.pop(i)
+                i -= 1  # Adjust index after removal
+        
+        # Check if we've reached the limit for both types
+        if current_tokens["training"] >= maximum_tokens and current_tokens["validation"] >= maximum_tokens:
+            if verbose:
+                logging.info("Reached token limit for both training and validation. Stopping.")
+            break
 
     output_dir = get_output_dir(scorecard_name, "combined" if len(score_names) > 1 else score_names[0], subsampled=True, max_tokens=maximum_tokens)
     os.makedirs(output_dir, exist_ok=True)
 
-    output_file_path = get_file_path(output_dir, "training")
-    with open(output_file_path, 'w') as file:
-        for entry in subsampled_data:
-            json.dump(entry, file)
-            file.write('\n')
+    for file_type in ["training", "validation"]:
+        output_file_path = get_file_path(output_dir, file_type)
+        with open(output_file_path, 'w') as file:
+            for entry in subsampled_data[file_type]:
+                json.dump(entry, file)
+                file.write('\n')
+        logging.info(f"Subsampled {file_type} JSON-L file saved in {output_file_path}")
+        logging.info(f"Total {file_type} examples: {len(subsampled_data[file_type])}")
+        logging.info(f"Total {file_type} tokens: {current_tokens[file_type]:,}")
 
-    logging.info(f"Subsampled JSON-L file saved in {output_file_path}")
-    logging.info(f"Total tokens: {current_tokens:,}")
-    logging.info(f"Total examples: {len(subsampled_data)}")
+    logging.info(f"Total examples: {sum(len(data) for data in subsampled_data.values())}")
