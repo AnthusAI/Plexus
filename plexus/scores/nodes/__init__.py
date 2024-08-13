@@ -3,3 +3,4 @@ from .BeforeAfterSlicer import BeforeAfterSlicer
 from .YesOrNoClassifier import YesOrNoClassifier
 from .AgenticExtractor import AgenticExtractor
 from .MultiClassClassifier import MultiClassClassifier
+from .NumericClassifier import NumericClassifier
