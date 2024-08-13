@@ -6,7 +6,7 @@ import numpy as np
 import inspect
 import functools
 from pydantic import BaseModel, ValidationError, field_validator
-from typing import Optional, Union
+from typing import Optional, Union, List
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -67,6 +67,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         id: Optional[Union[str, int]] = None
         scorecard_name: str
         score_name: str
+        dependencies: Optional[List[dict]] = None
         data: Optional[dict] = None
 
         @field_validator('data')

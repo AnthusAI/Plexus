@@ -27,7 +27,24 @@ class ScoreData:
 
         self.dataframe = data_cache.load_dataframe(data=data, fresh=fresh)
 
-        console.print(Text("Loaded dataframe from training data lake:", style="royal_blue1"))
+        logging.info("Loaded dataframe from training data lake.")
+        
+        # Apply dependency filters if they exist
+        if self.parameters.dependencies:
+
+            logging.info(f"Applying dependency filters.  Rows before: {len(self.dataframe)}")
+
+            for dependency in self.parameters.dependencies:
+                for column, condition in dependency.items():
+                    logging.info(f"Applying dependency filter: {column} == {condition['value']}")
+                    self.dataframe = self.dataframe[self.dataframe[column] == condition['value']]
+            
+            logging.info(f"Applied dependency filters.  Rows after: {len(self.dataframe)}")
+
+        # Display the first few rows of the dataframe
+        logging.info(f"First few rows of the dataframe:")
+        logging.info(self.dataframe.head().to_string())
+
         self.analyze_dataset()
 
     def _load_data_cache(self):
