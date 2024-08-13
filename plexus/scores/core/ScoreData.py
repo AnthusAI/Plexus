@@ -42,8 +42,8 @@ class ScoreData:
             logging.info(f"Applied dependency filters.  Rows after: {len(self.dataframe)}")
 
         # Display the first few rows of the dataframe
-        logging.info(f"First few rows of the dataframe:")
-        logging.info(self.dataframe.head().to_string())
+        logging.debug(f"First few rows of the dataframe:")
+        logging.debug(self.dataframe.head().to_string())
 
         self.analyze_dataset()
 
