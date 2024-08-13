@@ -43,8 +43,8 @@ class MultiClassClassifier(BaseNode):
             words = cleaned_output.split()
             
             # Check the first few words and the last few words
-            start_words = ' '.join(words[:5])
-            end_words = ' '.join(words[-5:])  # Check the last 5 words
+            start_words = ' '.join(words[:1])
+            end_words = ' '.join(words[-1:])  # Check the last 5 words
             logging.info(f'End words: {end_words}')
             for class_name in self.valid_classes:
                 clean_class = class_name.lower()
