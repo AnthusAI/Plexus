@@ -14,6 +14,8 @@ class MultiClassClassifier(BaseNode):
     """
     
     class Parameters(BaseNode.Parameters):
+        fuzzy_match: bool = Field(default=False)
+        fuzzy_match_threshold: float = Field(default=0.8)
         valid_classes: List[str] = Field(default_factory=list)
 
     def __init__(self, **parameters):
@@ -28,11 +30,18 @@ class MultiClassClassifier(BaseNode):
         explanation: Optional[str]
 
     class ClassificationOutputParser(BaseOutputParser):
+        """
+        A parser that classifies the output as one of the valid classes.
+        """
         valid_classes: List[str] = Field(...)
+        fuzzy_match: bool = Field(default=False)
+        fuzzy_match_threshold: float = Field(default=0.8)
 
-        def __init__(self, valid_classes: List[str]):
+        def __init__(self, valid_classes: List[str], fuzzy_match: bool, fuzzy_match_threshold: float):
             super().__init__()
             self.valid_classes = valid_classes
+            self.fuzzy_match = fuzzy_match
+            self.fuzzy_match_threshold = fuzzy_match_threshold
 
         def parse(self, output: str) -> Dict[str, Any]:
             # Clean and lowercase the output
@@ -54,11 +63,21 @@ class MultiClassClassifier(BaseNode):
                         "explanation": output
                     }
             
-            # If no valid class is found, return "unknown"
-            return {
-                "classification": "unknown",
-                "explanation": output
-            }
+            # If no valid class is found,
+            if self.fuzzy_match:
+                # TODO: Fuzzy match the output to the valid classes
+                # Pick the closest match
+                # Loop back and ask the LLM again if there is still no match that way.
+                return {
+                    "classification": output,
+                    "explanation": output
+                }
+            else:
+                # Return "unknown"
+                return {
+                    "classification": "unknown",
+                    "explanation": output
+                }
 
     def get_classifier_node(self) -> FunctionType:
         model = self.model
@@ -68,7 +87,11 @@ class MultiClassClassifier(BaseNode):
         def classifier_node(state):
             prompt = prompt_templates[0]
 
-            chain = prompt | model | self.ClassificationOutputParser(valid_classes=valid_classes)
+            chain = prompt | model | self.ClassificationOutputParser(
+                valid_classes=valid_classes,
+                fuzzy_match=self.parameters.fuzzy_match,
+                fuzzy_match_threshold=self.parameters.fuzzy_match_threshold
+            )
             return chain.invoke({"text": state.text})
 
         return classifier_node
