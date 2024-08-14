@@ -9,6 +9,7 @@ from plexus.CustomLogging import logging
 from plexus.cli.console import console
 from rich.progress import Progress
 from .DataCache import DataCache
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # boto3.set_stream_logger('', logging.WARNING)
 
@@ -241,6 +242,16 @@ class AWSDataLakeCache(DataCache):
             return dataframe
 
         # Build the dataframe
+        all_keys = set()
+        content_data = []
+
+        def process_and_collect_keys(scorecard_id, content_id):
+            content_row = self.process_content_item(scorecard_id, content_id)
+            if content_row:
+                all_keys.update(content_row.keys())
+                return content_row
+            return None
+
         if values:
             all_query_results = self.execute_batch_athena_queries(metadata_item, values)
 
@@ -248,25 +259,10 @@ class AWSDataLakeCache(DataCache):
                 logging.error("No non-deprecated content items found in the database.")
                 return pd.DataFrame()
 
-            def process_content_item_wrapper(row):
-                content_id = row['Data'][0]['VarCharValue']
-                scorecard_id = row['Data'][1]['VarCharValue']
-                logging.debug(f"Processing content item: content_id={content_id}, scorecard_id={scorecard_id}")
-                
-                content_row = self.process_content_item(scorecard_id, content_id)
-                if content_row:
-                    return content_row
-                else:
-                    logging.warning(f"Failed to process content item: content_id={content_id}, scorecard_id={scorecard_id}")
-                    return None
-
-            content_data = []
             thread_count = 64
 
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-
             with ThreadPoolExecutor(max_workers=thread_count) as executor:
-                future_to_row = {executor.submit(process_content_item_wrapper, row): row for row in all_query_results}
+                future_to_row = {executor.submit(process_and_collect_keys, row['Data'][1]['VarCharValue'], row['Data'][0]['VarCharValue']): row for row in all_query_results}
                 for future in concurrent.futures.as_completed(future_to_row):
                     content_row = future.result()
                     if content_row:
@@ -276,8 +272,6 @@ class AWSDataLakeCache(DataCache):
                 logging.error("No valid content items were processed. Unable to create dataframe.")
                 return pd.DataFrame()
 
-            dataframe = pd.DataFrame(content_data)
-            dataframes.append(dataframe)
         else:
             # Existing logic for queries
             all_scores = set()
@@ -321,36 +315,25 @@ class AWSDataLakeCache(DataCache):
                 
                 report_ids = [row['Data'][0]['VarCharValue'] for row in query_results[1:]]
 
-                from concurrent.futures import ThreadPoolExecutor, as_completed
-
-                def process_report(report_id):
-                    content_row = self.process_content_item(scorecard_id, report_id)
-                    if content_row:
-                        return content_row
-                    else:
-                        logging.warning(f"Failed to process content item: content_id={report_id}, scorecard_id={scorecard_id}")
-                        return None
-
-                content_data = []
-                all_scores = set()
                 thread_count = 64
 
                 with ThreadPoolExecutor(max_workers=thread_count) as executor:
-                    future_to_report = {executor.submit(process_report, report_id): report_id for report_id in report_ids}
+                    future_to_report = {executor.submit(process_and_collect_keys, scorecard_id, report_id): report_id for report_id in report_ids}
                     for future in as_completed(future_to_report):
                         content_row = future.result()
                         if content_row:
                             content_data.append(content_row)
                             all_scores.update(content_row.keys())
 
-                dataframe = pd.DataFrame(content_data)
-                
-                # Ensure all possible score columns are included
-                for score in all_scores:
-                    if score not in dataframe.columns:
-                        dataframe[score] = None
+        # Ensure all rows have all keys
+        for row in content_data:
+            for key in all_keys:
+                if key not in row:
+                    row[key] = None
 
-                dataframes.append(dataframe)
+        # Create DataFrame with all columns
+        dataframe = pd.DataFrame(content_data, columns=list(all_keys))
+        dataframes.append(dataframe)
 
         combined_dataframe = pd.concat(dataframes, ignore_index=True)
         logging.info(f"Loaded dataframe with {len(combined_dataframe)} rows and columns: {', '.join(combined_dataframe.columns)}")
@@ -361,5 +344,8 @@ class AWSDataLakeCache(DataCache):
         dataframe_file_path = os.path.join(dataframe_storage_directory, cached_dataframe_filename)
         combined_dataframe.to_hdf(dataframe_file_path, key='df', mode='w')
         logging.info(f"Dataframe saved to {dataframe_file_path}")
+
+        logging.info(f"Final dataframe columns: {', '.join(combined_dataframe.columns)}")
+        logging.info(f"Dataframe shape: {combined_dataframe.shape}")
 
         return combined_dataframe
