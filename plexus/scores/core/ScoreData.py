@@ -72,8 +72,12 @@ class ScoreData:
         answer_breakdown_table.add_column("Count", style="magenta1", justify="right")
         answer_breakdown_table.add_column("Percentage", style="magenta1 bold", justify="right")
 
+        score_name = self.parameters.score_name
+        if self.parameters.label_field:
+            score_name = score_name + ' ' + self.parameters.label_field
+
         try:
-            answer_counts = self.dataframe[self.parameters.score_name].value_counts()
+            answer_counts = self.dataframe[score_name].value_counts()
             total_responses = answer_counts.sum()
             for answer_value, count in answer_counts.items():
                 percentage_of_total = (count / total_responses) * 100
@@ -98,7 +102,7 @@ class ScoreData:
 
         if 'answer_counts' in locals():
             smallest_answer_count = answer_counts.min()
-            total_kinds_of_non_null_answers = self.dataframe[self.parameters.score_name].nunique()
+            total_kinds_of_non_null_answers = self.dataframe[score_name].nunique()
             total_balanced_count = smallest_answer_count * total_kinds_of_non_null_answers
 
             dataframe_summary_table.add_row("Smallest Count", str(smallest_answer_count))
@@ -117,7 +121,7 @@ class ScoreData:
         panels.append(Panel(column_names_table, border_style="royal_blue1"))
 
         columns = Columns(panels)
-        header_text = f"[bold royal_blue1]{self.parameters.score_name}[/bold royal_blue1]"
+        header_text = f"[bold royal_blue1]{score_name}[/bold royal_blue1]"
 
         rich.print(Panel(columns, title=header_text, border_style="magenta1"))
 
@@ -126,9 +130,13 @@ class ScoreData:
         Handle any pre-processing of the training data, including the training/validation splits.
         """
 
+        score_name = self.parameters.score_name
+        if self.parameters.label_field:
+            score_name = score_name + ' ' + self.parameters.label_field
+
         # Drop NaN values in the column specified by score_name
-        if self.parameters.score_name in self.dataframe.columns:
-            self.dataframe = self.dataframe.dropna(subset=[self.parameters.score_name])
+        if score_name in self.dataframe.columns:
+            self.dataframe = self.dataframe.dropna(subset=[score_name])
 
         if 'processors' in self.parameters.data:
             console.print(Text("Running configured processors...", style="royal_blue1"))
@@ -185,13 +193,13 @@ class ScoreData:
             logging.info("data->balance: [red][b]false.[/b][/red]  Skipping data balancing.")
             return
 
-        if self.parameters.score_name in self.dataframe.columns:
+        if score_name in self.dataframe.columns:
             print("\nDistribution of labels in the dataframe:")
-            print(self.dataframe[self.parameters.score_name].value_counts(dropna=False))
+            print(self.dataframe[score_name].value_counts(dropna=False))
 
             unique_labels = self.dataframe[self.parameters.score_name].unique()
 
-            label_dataframes = {label: self.dataframe[self.dataframe[self.parameters.score_name] == label] for label in unique_labels}
+            label_dataframes = {label: self.dataframe[self.dataframe[score_name] == label] for label in unique_labels}
 
             for label, df in label_dataframes.items():
                 print(f"Label '{label}' has {len(df)} instances.")
