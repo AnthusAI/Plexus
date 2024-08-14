@@ -54,8 +54,34 @@ class ScorecardRegistry(BaseRegistry):
     """
     A registry for scorecards.
     """
-    # Inherits all the functionality from BaseRegistry
-    # Additional scorecard-specific logic can be added here
+
+    def get_score_class(self, scorecard_key, score_name):
+        scorecard_class = self.get(scorecard_key)
+        if scorecard_class is None:
+            self.logger.error(f"Scorecard '{scorecard_key}' not found")
+            return None
+        
+        score_registry = scorecard_class.score_registry
+        score_class = score_registry.get(score_name)
+        if score_class is None:
+            self.logger.error(f"Score '{score_name}' not found in scorecard '{scorecard_key}'")
+            return None
+        
+        return score_class
+
+    def get_score_parameters(self, scorecard_key, score_name):
+        scorecard_class = self.get(scorecard_key)
+        if scorecard_class is None:
+            self.logger.error(f"Scorecard '{scorecard_key}' not found")
+            return None
+        
+        score_configuration = scorecard_class.scores.get(score_name, {}).copy()
+        score_configuration.update({
+            'scorecard_name': scorecard_class.name,
+            'score_name': score_name
+        })
+        
+        return score_configuration
 
 # Global Scorecard registry
 scorecard_registry = ScorecardRegistry()
