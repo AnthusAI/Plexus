@@ -16,6 +16,7 @@ from functools import partial
 
 from plexus.CustomLogging import logging
 from plexus.Registries import scorecard_registry
+from plexus.scores.Score import Score
 
 @click.group()
 def tuning():
@@ -126,105 +127,68 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
         example_refinement_nodes = score_instance.get_example_refinement_templates()
         logging.info(f"Nodes: {nodes}")
 
-        def process_row(row, nodes, example_refinement_nodes, generate_completions, completion_model, retry_mismatches, verbose):
-            formatted_messages = []
-            for node_templates, example_refinement_template in zip(nodes, example_refinement_nodes):
-                for template in node_templates:
-                    if isinstance(template, ChatPromptTemplate):
-                        try:
-                            messages = template.format_messages(text=row['text'])
-                            formatted_messages.extend(messages)  # Keep original message objects
-                        except Exception as e:
-                            logging.error(f"Error formatting messages for row {row.name}: {e}")
-                            return None
-
-            if not formatted_messages:
-                logging.warning(f"No formatted messages for row {row.name}. Skipping.")
-                return None
-
-            if verbose:
-                logging.info(f"Formatted messages for row {row.name}: {formatted_messages}")
-
-            def generate_completion_with_retry(messages, correct_answer, max_attempts=5):
-                class CompletionOutputParser(BaseOutputParser[dict]):
-                    def parse(self, output: str) -> dict:
-                        def extract_last_word(text):
-                            cleaned_text = re.sub(r'[^\w\s]', '', text)
-                            words = cleaned_text.split()
-                            return words[-1] if words else ""
-
-                        answer = extract_last_word(output)
-                        return {
-                            "answer": answer,
-                            "completion": output.strip(),
-                        }
-
-                output_parser = CompletionOutputParser()
+        def process_row(scorecard_name, row, score_instance, generate_completions, completion_model, retry_mismatches, verbose):
+            # Get the original user message from the score configuration
+            user_message = score_instance.parameters.graph[0]['user_message']
+            
+            def generate_completion_with_retry(score_instance, row, correct_answer, max_attempts=5):
+                # Create a temporary copy of the score instance for generating completions
+                temp_score_instance = Score.from_name(scorecard_name, score_instance.parameters.score_name)
                 
+                # Append the hint to the user message for the temporary instance
+                hint = f"\n\n<hint>The correct answer is {correct_answer}</hint>"
+                temp_score_instance.parameters.graph[0]['user_message'] = user_message + hint
+
                 for attempt in range(max_attempts):
-                    temperature = min(0.2 * attempt, 1.0)
-                    model = ChatOpenAI(model_name=completion_model, temperature=temperature)
-                    
-                    prompt = ChatPromptTemplate.from_messages(messages)
-                    answer_chain = prompt | model | output_parser
-                    result = answer_chain.invoke({"text": row['text']})
+                    # Adjust temperature based on the attempt number
+                    # temperature = min(0.2 * attempt, 1.0)
+                    # temp_score_instance.parameters.graph[0]['model_provider'].temperature = temperature
 
-                    # Use the example_refinement_template to refine the answer, if there is one.
-                    if example_refinement_template:
-                        logging.info(f"Refining completion with template: {example_refinement_template}")
-                        logging.info(f"Raw completion: {result['completion']}")
-                        prompt.extend([
-                            AIMessage(content=result['completion']),
-                            HumanMessage(content=example_refinement_template)
-                        ])
-                        refinement_chain = prompt | model | output_parser
-                        refined_result = refinement_chain.invoke({"text": row['text']})
-                        result['completion'] = re.sub(r'\n+', '\n', refined_result['completion'])
-                        logging.info(f"Refined completion: {result['completion']}")
+                    # Use the predict method of the Score class
+                    result = temp_score_instance.predict(context=None, model_input=Score.Input(text=row['text']))
 
-                    if result['answer'].lower() == correct_answer.lower():
-                        return result['completion']
-                    
+                    if result[0].value.lower() == correct_answer.lower():
+                        return result[0].explanation
+
                     if not retry_mismatches:
                         if verbose:
-                            logging.info(f"Generated answer '{result['answer']}' does not match correct answer '{correct_answer}'. Skipping.")
+                            logging.info(f"Generated answer '{result[0].value}' does not match correct answer '{correct_answer}'. Skipping.")
                         return None
 
                     if verbose:
-                        logging.info(f"Attempt {attempt + 1}: Generated answer '{result['answer']}' "
-                                     f"does not match correct answer '{correct_answer}'. "
-                                     f"Retrying with temperature {temperature:.2f}")
+                        logging.info(f"Attempt {attempt + 1}: Generated answer '{result[0].value}' "
+                                     f"does not match correct answer '{correct_answer}'.")
                 
                 logging.warning(f"Failed to generate matching completion after {max_attempts} attempts. "
                                 f"Skipping item.")
                 return None
 
             if generate_completions:
-                messages_with_hint = formatted_messages + [
-                    HumanMessage(content=f"<hint>The correct answer is {row[current_score_name]}</hint>")
-                ]
-                completion = generate_completion_with_retry(messages_with_hint, row[current_score_name])
+                
+                # Determine the correct score name
+                score_name = score_instance.parameters.score_name
+                if hasattr(score_instance.parameters, 'label_field') and score_instance.parameters.label_field:
+                    score_name = f"{score_name} {score_instance.parameters.label_field}"
+
+                completion = generate_completion_with_retry(score_instance, row, row[score_name])
                 if completion is None:
                     return None
             else:
-                completion = row[current_score_name]
+                completion = row[score_instance.parameters.score_name]
 
-            formatted_messages.append(AIMessage(content=completion))
-
-            # Convert messages to dict format for JSON serialization
-            serializable_messages = [
-                {"role": "system" if isinstance(msg, SystemMessage) else "user" if isinstance(msg, HumanMessage) else "assistant",
-                 "content": msg.content}
-                for msg in formatted_messages
+            # Construct the messages for the JSON-L file without the hint
+            messages = [
+                {"role": "system", "content": score_instance.parameters.graph[0]['system_message']},
+                {"role": "user", "content": user_message.format(text=row['text'])},
+                {"role": "assistant", "content": completion}
             ]
 
-            return {"messages": serializable_messages, "content_id": row['content_id']}
+            return {"messages": messages, "content_id": row['content_id']}
 
-        # Create a partial function with fixed arguments
+        # Update the partial function call
         process_row_partial = partial(
             process_row,
-            nodes=nodes,
-            example_refinement_nodes=example_refinement_nodes,
+            score_instance=score_instance,
             generate_completions=generate_completions,
             completion_model=completion_model,
             retry_mismatches=retry_mismatches,
@@ -242,38 +206,35 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
 
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-                future_to_row = {executor.submit(process_row_partial, row): row for _, row in sample_rows.iterrows()}
+                future_to_row = {executor.submit(process_row_partial, scorecard_name, row): row for _, row in sample_rows.iterrows()}
                 
                 processed_count = 0
                 for future in concurrent.futures.as_completed(future_to_row):
                     row = future_to_row[future]
-                    try:
-                        result = future.result()
-                        if result is not None:
-                            message, content_id = result['messages'], result['content_id']
-                            
-                            if len(training_data) < num_training_samples:
-                                json.dump({"messages": message}, train_file)
-                                train_file.write("\n")
-                                train_file.flush()
-                                train_id_file.write(f"{content_id}\n")
-                                train_id_file.flush()
-                                training_data.append(message)
-                                training_ids.append(content_id)
-                            else:
-                                json.dump({"messages": message}, val_file)
-                                val_file.write("\n")
-                                val_file.flush()
-                                val_id_file.write(f"{content_id}\n")
-                                val_id_file.flush()
-                                validation_data.append(message)
-                                validation_ids.append(content_id)
-                            
-                            processed_count += 1
-                            if processed_count >= maximum_number:
-                                break
-                    except Exception as exc:
-                        logging.error(f"Processing row {row.name} generated an exception: {exc}")
+                    result = future.result()
+                    if result is not None:
+                        message, content_id = result['messages'], result['content_id']
+                        
+                        if len(training_data) < num_training_samples:
+                            json.dump({"messages": message}, train_file)
+                            train_file.write("\n")
+                            train_file.flush()
+                            train_id_file.write(f"{content_id}\n")
+                            train_id_file.flush()
+                            training_data.append(message)
+                            training_ids.append(content_id)
+                        else:
+                            json.dump({"messages": message}, val_file)
+                            val_file.write("\n")
+                            val_file.flush()
+                            val_id_file.write(f"{content_id}\n")
+                            val_id_file.flush()
+                            validation_data.append(message)
+                            validation_ids.append(content_id)
+                        
+                        processed_count += 1
+                        if processed_count >= maximum_number:
+                            break
 
             logging.info(f"Number of training samples: {len(training_data)}")
             logging.info(f"Number of validation samples: {len(validation_data)}")
