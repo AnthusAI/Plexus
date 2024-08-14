@@ -278,38 +278,57 @@ class AWSDataLakeCache(DataCache):
             
             for query_params in queries:
                 scorecard_id = query_params['scorecard-id']
-                if 'score-id' in query_params and ('value' in query_params or 'values' in query_params):
-                    score_id = query_params['score-id']
-                    values = query_params['values'] if 'values' in query_params else [query_params['value']]
-                    number = query_params.get('number')
-                    
-                    values_list = ', '.join(f"'{value}'" for value in values)
-                    
-                    query = f"""
+                main_score_id = query_params['score-id']
+                main_value = query_params['value']
+                filters = query_params.get('filters', [])
+                number = query_params.get('number')
+
+                query = f"""
+                    WITH filtered_reports AS (
                         SELECT report_id
-                        FROM (
-                            SELECT report_id, MIN(CASE WHEN t.score.id = {score_id} THEN t.score.answer END) AS value
-                            FROM "{self.athena_database}"
-                            CROSS JOIN UNNEST(scores) AS t(score)
-                            GROUP BY report_id
-                        )
-                        WHERE value IN ({values_list})
-                    """
-                    if number:
-                        query += f" LIMIT {number}"
-                elif 'scorecard-id' in query_params:
-                    number = query_params.get('number')
-                    
-                    query = f"""
-                        SELECT DISTINCT report_id
                         FROM "{self.athena_database}"
+                        CROSS JOIN UNNEST(scores) AS t(score)
                         WHERE scorecard_id = '{scorecard_id}'
-                    """
-                    if number:
-                        query += f" LIMIT {number}"
-                else:
-                    raise ValueError("Invalid query parameters. Each query must contain 'scorecard-id'.")
-                
+                        AND t.score.id = {main_score_id}
+                        AND t.score.answer = '{main_value}'
+                    )
+                """
+
+                for i, filter_condition in enumerate(filters):
+                    filter_score_id = filter_condition['score-id']
+                    filter_conditions = []
+                    
+                    if 'calibration_comments_match' in filter_condition:
+                        filter_conditions.append(
+                            f"t.score.calibration_comments_match = {filter_condition['calibration_comments_match']}"
+                        )
+                    
+                    # Add more filter conditions here as needed
+
+                    if filter_conditions:
+                        conditions_str = ' AND '.join(filter_conditions)
+                        query += f"""
+                            , filter_{i} AS (
+                                SELECT DISTINCT fr.report_id
+                                FROM filtered_reports fr
+                                JOIN "{self.athena_database}" d ON fr.report_id = d.report_id
+                                CROSS JOIN UNNEST(d.scores) AS t(score)
+                                WHERE t.score.id = {filter_score_id}
+                                AND {conditions_str}
+                            )
+                        """
+
+                query += """
+                    SELECT DISTINCT fr.report_id
+                    FROM filtered_reports fr
+                """
+
+                for i in range(len(filters)):
+                    query += f" JOIN filter_{i} ON fr.report_id = filter_{i}.report_id"
+
+                if number:
+                    query += f" LIMIT {number}"
+
                 query_execution_id = self.execute_athena_query(query)
                 query_results = self.get_query_results(query_execution_id)
                 
