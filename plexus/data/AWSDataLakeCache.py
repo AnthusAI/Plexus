@@ -284,32 +284,27 @@ class AWSDataLakeCache(DataCache):
                 number = query_params.get('number')
 
                 query = f"""
-                    WITH filtered_reports AS (
-                        SELECT report_id, calibrations
-                        FROM "{self.athena_database}"
-                        WHERE scorecard_id = '{scorecard_id}'
+                    SELECT report_id
+                    FROM "{self.athena_database}"
+                    CROSS JOIN UNNEST(scores) AS t(score)
+                    WHERE scorecard_id = '{scorecard_id}'
                 """
 
                 if main_score_id:
-                    query += f"""
-                        AND EXISTS (
-                            SELECT 1
-                            FROM UNNEST(scores) AS t(score)
-                            WHERE t.score.id = {main_score_id}
-                            {f"AND t.score.answer = '{main_value}'" if main_value else ""}
-                            {f"AND t.score.calibration_answers_match = {str(calibration_answers_match).lower()}" if calibration_answers_match is not None else ""}
-                            {f"AND t.score.calibration_comments_match = {str(calibration_comments_match).lower()}" if calibration_comments_match is not None else ""}
-                        )
-                    """
-
-                query += ")"
-
-                query += f"""
-                    SELECT report_id 
-                    FROM filtered_reports
-                    WHERE calibrations >= {minimum_calibrations}
-                """
-
+                    query += f" AND t.score.id = {main_score_id}"
+                
+                if main_value:
+                    query += f" AND t.score.answer = '{main_value}'"
+                
+                if calibration_answers_match is not None:
+                    query += f" AND t.score.calibration_answers_match = {str(calibration_answers_match).lower()}"
+                
+                if calibration_comments_match is not None:
+                    query += f" AND t.score.calibration_comments_match = {str(calibration_comments_match).lower()}"
+                
+                query += f" AND calibrations >= {minimum_calibrations}"
+                query += " GROUP BY report_id"
+                
                 if number:
                     query += f" LIMIT {number}"
 
