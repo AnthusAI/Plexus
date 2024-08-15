@@ -439,7 +439,7 @@ class AccuracyExperiment(Experiment):
                             human_labels[override_question_name] = correct_value
 
                 column_name = question_name
-                human_label = str(human_labels[column_name]).lower().translate(str.maketrans('', '', string.punctuation))
+                human_label = str(human_labels[column_name]).lower().rstrip('.!?')
                 if human_label == 'nan':
                     human_label = 'na'
 
