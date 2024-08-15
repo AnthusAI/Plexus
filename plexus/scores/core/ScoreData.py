@@ -73,8 +73,8 @@ class ScoreData:
         answer_breakdown_table.add_column("Percentage", style="magenta1 bold", justify="right")
 
         score_name = self.parameters.score_name
-        if self.parameters.label_field:
-            score_name = score_name + ' ' + self.parameters.label_field
+        if hasattr(self.parameters, 'label_field') and self.parameters.label_field:
+            score_name = f"{score_name} {self.parameters.label_field}"
 
         try:
             answer_counts = self.dataframe[score_name].value_counts()
@@ -131,8 +131,8 @@ class ScoreData:
         """
 
         score_name = self.parameters.score_name
-        if self.parameters.label_field:
-            score_name = score_name + ' ' + self.parameters.label_field
+        if hasattr(self.parameters, 'label_field') and self.parameters.label_field:
+            score_name = f"{score_name} {self.parameters.label_field}"
 
         # Drop NaN values in the column specified by score_name
         if score_name in self.dataframe.columns:
