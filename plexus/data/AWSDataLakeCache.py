@@ -285,26 +285,30 @@ class AWSDataLakeCache(DataCache):
 
                 query = f"""
                     WITH filtered_reports AS (
-                        SELECT report_id, calibrations, 
-                               BOOL_OR(
-                                   CASE WHEN t.score.id = {main_score_id} 
-                                   {f"AND t.score.answer = '{main_value}'" if main_value else ""}
-                                   {f"AND t.score.calibration_answers_match = {str(calibration_answers_match).lower()}" if calibration_answers_match is not None else ""}
-                                   {f"AND t.score.calibration_comments_match = {str(calibration_comments_match).lower()}" if calibration_comments_match is not None else ""}
-                                   THEN TRUE ELSE FALSE END
-                               ) AS score_match
+                        SELECT report_id, calibrations
                         FROM "{self.athena_database}"
-                        CROSS JOIN UNNEST(scores) AS t(score)
                         WHERE scorecard_id = '{scorecard_id}'
-                        GROUP BY report_id, calibrations
-                    )
+                """
+
+                if main_score_id:
+                    query += f"""
+                        AND EXISTS (
+                            SELECT 1
+                            FROM UNNEST(scores) AS t(score)
+                            WHERE t.score.id = {main_score_id}
+                            {f"AND t.score.answer = '{main_value}'" if main_value else ""}
+                            {f"AND t.score.calibration_answers_match = {str(calibration_answers_match).lower()}" if calibration_answers_match is not None else ""}
+                            {f"AND t.score.calibration_comments_match = {str(calibration_comments_match).lower()}" if calibration_comments_match is not None else ""}
+                        )
+                    """
+
+                query += ")"
+
+                query += f"""
                     SELECT report_id 
                     FROM filtered_reports
                     WHERE calibrations >= {minimum_calibrations}
                 """
-
-                if main_score_id:
-                    query += " AND score_match = TRUE"
 
                 if number:
                     query += f" LIMIT {number}"
