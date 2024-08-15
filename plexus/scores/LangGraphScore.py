@@ -205,10 +205,14 @@ class LangGraphScore(Score, LangChainUser):
             "successful_requests": 0
         }
 
-        for node_name, node_instance in self.node_instances:
-            node_usage = node_instance.get_token_usage()
-            for key in total_usage:
-                total_usage[key] += node_usage[key]
+        try:
+            for node_name, node_instance in self.node_instances:
+                node_usage = node_instance.get_token_usage()
+                for key in total_usage:
+                    total_usage[key] += node_usage[key]
+        # TODO: Remove it.  It's necessary because AgenticValidator doesn't set node_instances because it overrides `predict()`
+        except Exception as e:
+            logging.error(f"Error getting token usage: {str(e)}")
 
         return total_usage
 
