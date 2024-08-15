@@ -7,6 +7,7 @@ import logging
 import requests
 import random
 import time
+import string
 import pprint
 from decimal import Decimal
 from abc import ABC, abstractmethod
@@ -438,7 +439,7 @@ class AccuracyExperiment(Experiment):
                             human_labels[override_question_name] = correct_value
 
                 column_name = question_name
-                human_label = str(human_labels[column_name]).lower()
+                human_label = str(human_labels[column_name]).lower().translate(str.maketrans('', '', string.punctuation))
                 if human_label == 'nan':
                     human_label = 'na'
 
