@@ -273,58 +273,38 @@ class AWSDataLakeCache(DataCache):
                 return pd.DataFrame()
 
         else:
-            # Existing logic for queries
-            all_scores = set()
-            
+            # Updated logic for queries
             for query_params in queries:
                 scorecard_id = query_params['scorecard-id']
-                main_score_id = query_params['score-id']
-                main_value = query_params['value']
-                filters = query_params.get('filters', [])
+                main_score_id = query_params.get('score-id')
+                main_value = query_params.get('value')
+                calibration_answers_match = query_params.get('calibration_answers_match')
+                calibration_comments_match = query_params.get('calibration_comments_match')
+                minimum_calibrations = query_params.get('minimum_calibrations', 0)
                 number = query_params.get('number')
 
                 query = f"""
                     WITH filtered_reports AS (
-                        SELECT report_id
+                        SELECT report_id, calibrations, 
+                               BOOL_OR(
+                                   CASE WHEN t.score.id = {main_score_id} 
+                                   {f"AND t.score.answer = '{main_value}'" if main_value else ""}
+                                   {f"AND t.score.calibration_answers_match = {str(calibration_answers_match).lower()}" if calibration_answers_match is not None else ""}
+                                   {f"AND t.score.calibration_comments_match = {str(calibration_comments_match).lower()}" if calibration_comments_match is not None else ""}
+                                   THEN TRUE ELSE FALSE END
+                               ) AS score_match
                         FROM "{self.athena_database}"
                         CROSS JOIN UNNEST(scores) AS t(score)
                         WHERE scorecard_id = '{scorecard_id}'
-                        AND t.score.id = {main_score_id}
-                        AND t.score.answer = '{main_value}'
+                        GROUP BY report_id, calibrations
                     )
+                    SELECT report_id 
+                    FROM filtered_reports
+                    WHERE calibrations >= {minimum_calibrations}
                 """
 
-                for i, filter_condition in enumerate(filters):
-                    filter_score_id = filter_condition['score-id']
-                    filter_conditions = []
-                    
-                    if 'calibration_comments_match' in filter_condition:
-                        filter_conditions.append(
-                            f"t.score.calibration_comments_match = {filter_condition['calibration_comments_match']}"
-                        )
-                    
-                    # Add more filter conditions here as needed
-
-                    if filter_conditions:
-                        conditions_str = ' AND '.join(filter_conditions)
-                        query += f"""
-                            , filter_{i} AS (
-                                SELECT DISTINCT fr.report_id
-                                FROM filtered_reports fr
-                                JOIN "{self.athena_database}" d ON fr.report_id = d.report_id
-                                CROSS JOIN UNNEST(d.scores) AS t(score)
-                                WHERE t.score.id = {filter_score_id}
-                                AND {conditions_str}
-                            )
-                        """
-
-                query += """
-                    SELECT DISTINCT fr.report_id
-                    FROM filtered_reports fr
-                """
-
-                for i in range(len(filters)):
-                    query += f" JOIN filter_{i} ON fr.report_id = filter_{i}.report_id"
+                if main_score_id:
+                    query += " AND score_match = TRUE"
 
                 if number:
                     query += f" LIMIT {number}"
@@ -342,7 +322,7 @@ class AWSDataLakeCache(DataCache):
                         content_row = future.result()
                         if content_row:
                             content_data.append(content_row)
-                            all_scores.update(content_row.keys())
+                            all_keys.update(content_row.keys())
 
         # Ensure all rows have all keys
         for row in content_data:
