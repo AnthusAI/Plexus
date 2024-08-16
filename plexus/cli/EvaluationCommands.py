@@ -47,7 +47,7 @@ def load_configuration_from_yaml_file(configuration_file_path):
 @click.option('--session-ids-to-sample', default='', type=str, help='Comma-separated list of session IDs to sample')
 @click.option('--score-name', '--score-names', default='', type=str, help='Comma-separated list of score names to evaluate')
 @click.option('--experiment-label', default='', type=str, help='Label for the experiment')
-@click.option('--threads', default=1, type=int, help='Number of threads to use')
+@click.option('--threads', default=16, type=int, help='Number of threads to use')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 def accuracy(
     scorecard_name: str,
