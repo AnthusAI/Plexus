@@ -273,7 +273,7 @@ class AWSDataLakeCache(DataCache):
                 return pd.DataFrame()
 
         else:
-            # Updated logic for queries
+            
             for query_params in queries:
                 scorecard_id = query_params['scorecard-id']
                 main_score_id = query_params.get('score-id')
@@ -281,29 +281,34 @@ class AWSDataLakeCache(DataCache):
                 calibration_answers_match = query_params.get('calibration_answers_match')
                 calibration_comments_match = query_params.get('calibration_comments_match')
                 minimum_calibrations = query_params.get('minimum_calibrations', 0)
+                minimum_good_call_confidence = query_params.get('minimum_good_call_confidence', 0)
+                minimum_confidence = query_params.get('minimum_confidence', 0)
                 number = query_params.get('number')
 
                 query = f"""
-                    SELECT report_id
+                    SELECT DISTINCT report_id
                     FROM "{self.athena_database}"
                     CROSS JOIN UNNEST(scores) AS t(score)
                     WHERE scorecard_id = '{scorecard_id}'
                 """
 
-                if main_score_id:
-                    query += f" AND t.score.id = {main_score_id}"
+                if main_score_id is not None:
+                    query += f" AND score.id = {main_score_id}"
                 
                 if main_value:
-                    query += f" AND t.score.answer = '{main_value}'"
+                    query += f" AND score.answer = '{main_value}'"
+                
+                if minimum_confidence:
+                    query += f" AND score.confidence >= {minimum_confidence}"
                 
                 if calibration_answers_match is not None:
-                    query += f" AND t.score.calibration_answers_match = {str(calibration_answers_match).lower()}"
+                    query += f" AND score.calibration_answers_match = {str(calibration_answers_match).lower()}"
                 
                 if calibration_comments_match is not None:
-                    query += f" AND t.score.calibration_comments_match = {str(calibration_comments_match).lower()}"
+                    query += f" AND score.calibration_comments_match = {str(calibration_comments_match).lower()}"
                 
                 query += f" AND calibrations >= {minimum_calibrations}"
-                query += " GROUP BY report_id"
+                query += f" AND good_call_confidence >= {minimum_good_call_confidence}"
                 
                 if number:
                     query += f" LIMIT {number}"
