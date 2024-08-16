@@ -13,6 +13,7 @@ from langchain_openai import ChatOpenAI
 import tiktoken
 import concurrent.futures
 from functools import partial
+from random import sample
 
 from plexus.CustomLogging import logging
 from plexus.Registries import scorecard_registry
@@ -39,6 +40,7 @@ def get_id_file_path(output_dir, file_type):
 @click.option('--scorecard-name', required=True, help='The name of the scorecard.')
 @click.option('--score-name', help='The name of the score to generate JSON-L for. If not provided, all scores will be processed.')
 @click.option('--maximum-number', type=int, default=100, help='Maximum number of samples, total.')
+@click.option('--train-ratio', type=float, default=0.8, help='Ratio of training samples to total samples.')
 @click.option('--generate-completions', is_flag=True, help='Generate completions using an LLM.')
 @click.option('--completion-model', default='gpt-4o-mini-2024-07-18', help='The model to use for generating completions.')
 @click.option('--retry-mismatches', is_flag=True, help='Retry when generated answer does not match the label.')
@@ -46,7 +48,7 @@ def get_id_file_path(output_dir, file_type):
 @click.option('--threads', type=int, default=20, help='Number of threads to use.')
 @click.option('--verbose', is_flag=True, help='Verbose output.')
 def generate_examples(scorecard_name, score_name,
-                      maximum_number, generate_completions,
+                      maximum_number, train_ratio, generate_completions,
                       completion_model, retry_mismatches, fresh, verbose, threads):
     """
     Generate JSON-L files that include a specified number of examples, using the prompt templates
@@ -58,6 +60,8 @@ def generate_examples(scorecard_name, score_name,
     :type score_name: str
     :param maximum_number: Maximum number of samples, total.
     :type maximum_number: int
+    :param train_ratio: Ratio of training samples to total samples.
+    :type train_ratio: float
     :param generate_completions: Generate completions using an LLM.
     :type generate_completions: bool
     :param completion_model: The model to use for generating completions.
@@ -102,24 +106,17 @@ def generate_examples(scorecard_name, score_name,
             continue
 
         # Get data
-        sample_rows = None
         score_instance = score_class(**score_configuration)
         score_instance.load_data(data=score_configuration['data'], fresh=fresh)
         score_instance.process_data()
 
+        num_training_samples = int(maximum_number * train_ratio)
+        num_validation_samples = maximum_number - num_training_samples
+
+        logging.info(f"Aiming for {num_training_samples} training samples and {num_validation_samples} validation samples.")
+
         total_rows = len(score_instance.dataframe)
-
-        if maximum_number > total_rows:
-            logging.warning(f"Requested sample size ({maximum_number}) is larger than available data ({total_rows}). Using all available data.")
-            sample_rows = score_instance.dataframe
-        else:
-            sample_rows = score_instance.dataframe.sample(n=maximum_number)
-
-        if verbose:
-            logging.info(f"First few sample rows: {sample_rows.to_dict('records')[:5]}")
-
-        # Calculate the number of training samples
-        num_training_samples = int(len(sample_rows) * 0.8)
+        row_indices = set(range(total_rows))
 
         training_data = []
         validation_data = []
@@ -216,36 +213,46 @@ def generate_examples(scorecard_name, score_name,
         val_id_file = open(get_id_file_path(output_dir, "validation"), "w")
 
         try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-                future_to_row = {executor.submit(process_row_partial, scorecard_name, row): row for _, row in sample_rows.iterrows()}
-                
+            with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
+                futures = []
                 processed_count = 0
-                for future in concurrent.futures.as_completed(future_to_row):
-                    row = future_to_row[future]
-                    result = future.result()
-                    if result is not None:
-                        message, content_id = result['messages'], result['content_id']
-                        
-                        if len(training_data) < num_training_samples:
-                            json.dump({"messages": message}, train_file)
-                            train_file.write("\n")
-                            train_file.flush()
-                            train_id_file.write(f"{content_id}\n")
-                            train_id_file.flush()
-                            training_data.append(message)
-                            training_ids.append(content_id)
-                        else:
-                            json.dump({"messages": message}, val_file)
-                            val_file.write("\n")
-                            val_file.flush()
-                            val_id_file.write(f"{content_id}\n")
-                            val_id_file.flush()
-                            validation_data.append(message)
-                            validation_ids.append(content_id)
-                        
-                        processed_count += 1
-                        if processed_count >= maximum_number:
-                            break
+
+                while row_indices and processed_count < maximum_number:
+                    batch_size = min(threads, len(row_indices), maximum_number - processed_count)
+                    batch_indices = sample(row_indices, batch_size)
+                    row_indices -= set(batch_indices)
+
+                    batch_rows = score_instance.dataframe.iloc[batch_indices]
+                    futures.extend([executor.submit(process_row_partial, scorecard_name, row) 
+                                     for _, row in batch_rows.iterrows()])
+
+                    for future in concurrent.futures.as_completed(futures):
+                        result = future.result()
+                        if result is not None:
+                            message, content_id = result['messages'], result['content_id']
+                            
+                            if len(training_data) < num_training_samples:
+                                json.dump({"messages": message}, train_file)
+                                train_file.write("\n")
+                                train_file.flush()
+                                train_id_file.write(f"{content_id}\n")
+                                train_id_file.flush()
+                                training_data.append(message)
+                                training_ids.append(content_id)
+                            elif len(validation_data) < num_validation_samples:
+                                json.dump({"messages": message}, val_file)
+                                val_file.write("\n")
+                                val_file.flush()
+                                val_id_file.write(f"{content_id}\n")
+                                val_id_file.flush()
+                                validation_data.append(message)
+                                validation_ids.append(content_id)
+                            
+                            processed_count += 1
+                            if processed_count >= maximum_number:
+                                break
+
+                    futures = []  # Clear processed futures
 
             logging.info(f"Number of training samples: {len(training_data)}")
             logging.info(f"Number of validation samples: {len(validation_data)}")
