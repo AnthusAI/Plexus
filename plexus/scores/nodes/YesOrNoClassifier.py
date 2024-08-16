@@ -33,23 +33,24 @@ class YesOrNoClassifier(BaseNode):
         def parse(self, output: str) -> Dict[str, Any]:
             cleaned_output = ''.join(char.lower() for char in output if char.isalnum() or char.isspace())
             words = cleaned_output.split()
-            last_word = words[-1] if words else ""
             
-            if last_word == "yes":
-                return {
-                    "classification": "yes",
-                    "explanation": output
-                }
-            elif last_word == "no":
-                return {
-                    "classification": "no",
-                    "explanation": output
-                }
-            else:
-                return {
-                    "classification": "unknown",
-                    "explanation": output
-                }
+            while words:
+                last_word = words.pop()
+                if last_word == "yes":
+                    return {
+                        "classification": "yes",
+                        "explanation": output
+                    }
+                elif last_word == "no":
+                    return {
+                        "classification": "no",
+                        "explanation": output
+                    }
+            
+            return {
+                "classification": "unknown",
+                "explanation": output
+            }
 
     def get_classifier_node(self) -> FunctionType:
         model = self.model
