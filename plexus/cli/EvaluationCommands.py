@@ -95,45 +95,44 @@ def accuracy(
     # Check if any score in the scorecard uses the data-driven approach
     uses_data_driven = any('data' in score_config for score_config in scorecard_instance.scores.values())
 
-    labeled_samples = []
-    if uses_data_driven:
-        # To pull data for evaluation from the `data:` configuration in the scorecard,
-        # we need to pick one score configuration to use.
+    score_names = [name.strip() for name in score_name.split(',') if name.strip()]
+    
+    if not score_names:
+        score_names = list(scorecard_instance.scores.keys())
 
-        # If the user specified a score name, we'll use that one.
-        # Otherwise, we'll just use the first one that has `data:` in its configuration.
-        if score_name:
-            labeled_samples.extend(get_data_driven_samples(
-                scorecard_instance, scorecard_name, score_name, scorecard_instance.scores[score_name], fresh))
-        else:
-            for score_name, score_config in scorecard_instance.scores.items():
-                if 'data' in score_config:
-                    labeled_samples.extend(get_data_driven_samples(
-                        scorecard_instance, scorecard_name, score_name, score_config, fresh))
-                    break
-    else:
-        labeled_samples_filename = os.path.join('scorecards', scorecard_instance.properties.get('key'), 'experiments', 'labeled-samples.csv')
+    for single_score_name in score_names:
+        logging.info(f"Running experiment for score: {single_score_name}")
+        
+        single_score_labeled_samples = []
+        if uses_data_driven:
+            if single_score_name in scorecard_instance.scores:
+                single_score_labeled_samples = get_data_driven_samples(
+                    scorecard_instance, scorecard_name, single_score_name, 
+                    scorecard_instance.scores[single_score_name], fresh)
+            else:
+                logging.warning(f"Score '{single_score_name}' not found in scorecard. Skipping.")
+                continue
+        
+        single_score_experiment_args = {
+            'scorecard_name': scorecard_name,
+            'scorecard': scorecard_instance,
+            'override_folder': override_folder,
+            'number_of_texts_to_sample': number_of_samples,
+            'sampling_method': sampling_method,
+            'random_seed': random_seed,
+            'session_ids_to_sample': re.split(r',\s+', session_ids_to_sample.strip()) if session_ids_to_sample.strip() else None,
+            'subset_of_score_names': [single_score_name],
+            'experiment_label': experiment_label,
+            'threads': threads
+        }
+        
+        if uses_data_driven:
+            single_score_experiment_args['labeled_samples'] = single_score_labeled_samples
+        
+        with AccuracyExperiment(**single_score_experiment_args) as experiment:
+            experiment.run()
 
-    experiment_args = {
-        'scorecard_name': scorecard_name,
-        'scorecard': scorecard_instance,
-        'override_folder': override_folder,
-        'number_of_texts_to_sample': number_of_samples,
-        'sampling_method': sampling_method,
-        'random_seed': random_seed,
-        'session_ids_to_sample': re.split(r',\s+', session_ids_to_sample.strip()) if session_ids_to_sample.strip() else None,
-        'subset_of_score_names': re.split(r',\s+', score_name.strip()) if score_name.strip() else None,
-        'experiment_label': experiment_label,
-        'threads': threads
-    }
-
-    if uses_data_driven:
-        experiment_args['labeled_samples'] = labeled_samples
-    else:
-        experiment_args['labeled_samples_filename'] = labeled_samples_filename
-
-    with AccuracyExperiment(**experiment_args) as experiment:
-        experiment.run()
+    logging.info("All score experiments completed.")
 
 def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, score_config, fresh):
     score_class_name = score_config['class']
