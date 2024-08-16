@@ -43,8 +43,11 @@ def get_id_file_path(output_dir, file_type):
 @click.option('--completion-model', default='gpt-4o-mini-2024-07-18', help='The model to use for generating completions.')
 @click.option('--retry-mismatches', is_flag=True, help='Retry when generated answer does not match the label.')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
+@click.option('--threads', type=int, default=20, help='Number of threads to use.')
 @click.option('--verbose', is_flag=True, help='Verbose output.')
-def generate_examples(scorecard_name, score_name, maximum_number, generate_completions, completion_model, retry_mismatches, fresh, verbose):
+def generate_examples(scorecard_name, score_name,
+                      maximum_number, generate_completions,
+                      completion_model, retry_mismatches, fresh, verbose, threads):
     """
     Generate JSON-L files that include a specified number of examples, using the prompt templates
     from the score configuration combined with data and ground-truth labels.
@@ -105,6 +108,7 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
         score_instance.process_data()
 
         total_rows = len(score_instance.dataframe)
+
         if maximum_number > total_rows:
             logging.warning(f"Requested sample size ({maximum_number}) is larger than available data ({total_rows}). Using all available data.")
             sample_rows = score_instance.dataframe
@@ -127,17 +131,23 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
         example_refinement_nodes = score_instance.get_example_refinement_templates()
         logging.info(f"Nodes: {nodes}")
 
-        def process_row(scorecard_name, row, score_instance, generate_completions, completion_model, retry_mismatches, verbose):
+        def process_row(scorecard_name, row, score_instance, score_configuration, generate_completions, completion_model, retry_mismatches, verbose):
             # Get the original user message from the score configuration
             user_message = score_instance.parameters.graph[0]['user_message']
             
             def generate_completion_with_retry(score_instance, row, correct_answer, max_attempts=5):
-                # Create a temporary copy of the score instance for generating completions
-                temp_score_instance = Score.from_name(scorecard_name, score_instance.parameters.score_name)
-                
                 # Append the hint to the user message for the temporary instance
-                hint = f"\n\n<hint>The correct answer is {correct_answer}</hint>"
-                temp_score_instance.parameters.graph[0]['user_message'] = user_message + hint
+                hint = f"\n\n<hint>The correct answer is: \"{correct_answer}\"</hint>"    
+
+                # Create a temporary copy of the score instance for generating completions
+                score_class = score_instance.__class__
+                temp_score_configuration = score_configuration.copy()
+                temp_score_configuration['graph'][0]['user_message'] = user_message + hint
+                temp_score_instance = score_class(**temp_score_configuration)
+
+                logging.info(f"System message: {temp_score_instance.parameters.graph[0]['system_message']}")
+                logging.info(f"User message: {temp_score_instance.parameters.graph[0]['user_message']}")
+                logging.info(f"Hint: {hint}")
 
                 for attempt in range(max_attempts):
                     # Adjust temperature based on the attempt number
@@ -189,6 +199,7 @@ def generate_examples(scorecard_name, score_name, maximum_number, generate_compl
         process_row_partial = partial(
             process_row,
             score_instance=score_instance,
+            score_configuration=score_configuration,
             generate_completions=generate_completions,
             completion_model=completion_model,
             retry_mismatches=retry_mismatches,
