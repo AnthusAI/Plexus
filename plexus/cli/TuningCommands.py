@@ -133,8 +133,9 @@ def generate_examples(scorecard_name, score_name,
             user_message = score_instance.parameters.graph[0]['user_message']
             
             def generate_completion_with_retry(score_instance, row, correct_answer, max_attempts=5):
-                # Append the hint to the user message for the temporary instance
-                hint = f"\n\n<hint>The correct answer is: \"{correct_answer}\"</hint>"    
+                # Strip ending punctuation from the correct answer
+                cleaned_answer = re.sub(r'[.,?!]+$', '', correct_answer.strip())
+                hint = f"\n\n<hint>The correct answer is: \"{cleaned_answer}\"</hint>"    
 
                 # Create a temporary copy of the score instance for generating completions
                 score_class = score_instance.__class__
@@ -153,8 +154,7 @@ def generate_examples(scorecard_name, score_name,
 
                     # Use the predict method of the Score class
                     result = temp_score_instance.predict(context=None, model_input=Score.Input(text=row['text']))
-
-                    if result[0].value.lower() == correct_answer.lower():
+                    if re.sub(r'[.,?!]+$', '', result[0].value.strip()).lower() == cleaned_answer.lower():
                         return result[0].explanation
 
                     if not retry_mismatches:
