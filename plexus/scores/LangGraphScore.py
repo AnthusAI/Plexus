@@ -32,7 +32,6 @@ class LangGraphScore(Score, LangChainUser):
         model_config = ConfigDict(protected_namespaces=())
         model_provider: Literal["ChatOpenAI", "AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "AzureChatOpenAI"
         model_name: Optional[str] = None
-        label_field: Optional[str] = None
         model_region: Optional[str] = None
         temperature: Optional[float] = 0.03
         max_tokens: Optional[int] = 500
