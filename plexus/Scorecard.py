@@ -208,11 +208,11 @@ class Scorecard:
                 score_total_cost = score_instance.get_accumulated_costs()
                 logging.info(f"Total cost: {score_total_cost}")
 
-                self.prompt_tokens       += score_total_cost['prompt_tokens']
-                self.completion_tokens   += score_total_cost['completion_tokens']
-                self.input_cost          += score_total_cost['input_cost']
-                self.output_cost         += score_total_cost['output_cost']
-                self.total_cost          += score_total_cost['total_cost']
+                self.prompt_tokens       += score_total_cost.get('prompt_tokens', 0)
+                self.completion_tokens   += score_total_cost.get('completion_tokens', 0)
+                self.input_cost          += score_total_cost.get('input_cost', 0)
+                self.output_cost         += score_total_cost.get('output_cost', 0)
+                self.total_cost          += score_total_cost.get('total_cost', 0)
 
                 # TODO: Find a different way of passing the costs with the score result.
                 # Maybe add support for `costs` and `metadata` in Score.Result?
