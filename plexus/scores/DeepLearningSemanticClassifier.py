@@ -1,10 +1,12 @@
 import os
+import json
 import mlflow
 from plexus.scores import Score
 from pydantic import BaseModel, validator, ValidationError
 import numpy as np
 import pandas as pd
 import nltk
+from abc import abstractmethod
 from nltk.tokenize import PunktSentenceTokenizer
 import tensorflow as tf
 from transformers import AutoTokenizer, TFAutoModel
@@ -80,6 +82,15 @@ class DeepLearningSemanticClassifier(Score):
     class Parameters(Parameters):
         ...
 
+    @abstractmethod
+    def create_model(self):
+        """
+        Create and return the model architecture.
+
+        :return: The created model.
+        """
+        pass
+    
     def encode_input(self, texts):
         def encode_single_text(text, maximum_length):
             return self.tokenizer.encode(text, padding='max_length', truncation=True, max_length=maximum_length, return_tensors='tf')
@@ -271,8 +282,9 @@ class DeepLearningSemanticClassifier(Score):
             return encoded_windows_ragged, attention_masks_ragged
 
         texts = self.dataframe['text'].tolist()
-        labels = self.dataframe[self.parameters.score_name].tolist()
-        unique_labels = self.dataframe[self.parameters.score_name].unique()
+        score_name = self.get_label_score_name()
+        labels = self.dataframe[score_name].tolist()
+        unique_labels = self.dataframe[score_name].unique()
 
         # Split the data into training and validation sets
         train_texts, val_texts, train_labels, val_labels = train_test_split(texts, labels, test_size=0.2, random_state=42)
@@ -494,7 +506,30 @@ class DeepLearningSemanticClassifier(Score):
         """
         confidence: float
 
+    def load_weights_and_label_map(self):
+        if not hasattr(self, 'model') or self.model is None:
+            self.model = self.create_model()
+            weights_path = 'tmp/best_model_weights.h5'
+            self.model.load_weights(weights_path)
+
+        if not hasattr(self, 'inverse_label_map') or self.inverse_label_map is None:
+            inverse_label_map_path = 'tmp/inverse_label_map.json'
+            with open(inverse_label_map_path, 'r') as f:
+                self.inverse_label_map = json.load(f)
+            # Ensure keys are integers
+            self.inverse_label_map = {int(k): v for k, v in self.inverse_label_map.items()}
+
+
     def predict(self, context, model_input: Score.Input):
+        # Check if model is loaded, if not, load it
+        if not hasattr(self, 'model') or self.model is None:
+            try:
+                self.load_weights_and_label_map()
+            except Exception as e:
+                logging.error(f"Failed to load model: {str(e)}")
+                raise
+
+        # Proceed with prediction
         logging.info(f"Received input: {model_input}")
 
         text = model_input.text
@@ -510,7 +545,7 @@ class DeepLearningSemanticClassifier(Score):
             logging.info(f"Prediction type: {type(predictions)}")
             logging.info(f"Prediction dtype: {predictions.dtype}")
 
-            if self.is_multi_class:
+            if self.parameters.number_of_classes > 2:
                 logging.info("Handling multi-class prediction")
                 confidence_score = float(np.max(predictions[0]))
                 predicted_class = int(np.argmax(predictions[0]))
@@ -525,11 +560,11 @@ class DeepLearningSemanticClassifier(Score):
             predicted_label = self.inverse_label_map[predicted_class]
             logging.info(f"Predicted label: {predicted_label}")
 
-            return self.Result(
+            return [self.Result(
                 name =       self.parameters.score_name,
                 value =      predicted_label,
                 confidence = confidence_score
-            )
+            )]
         except Exception as e:
             logging.error(f"Error during prediction: {str(e)}")
             logging.error(f"Error type: {type(e)}")
@@ -547,8 +582,8 @@ class DeepLearningSemanticClassifier(Score):
             model_input = self.Input(text=text)
             result = self.predict(None, model_input)
             
-            self.val_predictions.append(result.value)
-            self.val_confidence_scores.append(result.confidence)
+            self.val_predictions.append(result[0].value)
+            self.val_confidence_scores.append(result[0].confidence)
 
         self.val_predictions = np.array(self.val_predictions)
         self.val_confidence_scores = np.array(self.val_confidence_scores)

@@ -71,6 +71,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         label_field: Optional[str] = None
         dependencies: Optional[List[dict]] = None
         data: Optional[dict] = None
+        number_of_classes: Optional[int] = None
 
         @field_validator('data')
         def convert_data_percentage(cls, value):
@@ -150,6 +151,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             self.parameters = self.Parameters(**parameters)
             logging.info("Initializing [magenta1][b]Score[/b][/magenta1]")
             self._is_multi_class = None
+            self._number_of_classes = None
         except ValidationError as e:
             Score.log_validation_errors(e)
             raise
@@ -176,6 +178,8 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
 
     def report_directory_path(self):
         return f"./reports/{self.parameters.scorecard_name}/{self.parameters.score_name}/".replace(' ', '_')
+    def model_directory_path(self):
+        return f"./models/{self.parameters.scorecard_name}/{self.parameters.score_name}/".replace(' ', '_')
 
     @ensure_report_directory_exists
     def report_file_name(self, file_name):
@@ -303,7 +307,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         context : mlflow.pyfunc.PythonModelContext
             The context object containing artifacts and other information.
         """
-        self.model = mlflow.keras.load_model(context.artifacts["model"])
+        # self.model = mlflow.keras.load_model(context.artifacts["model"])
 
     @abstractmethod
     def predict(self, context, model_input: Input):
@@ -416,9 +420,28 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             True if the problem is multi-class, False otherwise.
         """
         if self._is_multi_class is None:
-            unique_labels = self.dataframe[self.parameters.score_name].unique()
+            score_name = self.get_label_score_name()
+            unique_labels = self.dataframe[score_name].unique()
             self._is_multi_class = len(unique_labels) > 2
         return self._is_multi_class
+
+    @property
+    def number_of_classes(self):
+        """
+        Determine the number of classes for the classification problem.
+
+        This property checks the unique labels in the dataframe to determine the number of classes.
+
+        Returns
+        -------
+        int
+            The number of unique classes.
+        """
+        if self._number_of_classes is None:
+            score_name = self.get_label_score_name()
+            unique_labels = self.dataframe[score_name].unique()
+            self._number_of_classes = len(unique_labels)
+        return self._number_of_classes
 
     def get_accumulated_costs(self):
         """
@@ -433,7 +456,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             "total_cost":  0
         }
 
-    def get_score_name(self):
+    def get_label_score_name(self):
         """
         Determine the appropriate score name based on the parameters.
 
