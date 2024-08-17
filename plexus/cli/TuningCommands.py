@@ -1,13 +1,15 @@
 import re
 import rich
+from rich import print
+from rich.panel import Panel
+from rich.columns import Columns
 import click
 import plexus
 import os
 import json
 import pandas as pd
 from openpyxl.styles import Font
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_openai import ChatOpenAI
 import tiktoken
@@ -110,8 +112,8 @@ def generate_examples(scorecard_name, score_name,
         score_instance.load_data(data=score_configuration['data'], fresh=fresh)
         score_instance.process_data()
 
-        num_training_samples = int(maximum_number * train_ratio)
-        num_validation_samples = maximum_number - num_training_samples
+        num_training_samples = maximum_number
+        num_validation_samples = int(num_training_samples * (1 - train_ratio) / train_ratio)
 
         logging.info(f"Aiming for {num_training_samples} training samples and {num_validation_samples} validation samples.")
 
@@ -125,7 +127,6 @@ def generate_examples(scorecard_name, score_name,
 
         # Get templates
         nodes = score_instance.get_prompt_templates()
-        example_refinement_nodes = score_instance.get_example_refinement_templates()
         logging.info(f"Nodes: {nodes}")
 
         def process_row(scorecard_name, row, score_instance, score_configuration, generate_completions, completion_model, retry_mismatches, verbose):
@@ -155,6 +156,55 @@ def generate_examples(scorecard_name, score_name,
                     # Use the predict method of the Score class
                     result = temp_score_instance.predict(context=None, model_input=Score.Input(text=row['text']))
                     if re.sub(r'[.,?!]+$', '', result[0].value.strip()).lower() == cleaned_answer.lower():
+                        
+                        # Use the example_refinement_template to refine the answer, if there is one.
+                        example_refinement_nodes = score_instance.get_example_refinement_templates()
+                        if example_refinement_nodes:
+                            model = ChatOpenAI(model_name=completion_model)
+                            class CompletionOutputParser(BaseOutputParser[dict]):
+                                def parse(self, output: str) -> dict:
+                                    def extract_last_word(text):
+                                        cleaned_text = re.sub(r'[^\w\s]', '', text)
+                                        words = cleaned_text.split()
+                                        return words[-1] if words else ""
+
+                                    answer = extract_last_word(output)
+                                    return {
+                                        "answer": answer,
+                                        "completion": output.strip(),
+                                    }
+                            output_parser = CompletionOutputParser()
+                            logging.info(f"Refining completion with template: {example_refinement_nodes}")
+                            logging.info(f"Raw completion: {result[0].explanation}")
+                            prompt = PromptTemplate(template=example_refinement_nodes[0], input_variables=["reformat"])
+                            refinement_chain = prompt | model | output_parser
+                            refined_result = refinement_chain.invoke({"reformat": result[0].explanation})
+
+                            original_panel = Panel(
+                                result[0].explanation,
+                                title="Original Completion",
+                                border_style="royal_blue1",
+                                expand=False,
+                                width=100
+                            )
+                            refined_panel = Panel(
+                                refined_result['completion'],
+                                title="Refined Completion",
+                                border_style="magenta1",
+                                expand=False,
+                                width=100
+                            )
+                            print(Columns([original_panel, refined_panel]))
+
+                            if refined_result['answer'].lower() == result[0].value.strip().lower():
+                                if verbose:
+                                    logging.info(f"Refined answer '{refined_result['answer']}' matches original answer '{result[0].value}'.")
+                                return refined_result['completion']
+                            else:
+                                if verbose:
+                                    logging.info(f"Refined answer '{refined_result['answer']}' does not match original answer '{result[0].value}'. Skipping.")
+                                return None
+
                         return result[0].explanation
 
                     if not retry_mismatches:
