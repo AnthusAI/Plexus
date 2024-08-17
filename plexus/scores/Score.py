@@ -67,6 +67,8 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         id: Optional[Union[str, int]] = None
         scorecard_name: str
         score_name: str
+        label_score_name: Optional[str] = None
+        label_field: Optional[str] = None
         dependencies: Optional[List[dict]] = None
         data: Optional[dict] = None
 
@@ -430,6 +432,22 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         return {
             "total_cost":  0
         }
+
+    def get_score_name(self):
+        """
+        Determine the appropriate score name based on the parameters.
+
+        Returns
+        -------
+        str
+            The determined score name.
+        """
+        score_name = self.parameters.score_name
+        if hasattr(self.parameters, 'label_score_name') and self.parameters.label_score_name:
+            score_name = self.parameters.label_score_name
+        if hasattr(self.parameters, 'label_field') and self.parameters.label_field:
+            score_name = f"{score_name} {self.parameters.label_field}"
+        return score_name
 
     @classmethod
     def from_name(cls, scorecard_name, score_name):
