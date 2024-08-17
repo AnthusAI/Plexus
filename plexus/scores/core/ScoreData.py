@@ -72,7 +72,7 @@ class ScoreData:
         answer_breakdown_table.add_column("Count", style="magenta1", justify="right")
         answer_breakdown_table.add_column("Percentage", style="magenta1 bold", justify="right")
 
-        score_name = self.get_score_name()
+        score_name = self.get_label_score_name()
 
         try:
             answer_counts = self.dataframe[score_name].value_counts()
@@ -127,7 +127,7 @@ class ScoreData:
         """
         Handle any pre-processing of the training data, including the training/validation splits.
         """
-        score_name = self.get_score_name()
+        score_name = self.get_label_score_name()
 
         # Drop NaN values in the column specified by score_name
         if score_name in self.dataframe.columns:

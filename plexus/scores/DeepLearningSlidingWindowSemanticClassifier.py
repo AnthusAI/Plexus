@@ -1,4 +1,5 @@
 import os
+import json
 import numpy as np
 import mlflow
 import mlflow.keras
@@ -10,6 +11,7 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras import regularizers
 import nltk
 nltk.download('punkt')
+from typing import Optional
 from rich.progress import Progress
 from plexus.CustomLogging import logging, console
 from plexus.scores.Score import Score
@@ -17,6 +19,7 @@ from tensorflow.keras.utils import to_categorical
 from tensorflow.keras import mixed_precision
 from sklearn.preprocessing import LabelBinarizer
 from plexus.scores import Score, DeepLearningSemanticClassifier
+from plexus.scores.core.utils import ensure_model_directory_exists
 import matplotlib.pyplot as plt
 from tensorflow.keras import backend as keras_backend
 keras_backend.clear_session()
@@ -39,6 +42,7 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
     class Parameters(DeepLearningSemanticClassifier.Parameters):
         ...
         multiple_windows_aggregation: str = 'max'
+        number_of_classes: Optional[int] = 2
 
         @field_validator('multiple_windows_aggregation')
         def validate_multiple_windows_aggregation(cls, value):
@@ -80,76 +84,49 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
 
             return sample_embeddings
 
-    def train_model(self):
+    def create_model(self):
         """
-        Train the model on the training data.
+        Create and return the model architecture.
 
-        :return: The trained model.
+        :return: The created model.
         """
-
-        # Determine if it's a binary or multi-class classification task
-        logging.info(f"Is multi-class: [purple][bold]{self.is_multi_class}[/purple][/bold]")
-
-        logging.info(f"train_input_ids shape: {self.train_input_ids.shape}")
-        logging.info(f"train_attention_mask shape: {self.train_attention_mask.shape}")
-        logging.info(f"train_labels shape: {self.train_labels.shape}")
-        logging.info(f"val_input_ids shape: {self.val_input_ids.shape}")
-        logging.info(f"val_attention_mask shape: {self.val_attention_mask.shape}")
-        logging.info(f"val_labels shape: {self.val_labels.shape}")
-
-        #############
-        # Model setup
-
-        logging.info("Model setup: Sliding window")
-
         input_ids = tf.keras.layers.Input(shape=(None, None,), ragged=True, dtype=tf.int32, name="input_ids")
         attention_mask = tf.keras.layers.Input(shape=(None, None,), ragged=True, dtype=tf.int32, name="attention_mask")
         
         self.embeddings_model = TFAutoModel.from_pretrained(self.parameters.embeddings_model)
 
-        # # Set all layers of the embeddings model to non-trainable first
+        # Set all layers of the embeddings model to non-trainable first
         for layer in self.embeddings_model.layers:
             layer.trainable = False
 
-        # # Set only the top few layers to trainable, for fine-tuning
+        # Set only the top few layers to trainable, for fine-tuning
         trainable_layers = self.embeddings_model.layers[-self.parameters.embeddings_model_trainable_layers:]
         for layer in trainable_layers:
             layer.trainable = True
 
-        # # Verify the trainability of each layer
-        for i, layer in enumerate(self.embeddings_model.layers):
-            logging.info(f"Layer {i} ({layer.name}) trainable: {layer.trainable}")
-
         # Create an instance of the custom layer
-        ragged_embeddings_layer = DeepLearningSlidingWindowSemanticClassifier.RaggedEmbeddingsLayer(self.embeddings_model, aggregation=self.parameters.multiple_windows_aggregation)
+        ragged_embeddings_layer = self.RaggedEmbeddingsLayer(self.embeddings_model, aggregation=self.parameters.multiple_windows_aggregation)
 
         # Pass the ragged tensors directly to the custom layer
         last_hidden_state = ragged_embeddings_layer([input_ids, attention_mask])
-        logging.info(f"Shape of last_hidden_state: {last_hidden_state.shape}")
 
         # Get the hidden size from the pre-loaded model
         hidden_size = self.embeddings_model.config.hidden_size
 
         # Use the TimeDistributed layer to apply the dense layer to each window embedding
         window_level_output = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(hidden_size, activation='relu'))(last_hidden_state)
-        logging.info(f"Shape of window_level_output: {window_level_output.shape}")
 
         # Perform max pooling over the window dimension
         aggregated_output = tf.reduce_max(window_level_output, axis=-2)
-        logging.info(f"Shape of aggregated_output: {aggregated_output.shape}")
 
         tanh_output = tf.keras.layers.Dense(hidden_size, activation='tanh', name="tanh_amplifier_1")(aggregated_output)
-        logging.info(f"Shape of tanh_output: {tanh_output.shape}")
 
         dropout = tf.keras.layers.Dropout(rate=self.parameters.dropout_rate, name="dropout")(tanh_output)
-        logging.info(f"Shape of dropout: {dropout.shape}")
 
         # Add the final output layer
-        if self.is_multi_class:
-            number_of_labels = tf.shape(self.train_labels)[1]
-            logging.info(f"Multi-class -- Number of labels: {number_of_labels}")
+        if self.parameters.number_of_classes > 2:
             out = tf.keras.layers.Dense(
-                number_of_labels,
+                self.parameters.number_of_classes,
                 activation='softmax',
                 kernel_regularizer=regularizers.l2(self.parameters.l2_regularization_strength),
                 name="softmax_multiclass_classifier"
@@ -161,16 +138,34 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
                 kernel_regularizer=regularizers.l2(self.parameters.l2_regularization_strength),
                 name="sigmoid_binary_classifier"
             )(dropout)
-        logging.info(f"Shape of final output: {out.shape}")
 
-        self.model = tf.keras.models.Model(inputs=[input_ids, attention_mask], outputs=out)
+        model = tf.keras.models.Model(inputs=[input_ids, attention_mask], outputs=out)
 
-        # Monitor the gradients during training
-        for layer in self.model.layers:
-            if hasattr(layer, 'kernel'):
-                layer.kernel.assign(tf.debugging.assert_all_finite(layer.kernel, message=f"Infinite or NaN values in {layer.name}.kernel"))
-            if hasattr(layer, 'bias'):
-                layer.bias.assign(tf.debugging.assert_all_finite(layer.bias, message=f"Infinite or NaN values in {layer.name}.bias"))
+        return model
+
+    @ensure_model_directory_exists
+    def train_model(self):
+        """
+        Train the model on the training data.
+
+        :return: The trained model.
+        """
+
+        # Determine if it's a binary or multi-class classification task
+        logging.info(f"Is multi-class: [purple][bold]{self.is_multi_class}[/purple][/bold]")
+
+        # Check the number of classes
+        actual_number_of_classes = self.number_of_classes
+        
+        if self.parameters.number_of_classes != actual_number_of_classes:
+            raise ValueError(f"Mismatch in number of classes.  Please set \"number_of_classes: {actual_number_of_classes}\" in the configuration to "
+                             f"Configured: {self.parameters.number_of_classes}, "
+                             f"Actual: {actual_number_of_classes}")
+        else:
+            logging.info(f"Number of classes matches configuration: {self.parameters.number_of_classes}")
+
+        # Create the model
+        self.model = self.create_model()
 
         # Compile the model with the appropriate loss function
         if self.is_multi_class:
@@ -206,10 +201,10 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
 
         # Save the best model weights
         checkpoint = tf.keras.callbacks.ModelCheckpoint(
-            'tmp/best_model_weights.h5',
+            os.path.join(self.model_directory_path(), 'best_model_weights.h5'),
             monitor='val_loss',
             save_best_only=True,
-            save_weights_only=True,  # Save only the model weights
+            save_weights_only=True,
             mode='min',
             verbose=1
         )
@@ -239,10 +234,11 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
         mlflow.log_metric("validation_loss", self.model.history.history['val_loss'][-1])
         mlflow.log_metric("validation_accuracy", self.model.history.history['val_accuracy'][-1])
 
-        # Load the best model weights
-        print("Loading model weights...")
-        self.model.load_weights('tmp/best_model_weights.h5')
+        # After training is complete:
+        inverse_label_map = {int(k): v for k, v in self.inverse_label_map.items()}
+        inverse_label_map_path = os.path.join(self.model_directory_path(), 'inverse_label_map.json')
+        with open(inverse_label_map_path, 'w') as f:
+            json.dump(inverse_label_map, f)
 
-        # Log the best model
-        # print("Logging model weights...")
-        # mlflow.keras.log_model(self.model, "best_model")
+        logging.info(f"Best model weights saved to tmp/best_model_weights.h5")
+        logging.info(f"Inverse label map saved to {inverse_label_map_path}")

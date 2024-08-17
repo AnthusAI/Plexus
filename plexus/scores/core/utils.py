@@ -21,3 +21,11 @@ def ensure_report_directory_exists(func):
             os.makedirs(self.report_directory_path())
         return func(self, *args, **kwargs)
     return wrapper
+
+def ensure_model_directory_exists(func):
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if not os.path.exists(self.model_directory_path()):
+            os.makedirs(self.model_directory_path())
+        return func(self, *args, **kwargs)
+    return wrapper
