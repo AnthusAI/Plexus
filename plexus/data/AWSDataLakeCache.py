@@ -157,7 +157,6 @@ class AWSDataLakeCache(DataCache):
                 metadata = json.loads(content_data['metadata.json'])
 
                 content_row['form_id'] = metadata.get('form_id')
-                content_row['Good Call'] = 'Yes' if metadata.get('good_call') else 'No'
 
                 for score in metadata.get('scores', []):
                     score_name = score['name']
