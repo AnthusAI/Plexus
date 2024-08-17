@@ -26,10 +26,6 @@ os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 # Use the CUDA asynchronous memory allocator to reduce memory fragmentation.
 os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
 
-# Set the global policy for mixed precision
-policy = mixed_precision.Policy('mixed_float16')
-mixed_precision.set_global_policy(policy)
-
 class DeepLearningOneStepSemanticClassifier(DeepLearningSemanticClassifier):
 
     def __init__(self, *args, **parameters):

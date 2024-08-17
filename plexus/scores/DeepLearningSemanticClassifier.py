@@ -21,6 +21,14 @@ from plexus.scores.core.utils import ensure_report_directory_exists
 import matplotlib.pyplot as plt
 import traceback
 
+from tensorflow.keras import mixed_precision
+if tf.test.is_gpu_available():
+    policy = mixed_precision.Policy('mixed_float16')
+    mixed_precision.set_global_policy(policy)
+else:
+    # Use default float32 policy for CPU
+    mixed_precision.set_global_policy('float32')
+
 class DeepLearningSemanticClassifier(Score):
     """
     A text classifier that uses HuggingFace transformer embeddings from language models like BERT.

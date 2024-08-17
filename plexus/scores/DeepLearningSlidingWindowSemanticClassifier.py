@@ -16,7 +16,6 @@ from rich.progress import Progress
 from plexus.CustomLogging import logging, console
 from plexus.scores.Score import Score
 from tensorflow.keras.utils import to_categorical
-from tensorflow.keras import mixed_precision
 from sklearn.preprocessing import LabelBinarizer
 from plexus.scores import Score, DeepLearningSemanticClassifier
 from plexus.scores.core.utils import ensure_model_directory_exists
@@ -29,10 +28,6 @@ os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 
 # Use the CUDA asynchronous memory allocator to reduce memory fragmentation.
 os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
-
-# Set the global policy for mixed precision
-policy = mixed_precision.Policy('mixed_float16')
-mixed_precision.set_global_policy(policy)
 
 class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier):
     """
@@ -90,6 +85,9 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
 
         :return: The created model.
         """
+
+        dtype = tf.float16 if tf.test.is_gpu_available() else tf.float32        
+
         input_ids = tf.keras.layers.Input(shape=(None, None,), ragged=True, dtype=tf.int32, name="input_ids")
         attention_mask = tf.keras.layers.Input(shape=(None, None,), ragged=True, dtype=tf.int32, name="attention_mask")
         
@@ -114,12 +112,12 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
         hidden_size = self.embeddings_model.config.hidden_size
 
         # Use the TimeDistributed layer to apply the dense layer to each window embedding
-        window_level_output = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(hidden_size, activation='relu'))(last_hidden_state)
+        window_level_output = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(hidden_size, activation='relu', dtype=dtype))(last_hidden_state)
 
         # Perform max pooling over the window dimension
         aggregated_output = tf.reduce_max(window_level_output, axis=-2)
 
-        tanh_output = tf.keras.layers.Dense(hidden_size, activation='tanh', name="tanh_amplifier_1")(aggregated_output)
+        tanh_output = tf.keras.layers.Dense(hidden_size, activation='tanh', name="tanh_amplifier_1", dtype=dtype)(aggregated_output)
 
         dropout = tf.keras.layers.Dropout(rate=self.parameters.dropout_rate, name="dropout")(tanh_output)
 
@@ -129,14 +127,16 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
                 self.parameters.number_of_classes,
                 activation='softmax',
                 kernel_regularizer=regularizers.l2(self.parameters.l2_regularization_strength),
-                name="softmax_multiclass_classifier"
+                name="softmax_multiclass_classifier",
+                dtype=dtype
             )(dropout)
         else:
             out = tf.keras.layers.Dense(
                 1,
                 activation='sigmoid',
                 kernel_regularizer=regularizers.l2(self.parameters.l2_regularization_strength),
-                name="sigmoid_binary_classifier"
+                name="sigmoid_binary_classifier",
+                dtype=dtype
             )(dropout)
 
         model = tf.keras.models.Model(inputs=[input_ids, attention_mask], outputs=out)
