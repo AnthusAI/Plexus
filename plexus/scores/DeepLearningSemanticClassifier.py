@@ -13,9 +13,8 @@ from transformers import AutoTokenizer, TFAutoModel
 from sklearn.model_selection import train_test_split
 from collections import Counter
 from rich.table import Table
-from rich.progress import Progress
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from plexus.CustomLogging import logging, console
 from plexus.scores.core.utils import ensure_report_directory_exists
 import matplotlib.pyplot as plt
@@ -106,12 +105,9 @@ class DeepLearningSemanticClassifier(Score):
         def encode_texts_parallel(texts, maximum_length):
             encoded_texts = []
             with ThreadPoolExecutor() as executor:
-                with Progress() as progress:
-                    task = progress.add_task("Encoding texts...", total=len(texts))
-                    futures = [executor.submit(encode_single_text, text, maximum_length) for text in texts]
-                    for future in futures:
-                        encoded_texts.append(future.result())
-                        progress.advance(task)
+                futures = [executor.submit(encode_single_text, text, maximum_length) for text in texts]
+                for future in tqdm(futures, total=len(texts), desc="Encoding texts"):
+                    encoded_texts.append(future.result())
             return tf.concat(encoded_texts, axis=0)
 
         encoded_texts = encode_texts_parallel(texts, self.parameters.maximum_tokens_per_window)
@@ -261,12 +257,9 @@ class DeepLearningSemanticClassifier(Score):
         def encode_texts_parallel(tokenizer, texts, maximum_length):
             encoded_texts = []
             with ThreadPoolExecutor() as executor:
-                with Progress() as progress:
-                    task = progress.add_task("Encoding texts...", total=len(texts))
-                    futures = [executor.submit(encode_single_text, tokenizer, text, maximum_length) for text in texts]
-                    for future in futures:
-                        encoded_texts.append(future.result())
-                        progress.advance(task)
+                futures = [executor.submit(encode_single_text, tokenizer, text, maximum_length) for text in texts]
+                for future in tqdm(as_completed(futures), total=len(texts), desc="Encoding texts"):
+                    encoded_texts.append(future.result())
             return tf.concat(encoded_texts, axis=0)
 
         def encode_windows_parallel(tokenizer, windows, maximum_length):
