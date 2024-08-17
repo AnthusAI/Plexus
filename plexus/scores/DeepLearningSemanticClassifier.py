@@ -517,11 +517,11 @@ class DeepLearningSemanticClassifier(Score):
     def load_weights_and_label_map(self):
         if not hasattr(self, 'model') or self.model is None:
             self.model = self.create_model()
-            weights_path = 'tmp/best_model_weights.h5'
+            weights_path = os.path.join(self.model_directory_path(), 'best_model_weights.h5')
             self.model.load_weights(weights_path)
 
         if not hasattr(self, 'inverse_label_map') or self.inverse_label_map is None:
-            inverse_label_map_path = 'tmp/inverse_label_map.json'
+            inverse_label_map_path = os.path.join(self.model_directory_path(), 'inverse_label_map.json')
             with open(inverse_label_map_path, 'r') as f:
                 self.inverse_label_map = json.load(f)
             # Ensure keys are integers
