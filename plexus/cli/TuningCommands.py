@@ -177,7 +177,7 @@ def generate_examples(scorecard_name, score_name,
                         
                         # Use the example_refinement_template to refine the answer, if there is one.
                         example_refinement_nodes = score_instance.get_example_refinement_templates()
-                        if example_refinement_nodes:
+                        if example_refinement_nodes and example_refinement_nodes[0]:
                             model = ChatOpenAI(model_name=completion_model)
                             class CompletionOutputParser(BaseOutputParser[dict]):
                                 def parse(self, output: str) -> dict:
@@ -185,10 +185,14 @@ def generate_examples(scorecard_name, score_name,
                                         cleaned_text = re.sub(r'[^\w\s]', '', text)
                                         words = cleaned_text.split()
                                         return words[-1] if words else ""
+                                    
+                                    def extract_last_line(text):
+                                        lines = text.split("\n")
+                                        return lines[-1] if lines else ""
 
-                                    answer = extract_last_word(output)
                                     return {
-                                        "answer": answer,
+                                        "last_word": extract_last_word(output),
+                                        "last_line": extract_last_line(output),
                                         "completion": output.strip(),
                                     }
                             output_parser = CompletionOutputParser()
@@ -214,9 +218,11 @@ def generate_examples(scorecard_name, score_name,
                             )
                             print(Columns([original_panel, refined_panel]))
 
-                            if refined_result['answer'].lower() == result[0].value.strip().lower():
+                            if (refined_result['last_word'].lower() == result[0].value.strip().lower()) or \
+                                (refined_result['last_line'].lower() == result[0].value.strip().lower()) or \
+                                (refined_result['last_line'].lower() in result[0].explanation.strip().lower().split('\n')[-1]):
                                 if verbose:
-                                    logging.info(f"Refined answer '{refined_result['answer']}' matches original answer '{result[0].value}'.")
+                                    logging.info(f"Refined answer '{refined_result['completion']}' matches original answer '{result[0].value}'.")
                                 return refined_result['completion']
                             else:
                                 if verbose:
