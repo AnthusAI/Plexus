@@ -112,10 +112,28 @@ def generate_examples(scorecard_name, score_name,
         score_instance.load_data(data=score_configuration['data'], fresh=fresh)
         score_instance.process_data()
 
-        num_training_samples = maximum_number
-        num_validation_samples = int(num_training_samples * (1 - train_ratio) / train_ratio)
+        num_training_samples = int(maximum_number * train_ratio)
+        num_validation_samples = maximum_number - num_training_samples
 
         logging.info(f"Aiming for {num_training_samples} training samples and {num_validation_samples} validation samples.")
+
+        output_dir = get_output_dir(scorecard_name, current_score_name)
+        os.makedirs(output_dir, exist_ok=True)
+
+        train_file_path = get_file_path(output_dir, "training")
+        val_file_path = get_file_path(output_dir, "validation")
+        train_id_file_path = get_id_file_path(output_dir, "training")
+        val_id_file_path = get_id_file_path(output_dir, "validation")
+
+        existing_train_samples = sum(1 for _ in open(train_file_path)) if os.path.exists(train_file_path) else 0
+        existing_val_samples = sum(1 for _ in open(val_file_path)) if os.path.exists(val_file_path) else 0
+
+        logging.info(f"Found {existing_train_samples} existing training samples and {existing_val_samples} existing validation samples.")
+
+        train_samples_to_generate = max(0, num_training_samples - existing_train_samples)
+        val_samples_to_generate = max(0, num_validation_samples - existing_val_samples)
+
+        logging.info(f"Will generate {train_samples_to_generate} additional training samples and {val_samples_to_generate} additional validation samples.")
 
         total_rows = len(score_instance.dataframe)
         row_indices = set(range(total_rows))
@@ -253,22 +271,19 @@ def generate_examples(scorecard_name, score_name,
             verbose=verbose
         )
 
-        # Open files at the beginning
-        output_dir = get_output_dir(scorecard_name, current_score_name)
-        os.makedirs(output_dir, exist_ok=True)
-        
-        train_file = open(get_file_path(output_dir, "training"), "w")
-        val_file = open(get_file_path(output_dir, "validation"), "w")
-        train_id_file = open(get_id_file_path(output_dir, "training"), "w")
-        val_id_file = open(get_id_file_path(output_dir, "validation"), "w")
+        train_file = open(train_file_path, "a")
+        val_file = open(val_file_path, "a")
+        train_id_file = open(train_id_file_path, "a")
+        val_id_file = open(val_id_file_path, "a")
 
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
                 futures = []
                 processed_count = 0
+                total_samples_to_generate = train_samples_to_generate + val_samples_to_generate
 
-                while row_indices and processed_count < maximum_number:
-                    batch_size = min(threads, len(row_indices), maximum_number - processed_count)
+                while row_indices and processed_count < total_samples_to_generate:
+                    batch_size = min(threads, len(row_indices), total_samples_to_generate - processed_count)
                     batch_indices = sample(row_indices, batch_size)
                     row_indices -= set(batch_indices)
 
@@ -281,7 +296,7 @@ def generate_examples(scorecard_name, score_name,
                         if result is not None:
                             message, content_id = result['messages'], result['content_id']
                             
-                            if len(training_data) < num_training_samples:
+                            if existing_train_samples + len(training_data) < num_training_samples:
                                 json.dump({"messages": message}, train_file)
                                 train_file.write("\n")
                                 train_file.flush()
@@ -289,7 +304,7 @@ def generate_examples(scorecard_name, score_name,
                                 train_id_file.flush()
                                 training_data.append(message)
                                 training_ids.append(content_id)
-                            elif len(validation_data) < num_validation_samples:
+                            elif existing_val_samples + len(validation_data) < num_validation_samples:
                                 json.dump({"messages": message}, val_file)
                                 val_file.write("\n")
                                 val_file.flush()
@@ -299,13 +314,13 @@ def generate_examples(scorecard_name, score_name,
                                 validation_ids.append(content_id)
                             
                             processed_count += 1
-                            if processed_count >= maximum_number:
+                            if processed_count >= total_samples_to_generate:
                                 break
 
                     futures = []  # Clear processed futures
 
-            logging.info(f"Number of training samples: {len(training_data)}")
-            logging.info(f"Number of validation samples: {len(validation_data)}")
+            logging.info(f"Total training samples: {existing_train_samples + len(training_data)}")
+            logging.info(f"Total validation samples: {existing_val_samples + len(validation_data)}")
 
         finally:
             # Close files
