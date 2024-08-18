@@ -112,8 +112,8 @@ def generate_examples(scorecard_name, score_name,
         score_instance.load_data(data=score_configuration['data'], fresh=fresh)
         score_instance.process_data()
 
-        num_training_samples = int(maximum_number * train_ratio)
-        num_validation_samples = maximum_number - num_training_samples
+        num_training_samples = maximum_number
+        num_validation_samples = round(maximum_number * (1 - train_ratio))
 
         logging.info(f"Aiming for {num_training_samples} training samples and {num_validation_samples} validation samples.")
 
@@ -201,6 +201,14 @@ def generate_examples(scorecard_name, score_name,
                             prompt = PromptTemplate(template=example_refinement_nodes[0], input_variables=["reformat"])
                             refinement_chain = prompt | model | output_parser
                             refined_result = refinement_chain.invoke({"reformat": result[0].explanation})
+                            refined_result['completion'] = refined_result['completion'].replace('\n\n', '\n').strip()
+
+                            # Remove quotes from the last line of the refined completion
+                            lines = refined_result['completion'].split('\n')
+                            last_line = lines[-1].strip()
+                            if last_line.startswith('"') and last_line.endswith('"'):
+                                lines[-1] = last_line[1:-1]
+                            refined_result['completion'] = '\n'.join(lines)
 
                             original_panel = Panel(
                                 result[0].explanation,
