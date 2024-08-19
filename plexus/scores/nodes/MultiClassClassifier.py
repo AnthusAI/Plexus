@@ -3,6 +3,8 @@ from pydantic import Field
 from typing import List, Dict, Any, Optional
 from langgraph.graph import StateGraph
 from langchain_core.output_parsers import BaseOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import AIMessage, HumanMessage
 from plexus.scores.nodes.BaseNode import BaseNode
 from plexus.CustomLogging import logging
 from rapidfuzz import process, fuzz
@@ -16,6 +18,7 @@ class MultiClassClassifier(BaseNode):
         fuzzy_match: bool = Field(default=False)
         fuzzy_match_threshold: float = Field(default=0.8)
         valid_classes: List[str] = Field(default_factory=list)
+        explanation_message: Optional[str] = None
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
@@ -57,16 +60,14 @@ class MultiClassClassifier(BaseNode):
                 clean_class = class_name.lower()
                 if clean_class in start_words or clean_class in end_words:
                     return {
-                        "classification": class_name,
-                        "explanation": output
+                        "classification": class_name
                     }
 
             # Check for exact matches in the entire output
             for class_name in self.valid_classes:
                 if class_name.lower() in cleaned_output:
                     return {
-                        "classification": class_name,
-                        "explanation": output
+                        "classification": class_name
                     }
 
             # Only use fuzzy matching if the parameter is set to True
@@ -76,14 +77,12 @@ class MultiClassClassifier(BaseNode):
                 
                 if score >= self.fuzzy_match_threshold * 100:  # Convert threshold to percentage
                     return {
-                        "classification": best_match,
-                        "explanation": output
+                        "classification": best_match
                     }
             
             # If no valid class is found
             return {
-                "classification": "unknown",
-                "explanation": output
+                "classification": "unknown"
             }
 
     def get_classifier_node(self) -> FunctionType:
@@ -94,14 +93,28 @@ class MultiClassClassifier(BaseNode):
         fuzzy_match_threshold = self.parameters.fuzzy_match_threshold
 
         def classifier_node(state):
-            prompt = prompt_templates[0]
-
-            chain = prompt | model | self.ClassificationOutputParser(
+            initial_prompt = prompt_templates[0]
+            initial_chain = initial_prompt | model | self.ClassificationOutputParser(
                 valid_classes=valid_classes,
                 fuzzy_match=fuzzy_match,
                 fuzzy_match_threshold=fuzzy_match_threshold
             )
-            return chain.invoke({"text": state.text})
+            result = initial_chain.invoke({"text": state.text})
+
+            if self.parameters.explanation_message:
+                explanation_prompt = ChatPromptTemplate.from_messages([
+                    HumanMessage(content=state.text),
+                    AIMessage(content=f"Classification: {result['classification']}"),
+                    HumanMessage(content=self.parameters.explanation_message)
+                ])
+                explanation_chain = explanation_prompt | model
+                explanation = explanation_chain.invoke({})
+                result["explanation"] = explanation.content
+            else:
+                full_response = model.invoke(initial_prompt.format(text=state.text))
+                result["explanation"] = full_response.content
+
+            return result
 
         return classifier_node
 
