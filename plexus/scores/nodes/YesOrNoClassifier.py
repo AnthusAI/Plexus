@@ -7,12 +7,16 @@ from langchain_core.prompts import ChatPromptTemplate
 from plexus.LangChainUser import LangChainUser
 from plexus.scores.LangGraphScore import LangGraphScore
 from plexus.scores.nodes.BaseNode import BaseNode
-from typing import Type, Optional, Dict, Any
+from typing import Type, Optional, Dict, Any, List
+from langchain_core.messages import AIMessage, HumanMessage
 
 class YesOrNoClassifier(BaseNode):
     """
     A node that classifies text input as 'yes' or 'no' based on the provided prompt.
     """
+
+    class Parameters(BaseNode.Parameters):
+        explanation_message: Optional[str] = None
 
     def __init__(self, **parameters):
         LangChainUser.__init__(self, **parameters)
@@ -34,33 +38,39 @@ class YesOrNoClassifier(BaseNode):
             cleaned_output = ''.join(char.lower() for char in output if char.isalnum() or char.isspace())
             words = cleaned_output.split()
             
-            while words:
-                last_word = words.pop()
-                if last_word == "yes":
-                    return {
-                        "classification": "yes",
-                        "explanation": output
-                    }
-                elif last_word == "no":
-                    return {
-                        "classification": "no",
-                        "explanation": output
-                    }
+            for word in words:
+                if word == "yes":
+                    return {"classification": "yes"}
+                elif word == "no":
+                    return {"classification": "no"}
             
-            return {
-                "classification": "unknown",
-                "explanation": output
-            }
+            return {"classification": "unknown"}
 
     def get_classifier_node(self) -> FunctionType:
         model = self.model
         prompt_templates = self.get_prompt_templates()
 
         def classifier_node(state):
-            prompt = prompt_templates[0]
+            initial_prompt = prompt_templates[0]
+            initial_chain = initial_prompt | model | self.ClassificationOutputParser()
+            result = initial_chain.invoke({"text": state.text})
 
-            chain = prompt | model | self.ClassificationOutputParser()
-            return chain.invoke({"text": state.text})
+            if self.parameters.explanation_message:
+                explanation_messages = ChatPromptTemplate(
+                    messages=[
+                        HumanMessage(initial_prompt.format(text=state.text)),
+                        AIMessage(content=result['classification']),
+                        HumanMessage(content=self.parameters.explanation_message)
+                    ]
+                )
+                explanation_chain = explanation_messages | model
+                explanation = explanation_chain.invoke({})
+                result["explanation"] = explanation.content
+            else:
+                full_response = model.invoke(initial_prompt.format(text=state.text))
+                result["explanation"] = full_response.content
+
+            return result
 
         return classifier_node
 
