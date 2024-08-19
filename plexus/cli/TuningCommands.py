@@ -46,12 +46,13 @@ def get_id_file_path(output_dir, file_type):
 @click.option('--generate-completions', is_flag=True, help='Generate completions using an LLM.')
 @click.option('--completion-model', default='gpt-4o-mini-2024-07-18', help='The model to use for generating completions.')
 @click.option('--retry-mismatches', is_flag=True, help='Retry when generated answer does not match the label.')
+@click.option('--clean-existing', is_flag=True, help='Clean existing JSON-L files before generating new ones.')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 @click.option('--threads', type=int, default=20, help='Number of threads to use.')
 @click.option('--verbose', is_flag=True, help='Verbose output.')
 def generate_examples(scorecard_name, score_name,
                       maximum_number, train_ratio, generate_completions,
-                      completion_model, retry_mismatches, fresh, verbose, threads):
+                      completion_model, retry_mismatches, clean_existing, fresh, verbose, threads):
     """
     Generate JSON-L files that include a specified number of examples, using the prompt templates
     from the score configuration combined with data and ground-truth labels.
@@ -125,6 +126,13 @@ def generate_examples(scorecard_name, score_name,
         train_id_file_path = get_id_file_path(output_dir, "training")
         val_id_file_path = get_id_file_path(output_dir, "validation")
 
+        # Clean existing JSON-L files if requested
+        if clean_existing:
+            for file_path in [train_file_path, val_file_path, train_id_file_path, val_id_file_path]:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    logging.info(f"Removed existing file: {file_path}")
+
         existing_train_samples = sum(1 for _ in open(train_file_path)) if os.path.exists(train_file_path) else 0
         existing_val_samples = sum(1 for _ in open(val_file_path)) if os.path.exists(val_file_path) else 0
 
@@ -185,12 +193,19 @@ def generate_examples(scorecard_name, score_name,
                                         cleaned_text = re.sub(r'[^\w\s]', '', text)
                                         words = cleaned_text.split()
                                         return words[-1] if words else ""
-                                    
                                     def extract_last_line(text):
                                         lines = text.split("\n")
                                         return lines[-1] if lines else ""
-
+                                    def extract_first_word(text):
+                                        cleaned_text = re.sub(r'[^\w\s]', '', text)
+                                        words = cleaned_text.split()
+                                        return words[0] if words else ""
+                                    def extract_first_line(text):
+                                        lines = text.split("\n")
+                                        return lines[0] if lines else ""
                                     return {
+                                        "first_word": extract_first_word(output),
+                                        "first_line": extract_first_line(output),
                                         "last_word": extract_last_word(output),
                                         "last_line": extract_last_line(output),
                                         "completion": output.strip(),
@@ -257,13 +272,22 @@ def generate_examples(scorecard_name, score_name,
                 # Determine the correct score name
                 score_name = score_instance.parameters.score_name
                 if hasattr(score_instance.parameters, 'label_field') and score_instance.parameters.label_field:
-                    score_name = f"{score_name} {score_instance.parameters.label_field}"
+                    score_name = f"{score_name} {score_instance.get_label_score_name()}"
 
                 completion = generate_completion_with_retry(score_instance, row, row[score_name])
                 if completion is None:
                     return None
             else:
-                completion = row[score_instance.parameters.score_name]
+
+                if 'completion_template' in score_instance.parameters.graph[0]:
+                    prompt = PromptTemplate(
+                        input_types     = {"labels" : dict},
+                        input_variables = ["labels"],
+                        template        = score_instance.parameters.graph[0]['completion_template'])
+                    completion = prompt.format(labels=row)
+                else:
+                    completion = row[score_instance.get_label_score_name()]
+                logging.info(f"Completion: {completion}")
 
             # Construct the messages for the JSON-L file without the hint
             messages = [
@@ -310,7 +334,7 @@ def generate_examples(scorecard_name, score_name,
                         if result is not None:
                             message, content_id = result['messages'], result['content_id']
                             
-                            if existing_train_samples + len(training_data) < num_training_samples:
+                            if len(training_data) < train_samples_to_generate:
                                 json.dump({"messages": message}, train_file)
                                 train_file.write("\n")
                                 train_file.flush()
@@ -318,7 +342,7 @@ def generate_examples(scorecard_name, score_name,
                                 train_id_file.flush()
                                 training_data.append(message)
                                 training_ids.append(content_id)
-                            elif existing_val_samples + len(validation_data) < num_validation_samples:
+                            elif len(validation_data) < val_samples_to_generate:
                                 json.dump({"messages": message}, val_file)
                                 val_file.write("\n")
                                 val_file.flush()
