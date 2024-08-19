@@ -57,7 +57,8 @@ setup(
         'langchain-openai==0.1.14',
         'langchain-google-vertexai==1.0.6',
         'openpyxl==3.1.5',
-        'rapidfuzz==3.9.4'
+        'rapidfuzz==3.9.4',
+        'datasets'
     ],
     dependency_links=[
         'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator'
