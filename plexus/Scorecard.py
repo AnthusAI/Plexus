@@ -191,7 +191,8 @@ class Scorecard:
 
             score_configuration.update({
                 'scorecard_name': self.name,
-                'score_name': score_name
+                'score_name': score_name,
+                'model_name': self.get_model_name(score_name)
             })
             score_instance = score_class(**score_configuration)
 
@@ -250,3 +251,11 @@ class Scorecard:
             'output_cost': self.output_cost,
             'total_cost': self.total_cost
         }
+
+    def get_model_name(self, score_name=None):
+        """Return the model name used for a specific score or the scorecard."""
+        if score_name and score_name in self.scores:
+            score_config = self.scores[score_name]
+            return score_config.get('model_name') or score_config.get('parameters', {}).get('model_name')
+        
+        return self.properties.get('model_name') or self.properties.get('parameters', {}).get('model_name') or 'Unknown'
