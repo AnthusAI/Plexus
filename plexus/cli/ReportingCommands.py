@@ -33,6 +33,10 @@ def index(scorecard_name):
     scorecard_folder = os.path.join('.', 'scorecards', scorecard_name)
     scorecard_instance = scorecard_class(scorecard_name=scorecard_name)
     report_folder = os.path.join('.', 'reports', scorecard_class.name.replace(' ', '_'))
+    
+    # Create the report folder if it doesn't exist
+    os.makedirs(report_folder, exist_ok=True)
+    
     report_filename = os.path.join(report_folder, 'index.html')
 
     logging.info(f"Using scorecard key [purple][b]{scorecard_name}[/b][/purple] with class name [purple][b]{scorecard_instance.__class__.__name__}[/b][/purple]")
