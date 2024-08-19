@@ -388,6 +388,16 @@ class AccuracyExperiment(Experiment):
         # Generate the Excel report
         self.generate_excel_report(report_folder_path, results)
 
+        # Log the model names for all scores as a JSON object
+        model_names = {}
+        for score_name in self.score_names():
+            model_name = self.scorecard.get_model_name(score_name)
+            model_names[score_name] = model_name
+            logging.info(f"Model name for {score_name}: {model_name}")
+        
+        mlflow.log_param("model_names", json.dumps(model_names))
+        logging.info(f"Logged model names: {model_names}")
+
     # Function to classify a single text and collect metrics
     @retry(
         wait=wait_fixed(2),          # wait 2 seconds between attempts
