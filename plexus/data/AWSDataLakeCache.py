@@ -186,15 +186,13 @@ class AWSDataLakeCache(DataCache):
             return None
 
     def load_dataframe(self, *, data, fresh=False):
-        dataframes = []
-        
         searches = data.get('searches')
         queries = data.get('queries')
         item_list_filename = searches[0].get('item_list_filename', None) if searches else None
         column_name = searches[0].get('column_name', None) if searches else None
         metadata_item = searches[0].get('metadata_item', None) if searches else None
 
-        def load_values_from_file(item_list_filename, column_name):
+        def load_values_and_dataframe_from_file(item_list_filename, column_name):
             if item_list_filename.endswith('.csv'):
                 df = pd.read_csv(item_list_filename)
             elif item_list_filename.endswith('.xlsx'):
@@ -205,12 +203,14 @@ class AWSDataLakeCache(DataCache):
             if column_name not in df.columns:
                 raise ValueError(f"Column '{column_name}' not found in the file.")
             
-            return df[column_name].dropna().unique().tolist()
+            values = df[column_name].dropna().unique().tolist()
+            return values, df
 
         if item_list_filename and column_name:
-            values = load_values_from_file(item_list_filename, column_name)
+            values, excel_df = load_values_and_dataframe_from_file(item_list_filename, column_name)
         else:
             values = None
+            excel_df = None
 
         # Create a unique filename for the cached dataframe based on queries or item list filename
         if values:
@@ -244,9 +244,11 @@ class AWSDataLakeCache(DataCache):
         all_keys = set()
         content_data = []
 
-        def process_and_collect_keys(scorecard_id, content_id):
+        def process_and_collect_keys(scorecard_id, content_id, extra_data=None):
             content_row = self.process_content_item(scorecard_id, content_id)
             if content_row:
+                if extra_data:
+                    content_row.update(extra_data)
                 all_keys.update(content_row.keys())
                 return content_row
             return None
@@ -259,9 +261,26 @@ class AWSDataLakeCache(DataCache):
                 return pd.DataFrame()
 
             thread_count = 64
-
             with ThreadPoolExecutor(max_workers=thread_count) as executor:
-                future_to_row = {executor.submit(process_and_collect_keys, row['Data'][1]['VarCharValue'], row['Data'][0]['VarCharValue']): row for row in all_query_results}
+                future_to_row = {}
+                for row in all_query_results:
+                    try:
+                        content_id = row['Data'][0]['VarCharValue']
+                        scorecard_id = row['Data'][1]['VarCharValue']
+                        extra_data = None
+                        if excel_df is not None:
+                            first_column = excel_df.columns[0]
+                            matching_rows = excel_df[excel_df[first_column] == int(content_id)]
+                            if not matching_rows.empty:
+                                extra_data = matching_rows.iloc[0].to_dict()
+                            else:
+                                logging.warning(f"No matching row found in Excel for content_id: {content_id}")
+                        future = executor.submit(process_and_collect_keys, scorecard_id, content_id, extra_data)
+                        future_to_row[future] = row
+                    except IndexError as e:
+                        logging.error(f"IndexError occurred while processing row: {row}. Error: {str(e)}")
+                    except KeyError as e:
+                        logging.error(f"KeyError occurred while processing row: {row}. Error: {str(e)}")
                 for future in concurrent.futures.as_completed(future_to_row):
                     content_row = future.result()
                     if content_row:
@@ -279,9 +298,9 @@ class AWSDataLakeCache(DataCache):
                 main_value = query_params.get('value')
                 calibration_answers_match = query_params.get('calibration_answers_match')
                 calibration_comments_match = query_params.get('calibration_comments_match')
-                minimum_calibrations = query_params.get('minimum_calibrations', 0)
-                minimum_good_call_confidence = query_params.get('minimum_good_call_confidence', 0)
-                minimum_confidence = query_params.get('minimum_confidence', 0)
+                minimum_calibrations = query_params.get('minimum_calibrations', None)
+                minimum_good_call_confidence = query_params.get('minimum_good_call_confidence', None)
+                minimum_confidence = query_params.get('minimum_confidence', None)
                 number = query_params.get('number')
 
                 query = f"""
@@ -296,18 +315,23 @@ class AWSDataLakeCache(DataCache):
                 
                 if main_value:
                     query += f" AND score.answer = '{main_value}'"
-                
-                if minimum_confidence:
-                    query += f" AND score.confidence >= {minimum_confidence}"
-                
+                elif main_score_id is not None:
+                    query += f" AND score.answer IS NOT NULL"
+                                
                 if calibration_answers_match is not None:
                     query += f" AND score.calibration_answers_match = {str(calibration_answers_match).lower()}"
                 
                 if calibration_comments_match is not None:
                     query += f" AND score.calibration_comments_match = {str(calibration_comments_match).lower()}"
                 
-                query += f" AND calibrations >= {minimum_calibrations}"
-                query += f" AND good_call_confidence >= {minimum_good_call_confidence}"
+                if minimum_confidence:
+                    query += f" AND score.confidence >= {minimum_confidence}"
+
+                if minimum_calibrations:
+                    query += f" AND calibrations >= {minimum_calibrations}"
+                
+                if minimum_good_call_confidence:
+                    query += f" AND good_call_confidence >= {minimum_good_call_confidence}"
                 
                 if number:
                     query += f" LIMIT {number}"
@@ -320,34 +344,40 @@ class AWSDataLakeCache(DataCache):
                 thread_count = 64
 
                 with ThreadPoolExecutor(max_workers=thread_count) as executor:
-                    future_to_report = {executor.submit(process_and_collect_keys, scorecard_id, report_id): report_id for report_id in report_ids}
+                    future_to_report = {}
+                    for report_id in report_ids:
+                        try:
+                            extra_data = None
+                            if excel_df is not None:
+                                first_column = excel_df.columns[0]
+                                matching_rows = excel_df[excel_df[first_column] == int(report_id)]
+                                if not matching_rows.empty:
+                                    extra_data = matching_rows.iloc[0].to_dict()
+                                else:
+                                    logging.warning(f"No matching row found in Excel for report_id: {report_id}")
+                            future = executor.submit(process_and_collect_keys, scorecard_id, report_id, extra_data)
+                            future_to_report[future] = report_id
+                        except IndexError as e:
+                            logging.error(f"IndexError occurred while processing report_id: {report_id}. Error: {str(e)}")
+                        except KeyError as e:
+                            logging.error(f"KeyError occurred while processing report_id: {report_id}. Error: {str(e)}")
                     for future in as_completed(future_to_report):
                         content_row = future.result()
                         if content_row:
                             content_data.append(content_row)
                             all_keys.update(content_row.keys())
 
-        # Ensure all rows have all keys
-        for row in content_data:
-            for key in all_keys:
-                if key not in row:
-                    row[key] = None
-
         # Create DataFrame with all columns
         dataframe = pd.DataFrame(content_data, columns=list(all_keys))
-        dataframes.append(dataframe)
-
-        combined_dataframe = pd.concat(dataframes, ignore_index=True)
-        logging.info(f"Loaded dataframe with {len(combined_dataframe)} rows and columns: {', '.join(combined_dataframe.columns)}")
 
         # Cache the dataframe
         dataframe_storage_directory = os.path.join(self.local_cache_directory, 'dataframes')
         os.makedirs(dataframe_storage_directory, exist_ok=True)
         dataframe_file_path = os.path.join(dataframe_storage_directory, cached_dataframe_filename)
-        combined_dataframe.to_hdf(dataframe_file_path, key='df', mode='w')
+        dataframe.to_hdf(dataframe_file_path, key='df', mode='w')
         logging.info(f"Dataframe saved to {dataframe_file_path}")
 
-        logging.info(f"Final dataframe columns: {', '.join(combined_dataframe.columns)}")
-        logging.info(f"Dataframe shape: {combined_dataframe.shape}")
+        logging.info(f"Final dataframe columns: {', '.join(dataframe.columns)}")
+        logging.info(f"Dataframe shape: {dataframe.shape}")
 
-        return combined_dataframe
+        return dataframe
