@@ -284,7 +284,8 @@ def generate_examples(scorecard_name, score_name,
                         input_types     = {"labels" : dict},
                         input_variables = ["labels"],
                         template        = score_instance.parameters.graph[0]['completion_template'])
-                    completion = prompt.format(labels=row)
+                    completion = prompt.format(labels=row).strip()
+                    completion = re.sub(r'\s+$', '', completion)
                 else:
                     completion = row[score_instance.get_label_score_name()]
                 logging.info(f"Completion: {completion}")
