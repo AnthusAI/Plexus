@@ -1,4 +1,5 @@
 from types import FunctionType
+from time import sleep
 import pydantic
 from pydantic import Field
 from langgraph.graph import StateGraph, END
@@ -17,6 +18,7 @@ class YesOrNoClassifier(BaseNode):
 
     class Parameters(BaseNode.Parameters):
         explanation_message: Optional[str] = None
+        maximum_retry_count: int = Field(default=40, description="Maximum number of retries for classification")
 
     def __init__(self, **parameters):
         LangChainUser.__init__(self, **parameters)
@@ -32,6 +34,7 @@ class YesOrNoClassifier(BaseNode):
     class GraphState(BaseNode.GraphState):
         classification: Optional[str]
         explanation: Optional[str]
+        retry_count: Optional[int] = Field(default=0, description="Number of retry attempts")
 
     class ClassificationOutputParser(BaseOutputParser[dict]):
         def parse(self, output: str) -> Dict[str, Any]:
@@ -40,9 +43,15 @@ class YesOrNoClassifier(BaseNode):
             
             for word in words:
                 if word == "yes":
-                    return {"classification": "yes"}
+                    return {
+                        "classification": "yes",
+                        "explanation": None
+                    }
                 elif word == "no":
-                    return {"classification": "no"}
+                    return {
+                        "classification": "no",
+                        "explanation": output
+                    }
             
             return {"classification": "unknown"}
 
@@ -52,25 +61,37 @@ class YesOrNoClassifier(BaseNode):
 
         def classifier_node(state):
             initial_prompt = prompt_templates[0]
-            initial_chain = initial_prompt | model | self.ClassificationOutputParser()
-            result = initial_chain.invoke({"text": state.text})
+            retry_count = 0 if state.retry_count is None else state.retry_count
 
-            if self.parameters.explanation_message:
-                explanation_messages = ChatPromptTemplate(
-                    messages=[
-                        HumanMessage(initial_prompt.format(text=state.text)),
-                        AIMessage(content=result['classification']),
-                        HumanMessage(content=self.parameters.explanation_message)
-                    ]
-                )
-                explanation_chain = explanation_messages | model
-                explanation = explanation_chain.invoke({})
-                result["explanation"] = explanation.content
-            else:
-                full_response = model.invoke(initial_prompt.format(text=state.text))
-                result["explanation"] = full_response.content
+            while retry_count < self.parameters.maximum_retry_count:
+                initial_chain = initial_prompt | model | self.ClassificationOutputParser()
+                result = initial_chain.invoke({
+                    "text": state.text,
+                    "retry_feedback": f"You responded with {state.explanation}, but we need a \"Yes\" or a \"No\". Please try again. This is attempt {retry_count + 1} of {self.parameters.maximum_retry_count}." if retry_count > 0 else ""
+                })
 
-            return result
+                if result["classification"] != "unknown":
+                    if self.parameters.explanation_message:
+                        explanation_messages = ChatPromptTemplate(
+                            messages=[
+                                HumanMessage(initial_prompt.format(text=state.text)),
+                                AIMessage(content=result['classification']),
+                                HumanMessage(content=self.parameters.explanation_message)
+                            ]
+                        )
+                        explanation_chain = explanation_messages | model
+                        explanation = explanation_chain.invoke({})
+                        result["explanation"] = explanation.content
+                    else:
+                        full_response = model.invoke(initial_prompt.format(text=state.text))
+                        result["explanation"] = full_response.content
+
+                    return {**state.dict(), **result, "retry_count": retry_count}
+
+                retry_count += 1
+                sleep(1)
+
+            return {**state.dict(), "classification": "unknown", "explanation": "Maximum retries reached", "retry_count": retry_count}
 
         return classifier_node
 
