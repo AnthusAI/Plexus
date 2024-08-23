@@ -165,12 +165,14 @@ def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, scor
         logging.info(f"Number of samples after filtering: {len(samples)}")
 
     score_name_column_name = score_name
+    if score_config.get('label_score_name'):
+        score_name = score_config['label_score_name']
     if score_config.get('label_field'):
         score_name_column_name = f"{score_name} {score_config['label_field']}"
 
     return [{
         'text': sample.get('text', ''),
-        f'{score_name}_label': sample.get(score_name_column_name, ''),
+        f'{score_name_column_name}_label': sample.get(score_name_column_name, ''),
         'content_id': sample.get('content_id', ''),
         'metadata': {k: v for k, v in sample.items() if k not in ['text', score_name, 'content_id']}
     } for sample in samples]

@@ -423,13 +423,15 @@ class AccuracyExperiment(Experiment):
         # Extract human labels for each question from the DataFrame row
         human_labels = {}
         for question_name in scorecard_results.keys():
-            label_column = question_name + '_label'
+            score_instance = Score.from_name(self.scorecard_name, question_name)
+            label_score_name = score_instance.get_label_score_name()
+            label_column = label_score_name + '_label'
             if label_column in row.index:
                 human_labels[question_name] = row[label_column]
-            elif question_name in row.index:
-                human_labels[question_name] = row[question_name]
+            elif label_score_name in row.index:
+                human_labels[question_name] = row[label_score_name]
             else:
-                logging.warning(f"Neither '{question_name}' nor '{label_column}' found in the row. Available columns: {row.index.tolist()}")
+                logging.warning(f"Neither '{question_name}' nor '{label_score_name}' found in the row. Available columns: {row.index.tolist()}")
                 human_labels[question_name] = 'N/A'
 
         for question_name in scorecard_results.keys():
