@@ -16,10 +16,6 @@ class YesOrNoClassifier(BaseNode):
     A node that classifies text input as 'yes' or 'no' based on the provided prompt.
     """
 
-    class Parameters(BaseNode.Parameters):
-        explanation_message: Optional[str] = None
-        maximum_retry_count: int = Field(default=40, description="Maximum number of retries for classification")
-
     def __init__(self, **parameters):
         LangChainUser.__init__(self, **parameters)
         # We intentionally override super().__init__() to allow for a carefully-crafted Pydantic model here.
@@ -36,10 +32,20 @@ class YesOrNoClassifier(BaseNode):
         explanation: Optional[str]
         retry_count: Optional[int] = Field(default=0, description="Number of retry attempts")
 
+    class Parameters(BaseNode.Parameters):
+        explanation_message: Optional[str] = None
+        parse_from_start: Optional[bool] = False
+        maximum_retry_count: int = Field(default=40, description="Maximum number of retries for classification")
+
     class ClassificationOutputParser(BaseOutputParser[dict]):
+        parse_from_start: bool = Field(default=False)
+
         def parse(self, output: str) -> Dict[str, Any]:
             cleaned_output = ''.join(char.lower() for char in output if char.isalnum() or char.isspace())
             words = cleaned_output.split()
+            
+            if not self.parse_from_start:
+                words = reversed(words)
             
             for word in words:
                 if word == "yes":
@@ -55,6 +61,10 @@ class YesOrNoClassifier(BaseNode):
             
             return {"classification": "unknown"}
 
+    def __init__(self, **parameters):
+        super().__init__(**parameters)
+        self.parameters = self.Parameters(**parameters)
+
     def get_classifier_node(self) -> FunctionType:
         model = self.model
         prompt_templates = self.get_prompt_templates()
@@ -64,7 +74,9 @@ class YesOrNoClassifier(BaseNode):
             retry_count = 0 if state.retry_count is None else state.retry_count
 
             while retry_count < self.parameters.maximum_retry_count:
-                initial_chain = initial_prompt | model | self.ClassificationOutputParser()
+                initial_chain = initial_prompt | model | \
+                    self.ClassificationOutputParser(
+                        parse_from_start=self.parameters.parse_from_start)
                 result = initial_chain.invoke({
                     "text": state.text,
                     "retry_feedback": f"You responded with {state.explanation}, but we need a \"Yes\" or a \"No\". Please try again. This is attempt {retry_count + 1} of {self.parameters.maximum_retry_count}." if retry_count > 0 else ""
