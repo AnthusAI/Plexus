@@ -266,8 +266,8 @@ class AccuracyExperiment(Experiment):
         logging.info("Scoring completed.")
 
         for result in results:
-            logging.info(f"Session ID: {result['session_id']}")
-            logging.info(f"   Results: {result['results']}")
+            logging.info(f"Form ID: {result['form_id']}")
+            logging.info(f"Results: {result['results']}")
 
         # Count the number correct out of all questions.
         for result in results:
