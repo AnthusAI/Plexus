@@ -104,6 +104,7 @@ def accuracy(
         logging.info(f"Running experiment for score: {single_score_name}")
         
         single_score_labeled_samples = []
+        labeled_samples_filename = None
         if uses_data_driven:
             if single_score_name in scorecard_instance.scores:
                 single_score_labeled_samples = get_data_driven_samples(
@@ -112,6 +113,9 @@ def accuracy(
             else:
                 logging.warning(f"Score '{single_score_name}' not found in scorecard. Skipping.")
                 continue
+        else:
+            # Use the default labeled samples file if not data-driven
+            labeled_samples_filename = os.path.join(scorecard_folder, 'experiments', 'labeled-samples.csv')
         
         single_score_experiment_args = {
             'scorecard_name': scorecard_name,
@@ -128,6 +132,8 @@ def accuracy(
         
         if uses_data_driven:
             single_score_experiment_args['labeled_samples'] = single_score_labeled_samples
+        else:
+            single_score_experiment_args['labeled_samples_filename'] = labeled_samples_filename
         
         with AccuracyExperiment(**single_score_experiment_args) as experiment:
             experiment.run()
