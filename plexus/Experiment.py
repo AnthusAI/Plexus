@@ -1,4 +1,5 @@
 import os
+import yaml
 import json
 import copy
 import base64
@@ -44,7 +45,8 @@ class Experiment:
         session_ids_to_sample = None,
         subset_of_score_names = None,
         experiment_label = None,
-        threads = 1
+        threads = 1,
+        max_mismatches_to_report=10
     ):
         self.scorecard_name = scorecard_name
         self.scorecard = scorecard
@@ -60,6 +62,10 @@ class Experiment:
 
         self.experiment_label = experiment_label
         self.threads = threads
+        self.max_mismatches_to_report = max_mismatches_to_report
+        self.mismatches = []
+        self.total_correct = 0
+        self.total_questions = 0
 
     def __enter__(self):
         self.start_mlflow_run()
@@ -278,8 +284,18 @@ class AccuracyExperiment(Experiment):
                 human_label = str(result['results'][question].metadata['human_label']).lower()
                 logging.info(f"Question: {question}, score Label: {score_value}, Human Label: {human_label}")
                 is_match = 1 if result['results'][question].metadata['correct'] else 0
-                total_correct += is_match
-                total_questions += 1
+                self.total_correct += is_match
+                self.total_questions += 1
+
+                if not is_match and len(self.mismatches) < self.max_mismatches_to_report:
+                    self.mismatches.append({
+                        'form_id': result['form_id'],
+                        'question': question,
+                        'predicted': score_value,
+                        'ground_truth': human_label,
+                        'explanation': result['results'][question].explanation,
+                        'transcript': result['results'][question].metadata['text']
+                    })
 
         analysis = ScorecardResultsAnalysis(
             scorecard_results=scorecard_results
@@ -370,7 +386,7 @@ class AccuracyExperiment(Experiment):
         log_scorecard_costs()
 
         # Calculate overall accuracy
-        overall_accuracy = (total_correct / total_questions) * 100 if total_questions > 0 else 0
+        overall_accuracy = (self.total_correct / self.total_questions) * 100 if self.total_questions > 0 else 0
         mlflow.log_metric("overall_accuracy", overall_accuracy)
 
         # Log the results to MLflow
@@ -378,12 +394,6 @@ class AccuracyExperiment(Experiment):
         mlflow.log_metric("number_of_scores", len(self.score_names()))
         mlflow.log_metric("total_cost", expenses['total_cost'])
         mlflow.log_metric("cost_per_text", expenses['cost_per_text'])
-
-        logging.info(f"Expenses: {expenses}")
-        logging.info(f"Number of texts to sample: {len(selected_sample_rows)}")
-        logging.info(f"Total cost: {expenses['total_cost']}")
-        logging.info(f"Cost per text: {expenses['cost_per_text']}")
-        logging.info(f"Overall accuracy: {overall_accuracy:.2f}%")
 
         # Generate the Excel report
         self.generate_excel_report(report_folder_path, results)
@@ -397,6 +407,47 @@ class AccuracyExperiment(Experiment):
         
         mlflow.log_param("model_names", json.dumps(model_names))
         logging.info(f"Logged model names: {model_names}")
+
+        logging.info(f"Expenses: {expenses}")
+        logging.info(f"{overall_accuracy:.1f}% accuracy / {len(selected_sample_rows)} samples")
+        logging.info(f"cost: ${expenses['cost_per_text']:.6f} per call / ${expenses['total_cost']:.6f} total")
+
+        report = self.generate_report(score_instance, overall_accuracy, expenses, len(selected_sample_rows))
+        logging.info(report)
+
+    def generate_report(self, score_instance, overall_accuracy, expenses, sample_size):
+        score_config = score_instance.parameters
+
+        report = f"""
+Experiment Report:
+------------------
+Overall Accuracy: {overall_accuracy:.1f}% ({self.total_correct} / {self.total_questions})
+Sample Size: {sample_size}
+Cost per call: ${expenses['cost_per_text']:.6f}
+Total cost: ${expenses['total_cost']:.6f}
+
+Prompts:
+{yaml.dump(score_config.graph, default_flow_style=False)}
+
+Mismatches (up to {self.max_mismatches_to_report}):
+"""
+        for mismatch in self.mismatches:
+            report += f"""
+Form ID:      {mismatch['form_id']}
+Question:     {mismatch['question']}
+
+Predicted:    {mismatch['predicted']}
+Ground Truth: {mismatch['ground_truth']}
+
+Explanation:
+{mismatch['explanation']}
+
+Transcript:
+{mismatch['transcript']}
+
+---
+"""
+        return report
 
     # Function to classify a single text and collect metrics
     @retry(
