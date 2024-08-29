@@ -46,7 +46,7 @@ class Experiment:
         subset_of_score_names = None,
         experiment_label = None,
         threads = 1,
-        max_mismatches_to_report=10
+        max_mismatches_to_report=5
     ):
         self.scorecard_name = scorecard_name
         self.scorecard = scorecard
@@ -421,10 +421,6 @@ class AccuracyExperiment(Experiment):
         report = f"""
 Experiment Report:
 ------------------
-Overall Accuracy: {overall_accuracy:.1f}% ({self.total_correct} / {self.total_questions})
-Sample Size: {sample_size}
-Cost per call: ${expenses['cost_per_text']:.6f}
-Total cost: ${expenses['total_cost']:.6f}
 
 Prompts:
 {yaml.dump(score_config.graph, default_flow_style=False)}
@@ -447,6 +443,14 @@ Transcript:
 
 ---
 """
+        report += f"""
+
+Overall Accuracy: {overall_accuracy:.1f}% ({self.total_correct} / {self.total_questions})
+Sample Size:      {sample_size}
+Cost per call:    ${expenses['cost_per_text']:.6f}
+Total cost:       ${expenses['total_cost']:.6f}
+"""            
+
         return report
 
     # Function to classify a single text and collect metrics
