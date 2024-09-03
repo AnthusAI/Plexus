@@ -7,6 +7,7 @@ from nltk.tokenize import sent_tokenize
 from rapidfuzz import fuzz, process
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import BaseOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import StateGraph, END
 from plexus.scores.nodes.BaseNode import BaseNode
 from plexus.CustomLogging import logging
@@ -92,7 +93,14 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
         model = self.model
 
         def slicer_node(state):
-            prompt = BaseNode.get_prompt_templates()
+            prompts = self.get_prompt_templates()
+            # Assuming the first prompt in the list is the one we want to use
+            prompt = prompts[0] if isinstance(prompts, list) else prompts
+            
+            # Ensure prompt is a ChatPromptTemplate
+            if not isinstance(prompt, ChatPromptTemplate):
+                prompt = ChatPromptTemplate.from_template(prompt)
+            
             chain = prompt | model | self.SlicingOutputParser(text=state.text)
             return chain.invoke({"text": state.text})
 
