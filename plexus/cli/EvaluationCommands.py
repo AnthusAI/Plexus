@@ -45,7 +45,7 @@ def load_configuration_from_yaml_file(configuration_file_path):
 @click.option('--sampling-method', default='random', type=str, help='Method for sampling texts')
 @click.option('--random-seed', default=None, type=int, help='Random seed for sampling')
 @click.option('--session-ids-to-sample', default='', type=str, help='Comma-separated list of session IDs to sample')
-@click.option('--score-name', '--score-names', default='', type=str, help='Comma-separated list of score names to evaluate')
+@click.option('--score-name', default='', type=str, help='Comma-separated list of score names to evaluate')
 @click.option('--experiment-label', default='', type=str, help='Label for the experiment')
 @click.option('--threads', default=16, type=int, help='Number of threads to use')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
@@ -95,7 +95,9 @@ def accuracy(
     # Check if any score in the scorecard uses the data-driven approach
     uses_data_driven = any('data' in score_config for score_config in scorecard_instance.scores.values())
 
-    score_names = [name.strip() for name in score_name.split(',') if name.strip()]
+    # We used to support multiple, comma-separated score names.  But lots of our
+    # score names have commas in them.  So, we don't support that anymore.
+    score_names = [score_name]
     
     if not score_names:
         score_names = list(scorecard_instance.scores.keys())
