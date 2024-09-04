@@ -12,6 +12,7 @@ from plexus.scores.Score import Score
 from langchain_community.callbacks import OpenAICallbackHandler
 
 from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import ToolExecutor
 
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
@@ -424,54 +425,89 @@ class LangGraphScore(Score, LangChainUser):
         # Create the combined GraphState class
         combined_graphstate_class = self.create_combined_graphstate_class([instance for _, instance in node_instances])
 
-        # Second pass: Create workflow and add nodes
+        # Create the workflow
         workflow = StateGraph(combined_graphstate_class)
 
         # Add input aliasing node if needed
         if hasattr(self.parameters, 'input') and self.parameters.input is not None:
             input_aliasing_function = LangGraphScore.generate_input_aliasing_function(self.parameters.input)
             workflow.add_node('input_aliasing', input_aliasing_function)
+            entry_point = 'input_aliasing'
+        else:
+            entry_point = None
 
-        previous_node = None
-        for node_name, node_instance in node_instances:
+        # Create a 'final' node
+        def final_function(state):
+            return state
+
+        workflow.add_node('final', final_function)
+
+        # Add nodes and edges
+        for i, (node_name, node_instance) in enumerate(node_instances):
             logging.info(f"Adding node: {node_name}")
             workflow.add_node(node_name,
                 node_instance.build_compiled_workflow(
                     graph_state_class=combined_graphstate_class))
             
-            if previous_node:
+            if i == 0 and entry_point:
+                workflow.add_edge(entry_point, node_name)
+            
+            if i > 0:
+                previous_node = node_instances[i-1][0]
                 node_config = next((node for node in self.parameters.graph if node['name'] == previous_node), None)
                 if node_config and 'conditions' in node_config:
-                    logging.info(f"Node '{previous_node}' has conditions")
+                    logging.info(f"Node '{previous_node}' has conditions: {node_config['conditions']}")
                     
-                    def routing_function(x):
-                        if hasattr(x, 'classification') and x.classification == "No":
-                            return END
-                        return node_name
+                    def create_routing_function(config, target_node):
+                        def routing_function(x):
+                            logging.info(f"Routing function called with x: {x}")
+                            logging.info(f"Config: {config}")
+                            conditions = config['conditions']
+                            if isinstance(conditions, dict):
+                                if hasattr(x, conditions['state']) and \
+                                   getattr(x, conditions['state']) == conditions['value']:
+                                    return conditions.get('node', 'final')
+                            else:
+                                logging.error(f"Conditions is not a dict: {conditions}")
+                            return target_node
+                        return routing_function
 
-                    workflow.add_conditional_edges(previous_node, routing_function)
+                    workflow.add_conditional_edges(
+                        previous_node,
+                        create_routing_function(node_config, node_name)
+                    )
                 else:
                     logging.info(f"Node '{previous_node}' does not have conditions")
                     workflow.add_edge(previous_node, node_name)
 
-            previous_node = node_name
+        # Connect the last node to the 'final' node
+        workflow.add_edge(node_instances[-1][0], 'final')
 
         # Add output aliasing node if needed
         if hasattr(self.parameters, 'output') and self.parameters.output is not None:
             output_aliasing_function = LangGraphScore.generate_output_aliasing_function(self.parameters.output)
             workflow.add_node('output_aliasing', output_aliasing_function)
-            workflow.add_edge(previous_node, 'output_aliasing')
+            workflow.add_edge('final', 'output_aliasing')
+            final_node = 'output_aliasing'
+        else:
+            final_node = 'final'
 
-        # Start at the first node in the list.  End at the last node.
-        if workflow.nodes:
-            workflow.set_entry_point(next(iter(workflow.nodes)))
-            last_node = list(workflow.nodes.keys())[-1]
-            workflow.add_edge(last_node, END)
+        # Set entry and end points
+        if entry_point:
+            workflow.set_entry_point(entry_point)
+        else:
+            workflow.set_entry_point(node_instances[0][0])
+        workflow.add_edge(final_node, END)
+
+        # Visualize the graph
+        dot = graphviz.Digraph(comment='Workflow Graph')
+        for node in workflow.nodes:
+            dot.node(node)
+        for edge in workflow.edges:
+            dot.edge(edge[0], edge[1])
+        dot.render('workflow_graph', view=True)
 
         app = workflow.compile()
-
-        # logging.info(f"Graph for {self.__class__.__name__}:")
-        # app.get_graph().print_ascii()
 
         # Store node instances for later token usage calculation
         self.node_instances = node_instances
