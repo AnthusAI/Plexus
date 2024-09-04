@@ -467,6 +467,10 @@ class LangGraphScore(Score, LangChainUser):
                                 if hasattr(x, conditions['state']) and \
                                    getattr(x, conditions['state']).lower() == \
                                    conditions['value'].lower():
+                                    # Set the output values when condition is met
+                                    output = conditions.get('output', {})
+                                    x.value = output.get('value', x.value)
+                                    x.explanation = output.get('explanation', x.explanation)
                                     return conditions.get('node', 'final')
                             else:
                                 logging.error(f"Conditions is not a dict: {conditions}")
@@ -515,10 +519,15 @@ class LangGraphScore(Score, LangChainUser):
         result = app.invoke({"text": text.lower()})
         logging.info(f"LangGraph result: {result}")
 
+        # Ensure we have a valid value (either string or boolean)
+        value = result.get("value")
+        if value is None:
+            value = ""  # Default to empty string if no value is provided
+
         return [
             LangGraphScore.Result(
-                name  =       self.parameters.score_name,
-                value =       result["value"],
-                explanation = result["explanation"]
+                name=self.parameters.score_name,
+                value=value,
+                explanation=result.get("explanation", "")
             )
         ]
