@@ -32,7 +32,11 @@ def index(scorecard_name):
 
     scorecard_folder = os.path.join('.', 'scorecards', scorecard_name)
     scorecard_instance = scorecard_class(scorecard_name=scorecard_name)
-    report_folder = os.path.join('.', 'reports', scorecard_class.name.replace(' ', '_'))
+    score_instance = scorecard_instance.scores[0] if scorecard_instance.scores else None
+    if score_instance:
+        report_folder = score_instance.report_directory_path().rstrip('/')
+    else:
+        report_folder = os.path.join('.', 'reports', scorecard_class.name.replace(' ', '_'))
     
     # Create the report folder if it doesn't exist
     os.makedirs(report_folder, exist_ok=True)
