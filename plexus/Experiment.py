@@ -1,4 +1,5 @@
 import os
+import math
 import yaml
 import json
 import copy
@@ -23,6 +24,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.colors import ListedColormap
+from collections import Counter
 
 from graphviz import Digraph
 from jinja2 import Template
@@ -32,6 +34,8 @@ from plexus.scores.Score import Score
 from .Scorecard import Scorecard
 from .ScorecardResults import ScorecardResults
 from .ScorecardResultsAnalysis import ScorecardResultsAnalysis
+
+from sklearn.metrics import confusion_matrix
 
 class Experiment:
     def __init__(self, *,
@@ -415,6 +419,13 @@ class AccuracyExperiment(Experiment):
         report = self.generate_report(score_instance, overall_accuracy, expenses, len(selected_sample_rows))
         logging.info(report)
 
+        self.generate_and_log_confusion_matrix(results, report_folder_path)
+        
+        for question in self.score_names():
+            self.create_performance_visualization(results, question, report_folder_path)
+
+        self.generate_metrics_json(report_folder_path, len(selected_sample_rows), expenses)
+
     def generate_report(self, score_instance, overall_accuracy, expenses, sample_size):
         score_config = score_instance.parameters
 
@@ -453,6 +464,38 @@ Total cost:       ${expenses['total_cost']:.6f}
 
         return report
 
+    def generate_metrics_json(self, report_folder_path, sample_size, expenses):
+        overall_accuracy = (self.total_correct / self.total_questions) * 100
+        
+        if sample_size < 120:
+            accuracy_format = "{:.0f}"
+        elif sample_size < 10000:
+            accuracy_format = "{:.1f}"
+        else:
+            accuracy_format = "{:.2f}"
+        
+        metrics = {
+            "overall_accuracy": accuracy_format.format(overall_accuracy),
+            "number_correct": self.total_correct,
+            "total_questions": self.total_questions,
+            "number_of_samples": sample_size,
+            "cost_per_call": f"{expenses['cost_per_text']:.7f}".rstrip('0').rstrip('.'),
+            "total_cost": f"{expenses['total_cost']:.7f}".rstrip('0').rstrip('.')
+        }
+
+        metrics_file_path = f"{report_folder_path}/metrics.json"
+        with open(metrics_file_path, 'w') as f:
+            json.dump(metrics, f, indent=2)
+
+        mlflow.log_artifact(metrics_file_path)
+        logging.info(f"Metrics JSON file generated at {metrics_file_path}")
+
+        for key, value in metrics.items():
+            if key in ["overall_accuracy", "cost_per_call", "total_cost"]:
+                mlflow.log_metric(key, float(value))
+            else:
+                mlflow.log_metric(key, value)
+
     # Function to classify a single text and collect metrics
     @retry(
         wait=wait_fixed(2),          # wait 2 seconds between attempts
@@ -467,7 +510,6 @@ Total cost:       ${expenses['total_cost']:.6f}
         content_id = row.get('content_id', '')
         session_id = row.get('Session ID', content_id)
         form_id = row.get('metadata', {}).get('form_id', '')
-
         logging.info(f"Processing text for content_id: {content_id}, session_id: {session_id}, form_id: {form_id}")
 
         scorecard_results = self.scorecard.score_entire_text(
@@ -573,6 +615,91 @@ Total cost:       ${expenses['total_cost']:.6f}
 
         logging.info(f"Excel report generated at {excel_file_path}")
 
+    def generate_and_log_confusion_matrix(self, results, report_folder_path):
+        for question in self.score_names():
+            y_true = []
+            y_pred = []
+            class_names = set()
+
+            for result in results:
+                true_label = result['results'][question].metadata['human_label']
+                pred_label = str(result['results'][question].value).lower()
+                
+                y_true.append(true_label)
+                y_pred.append(pred_label)
+                class_names.update([true_label, pred_label])
+
+            class_names = sorted(list(class_names))
+            cm = confusion_matrix(y_true, y_pred, labels=class_names)
+
+            plt.figure(figsize=(5, 5))
+            sns.heatmap(cm, annot=True, fmt='d', cmap='Greens', 
+                        xticklabels=class_names, yticklabels=class_names, square=True,
+                        cbar=False)
+            plt.title(f'Confusion Matrix for {question}', fontsize=6)
+            plt.xlabel('Predicted', fontsize=5)
+            plt.ylabel('True', fontsize=5)
+            plt.tick_params(axis='both', which='major', labelsize=4)
+
+            cm_path = f"{report_folder_path}/confusion_matrix_{question.replace(' ', '_')}.png"
+            plt.savefig(cm_path, bbox_inches='tight', dpi=600)
+            plt.close()
+
+            mlflow.log_artifact(cm_path)
+
+    def create_performance_visualization(self, results, question, report_folder_path):
+        # Extract data
+        true_labels = [r['results'][question].metadata['human_label'] for r in results]
+        pred_labels = [str(r['results'][question].value).lower() for r in results]
+        
+        # Get unique labels
+        unique_labels = sorted(set(true_labels + pred_labels))
+        
+        # Count occurrences
+        true_counts = [true_labels.count(label) for label in unique_labels]
+        pred_counts = [pred_labels.count(label) for label in unique_labels]
+        
+        # Calculate accuracies
+        accuracies = []
+        for label in unique_labels:
+            correct = sum((t == p == label) for t, p in zip(true_labels, pred_labels))
+            total = true_labels.count(label)
+            accuracies.append(correct / total if total > 0 else 0)
+        
+        # Create the visualization
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10), sharex=True)
+        
+        x = np.arange(len(unique_labels))
+        width = 0.35
+        
+        # Distribution plot
+        ax1.bar(x - width/2, true_counts, width, label='Ground Truth', color=(0.012, 0.635, 0.996))  # Blue
+        ax1.bar(x + width/2, pred_counts, width, label='Predicted', color=(0.815, 0.2, 0.51))  # Fuchsia
+        ax1.set_ylabel('Count')
+        ax1.set_title(f'Label Distribution for {question}')
+        ax1.legend()
+        
+        # Accuracy plot
+        incorrect = [1 - acc for acc in accuracies]
+        ax2.bar(x, incorrect, width, bottom=accuracies, color='#d33', label='Incorrect')
+        ax2.bar(x, accuracies, width, color='#393', label='Correct')
+        ax2.set_ylabel('Accuracy (%)')
+        ax2.set_ylim(0, 1)
+        ax2.set_yticklabels([f'{int(x*100)}%' for x in ax2.get_yticks()])
+        ax2.set_xlabel('Labels (Based on Ground Truth)')
+        ax2.set_title(f'Accuracy by Label for {question}')
+        ax2.legend()
+        
+        plt.xticks(x, unique_labels, rotation=45, ha='right')
+        plt.tight_layout()
+        
+        # Save the figure
+        plt.savefig(f"{report_folder_path}/performance_{question.replace(' ', '_')}.png", bbox_inches='tight', dpi=600)
+        plt.close()
+        
+        # Log to MLflow
+        mlflow.log_artifact(f"{report_folder_path}/performance_{question.replace(' ', '_')}.png")
+        
 class ConsistencyExperiment(Experiment):
     def __init__(self, *, number_of_times_to_sample_each_text, **kwargs):
         super().__init__(**kwargs)
