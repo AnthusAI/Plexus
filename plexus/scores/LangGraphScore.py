@@ -432,32 +432,35 @@ class LangGraphScore(Score, LangChainUser):
             input_aliasing_function = LangGraphScore.generate_input_aliasing_function(self.parameters.input)
             workflow.add_node('input_aliasing', input_aliasing_function)
 
-        current_node = None
+        previous_node = None
         for node_name, node_instance in node_instances:
             logging.info(f"Adding node: {node_name}")
             workflow.add_node(node_name,
                 node_instance.build_compiled_workflow(
                     graph_state_class=combined_graphstate_class))
             
-            logging.info(f"Checking conditions for node: {node_name}")
-            node_config = next((node for node in self.parameters.graph if node['name'] == node_name), None)
-            if node_config and 'conditions' in node_config:
-                conditions = node_config['conditions']
-                logging.info(f"Node '{node_name}' has conditions: {conditions}")
-            else:
-                logging.info(f"Node '{node_name}' does not have conditions")
-            
-            if len(workflow.nodes) > 1:
-                previous_node = list(workflow.nodes.keys())[-2]
-                workflow.add_edge(previous_node, node_name)
+            if previous_node:
+                node_config = next((node for node in self.parameters.graph if node['name'] == previous_node), None)
+                if node_config and 'conditions' in node_config:
+                    logging.info(f"Node '{previous_node}' has conditions")
+                    
+                    def routing_function(x):
+                        if hasattr(x, 'classification') and x.classification == "No":
+                            return END
+                        return node_name
 
-            current_node = node_name
+                    workflow.add_conditional_edges(previous_node, routing_function)
+                else:
+                    logging.info(f"Node '{previous_node}' does not have conditions")
+                    workflow.add_edge(previous_node, node_name)
+
+            previous_node = node_name
 
         # Add output aliasing node if needed
         if hasattr(self.parameters, 'output') and self.parameters.output is not None:
             output_aliasing_function = LangGraphScore.generate_output_aliasing_function(self.parameters.output)
             workflow.add_node('output_aliasing', output_aliasing_function)
-            workflow.add_edge(current_node, 'output_aliasing')
+            workflow.add_edge(previous_node, 'output_aliasing')
 
         # Start at the first node in the list.  End at the last node.
         if workflow.nodes:
@@ -480,7 +483,7 @@ class LangGraphScore(Score, LangChainUser):
 
         app = self.build_compiled_workflow()
 
-        result = app.invoke({"text": text.lower()})
+        result = app.invoke({"text": text.lower(), "current_node": self.node_instances[0][0]})
         logging.info(f"LangGraph result: {result}")
 
         return [
