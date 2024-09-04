@@ -434,12 +434,23 @@ class LangGraphScore(Score, LangChainUser):
 
         current_node = None
         for node_name, node_instance in node_instances:
+            logging.info(f"Adding node: {node_name}")
             workflow.add_node(node_name,
                 node_instance.build_compiled_workflow(
                     graph_state_class=combined_graphstate_class))
+            
+            logging.info(f"Checking conditions for node: {node_name}")
+            node_config = next((node for node in self.parameters.graph if node['name'] == node_name), None)
+            if node_config and 'conditions' in node_config:
+                conditions = node_config['conditions']
+                logging.info(f"Node '{node_name}' has conditions: {conditions}")
+            else:
+                logging.info(f"Node '{node_name}' does not have conditions")
+            
             if len(workflow.nodes) > 1:
                 previous_node = list(workflow.nodes.keys())[-2]
                 workflow.add_edge(previous_node, node_name)
+
             current_node = node_name
 
         # Add output aliasing node if needed

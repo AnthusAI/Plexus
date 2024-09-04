@@ -62,16 +62,22 @@ class AWSDataLakeCache(DataCache):
             batch_size = len(values_batch)
             logging.info(f"Processing batch {batch_index} of {total_batches} with {batch_size} items.")
             
-            # Check if the values are integers or strings
-            if isinstance(values_batch[0], int):
+            # Determine the type of the first value in the batch
+            first_value = values_batch[0]
+            is_integer = isinstance(first_value, int)
+            
+            # Create the values list based on the type
+            if is_integer:
                 values_list = ', '.join(str(value) for value in values_batch)
+                cast_expression = f'CAST("{metadata_item}" AS integer)'
             else:
                 values_list = ', '.join(f"'{value}'" for value in values_batch)
+                cast_expression = f'"{metadata_item}"'
             
             query = f"""
                 SELECT report_id, scorecard_id
                 FROM "{self.athena_database}"
-                WHERE "{metadata_item}" IN ({values_list})
+                WHERE {cast_expression} IN ({values_list})
             """
             
             logging.info(f"Executing query for batch {batch_index} of {total_batches}...")
