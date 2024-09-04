@@ -483,7 +483,7 @@ class LangGraphScore(Score, LangChainUser):
 
         app = self.build_compiled_workflow()
 
-        result = app.invoke({"text": text.lower(), "current_node": self.node_instances[0][0]})
+        result = app.invoke({"text": text.lower()})
         logging.info(f"LangGraph result: {result}")
 
         return [
