@@ -499,14 +499,6 @@ class LangGraphScore(Score, LangChainUser):
             workflow.set_entry_point(node_instances[0][0])
         workflow.add_edge(final_node, END)
 
-        # Visualize the graph
-        dot = graphviz.Digraph(comment='Workflow Graph')
-        for node in workflow.nodes:
-            dot.node(node)
-        for edge in workflow.edges:
-            dot.edge(edge[0], edge[1])
-        dot.render('workflow_graph', view=True)
-
         app = workflow.compile()
 
         # Store node instances for later token usage calculation
