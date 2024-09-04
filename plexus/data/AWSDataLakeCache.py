@@ -55,7 +55,7 @@ class AWSDataLakeCache(DataCache):
         for i in range(0, len(form_ids), batch_size):
             yield form_ids[i:i + batch_size]
 
-    def execute_batch_athena_queries(self, metadata_item, values):
+    def execute_batch_athena_queries(self, metadata_item, values, scorecard_id):
         all_query_results = []
         total_batches = len(list(self.split_into_batches(values)))
         for batch_index, values_batch in enumerate(self.split_into_batches(values), start=1):
@@ -78,6 +78,7 @@ class AWSDataLakeCache(DataCache):
                 SELECT report_id, scorecard_id
                 FROM "{self.athena_database}"
                 WHERE {cast_expression} IN ({values_list})
+                {f'AND scorecard_id = CAST({scorecard_id} AS VARCHAR)' if scorecard_id is not None else ''}
             """
             
             logging.info(f"Executing query for batch {batch_index} of {total_batches}...")
@@ -197,6 +198,7 @@ class AWSDataLakeCache(DataCache):
         item_list_filename = searches[0].get('item_list_filename', None) if searches else None
         column_name = searches[0].get('column_name', None) if searches else None
         metadata_item = searches[0].get('metadata_item', None) if searches else None
+        scorecard_id = searches[0].get('scorecard_id', None) if searches else None
 
         def load_values_and_dataframe_from_file(item_list_filename, column_name):
             if item_list_filename.endswith('.csv'):
@@ -208,6 +210,8 @@ class AWSDataLakeCache(DataCache):
             
             if column_name not in df.columns:
                 raise ValueError(f"Column '{column_name}' not found in the file.")
+            
+            df[column_name] = pd.to_numeric(df[column_name], errors='coerce').fillna(0).astype(int)
             
             values = df[column_name].dropna().unique().tolist()
             return values, df
@@ -260,7 +264,7 @@ class AWSDataLakeCache(DataCache):
             return None
 
         if values:
-            all_query_results = self.execute_batch_athena_queries(metadata_item, values)
+            all_query_results = self.execute_batch_athena_queries(metadata_item, values, scorecard_id)
 
             if not all_query_results:
                 logging.error("No non-deprecated content items found in the database.")
