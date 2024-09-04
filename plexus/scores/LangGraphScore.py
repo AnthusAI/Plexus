@@ -465,7 +465,8 @@ class LangGraphScore(Score, LangChainUser):
                             conditions = config['conditions']
                             if isinstance(conditions, dict):
                                 if hasattr(x, conditions['state']) and \
-                                   getattr(x, conditions['state']) == conditions['value']:
+                                   getattr(x, conditions['state']).lower() == \
+                                   conditions['value'].lower():
                                     return conditions.get('node', 'final')
                             else:
                                 logging.error(f"Conditions is not a dict: {conditions}")
