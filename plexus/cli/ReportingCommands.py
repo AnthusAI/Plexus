@@ -5,6 +5,7 @@ import plexus
 from jinja2 import Template
 import importlib
 import base64
+import pandas as pd
 
 from plexus.CustomLogging import logging
 from plexus.cli.console import console
@@ -460,3 +461,19 @@ def evaluation(scorecard_name):
     
     with open(report_filename, 'w') as f:
         f.write(report_html)
+
+    # Create a new Excel writer object
+    excel_file_path = os.path.join(report_folder, 'evaluation.xlsx')
+    with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
+        for score_name, score_configuration in scorecard_instance.scores.items():
+            score_folder = os.path.join(report_folder, score_name.replace(' ', '_'))
+            excel_files = [f for f in os.listdir(score_folder) if f.endswith('.xlsx')]
+            
+            if excel_files:
+                excel_file = excel_files[0]  # Assume there's only one Excel file per score
+                df = pd.read_excel(os.path.join(score_folder, excel_file))
+                
+                # Write the DataFrame to a sheet named after the score
+                df.to_excel(writer, sheet_name=score_name[:31], index=False)  # Excel limits sheet names to 31 characters
+    
+    logging.info(f"Combined Excel report generated at {excel_file_path}")
