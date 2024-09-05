@@ -471,6 +471,7 @@ class LangGraphScore(Score, LangChainUser):
                                     output = conditions.get('output', {})
                                     x.value = output.get('value', x.value)
                                     x.explanation = output.get('explanation', x.explanation)
+                                    logging.info(f"Condition met. Set value to: {x.value}, explanation to: {x.explanation}")
                                     return conditions.get('node', 'final')
                             else:
                                 logging.error(f"Conditions is not a dict: {conditions}")
@@ -523,11 +524,14 @@ class LangGraphScore(Score, LangChainUser):
         value = result.get("value")
         if value is None:
             value = ""  # Default to empty string if no value is provided
+        explanation = result.get("explanation")
+        logging.info(f"LangGraph value: {value}")
+        logging.info(f"LangGraph explanation: {explanation}")
 
         return [
             LangGraphScore.Result(
                 name=self.parameters.score_name,
                 value=value,
-                explanation=result.get("explanation", "")
+                explanation=explanation
             )
         ]
