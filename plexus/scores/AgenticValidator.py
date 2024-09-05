@@ -1,7 +1,6 @@
 import math
 from typing import Dict, List, Any, Literal, Optional, Union, TypedDict
 from pydantic import ConfigDict, Field, validator, BaseModel
-from langsmith import Client
 from dataclasses import dataclass, field
 
 from plexus.CustomLogging import logging
@@ -143,7 +142,6 @@ class AgenticValidator(LangGraphScore):
         self.total_cost = 0
         self.agent_executor = None
         self.current_state = None
-        self.langsmith_client = Client()
         self.dependency = self.parameters.dependency
         self.output_parser = PydanticOutputParser(pydantic_object=TextAnalysis)
         self.prompt_template = self._create_prompt_template()
