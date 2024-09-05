@@ -4,10 +4,15 @@ import click
 import plexus
 from jinja2 import Template
 import importlib
+import base64
 
 from plexus.CustomLogging import logging
 from plexus.cli.console import console
 from plexus.Registries import scorecard_registry
+
+def image_to_base64(image_path):
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode("utf-8")
 
 @click.group()
 def report():
@@ -320,7 +325,7 @@ def evaluation(scorecard_name):
                     <div style="display: flex; flex-direction: column; width: 100%; line-height: 1.5;">
                         <div style="display: flex; width: 100%;">
                             <div style="flex: 1;"><strong>Overall Accuracy:</strong></div>
-                            <div style="flex: 1;">{{ metrics.get('overall_accuracy', 0) }}</div>
+                            <div style="flex: 1;">{{ metrics.get('overall_accuracy', 0) }}%</div>
                         </div>
                         <div style="display: flex; width: 100%;">
                             <div style="flex: 1;"><strong>Number of Calls:</strong></div>
@@ -336,7 +341,7 @@ def evaluation(scorecard_name):
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1em;">
                         {% for artifact in artifacts %}
                             <div style="display: flex; justify-content: center; align-items: start;">
-                                <img onclick="enlargeImage(this.src)" style="width: 100%; height: auto; max-width: 500px; margin-top: 2em;" src="{{ score_name.replace(' ', '_') }}/{{ artifact }}">
+                                <img onclick="enlargeImage(this.src)" style="width: 100%; height: auto; max-width: 500px; margin-top: 2em;" src="data:image/png;base64,{{ artifact.base64 }}" alt="{{ artifact.filename }}">
                             </div>
                         {% endfor %}
                     </div>
@@ -403,8 +408,14 @@ def evaluation(scorecard_name):
             metrics = None
 
         if os.path.exists(score_folder):
-            artifacts = os.listdir(score_folder)
-            artifacts = [f for f in artifacts if f.endswith('.png')]
+            artifact_files = [f for f in os.listdir(score_folder) if f.endswith('.png')]
+            artifacts = []
+            for artifact_file in artifact_files:
+                artifact_path = os.path.join(score_folder, artifact_file)
+                artifacts.append({
+                    'filename': artifact_file,
+                    'base64': image_to_base64(artifact_path)
+                })
         else:
             artifacts = []
         
