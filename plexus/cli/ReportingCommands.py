@@ -3,6 +3,7 @@ import json
 import click
 import plexus
 from jinja2 import Template
+import importlib
 
 from plexus.CustomLogging import logging
 from plexus.cli.console import console
@@ -17,9 +18,9 @@ def report():
 
 @click.option('--scorecard-name', required=True, help='The name of the scorecard to load data for')
 @report.command()
-def index(scorecard_name):
+def evaluation(scorecard_name):
     """
-    Generate an `index.html` at the root of the `reports/` folder with an HTML representation
+    Generate an `evaluation.html` at the root of the `reports/` folder with an HTML representation
     of the data in the reports.
     """
 
@@ -30,28 +31,22 @@ def index(scorecard_name):
         logging.error(f"Scorecard with name '{scorecard_name}' not found.")
         return
 
-    scorecard_folder = os.path.join('.', 'scorecards', scorecard_name)
     scorecard_instance = scorecard_class(scorecard_name=scorecard_name)
-    score_instance = scorecard_instance.scores[0] if scorecard_instance.scores else None
-    if score_instance:
-        report_folder = score_instance.report_directory_path().rstrip('/')
-    else:
-        report_folder = os.path.join('.', 'reports', scorecard_class.name.replace(' ', '_'))
     
-    # Create the report folder if it doesn't exist
+    report_folder = os.path.join('.', 'reports', scorecard_name.replace(' ', '_'))
     os.makedirs(report_folder, exist_ok=True)
     
-    report_filename = os.path.join(report_folder, 'index.html')
+    report_filename = os.path.join(report_folder, 'evaluation.html')
 
     logging.info(f"Using scorecard key [purple][b]{scorecard_name}[/b][/purple] with class name [purple][b]{scorecard_instance.__class__.__name__}[/b][/purple]")
     logging.info(f"Generating [grey][b]{report_filename}[/b][/grey]")
-    
+
     header_template = Template("""
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="UTF-8">
-        <title>{{ scorecard.name }} - Training Report</title>
+        <title>{{ scorecard.name }} - Evaluation Report</title>
             <link rel="preconnect" href="https://fonts.googleapis.com">
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
             <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400..900&display=swap" rel="stylesheet">
@@ -317,25 +312,35 @@ def index(scorecard_name):
     score_template = Template("""
     <score class="{% if viable %}viable {% endif %}{% if nailed_it %}nailed_it {% endif %}{% if almost_there %}almost_there {% endif %}{% if exists %}exists {% endif %}">
     <metadata>
-        <div style="display: flex; flex-direction: column; gap: 1em;">
-            <div style="display: flex; justify-content: space-between; gap: 2em;">
-                <div style="flex: 3; display: flex; flex-direction: column; gap: 1em;">
+        <div style="display: flex; flex-direction: column; width: 100%; gap: 1em;">
+            <div style="display: flex; justify-content: space-between; width: 100%; gap: 2em;">
+                <div style="flex: 3; display: flex; flex-direction: column; width: 100%; gap: 1em;">
                     <div><h2>{{ score_name }}</h2></div>
                     {% if metrics %}
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); font-weight: bold; margin: 0 10%; gap: 3em;">
-                        <div>Validation Accuracy</div>
-                        <div>Validation F1 Score</div>
-                        <div>Training Accuracy</div>
-                    </div>
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 3em; margin: 0 10%;">
-                        <div class="label">{{ '%.1f'|format(metrics.get('validation_accuracy', metrics.get('accuracy', 0)) * 100) }}%</div>
-                        <div class="label">{{ '%.1f'|format(metrics.get('validation_f1_score', metrics.get('f1_score', 0)) * 100) }}%</div>
-                        <div class="label">{{ '%.1f'|format(metrics.get('training_accuracy', metrics.get('accuracy', 0)) * 100) }}%</div>
+                    <div style="display: flex; flex-direction: column; width: 100%; line-height: 1.5;">
+                        <div style="display: flex; width: 100%;">
+                            <div style="flex: 1;"><strong>Overall Accuracy:</strong></div>
+                            <div style="flex: 1;">{{ metrics.get('overall_accuracy', 0) }}</div>
+                        </div>
+                        <div style="display: flex; width: 100%;">
+                            <div style="flex: 1;"><strong>Number of Calls:</strong></div>
+                            <div style="flex: 1;">{{ metrics.get('number_of_samples', 0) }}</div>
+                        </div>
+                        <div style="display: flex; width: 100%;">
+                            <div style="flex: 1;"><strong>Cost Per Call:</strong></div>
+                            <div style="flex: 1;">${{ metrics.get('cost_per_call', 0) }}</div>
+                        </div>
                     </div>
                     {% endif %}
-                    {% if classifier_class_name %}
-                    <div><b>Classifier:</b> <span class="code_name">{{ classifier_class_name }}</span></div>
-                    {% endif %}
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1em;">
+                        {% for artifact in artifacts %}
+                            <div style="display: flex; justify-content: center; align-items: start;">
+                                <img onclick="enlargeImage(this.src)" style="width: 100%; height: auto; max-width: 500px; margin-top: 2em;" src="{{ score_name.replace(' ', '_') }}/{{ artifact }}">
+                            </div>
+                        {% endfor %}
+                    </div>
+                                                            
                     <div><b>Configuration:</b></div>
                     <div class="collapsible_section">
                         <label for="collapsible">Click to expand</label>
@@ -367,20 +372,6 @@ def index(scorecard_name):
                     </div>
                     {% endif %}
 
-                    <div><b>Artifacts:</b></div>
-                    <div class="collapsible_section">
-                        <label for="collapsible">Click to expand</label>
-                        <input type="checkbox" class="collapsible_toggle">
-                        <div class="collapsible_content">
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1em;">
-                                {% for artifact in artifacts %}
-                                    <div style="display: flex; justify-content: center; align-items: start;">
-                                        <img onclick="enlargeImage(this.src)" style="width: 100%; height: auto; max-width: 500px; margin-top: 2em;" src="{{ score_name.replace(' ', '_') }}/{{ artifact }}">
-                                    </div>
-                                {% endfor %}
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
