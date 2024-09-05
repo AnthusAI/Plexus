@@ -100,12 +100,12 @@ class AgenticValidator(LangGraphScore):
         Parameters for configuring the AgenticValidator.
 
         Attributes:
-            label (str): The label of the metadata to validate.
+            labels (List[str]): The labels of the metadata to validate.
             prompt (str): The custom prompt to use for validation.
             dependency (Optional[Dict[str, str]]): The dependency configuration.
             agent_type (Literal): The type of agent to use for validation.
         """
-        label: str = ""
+        labels: List[str] = Field(default_factory=list)
         prompt: str = ""
         dependency: Optional[Dict[str, str]] = None
         agent_type: Literal["react", "langgraph"] = "react"
@@ -390,29 +390,33 @@ class AgenticValidator(LangGraphScore):
         try:
             logging.info(f"Metadata Contents: {self.current_state.metadata}")
 
-            if not self.current_state.metadata:
-                label_value = ""
-            else:
+            label_values = []
+            for label in self.parameters.labels:
                 # Find all keys that match the pattern school_\d+_{label}
                 matching_keys = [key for key in self.current_state.metadata.keys() 
-                                 if key.startswith("school_") and key.endswith(f"_{self.parameters.label}")]
+                                 if key.startswith("school_") and key.endswith(f"_{label}")]
 
                 if not matching_keys:
-                    raise ValueError(f"No values found for label '{self.parameters.label}' in the metadata")
+                    logging.warning(f"No values found for label '{label}' in the metadata")
+                    continue
 
                 # Extract all values for the matching keys, remove duplicates, and filter out None and empty values
-                label_values = list(set(str(value) for key in matching_keys if (value := self.current_state.metadata.get(key)) not in (None, "", "nan")))
+                values = list(set(str(value) for key in matching_keys if (value := self.current_state.metadata.get(key)) not in (None, "", "nan")))
 
-                if not label_values:
-                    raise ValueError(f"No valid values found for label '{self.parameters.label}' in the metadata")
+                if values:
+                    # Join unique values if there's more than one, otherwise use the single value
+                    label_values.append(f"{label}: {' and '.join(values)}")
 
-                # Join unique values if there's more than one, otherwise use the single value
-                label_value = " and ".join(label_values) if len(label_values) > 1 else label_values[0]
+            if not label_values:
+                raise ValueError(f"No valid values found for any of the labels {self.parameters.labels} in the metadata")
 
-            logging.info(f"Extracted unique label values: {label_value}")
+            logging.info(f"Extracted label values: {label_values}")
+            
+            # Join all label values into a single string
+            label_value_string = ", ".join(label_values)
             
             # Use the custom prompt from the YAML file
-            custom_prompt = self.parameters.prompt.format(label_value=label_value)
+            custom_prompt = self.parameters.prompt.format(label_value=label_value_string)
             
             input_string = f"Answer the following: {custom_prompt}"
             
