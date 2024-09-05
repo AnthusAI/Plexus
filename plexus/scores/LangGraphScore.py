@@ -396,6 +396,15 @@ class LangGraphScore(Score, LangChainUser):
         
         return example_refinement_templates
 
+    @staticmethod
+    def create_value_setter_node(output):
+        def value_setter(state):
+            state.value = output.get('value', state.value)
+            state.explanation = output.get('explanation', state.explanation)
+            logging.info(f"Value setter node: Set value to: {state.value}, explanation to: {state.explanation}")
+            return state
+        return value_setter
+
     def build_compiled_workflow(self):
         """
         Build the LangGraph workflow.
@@ -458,30 +467,33 @@ class LangGraphScore(Score, LangChainUser):
                 if node_config and 'conditions' in node_config:
                     logging.info(f"Node '{previous_node}' has conditions: {node_config['conditions']}")
                     
-                    def create_routing_function(config, target_node):
-                        def routing_function(x):
-                            logging.info(f"Routing function called with x: {x}")
-                            logging.info(f"Config: {config}")
-                            conditions = config['conditions']
-                            if isinstance(conditions, dict):
-                                if hasattr(x, conditions['state']) and \
-                                   getattr(x, conditions['state']).lower() == \
-                                   conditions['value'].lower():
-                                    # Set the output values when condition is met
-                                    output = conditions.get('output', {})
-                                    x.value = output.get('value', x.value)
-                                    x.explanation = output.get('explanation', x.explanation)
-                                    logging.info(f"Condition met. Set value to: {x.value}, explanation to: {x.explanation}")
-                                    return conditions.get('node', 'final')
-                            else:
-                                logging.error(f"Conditions is not a dict: {conditions}")
-                            return target_node
-                        return routing_function
+                    conditions = node_config['conditions']
+                    if isinstance(conditions, dict):
+                        # Create a value setter node
+                        value_setter_name = f"{previous_node}_value_setter"
+                        workflow.add_node(value_setter_name, self.create_value_setter_node(conditions.get('output', {})))
 
-                    workflow.add_conditional_edges(
-                        previous_node,
-                        create_routing_function(node_config, node_name)
-                    )
+                        def create_routing_function(condition, true_node, false_node):
+                            def routing_function(x):
+                                if hasattr(x, condition['state']) and \
+                                   getattr(x, condition['state']).lower() == \
+                                   condition['value'].lower():
+                                    return true_node
+                                return false_node
+                            return routing_function
+
+                        workflow.add_conditional_edges(
+                            previous_node,
+                            create_routing_function(conditions, value_setter_name, node_name)
+                        )
+                        next_node = conditions.get('node', 'final')
+                        if next_node != 'END':
+                            workflow.add_edge(value_setter_name, next_node)
+                        else:
+                            workflow.add_edge(value_setter_name, END)
+                    else:
+                        logging.error(f"Conditions is not a dict: {conditions}")
+                        workflow.add_edge(previous_node, node_name)
                 else:
                     logging.info(f"Node '{previous_node}' does not have conditions")
                     workflow.add_edge(previous_node, node_name)
