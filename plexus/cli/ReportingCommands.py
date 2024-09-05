@@ -303,8 +303,8 @@ def evaluation(scorecard_name):
     <body>
         <header>
             <metadata>
-                <h1>Training Report</h1>
-                <p>{{ scorecard.name }}</p>
+                <h1>{{ scorecard.name }}</h1>
+                <p>Evaluation Report</p>
             </metadata>
         </header>
     """)
