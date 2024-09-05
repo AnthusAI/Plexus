@@ -468,31 +468,38 @@ class LangGraphScore(Score, LangChainUser):
                     logging.info(f"Node '{previous_node}' has conditions: {node_config['conditions']}")
                     
                     conditions = node_config['conditions']
-                    if isinstance(conditions, dict):
-                        # Create a value setter node
-                        value_setter_name = f"{previous_node}_value_setter"
-                        workflow.add_node(value_setter_name, self.create_value_setter_node(conditions.get('output', {})))
+                    if isinstance(conditions, list):
+                        # Create value setter nodes for each condition
+                        value_setters = {}
+                        for i, condition in enumerate(conditions):
+                            value_setter_name = f"{previous_node}_value_setter_{i}"
+                            value_setters[condition['value'].lower()] = value_setter_name
+                            workflow.add_node(value_setter_name, self.create_value_setter_node(condition.get('output', {})))
 
-                        def create_routing_function(condition, true_node, false_node):
-                            def routing_function(x):
+                        # Create a single routing function for all conditions
+                        def routing_function(x):
+                            for condition in conditions:
                                 if hasattr(x, condition['state']) and \
-                                   getattr(x, condition['state']).lower() == \
-                                   condition['value'].lower():
-                                    return true_node
-                                return false_node
-                            return routing_function
+                                   getattr(x, condition['state']).lower() == condition['value'].lower():
+                                    return value_setters[condition['value'].lower()]
+                            return node_name  # Default to next node if no condition matches
 
+                        # Add the conditional edges with the single routing function
                         workflow.add_conditional_edges(
                             previous_node,
-                            create_routing_function(conditions, value_setter_name, node_name)
+                            routing_function
                         )
-                        next_node = conditions.get('node', 'final')
-                        if next_node != 'END':
-                            workflow.add_edge(value_setter_name, next_node)
-                        else:
-                            workflow.add_edge(value_setter_name, END)
+
+                        # Add edges from value setters to their respective next nodes
+                        for condition in conditions:
+                            value_setter_name = value_setters[condition['value'].lower()]
+                            next_node = condition.get('node', 'final')
+                            if next_node != 'END':
+                                workflow.add_edge(value_setter_name, next_node)
+                            else:
+                                workflow.add_edge(value_setter_name, END)
                     else:
-                        logging.error(f"Conditions is not a dict: {conditions}")
+                        logging.error(f"Conditions is not a list: {conditions}")
                         workflow.add_edge(previous_node, node_name)
                 else:
                     logging.info(f"Node '{previous_node}' does not have conditions")
