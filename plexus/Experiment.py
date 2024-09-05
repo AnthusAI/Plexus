@@ -632,14 +632,14 @@ Total cost:       ${expenses['total_cost']:.6f}
             class_names = sorted(list(class_names))
             cm = confusion_matrix(y_true, y_pred, labels=class_names)
 
-            plt.figure(figsize=(5, 5))
-            sns.heatmap(cm, annot=True, fmt='d', cmap='Greens', 
+            plt.figure(figsize=(10, 10))
+            sns.heatmap(cm, annot=True, fmt='d', cmap='cool', 
                         xticklabels=class_names, yticklabels=class_names, square=True,
                         cbar=False)
-            plt.title(f'Confusion Matrix for {question}', fontsize=6)
-            plt.xlabel('Predicted', fontsize=5)
-            plt.ylabel('True', fontsize=5)
-            plt.tick_params(axis='both', which='major', labelsize=4)
+            plt.title(f'Confusion Matrix for {question}', fontsize=12)
+            plt.xlabel('Predicted', fontsize=10)
+            plt.ylabel('True', fontsize=10)
+            plt.tick_params(axis='both', which='major', labelsize=16)
 
             cm_path = f"{report_folder_path}/confusion_matrix_{question.replace(' ', '_')}.png"
             plt.savefig(cm_path, bbox_inches='tight', dpi=600)
@@ -648,56 +648,49 @@ Total cost:       ${expenses['total_cost']:.6f}
             mlflow.log_artifact(cm_path)
 
     def create_performance_visualization(self, results, question, report_folder_path):
-        # Extract data
         true_labels = [r['results'][question].metadata['human_label'] for r in results]
         pred_labels = [str(r['results'][question].value).lower() for r in results]
         
-        # Get unique labels
         unique_labels = sorted(set(true_labels + pred_labels))
         
-        # Count occurrences
         true_counts = [true_labels.count(label) for label in unique_labels]
         pred_counts = [pred_labels.count(label) for label in unique_labels]
         
-        # Calculate accuracies
         accuracies = []
         for label in unique_labels:
             correct = sum((t == p == label) for t, p in zip(true_labels, pred_labels))
             total = true_labels.count(label)
             accuracies.append(correct / total if total > 0 else 0)
         
-        # Create the visualization
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10), sharex=True)
         
         x = np.arange(len(unique_labels))
         width = 0.35
         
-        # Distribution plot
-        ax1.bar(x - width/2, true_counts, width, label='Ground Truth', color=(0.012, 0.635, 0.996))  # Blue
-        ax1.bar(x + width/2, pred_counts, width, label='Predicted', color=(0.815, 0.2, 0.51))  # Fuchsia
-        ax1.set_ylabel('Count')
-        ax1.set_title(f'Label Distribution for {question}')
-        ax1.legend()
+        ax1.bar(x - width/2, true_counts, width, label='Ground Truth', color=(0.012, 0.635, 0.996))
+        ax1.bar(x + width/2, pred_counts, width, label='Predicted', color=(0.815, 0.2, 0.51))
+        ax1.set_ylabel('Count', fontsize=10)
+        ax1.set_title(f'Label Distribution for {question}', fontsize=12)
+        ax1.legend(fontsize=10)
+        ax1.tick_params(axis='both', which='major', labelsize=8)
         
-        # Accuracy plot
         incorrect = [1 - acc for acc in accuracies]
-        ax2.bar(x, incorrect, width, bottom=accuracies, color='#d33', label='Incorrect')
-        ax2.bar(x, accuracies, width, color='#393', label='Correct')
-        ax2.set_ylabel('Accuracy (%)')
+        ax2.bar(x, incorrect, width*2, bottom=accuracies, color='#d33', label='Incorrect')
+        ax2.bar(x, accuracies, width*2, color='#393', label='Correct')
+        ax2.set_ylabel('Accuracy (%)', fontsize=10)
         ax2.set_ylim(0, 1)
-        ax2.set_yticklabels([f'{int(x*100)}%' for x in ax2.get_yticks()])
-        ax2.set_xlabel('Labels (Based on Ground Truth)')
-        ax2.set_title(f'Accuracy by Label for {question}')
-        ax2.legend()
+        ax2.set_yticklabels([f'{int(x*100)}%' for x in ax2.get_yticks()], fontsize=8)
+        ax2.set_xlabel('Labels (Based on Ground Truth)', fontsize=10)
+        ax2.set_title(f'Accuracy by Label for {question}', fontsize=12)
+        ax2.legend(fontsize=10)
+        ax2.tick_params(axis='both', which='major', labelsize=8)
         
-        plt.xticks(x, unique_labels, rotation=45, ha='right')
+        plt.xticks(x, unique_labels, rotation=45, ha='right', fontsize=16)
         plt.tight_layout()
         
-        # Save the figure
         plt.savefig(f"{report_folder_path}/performance_{question.replace(' ', '_')}.png", bbox_inches='tight', dpi=600)
         plt.close()
         
-        # Log to MLflow
         mlflow.log_artifact(f"{report_folder_path}/performance_{question.replace(' ', '_')}.png")
         
 class ConsistencyExperiment(Experiment):
