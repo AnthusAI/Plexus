@@ -412,14 +412,23 @@ def evaluation(scorecard_name):
         if metrics:
             exists = True
         viable = False
-        if metrics and (metrics.get('validation_accuracy', 0) > 0.90 or metrics.get('accuracy', 0) > 0.90):
-            viable = True
+        if metrics:
+            overall_accuracy = float(metrics.get('overall_accuracy', '0'))
+            accuracy = float(metrics.get('accuracy', '0'))
+            if overall_accuracy > 0.90 or accuracy > 0.90:
+                viable = True
         nailed_it = False
-        if metrics and (metrics.get('validation_accuracy', 0) > 0.95 or metrics.get('accuracy', 0) > 0.95):
-            nailed_it = True
+        if metrics:
+            overall_accuracy = float(metrics.get('overall_accuracy', '0'))
+            accuracy = float(metrics.get('accuracy', '0'))
+            if overall_accuracy > 0.95 or accuracy > 0.95:
+                nailed_it = True
         almost_there = False
-        if metrics and (metrics.get('validation_accuracy', 0) > 0.80 or metrics.get('accuracy', 0) > 0.80):
-            almost_there = True
+        if metrics:
+            overall_accuracy = float(metrics.get('overall_accuracy', '0'))
+            accuracy = float(metrics.get('accuracy', '0'))
+            if overall_accuracy > 0.80 or accuracy > 0.80:
+                almost_there = True
 
         score_html = score_template.render(
             scorecard=scorecard_instance,
