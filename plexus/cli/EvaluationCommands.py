@@ -97,10 +97,14 @@ def accuracy(
 
     # We used to support multiple, comma-separated score names.  But lots of our
     # score names have commas in them.  So, we don't support that anymore.
-    score_names = [score_name]
+    if score_name is not None and score_name != '':
+        score_names = [score_name]
+    else:
+        score_names = list(scorecard_instance.scores.keys())
     
     if not score_names:
-        score_names = list(scorecard_instance.scores.keys())
+        logging.error("No score names specified")
+        return
 
     for single_score_name in score_names:
         logging.info(f"Running experiment for score: {single_score_name}")
