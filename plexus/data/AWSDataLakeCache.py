@@ -171,11 +171,13 @@ class AWSDataLakeCache(DataCache):
                     if 'comment' in score:
                         content_row[f"{score_name} comment"] = score['comment']
 
+                metadata_dict = {}
                 if 'school' in metadata and isinstance(metadata['school'], list):
-                    for index, school_info in enumerate(metadata['school']):
-                        if isinstance(school_info, dict):
-                            for key, value in school_info.items():
-                                content_row[f"school_{index}_{key}"] = value
+                    metadata_dict['schools'] = metadata['school']
+                metadata_dict['channels'] = metadata.get('channels')
+                metadata_dict['duration'] = metadata.get('duration')
+                metadata_dict['form_id'] = metadata.get('form_id')
+                content_row['metadata'] = json.dumps(metadata_dict)
 
             if 'transcript.txt' in content_data:
                 text_content = content_data['transcript.txt']

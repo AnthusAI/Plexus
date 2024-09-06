@@ -1,4 +1,5 @@
 import os
+import json
 import rich
 import click
 import plexus
@@ -197,23 +198,25 @@ def predict_score(score_name, scorecard_class, sample_row, content_id):
 
     score_instance.record_configuration(score_configuration)
 
-    model_input_class = getattr(score_class, 'Input', None)
-    if model_input_class is None:
+    score_input_class = getattr(score_class, 'Input', None)
+    if score_input_class is None:
         logging.warning(f"Input class not found for score '{score_name}'. Using a default input.")
-        model_input = {'id': content_id, 'text': ""}
+        score_input = {'id': content_id, 'text': ""}
     else:
         if sample_row is not None:
             row_dictionary = sample_row.iloc[0].to_dict()
             logging.info(f"Sample Row: {row_dictionary}")
             text = row_dictionary.get('text', '')
-            model_input = model_input_class(text=text, metadata=row_dictionary)
+            metadata_str = row_dictionary.get('metadata', '{}')
+            metadata = json.loads(metadata_str)
+            score_input = score_input_class(text=text, metadata=metadata)
         else:
-            model_input = model_input_class(id=content_id, text="")
+            score_input = score_input_class(id=content_id, text="")
 
     try:
         prediction_result = score_instance.predict(
             context={},
-            model_input=model_input
+            model_input=score_input
         )
         costs = score_instance.get_accumulated_costs()
     except Exception as e:

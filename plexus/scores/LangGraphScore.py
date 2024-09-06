@@ -51,6 +51,7 @@ class LangGraphScore(Score, LangChainUser):
 
     class GraphState(BaseModel):
         text: str
+        metadata: Optional[dict]
         is_not_empty: Optional[bool]
         value: Optional[str]
         explanation: Optional[str]
@@ -533,10 +534,11 @@ class LangGraphScore(Score, LangChainUser):
 
     def predict(self, context, model_input: Score.Input):
         text = model_input.text
+        metadata = model_input.metadata
 
         app = self.build_compiled_workflow()
 
-        result = app.invoke({"text": text.lower()})
+        result = app.invoke({"text": text.lower(), "metadata": metadata})
         logging.info(f"LangGraph result: {result}")
 
         # Ensure we have a valid value (either string or boolean)
