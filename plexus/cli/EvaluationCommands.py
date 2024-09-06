@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import json
 import click
 import yaml
 import pandas as pd
@@ -186,7 +187,7 @@ def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, scor
         'text': sample.get('text', ''),
         f'{score_name_column_name}_label': sample.get(score_name_column_name, ''),
         'content_id': sample.get('content_id', ''),
-        'metadata': {k: v for k, v in sample.items() if k not in ['text', score_name, 'content_id']}
+        'columns': {k: v for k, v in sample.items() if k not in ['text', score_name, 'content_id']}
     } for sample in samples]
 
 def get_csv_samples(csv_filename):
@@ -274,12 +275,14 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
 
     for _, row in sample_rows.iterrows():
         row_dictionary = row.to_dict()
-        text = row_dictionary['text']
+        text = row_dictionary.get('text', '')
+        metadata_str = row_dictionary.get('metadata', '{}')
+        metadata = json.loads(metadata_str)
         model_input_class = getattr(score_class, 'Input')
         prediction_result = score_instance.predict(
             model_input_class(
                 text=text,
-                metadata=row_dictionary
+                metadata=metadata
             )
         )
         predictions.append(prediction_result)
