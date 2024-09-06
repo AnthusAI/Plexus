@@ -49,7 +49,12 @@ class BaseNode(ABC, LangChainUser):
                 messages.append((role, content))
         
         if messages:
-            return [ChatPromptTemplate.from_messages(messages)]
+            return [
+                ChatPromptTemplate.from_messages(
+                    messages,
+                    template_format = "jinja2"
+                )
+            ]
         else:
             return []
 
