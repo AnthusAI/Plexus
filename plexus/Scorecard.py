@@ -165,7 +165,7 @@ class Scorecard:
 
             cls.score_registry.register(score_name, score_class)
     
-    def get_score_result(self, *, score_name=None, text):
+    def get_score_result(self, *, score_name=None, text, metadata):
         """
         Get a result for a score by looking up a Score instance for that question name and calling its
         compute_score_result method with the provided transcript.
@@ -200,7 +200,7 @@ class Scorecard:
                 context=None,
                 model_input=plexus.scores.Score.Input(
                     text=text,
-                    metadata={}
+                    metadata=metadata
                 )
             )
             logging.info(f"Score result: {score_result}")
@@ -225,7 +225,7 @@ class Scorecard:
             logging.info(error_string)
             return plexus.scores.Score.Result(value="Error", error=error_string)
 
-    def score_entire_text(self, *, text, subset_of_score_names=None, thread_pool_size=25):
+    def score_entire_text(self, *, text, metadata, subset_of_score_names=None, thread_pool_size=25):
         logging.info(f"score_entire_text method. subset_of_score_names: {subset_of_score_names}")
         if subset_of_score_names is None:
             subset_of_score_names = self.score_names_to_process()
@@ -233,7 +233,7 @@ class Scorecard:
         score_results_dict = {}
         with ThreadPoolExecutor(max_workers=thread_pool_size) as executor:
             future_to_score_name = {
-                executor.submit(self.get_score_result, score_name=score_name, text=text): score_name
+                executor.submit(self.get_score_result, score_name=score_name, text=text, metadata=metadata): score_name
                 for score_name in subset_of_score_names
             }
             for future in as_completed(future_to_score_name):

@@ -509,11 +509,15 @@ Total cost:       ${expenses['total_cost']:.6f}
         text = row['text']
         content_id = row.get('content_id', '')
         session_id = row.get('Session ID', content_id)
-        form_id = row.get('metadata', {}).get('form_id', '')
+        columns = row.get('columns', {})
+        form_id = columns.get('form_id', '')
+        metadata_string = columns.get('metadata', {})
+        metadata = json.loads(metadata_string)
         logging.info(f"Processing text for content_id: {content_id}, session_id: {session_id}, form_id: {form_id}")
 
         scorecard_results = self.scorecard.score_entire_text(
             text=text,
+            metadata=metadata,
             subset_of_score_names=self.score_names_to_process()
         )
 
