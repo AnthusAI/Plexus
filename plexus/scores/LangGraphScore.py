@@ -477,18 +477,20 @@ class LangGraphScore(Score, LangChainUser):
                             value_setters[condition['value'].lower()] = value_setter_name
                             workflow.add_node(value_setter_name, self.create_value_setter_node(condition.get('output', {})))
 
-                        # Create a single routing function for all conditions
-                        def routing_function(x):
-                            for condition in conditions:
-                                if hasattr(x, condition['state']) and \
-                                   getattr(x, condition['state']).lower() == condition['value'].lower():
-                                    return value_setters[condition['value'].lower()]
-                            return node_name  # Default to next node if no condition matches
+                        # Create a function that generates the routing function for each node
+                        def create_routing_function(conditions, value_setters, node_name):
+                            def routing_function(state):
+                                for condition in conditions:
+                                    if hasattr(state, condition['state']) and \
+                                       getattr(state, condition['state']).lower() == condition['value'].lower():
+                                        return value_setters[condition['value'].lower()]
+                                return node_name  # Default to next node if no condition matches
+                            return routing_function
 
                         # Add the conditional edges with the single routing function
                         workflow.add_conditional_edges(
                             previous_node,
-                            routing_function
+                            create_routing_function(conditions, value_setters, node_name)
                         )
 
                         # Add edges from value setters to their respective next nodes
@@ -538,8 +540,16 @@ class LangGraphScore(Score, LangChainUser):
 
         app = self.build_compiled_workflow()
 
-        result = app.invoke({"text": text.lower(), "metadata": metadata})
-        logging.info(f"LangGraph result: {result}")
+        try:
+            # Process the text to create a single string input
+            processed_text = self.preprocess_text(text)
+            
+            # Invoke the app with the processed text
+            result = app.invoke({"text": processed_text, "metadata": metadata})
+            logging.info(f"LangGraph result: {result}")
+        except Exception as e:
+            logging.error(f"Error during app.invoke: {str(e)}")
+            raise
 
         # Ensure we have a valid value (either string or boolean)
         value = result.get("value")
@@ -556,3 +566,9 @@ class LangGraphScore(Score, LangChainUser):
                 explanation=explanation
             )
         ]
+
+    def preprocess_text(self, text):
+        # Join all text elements into a single string
+        if isinstance(text, list):
+            return " ".join(text)
+        return text
