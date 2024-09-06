@@ -409,7 +409,7 @@ def evaluation(scorecard_name):
             metrics = None
 
         if os.path.exists(score_folder):
-            artifact_files = [f for f in os.listdir(score_folder) if f.endswith('.png')]
+            artifact_files = sorted([f for f in os.listdir(score_folder) if f.endswith('.png')])
             artifacts = []
             for artifact_file in artifact_files:
                 artifact_path = os.path.join(score_folder, artifact_file)
