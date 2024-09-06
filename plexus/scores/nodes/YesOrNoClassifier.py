@@ -79,6 +79,7 @@ class YesOrNoClassifier(BaseNode):
                         parse_from_start=self.parameters.parse_from_start)
                 result = initial_chain.invoke({
                     "text": state.text,
+                    "metadata": state.metadata,
                     "retry_feedback": f"You responded with {state.explanation}, but we need a \"Yes\" or a \"No\". Please try again. This is attempt {retry_count + 1} of {self.parameters.maximum_retry_count}." if retry_count > 0 else ""
                 })
 
@@ -95,7 +96,12 @@ class YesOrNoClassifier(BaseNode):
                         explanation = explanation_chain.invoke({})
                         result["explanation"] = explanation.content
                     else:
-                        full_response = model.invoke(initial_prompt.format(text=state.text))
+                        full_response = model.invoke(
+                            initial_prompt.format(
+                                text=state.text,
+                                metadata=state.metadata
+                            )
+                        )
                         result["explanation"] = full_response.content
 
                     return {**state.dict(), **result, "retry_count": retry_count}
