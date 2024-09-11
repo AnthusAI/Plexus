@@ -596,7 +596,7 @@ class LangGraphScore(Score, LangChainUser):
 
         return [
             LangGraphScore.Result(
-                name=self.parameters.score_name,
+                parameters=self.parameters,
                 value=value,
                 explanation=explanation
             )

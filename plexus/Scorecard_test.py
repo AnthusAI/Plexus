@@ -1,47 +1,39 @@
 import unittest
-from decimal import Decimal
-
+from unittest.mock import Mock, patch
 from plexus.Scorecard import Scorecard
 
-class MockScoreResult:
-    def __init__(self, value):
-        self.value = value
-        self.element_results = "dummy_element_results"
-        self.metadata = {}
+class TestScorecard(unittest.TestCase):
 
-class MockScore:
-    def __init__(self, transcript):
-        self.transcript = transcript
-
-    def compute_result(self):
-        # Mock computation, return a dummy result wrapped in an object with a 'value' attribute
-        return MockScoreResult(42)
-
-    def get_accumulated_costs(self):
-        # Mock expenses, return dummy values
-        return {
-            'prompt_tokens': 10,
-            'completion_tokens': 20,
-            'input_cost': Decimal('0.5'),
-            'output_cost': Decimal('0.3'),
-            'total_cost': Decimal('0.8')
+    def setUp(self):
+        # Create a mock scorecard configuration
+        self.mock_config = {
+            'scores': {
+                'Score1': {'id': 1},
+                'Score2': {'id': 2},
+                'Score3': {'id': 3},
+            }
         }
+        self.scorecard = Scorecard(self.mock_config)
 
-# class TestScorecard(unittest.TestCase):
-#     def setUp(self):
-#         self.scorecard = Scorecard(scorecard_folder_path="scorecards/TermLifeAI")
+    @patch('Plexus.plexus.Scorecard.Scorecard.get_score_result')
+    def test_score_entire_text_executes_all_scores(self, mock_get_score_result):
+        # Setup mock return values
+        mock_get_score_result.side_effect = [
+            [Mock(name='Score1')],
+            [Mock(name='Score2')],
+            [Mock(name='Score3')]
+        ]
 
-#     def test_get_score_result(self):
-#         score_result = self.scorecard.get_score_result(
-#             score_name="Dependents",
-#             transcript="Well hello there!")
-        
-#         self.assertEqual(score_result.value, 42)  # Compare the value attribute, not the object itself
-#         self.assertEqual(self.scorecard.prompt_tokens, 10)
-#         self.assertEqual(self.scorecard.completion_tokens, 20)
-#         self.assertEqual(self.scorecard.input_cost, Decimal('0.5'))
-#         self.assertEqual(self.scorecard.output_cost, Decimal('0.3'))
-#         self.assertEqual(self.scorecard.total_cost, Decimal('0.8'))
+        # Call the method we're testing
+        result = self.scorecard.score_entire_text(text="Sample text")
+
+        # Assert that get_score_result was called for each score
+        self.assertEqual(mock_get_score_result.call_count, 3)
+
+        # Assert that the result contains all scores
+        self.assertIn('Score1', result)
+        self.assertIn('Score2', result)
+        self.assertIn('Score3', result)
 
 if __name__ == '__main__':
     unittest.main()

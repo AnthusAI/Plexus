@@ -275,7 +275,11 @@ class CompositeScore(Score):
                 pass
 
         # Register the created class with the score_registry
-        scorecard.score_registry.register(score_name)(CompositeScoreFromMarkdown)
+        scorecard.score_registry.register(
+            cls=CompositeScoreFromMarkdown,
+            properties=config,
+            name=score_name,
+        )
 
         return CompositeScoreFromMarkdown
 
@@ -512,7 +516,7 @@ class CompositeScore(Score):
 
         # Process the chunks in parallel.
         
-        # Set this to 1 to process them in sequence.  Slower but cheaper since it will short-cirtuit
+        # Set this to 1 to process them in sequence.  Slower but cheaper since it will short-circut
         # in the decision tree and potentially not run a lot of the elements.
         max_threads = 20
 
