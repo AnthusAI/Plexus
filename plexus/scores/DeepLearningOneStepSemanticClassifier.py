@@ -8,7 +8,6 @@ import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras import regularizers
 import nltk
-nltk.download('punkt')
 from rich.progress import Progress
 from plexus.CustomLogging import logging, console
 from plexus.scores.Score import Score
@@ -29,6 +28,7 @@ os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
 class DeepLearningOneStepSemanticClassifier(DeepLearningSemanticClassifier):
 
     def __init__(self, *args, **parameters):
+        nltk.download('punkt')
         parameters['maximum_windows'] = 1
         super().__init__(*args, **parameters)
         self.validation_losses = []

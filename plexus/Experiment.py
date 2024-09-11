@@ -49,7 +49,7 @@ class Experiment:
         session_ids_to_sample = None,
         subset_of_score_names = None,
         experiment_label = None,
-        threads = 1,
+        threads = 16,
         max_mismatches_to_report=5
     ):
         self.scorecard_name = scorecard_name
@@ -503,7 +503,7 @@ Total cost:       ${expenses['total_cost']:.6f}
         before=before_log(logging.getLogger(), logging.INFO),       # log before retry
         retry=retry_if_exception_type((Timeout, RequestException))  # retry on specific exceptions
     )
-    def score_text(self, row):
+    async def score_text(self, row):
         logging.info(f"Columns available in this row: {row.index.tolist()}")
 
         text = row['text']

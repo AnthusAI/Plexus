@@ -10,10 +10,13 @@ import pandas as pd
 import importlib.util
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Optional, List, Dict
+import asyncio
 
 from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
 import plexus.scores
+from plexus.scores.Score import Score
 
 class Scorecard:
     """
@@ -165,7 +168,7 @@ class Scorecard:
 
             cls.score_registry.register(score_name, score_class)
     
-    def get_score_result(self, *, score_name=None, text, metadata):
+    async def get_score_result(self, *, score_name=None, text, metadata):
         """
         Get a result for a score by looking up a Score instance for that question name and calling its
         compute_score_result method with the provided transcript.
@@ -195,9 +198,13 @@ class Scorecard:
                 'score_name': score_name,
                 'model_name': self.get_model_name(score_name)
             })
-            score_instance = score_class(**score_configuration)
+            score_instance = await score_class.create(**score_configuration)
 
-            score_result = score_instance.predict(
+            if score_instance is None:
+                logging.error(f"Score with name '{score_name}' not found in scorecard '{self.name}'.")
+                return
+
+            score_result = await score_instance.predict(
                 context=None,
                 model_input=plexus.scores.Score.Input(
                     text=text,
@@ -226,21 +233,24 @@ class Scorecard:
             logging.info(error_string)
             return plexus.scores.Score.Result(value="Error", error=error_string)
 
-    def score_entire_text(self, *, text, metadata, subset_of_score_names=None, thread_pool_size=25):
+    async def score_entire_text(self, *, text: str, metadata: dict, subset_of_score_names: Optional[List[str]] = None, concurrency_limit: int = 25) -> Dict[str, Score.Result]:
         logging.info(f"score_entire_text method. subset_of_score_names: {subset_of_score_names}")
         if subset_of_score_names is None:
             subset_of_score_names = self.score_names_to_process()
 
+        async def process_score(score_name: str) -> List[Score.Result]:
+            return await self.get_score_result(score_name=score_name, text=text, metadata=metadata)
+
         score_results_dict = {}
-        with ThreadPoolExecutor(max_workers=thread_pool_size) as executor:
-            future_to_score_name = {
-                executor.submit(self.get_score_result, score_name=score_name, text=text, metadata=metadata): score_name
-                for score_name in subset_of_score_names
-            }
-            for future in as_completed(future_to_score_name):
-                results_list = future.result()
+        semaphore = asyncio.Semaphore(concurrency_limit)
+
+        async def bounded_process_score(score_name: str) -> None:
+            async with semaphore:
+                results_list = await process_score(score_name)
                 for result in results_list:
                     score_results_dict[result.name] = result
+
+        await asyncio.gather(*(bounded_process_score(score_name) for score_name in subset_of_score_names))
 
         return score_results_dict
 

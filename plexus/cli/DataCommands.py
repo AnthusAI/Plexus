@@ -337,8 +337,6 @@ def preprocess_text(text, stop_words):
 
 import re
 from nltk.corpus import stopwords
-nltk.download('punkt')
-nltk.download('stopwords')
 
 def compute_shap_feature_importances(
         scorecard_id,
@@ -349,7 +347,7 @@ def compute_shap_feature_importances(
         sample_size=1,
         ngram_range=(2,3)):
     logging.info(f"Computing feature importance for scorecard: {scorecard_id}, score: {score_name}")
-    
+
     # Filter the dataframe to include only the relevant score
     filtered_dataframe = dataframe[dataframe[score_name].notnull()]
     
