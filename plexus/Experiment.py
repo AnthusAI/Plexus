@@ -512,7 +512,17 @@ Total cost:       ${expenses['total_cost']:.6f}
         columns = row.get('columns', {})
         form_id = columns.get('form_id', '')
         metadata_string = columns.get('metadata', {})
-        metadata = json.loads(metadata_string)
+        
+        # Check if metadata_string is already a dict, if not, try to parse it
+        if isinstance(metadata_string, dict):
+            metadata = metadata_string
+        else:
+            try:
+                metadata = json.loads(metadata_string)
+            except json.JSONDecodeError:
+                logging.warning(f"Failed to parse metadata as JSON. Using empty dict. Metadata: {metadata_string}")
+                metadata = {}
+
         logging.info(f"Processing text for content_id: {content_id}, session_id: {session_id}, form_id: {form_id}")
 
         scorecard_results = self.scorecard.score_entire_text(
