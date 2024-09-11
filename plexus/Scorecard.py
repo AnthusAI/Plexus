@@ -24,21 +24,40 @@ class Scorecard:
 
     This class provides functionality to load scores from a YAML configuration, compute individual and total scores,
     and manage the costs associated with score computations.
-
-    Attributes:
-        score_registry (ScoreRegistry): Registry holding all available scores.
     """
-        
-    score_registry = ScoreRegistry()
-    
-    def __init__(self, *, scorecard_name):
+
+    score_registry = None
+
+    @classmethod
+    def initialize_registry(cls):
+        if cls.score_registry is None:
+            cls.score_registry = ScoreRegistry()
+
+        cls.log_registry_structures()
+
+    @classmethod
+    def log_registry_structures(cls):
+        logging.info("Scorecard Registry Structure:")
+        for identifier, scorecard_class in scorecard_registry._classes_by_id.items():
+            logging.info(f"  Scorecard: {identifier}")
+            if hasattr(scorecard_class, 'score_registry'):
+                score_reg = scorecard_class.score_registry
+                logging.info("    Score Registry:")
+                logging.info(f"      By ID: {score_reg._classes_by_id}")
+                logging.info(f"      By Key: {score_reg._classes_by_key}")
+                logging.info(f"      By Name: {score_reg._classes_by_name}")
+            else:
+                logging.info("    No Score Registry found for this Scorecard")
+
+    def __init__(self, *, scorecard):
         """
         Initializes a new instance of the Scorecard class.
 
         Args:
-            scorecard_name (str): The name of the scorecard.
+            scorecard (str): The name of the scorecard.
         """
-        self.scorecard_name = scorecard_name
+        self.initialize_registry()
+        self.scorecard_identifier = scorecard
 
         # Accumulators for tracking the total expenses.
         self.prompt_tokens = 0
@@ -75,11 +94,11 @@ class Scorecard:
         Some scores are computed implicitly by other scores and don't need to be directly processed.
 
         Returns:
-            list of str: Names of scores that are marked as 'primary' and need direct processing.
+            list of str: Names of scores that need direct processing.
         """
         return [
-            score_name for score_name, details in cls.scores.items()
-            if 'primary' not in details
+            score['name'] for score in cls.scores
+            if 'primary' not in score
         ]
 
     @classmethod
@@ -115,31 +134,39 @@ class Scorecard:
         scorecard_class = type(scorecard_name, (Scorecard,), {
             'properties':            scorecard_properties,
             'name':                  scorecard_properties['name'],
-            'metadata':              scorecard_properties['metadata'],
             'scores':                scorecard_properties['scores'],
             'score_registry':        ScoreRegistry()
         })
 
         # Register the scorecard class.
+        registration_args = {
+            'properties': scorecard_properties,
+        }
+        if 'id' in scorecard_properties:
+            registration_args['id'] = scorecard_properties['id']
+        if 'key' in scorecard_properties:
+            registration_args['key'] = scorecard_properties['key']
+        if 'name' in scorecard_properties:
+            registration_args['name'] = scorecard_properties['name']
+        
         scorecard_registry.register(
-            scorecard_properties['key'],
-            scorecard_properties['family'])(scorecard_class)
-
-        # Find the path of the Markdown files for individual scores from the file name.
-        file_name = os.path.splitext(os.path.basename(yaml_file_path))[0]
-        markdown_folder_path = os.path.join(
-            'scorecards', file_name)
-
-        # Register scores that come from Markdown files.
-        scorecard_class.load_and_register_scores(markdown_folder_path)
+            cls=scorecard_class,
+            **registration_args
+        )
 
         # Register any other scores that are in the YAML file.
-        for score_name, score_info in scorecard_properties['scores'].items():
+        for score_info in scorecard_properties['scores']:
             if 'class' in score_info:
                 class_name = score_info['class']
                 module = importlib.import_module('plexus.scores')
                 score_class = getattr(module, class_name)
-                scorecard_class.score_registry.register(score_name)(score_class)
+                scorecard_class.score_registry.register(
+                    cls=score_class,
+                    properties=score_info,
+                    name=score_info.get('name'),
+                    key=score_info.get('key'),
+                    id=score_info.get('id')
+                )
 
         return scorecard_class
     
@@ -150,58 +177,36 @@ class Scorecard:
                 yaml_file_path = os.path.join(directory_path, file_name)
                 cls.create_from_yaml(yaml_file_path)
 
-    @classmethod
-    def load_and_register_scores(cls, markdown_folder_path):
-        """
-        Load and register the scores based on the `scores` dictionary.
-        """
-        for score_name in cls.score_names_to_process():
-            normalized_score_name = cls.normalize_score_name(score_name)
-            markdown_file_path = os.path.join(
-                markdown_folder_path, f"{normalized_score_name}.md")
-
-            score_class = plexus.scores.CompositeScore.create_from_markdown(
-                scorecard=cls,
-                markdown_file_path=markdown_file_path,
-                score_name=score_name
-            )
-
-            cls.score_registry.register(score_name, score_class)
-    
-    async def get_score_result(self, *, score_name=None, text, metadata):
+    async def get_score_result(self, *, scorecard, score, text, metadata):
         """
         Get a result for a score by looking up a Score instance for that question name and calling its
         compute_score_result method with the provided transcript.
 
-        :param question_name: The name of the question.
+        :param score: The score identifier.
         :param text: The transcript.
         :param metadata: The metadata.
         :return: The score result.
         """
         
-        # Get score configuration
-        logging.info(f"Predicting Score [magenta1][b]{score_name}[/b][/magenta1]...")
-        score_configuration = self.scores[score_name]
-
-        if score_name not in self.scores:
-            logging.error(f"Score with name '{score_name}' not found in scorecard '{self.name}'.")
+        score_class = self.score_registry.get(score)
+        if score_class is None:
+            logging.error(f"Score with name '{score}' not found.")
             return
 
-        logging.info(f"Score Configuration: {rich.pretty.pretty_repr(score_configuration)}")
-
-        score_class = self.score_registry.get(score_name)
+        score_instance = score_class()
+        score_configuration = self.score_registry.get_properties(score)
+        
         if (score_class is not None):
-            logging.info("Found score for question: " + score_name)
+            logging.info("Found score for question: " + score)
 
             score_configuration.update({
                 'scorecard_name': self.name,
-                'score_name': score_name,
-                'model_name': self.get_model_name(score_name)
+                'score_name': score
             })
             score_instance = await score_class.create(**score_configuration)
 
             if score_instance is None:
-                logging.error(f"Score with name '{score_name}' not found in scorecard '{self.name}'.")
+                logging.error(f"Score with name '{score}' not found in scorecard '{self.name}'.")
                 return
 
             score_result = await score_instance.predict(
@@ -229,7 +234,7 @@ class Scorecard:
             return score_result
 
         else:
-            error_string = f"No score found for question: \"{score_name}\""
+            error_string = f"No score found for question: \"{score}\""
             logging.info(error_string)
             return plexus.scores.Score.Result(value="Error", error=error_string)
 
@@ -238,8 +243,8 @@ class Scorecard:
         if subset_of_score_names is None:
             subset_of_score_names = self.score_names_to_process()
 
-        async def process_score(score_name: str) -> List[Score.Result]:
-            return await self.get_score_result(score_name=score_name, text=text, metadata=metadata)
+        async def process_score(score: str) -> List[Score.Result]:
+            return await self.get_score_result(scorecard=self.scorecard_identifier, score=score, text=text, metadata=metadata)
 
         score_results_dict = {}
         semaphore = asyncio.Semaphore(concurrency_limit)
@@ -248,7 +253,7 @@ class Scorecard:
             async with semaphore:
                 results_list = await process_score(score_name)
                 for result in results_list:
-                    score_results_dict[result.name] = result
+                    score_results_dict[result.parameters['id']] = result
 
         await asyncio.gather(*(bounded_process_score(score_name) for score_name in subset_of_score_names))
 
@@ -263,10 +268,15 @@ class Scorecard:
             'total_cost': self.total_cost
         }
 
-    def get_model_name(self, score_name=None):
+    def get_model_name(self, name=None, id=None, key=None):
         """Return the model name used for a specific score or the scorecard."""
-        if score_name and score_name in self.scores:
-            score_config = self.scores[score_name]
-            return score_config.get('model_name') or score_config.get('parameters', {}).get('model_name')
+        if name or id or key:
+            identifier = id or key or name
+            score_class = self.score_registry.get_score_class(identifier)
+            if score_class:
+                return score_class.get_model_name()
         
-        return self.properties.get('model_name') or self.properties.get('parameters', {}).get('model_name') or 'Unknown'
+        # If no specific score is found or requested, return the scorecard's model name
+        return self.properties.get('model_name') or \
+               self.properties.get('parameters', {}).get('model_name') or \
+               'Unknown'

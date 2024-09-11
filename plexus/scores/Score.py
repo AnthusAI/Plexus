@@ -57,18 +57,12 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
 
         Attributes
         ----------
-        scorecard_name : str
-            The name of the scorecard.
-        score_name : str
-            The name of the score.
         data : dict
             Dictionary containing data-related parameters.
         """
+        name: Optional[str] = None
         id: Optional[Union[str, int]] = None
-        scorecard_name: str
-        score_name: str
-        label_score_name: Optional[str] = None
-        label_field: Optional[str] = None
+        key: Optional[str] = None
         dependencies: Optional[List[dict]] = None
         data: Optional[dict] = None
         number_of_classes: Optional[int] = None
@@ -115,10 +109,10 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         value : str
             The predicted score value.
         """
-        name:     str
-        value:    Union[str, bool]
-        metadata: dict = {}
-        error:    Optional[str] = None
+        parameters: 'Score.Parameters'
+        value:      Union[str, bool]
+        metadata:   dict = {}
+        error:      Optional[str] = None
 
         def __eq__(self, other):
             if isinstance(other, Score.Result):
@@ -132,7 +126,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
 
         def is_no(self):
             return self.value.lower() == 'no'
-
+        
     def __init__(self, **parameters):
         """
         Initialize the Score instance with the given parameters.
@@ -489,3 +483,5 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         score_configuration['score_name'] = score_name
         
         return score_class(**score_configuration)
+
+Score.Result.model_rebuild()

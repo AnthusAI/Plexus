@@ -1,87 +1,55 @@
 import logging
 
-class BaseRegistry:
+class Registry:
     def __init__(self):
-        self._registry = {}
-        self._family_registry = {}
-        self.logger = logging.getLogger(__name__)
+        self._classes_by_id = {}
+        self._classes_by_key = {}
+        self._classes_by_name = {}
+        self._properties_by_id = {}
+        self._properties_by_key = {}
+        self._properties_by_name = {}
+        self.logger = logging.getLogger(self.__class__.__name__)
 
-    def register(self, name, family=None):
-        def decorator(cls):
-            self._registry[name.lower()] = cls
-            if family:
-                family_lower = family.lower()
-                if family_lower not in self._family_registry:
-                    self._family_registry[family_lower] = []
-                self._family_registry[family_lower].append(name.lower())
-            self.logger.debug(f"Registered {name} in {self.__class__.__name__}")
-            return cls
-        return decorator
+    def register(self, cls, properties, id=None, key=None, name=None):
+        if not any([id, key, name]):
+            raise ValueError("At least one of id, key, or name must be provided")
 
-    def get(self, name_or_family):
-        name_or_family_lower = name_or_family.lower()
-        # Direct name lookup
-        if name_or_family_lower in self._registry:
-            self.logger.debug(f"Retrieved {name_or_family} from {self.__class__.__name__}")
-            return self._registry[name_or_family_lower]
-        
-        # Family name lookup with custom logic to select the correct one
-        if name_or_family_lower in self._family_registry:
-            self.logger.debug(f"Retrieved {name_or_family} from {self.__class__.__name__}")
-            return self.resolve_family(name_or_family_lower)
+        if id is not None:
+            id = str(id)
+            self._classes_by_id[id] = cls
+            self._properties_by_id[id] = properties
+        if key is not None:
+            key = key.lower()
+            self._classes_by_key[key] = cls
+            self._properties_by_key[key] = properties
+        if name is not None:
+            name = name.lower()
+            self._classes_by_name[name] = cls
+            self._properties_by_name[name] = properties
 
-        return None
+        class_name = cls.__name__ if hasattr(cls, '__name__') else str(cls)
+        identifiers = [f"{k}={v}" for k, v in {'id': id, 'key': key, 'name': name}.items() if v is not None]
+        self.logger.debug(f"Registered {class_name} with {', '.join(identifiers)}")
 
-    def resolve_family(self, family):
-        family_lower = family.lower()
-        # Implement the logic to select the correct classifier/scorecard for the family
-        # This is a placeholder for the selection logic
-        current_names = self._family_registry[family_lower]
-        # Placeholder for the logic to select the correct one
-        # For example, it could be the most recently added, or based on some versioning
-        selected_name = current_names[-1]  # This is just a placeholder
-        self.logger.debug(f"Resolved family {family} to {selected_name} in {self.__class__.__name__}")
-        return self._registry[selected_name]
-    
-class ScoreRegistry(BaseRegistry):
-    """
-    A registry for scores.
-    """
-    # Inherits all the functionality from BaseRegistry
-    # Additional classifier-specific logic can be added here
+    def get(self, identifier):
+        identifier = str(identifier).lower() if identifier is not None else None
+        return (self._classes_by_id.get(identifier) or
+                self._classes_by_key.get(identifier) or
+                self._classes_by_name.get(identifier))
 
-class ScorecardRegistry(BaseRegistry):
-    """
-    A registry for scorecards.
-    """
+    def get_properties(self, identifier):
+        identifier = str(identifier).lower() if identifier is not None else None
+        return (self._properties_by_id.get(identifier) or
+                self._properties_by_key.get(identifier) or
+                self._properties_by_name.get(identifier))
 
-    def get_score_class(self, scorecard_key, score_name):
-        scorecard_class = self.get(scorecard_key)
-        if scorecard_class is None:
-            self.logger.error(f"Scorecard '{scorecard_key}' not found")
-            return None
-        
-        score_registry = scorecard_class.score_registry
-        score_class = score_registry.get(score_name)
-        if score_class is None:
-            self.logger.error(f"Score '{score_name}' not found in scorecard '{scorecard_key}'")
-            return None
-        
-        return score_class
+    def __contains__(self, identifier):
+        return bool(self.get(identifier))
 
-    def get_score_parameters(self, scorecard_key, score_name):
-        scorecard_class = self.get(scorecard_key)
-        if scorecard_class is None:
-            self.logger.error(f"Scorecard '{scorecard_key}' not found")
-            return None
-        
-        score_configuration = scorecard_class.scores.get(score_name, {}).copy()
-        score_configuration.update({
-            'scorecard_name': scorecard_class.name,
-            'score_name': score_name
-        })
-        
-        return score_configuration
+class ScorecardRegistry(Registry):
+    pass
 
-# Global Scorecard registry
+class ScoreRegistry(Registry):
+    pass
+
 scorecard_registry = ScorecardRegistry()
