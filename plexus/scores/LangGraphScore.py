@@ -16,9 +16,14 @@ from langgraph.prebuilt import ToolExecutor
 
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
+from langchain.globals import set_debug, set_verbose
 # Logging.
-from langchain.globals import set_debug
-set_debug(True)
+# if os.getenv('DEBUG'):
+#     
+#     set_debug(True)
+# else:
+set_debug(False)
+set_verbose(False)
 
 class LangGraphScore(Score, LangChainUser):
     """
@@ -61,17 +66,47 @@ class LangGraphScore(Score, LangChainUser):
         """
         Initialize the LangGraphScore.
 
-        This method sets up the score parameters, initializes the token counter,
-        and sets up the language model specified in the configuration.
+        This method sets up the score parameters and initializes basic attributes.
+        The language model initialization is deferred to the async setup.
 
         :param parameters: Configuration parameters for the score and language model.
         """
-        super().__init__(**parameters)
+        Score.__init__(self, **parameters)
         self.token_counter = self._create_token_counter()
         self.openai_callback = None
-        self.model = self._initialize_model()
+        self.model = None  # Will be initialized in async setup
+        self.parameters = self.Parameters(**parameters)
 
-    def _parse_validation_result(self, output: str) -> Tuple[str, str]:
+    async def async_setup(self):
+        """
+        Asynchronous setup for LangGraphScore.
+
+        This method initializes the language model asynchronously.
+        """
+        self.model = await self._ainitialize_model()
+
+    @classmethod
+    async def create(cls, **parameters):
+        """
+        Create and set up a LangGraphScore instance asynchronously.
+
+        :param parameters: Configuration parameters for the score and language model.
+        :return: An initialized LangGraphScore instance.
+        """
+        instance = cls(**parameters)
+        await instance.async_setup()
+        return instance
+
+    async def _ainitialize_model(self):
+        """
+        Asynchronously initialize the language model.
+
+        This method should be implemented in LangChainUser.
+        """
+        # Implement this in LangChainUser
+        pass
+
+    async def _parse_validation_result(self, output: str) -> Tuple[str, str]:
         """
         Parse the output from the language model to determine the validation result and explanation.
 
@@ -534,7 +569,7 @@ class LangGraphScore(Score, LangChainUser):
 
         return app
 
-    def predict(self, context, model_input: Score.Input):
+    async def predict(self, context, model_input: Score.Input):
         text = model_input.text
         metadata = model_input.metadata
 
@@ -544,11 +579,11 @@ class LangGraphScore(Score, LangChainUser):
             # Process the text to create a single string input
             processed_text = self.preprocess_text(text)
             
-            # Invoke the app with the processed text
-            result = app.invoke({"text": processed_text, "metadata": metadata})
-            logging.info(f"LangGraph result: {result}")
+            # Invoke the app with the processed text asynchronously
+            result = await app.ainvoke({"text": processed_text, "metadata": metadata})
+            logging.debug(f"LangGraph result: {result}")
         except Exception as e:
-            logging.error(f"Error during app.invoke: {str(e)}")
+            logging.error(f"Error during app.ainvoke: {str(e)}")
             raise
 
         # Ensure we have a valid value (either string or boolean)

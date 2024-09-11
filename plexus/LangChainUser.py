@@ -6,12 +6,14 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 from langchain_aws import ChatBedrock
-from langchain_openai import AzureChatOpenAI, ChatOpenAI
-from langchain_google_vertexai import ChatVertexAI
+from langchain_community.chat_models import ChatOpenAI, AzureChatOpenAI
+from langchain_community.chat_models import ChatOpenAI
 from langchain_community.callbacks import OpenAICallbackHandler
 
 from plexus.CustomLogging import logging
 from plexus.scores.Score import Score
+
+from langchain_community.chat_models import BedrockChat, ChatVertexAI
 
 class LangChainUser:
 
@@ -154,6 +156,28 @@ class LangChainUser:
             callbacks=callbacks,
             max_tokens=max_tokens
         )
+
+    async def _ainitialize_model(self):
+        """
+        Asynchronously initialize the language model.
+        """
+        if self.parameters.model_provider == "ChatOpenAI":
+            model = ChatOpenAI(
+                model_name=self.parameters.model_name,
+                temperature=self.parameters.temperature,
+                max_tokens=self.parameters.max_tokens
+            )
+            await model.agenerate([])  # Initialize the async client
+            return model
+        elif self.parameters.model_provider == "AzureChatOpenAI":
+            model = AzureChatOpenAI(
+                deployment_name=self.parameters.model_name,
+                temperature=self.parameters.temperature,
+                max_tokens=self.parameters.max_tokens
+            )
+            await model.agenerate([])  # Initialize the async client
+            return model
+        # ... other model providers ...
 
     def get_token_usage(self):
         if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:

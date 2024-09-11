@@ -21,10 +21,10 @@ from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.exceptions import OutputParserException
 
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
-from langchain.globals import set_debug
 from langchain.output_parsers import EnumOutputParser
 
-set_debug(True)
+# from langchain.globals import set_debug
+# set_debug(True)
 
 class GraphState(TypedDict):
     text: str

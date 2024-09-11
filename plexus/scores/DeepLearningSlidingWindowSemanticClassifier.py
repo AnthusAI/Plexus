@@ -10,7 +10,6 @@ import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras import regularizers
 import nltk
-nltk.download('punkt')
 from typing import Optional
 from rich.progress import Progress
 from plexus.CustomLogging import logging, console
@@ -47,6 +46,7 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
             return value
 
     def __init__(self, *args, **parameters):
+        nltk.download('punkt')
         super().__init__(*args, **parameters)
         self.validation_losses = []
 
