@@ -4,6 +4,7 @@ import sys
 import json
 import click
 import yaml
+import asyncio
 import pandas as pd
 
 from plexus.CustomLogging import logging
@@ -48,7 +49,6 @@ def load_configuration_from_yaml_file(configuration_file_path):
 @click.option('--session-ids-to-sample', default='', type=str, help='Comma-separated list of session IDs to sample')
 @click.option('--score-name', default='', type=str, help='Comma-separated list of score names to evaluate')
 @click.option('--experiment-label', default='', type=str, help='Label for the experiment')
-@click.option('--threads', default=16, type=int, help='Number of threads to use')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 def accuracy(
     scorecard_name: str,
@@ -59,7 +59,6 @@ def accuracy(
     session_ids_to_sample: str,
     score_name: str,
     experiment_label: str,
-    threads: int,
     fresh: bool
     ):
     """
@@ -67,6 +66,14 @@ def accuracy(
     These experiment runs will generate metrics and artifacts that Plexus will log in MLFLow.
     The scoring reports from evaluation will include accuracy metrics.
     """
+
+    try:
+        loop = asyncio.get_event_loop()
+        logging.warning("An event loop is already running at the start of the accuracy command")
+        logging.warning(f"Current event loop: {loop}")
+        logging.warning(f"Loop is running: {loop.is_running()}")
+    except RuntimeError:
+        logging.info("No running event loop detected at the start of the accuracy command")
 
     # Set LANGCHAIN_TRACING_V2 environment variable if use_langsmith_trace is True
     if use_langsmith_trace:
@@ -134,8 +141,7 @@ def accuracy(
             'random_seed': random_seed,
             'session_ids_to_sample': re.split(r',\s+', session_ids_to_sample.strip()) if session_ids_to_sample.strip() else None,
             'subset_of_score_names': [single_score_name],
-            'experiment_label': experiment_label,
-            'threads': threads
+            'experiment_label': experiment_label
         }
         
         if uses_data_driven:
