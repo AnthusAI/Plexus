@@ -90,11 +90,11 @@ def accuracy(
         logging.error(f"Scorecard with name '{scorecard_name}' not found.")
         return
     # Instantiate the scorecard type and tell it where to find the score definition files.
-    scorecard_instance = scorecard_type(scorecard_name=scorecard_name)
+    scorecard_instance = scorecard_type(scorecard=scorecard_name)
     logging.info(f"  Using scorecard {scorecard_name} with class {scorecard_instance.__class__.__name__}")
 
     # Check if any score in the scorecard uses the data-driven approach
-    uses_data_driven = any('data' in score_config for score_config in scorecard_instance.scores.values())
+    uses_data_driven = any('data' in score_config for score_config in scorecard_instance.scores)
 
     # We used to support multiple, comma-separated score names.  But lots of our
     # score names have commas in them.  So, we don't support that anymore.
@@ -113,10 +113,11 @@ def accuracy(
         single_score_labeled_samples = []
         labeled_samples_filename = None
         if uses_data_driven:
-            if single_score_name in scorecard_instance.scores:
+            score_config = next((score for score in scorecard_instance.scores if score['name'] == single_score_name), None)
+            if score_config:
                 single_score_labeled_samples = get_data_driven_samples(
                     scorecard_instance, scorecard_name, single_score_name, 
-                    scorecard_instance.scores[single_score_name], fresh)
+                    score_config, fresh)
             else:
                 logging.warning(f"Score '{single_score_name}' not found in scorecard. Skipping.")
                 continue
