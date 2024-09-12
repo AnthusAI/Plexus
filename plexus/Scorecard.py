@@ -239,22 +239,29 @@ class Scorecard:
             logging.info(error_string)
             return plexus.scores.Score.Result(value="Error", error=error_string)
 
-    async def score_entire_text(self, *, text: str, metadata: dict, subset_of_score_names: Optional[List[str]] = None, concurrency_limit: int = 25) -> Dict[str, Score.Result]:
-        logging.info(f"score_entire_text method. subset_of_score_names: {subset_of_score_names}")
+    async def score_entire_text(self, *, text: str, metadata: dict, subset_of_score_names: Optional[List[str]] = None) -> Dict[str, Score.Result]:
         if subset_of_score_names is None:
             subset_of_score_names = self.score_names_to_process()
 
         async def process_score(score: str) -> List[Score.Result]:
-            return await self.get_score_result(scorecard=self.scorecard_identifier, score=score, text=text, metadata=metadata)
+            try:
+                return await asyncio.wait_for(
+                    self.get_score_result(scorecard=self.scorecard_identifier, score=score, text=text, metadata=metadata),
+                    timeout=300
+                )
+            except asyncio.TimeoutError:
+                logging.error(f"Timeout processing score: {score}")
+                return []
+            except Exception as e:
+                logging.error(f"Error processing score {score}: {str(e)}")
+                return []
 
         score_results_dict = {}
-        semaphore = asyncio.Semaphore(concurrency_limit)
 
         async def bounded_process_score(score_name: str) -> None:
-            async with semaphore:
-                results_list = await process_score(score_name)
-                for result in results_list:
-                    score_results_dict[result.parameters.id] = result
+            results_list = await process_score(score_name)
+            for result in results_list:
+                score_results_dict[result.parameters.id] = result
 
         await asyncio.gather(*(bounded_process_score(score_name) for score_name in subset_of_score_names))
 
