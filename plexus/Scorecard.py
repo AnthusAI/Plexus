@@ -156,6 +156,7 @@ class Scorecard:
 
         # Register any other scores that are in the YAML file.
         for score_info in scorecard_properties['scores']:
+            score_info['scorecard_name'] = scorecard_properties['name']
             if 'class' in score_info:
                 class_name = score_info['class']
                 module = importlib.import_module('plexus.scores')
@@ -253,7 +254,7 @@ class Scorecard:
             async with semaphore:
                 results_list = await process_score(score_name)
                 for result in results_list:
-                    score_results_dict[result.parameters['id']] = result
+                    score_results_dict[result.parameters.id] = result
 
         await asyncio.gather(*(bounded_process_score(score_name) for score_name in subset_of_score_names))
 
@@ -272,7 +273,7 @@ class Scorecard:
         """Return the model name used for a specific score or the scorecard."""
         if name or id or key:
             identifier = id or key or name
-            score_class = self.score_registry.get_score_class(identifier)
+            score_class = self.score_registry.get(identifier)
             if score_class:
                 return score_class.get_model_name()
         
