@@ -50,42 +50,36 @@ class LangChainUser:
 
             def on_llm_start(self, serialized, prompts, **kwargs):
                 self.llm_calls += 1
-                logging.info(f"LLM Call {self.llm_calls} started")
 
             def on_llm_end(self, response: LLMResult, **kwargs):
-                logging.info(f"LLM Call {self.llm_calls} ended")
-                logging.info(f"Response type: {type(response)}")
-                logging.info(f"Response content: {response}")
 
                 usage = {}
                 if isinstance(response, LLMResult):
                     if response.llm_output:
                         usage = response.llm_output.get("usage", {})
-                        logging.info(f"Token usage from llm_output: {usage}")
-                    else:
-                        logging.info("No llm_output in response")
+                        logging.debug(f"Token usage from llm_output: {usage}")
                         
                     if response.generations and response.generations[0]:
                         generation = response.generations[0][0]
                         if hasattr(generation, 'generation_info') and generation.generation_info:
                             usage = generation.generation_info.get("token_usage", {})
-                            logging.info(f"Token usage from generation_info: {usage}")
+                            logging.debug(f"Token usage from generation_info: {usage}")
                         elif hasattr(generation, 'message') and hasattr(generation.message, 'usage_metadata'):
                             usage = generation.message.usage_metadata
-                            logging.info(f"Token usage from usage_metadata: {usage}")
+                            logging.debug(f"Token usage from usage_metadata: {usage}")
                         else:
                             logging.info("No token usage information found in generation")
                     else:
-                        logging.info("No generations in response")
+                        logging.debug("No generations in response")
 
                 self.prompt_tokens += usage.get("input_tokens", 0) or usage.get("prompt_tokens", 0)
                 self.completion_tokens += usage.get("output_tokens", 0) or usage.get("completion_tokens", 0)
                 self.total_tokens += usage.get("total_tokens", 0) or (self.prompt_tokens + self.completion_tokens)
 
-                logging.info(f"Current cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}")
+                logging.debug(f"Current cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}")
 
             def on_chain_end(self, outputs, **kwargs):
-                logging.info(f"Chain ended. Cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}")
+                logging.debug(f"Chain ended. Cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}")
 
         return TokenCounterCallback()
 
