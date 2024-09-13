@@ -217,7 +217,7 @@ class Scorecard:
                     metadata=metadata
                 )
             )
-            logging.info(f"Score result: {score_result}")
+            logging.debug(f"Score result: {score_result}")
 
             if hasattr(score_instance, 'get_accumulated_costs'):
                 score_total_cost = score_instance.get_accumulated_costs()
@@ -247,7 +247,7 @@ class Scorecard:
             try:
                 return await asyncio.wait_for(
                     self.get_score_result(scorecard=self.scorecard_identifier, score=score, text=text, metadata=metadata),
-                    timeout=300
+                    timeout=1200
                 )
             except asyncio.TimeoutError:
                 logging.error(f"Timeout processing score: {score}")

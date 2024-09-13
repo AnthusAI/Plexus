@@ -144,7 +144,6 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         """
         try:
             self.parameters = self.Parameters(**parameters)
-            logging.info("Initializing [magenta1][b]Score[/b][/magenta1]")
             self._is_multi_class = None
             self._number_of_classes = None
         except ValidationError as e:

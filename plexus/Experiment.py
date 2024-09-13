@@ -246,12 +246,9 @@ class AccuracyExperiment(Experiment):
 
         logging.info("Scoring completed.")
 
-        for result in results:
-            logging.info(f"Form ID: {result['form_id']}")
-            logging.info(f"Results: {result['results']}")
-
         # Count the number correct out of all questions.
         for result in results:
+            logging.info(f"Form ID: {result['form_id']}")
             for question in self.score_names():
                 score_result = next((result for result in result['results'].values() if result.parameters.name == question), None)
                 score_value = str(score_result.value).lower() if score_result else None
@@ -267,7 +264,7 @@ class AccuracyExperiment(Experiment):
                         'question': question,
                         'predicted': score_value,
                         'ground_truth': human_label,
-                        'explanation': score_result.explanation,
+                        'explanation': score_result.explanation if score_result else None,
                         'transcript': score_result.metadata['text']
                     })
 
@@ -536,7 +533,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 # Also, add the full text to the score result.
                 score_result.metadata['text'] = text
 
-                logging.info(f"Score result for {score_identifier}: {score_result}")
+                logging.debug(f"Score result for {score_identifier}: {score_result}")
 
             except Exception as e:
                 logging.exception(f"Error processing {score_identifier}: {e}")
