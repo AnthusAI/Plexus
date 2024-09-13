@@ -359,7 +359,7 @@ class LangGraphScore(Score, LangChainUser):
     @staticmethod
     def generate_output_aliasing_function(output_mapping: dict) -> FunctionType:
         def output_aliasing(state):
-            logging.info(f"Output aliasing: {output_mapping}")
+            logging.debug(f"Output aliasing: {output_mapping}")
             for alias, original in output_mapping.items():
                 if hasattr(state, original):
                     setattr(state, alias, getattr(state, original))
