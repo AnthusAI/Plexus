@@ -51,15 +51,15 @@ class YesOrNoClassifier(BaseNode):
                 if word == "yes":
                     return {
                         "classification": "yes",
-                        "explanation": None
+                        "explanation": output  # Store the entire LLM response
                     }
                 elif word == "no":
                     return {
                         "classification": "no",
-                        "explanation": output
+                        "explanation": output  # Store the entire LLM response
                     }
             
-            return {"classification": "unknown"}
+            return {"classification": "unknown", "explanation": output}  # Store the entire LLM response even for unknown
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
@@ -71,19 +71,21 @@ class YesOrNoClassifier(BaseNode):
 
         def classifier_node(state):
             initial_prompt = prompt_templates[0]
-            retry_count = 0 if state.retry_count is None else state.retry_count
+            retry_count = state.retry_count or 0
 
             while retry_count < self.parameters.maximum_retry_count:
                 initial_chain = initial_prompt | model | \
                     self.ClassificationOutputParser(
                         parse_from_start=self.parameters.parse_from_start)
-                result = initial_chain.invoke({
-                    "text": state.text,
-                    "metadata": state.metadata,
-                    "retry_feedback": f"You responded with {state.explanation}, but we need a \"Yes\" or a \"No\". Please try again. This is attempt {retry_count + 1} of {self.parameters.maximum_retry_count}." if retry_count > 0 else ""
-                })
+                
+                retry_feedback = f"You responded with {state.explanation}, but we need a \"Yes\" or a \"No\". Please try again. This is attempt {retry_count + 1} of {self.parameters.maximum_retry_count}." if retry_count > 0 else ""
+                
+                result = initial_chain.invoke({**state.dict(), "retry_feedback": retry_feedback})
 
                 if result["classification"] != "unknown":
+                    explanation = result["explanation"]
+
+                    # If explanation_message is configured, run a second LLM call
                     if self.parameters.explanation_message:
                         explanation_messages = ChatPromptTemplate(
                             messages=[
@@ -93,23 +95,22 @@ class YesOrNoClassifier(BaseNode):
                             ]
                         )
                         explanation_chain = explanation_messages | model
-                        explanation = explanation_chain.invoke({})
-                        result["explanation"] = explanation.content
-                    else:
-                        full_response = model.invoke(
-                            initial_prompt.format(
-                                text=state.text,
-                                metadata=state.metadata
-                            )
-                        )
-                        result["explanation"] = full_response.content
+                        explanation = explanation_chain.invoke({}).content
 
-                    return {**state.dict(), **result, "retry_count": retry_count}
+                    return {
+                        "classification": result["classification"],
+                        "explanation": explanation,
+                        "retry_count": retry_count
+                    }
 
                 retry_count += 1
                 sleep(1)
 
-            return {**state.dict(), "classification": "unknown", "explanation": "Maximum retries reached", "retry_count": retry_count}
+            return {
+                "classification": "unknown",
+                "explanation": "Maximum retries reached",
+                "retry_count": retry_count
+            }
 
         return classifier_node
 
