@@ -77,7 +77,6 @@ class VectorizerLogger:
 @click.option('--ngram-range', 'ngram_range', default='2,3', help='The range of n-grams to use for feature extraction, e.g., "2,3"')
 def analyze(scorecard_name, excel, score_name, all_questions, value, top_n_features, leaderboard_n_features, sample_size, ngram_range):
     plexus.Scorecard.load_and_register_scorecards('scorecards/')
-    scorecard_class = scorecard_registry.get(scorecard_name)
 
     try:
         if ',' in ngram_range:
