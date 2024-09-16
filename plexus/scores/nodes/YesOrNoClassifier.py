@@ -10,6 +10,9 @@ from plexus.scores.LangGraphScore import LangGraphScore
 from plexus.scores.nodes.BaseNode import BaseNode
 from typing import Type, Optional, Dict, Any, List
 from langchain_core.messages import AIMessage, HumanMessage
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import time
 
 class YesOrNoClassifier(BaseNode):
     """
@@ -68,48 +71,58 @@ class YesOrNoClassifier(BaseNode):
     def get_classifier_node(self) -> FunctionType:
         model = self.model
         prompt_templates = self.get_prompt_templates()
+        executor = ThreadPoolExecutor(max_workers=1)
 
         def classifier_node(state):
             initial_prompt = prompt_templates[0]
             retry_count = 0 if state.retry_count is None else state.retry_count
 
-            while retry_count < self.parameters.maximum_retry_count:
-                initial_chain = initial_prompt | model | \
-                    self.ClassificationOutputParser(
-                        parse_from_start=self.parameters.parse_from_start)
-                result = initial_chain.invoke({
-                    "text": state.text,
-                    "metadata": state.metadata,
-                    "retry_feedback": f"You responded with {state.explanation}, but we need a \"Yes\" or a \"No\". Please try again. This is attempt {retry_count + 1} of {self.parameters.maximum_retry_count}." if retry_count > 0 else ""
-                })
+            def run_chain():
+                nonlocal retry_count
+                while retry_count < self.parameters.maximum_retry_count:
+                    initial_chain = initial_prompt | model | \
+                        self.ClassificationOutputParser(
+                            parse_from_start=self.parameters.parse_from_start)
+                    
+                    try:
+                        result = initial_chain.invoke({
+                            "text": state.text,
+                            "metadata": state.metadata,
+                            "retry_feedback": f"You responded with {state.explanation}, but we need a \"Yes\" or a \"No\". Please try again. This is attempt {retry_count + 1} of {self.parameters.maximum_retry_count}." if retry_count > 0 else ""
+                        })
+                        return result
+                    except Exception as e:
+                        retry_count += 1
+                        if retry_count >= self.parameters.maximum_retry_count:
+                            return {"classification": "unknown", "explanation": f"Error: {str(e)}"}
+                        time.sleep(1)  # Add a small delay before retrying
 
-                if result["classification"] != "unknown":
-                    if self.parameters.explanation_message:
-                        explanation_messages = ChatPromptTemplate(
-                            messages=[
-                                HumanMessage(initial_prompt.format(text=state.text)),
-                                AIMessage(content=result['classification']),
-                                HumanMessage(content=self.parameters.explanation_message)
-                            ]
+                return {"classification": "unknown", "explanation": "Maximum retries reached"}
+
+            result = executor.submit(run_chain).result()
+
+            if result["classification"] != "unknown":
+                if self.parameters.explanation_message:
+                    explanation_messages = ChatPromptTemplate(
+                        messages=[
+                            HumanMessage(initial_prompt.format(text=state.text)),
+                            AIMessage(content=result['classification']),
+                            HumanMessage(content=self.parameters.explanation_message)
+                        ]
+                    )
+                    explanation_chain = explanation_messages | model
+                    explanation = explanation_chain.invoke({})
+                    result["explanation"] = explanation.content
+                else:
+                    full_response = model.invoke(
+                        initial_prompt.format(
+                            text=state.text,
+                            metadata=state.metadata
                         )
-                        explanation_chain = explanation_messages | model
-                        explanation = explanation_chain.invoke({})
-                        result["explanation"] = explanation.content
-                    else:
-                        full_response = model.invoke(
-                            initial_prompt.format(
-                                text=state.text,
-                                metadata=state.metadata
-                            )
-                        )
-                        result["explanation"] = full_response.content
+                    )
+                    result["explanation"] = full_response.content
 
-                    return {**state.dict(), **result, "retry_count": retry_count}
-
-                retry_count += 1
-                sleep(1)
-
-            return {**state.dict(), "classification": "unknown", "explanation": "Maximum retries reached", "retry_count": retry_count}
+            return {**state.dict(), **result, "retry_count": retry_count}
 
         return classifier_node
 

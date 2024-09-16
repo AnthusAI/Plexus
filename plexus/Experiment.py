@@ -11,6 +11,7 @@ import random
 import time
 import string
 import pprint
+import asyncio
 from decimal import Decimal
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -49,7 +50,6 @@ class Experiment:
         session_ids_to_sample = None,
         subset_of_score_names = None,
         experiment_label = None,
-        threads = 1,
         max_mismatches_to_report=5
     ):
         self.scorecard_name = scorecard_name
@@ -65,7 +65,6 @@ class Experiment:
         self.subset_of_score_names = subset_of_score_names
 
         self.experiment_label = experiment_label
-        self.threads = threads
         self.max_mismatches_to_report = max_mismatches_to_report
         self.mismatches = []
         self.total_correct = 0
@@ -173,7 +172,10 @@ class AccuracyExperiment(Experiment):
 
     @Experiment.time_execution
     def run(self):
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(self._async_run())
 
+    async def _async_run(self):
         # Configure logging
         # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -232,62 +234,27 @@ class AccuracyExperiment(Experiment):
         else:
             selected_sample_rows = df.head(self.number_of_texts_to_sample)
 
-        # Iterate over the randomly selected DataFrame rows and classify each text
-        results = []
-        max_thread_pool_size = self.threads
-
-        # Create a thread pool executor
-        with ThreadPoolExecutor(max_workers=max_thread_pool_size) as executor:
-            # Submit tasks to the executor to score each text in parallel
-            future_to_index = {
-                executor.submit(self.score_text, row): index
-                for index, row in selected_sample_rows.iterrows()
-            }
-
-            # Initialize counters outside of the loop
-            total_correct = 0
-            total_questions = 0
-            heatmap_data = []
-            annotations = []
-
-            # Collect the results as they are completed
-            for future in as_completed(future_to_index):
-                index = future_to_index[future]
-                # try:
-                result = future.result()
-                logging.info(f"text {index} classified.")
-                logging.debug(f"Result: {result}")
-                results.append(result)
-                # except Exception as e:
-                #     logging.exception(f"Error processing text at index {index}: {e}")
-
-        # pretty_printer = pprint.PrettyPrinter()
-        # print("Final all scorecard results:\n")
-        # pretty_printer.pprint(results)
-
+        results = await self.score_all_texts(selected_sample_rows)
+        
         if not os.path.exists(report_folder_path):
             os.makedirs(report_folder_path)
 
-        # Log the raw results data as an artifact in MLFlow.
+        logging.info("Logging scorecard results as an artifact in MLFlow.")
         scorecard_results = ScorecardResults(results)
         scorecard_results.save_to_file(f"{report_folder_path}/scorecard_results.json")
         mlflow.log_artifact(f"{report_folder_path}/scorecard_results.json")
 
         logging.info("Scoring completed.")
 
-        for result in results:
-            logging.info(f"Form ID: {result['form_id']}")
-            logging.info(f"Results: {result['results']}")
-
         # Count the number correct out of all questions.
         for result in results:
+            logging.info(f"Form ID: {result['form_id']}")
             for question in self.score_names():
-                score_value = str(result['results'][question].value).lower()
-                if not score_value or score_value.strip() == "":
-                    score_value = "na"
-                human_label = str(result['results'][question].metadata['human_label']).lower()
+                score_result = next((result for result in result['results'].values() if result.parameters.name == question), None)
+                score_value = str(score_result.value).lower() if score_result else None
+                human_label = str(score_result.metadata['human_label']).lower() if score_result else None
                 logging.info(f"Question: {question}, score Label: {score_value}, Human Label: {human_label}")
-                is_match = 1 if result['results'][question].metadata['correct'] else 0
+                is_match = 1 if score_result and score_result.metadata.get('correct', False) else 0
                 self.total_correct += is_match
                 self.total_questions += 1
 
@@ -297,8 +264,8 @@ class AccuracyExperiment(Experiment):
                         'question': question,
                         'predicted': score_value,
                         'ground_truth': human_label,
-                        'explanation': result['results'][question].explanation,
-                        'transcript': result['results'][question].metadata['text']
+                        'explanation': score_result.explanation if score_result else None,
+                        'transcript': score_result.metadata['text']
                     })
 
         analysis = ScorecardResultsAnalysis(
@@ -368,26 +335,20 @@ class AccuracyExperiment(Experiment):
         expenses = self.scorecard.get_accumulated_costs()
         expenses['cost_per_text'] = expenses['total_cost'] / len(selected_sample_rows)    
 
-        # Create a thread pool executor
-        with ThreadPoolExecutor() as executor:
-            # Submit the combined analysis and logging tasks to the executor
-            futures = [
-                #executor.submit(log_accuracy_heatmap),
-                executor.submit(log_html_report),
-                executor.submit(log_incorrect_scores_report),
-                executor.submit(log_no_costs_report),
-                #executor.submit(log_scorecard_costs),
-                executor.submit(log_csv_report),
-                executor.submit(log_question_accuracy_csv)  # Ensure this function is called
-            ]
+        loop = asyncio.get_running_loop()
 
-            # Wait for all the tasks to complete
-            for future in futures:
-                future.result()
+        # Run these operations concurrently
+        await asyncio.gather(
+            asyncio.to_thread(log_html_report),
+            asyncio.to_thread(log_incorrect_scores_report),
+            asyncio.to_thread(log_no_costs_report),
+            asyncio.to_thread(log_csv_report),
+            asyncio.to_thread(log_question_accuracy_csv)
+        )
 
         # Run these sequentially to avoid issues with Heatmap generation.
-        log_accuracy_heatmap()
-        log_scorecard_costs()
+        await asyncio.to_thread(log_accuracy_heatmap)
+        await asyncio.to_thread(log_scorecard_costs)
 
         # Calculate overall accuracy
         overall_accuracy = (self.total_correct / self.total_questions) * 100 if self.total_questions > 0 else 0
@@ -402,16 +363,6 @@ class AccuracyExperiment(Experiment):
         # Generate the Excel report
         self.generate_excel_report(report_folder_path, results)
 
-        # Log the model names for all scores as a JSON object
-        model_names = {}
-        for score_name in self.score_names():
-            model_name = self.scorecard.get_model_name(score_name)
-            model_names[score_name] = model_name
-            logging.info(f"Model name for {score_name}: {model_name}")
-        
-        mlflow.log_param("model_names", json.dumps(model_names))
-        logging.info(f"Logged model names: {model_names}")
-
         logging.info(f"Expenses: {expenses}")
         logging.info(f"{overall_accuracy:.1f}% accuracy / {len(selected_sample_rows)} samples")
         logging.info(f"cost: ${expenses['cost_per_text']:.6f} per call / ${expenses['total_cost']:.6f} total")
@@ -419,7 +370,7 @@ class AccuracyExperiment(Experiment):
         report = self.generate_report(score_instance, overall_accuracy, expenses, len(selected_sample_rows))
         logging.info(report)
 
-        self.generate_and_log_confusion_matrix(results, report_folder_path)
+        await asyncio.to_thread(self.generate_and_log_confusion_matrix, results, report_folder_path)
         
         for question in self.score_names():
             self.create_performance_visualization(results, question, report_folder_path)
@@ -465,7 +416,7 @@ Total cost:       ${expenses['total_cost']:.6f}
         return report
 
     def generate_metrics_json(self, report_folder_path, sample_size, expenses):
-        overall_accuracy = (self.total_correct / self.total_questions) * 100
+        overall_accuracy = None if self.total_questions == 0 else (self.total_correct / self.total_questions) * 100
         
         if sample_size < 120:
             accuracy_format = "{:.0f}"
@@ -475,7 +426,7 @@ Total cost:       ${expenses['total_cost']:.6f}
             accuracy_format = "{:.2f}"
         
         metrics = {
-            "overall_accuracy": accuracy_format.format(overall_accuracy),
+            "overall_accuracy": accuracy_format.format(overall_accuracy) if overall_accuracy is not None else 0,
             "number_correct": self.total_correct,
             "total_questions": self.total_questions,
             "number_of_samples": sample_size,
@@ -496,6 +447,11 @@ Total cost:       ${expenses['total_cost']:.6f}
             else:
                 mlflow.log_metric(key, value)
 
+    async def score_all_texts(self, selected_sample_rows):
+        tasks = [self.score_text(row) for _, row in selected_sample_rows.iterrows()]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        return [r for r in results if not isinstance(r, Exception)]
+
     # Function to classify a single text and collect metrics
     @retry(
         wait=wait_fixed(2),          # wait 2 seconds between attempts
@@ -503,8 +459,8 @@ Total cost:       ${expenses['total_cost']:.6f}
         before=before_log(logging.getLogger(), logging.INFO),       # log before retry
         retry=retry_if_exception_type((Timeout, RequestException))  # retry on specific exceptions
     )
-    def score_text(self, row):
-        logging.info(f"Columns available in this row: {row.index.tolist()}")
+    async def score_text(self, row):
+        logging.info("Scoring text...")
 
         text = row['text']
         content_id = row.get('content_id', '')
@@ -512,10 +468,20 @@ Total cost:       ${expenses['total_cost']:.6f}
         columns = row.get('columns', {})
         form_id = columns.get('form_id', '')
         metadata_string = columns.get('metadata', {})
-        metadata = json.loads(metadata_string)
+        
+        # Check if metadata_string is already a dict, if not, try to parse it
+        if isinstance(metadata_string, dict):
+            metadata = metadata_string
+        else:
+            try:
+                metadata = json.loads(metadata_string)
+            except json.JSONDecodeError:
+                logging.warning(f"Failed to parse metadata as JSON. Using empty dict. Metadata: {metadata_string}")
+                metadata = {}
+
         logging.info(f"Processing text for content_id: {content_id}, session_id: {session_id}, form_id: {form_id}")
 
-        scorecard_results = self.scorecard.score_entire_text(
+        scorecard_results = await self.scorecard.score_entire_text(
             text=text,
             metadata=metadata,
             subset_of_score_names=self.score_names_to_process()
@@ -523,21 +489,22 @@ Total cost:       ${expenses['total_cost']:.6f}
 
         # Extract human labels for each question from the DataFrame row
         human_labels = {}
-        for question_name in scorecard_results.keys():
-            score_instance = Score.from_name(self.scorecard_name, question_name)
+        for score_identifier in scorecard_results.keys():
+            score_instance = Score.from_name(
+                self.scorecard.properties['id'], score_identifier)
             label_score_name = score_instance.get_label_score_name()
             label_column = label_score_name + '_label'
             if label_column in row.index:
-                human_labels[question_name] = row[label_column]
+                human_labels[score_identifier] = row[label_column]
             elif label_score_name in row.index:
-                human_labels[question_name] = row[label_score_name]
+                human_labels[score_identifier] = row[label_score_name]
             else:
-                logging.warning(f"Neither '{question_name}' nor '{label_score_name}' found in the row. Available columns: {row.index.tolist()}")
-                human_labels[question_name] = 'N/A'
+                logging.warning(f"Neither '{score_identifier}' nor '{label_score_name}' found in the row. Available columns: {row.index.tolist()}")
+                human_labels[score_identifier] = 'N/A'
 
-        for question_name in scorecard_results.keys():
+        for score_identifier in scorecard_results.keys():
             try:
-                score_result = scorecard_results[question_name]
+                score_result = scorecard_results[score_identifier]
 
                 # Normalize the score result value for comparison
                 score_result_value = score_result.value.strip().lower()
@@ -551,7 +518,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                             logging.info(f"OVERRIDING human label for question '{override_question_name}' in session '{session_id}' from '{human_labels[override_question_name]}' to '{correct_value}'")
                             human_labels[override_question_name] = correct_value
 
-                column_name = question_name
+                column_name = score_identifier
                 human_label = str(human_labels[column_name]).lower().rstrip('.!?')
                 if human_label == 'nan':
                     human_label = 'na'
@@ -561,15 +528,15 @@ Total cost:       ${expenses['total_cost']:.6f}
 
                 # Log warnings for mismatches and append to incorrect results
                 if not score_result.metadata['correct']:
-                    logging.warning(f"Human label '{human_label}' does not match score '{score_result_value}' for question '{question_name}' in session '{session_id}'")
+                    logging.warning(f"Human label '{human_label}' does not match score '{score_result_value}' for question '{score_identifier}' in session '{session_id}'")
 
                 # Also, add the full text to the score result.
                 score_result.metadata['text'] = text
 
-                logging.debug(f"Score result for {question_name}: {score_result}")
+                logging.debug(f"Score result for {score_identifier}: {score_result}")
 
             except Exception as e:
-                logging.exception(f"Error processing {question_name}: {e}")
+                logging.exception(f"Error processing {score_identifier}: {e}")
                 # Log the full response if it's an HTTPError
                 if isinstance(e, requests.exceptions.HTTPError):
                     logging.error(f"HTTPError: {e.response.text}")
@@ -599,7 +566,7 @@ Total cost:       ${expenses['total_cost']:.6f}
         filename_safe_score_names = "".join(c for c in all_score_names if c.isalnum() or c in "_-")
         for result in results:
             for question in score_names:
-                score_result = result['results'][question]
+                score_result = next((result for result in result['results'].values() if result.parameters.name == question), None)
                 match = score_result.metadata['correct']
                 records.append({
                     'session_id': result['session_id'],
@@ -626,14 +593,25 @@ Total cost:       ${expenses['total_cost']:.6f}
             class_names = set()
 
             for result in results:
-                true_label = result['results'][question].metadata['human_label']
-                pred_label = str(result['results'][question].value).lower()
-                
-                y_true.append(true_label)
-                y_pred.append(pred_label)
-                class_names.update([true_label, pred_label])
+                score_result = next((result for result in result['results'].values() if result.parameters.name == question), None)
+                if score_result:
+                    true_label = score_result.metadata['human_label']
+                    pred_label = str(score_result.value).lower()
+                    
+                    y_true.append(true_label)
+                    y_pred.append(pred_label)
+                    class_names.update([true_label, pred_label])
+
+            if not class_names:
+                logging.warning(f"No labels found for question '{question}'. Skipping confusion matrix generation.")
+                continue
 
             class_names = sorted(list(class_names))
+            
+            if len(class_names) < 2:
+                logging.warning(f"Only one unique label found for question '{question}'. Skipping confusion matrix generation.")
+                continue
+
             cm = confusion_matrix(y_true, y_pred, labels=class_names)
 
             plt.figure(figsize=(10, 10))
@@ -652,8 +630,14 @@ Total cost:       ${expenses['total_cost']:.6f}
             mlflow.log_artifact(cm_path)
 
     def create_performance_visualization(self, results, question, report_folder_path):
-        true_labels = [r['results'][question].metadata['human_label'] for r in results]
-        pred_labels = [str(r['results'][question].value).lower() for r in results]
+        
+        true_labels = []
+        pred_labels = []
+        for result in results:
+            score_result = next((r for r in result['results'].values() if r.parameters.name == question), None)
+            if score_result:
+                true_labels.append(score_result.metadata['human_label'])
+                pred_labels.append(str(score_result.value).lower())
         
         unique_labels = sorted(set(true_labels + pred_labels))
         

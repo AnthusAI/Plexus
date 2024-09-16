@@ -57,18 +57,13 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
 
         Attributes
         ----------
-        scorecard_name : str
-            The name of the scorecard.
-        score_name : str
-            The name of the score.
         data : dict
             Dictionary containing data-related parameters.
         """
+        scorecard_name: Optional[str] = None
+        name: Optional[str] = None
         id: Optional[Union[str, int]] = None
-        scorecard_name: str
-        score_name: str
-        label_score_name: Optional[str] = None
-        label_field: Optional[str] = None
+        key: Optional[str] = None
         dependencies: Optional[List[dict]] = None
         data: Optional[dict] = None
         number_of_classes: Optional[int] = None
@@ -115,10 +110,10 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         value : str
             The predicted score value.
         """
-        name:     str
-        value:    Union[str, bool]
-        metadata: dict = {}
-        error:    Optional[str] = None
+        parameters: 'Score.Parameters'
+        value:      Union[str, bool]
+        metadata:   dict = {}
+        error:      Optional[str] = None
 
         def __eq__(self, other):
             if isinstance(other, Score.Result):
@@ -132,7 +127,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
 
         def is_no(self):
             return self.value.lower() == 'no'
-
+        
     def __init__(self, **parameters):
         """
         Initialize the Score instance with the given parameters.
@@ -149,7 +144,6 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         """
         try:
             self.parameters = self.Parameters(**parameters)
-            logging.info("Initializing [magenta1][b]Score[/b][/magenta1]")
             self._is_multi_class = None
             self._number_of_classes = None
         except ValidationError as e:
@@ -177,9 +171,9 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             logging.error(message)
 
     def report_directory_path(self):
-        return f"./reports/{self.parameters.scorecard_name}/{self.parameters.score_name}/".replace(' ', '_')
+        return f"./reports/{self.parameters.scorecard_name}/{self.parameters.name}/".replace(' ', '_')
     def model_directory_path(self):
-        return f"./models/{self.parameters.scorecard_name}/{self.parameters.score_name}/".replace(' ', '_')
+        return f"./models/{self.parameters.scorecard_name}/{self.parameters.name}/".replace(' ', '_')
 
     @ensure_report_directory_exists
     def report_file_name(self, file_name):
@@ -465,7 +459,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         str
             The determined score name.
         """
-        score_name = self.parameters.score_name
+        score_name = self.parameters.name
         if hasattr(self.parameters, 'label_score_name') and self.parameters.label_score_name:
             score_name = self.parameters.label_score_name
         if hasattr(self.parameters, 'label_field') and self.parameters.label_field:
@@ -473,19 +467,18 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         return score_name
 
     @classmethod
-    def from_name(cls, scorecard_name, score_name):
+    def from_name(cls, scorecard, score):
         
-        scorecard_class = scorecard_registry.get(scorecard_name)
+        scorecard_class = scorecard_registry.get(scorecard)
         if not scorecard_class:
-            raise ValueError(f"Scorecard '{scorecard_name}' not found")
+            raise ValueError(f"Scorecard '{scorecard}' not found")
         
-        score_configuration = scorecard_class.scores.get(score_name, {})
-        score_class = scorecard_class.score_registry.get(score_name)
+        score_parameters = scorecard_class.score_registry.get_properties(score)
+        score_class =      scorecard_class.score_registry.get(score)
         
         if not score_class:
-            raise ValueError(f"Score '{score_name}' not found in scorecard '{scorecard_name}'")
+            raise ValueError(f"Score '{score}' not found in scorecard '{scorecard}'")
         
-        score_configuration['scorecard_name'] = scorecard_name
-        score_configuration['score_name'] = score_name
-        
-        return score_class(**score_configuration)
+        return score_class(**score_parameters)
+
+Score.Result.model_rebuild()

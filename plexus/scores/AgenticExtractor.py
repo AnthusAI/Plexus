@@ -5,13 +5,13 @@ from typing import Dict, TypedDict, Optional, Literal, Annotated
 from langchain.output_parsers import ResponseSchema, StructuredOutputParser
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
 from langchain_core.messages import HumanMessage, AIMessage
-from langchain_openai import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages, AnyMessage
 
 # Logging.
-from langchain.globals import set_debug
-set_debug(True)
+# from langchain.globals import set_debug
+# set_debug(True)
 
 class ExtractorState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]

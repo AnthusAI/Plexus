@@ -77,7 +77,6 @@ class VectorizerLogger:
 @click.option('--ngram-range', 'ngram_range', default='2,3', help='The range of n-grams to use for feature extraction, e.g., "2,3"')
 def analyze(scorecard_name, excel, score_name, all_questions, value, top_n_features, leaderboard_n_features, sample_size, ngram_range):
     plexus.Scorecard.load_and_register_scorecards('scorecards/')
-    scorecard_class = scorecard_registry.get(scorecard_name)
 
     try:
         if ',' in ngram_range:
@@ -337,8 +336,6 @@ def preprocess_text(text, stop_words):
 
 import re
 from nltk.corpus import stopwords
-nltk.download('punkt')
-nltk.download('stopwords')
 
 def compute_shap_feature_importances(
         scorecard_id,
@@ -349,7 +346,7 @@ def compute_shap_feature_importances(
         sample_size=1,
         ngram_range=(2,3)):
     logging.info(f"Computing feature importance for scorecard: {scorecard_id}, score: {score_name}")
-    
+
     # Filter the dataframe to include only the relevant score
     filtered_dataframe = dataframe[dataframe[score_name].notnull()]
     
