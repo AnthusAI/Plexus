@@ -16,6 +16,7 @@ import tiktoken
 import concurrent.futures
 from functools import partial
 from random import sample
+import textwrap
 
 from plexus.CustomLogging import logging
 from plexus.Registries import scorecard_registry
@@ -280,11 +281,24 @@ def generate_examples(scorecard_name, score_name,
             else:
 
                 if 'completion_template' in score_instance.parameters.graph[0]:
+                    labels = row.copy()
+                    
+                    if 'massage_labels' in score_instance.parameters.graph[0]:
+                        massage_labels_code = score_instance.parameters.graph[0]['massage_labels']
+                        massage_labels_func = f"""
+def massage_labels(labels):
+    print("Executing massage_labels function")
+{textwrap.indent(massage_labels_code, '    ')}
+"""
+                        local_vars = {}
+                        exec(massage_labels_func, local_vars)
+                        labels = local_vars['massage_labels'](labels)
+                    
                     prompt = PromptTemplate(
                         input_types     = {"labels" : dict},
                         input_variables = ["labels"],
                         template        = score_instance.parameters.graph[0]['completion_template'])
-                    completion = prompt.format(labels=row).strip()
+                    completion = prompt.format(labels=labels).strip()
                     completion = re.sub(r'\s+$', '', completion)
                 else:
                     completion = row[score_instance.get_label_score_name()]
