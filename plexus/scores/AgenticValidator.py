@@ -22,11 +22,11 @@ from langchain.agents.format_scratchpad import format_log_to_str
 from langchain.agents.output_parsers import ReActSingleInputOutputParser
 
 from langchain.memory import SimpleMemory
-from langchain_openai import AzureChatOpenAI, ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI, AzureChatOpenAI
 from langchain.tools.render import render_text_description
-from langchain.globals import set_debug
 
-set_debug(True)
+# from langchain.globals import set_debug
+# set_debug(True)
 
 class SchoolInfo(BaseModel):
     school_name: str = Field(description="Name of the school mentioned")

@@ -19,8 +19,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import confusion_matrix
 from imblearn.over_sampling import SMOTE
-import nltk
-nltk.download('punkt')
 
 from plexus.CustomLogging import logging
 from plexus.scores.Score import Score

@@ -11,7 +11,7 @@ import pandas as pd
 from openpyxl.styles import Font
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import BaseOutputParser
-from langchain_openai import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI
 import tiktoken
 import concurrent.futures
 from functools import partial
