@@ -47,26 +47,19 @@ class YesOrNoClassifier(BaseNode):
             cleaned_output = ''.join(char.lower() for char in output if char.isalnum() or char.isspace())
             words = cleaned_output.split()
             
-            if not self.parse_from_start:
-                words = reversed(words)
-            
+            classification = "unknown"
             for word in words:
                 if word == "yes":
-                    return {
-                        "classification": "yes",
-                        "explanation": None
-                    }
+                    classification = "yes"
+                    break
                 elif word == "no":
-                    return {
-                        "classification": "no",
-                        "explanation": output
-                    }
+                    classification = "no"
+                    break
             
-            return {"classification": "unknown"}
-
-    def __init__(self, **parameters):
-        super().__init__(**parameters)
-        self.parameters = self.Parameters(**parameters)
+            return {
+                "classification": classification,
+                "explanation": output  # Always include the full LLM response as explanation
+            }
 
     def get_classifier_node(self) -> FunctionType:
         model = self.model
@@ -85,11 +78,16 @@ class YesOrNoClassifier(BaseNode):
                             parse_from_start=self.parameters.parse_from_start)
                     
                     try:
-                        result = initial_chain.invoke({
-                            "text": state.text,
-                            "metadata": state.metadata,
-                            "retry_feedback": f"You responded with {state.explanation}, but we need a \"Yes\" or a \"No\". Please try again. This is attempt {retry_count + 1} of {self.parameters.maximum_retry_count}." if retry_count > 0 else ""
-                        })
+                        # Pass the entire state as a dictionary and add retry_feedback
+                        invoke_input = {
+                            **state.dict(),
+                            "retry_feedback": (
+                                f"You responded with {state.explanation}, but we need a \"Yes\" or a \"No\". "
+                                f"Please try again. This is attempt {retry_count + 1} of {self.parameters.maximum_retry_count}."
+                                if retry_count > 0 else ""
+                            )
+                        }
+                        result = initial_chain.invoke(invoke_input)
                         return result
                     except Exception as e:
                         retry_count += 1
@@ -102,6 +100,9 @@ class YesOrNoClassifier(BaseNode):
             result = executor.submit(run_chain).result()
 
             if result["classification"] != "unknown":
+                # Add the entire LLM response as explanation
+                explanation = result["explanation"]
+
                 if self.parameters.explanation_message:
                     explanation_messages = ChatPromptTemplate(
                         messages=[
@@ -111,16 +112,10 @@ class YesOrNoClassifier(BaseNode):
                         ]
                     )
                     explanation_chain = explanation_messages | model
-                    explanation = explanation_chain.invoke({})
-                    result["explanation"] = explanation.content
-                else:
-                    full_response = model.invoke(
-                        initial_prompt.format(
-                            text=state.text,
-                            metadata=state.metadata
-                        )
-                    )
-                    result["explanation"] = full_response.content
+                    detailed_explanation = explanation_chain.invoke({})
+                    explanation = detailed_explanation.content  # Overwrite with detailed explanation
+
+                result["explanation"] = explanation  # Update the explanation in the result
 
             return {**state.dict(), **result, "retry_count": retry_count}
 

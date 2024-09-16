@@ -32,22 +32,7 @@ class Scorecard:
     def initialize_registry(cls):
         if cls.score_registry is None:
             cls.score_registry = ScoreRegistry()
-
-        cls.log_registry_structures()
-
-    @classmethod
-    def log_registry_structures(cls):
-        logging.info("Scorecard Registry Structure:")
-        for identifier, scorecard_class in scorecard_registry._classes_by_id.items():
-            logging.info(f"  Scorecard: {identifier}")
-            if hasattr(scorecard_class, 'score_registry'):
-                score_reg = scorecard_class.score_registry
-                logging.info("    Score Registry:")
-                logging.info(f"      By ID: {score_reg._classes_by_id}")
-                logging.info(f"      By Key: {score_reg._classes_by_key}")
-                logging.info(f"      By Name: {score_reg._classes_by_name}")
-            else:
-                logging.info("    No Score Registry found for this Scorecard")
+            
 
     def __init__(self, *, scorecard):
         """
