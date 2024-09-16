@@ -449,8 +449,8 @@ Total cost:       ${expenses['total_cost']:.6f}
 
     async def score_all_texts(self, selected_sample_rows):
         tasks = [self.score_text(row) for _, row in selected_sample_rows.iterrows()]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        return [r for r in results if not isinstance(r, Exception)]
+        results = await asyncio.gather(*tasks)
+        return results
 
     # Function to classify a single text and collect metrics
     @retry(
