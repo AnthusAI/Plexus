@@ -6,7 +6,7 @@ from gensim.parsing.preprocessing import STOPWORDS
 from gensim.utils import simple_preprocess
 from tqdm.auto import tqdm
 from typing import List, Tuple
-import openai
+from openai import OpenAI
 
 class TopicModelClusterer:
     def __init__(self, explanations: List[str]):
@@ -20,7 +20,6 @@ class TopicModelClusterer:
         self.prominent_topics = None
         self.llm_explanations = {}
         self.summary = ""
-        openai.api_key = os.environ.get("OPENAI_API_KEY")
 
     def _preprocess_documents(self, documents: List[str]) -> List[List[str]]:
         return [[word for word in simple_preprocess(doc) if word not in STOPWORDS] for doc in documents]
@@ -31,15 +30,18 @@ class TopicModelClusterer:
     def _create_corpus(self) -> List[List[Tuple[int, int]]]:
         return [self.dictionary.doc2bow(doc) for doc in self.processed_docs]
 
-    def _compute_coherence_values(self, limit: int, start: int = 2, step: int = 3) -> Tuple[List[LdaMulticore], List[float]]:
+    def _compute_coherence_values(self, limit: int, start: int = 5, step: int = 5) -> Tuple[List[LdaMulticore], List[float]]:
         coherence_values = []
         model_list = []
-        for num_topics in tqdm(range(start, limit, step)):
+        for num_topics in tqdm(range(start, limit + 1, step)):
             try:
-                model = LdaMulticore(corpus=self.corpus, id2word=self.dictionary, num_topics=num_topics, random_state=100)
+                model = LdaMulticore(corpus=self.corpus, id2word=self.dictionary, num_topics=num_topics, 
+                                     random_state=100, workers=1)  # Reduced to 1 worker for small datasets
                 model_list.append(model)
-                # Explicitly call get_topics() here
-                topics = model.get_topics()
+                
+                topic_words = model.show_topics(formatted=False, num_words=10)
+                topics = [[word for word, _ in topic] for topic_id, topic in topic_words]
+                
                 coherence_model = CoherenceModel(topics=topics, texts=self.processed_docs, dictionary=self.dictionary, coherence='c_v')
                 coherence_values.append(coherence_model.get_coherence())
             except Exception as e:
@@ -48,7 +50,7 @@ class TopicModelClusterer:
         
         return model_list, coherence_values
 
-    def determine_optimal_topics(self, limit: int = 50, start: int = 5, step: int = 5):
+    def determine_optimal_topics(self, limit: int = 10, start: int = 5, step: int = 5):
         model_list, coherence_values = self._compute_coherence_values(limit=limit, start=start, step=step)
         if coherence_values:
             self.optimal_model = model_list[np.argmax(coherence_values)]
@@ -77,16 +79,27 @@ class TopicModelClusterer:
         return ", ".join([word for word, _ in topic[:n]])
 
     def _get_explanation(self, topic_words: str) -> str:
-        response = openai.ChatCompletion.create(
+        prompt = (
+            f"Given the following words representing a topic in "
+            f"call center QA for qualified buyers:\n"
+            f"<topic>\n"
+            f"{topic_words}\n"
+            f"</topic>\n\n"
+            f"Provide a concise one-sentence explanation of what this topic "
+            f"represents:"
+        )
+        print(prompt)
+        client = OpenAI()
+        response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {
                     "role": "user",
-                    "content": f"Given the following words representing a topic in call center QA for qualified buyers: {topic_words}\n\nProvide a concise one-sentence explanation of what this topic represents in the context of AI vs. human evaluation mismatches:"
+                    "content": prompt
                 }
             ]
         )
-        return response.choices[0].message['content']
+        return response.choices[0].message.content
 
     def generate_llm_explanations(self):
         if not self.prominent_topics:
@@ -105,20 +118,18 @@ class TopicModelClusterer:
         if not self.optimal_num_topics:
             raise ValueError("Optimal number of topics not determined. Call determine_optimal_topics first.")
         prompt = (
-            f"I have analyzed {len(self.explanations)} explanations of mismatches between AI and human evaluations in call center QA for qualified buyers. "
+            f"I have analyzed {len(self.explanations)} topic clusters that were found in the various input strings."
             f"The analysis revealed {self.optimal_num_topics} main topics. "
-            "Please provide a brief summary of what this might indicate about the nature of AI vs. human evaluation mismatches in this context."
+            "Please provide a brief summary of the topics found."
         )
-        response = openai.ChatCompletion.create(
+        client = OpenAI()
+        response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
+                {"role": "user", "content": prompt}
             ]
         )
-        self.summary = response.choices[0].message['content']
+        self.summary = response.choices[0].message.content
 
     def get_summary(self) -> str:
         if not self.summary:
