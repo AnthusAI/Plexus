@@ -105,10 +105,16 @@ class MultiClassClassifier(BaseNode):
                     fuzzy_match_threshold=fuzzy_match_threshold,
                     parse_from_start=parse_from_start
                 )
-                result = initial_chain.invoke({
-                    "text": state.text,
-                    "retry_feedback": f"You responded with an unknown classification. Please try again. This is attempt {retry_count + 1} of {self.parameters.maximum_retry_count}. Valid classes are: {', '.join(valid_classes)}." if retry_count > 0 else ""
-                })
+
+                # Pass the entire state as a dictionary and add retry_feedback
+                invoke_input = {
+                    **state.dict(),
+                    "retry_feedback": (
+                        f"You responded with an unknown classification. Please try again. This is attempt {retry_count + 1} of {self.parameters.maximum_retry_count}. Valid classes are: {', '.join(valid_classes)}." if retry_count > 0 else ""
+                        if retry_count > 0 else ""
+                    )
+                }
+                result = initial_chain.invoke(invoke_input)
 
                 if result["classification"] != "unknown":
                     if self.parameters.explanation_message:
