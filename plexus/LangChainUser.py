@@ -27,6 +27,7 @@ class LangChainUser:
         base_model_name: Optional[str] = None
         model_region: Optional[str] = None
         temperature: Optional[float] = 0.1
+        top_p: Optional[float] = 0.03
         max_tokens: Optional[int] = 500
 
     MAX_RETRY_ATTEMPTS = 20
@@ -119,8 +120,8 @@ class LangChainUser:
                 base_model = ChatOpenAI(
                     model=self.parameters.model_name,
                     api_key=os.environ.get("OPENAI_API_KEY"),
-                    temperature=self.parameters.temperature,
-                    max_tokens=max_tokens
+                    max_tokens=max_tokens,
+                    model_kwargs={"top_p": self.parameters.top_p}
                 )
         elif self.parameters.model_provider == "BedrockChat":
             base_model = ChatBedrock(
