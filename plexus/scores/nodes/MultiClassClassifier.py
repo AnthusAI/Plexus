@@ -99,14 +99,21 @@ class MultiClassClassifier(BaseNode):
             retry_count = 0 if state.retry_count is None else state.retry_count
 
             while retry_count < self.parameters.maximum_retry_count:
-                initial_chain = initial_prompt | model | self.ClassificationOutputParser(
-                    valid_classes=valid_classes,
-                    fuzzy_match=fuzzy_match,
-                    fuzzy_match_threshold=fuzzy_match_threshold,
-                    parse_from_start=parse_from_start
+                # Create a RunnableSequence
+                initial_chain = (
+                    initial_prompt 
+                    | model 
+                    | self.ClassificationOutputParser(
+                        valid_classes=valid_classes,
+                        fuzzy_match=fuzzy_match,
+                        fuzzy_match_threshold=fuzzy_match_threshold,
+                        parse_from_start=parse_from_start
+                    )
                 )
+                
+                # Invoke the chain with the entire state as a dictionary
                 result = initial_chain.invoke({
-                    "text": state.text,
+                    **state.dict(),
                     "retry_feedback": f"You responded with an unknown classification. Please try again. This is attempt {retry_count + 1} of {self.parameters.maximum_retry_count}. Valid classes are: {', '.join(valid_classes)}." if retry_count > 0 else ""
                 })
 
@@ -121,7 +128,8 @@ class MultiClassClassifier(BaseNode):
                         explanation = explanation_chain.invoke({})
                         result["explanation"] = explanation.content
                     else:
-                        full_response = model.invoke(initial_prompt.format(text=state.text))
+                        # Use the RunnableSequence for the full response as well
+                        full_response = (initial_prompt | model).invoke({**state.dict()})
                         result["explanation"] = full_response.content
 
                     return {**state.dict(), **result, "retry_count": retry_count}
