@@ -95,7 +95,7 @@ def generate_examples(scorecard_name, score_name,
         logging.info(f"Processing score: [magenta1][b]{current_score_name}[/b][/magenta1]")
         
         # Instantiate the score class using the configuration parameters.
-        score_configuration = scorecard_class.scores.get(current_score_name, {})
+        score_configuration = next((score for score in scorecard_class.scores if score['name'] == current_score_name), {})
         logging.info(f"Score Configuration: {rich.pretty.pretty_repr(score_configuration)}")
         score_class = scorecard_class.score_registry.get(current_score_name)
         if score_class is None:
