@@ -58,7 +58,8 @@ setup(
         'openpyxl==3.1.5',
         'rapidfuzz==3.9.4',
         'datasets',
-        'gensim'
+        'gensim',
+        'watchtower'
     ],
     dependency_links=[
         'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator'
