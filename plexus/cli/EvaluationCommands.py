@@ -7,7 +7,7 @@ import yaml
 import asyncio
 import pandas as pd
 
-from plexus.CustomLogging import logging
+from plexus.CustomLogging import logging, set_log_group
 from plexus.Scorecard import Scorecard
 from plexus.Registries import scorecard_registry
 from plexus.Experiment import AccuracyExperiment
@@ -21,6 +21,8 @@ import threading
 
 from dotenv import load_dotenv
 load_dotenv()
+
+set_log_group('plexus/cli/evaluation')
 
 # Add this at the top of your file
 console_lock = threading.Lock()
