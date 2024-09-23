@@ -20,7 +20,7 @@ class MultiClassClassifier(BaseNode):
         fuzzy_match_threshold: float = Field(default=0.8)
         valid_classes: List[str] = Field(default_factory=list)
         explanation_message: Optional[str] = None
-        maximum_retry_count: int = Field(default=40, description="Maximum number of retries for classification")
+        maximum_retry_count: int = Field(default=3, description="Maximum number of retries for classification")
         parse_from_start: Optional[bool] = False
 
     def __init__(self, **parameters):

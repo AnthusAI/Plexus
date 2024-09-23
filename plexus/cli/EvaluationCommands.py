@@ -251,7 +251,7 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
     start_time = time.time()
     logging.info(f"Started evaluating distribution for Score {score_name} at {time.strftime('%H:%M:%S')}")
     
-    score_configuration = scorecard_class.scores.get(score_name)
+    score_configuration = next((score for score in scorecard_class.scores if score['name'] == score_name), {})
 
     if not score_configuration:
         logging.error(f"Score with name '{score_name}' not found in scorecard '{scorecard_class.name}'.")
