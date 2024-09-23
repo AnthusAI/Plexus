@@ -38,7 +38,7 @@ class YesOrNoClassifier(BaseNode):
     class Parameters(BaseNode.Parameters):
         explanation_message: Optional[str] = None
         parse_from_start: Optional[bool] = False
-        maximum_retry_count: int = Field(default=40, description="Maximum number of retries for classification")
+        maximum_retry_count: int = Field(default=3, description="Maximum number of retries for classification")
 
     class ClassificationOutputParser(BaseOutputParser[dict]):
         parse_from_start: bool = Field(default=False)

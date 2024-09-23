@@ -5,6 +5,7 @@ import click
 import plexus
 import pandas as pd
 from openpyxl.styles import Font
+import asyncio
 
 from plexus.CustomLogging import logging
 from plexus.Registries import scorecard_registry
@@ -19,7 +20,6 @@ from plexus.Registries import scorecard_registry
 @click.option('--use-langsmith-trace', is_flag=True, default=False, help='Activate LangSmith trace client for LangChain components')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 def predict(scorecard_name, score_name, content_id, number, excel, use_langsmith_trace, fresh):
-    # Set LANGCHAIN_TRACING_V2 environment variable if use_langsmith_trace is True
     if use_langsmith_trace:
         os.environ['LANGCHAIN_TRACING_V2'] = 'true'
         logging.info("LangSmith tracing enabled")
@@ -58,7 +58,8 @@ def predict(scorecard_name, score_name, content_id, number, excel, use_langsmith
         
         row_result = {}
         for single_score_name in score_names:
-            transcript, predictions, costs = predict_score(single_score_name, scorecard_class, sample_row, used_content_id)
+            transcript, predictions, costs = asyncio.run(predict_score(
+                single_score_name, scorecard_class, sample_row, used_content_id))
             row_result['content_id'] = used_content_id
             row_result['text'] = transcript
             for attribute, value in predictions[0].__dict__.items():
@@ -112,7 +113,7 @@ def output_excel(results, score_names, scorecard_name):
 
 def select_sample(scorecard_class, score_name, content_id, fresh):
 
-    score_configuration = scorecard_class.scores.get(score_name, {})
+    score_configuration = next((score for score in scorecard_class.scores if score['name'] == score_name), {})
     
     # Check if the score uses the new data-driven approach
     if 'data' in score_configuration:
@@ -172,11 +173,11 @@ def select_sample_csv(csv_path, content_id):
         logging.error(f"Failed to load or process data from {csv_path}: {str(e)}")
         raise
 
-def predict_score(score_name, scorecard_class, sample_row, content_id):
+async def predict_score(score_name, scorecard_class, sample_row, content_id):
     logging.info(f"Predicting Score [magenta1][b]{score_name}[/b][/magenta1]...")
-    score_configuration = scorecard_class.scores.get(score_name, {})
+    score_configuration = next((score for score in scorecard_class.scores if score['name'] == score_name), {})
 
-    if score_name not in scorecard_class.scores:
+    if not score_configuration:
         logging.error(f"Score with name '{score_name}' not found in scorecard '{scorecard_class.name}'.")
         return None, None, None
 
@@ -213,15 +214,11 @@ def predict_score(score_name, scorecard_class, sample_row, content_id):
         else:
             score_input = score_input_class(id=content_id, text="")
 
-    try:
-        prediction_result = score_instance.predict(
-            context={},
-            model_input=score_input
-        )
-        costs = score_instance.get_accumulated_costs()
-    except Exception as e:
-        logging.error(f"Prediction failed for score '{score_name}': {str(e)}")
-        return None, None, None
+    prediction_result = await score_instance.predict(
+        context={},
+        model_input=score_input
+    )
+    costs = score_instance.get_accumulated_costs()
 
     logging.info(f"Prediction result: {prediction_result}")
     logging.info(f"Costs: {costs}")
