@@ -12,6 +12,8 @@ from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, List, Dict
 import asyncio
+import boto3
+from botocore.exceptions import ClientError
 
 from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
@@ -50,6 +52,9 @@ class Scorecard:
         self.input_cost =  Decimal('0.0')
         self.output_cost = Decimal('0.0')
         self.total_cost =  Decimal('0.0')
+        self.scorecard_total_cost = Decimal('0.0')
+
+        self.cloudwatch_client = boto3.client('cloudwatch')
 
     @classmethod
     def name(cls):
@@ -163,7 +168,7 @@ class Scorecard:
                 yaml_file_path = os.path.join(directory_path, file_name)
                 cls.create_from_yaml(yaml_file_path)
 
-    async def get_score_result(self, *, scorecard, score, text, metadata):
+    async def get_score_result(self, *, scorecard, score, text, metadata, modality):
         """
         Get a result for a score by looking up a Score instance for that question name and calling its
         compute_score_result method with the provided transcript.
@@ -171,6 +176,7 @@ class Scorecard:
         :param score: The score identifier.
         :param text: The transcript.
         :param metadata: The metadata.
+        :param modality: The modality.
         :return: The score result.
         """
         
@@ -213,10 +219,15 @@ class Scorecard:
                 self.input_cost          += score_total_cost.get('input_cost', 0)
                 self.output_cost         += score_total_cost.get('output_cost', 0)
                 self.total_cost          += score_total_cost.get('total_cost', 0)
+                self.scorecard_total_cost += score_total_cost.get('total_cost', Decimal('0.0'))
 
                 # TODO: Find a different way of passing the costs with the score result.
                 # Maybe add support for `costs` and `metadata` in Score.Result?
                 # score_result[0].metadata.update(score_total_cost)
+                
+                # Log the cost for this individual score
+                self.log_metric_to_cloudwatch('Cost', score_total_cost.get('total_cost', 0), self.scorecard_identifier, score_name=score, modality=modality)
+
             return score_result
 
         else:
@@ -224,14 +235,14 @@ class Scorecard:
             logging.info(error_string)
             return plexus.scores.Score.Result(value="Error", error=error_string)
 
-    async def score_entire_text(self, *, text: str, metadata: dict, subset_of_score_names: Optional[List[str]] = None) -> Dict[str, Score.Result]:
+    async def score_entire_text(self, *, text: str, metadata: dict, modality: str, subset_of_score_names: Optional[List[str]] = None) -> Dict[str, Score.Result]:
         if subset_of_score_names is None:
             subset_of_score_names = self.score_names_to_process()
 
         async def process_score(score: str) -> List[Score.Result]:
             try:
                 return await asyncio.wait_for(
-                    self.get_score_result(scorecard=self.scorecard_identifier, score=score, text=text, metadata=metadata),
+                    self.get_score_result(scorecard=self.scorecard_identifier, score=score, text=text, metadata=metadata, modality=modality),
                     timeout=1200
                 )
             except asyncio.TimeoutError:
@@ -250,6 +261,10 @@ class Scorecard:
 
         await asyncio.gather(*(bounded_process_score(score_name) for score_name in subset_of_score_names))
 
+        # Log the total cost for the entire scorecard
+        self.log_metric_to_cloudwatch('Cost', self.scorecard_total_cost, self.scorecard_identifier, modality=modality)
+
+        logging.info(f"Scorecard total cost: {self.scorecard_total_cost}")
         return score_results_dict
 
     def get_accumulated_costs(self):
@@ -273,3 +288,42 @@ class Scorecard:
         return self.properties.get('model_name') or \
                self.properties.get('parameters', {}).get('model_name') or \
                'Unknown'
+
+    def log_metric_to_cloudwatch(self, metric_name, metric_value, scorecard_name, score_name=None, modality=None):
+        try:
+            dimensions = [
+                {
+                    'Name': 'ScoreCardID',
+                    'Value': str(self.properties['id'])
+                },
+                {
+                    'Name': 'ScoreCardName',
+                    'Value': scorecard_name
+                },
+                {
+                    'Name': 'Modality',
+                    'Value': modality or 'Unknown'
+                }
+            ]
+            
+            if score_name:
+                dimensions.append({
+                    'Name': 'Score',
+                    'Value': score_name
+                })
+
+            metric_data = {
+                'MetricName': metric_name,
+                'Value': float(metric_value),
+                'Unit': 'None',
+                'Dimensions': dimensions
+            }
+
+            self.cloudwatch_client.put_metric_data(
+                Namespace='Plexus/Scorecard',
+                MetricData=[metric_data]
+            )
+            logging.info(f"Successfully logged {metric_name} to CloudWatch for scorecard ID {self.properties['id']}, name {scorecard_name}, modality {modality}" + 
+                         (f", and score {score_name}" if score_name else ""))
+        except ClientError as e:
+            logging.error(f"Failed to log metric to CloudWatch: {e}")
