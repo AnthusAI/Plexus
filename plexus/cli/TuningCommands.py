@@ -307,7 +307,7 @@ def massage_labels(labels):
             # Construct the messages for the JSON-L file without the hint
             messages = [
                 {"role": "system", "content": score_instance.parameters.graph[0]['system_message']},
-                {"role": "user", "content": user_message.format(text=row['text'])},
+                {"role": "user", "content": PromptTemplate.from_template(user_message, template_format = "jinja2").format(**{"text": row['text']})},
                 {"role": "assistant", "content": completion}
             ]
 
