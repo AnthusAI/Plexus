@@ -76,6 +76,7 @@ class LangGraphScore(Score, LangChainUser):
         self.openai_callback = None
         self.model = None  # Will be initialized in async setup
         self.parameters = self.Parameters(**parameters)
+        self.node_instances = []
 
     async def async_setup(self):
         """
@@ -327,6 +328,7 @@ class LangGraphScore(Score, LangChainUser):
             if hasattr(instance.parameters, 'output') and instance.parameters.output is not None:
                 for alias, original in instance.parameters.output.items():
                     if original in attributes:
+                        attributes[alias] = attributes[original]
                         output_aliases[alias] = attributes[original]
                     else:
                         raise ValueError(f"Original attribute '{original}' not found in GraphState")
