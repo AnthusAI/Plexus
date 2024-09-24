@@ -29,6 +29,7 @@ class CallCriteriaDBCache(DataCache):
         cache_file: str = Field(default="call_criteria_cache.h5")
         batch_size: int = Field(default=1000)
         local_cache_directory: str = Field(default_factory=lambda: './.plexus_training_data_cache/')
+        thread_count: int = Field(default=os.cpu_count())
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
@@ -40,6 +41,7 @@ class CallCriteriaDBCache(DataCache):
         self.db_pass = self.parameters.db_pass
         self.cache_file = self.parameters.cache_file
         self.batch_size = self.parameters.batch_size
+        self.thread_count = self.parameters.thread_count
         if not all([self.db_server, self.db_name, self.db_user, self.db_pass]):
             raise ValueError("Database credentials are missing.")
         logging.debug(f"Initialized CallCriteriaDBCache with DB server {self.db_server}")
@@ -114,7 +116,7 @@ class CallCriteriaDBCache(DataCache):
                 
                 SessionLocal = sessionmaker(bind=DB.get_engine())
 
-                with ThreadPoolExecutor(max_workers=os.cpu_count() * 4) as executor:
+                with ThreadPoolExecutor(max_workers=self.thread_count) as executor:
                     futures = [executor.submit(self.process_report, report, SessionLocal()) 
                                for report in batch_results]
                     
@@ -185,6 +187,7 @@ class CallCriteriaDBCache(DataCache):
         return ''
 
     def store_report_transcript_text(self, scorecard_id, report_id, transcript_text):
+        logging.debug(f"Storing transcript for scorecard_id={scorecard_id}, report_id={report_id}")
         transcript_file_path = self._get_transcript_txt_path(scorecard_id, report_id)
         os.makedirs(os.path.dirname(transcript_file_path), exist_ok=True)
 
@@ -196,6 +199,7 @@ class CallCriteriaDBCache(DataCache):
             logging.error(f"Failed to store transcript.txt for scorecard_id={scorecard_id}, report_id={report_id}: {str(e)}")
 
     def store_report_metadata(self, scorecard_id, report_id, report_dict):
+        logging.debug(f"Storing metadata for scorecard_id={scorecard_id}, report_id={report_id}")
         session = self.initialize_db()
         try:
             report_obj = session.query(Report).get(report_id)
@@ -314,14 +318,19 @@ class CallCriteriaDBCache(DataCache):
             logging.error(f"Missing scorecard_id or content_id for report {report}")
             return None
 
-        metadata = self.get_report_metadata(scorecard_id, content_id)
+        with ThreadPoolExecutor() as executor:
+            metadata_future = executor.submit(self.get_report_metadata, scorecard_id, content_id)
+            transcript_future = executor.submit(self.get_report_transcript_text, scorecard_id, content_id)
+
+            metadata = metadata_future.result()
+            transcript_text = transcript_future.result()
+
         if not metadata:
             report_dict = report._asdict()
             metadata = self.store_report_metadata(scorecard_id, content_id, report_dict)
             if not metadata:
                 return None
 
-        transcript_text = self.get_report_transcript_text(scorecard_id, content_id)
         if not transcript_text:
             transcript_text = self.fetch_and_store_transcript(scorecard_id, content_id, session)
             if not transcript_text:
@@ -347,6 +356,8 @@ class CallCriteriaDBCache(DataCache):
         return result
 
     def fetch_and_store_transcript(self, scorecard_id, content_id, session):
+        logging.debug(f"Fetching transcript for scorecard_id={scorecard_id}, content_id={content_id}")
+
         report_obj = session.query(Report).get(content_id)
         if not report_obj:
             logging.error(f"Report with id {content_id} not found in database")
