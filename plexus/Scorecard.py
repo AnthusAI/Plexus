@@ -235,7 +235,7 @@ class Scorecard:
             logging.info(error_string)
             return plexus.scores.Score.Result(value="Error", error=error_string)
 
-    async def score_entire_text(self, *, text: str, metadata: dict, modality: str, subset_of_score_names: Optional[List[str]] = None) -> Dict[str, Score.Result]:
+    async def score_entire_text(self, *, text: str, metadata: dict, modality: Optional[str] = None, subset_of_score_names: Optional[List[str]] = None) -> Dict[str, Score.Result]:
         if subset_of_score_names is None:
             subset_of_score_names = self.score_names_to_process()
 
