@@ -20,7 +20,7 @@ class MultiClassClassifier(BaseNode):
         fuzzy_match_threshold: float = Field(default=0.8)
         valid_classes: List[str] = Field(default_factory=list)
         explanation_message: Optional[str] = None
-        maximum_retry_count: int = Field(default=40, description="Maximum number of retries for classification")
+        maximum_retry_count: int = Field(default=3, description="Maximum number of retries for classification")
         parse_from_start: Optional[bool] = False
 
     def __init__(self, **parameters):
@@ -64,6 +64,10 @@ class MultiClassClassifier(BaseNode):
             start_words = ' '.join(words[:1])
             end_words = ' '.join(words[-1:])
             logging.debug(f'Start words: {start_words}, End words: {end_words}')
+
+            if not self.valid_classes:
+                logging.error("No valid classes provided")
+                raise RuntimeError("No valid classes provided")
 
             # Check start/end words first
             for class_name in self.valid_classes:
