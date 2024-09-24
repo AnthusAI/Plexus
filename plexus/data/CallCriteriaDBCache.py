@@ -44,6 +44,7 @@ class CallCriteriaDBCache(DataCache):
         self.thread_count = self.parameters.thread_count
         if not all([self.db_server, self.db_name, self.db_user, self.db_pass]):
             raise ValueError("Database credentials are missing.")
+        DB.initialize(self.db_server, self.db_name, self.db_user, self.db_pass)
         logging.debug(f"Initialized CallCriteriaDBCache with DB server {self.db_server}")
 
     def initialize_db(self):
@@ -51,27 +52,27 @@ class CallCriteriaDBCache(DataCache):
         return sessionmaker(bind=DB.get_engine())()
 
     def load_dataframe(self, *, data, fresh=False):
-        if not fresh and os.path.exists(self.cache_file):
-            logging.info(f"Loading cached dataframe from {self.cache_file}")
-            df = pd.read_hdf(self.cache_file, key='dataframe')
+        # if not fresh and os.path.exists(self.cache_file):
+        #     logging.info(f"Loading cached dataframe from {self.cache_file}")
+        #     df = pd.read_hdf(self.cache_file, key='dataframe')
             
-            if 'scorecard_id' not in df.columns or 'content_id' not in df.columns:
-                logging.error("Cached dataframe is missing 'scorecard_id' or 'content_id' columns.")
-                return pd.DataFrame()
+        #     if 'scorecard_id' not in df.columns or 'content_id' not in df.columns:
+        #         logging.error("Cached dataframe is missing 'scorecard_id' or 'content_id' columns.")
+        #         return pd.DataFrame()
 
-            logging.info("Reloading transcript text for all rows")
-            df['text'] = df.apply(
-                lambda row: self.get_report_transcript_text(row['scorecard_id'], row['content_id']),
-                axis=1
-            )
+        #     logging.info("Reloading transcript text for all rows")
+        #     df['text'] = df.apply(
+        #         lambda row: self.get_report_transcript_text(row['scorecard_id'], row['content_id']),
+        #         axis=1
+        #     )
 
-            non_empty_text = df['text'].astype(bool).sum()
-            logging.info(f"Loaded {non_empty_text} non-empty transcripts out of {len(df)} rows")
+        #     non_empty_text = df['text'].astype(bool).sum()
+        #     logging.info(f"Loaded {non_empty_text} non-empty transcripts out of {len(df)} rows")
             
-            df.to_hdf(self.cache_file, key='dataframe', mode='w')
-            logging.info(f"Updated cached dataframe saved to {self.cache_file}")
+        #     df.to_hdf(self.cache_file, key='dataframe', mode='w')
+        #     logging.info(f"Updated cached dataframe saved to {self.cache_file}")
             
-            return df
+        #     return df
 
         searches = data.get('searches', [])
         logging.info(f"Processing {len(searches)} search configurations.")
@@ -84,55 +85,51 @@ class CallCriteriaDBCache(DataCache):
         
         logging.info(f"Total form IDs collected: {len(form_ids)}")
         
-        session = self.initialize_db()
-        results = []
-        
-        progress = Progress(
-            "[progress.description]{task.description}",
-            "[progress.percentage]{task.percentage:>3.0f}%",
-            "{task.completed}/{task.total}",
-            TimeElapsedColumn(),
-            TimeRemainingColumn(),
-        )
-        
-        with progress:
-            total_task = progress.add_task("Processing reports", total=len(form_ids))
+        with DB.get_session() as session:
+            results = []
             
-            for i in range(0, len(form_ids), self.batch_size):
-                batch = form_ids[i:i+self.batch_size]
-                logging.info(f"Processing batch {i//self.batch_size + 1} of {len(form_ids)//self.batch_size + 1}")
+            progress = Progress(
+                "[progress.description]{task.description}",
+                "[progress.percentage]{task.percentage:>3.0f}%",
+                "{task.completed}/{task.total}",
+                TimeElapsedColumn(),
+                TimeRemainingColumn(),
+            )
+            
+            with progress:
+                total_task = progress.add_task("Processing reports", total=len(form_ids))
                 
-                query = select(Report.id.label('content_id'),
-                               VWForm.f_id.label('form_id'),
-                               Report.scorecard_id,
-                               Report.date,
-                               Report.media_id,
-                               Report.transcribe_call)\
-                        .join(VWForm, Report.id == VWForm.review_id)\
-                        .filter(VWForm.f_id.in_(batch))
-                
-                batch_results = session.execute(query).fetchall()
-                logging.info(f"Retrieved {len(batch_results)} records from database")
-                
-                SessionLocal = sessionmaker(bind=DB.get_engine())
-
-                with ThreadPoolExecutor(max_workers=self.thread_count) as executor:
-                    futures = [executor.submit(self.process_report, report, SessionLocal()) 
-                               for report in batch_results]
+                for i in range(0, len(form_ids), self.batch_size):
+                    batch = form_ids[i:i+self.batch_size]
+                    logging.info(f"Processing batch {i//self.batch_size + 1} of {len(form_ids)//self.batch_size + 1}")
                     
-                    for future in as_completed(futures):
-                        try:
-                            result = future.result()
-                            if result is not None:
-                                results.append(result)
-                        except Exception as e:
-                            logging.error(f"Error in future: {str(e)}")
-                        finally:
-                            progress.update(total_task, advance=1)
+                    query = select(Report.id.label('content_id'),
+                                VWForm.f_id.label('form_id'),
+                                Report.scorecard_id,
+                                Report.date,
+                                Report.media_id,
+                                Report.transcribe_call)\
+                            .join(VWForm, Report.id == VWForm.review_id)\
+                            .filter(VWForm.f_id.in_(batch))
+                    
+                    batch_results = session.execute(query).fetchall()
+                    logging.info(f"Retrieved {len(batch_results)} records from database")
+                    
+                    with ThreadPoolExecutor(max_workers=self.thread_count) as executor:
+                        futures = [executor.submit(self.process_report, report, session) 
+                                for report in batch_results]
+                        
+                        for future in as_completed(futures):
+                            try:
+                                result = future.result()
+                                if result is not None:
+                                    results.append(result)
+                            except Exception as e:
+                                logging.error(f"Error in future: {str(e)}")
+                            finally:
+                                progress.update(total_task, advance=1)
 
-                logging.info(f"Finished processing batch {i//self.batch_size + 1}")
-        
-        session.close()
+                    logging.info(f"Finished processing batch {i//self.batch_size + 1}")
         
         if results:
             dataframe = pd.DataFrame(results)
@@ -200,8 +197,8 @@ class CallCriteriaDBCache(DataCache):
 
     def store_report_metadata(self, scorecard_id, report_id, report_dict):
         logging.debug(f"Storing metadata for scorecard_id={scorecard_id}, report_id={report_id}")
-        session = self.initialize_db()
-        try:
+        with DB.get_session() as session:
+
             report_obj = session.query(Report).get(report_id)
             if not report_obj:
                 logging.error(f"Report with id {report_id} not found in database")
@@ -268,9 +265,6 @@ class CallCriteriaDBCache(DataCache):
             # Store the transcript text separately using the new method
             transcript_text = report_obj.transcript(session=session)
             self.store_report_transcript_text(scorecard_id, report_id, transcript_text)
-
-        finally:
-            session.close()
 
         return structured_data
 
@@ -356,16 +350,17 @@ class CallCriteriaDBCache(DataCache):
         return result
 
     def fetch_and_store_transcript(self, scorecard_id, content_id, session):
-        logging.debug(f"Fetching transcript for scorecard_id={scorecard_id}, content_id={content_id}")
+        with DB.get_session() as session:
+            logging.debug(f"Fetching transcript for scorecard_id={scorecard_id}, content_id={content_id}")
 
-        report_obj = session.query(Report).get(content_id)
-        if not report_obj:
-            logging.error(f"Report with id {content_id} not found in database")
+            report_obj = session.query(Report).get(content_id)
+            if not report_obj:
+                logging.error(f"Report with id {content_id} not found in database")
+                return None
+
+            transcript_text = report_obj.transcript(session=session)
+            if transcript_text:
+                self.store_report_transcript_text(scorecard_id, content_id, transcript_text)
+                return transcript_text
+            logging.error(f"Transcript text is empty for scorecard_id={scorecard_id}, content_id={content_id}")
             return None
-
-        transcript_text = report_obj.transcript(session=session)
-        if transcript_text:
-            self.store_report_transcript_text(scorecard_id, content_id, transcript_text)
-            return transcript_text
-        logging.error(f"Transcript text is empty for scorecard_id={scorecard_id}, content_id={content_id}")
-        return None
