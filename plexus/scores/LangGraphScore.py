@@ -20,10 +20,10 @@ from langchain.globals import set_debug, set_verbose
 # Logging.
 # if os.getenv('DEBUG'):
 #     
-#     set_debug(True)
+set_debug(True)
 # else:
-set_debug(False)
-set_verbose(False)
+# set_debug(False)
+# set_verbose(False)
 
 class LangGraphScore(Score, LangChainUser):
     """
@@ -334,7 +334,9 @@ class LangGraphScore(Score, LangChainUser):
         # Collect output aliases from main LangGraphScore parameter
         if hasattr(self.parameters, 'output'):
             for alias, original in self.parameters.output.items():
-                if original in attributes:
+                if original in output_aliases:
+                    output_aliases[alias] = output_aliases[original]
+                elif original in attributes:
                     output_aliases[alias] = attributes[original]
                 else:
                     raise ValueError(f"Original attribute '{original}' not found in GraphState")
@@ -540,7 +542,7 @@ class LangGraphScore(Score, LangChainUser):
                         logging.error(f"Conditions is not a list: {conditions}")
                         workflow.add_edge(previous_node, node_name)
                 else:
-                    logging.info(f"Node '{previous_node}' does not have conditions")
+                    logging.debug(f"Node '{previous_node}' does not have conditions")
                     workflow.add_edge(previous_node, node_name)
 
         # Connect the last node to the 'final' node
