@@ -50,11 +50,7 @@ def predict(scorecard_name, score_name, content_id, number, excel, use_langsmith
         if number > 1:
             logging.info(f"Iteration {iteration + 1} of {number}")
         
-        try:
-            sample_row, used_content_id = select_sample(scorecard_class, score_names[0], content_id, fresh)
-        except Exception as e:
-            logging.error(f"Failed to select sample: {str(e)}")
-            continue
+        sample_row, used_content_id = select_sample(scorecard_class, score_names[0], content_id, fresh)
         
         row_result = {}
         for single_score_name in score_names:
@@ -133,45 +129,37 @@ def select_sample_data_driven(scorecard_class, score_name, content_id, score_con
     score_configuration['scorecard_name'] = scorecard_class.name
     score_configuration['score_name'] = score_name
 
-    try:
-        score_instance = score_class(**score_configuration)
-        score_instance.load_data(data=score_configuration['data'], fresh=fresh)
-        score_instance.process_data()
+    score_instance = score_class(**score_configuration)
+    score_instance.load_data(data=score_configuration['data'], fresh=fresh)
+    score_instance.process_data()
 
-        if content_id:
-            sample_row = score_instance.dataframe[score_instance.dataframe['content_id'] == content_id]
-            if sample_row.empty:
-                logging.warning(f"Content ID '{content_id}' not found in the data. Selecting a random sample.")
-                sample_row = score_instance.dataframe.sample(n=1)
-        else:
+    if content_id:
+        sample_row = score_instance.dataframe[score_instance.dataframe['content_id'] == content_id]
+        if sample_row.empty:
+            logging.warning(f"Content ID '{content_id}' not found in the data. Selecting a random sample.")
             sample_row = score_instance.dataframe.sample(n=1)
-        
-        used_content_id = sample_row.iloc[0]['content_id']
-        return sample_row, used_content_id
-    except Exception as e:
-        logging.error(f"Failed to load or process data for '{score_name}': {str(e)}")
-        raise
+    else:
+        sample_row = score_instance.dataframe.sample(n=1)
+    
+    used_content_id = sample_row.iloc[0]['content_id']
+    return sample_row, used_content_id
 
 def select_sample_csv(csv_path, content_id):
     if not os.path.exists(csv_path):
         logging.error(f"labeled-samples.csv not found at {csv_path}")
         raise FileNotFoundError(f"labeled-samples.csv not found at {csv_path}")
 
-    try:
-        df = pd.read_csv(csv_path)
-        if content_id:
-            sample_row = df[df['id'] == content_id]
-            if sample_row.empty:
-                logging.warning(f"ID '{content_id}' not found in {csv_path}. Selecting a random sample.")
-                sample_row = df.sample(n=1)
-        else:
+    df = pd.read_csv(csv_path)
+    if content_id:
+        sample_row = df[df['id'] == content_id]
+        if sample_row.empty:
+            logging.warning(f"ID '{content_id}' not found in {csv_path}. Selecting a random sample.")
             sample_row = df.sample(n=1)
-        
-        used_content_id = sample_row.iloc[0]['id']
-        return sample_row, used_content_id
-    except Exception as e:
-        logging.error(f"Failed to load or process data from {csv_path}: {str(e)}")
-        raise
+    else:
+        sample_row = df.sample(n=1)
+    
+    used_content_id = sample_row.iloc[0]['id']
+    return sample_row, used_content_id
 
 async def predict_score(score_name, scorecard_class, sample_row, content_id):
     logging.info(f"Predicting Score [magenta1][b]{score_name}[/b][/magenta1]...")
