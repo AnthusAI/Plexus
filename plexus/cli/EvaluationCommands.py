@@ -204,12 +204,8 @@ def get_csv_samples(csv_filename):
         logging.error(f"labeled-samples.csv not found at {csv_filename}")
         return []
 
-    try:
-        df = pd.read_csv(csv_filename)
-        return df.to_dict('records')
-    except Exception as e:
-        logging.error(f"Failed to load or process data from {csv_filename}: {str(e)}")
-        return []
+    df = pd.read_csv(csv_filename)
+    return df.to_dict('records')
 
 @evaluate.command()
 @click.option('--scorecard-name', required=True, help='Name of the scorecard to evaluate')
