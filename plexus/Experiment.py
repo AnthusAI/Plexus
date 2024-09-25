@@ -50,7 +50,7 @@ class Experiment:
         session_ids_to_sample = None,
         subset_of_score_names = None,
         experiment_label = None,
-        max_mismatches_to_report=5
+        max_mismatches_to_report=25
     ):
         self.scorecard_name = scorecard_name
         self.scorecard = scorecard
@@ -145,6 +145,7 @@ class Experiment:
 class AccuracyExperiment(Experiment):
     def __init__(self, *, override_folder=None, labeled_samples=None, labeled_samples_filename=None, **kwargs):
         super().__init__(**kwargs)
+        self.scorecard_name = kwargs.get('scorecard_name')
         self.override_folder = override_folder
         self.override_data = self.load_override_data() if self.override_folder else {}
         self.labeled_samples = labeled_samples
@@ -213,6 +214,39 @@ class AccuracyExperiment(Experiment):
         if 'Session ID' not in df.columns:
             logging.warning("'Session ID' column not found. Using content_id as Session ID.")
             df['Session ID'] = df['content_id']
+
+        fine_tuning_ids = set()
+        fine_tuning_ids_file = f"tuning/{self.scorecard_name}/{self.subset_of_score_names[0]}/training_ids.txt"
+        original_shape = df.shape
+        if os.path.exists(fine_tuning_ids_file):
+            with open(fine_tuning_ids_file, 'r') as f:
+                fine_tuning_ids = set(f.read().splitlines())
+            logging.info(f"Loaded {len(fine_tuning_ids)} IDs used in fine-tuning")
+            
+            # Debug: Check the types and some sample values
+            logging.info(f"Sample fine-tuning IDs: {list(fine_tuning_ids)[:5]}")
+            logging.info(f"Sample content_ids from DataFrame: {df['content_id'].head().tolist()}")
+            logging.info(f"content_id dtype: {df['content_id'].dtype}")
+            
+            # Convert fine_tuning_ids to the same type as content_id
+            fine_tuning_ids = set(df['content_id'].dtype.type(id) for id in fine_tuning_ids)
+            
+            # Check for any matches
+            matching_ids = df['content_id'].isin(fine_tuning_ids)
+            logging.info(f"Number of matching IDs: {matching_ids.sum()}")
+            
+            df = df[~df['content_id'].isin(fine_tuning_ids)]
+            logging.info(f"Excluded fine-tuning IDs. Original DataFrame shape: {original_shape}, New DataFrame shape: {df.shape}")
+            
+            # If still no change, let's check for any partial matches
+            if original_shape == df.shape:
+                partial_matches = df['content_id'].apply(lambda x: any(str(x) in str(id) for id in fine_tuning_ids))
+                logging.info(f"Number of partial matches: {partial_matches.sum()}")
+                if partial_matches.sum() > 0:
+                    logging.info("Sample partial matches:")
+                    for idx, content_id in df[partial_matches]['content_id'].head().items():
+                        matching_fine_tuning_ids = [id for id in fine_tuning_ids if str(content_id) in str(id)]
+                        logging.info(f"DataFrame ID: {content_id}, Matching fine-tuning IDs: {matching_fine_tuning_ids}")
 
         if hasattr(self, 'session_ids_to_sample') and self.session_ids_to_sample:
             selected_sample_rows = df[df['Session ID'].isin(self.session_ids_to_sample)]
