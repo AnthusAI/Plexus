@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional
 from langgraph.graph import StateGraph
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from plexus.scores.nodes.BaseNode import BaseNode
 from plexus.CustomLogging import logging
 from rapidfuzz import process, fuzz
@@ -88,7 +88,7 @@ class MultiClassClassifier(BaseNode):
                 if score >= self.fuzzy_match_threshold * 100:
                     return {"classification": best_match}
             
-            return {"classification": "unknown"}
+            return {"classification": None}
 
     def get_classifier_node(self) -> FunctionType:
         model = self.model
@@ -101,44 +101,55 @@ class MultiClassClassifier(BaseNode):
         def classifier_node(state):
             initial_prompt = prompt_templates[0]
             retry_count = 0 if state.retry_count is None else state.retry_count
+            use_existing_completion = True
+
+            # Initialize chat history
+            chat_history = [
+                initial_prompt.messages[0],
+                ('user', state.text)
+            ]
 
             while retry_count < self.parameters.maximum_retry_count:
-                # Create a RunnableSequence
-                initial_chain = (
-                    initial_prompt 
-                    | model 
-                    | self.ClassificationOutputParser(
-                        valid_classes=valid_classes,
-                        fuzzy_match=fuzzy_match,
-                        fuzzy_match_threshold=fuzzy_match_threshold,
-                        parse_from_start=parse_from_start
-                    )
-                )
-                
-                # Invoke the chain with the entire state as a dictionary
-                result = initial_chain.invoke({
-                    **state.dict(),
-                    "retry_feedback": f"You responded with an unknown classification. Please try again. This is attempt {retry_count + 1} of {self.parameters.maximum_retry_count}. Valid classes are: {', '.join(valid_classes)}." if retry_count > 0 else ""
-                })
+                if use_existing_completion and hasattr(state, 'completion'):
+                    current_completion = state.completion
+                else:
+                    # Create a ChatPromptTemplate from the current chat history
+                    chat_prompt = ChatPromptTemplate.from_messages(chat_history)
+                    
+                    # Invoke the model with the current chat history
+                    current_completion = model.invoke(chat_prompt.format_prompt().to_messages())
+                    current_completion = current_completion.content
 
-                if result["classification"] != "unknown":
+                # Parse the completion
+                result = self.ClassificationOutputParser(
+                    valid_classes=valid_classes,
+                    fuzzy_match=fuzzy_match,
+                    fuzzy_match_threshold=fuzzy_match_threshold,
+                    parse_from_start=parse_from_start
+                ).parse(current_completion)
+
+                if result["classification"] is not None:
                     if self.parameters.explanation_message:
                         explanation_prompt = ChatPromptTemplate.from_messages([
-                            HumanMessage(content=state.text),
-                            AIMessage(content=f"Classification: {result['classification']}"),
+                            *chat_history,
+                            AIMessage(content=current_completion),
                             HumanMessage(content=self.parameters.explanation_message)
                         ])
-                        explanation_chain = explanation_prompt | model
-                        explanation = explanation_chain.invoke({})
+                        explanation = model.invoke(explanation_prompt.format_prompt().to_messages())
                         result["explanation"] = explanation.content
                     else:
-                        # Use the RunnableSequence for the full response as well
-                        full_response = (initial_prompt | model).invoke({**state.dict()})
-                        result["explanation"] = full_response.content
+                        result["explanation"] = current_completion
 
                     return {**state.dict(), **result, "retry_count": retry_count}
 
+                # If we reach here, the classification was unknown, so we need to retry
+                chat_history.extend([
+                    ('assistant', current_completion),
+                    ('user', f"You responded with an unknown classification. Please try again. This is attempt {retry_count + 1} of {self.parameters.maximum_retry_count}. Valid classes are: {', '.join(valid_classes)}.")
+                ])
+
                 retry_count += 1
+                use_existing_completion = False  # Use model for subsequent retries
                 sleep(1)
 
             return {**state.dict(), "classification": "unknown", "explanation": "Maximum retries reached", "retry_count": retry_count}
