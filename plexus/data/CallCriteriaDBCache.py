@@ -180,7 +180,7 @@ class CallCriteriaDBCache(DataCache):
             except Exception as e:
                 logging.error(f"Error reading transcript.txt for scorecard_id={scorecard_id}, report_id={report_id}: {str(e)}")
         else:
-            logging.warning(f"Transcript file not found: {transcript_file_path}")
+            logging.debug(f"Transcript file not found: {transcript_file_path}")
         return ''
 
     def store_report_transcript_text(self, scorecard_id, report_id, transcript_text):
