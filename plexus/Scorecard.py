@@ -232,7 +232,7 @@ class Scorecard:
                     'ScoreCardID': str(self.properties['id']),
                     'ScoreCardName': self.scorecard_identifier,
                     'Score': score,
-                    'Modality': modality or 'Unknown',
+                    'Modality': modality or 'Development',
                     'Environment': os.getenv('environment') or 'Unknown'
                 }
                 self.log_metric_to_cloudwatch('Cost', score_total_cost.get('total_cost', 0), dimensions)
