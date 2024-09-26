@@ -221,12 +221,24 @@ class Scorecard:
                 self.total_cost          += score_total_cost.get('total_cost', 0)
                 self.scorecard_total_cost += score_total_cost.get('total_cost', Decimal('0.0'))
 
+                total_tokens = self.prompt_tokens + self.completion_tokens
+
                 # TODO: Find a different way of passing the costs with the score result.
                 # Maybe add support for `costs` and `metadata` in Score.Result?
                 # score_result[0].metadata.update(score_total_cost)
                 
                 # Log the cost for this individual score
-                self.log_metric_to_cloudwatch('Cost', score_total_cost.get('total_cost', 0), self.scorecard_identifier, score_name=score, modality=modality)
+                dimensions = {
+                    'ScoreCardID': str(self.properties['id']),
+                    'ScoreCardName': self.scorecard_identifier,
+                    'Score': score,
+                    'Modality': modality or 'Unknown',
+                    'Environment': os.getenv('environment') or 'Unknown'
+                }
+                self.log_metric_to_cloudwatch('Cost', score_total_cost.get('total_cost', 0), dimensions)
+                self.log_metric_to_cloudwatch('PromptTokens', score_total_cost.get('prompt_tokens', 0), dimensions)
+                self.log_metric_to_cloudwatch('CompletionTokens', score_total_cost.get('completion_tokens', 0), dimensions)
+                self.log_metric_to_cloudwatch('TotalTokens', total_tokens, dimensions)
 
             return score_result
 
@@ -262,7 +274,7 @@ class Scorecard:
         await asyncio.gather(*(bounded_process_score(score_name) for score_name in subset_of_score_names))
 
         # Log the total cost for the entire scorecard
-        self.log_metric_to_cloudwatch('Cost', self.scorecard_total_cost, self.scorecard_identifier, modality=modality)
+        # self.log_metric_to_cloudwatch('Cost', self.scorecard_total_cost, self.scorecard_identifier, modality=modality)
 
         logging.info(f"Scorecard total cost: {self.scorecard_total_cost}")
         return score_results_dict
@@ -289,41 +301,19 @@ class Scorecard:
                self.properties.get('parameters', {}).get('model_name') or \
                'Unknown'
 
-    def log_metric_to_cloudwatch(self, metric_name, metric_value, scorecard_name, score_name=None, modality=None):
+    def log_metric_to_cloudwatch(self, metric_name, metric_value, dimensions):
         try:
-            dimensions = [
-                {
-                    'Name': 'ScoreCardID',
-                    'Value': str(self.properties['id'])
-                },
-                {
-                    'Name': 'ScoreCardName',
-                    'Value': scorecard_name
-                },
-                {
-                    'Name': 'Modality',
-                    'Value': modality or 'Unknown'
-                }
-            ]
-            
-            if score_name:
-                dimensions.append({
-                    'Name': 'Score',
-                    'Value': score_name
-                })
-
             metric_data = {
                 'MetricName': metric_name,
                 'Value': float(metric_value),
                 'Unit': 'None',
-                'Dimensions': dimensions
+                'Dimensions': [{'Name': k, 'Value': str(v)} for k, v in dimensions.items()]
             }
 
             self.cloudwatch_client.put_metric_data(
-                Namespace='Plexus/Scorecard',
+                Namespace='Plexus/Scorecard/Development',
                 MetricData=[metric_data]
             )
-            logging.info(f"Successfully logged {metric_name} to CloudWatch for scorecard ID {self.properties['id']}, name {scorecard_name}, modality {modality}" + 
-                         (f", and score {score_name}" if score_name else ""))
+            logging.info(f"Successfully logged {metric_name} to CloudWatch with dimensions: {dimensions}")
         except ClientError as e:
             logging.error(f"Failed to log metric to CloudWatch: {e}")
