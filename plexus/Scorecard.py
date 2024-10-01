@@ -68,14 +68,7 @@ class Scorecard:
 
     @classmethod
     def score_names(cls):
-        """
-        Retrieves a list of all score names registered in the scorecard.
-        Incuding scores that are computed implicitly by other scores.
-
-        Returns:
-            list of str: The names of all registered scores.
-        """
-        return cls.scores.keys()
+        return [score['name'] for score in cls.scores]
 
     @classmethod
     def score_names_to_process(cls):
@@ -117,7 +110,7 @@ class Scorecard:
         """
         logging.info(f"Loading scorecard from YAML file: {yaml_file_path}")
         with open(yaml_file_path, 'r') as file:
-            scorecard_properties = yaml.safe_load(file)
+                scorecard_properties = yaml.safe_load(file)
 
         scorecard_name = scorecard_properties['name']
 
@@ -187,7 +180,6 @@ class Scorecard:
 
         score_instance = score_class()
         score_configuration = self.score_registry.get_properties(score)
-        
         if (score_class is not None):
             logging.info("Found score for question: " + score)
 
@@ -230,11 +222,13 @@ class Scorecard:
                 # Log the cost for this individual score
                 dimensions = {
                     'ScoreCardID': str(self.properties['id']),
-                    'ScoreCardName': self.scorecard_identifier,
-                    'Score': score,
+                    'ScoreCardName': str(self.properties['name']),
+                    'Score': str(score_configuration.get('name')),
+                    'ScoreID': str(score_configuration.get('id')),
                     'Modality': modality or 'Development',
                     'Environment': os.getenv('environment') or 'Unknown'
                 }
+                
                 self.log_metric_to_cloudwatch('Cost', score_total_cost.get('total_cost', 0), dimensions)
                 self.log_metric_to_cloudwatch('PromptTokens', score_total_cost.get('prompt_tokens', 0), dimensions)
                 self.log_metric_to_cloudwatch('CompletionTokens', score_total_cost.get('completion_tokens', 0), dimensions)
@@ -311,7 +305,7 @@ class Scorecard:
             }
 
             self.cloudwatch_client.put_metric_data(
-                Namespace='Plexus/Scorecard/Development',
+                Namespace='Plexus',
                 MetricData=[metric_data]
             )
             logging.info(f"Successfully logged {metric_name} to CloudWatch with dimensions: {dimensions}")
