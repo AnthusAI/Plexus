@@ -27,7 +27,7 @@ class ScoreData:
 
         self.dataframe = data_cache.load_dataframe(data=data, fresh=fresh)
 
-        logging.info("Loaded dataframe from training data lake.")
+        logging.debug(f"Loaded dataframe: {self.dataframe.head().to_string()}")
         
         # Apply dependency filters if they exist
         if self.parameters.dependencies:
@@ -46,6 +46,8 @@ class ScoreData:
         logging.debug(self.dataframe.head().to_string())
 
         self.analyze_dataset()
+
+        return self.dataframe
 
     def _load_data_cache(self):
         data_cache_class_name = self.parameters.data['class']
