@@ -251,23 +251,46 @@ class AccuracyExperiment(Experiment):
         if hasattr(self, 'session_ids_to_sample') and self.session_ids_to_sample:
             selected_sample_rows = df[df['Session ID'].isin(self.session_ids_to_sample)]
         elif self.sampling_method == 'random':
-            if hasattr(self, 'random_seed'):
-                random.seed(self.random_seed)
+            logging.info(f"Random seed: {self.random_seed}")
+            logging.info(f"DataFrame shape before sampling: {df.shape}")
+            logging.info(f"First few DataFrame indices: {df.index[:5].tolist()}")
+            logging.info(f"First few Session IDs: {df['Session ID'].head(5).tolist()}")
+            
             try:
                 if self.number_of_texts_to_sample > len(df):
                     logging.warning("Requested number of samples is larger than the dataframe size. Using the entire dataframe.")
                     selected_sample_rows = df
                 else:
-                    selected_sample_indices = random.sample(range(len(df)), self.number_of_texts_to_sample)
-                    selected_sample_rows = df.iloc[selected_sample_indices]
+                    selected_sample_rows = df.sample(
+                        n=self.number_of_texts_to_sample,
+                        random_state=self.random_seed
+                    )
+
+                logging.info(f"Sampled DataFrame shape: {selected_sample_rows.shape}")
+                logging.info(f"First few sampled indices: {selected_sample_rows.index[:5].tolist()}")
+                logging.info(f"First few sampled Session IDs: {selected_sample_rows['Session ID'].head(5).tolist()}")
             except ValueError as e:
                 logging.error(f"Sampling error: {e}")
                 selected_sample_rows = df
         elif self.sampling_method == 'all':
             selected_sample_rows = df
-        else:
-            selected_sample_rows = df.head(self.number_of_texts_to_sample)
+        elif self.sampling_method == 'sequential':
+            logging.info(f"DataFrame shape before sampling: {df.shape}")
+            logging.info(f"First few DataFrame indices: {df.index[:5].tolist()}")
+            logging.info(f"First few session IDs: {df['Session ID'].head(5).tolist()}")
 
+            logging.info("Using sequential sampling.")
+            selected_sample_rows = df.head(self.number_of_texts_to_sample)
+            
+            logging.info(f"Sampled DataFrame shape: {selected_sample_rows.shape}")
+            logging.info(f"First few sampled indices: {selected_sample_rows.index[:5].tolist()}")
+            logging.info(f"First few sampled session IDs: {selected_sample_rows['Session ID'].head(5).tolist()}")
+        else:
+            logging.warning(f"Unknown sampling method '{self.sampling_method}'. Defaulting to random.")
+            selected_sample_rows = df.sample(
+                n=self.number_of_texts_to_sample,
+                random_state=self.random_seed
+            )
         results = await self.score_all_texts(selected_sample_rows)
         
         if not os.path.exists(report_folder_path):
