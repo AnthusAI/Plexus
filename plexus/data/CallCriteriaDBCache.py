@@ -1,11 +1,12 @@
 import os
 import pandas as pd
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, func
 from sqlalchemy.orm import sessionmaker
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from call_criteria_database import DB, Report, VWForm
+from call_criteria_database import DB, Report, VWForm, VWCalibrationForm, FormScore, FormQScore, QuestionAnswer
 from .DataCache import DataCache
+from call_criteria_database.session_viewed import SessionViewed
 from pydantic import Field
 import logging
 from sqlalchemy.exc import SQLAlchemyError
@@ -52,42 +53,103 @@ class CallCriteriaDBCache(DataCache):
         return sessionmaker(bind=DB.get_engine())()
 
     def load_dataframe(self, *, data, fresh=False):
-        # if not fresh and os.path.exists(self.cache_file):
-        #     logging.info(f"Loading cached dataframe from {self.cache_file}")
-        #     df = pd.read_hdf(self.cache_file, key='dataframe')
-            
-        #     if 'scorecard_id' not in df.columns or 'content_id' not in df.columns:
-        #         logging.error("Cached dataframe is missing 'scorecard_id' or 'content_id' columns.")
-        #         return pd.DataFrame()
+        if 'searches' in data:
+            return self.load_from_searches(data, fresh)
+        if 'queries' in data:
+            return self.load_from_queries(data, fresh)
+        logging.warning("No 'searches' or 'queries' found in data.")
+        return pd.DataFrame()
 
-        #     logging.info("Reloading transcript text for all rows")
-        #     df['text'] = df.apply(
-        #         lambda row: self.get_report_transcript_text(row['scorecard_id'], row['content_id']),
-        #         axis=1
-        #     )
+    def save_to_cache(self, df, identifier):
+        cache_file = self._get_cache_file_path(identifier)
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+        df.to_parquet(cache_file)
 
-        #     non_empty_text = df['text'].astype(bool).sum()
-        #     logging.info(f"Loaded {non_empty_text} non-empty transcripts out of {len(df)} rows")
-            
-        #     df.to_hdf(self.cache_file, key='dataframe', mode='w')
-        #     logging.info(f"Updated cached dataframe saved to {self.cache_file}")
-            
-        #     return df
+    def cache_exists(self, identifier):
+        cache_file = self._get_cache_file_path(identifier)
+        return os.path.exists(cache_file)
 
+    def load_from_cache(self, identifier):
+        cache_file = self._get_cache_file_path(identifier)
+        return pd.read_parquet(cache_file)
+
+    def _get_cache_file_path(self, identifier):
+        cache_dir = os.path.join(self.local_cache_directory, 'dataframes')
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_filename = f"{identifier}.parquet"
+        return os.path.join(cache_dir, cache_filename)
+
+    def load_from_searches(self, data, fresh):
         searches = data.get('searches', [])
+        unique_identifier = self.generate_unique_search_identifier(searches)
+
+        if not fresh and self.cache_exists(unique_identifier):
+            df = self.load_from_cache(unique_identifier)
+            if 'scorecard_id' in df.columns and 'content_id' in df.columns:
+                df['text'] = df.apply(
+                    lambda row: self.get_report_transcript_text(row['scorecard_id'], row['content_id']),
+                    axis=1
+                )
+                non_empty_text = df['text'].astype(bool).sum()
+                logging.info(f"Loaded {non_empty_text} non-empty transcripts out of {len(df)} rows")
+                self.save_to_cache(df, unique_identifier)
+                logging.info(f"Updated cached dataframe saved")
+                return df
+            else:
+                logging.error("Cached dataframe is missing 'scorecard_id' or 'content_id' columns.")
+
         logging.info(f"Processing {len(searches)} search configurations.")
+        form_ids = self.collect_form_ids(searches)
+        logging.info(f"Total form IDs collected: {len(form_ids)}")
+        
+        results = self.process_form_ids(form_ids)
+        
+        if results:
+            dataframe = pd.DataFrame(results)
+            logging.info(f"Dataframe created with {len(dataframe)} records and {len(dataframe.columns)} columns.")
+            non_empty_text = dataframe['text'].astype(bool).sum()
+            logging.info(f"Loaded {non_empty_text} non-empty transcripts out of {len(dataframe)} rows")
+            logging.info(dataframe[['scorecard_id', 'content_id', 'text']].head().to_string())
+            self.save_to_cache(dataframe, unique_identifier)
+            logging.info(f"Cached dataframe saved")
+        else:
+            logging.warning("No data was loaded. Returning empty DataFrame.")
+            dataframe = pd.DataFrame()
+        
+        logging.info(
+            dataframe[['content_id', 'form_id', 'Good Call comment', 'text']]
+            .head(3)
+            .assign(text=dataframe['text'].str[:256])
+            .to_string(index=False)
+        )
+        return dataframe
+
+    def generate_unique_search_identifier(self, searches):
+        search_identifiers = [
+            f"{os.path.basename(search.get('item_list_filename', 'no_filename'))}_"
+            f"{search.get('column_name', 'no_column')}_"
+            f"{search.get('metadata_item', 'no_metadata')}_"
+            f"{search.get('scorecard_id', 'no_scorecard')}"
+            for search in searches
+        ]
+        return "_".join(search_identifiers) or "default"
+
+    def collect_form_ids(self, searches):
         form_ids = []
         for search in searches:
             item_list_filename = search.get('item_list_filename')
             if item_list_filename:
-                df = pd.read_csv(item_list_filename) if item_list_filename.endswith('.csv') else pd.read_excel(item_list_filename)
+                df = (
+                    pd.read_csv(item_list_filename) 
+                    if item_list_filename.endswith('.csv') 
+                    else pd.read_excel(item_list_filename)
+                )
                 form_ids.extend(df['form_id'].dropna().tolist())
-        
-        logging.info(f"Total form IDs collected: {len(form_ids)}")
-        
+        return form_ids
+
+    def process_form_ids(self, form_ids):
+        results = []
         with DB.get_session() as session:
-            results = []
-            
             progress = Progress(
                 "[progress.description]{task.description}",
                 "[progress.percentage]{task.percentage:>3.0f}%",
@@ -95,65 +157,142 @@ class CallCriteriaDBCache(DataCache):
                 TimeElapsedColumn(),
                 TimeRemainingColumn(),
             )
-            
             with progress:
                 total_task = progress.add_task("Processing reports", total=len(form_ids))
-                
                 for i in range(0, len(form_ids), self.batch_size):
                     batch = form_ids[i:i+self.batch_size]
                     logging.info(f"Processing batch {i//self.batch_size + 1} of {len(form_ids)//self.batch_size + 1}")
-                    
-                    query = select(Report.id.label('content_id'),
-                                VWForm.f_id.label('form_id'),
-                                Report.scorecard_id,
-                                Report.date,
-                                Report.media_id,
-                                Report.transcribe_call)\
-                            .join(VWForm, Report.id == VWForm.review_id)\
-                            .filter(VWForm.f_id.in_(batch))
-                    
-                    batch_results = session.execute(query).fetchall()
+                    batch_results = self.fetch_batch_from_db(batch, session)
                     logging.info(f"Retrieved {len(batch_results)} records from database")
                     
                     with ThreadPoolExecutor(max_workers=self.thread_count) as executor:
-                        futures = [executor.submit(self.process_report, report, session) 
-                                for report in batch_results]
-                        
+                        futures = [executor.submit(self.process_report, row, session) for row in batch_results]
                         for future in as_completed(futures):
-                            try:
-                                result = future.result()
-                                if result is not None:
-                                    results.append(result)
-                            except Exception as e:
-                                logging.error(f"Error in future: {str(e)}")
-                            finally:
-                                progress.update(total_task, advance=1)
-
+                            result = future.result()
+                            if result is not None:
+                                results.append(result)
+                            progress.update(total_task, advance=1)
                     logging.info(f"Finished processing batch {i//self.batch_size + 1}")
-        
-        if results:
-            dataframe = pd.DataFrame(results)
-            logging.info(f"Dataframe created with {len(dataframe)} records and {len(dataframe.columns)} columns.")
-            
-            non_empty_text = dataframe['text'].astype(bool).sum()
-            logging.info(f"Loaded {non_empty_text} non-empty transcripts out of {len(dataframe)} rows")
-            
-            logging.info("Sample rows from the dataframe:")
-            logging.info(dataframe[['scorecard_id', 'content_id', 'text']].head().to_string())
-            
-            dataframe.to_hdf(self.cache_file, key='dataframe', mode='w')
-            logging.info(f"Cached dataframe saved to {self.cache_file}")
-        else:
-            logging.warning("No data was loaded. Returning empty DataFrame.")
-            dataframe = pd.DataFrame()
-        
-        logging.info("First three rows of the dataframe:")
-        logging.info(dataframe[['content_id', 'form_id', 'Good Call comment', 
-                        'text']].head(3)
-                     .assign(text=dataframe['text'].str[:256])
-                     .to_string(index=False))
+        return results
 
-        return dataframe
+    def fetch_batch_from_db(self, batch, session):
+        query = select(
+            Report.id.label('content_id'),
+            VWForm.f_id.label('form_id'),
+            Report.session_id,
+            Report.scorecard_id,
+            Report.date,
+            Report.media_id,
+            Report.transcribe_call
+        ).join(
+            VWForm, Report.id == VWForm.review_id
+        ).filter(
+            VWForm.f_id.in_(batch)
+        )
+        return session.execute(query).fetchall()
+
+    def fetch_data_from_db(self, query, scorecard_id, number):
+        with DB.get_session() as session:
+            base_query = select(
+                Report.id.label('content_id'),
+                VWForm.f_id.label('form_id'),
+                Report.session_id,
+                Report.scorecard_id,
+                Report.date,
+                Report.media_id,
+                Report.transcribe_call
+            ).join(
+                VWForm, Report.id == VWForm.review_id
+            ).filter(
+                Report.scorecard_id == scorecard_id
+            ).filter(
+                Report.media_id != None
+            )
+
+            if query.get('minimum_calibration_count'):
+                min_calibration_count = query['minimum_calibration_count']
+                calibration_count_subquery = session.query(
+                    VWCalibrationForm.review_id,
+                    func.count(VWCalibrationForm.id).label('calibration_count')
+                ).group_by(
+                    VWCalibrationForm.review_id
+                ).having(
+                    func.count(VWCalibrationForm.id) >= min_calibration_count
+                ).subquery()
+
+                base_query = base_query.join(
+                    calibration_count_subquery,
+                    Report.id == calibration_count_subquery.c.review_id
+                )
+
+            score_id = query.get('score_id')
+            answer = query.get('answer')
+            if score_id is not None:
+                base_query = base_query.join(FormQScore, VWForm.f_id == FormQScore.form_id)
+                if answer:
+                    base_query = base_query.join(
+                        QuestionAnswer, FormQScore.question_answered == QuestionAnswer.id
+                    ).filter(
+                        FormQScore.question_id == score_id,
+                        QuestionAnswer.answer_text == answer
+                    )
+                else:
+                    base_query = base_query.filter(
+                        FormQScore.question_id == score_id,
+                        FormQScore.question_answered != None
+                    )
+
+            reviewer = query.get('reviewer')
+            if reviewer:
+                base_query = base_query.join(SessionViewed, VWForm.review_id == SessionViewed.session_id)
+                base_query = base_query.filter(SessionViewed.agent == reviewer)
+
+            final_query = base_query.limit(number)
+
+            logging.debug(f"Query: {final_query}")
+            logging.info(
+                f"Compiled SQL: {final_query.compile(compile_kwargs={'literal_binds': True})}"
+            )
+            
+            result = session.execute(final_query).fetchall()
+            
+            logging.info(f"First Result: {result[0] if result else 'No results'}")
+            
+            return result
+
+    def generate_unique_query_identifier(self, queries):
+        query_strings = [
+            "_".join(f"{key}_{value}" for key, value in query.items())
+            for query in queries
+        ]
+        return "_".join(sorted(query_strings))
+
+    def load_from_queries(self, data, fresh=False):
+        queries = data.get('queries', [])
+        unique_identifier = self.generate_unique_query_identifier(queries)
+        
+        if not fresh and self.cache_exists(unique_identifier):
+            return self.load_from_cache(unique_identifier)
+        
+        all_results = []
+        with DB.get_session() as session:
+            for query in queries:
+                scorecard_id = query['scorecard_id']
+                number = query['number']
+                query_results = self.fetch_data_from_db(query, scorecard_id, number)
+                
+                with ThreadPoolExecutor(max_workers=self.thread_count) as executor:
+                    futures = [executor.submit(self.process_report, row, session) for row in query_results]
+                    for future in as_completed(futures):
+                        result = future.result()
+                        if result is not None:
+                            all_results.append(result)
+        
+        df = pd.DataFrame(all_results)
+        
+        self.save_to_cache(df, unique_identifier)
+        
+        return df
 
     def get_report_metadata(self, scorecard_id, report_id):
         metadata_file_path = self._get_metadata_file_path(scorecard_id, report_id)
@@ -164,6 +303,7 @@ class CallCriteriaDBCache(DataCache):
                 cached_data['scorecard_id'] = cached_data.get('scorecard_id')
                 cached_data['content_id'] =   cached_data.get('content_id')
                 cached_data['form_id'] =      cached_data.get('form_id')
+                cached_data['session_id'] =   cached_data.get('session_id')
                 if 'searches' not in cached_data:
                     cached_data['searches'] = []
                 return cached_data
