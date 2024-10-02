@@ -147,6 +147,8 @@ def accuracy(
         }
         
         if uses_data_driven:
+            if not single_score_labeled_samples:
+                raise ValueError("The dataset is empty. Cannot proceed with the experiment.")
             single_score_experiment_args['labeled_samples'] = single_score_labeled_samples
         else:
             single_score_experiment_args['labeled_samples_filename'] = labeled_samples_filename
