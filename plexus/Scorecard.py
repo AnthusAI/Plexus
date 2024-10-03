@@ -49,6 +49,8 @@ class Scorecard:
         # Accumulators for tracking the total expenses.
         self.prompt_tokens = 0
         self.completion_tokens = 0
+        self.cached_tokens = 0
+        self.llm_calls = 0
         self.input_cost =  Decimal('0.0')
         self.output_cost = Decimal('0.0')
         self.total_cost =  Decimal('0.0')
@@ -208,6 +210,8 @@ class Scorecard:
 
                 self.prompt_tokens       += score_total_cost.get('prompt_tokens', 0)
                 self.completion_tokens   += score_total_cost.get('completion_tokens', 0)
+                self.cached_tokens       += score_total_cost.get('cached_tokens', 0)
+                self.llm_calls           += score_total_cost.get('llm_calls', 0)
                 self.input_cost          += score_total_cost.get('input_cost', 0)
                 self.output_cost         += score_total_cost.get('output_cost', 0)
                 self.total_cost          += score_total_cost.get('total_cost', 0)
@@ -233,6 +237,8 @@ class Scorecard:
                 self.log_metric_to_cloudwatch('PromptTokens', score_total_cost.get('prompt_tokens', 0), dimensions)
                 self.log_metric_to_cloudwatch('CompletionTokens', score_total_cost.get('completion_tokens', 0), dimensions)
                 self.log_metric_to_cloudwatch('TotalTokens', total_tokens, dimensions)
+                self.log_metric_to_cloudwatch('CachedTokens', score_total_cost.get('cached_tokens', 0), dimensions)
+                self.log_metric_to_cloudwatch('ExternalAIRequests', score_total_cost.get('llm_calls', 0), dimensions)
 
             return score_result
 
@@ -277,6 +283,8 @@ class Scorecard:
         return {
             'prompt_tokens': self.prompt_tokens,
             'completion_tokens': self.completion_tokens,
+            'cached_tokens': self.cached_tokens,
+            'llm_calls': self.llm_calls,
             'input_cost': self.input_cost,
             'output_cost': self.output_cost,
             'total_cost': self.total_cost
