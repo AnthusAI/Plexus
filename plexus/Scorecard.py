@@ -14,6 +14,7 @@ from typing import Optional, List, Dict
 import asyncio
 import boto3
 from botocore.exceptions import ClientError
+import tiktoken
 
 from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
@@ -185,6 +186,10 @@ class Scorecard:
         if (score_class is not None):
             logging.info("Found score for question: " + score)
 
+            # Calculate content item length in tokens using a general-purpose encoding
+            encoding = tiktoken.get_encoding("cl100k_base")
+            asset_item_tokens = len(encoding.encode(text))
+
             score_configuration.update({
                 'scorecard_name': self.name,
                 'score_name': score
@@ -239,6 +244,7 @@ class Scorecard:
                 self.log_metric_to_cloudwatch('TotalTokens', total_tokens, dimensions)
                 self.log_metric_to_cloudwatch('CachedTokens', score_total_cost.get('cached_tokens', 0), dimensions)
                 self.log_metric_to_cloudwatch('ExternalAIRequests', score_total_cost.get('llm_calls', 0), dimensions)
+                self.log_metric_to_cloudwatch('AssetTokenCount', asset_item_tokens, dimensions)
 
             return score_result
 
