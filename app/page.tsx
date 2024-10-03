@@ -11,6 +11,8 @@ import { Authenticator } from '@aws-amplify/ui-react'
 import '@aws-amplify/ui-react/styles.css'
 Amplify.configure(outputs);
 
+import '../styles/globals.css';
+
 const client = generateClient<Schema>();
 
 export default function App() {
@@ -40,6 +42,9 @@ export default function App() {
     <Authenticator>
       {({ signOut, user }) => (
       <main>
+        <h1 className="text-3xl font-bold underline">
+          Hello world!
+        </h1>
         <h1>My todos</h1>
         <button onClick={createTodo}>+ new</button>
         <ul>
