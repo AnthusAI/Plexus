@@ -3,15 +3,12 @@
 import { useState, useEffect } from "react";
 import { generateClient } from "aws-amplify/data";
 import type { Schema } from "@/amplify/data/resource";
-import "./../app/app.css";
 import { Amplify } from "aws-amplify";
 import outputs from "@/amplify_outputs.json";
-import "@aws-amplify/ui-react/styles.css";
 import { Authenticator } from '@aws-amplify/ui-react'
-import '@aws-amplify/ui-react/styles.css'
 Amplify.configure(outputs);
 
-import '../styles/globals.css';
+import { Button } from '@/components/ui/button';
 
 const client = generateClient<Schema>();
 
@@ -45,6 +42,10 @@ export default function App() {
         <h1 className="text-3xl font-bold underline">
           Hello world!
         </h1>
+        <div>
+          <h1>Welcome to My Shadcn App</h1>
+          <Button>Click Me</Button>
+        </div>
         <h1>My todos</h1>
         <button onClick={createTodo}>+ new</button>
         <ul>
