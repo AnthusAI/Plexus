@@ -106,7 +106,7 @@ class MultiClassClassifier(BaseNode):
             # Initialize chat history
             chat_history = [
                 initial_prompt.messages[0],
-                ('user', state.text)
+                initial_prompt.messages[1].format(**state.dict())
             ]
 
             while retry_count < self.parameters.maximum_retry_count:
