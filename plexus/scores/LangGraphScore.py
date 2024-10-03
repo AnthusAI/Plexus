@@ -239,7 +239,8 @@ class LangGraphScore(Score, LangChainUser):
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
-            "successful_requests": 0
+            "successful_requests": 0,
+            "cached_tokens": 0
         }
 
         try:
@@ -279,6 +280,7 @@ class LangGraphScore(Score, LangChainUser):
             "completion_tokens": usage['completion_tokens'],
             "total_tokens":      usage['total_tokens'],
             "llm_calls":         usage['successful_requests'],
+            "cached_tokens":     usage['cached_tokens'],
             "input_cost":        cost_info['input_cost'],
             "output_cost":       cost_info['output_cost'],
             "total_cost":        cost_info['total_cost']

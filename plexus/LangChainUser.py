@@ -48,39 +48,35 @@ class LangChainUser:
                 self.completion_tokens = 0
                 self.total_tokens = 0
                 self.llm_calls = 0
+                self.cached_tokens = 0  # New attribute to track cached tokens
 
             def on_llm_start(self, serialized, prompts, **kwargs):
                 self.llm_calls += 1
 
             def on_llm_end(self, response: LLMResult, **kwargs):
-
                 usage = {}
                 if isinstance(response, LLMResult):
                     if response.llm_output:
-                        usage = response.llm_output.get("usage", {})
-                        logging.debug(f"Token usage from llm_output: {usage}")
-                        
-                    if response.generations and response.generations[0]:
-                        generation = response.generations[0][0]
-                        if hasattr(generation, 'generation_info') and generation.generation_info:
-                            usage = generation.generation_info.get("token_usage", {})
-                            logging.debug(f"Token usage from generation_info: {usage}")
-                        elif hasattr(generation, 'message') and hasattr(generation.message, 'usage_metadata'):
-                            usage = generation.message.usage_metadata
-                            logging.debug(f"Token usage from usage_metadata: {usage}")
-                        else:
-                            logging.info("No token usage information found in generation")
-                    else:
-                        logging.debug("No generations in response")
+                        logging.info(f"LLM output: {response.llm_output}")
+                        usage = response.llm_output.get("token_usage", response.llm_output.get("usage", {}))
+                        logging.debug(f"Token usage: {usage}")
 
-                self.prompt_tokens += usage.get("input_tokens", 0) or usage.get("prompt_tokens", 0)
-                self.completion_tokens += usage.get("output_tokens", 0) or usage.get("completion_tokens", 0)
-                self.total_tokens += usage.get("total_tokens", 0) or (self.prompt_tokens + self.completion_tokens)
+                    # Handle the nested structure
+                    if "token_usage" in usage:
+                        usage = usage["token_usage"]
 
-                logging.debug(f"Current cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}")
+                    self.prompt_tokens += usage.get("prompt_tokens", 0)
+                    self.completion_tokens += usage.get("completion_tokens", 0)
+                    self.total_tokens += usage.get("total_tokens", 0)
+                    
+                    # Track cached tokens if available
+                    prompt_tokens_details = usage.get("prompt_tokens_details", {})
+                    self.cached_tokens += prompt_tokens_details.get("cached_tokens", 0)
+
+                    logging.info(f"Current cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}, Cached: {self.cached_tokens}")
 
             def on_chain_end(self, outputs, **kwargs):
-                logging.debug(f"Chain ended. Cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}")
+                logging.info(f"Chain ended. Cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}, Cached: {self.cached_tokens}")
 
         return TokenCounterCallback()
 
@@ -175,17 +171,18 @@ class LangChainUser:
         # ... other model providers ...
 
     def get_token_usage(self):
-        if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
-            return {
-                "prompt_tokens": self.openai_callback.prompt_tokens,
-                "completion_tokens": self.openai_callback.completion_tokens,
-                "total_tokens": self.openai_callback.total_tokens,
-                "successful_requests": self.openai_callback.successful_requests
-            }
-        else:
+        # if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
+        #     return {
+        #         "prompt_tokens": self.openai_callback.prompt_tokens,
+        #         "completion_tokens": self.openai_callback.completion_tokens,
+        #         "total_tokens": self.openai_callback.total_tokens,
+        #         "successful_requests": self.openai_callback.successful_requests
+        #     }
+        # else:
             return {
                 "prompt_tokens": self.token_counter.prompt_tokens,
                 "completion_tokens": self.token_counter.completion_tokens,
                 "total_tokens": self.token_counter.total_tokens,
-                "successful_requests": self.token_counter.llm_calls
+                "successful_requests": self.token_counter.llm_calls,
+                "cached_tokens": self.token_counter.cached_tokens
             }
