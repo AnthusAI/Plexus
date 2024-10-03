@@ -244,7 +244,7 @@ class Scorecard:
                 self.log_metric_to_cloudwatch('TotalTokens', total_tokens, dimensions)
                 self.log_metric_to_cloudwatch('CachedTokens', score_total_cost.get('cached_tokens', 0), dimensions)
                 self.log_metric_to_cloudwatch('ExternalAIRequests', score_total_cost.get('llm_calls', 0), dimensions)
-                self.log_metric_to_cloudwatch('AssetTokenCount', asset_item_tokens, dimensions)
+                self.log_metric_to_cloudwatch('AssetTokens', asset_item_tokens, dimensions)
 
             return score_result
 
