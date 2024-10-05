@@ -15,6 +15,7 @@ Amplify.configure(outputs);
 
 import DashboardLayout from '../components/dashboard-layout'
 import Logo from '../components/Logo'
+import NivoCalendar from '../components/cards/nivo-calendar'
 
 const client = generateClient<Schema>();
 
@@ -43,9 +44,7 @@ function AppContent({ signOut }: { signOut: () => void }) {
 
   return (
     <DashboardLayout signOut={signOut}>
-      <h1 className="text-3xl font-bold underline">
-        Babulus
-      </h1>
+      <NivoCalendar />
     </DashboardLayout>
   );
 }
