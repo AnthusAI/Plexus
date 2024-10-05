@@ -10,8 +10,8 @@ const Logo = () => {
         className="text-blue-500 text-4xl"
       />
       <div>
-        <h1 className="text-3xl font-bold text-gray-800">Babulus</h1>
-        <p className="text-sm text-gray-600">Manage Agent Collaboration</p>
+        <h1 className="text-3xl font-bold text-gray-800">Plexus</h1>
+        <p className="text-sm text-gray-600">AI scoring at scale</p>
       </div>
     </div>
   );

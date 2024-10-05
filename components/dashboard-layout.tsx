@@ -1,9 +1,10 @@
 "use client"
 
-import { useState } from "react"
-import { Book, ChevronLeft, ChevronRight, FileText, Layout, LogOut, Menu, MessageSquare, Settings, User, Users } from "lucide-react"
+import { useState, useEffect } from "react"
+import { AudioLines, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, Settings, Zap, Siren } from "lucide-react"
 import Link from "next/link"
 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -14,90 +15,136 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
+// Custom hook for media query
+const useMediaQuery = (query: string): boolean => {
+  const [matches, setMatches] = useState(false)
+
+  useEffect(() => {
+    const media = window.matchMedia(query)
+    if (media.matches !== matches) {
+      setMatches(media.matches)
+    }
+    const listener = () => setMatches(media.matches)
+    window.addEventListener("resize", listener)
+    return () => window.removeEventListener("resize", listener)
+  }, [matches, query])
+
+  return matches
+}
+
 const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; signOut: () => void }) => {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const isDesktop = useMediaQuery("(min-width: 1024px)")
+  const isMobile = useMediaQuery("(max-width: 767px)")
+
+  useEffect(() => {
+    if (isDesktop) {
+      setIsSidebarOpen(true)
+    } else if (isMobile) {
+      setIsSidebarOpen(false)
+    }
+  }, [isDesktop, isMobile])
+
+  const toggleSidebar = () => {
+    setIsSidebarOpen(!isSidebarOpen)
+  }
 
   const menuItems = [
-    { name: "Posts", icon: Layout },
-    { name: "Drafts", icon: FileText },
-    { name: "Research", icon: Book },
-    { name: "Topics", icon: MessageSquare },
-    { name: "Agents", icon: Users },
-    { name: "Brand", icon: User },
+    { name: "Items", icon: AudioLines },
+    { name: "Alerts", icon: Siren },
+    { name: "Reports", icon: FileBarChart },
+    { name: "Scorecards", icon: ListTodo },
+    { name: "Experiments", icon: FlaskConical },
+    { name: "Optimizations", icon: Zap },
+    { name: "Settings", icon: Settings },
+  ]
+
+  const accounts = [
+    { name: "Account 1", avatar: "/avatar1.png", initials: "A1" },
+    { name: "Account 2", avatar: "/avatar2.png", initials: "A2" },
+    { name: "Account 3", avatar: "/avatar3.png", initials: "A3" },
   ]
 
   const Sidebar = () => (
-    <div className={`flex h-full flex-col py-4 transition-all duration-300 ${isSidebarCollapsed ? "w-16" : "w-64"}`}>
-      <div className="flex items-center justify-between px-4 mb-4">
-        <h2 className={`text-lg font-semibold tracking-tight ${isSidebarCollapsed ? "hidden" : "block"}`}>Babulus</h2>
-        <Button variant="ghost" size="icon" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}>
-          {isSidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-        </Button>
+    <div className="flex h-full flex-col py-4">
+      <div className="px-3 py-2 mb-2">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" className="w-full justify-start" onClick={toggleSidebar}>
+                <PanelLeft className="h-4 w-4 mr-2 flex-shrink-0" />
+                {isSidebarOpen && <span>Plexus</span>}
+              </Button>
+            </TooltipTrigger>
+            {!isSidebarOpen && <TooltipContent side="right">Plexus</TooltipContent>}
+          </Tooltip>
+        </TooltipProvider>
       </div>
-      <div className="space-y-1 px-2">
-        {menuItems.map((item) => (
-          <TooltipProvider key={item.name}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" className={`w-full justify-start ${isSidebarCollapsed ? "px-2" : ""}`}>
-                  <item.icon className={`h-4 w-4 ${isSidebarCollapsed ? "" : "mr-2"}`} />
-                  {!isSidebarCollapsed && <span>{item.name}</span>}
-                </Button>
-              </TooltipTrigger>
-              {isSidebarCollapsed && <TooltipContent side="right">{item.name}</TooltipContent>}
-            </Tooltip>
-          </TooltipProvider>
-        ))}
-      </div>
+      <ScrollArea className="flex-1">
+        <div className="space-y-1 px-3">
+          {menuItems.map((item) => (
+            <TooltipProvider key={item.name}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-start">
+                    <item.icon className="h-4 w-4 mr-2 flex-shrink-0" />
+                    {isSidebarOpen && <span>{item.name}</span>}
+                  </Button>
+                </TooltipTrigger>
+                {!isSidebarOpen && <TooltipContent side="right">{item.name}</TooltipContent>}
+              </Tooltip>
+            </TooltipProvider>
+          ))}
+        </div>
+      </ScrollArea>
     </div>
   )
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex flex-col min-h-screen">
       <header className="flex h-14 items-center gap-4 border-b bg-gray-100/40 px-6 dark:bg-gray-800/40">
-        <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="lg:hidden">
-              <Menu className="h-6 w-6" />
-              <span className="sr-only">Toggle navigation menu</span>
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-64 p-0">
-            <Sidebar />
-          </SheetContent>
-        </Sheet>
+        {isMobile && (
+          <Button variant="ghost" size="icon" onClick={toggleSidebar} className="mr-2">
+            <Menu className="h-6 w-6" />
+            <span className="sr-only">Toggle sidebar</span>
+          </Button>
+        )}
         <div className="flex items-center gap-2">
-          <Select>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select account" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="account1">Account 1</SelectItem>
-              <SelectItem value="account2">Account 2</SelectItem>
-              <SelectItem value="account3">Account 3</SelectItem>
-            </SelectContent>
-          </Select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="pl-1">
+                <Avatar className="h-8 w-8 mr-2">
+                  <AvatarImage src={accounts[0].avatar} alt={accounts[0].name} />
+                  <AvatarFallback>{accounts[0].initials}</AvatarFallback>
+                </Avatar>
+                <span>{accounts[0].name}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuLabel>Switch Account</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {accounts.map((account) => (
+                <DropdownMenuItem key={account.name}>
+                  <Avatar className="h-8 w-8 mr-2">
+                    <AvatarImage src={account.avatar} alt={account.name} />
+                    <AvatarFallback>{account.initials}</AvatarFallback>
+                  </Avatar>
+                  <span>{account.name}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <div className="ml-auto flex items-center gap-4">
-          <Button variant="ghost" size="icon">
-            <Settings className="h-4 w-4" />
-            <span className="sr-only">Settings</span>
-          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-full">
-                <img
-                  src="/placeholder.svg?height=32&width=32"
-                  alt="User avatar"
-                  className="rounded-full"
-                  width="32"
-                  height="32"
-                />
+                <Avatar>
+                  <AvatarImage src="/user-avatar.png" alt="User avatar" />
+                  <AvatarFallback>RP</AvatarFallback>
+                </Avatar>
                 <span className="sr-only">Toggle user menu</span>
               </Button>
             </DropdownMenuTrigger>
@@ -115,14 +162,18 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           </DropdownMenu>
         </div>
       </header>
-      <div className="flex flex-1">
-        <aside className="hidden border-r lg:block">
-          <ScrollArea className="h-[calc(100vh-3.5rem)]">
-            <Sidebar />
-          </ScrollArea>
+      <div className="flex flex-1 overflow-hidden">
+        <aside
+          className={`
+            ${isSidebarOpen ? (isMobile ? 'w-64' : 'w-64') : (isMobile ? 'w-0' : 'w-16')}
+            flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden border-r
+            ${isMobile && !isSidebarOpen ? 'hidden' : ''}
+          `}
+        >
+          <Sidebar />
         </aside>
         <main className="flex-1 overflow-y-auto">
-          <div className="container mx-auto py-6">
+          <div className="container mx-auto py-6 px-4">
             {children}
           </div>
         </main>
