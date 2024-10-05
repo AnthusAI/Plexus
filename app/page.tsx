@@ -18,9 +18,8 @@ import Logo from '../components/Logo'
 
 const client = generateClient<Schema>();
 
-function AppContent() {
+function AppContent({ signOut }: { signOut: () => void }) {
   const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
-  const { user, signOut } = useAuthenticator(context => [context.user]);
 
   function listTodos() {
     client.models.Todo.observeQuery().subscribe({
@@ -52,7 +51,7 @@ function AppContent() {
 }
 
 function AuthenticatedApp() {
-  const { authStatus, user, signOut } = useAuthenticator(context => [context.authStatus, context.user]);
+  const { authStatus, signOut } = useAuthenticator(context => [context.authStatus, context.user]);
 
   if (authStatus !== 'authenticated') {
     return (
@@ -67,7 +66,7 @@ function AuthenticatedApp() {
     );
   }
 
-  return <AppContent />;
+  return <AppContent signOut={signOut} />;
 }
 
 export default function App() {
