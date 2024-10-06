@@ -74,7 +74,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   const Sidebar = () => (
     <div className="flex h-full flex-col py-4 bg-[hsl(var(--light-blue-bg))]">
-      <div className={`mb-4 ${isSidebarOpen ? 'px-3' : 'px-1'}`}>
+      <div className={`mb-4 ${isSidebarOpen ? 'px-3' : 'px-3'}`}>
         <Link href="/" className={`block ${isSidebarOpen ? 'w-full max-w-md' : 'w-8'}`}>
           {isSidebarOpen ? (
             <SquareLogo variant={LogoVariant.Wide} />
@@ -84,7 +84,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         </Link>
       </div>
       <ScrollArea className="flex-1">
-        <div className={`space-y-1 ${isSidebarOpen ? 'px-3' : 'px-1'}`}>
+        <div className={`space-y-1 ${isSidebarOpen ? 'px-3' : 'px-3'}`}>
           {menuItems.map((item) => (
             <TooltipProvider key={item.name}>
               <Tooltip>
@@ -107,7 +107,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           ))}
         </div>
       </ScrollArea>
-      <div className={`mt-auto ${isSidebarOpen ? 'px-3' : 'px-1'}`}>
+      <div className={`mt-auto ${isSidebarOpen ? 'px-3' : 'px-3'}`}>
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -130,8 +130,8 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   )
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <header className="flex h-14 items-center gap-4 border-b bg-[hsl(var(--light-blue-bg))] px-6">
+    <div className="flex flex-col min-h-screen bg-[hsl(var(--light-blue-bg))]">
+      <header className="flex h-14 items-center gap-4 bg-[hsl(var(--light-blue-bg))] px-2">
         {isMobile && (
           <Button variant="ghost" size="icon" onClick={toggleSidebar} className="mr-2">
             <Menu className="h-6 w-6" />
@@ -192,17 +192,19 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
       <div className="flex flex-1 overflow-hidden">
         <aside
           className={`
-            ${isSidebarOpen ? (isMobile ? 'w-10' : 'w-48') : (isMobile ? 'w-0' : 'w-10')}
-            flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden border-r
+            ${isSidebarOpen ? (isMobile ? 'w-14' : 'w-48') : (isMobile ? 'w-0' : 'w-14')}
+            flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden
             ${isMobile && !isSidebarOpen ? 'hidden' : ''}
             bg-[hsl(var(--light-blue-bg))]
           `}
         >
           <Sidebar />
         </aside>
-        <main className="flex-1 overflow-y-auto">
-          <div className="container mx-auto py-6 px-4">
-            {children}
+        <main className={`flex-1 overflow-y-auto ${isMobile && !isSidebarOpen ? 'p-2' : 'pr-2 pb-2'}`}>
+          <div className="h-full bg-white rounded-lg">
+            <div className="h-full p-6 overflow-y-auto">
+              {children}
+            </div>
           </div>
         </main>
       </div>
