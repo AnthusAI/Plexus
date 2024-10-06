@@ -73,7 +73,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   ]
 
   const Sidebar = () => (
-    <div className="flex h-full flex-col py-4">
+    <div className="flex h-full flex-col py-4 bg-[hsl(var(--light-blue-bg))]">
       <div className={`mb-4 ${isSidebarOpen ? 'px-3' : 'px-1'}`}>
         <Link href="/" className={`block ${isSidebarOpen ? 'w-full max-w-md' : 'w-8'}`}>
           {isSidebarOpen ? (
@@ -131,7 +131,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="flex h-14 items-center gap-4 border-b bg-gray-100/40 px-6 dark:bg-gray-800/40">
+      <header className="flex h-14 items-center gap-4 border-b bg-[hsl(var(--light-blue-bg))] px-6">
         {isMobile && (
           <Button variant="ghost" size="icon" onClick={toggleSidebar} className="mr-2">
             <Menu className="h-6 w-6" />
@@ -195,6 +195,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             ${isSidebarOpen ? (isMobile ? 'w-10' : 'w-48') : (isMobile ? 'w-0' : 'w-10')}
             flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden border-r
             ${isMobile && !isSidebarOpen ? 'hidden' : ''}
+            bg-[hsl(var(--light-blue-bg))]
           `}
         >
           <Sidebar />

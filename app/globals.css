@@ -23,6 +23,7 @@
     --destructive-foreground: 8 0% 100%;
     --ring: 224 92% 65%;
     --radius: 0.5rem;
+    --light-blue-bg: 210 50% 95%;
   }
 
   .dark {
@@ -45,6 +46,7 @@
     --destructive: 0 82% 60%;
     --destructive-foreground: 0 0% 100%;
     --ring: 224.27 92.13% 65.1%;
+    --light-blue-bg: 210 50% 15%;
   }
 }
 
@@ -55,6 +57,7 @@
   --amplify-components-button-primary-background-color: hsl(var(--primary));
   --amplify-components-button-primary-foreground-color: hsl(var(--primary-foreground));
   --amplify-components-button-primary-color: hsl(var(--primary-foreground));
+  --amplify-components-button-primary-hover-background-color: hsl(var(--secondary));
   --amplify-components-fieldcontrol-focus-box-shadow: 0 0 0 2px hsl(var(--secondary));
   --amplify-components-tabs-item-active-border-color: hsl(var(--secondary));
   --amplify-components-tabs-item-color: hsl(var(--muted-foreground));
