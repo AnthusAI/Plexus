@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 
-// Add this enum at the top of the file
 enum LogoVariant {
   Square,
   Wide,
@@ -42,7 +41,6 @@ const interpolateColor = (color1: string, color2: string, factor: number): strin
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 };
 
-// Update the interface
 interface SquareLogoProps {
   variant: LogoVariant;
   className?: string;
@@ -56,24 +54,20 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
 
   const cycleDuration = 80000;
 
-  // Move startTime above grid initialization
   const [startTime] = useState(() => {
     const halfCycle = cycleDuration * 0.5;
     const additionalOffset = 30000;
     return Date.now() - (halfCycle + additionalOffset);
   });
 
-  // Move jitterValues above grid initialization
   const [jitterValues, setJitterValues] = useState(() => 
     Array(rows * columns).fill(0).map(() => ({ value: Math.random() * 0.1 - 0.05, target: Math.random() * 0.1 - 0.05 }))
   );
 
-  // Move randomOffsets above grid initialization
   const randomOffsets = useMemo(() => 
     Array(rows * columns).fill(0).map(() => Math.random() * 0.2 - 0.1),
   [rows, columns]);
 
-  // Initialize grid after defining dependencies
   const [grid, setGrid] = useState<string[]>(() =>
     Array(rows * columns).fill(0).map((_, index) => {
       const row = Math.floor(index / columns);
@@ -118,7 +112,7 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
           `${containerWidth / 3}px` :
           variant === LogoVariant.Narrow ?
             `${containerWidth * 0.7}px` :
-            `${containerWidth * 1.4}px`;
+            `${containerWidth / 3}px`;  // Adjusted for Square variant
         setFontSize(newFontSize);
       }
     };
@@ -162,8 +156,7 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
     >
       <div
         className={`absolute inset-0 grid ${
-          variant === LogoVariant.Wide ? 'grid-cols-6' : 
-          variant === LogoVariant.Square ? 'grid-cols-6' : 'grid-cols-1'
+          variant === LogoVariant.Wide || variant === LogoVariant.Square ? 'grid-cols-6' : 'grid-cols-1'
         }`}
         style={{ gridTemplateRows: `repeat(${rows}, 1fr)` }}
       >
@@ -175,10 +168,18 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
           />
         ))}
       </div>
-      {variant === LogoVariant.Wide ? (
+      {variant === LogoVariant.Wide || variant === LogoVariant.Square ? (
         <div className="absolute inset-0 flex">
           {['P', 'L', 'E', 'X', 'U', 'S'].map((letter, index) => (
-            <span key={letter} style={{ ...letterStyle, left: `${((index + 0.5) * 100) / columns}%` }}>
+            <span 
+              key={letter} 
+              style={{ 
+                ...letterStyle, 
+                left: `${((index + 0.53) * 100) / columns}%`,
+                top: variant === LogoVariant.Square ? '50%' : '50%',
+                width: `${100 / columns}%`,
+              }}
+            >
               {letter}
             </span>
           ))}
