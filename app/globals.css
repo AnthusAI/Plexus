@@ -24,6 +24,9 @@
     --ring: 224 92% 65%;
     --radius: 0.5rem;
     --light-blue-bg: 210 50% 95%;
+    --chart-primary: 224 50% 70%;
+    --chart-secondary: 344 50% 70%;
+    --chart-accent: 224 50% 70%;
   }
 
   .dark {
@@ -47,6 +50,9 @@
     --destructive-foreground: 0 0% 100%;
     --ring: 224.27 92.13% 65.1%;
     --light-blue-bg: 210 50% 15%;
+    --chart-primary: 224 30% 40%;
+    --chart-secondary: 344 30% 40%;
+    --chart-accent: 224 30% 40%;
   }
 }
 
