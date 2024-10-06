@@ -40,9 +40,9 @@ interface SquareLogoProps {
   className?: string;
 }
 
-const SquareLogo = ({ wide = false, className = '' }: SquareLogoProps) => {
-  const columns = 6;
-  const rows = wide ? 2 : 6;
+const SquareLogo = ({ wide = true, className = '' }: SquareLogoProps) => {
+  const columns = wide ? 6 : 1;
+  const rows = wide ? 2 : 1;
   const containerRef = useRef<HTMLDivElement>(null);
   const [fontSize, setFontSize] = useState('16px');
 
@@ -107,8 +107,8 @@ const SquareLogo = ({ wide = false, className = '' }: SquareLogoProps) => {
       if (containerRef.current) {
         const containerWidth = containerRef.current.offsetWidth;
         const newFontSize = wide ? 
-          `${containerWidth / 3}px` : // This remains unchanged for the wide variant
-          `${containerWidth / 3}px`; // Changed from 4 to 2.67 to increase size by ~1.5x
+          `${containerWidth / 3}px` :
+          `${containerWidth * 1.4}px`;
         setFontSize(newFontSize);
       }
     };
@@ -136,12 +136,13 @@ const SquareLogo = ({ wide = false, className = '' }: SquareLogoProps) => {
     fontSize: fontSize,
     fontWeight: 400,
     color: 'white',
-    position: 'absolute',
+    position: 'absolute' as const,
     top: '50%',
+    left: '50%',
     transform: 'translate(-50%, -50%)',
-    width: `${100 / columns}%`,
-    textAlign: 'center',
-  } as const;
+    width: wide ? `${100 / columns}%` : '100%',
+    textAlign: 'center' as const,
+  };
 
   return (
     <div 
@@ -150,10 +151,10 @@ const SquareLogo = ({ wide = false, className = '' }: SquareLogoProps) => {
       style={containerStyle}
     >
       <div
-        className="absolute inset-0 grid grid-cols-6"
+        className={`absolute inset-0 grid ${wide ? 'grid-cols-6' : 'grid-cols-1'}`}
         style={{ gridTemplateRows: `repeat(${rows}, 1fr)` }}
       >
-        {grid.map((color, index) => (
+        {grid.slice(0, wide ? grid.length : 1).map((color, index) => (
           <div
             key={index}
             className="w-full h-full"
@@ -161,13 +162,19 @@ const SquareLogo = ({ wide = false, className = '' }: SquareLogoProps) => {
           />
         ))}
       </div>
-      <div className="absolute inset-0 flex">
-        {['P', 'L', 'E', 'X', 'U', 'S'].map((letter, index) => (
-          <span key={letter} style={{ ...letterStyle, left: `${((index + 0.53) * 100) / columns}%` }}>
-            {letter}
-          </span>
-        ))}
-      </div>
+      {wide ? (
+        <div className="absolute inset-0 flex">
+          {['P', 'L', 'E', 'X', 'U', 'S'].map((letter, index) => (
+            <span key={letter} style={{ ...letterStyle, left: `${((index + 0.5) * 100) / columns}%` }}>
+              {letter}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span style={{ ...letterStyle, left: `55%`}}>P</span>
+        </div>
+      )}
     </div>
   );
 };

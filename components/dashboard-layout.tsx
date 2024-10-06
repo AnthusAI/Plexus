@@ -18,7 +18,9 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
-import WideLogo from '../components/logo-wide'
+import WideLogo from './logo-wide'
+import NarrowLogo from './logo-narrow'
+
 // Custom hook for media query
 const useMediaQuery = (query: string): boolean => {
   const [matches, setMatches] = useState(false)
@@ -73,15 +75,13 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
 
   const Sidebar = () => (
     <div className="flex h-full flex-col py-4">
-      <div className="px-3 py-2 mb-4">
-        {isSidebarOpen && (
-          <Link href="/" className="w-full max-w-md block">
-            <WideLogo />
-          </Link>
-        )}
+      <div className={`mb-4 ${isSidebarOpen ? 'px-3' : 'px-2'}`}>
+        <Link href="/" className={`block ${isSidebarOpen ? 'w-full max-w-md' : 'w-12'}`}>
+          {isSidebarOpen ? <WideLogo /> : <NarrowLogo />}
+        </Link>
       </div>
       <ScrollArea className="flex-1">
-        <div className="space-y-1 px-3">
+        <div className={`space-y-1 ${isSidebarOpen ? 'px-3' : 'px-2'}`}>
           {menuItems.map((item) => (
             <TooltipProvider key={item.name}>
               <Tooltip>
@@ -91,9 +91,9 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
                       variant="ghost"
                       className={`w-full justify-start ${
                         pathname === item.path ? "bg-gray-100 dark:bg-gray-800" : ""
-                      }`}
+                      } ${isSidebarOpen ? '' : 'px-2'}`}
                     >
-                      <item.icon className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <item.icon className={`h-4 w-4 ${isSidebarOpen ? 'mr-2' : ''} flex-shrink-0`} />
                       {isSidebarOpen && <span>{item.name}</span>}
                     </Button>
                   </Link>
@@ -104,12 +104,17 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
           ))}
         </div>
       </ScrollArea>
-      <div className="px-3 py-2 mt-auto">
+      <div className={`mt-auto ${isSidebarOpen ? 'px-3' : 'px-2'}`}>
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" className="w-full justify-start" onClick={toggleSidebar}>
+              <Button 
+                variant="ghost" 
+                className={`w-full justify-start ${isSidebarOpen ? '' : 'px-2'}`} 
+                onClick={toggleSidebar}
+              >
                 <PanelLeft className="h-4 w-4 flex-shrink-0" />
+                {isSidebarOpen && <span className="ml-2">Collapse sidebar</span>}
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right">
