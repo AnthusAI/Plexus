@@ -17,6 +17,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
+import WideLogo from '../components/logo-wide'
 // Custom hook for media query
 const useMediaQuery = (query: string): boolean => {
   const [matches, setMatches] = useState(false)
@@ -69,18 +70,8 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   const Sidebar = () => (
     <div className="flex h-full flex-col py-4">
-      <div className="px-3 py-2 mb-2">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" className="w-full justify-start" onClick={toggleSidebar}>
-                <PanelLeft className="h-4 w-4 mr-2 flex-shrink-0" />
-                {isSidebarOpen && <span>Plexus</span>}
-              </Button>
-            </TooltipTrigger>
-            {!isSidebarOpen && <TooltipContent side="right">Plexus</TooltipContent>}
-          </Tooltip>
-        </TooltipProvider>
+      <div className="px-3 py-2 mb-4">
+        {isSidebarOpen && <div className="w-full max-w-md"><WideLogo /></div>}
       </div>
       <ScrollArea className="flex-1">
         <div className="space-y-1 px-3">
@@ -99,6 +90,20 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           ))}
         </div>
       </ScrollArea>
+      <div className="px-3 py-2 mt-auto">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" className="w-full justify-start" onClick={toggleSidebar}>
+                <PanelLeft className="h-4 w-4 flex-shrink-0" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              {isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
     </div>
   )
 
@@ -165,7 +170,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
       <div className="flex flex-1 overflow-hidden">
         <aside
           className={`
-            ${isSidebarOpen ? (isMobile ? 'w-64' : 'w-64') : (isMobile ? 'w-0' : 'w-16')}
+            ${isSidebarOpen ? (isMobile ? 'w-16' : 'w-48') : (isMobile ? 'w-0' : 'w-16')}
             flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden border-r
             ${isMobile && !isSidebarOpen ? 'hidden' : ''}
           `}

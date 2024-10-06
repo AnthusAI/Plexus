@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 
 const gradientColors = [
   { position: 0, color: '#85cefa' },
@@ -7,7 +7,7 @@ const gradientColors = [
   { position: 1, color: '#85cefa' },
 ];
 
-const getColorAtPosition = (position) => {
+const getColorAtPosition = (position: number): string => {
   for (let i = 1; i < gradientColors.length; i++) {
     if (position <= gradientColors[i].position) {
       const prevColor = gradientColors[i - 1];
@@ -19,7 +19,7 @@ const getColorAtPosition = (position) => {
   return gradientColors[gradientColors.length - 1].color;
 };
 
-const interpolateColor = (color1, color2, factor) => {
+const interpolateColor = (color1: string, color2: string, factor: number): string => {
   const r1 = parseInt(color1.slice(1, 3), 16);
   const g1 = parseInt(color1.slice(3, 5), 16);
   const b1 = parseInt(color1.slice(5, 7), 16);
@@ -35,35 +35,59 @@ const interpolateColor = (color1, color2, factor) => {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 };
 
-const SquareLogo = () => {
-  const [grid, setGrid] = useState(Array(36).fill(''));
+interface SquareLogoProps {
+  wide?: boolean;
+  className?: string;
+}
+
+const SquareLogo = ({ wide = false, className = '' }: SquareLogoProps) => {
+  const columns = 6;
+  const rows = wide ? 2 : 6;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [fontSize, setFontSize] = useState('16px');
+
   const cycleDuration = 80000;
+
+  // Move startTime above grid initialization
   const [startTime] = useState(() => {
     const halfCycle = cycleDuration * 0.5;
     const additionalOffset = 30000;
     return Date.now() - (halfCycle + additionalOffset);
   });
+
+  // Move jitterValues above grid initialization
   const [jitterValues, setJitterValues] = useState(() => 
-    Array(36).fill(0).map(() => ({ value: Math.random() * 0.1 - 0.05, target: Math.random() * 0.1 - 0.05 }))
+    Array(rows * columns).fill(0).map(() => ({ value: Math.random() * 0.1 - 0.05, target: Math.random() * 0.1 - 0.05 }))
   );
 
+  // Move randomOffsets above grid initialization
   const randomOffsets = useMemo(() => 
-    Array(36).fill(0).map(() => Math.random() * 0.2 - 0.1),
-  []);
+    Array(rows * columns).fill(0).map(() => Math.random() * 0.2 - 0.1),
+  [rows, columns]);
+
+  // Initialize grid after defining dependencies
+  const [grid, setGrid] = useState<string[]>(() =>
+    Array(rows * columns).fill(0).map((_, index) => {
+      const row = Math.floor(index / columns);
+      const col = index % columns;
+      const baseProgress = ((10 - (row + col)) / 10 + ((Date.now() - startTime) / cycleDuration)) % 1;
+      const randomizedProgress = (baseProgress + randomOffsets[index] + jitterValues[index].value + 1) % 1;
+      return getColorAtPosition(randomizedProgress);
+    })
+  );
 
   useEffect(() => {
     const animationInterval = setInterval(() => {
       setGrid(prevGrid => 
         prevGrid.map((_, index) => {
-          const row = Math.floor(index / 6);
-          const col = index % 6;
+          const row = Math.floor(index / columns);
+          const col = index % columns;
           const baseProgress = ((10 - (row + col)) / 10 + ((Date.now() - startTime) / cycleDuration)) % 1;
           const randomizedProgress = (baseProgress + randomOffsets[index] + jitterValues[index].value + 1) % 1;
           return getColorAtPosition(randomizedProgress);
         })
       );
 
-      // Gradually update jitter values
       setJitterValues(prevJitterValues => 
         prevJitterValues.map(jitter => {
           const newValue = jitter.value + (jitter.target - jitter.value) * 0.05;
@@ -76,23 +100,59 @@ const SquareLogo = () => {
     }, 200);
 
     return () => clearInterval(animationInterval);
-  }, [randomOffsets, startTime]);
+  }, [randomOffsets, startTime, columns, rows]);
+
+  useEffect(() => {
+    const updateSize = () => {
+      if (containerRef.current) {
+        const containerWidth = containerRef.current.offsetWidth;
+        const newFontSize = wide ? 
+          `${containerWidth / 3}px` : // This remains unchanged for the wide variant
+          `${containerWidth / 3}px`; // Changed from 4 to 2.67 to increase size by ~1.5x
+        setFontSize(newFontSize);
+      }
+    };
+
+    updateSize();
+    window.addEventListener('resize', updateSize);
+
+    const resizeObserver = new ResizeObserver(updateSize);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateSize);
+      resizeObserver.disconnect();
+    };
+  }, [wide]);
+
+  const containerStyle = {
+    aspectRatio: `${columns} / ${rows}`,
+  };
 
   const letterStyle = {
     fontFamily: "'Jersey 20', sans-serif",
-    fontSize: '8rem',
+    fontSize: fontSize,
     fontWeight: 400,
     color: 'white',
     position: 'absolute',
     top: '50%',
-    transform: 'translate(3%, -50%)',
-    width: '16.666%',
+    transform: 'translate(-50%, -50%)',
+    width: `${100 / columns}%`,
     textAlign: 'center',
   } as const;
 
   return (
-    <div className="relative w-96 h-96 flex items-center justify-center overflow-hidden">
-      <div className="absolute w-full h-full grid grid-cols-6 grid-rows-6">
+    <div 
+      ref={containerRef}
+      className={`relative flex items-center justify-center overflow-hidden ${className}`} 
+      style={containerStyle}
+    >
+      <div
+        className="absolute inset-0 grid grid-cols-6"
+        style={{ gridTemplateRows: `repeat(${rows}, 1fr)` }}
+      >
         {grid.map((color, index) => (
           <div
             key={index}
@@ -101,13 +161,12 @@ const SquareLogo = () => {
           />
         ))}
       </div>
-      <div className="absolute inset-0">
-        <span style={{...letterStyle, left: '0%'}}>P</span>
-        <span style={{...letterStyle, left: '16.666%'}}>L</span>
-        <span style={{...letterStyle, left: '33.333%'}}>E</span>
-        <span style={{...letterStyle, left: '50%'}}>X</span>
-        <span style={{...letterStyle, left: '66.666%'}}>U</span>
-        <span style={{...letterStyle, left: '83.333%'}}>S</span>
+      <div className="absolute inset-0 flex">
+        {['P', 'L', 'E', 'X', 'U', 'S'].map((letter, index) => (
+          <span key={letter} style={{ ...letterStyle, left: `${((index + 0.53) * 100) / columns}%` }}>
+            {letter}
+          </span>
+        ))}
       </div>
     </div>
   );
