@@ -1,5 +1,5 @@
 import React from 'react';
-import SquareLogo from './logo-square';
+import SquareLogo, { LogoVariant } from './logo-square';
 
 interface WideLogoProps {
   className?: string;
@@ -7,7 +7,7 @@ interface WideLogoProps {
 
 const WideLogo = ({ className = '' }: WideLogoProps) => {
   return (
-    <SquareLogo wide className={`w-full ${className}`} />
+    <SquareLogo variant={LogoVariant.Wide} className={`w-full ${className}`} />
   );
 };
 
