@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import styles from '@/styles/ActivityDashboard.module.css'
 
 // Mock data for the chart
 const data = [
@@ -44,26 +45,17 @@ export default function ActivityDashboard() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Activity</h1>
-          <p className="text-muted-foreground">
-            Recent items scored, experiments run, optimizations started or completed, and other activity.
-          </p>
-        </div>
-        <div className="flex space-x-2">
-          {["1h", "3h", "12h", "1d", "3d", "1w"].map((range) => (
-            <Button key={range} variant="outline" size="sm">
-              {range}
-            </Button>
-          ))}
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold">Activity</h1>
+        <p className="text-muted-foreground">
+          Recent items scored, experiments run, optimizations started or completed, and other activity.
+        </p>
       </div>
 
-      <div className="flex space-x-4">
+      <div className="flex items-center space-x-4">
         <Select>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Select Scorecard" />
+            <SelectValue placeholder="Scorecard" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="scorecard1">Scorecard 1</SelectItem>
@@ -73,7 +65,7 @@ export default function ActivityDashboard() {
         </Select>
         <Select>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Select Score" />
+            <SelectValue placeholder="Score" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="score1">Score 1</SelectItem>
@@ -81,13 +73,16 @@ export default function ActivityDashboard() {
             <SelectItem value="score3">Score 3</SelectItem>
           </SelectContent>
         </Select>
+        <div className="flex space-x-2">
+          {["1h", "3h", "12h", "1d", "3d", "1w"].map((range) => (
+            <Button key={range} variant="outline" size="sm">
+              {range}
+            </Button>
+          ))}
+        </div>
       </div>
 
-      <Card className="bg-[hsl(var(--light-blue-bg))]">
-        <CardHeader>
-          <CardTitle>Activity Overview</CardTitle>
-          <CardDescription>Stacked bar chart showing activity breakdown</CardDescription>
-        </CardHeader>
+      <Card>
         <CardContent className="p-0">
           <ChartContainer
             config={{
@@ -159,7 +154,7 @@ export default function ActivityDashboard() {
               </div>
             </div>
             {updateData.slice(0, 3).map((item) => (
-              <Card key={item.id}>
+              <Card key={item.id} className="shadow-none">
                 <CardHeader>
                   <CardTitle className="text-lg">{item.title}</CardTitle>
                 </CardHeader>
@@ -172,7 +167,7 @@ export default function ActivityDashboard() {
         ) : (
           <div className="space-y-4">
             {updateData.map((item) => (
-              <Card key={item.id}>
+              <Card key={item.id} className="shadow-none">
                 <CardHeader>
                   <CardTitle className="text-lg">{item.title}</CardTitle>
                 </CardHeader>
