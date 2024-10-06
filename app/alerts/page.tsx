@@ -1,18 +1,19 @@
-import DashboardLayout from "@/components/dashboard-layout"
+import { signOut } from '../actions'
+import DashboardLayout from '@/components/dashboard-layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 export default function Alerts() {
   return (
-    <DashboardLayout>
+    <DashboardLayout signOut={signOut}>
       <div className="space-y-4">
         <h1 className="text-3xl font-bold">Alerts</h1>
         <Card>
           <CardHeader>
-            <CardTitle>View and Manage Alerts</CardTitle>
-            <CardDescription>Stay informed about important events.</CardDescription>
+            <CardTitle>Alerts Dashboard</CardTitle>
+            <CardDescription>View and manage your alerts here.</CardDescription>
           </CardHeader>
           <CardContent>
-            <p>Here you can view and manage all your alerts and notifications.</p>
+            <p>Your alerts will be displayed here.</p>
           </CardContent>
         </Card>
       </div>
