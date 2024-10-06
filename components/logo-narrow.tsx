@@ -1,5 +1,5 @@
 import React from 'react';
-import SquareLogo from './logo-square';
+import SquareLogo, { LogoVariant } from './logo-square';
 
 interface NarrowLogoProps {
   className?: string;
@@ -8,7 +8,7 @@ interface NarrowLogoProps {
 const NarrowLogo = ({ className = '' }: NarrowLogoProps) => {
   return (
     <div className={`w-full aspect-square ${className}`}>
-      <SquareLogo wide={false} className="w-full h-full" />
+      <SquareLogo variant={LogoVariant.Narrow} className="w-full h-full" />
     </div>
   );
 };

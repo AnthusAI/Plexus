@@ -18,8 +18,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
-import WideLogo from './logo-wide'
-import NarrowLogo from './logo-narrow'
+import SquareLogo, { LogoVariant } from './logo-square'
 
 // Custom hook for media query
 const useMediaQuery = (query: string): boolean => {
@@ -38,7 +37,7 @@ const useMediaQuery = (query: string): boolean => {
   return matches
 }
 
-const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
+const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; signOut: () => void }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const isDesktop = useMediaQuery("(min-width: 1024px)")
   const isMobile = useMediaQuery("(max-width: 767px)")
@@ -77,7 +76,11 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
     <div className="flex h-full flex-col py-4">
       <div className={`mb-4 ${isSidebarOpen ? 'px-3' : 'px-2'}`}>
         <Link href="/" className={`block ${isSidebarOpen ? 'w-full max-w-md' : 'w-12'}`}>
-          {isSidebarOpen ? <WideLogo /> : <NarrowLogo />}
+          {isSidebarOpen ? (
+            <SquareLogo variant={LogoVariant.Wide} />
+          ) : (
+            <SquareLogo variant={LogoVariant.Narrow} />
+          )}
         </Link>
       </div>
       <ScrollArea className="flex-1">
@@ -180,7 +183,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
               <DropdownMenuSeparator />
               <DropdownMenuItem>
                 <LogOut className="mr-2 h-4 w-4" />
-                <Link href="/api/auth/signout">Sign out</Link>
+                <button onClick={signOut}>Sign out</button>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

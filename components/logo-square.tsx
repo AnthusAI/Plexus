@@ -1,5 +1,12 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 
+// Add this enum at the top of the file
+enum LogoVariant {
+  Square,
+  Wide,
+  Narrow
+}
+
 const gradientColors = [
   { position: 0, color: '#85cefa' },
   { position: 0.12, color: '#0389d7' },
@@ -35,14 +42,15 @@ const interpolateColor = (color1: string, color2: string, factor: number): strin
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 };
 
+// Update the interface
 interface SquareLogoProps {
-  wide?: boolean;
+  variant: LogoVariant;
   className?: string;
 }
 
-const SquareLogo = ({ wide = true, className = '' }: SquareLogoProps) => {
-  const columns = wide ? 6 : 1;
-  const rows = wide ? 2 : 1;
+const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
+  const columns = variant === LogoVariant.Wide ? 6 : variant === LogoVariant.Square ? 6 : 1;
+  const rows = variant === LogoVariant.Square ? 6 : variant === LogoVariant.Wide ? 2 : 1;
   const containerRef = useRef<HTMLDivElement>(null);
   const [fontSize, setFontSize] = useState('16px');
 
@@ -106,9 +114,11 @@ const SquareLogo = ({ wide = true, className = '' }: SquareLogoProps) => {
     const updateSize = () => {
       if (containerRef.current) {
         const containerWidth = containerRef.current.offsetWidth;
-        const newFontSize = wide ? 
+        const newFontSize = variant === LogoVariant.Wide ? 
           `${containerWidth / 3}px` :
-          `${containerWidth * 1.4}px`;
+          variant === LogoVariant.Narrow ?
+            `${containerWidth * 0.7}px` :
+            `${containerWidth * 1.4}px`;
         setFontSize(newFontSize);
       }
     };
@@ -125,7 +135,7 @@ const SquareLogo = ({ wide = true, className = '' }: SquareLogoProps) => {
       window.removeEventListener('resize', updateSize);
       resizeObserver.disconnect();
     };
-  }, [wide]);
+  }, [variant]);
 
   const containerStyle = {
     aspectRatio: `${columns} / ${rows}`,
@@ -140,7 +150,7 @@ const SquareLogo = ({ wide = true, className = '' }: SquareLogoProps) => {
     top: '50%',
     left: '50%',
     transform: 'translate(-50%, -50%)',
-    width: wide ? `${100 / columns}%` : '100%',
+    width: variant === LogoVariant.Wide ? `${100 / columns}%` : '100%',
     textAlign: 'center' as const,
   };
 
@@ -151,10 +161,13 @@ const SquareLogo = ({ wide = true, className = '' }: SquareLogoProps) => {
       style={containerStyle}
     >
       <div
-        className={`absolute inset-0 grid ${wide ? 'grid-cols-6' : 'grid-cols-1'}`}
+        className={`absolute inset-0 grid ${
+          variant === LogoVariant.Wide ? 'grid-cols-6' : 
+          variant === LogoVariant.Square ? 'grid-cols-6' : 'grid-cols-1'
+        }`}
         style={{ gridTemplateRows: `repeat(${rows}, 1fr)` }}
       >
-        {grid.slice(0, wide ? grid.length : 1).map((color, index) => (
+        {grid.map((color, index) => (
           <div
             key={index}
             className="w-full h-full"
@@ -162,7 +175,7 @@ const SquareLogo = ({ wide = true, className = '' }: SquareLogoProps) => {
           />
         ))}
       </div>
-      {wide ? (
+      {variant === LogoVariant.Wide ? (
         <div className="absolute inset-0 flex">
           {['P', 'L', 'E', 'X', 'U', 'S'].map((letter, index) => (
             <span key={letter} style={{ ...letterStyle, left: `${((index + 0.5) * 100) / columns}%` }}>
@@ -180,3 +193,4 @@ const SquareLogo = ({ wide = true, className = '' }: SquareLogoProps) => {
 };
 
 export default SquareLogo;
+export { LogoVariant };
