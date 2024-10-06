@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { AudioLines, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, Settings, Zap, Siren } from "lucide-react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -35,7 +36,7 @@ const useMediaQuery = (query: string): boolean => {
   return matches
 }
 
-const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; signOut: () => void }) => {
+const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const isDesktop = useMediaQuery("(min-width: 1024px)")
   const isMobile = useMediaQuery("(max-width: 767px)")
@@ -52,14 +53,16 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     setIsSidebarOpen(!isSidebarOpen)
   }
 
+  const pathname = usePathname()
+
   const menuItems = [
-    { name: "Items", icon: AudioLines },
-    { name: "Alerts", icon: Siren },
-    { name: "Reports", icon: FileBarChart },
-    { name: "Scorecards", icon: ListTodo },
-    { name: "Experiments", icon: FlaskConical },
-    { name: "Optimizations", icon: Zap },
-    { name: "Settings", icon: Settings },
+    { name: "Items", icon: AudioLines, path: "/items" },
+    { name: "Alerts", icon: Siren, path: "/alerts" },
+    { name: "Reports", icon: FileBarChart, path: "/reports" },
+    { name: "Scorecards", icon: ListTodo, path: "/scorecards" },
+    { name: "Experiments", icon: FlaskConical, path: "/experiments" },
+    { name: "Optimizations", icon: Zap, path: "/optimizations" },
+    { name: "Settings", icon: Settings, path: "/settings" },
   ]
 
   const accounts = [
@@ -71,7 +74,11 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   const Sidebar = () => (
     <div className="flex h-full flex-col py-4">
       <div className="px-3 py-2 mb-4">
-        {isSidebarOpen && <div className="w-full max-w-md"><WideLogo /></div>}
+        {isSidebarOpen && (
+          <Link href="/" className="w-full max-w-md block">
+            <WideLogo />
+          </Link>
+        )}
       </div>
       <ScrollArea className="flex-1">
         <div className="space-y-1 px-3">
@@ -79,10 +86,17 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             <TooltipProvider key={item.name}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" className="w-full justify-start">
-                    <item.icon className="h-4 w-4 mr-2 flex-shrink-0" />
-                    {isSidebarOpen && <span>{item.name}</span>}
-                  </Button>
+                  <Link href={item.path} passHref>
+                    <Button
+                      variant="ghost"
+                      className={`w-full justify-start ${
+                        pathname === item.path ? "bg-gray-100 dark:bg-gray-800" : ""
+                      }`}
+                    >
+                      <item.icon className="h-4 w-4 mr-2 flex-shrink-0" />
+                      {isSidebarOpen && <span>{item.name}</span>}
+                    </Button>
+                  </Link>
                 </TooltipTrigger>
                 {!isSidebarOpen && <TooltipContent side="right">{item.name}</TooltipContent>}
               </Tooltip>
@@ -161,7 +175,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               <DropdownMenuSeparator />
               <DropdownMenuItem>
                 <LogOut className="mr-2 h-4 w-4" />
-                <button onClick={signOut}>Sign out</button>
+                <Link href="/api/auth/signout">Sign out</Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
