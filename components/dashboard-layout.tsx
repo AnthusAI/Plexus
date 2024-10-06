@@ -74,8 +74,8 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   const Sidebar = () => (
     <div className="flex h-full flex-col py-4">
-      <div className={`mb-4 ${isSidebarOpen ? 'px-3' : 'px-2'}`}>
-        <Link href="/" className={`block ${isSidebarOpen ? 'w-full max-w-md' : 'w-12'}`}>
+      <div className={`mb-4 ${isSidebarOpen ? 'px-3' : 'px-1'}`}>
+        <Link href="/" className={`block ${isSidebarOpen ? 'w-full max-w-md' : 'w-8'}`}>
           {isSidebarOpen ? (
             <SquareLogo variant={LogoVariant.Wide} />
           ) : (
@@ -84,7 +84,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         </Link>
       </div>
       <ScrollArea className="flex-1">
-        <div className={`space-y-1 ${isSidebarOpen ? 'px-3' : 'px-2'}`}>
+        <div className={`space-y-1 ${isSidebarOpen ? 'px-3' : 'px-1'}`}>
           {menuItems.map((item) => (
             <TooltipProvider key={item.name}>
               <Tooltip>
@@ -107,7 +107,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           ))}
         </div>
       </ScrollArea>
-      <div className={`mt-auto ${isSidebarOpen ? 'px-3' : 'px-2'}`}>
+      <div className={`mt-auto ${isSidebarOpen ? 'px-3' : 'px-1'}`}>
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -117,7 +117,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 onClick={toggleSidebar}
               >
                 <PanelLeft className="h-4 w-4 flex-shrink-0" />
-                {isSidebarOpen && <span className="ml-2">Collapse sidebar</span>}
+                {isSidebarOpen && <span className="ml-2"></span>}
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right">
@@ -192,7 +192,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
       <div className="flex flex-1 overflow-hidden">
         <aside
           className={`
-            ${isSidebarOpen ? (isMobile ? 'w-16' : 'w-48') : (isMobile ? 'w-0' : 'w-16')}
+            ${isSidebarOpen ? (isMobile ? 'w-10' : 'w-48') : (isMobile ? 'w-0' : 'w-10')}
             flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden border-r
             ${isMobile && !isSidebarOpen ? 'hidden' : ''}
           `}
