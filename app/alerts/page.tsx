@@ -1,18 +1,18 @@
 import DashboardLayout from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
-export default function Home() {
+export default function Alerts() {
   return (
     <DashboardLayout>
       <div className="space-y-4">
-        <h1 className="text-3xl font-bold">Home</h1>
+        <h1 className="text-3xl font-bold">Alerts</h1>
         <Card>
           <CardHeader>
-            <CardTitle>Welcome to the Dashboard</CardTitle>
-            <CardDescription>This is your dashboard home page.</CardDescription>
+            <CardTitle>View and Manage Alerts</CardTitle>
+            <CardDescription>Stay informed about important events.</CardDescription>
           </CardHeader>
           <CardContent>
-            <p>Here you can find an overview of your account and quick access to important features.</p>
+            <p>Here you can view and manage all your alerts and notifications.</p>
           </CardContent>
         </Card>
       </div>
