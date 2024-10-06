@@ -14,7 +14,7 @@ config.autoAddCss = false
 Amplify.configure(outputs);
 
 import DashboardLayout from '../components/dashboard-layout'
-import Logo from '../components/Logo'
+import SquareLogo from '../components/logo-square'
 import NivoCalendar from '../components/cards/nivo-calendar'
 
 const client = generateClient<Schema>();
@@ -56,7 +56,7 @@ function AuthenticatedApp() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
         <div className="mb-8">
-          <Logo />
+          <SquareLogo />
         </div>
         <div className="w-full max-w-md">
           <Authenticator />
