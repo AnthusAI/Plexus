@@ -47,6 +47,21 @@
     --ring: 224.27 92.13% 65.1%;
   }
 }
+
+[data-amplify-authenticator] {
+  --amplify-components-authenticator-router-box-shadow: none;
+  --amplify-components-authenticator-router-border-width: 2px;
+  --amplify-components-authenticator-form-padding: 1rem 2rem;
+  --amplify-components-button-primary-background-color: hsl(var(--primary));
+  --amplify-components-button-primary-foreground-color: hsl(var(--primary-foreground));
+  --amplify-components-button-primary-color: hsl(var(--primary-foreground));
+  --amplify-components-fieldcontrol-focus-box-shadow: 0 0 0 2px hsl(var(--secondary));
+  --amplify-components-tabs-item-active-border-color: hsl(var(--secondary));
+  --amplify-components-tabs-item-color: hsl(var(--muted-foreground));
+  --amplify-components-tabs-item-active-color: hsl(var(--secondary-background));
+  --amplify-components-button-link-color: hsl(var(--accent-foreground));
+}
+
 @layer base {
   * {
     @apply border-border;
