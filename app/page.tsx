@@ -15,7 +15,7 @@ Amplify.configure(outputs);
 
 import DashboardLayout from '../components/dashboard-layout'
 import SquareLogo, { LogoVariant } from '../components/logo-square'
-import NivoCalendar from '../components/cards/nivo-calendar'
+import ActivityDashboard from '../components/activity-dashboard'
 
 const client = generateClient<Schema>();
 
@@ -44,7 +44,7 @@ function AppContent({ signOut }: { signOut: () => void }) {
 
   return (
     <DashboardLayout signOut={signOut}>
-      <NivoCalendar />
+      <ActivityDashboard />
     </DashboardLayout>
   );
 }
