@@ -30,33 +30,50 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-const initialScorecards = [
-  { id: "1", name: "SelectQuote Term Life v1", key: "SQTL1", scores: 10, viable: 8 },
-  { id: "2", name: "CS3 CRM Validation", key: "CS3CRM", scores: 15, viable: 12 },
-  { id: "3", name: "CS3 Services v2", key: "CS3SV2", scores: 8, viable: 7 },
+const initialScorecards: Scorecard[] = [
+  { id: "1", name: "SelectQuote Term Life v1", key: "SQTL1", scores: 10, viable: 8, scoreDetails: [] },
+  { id: "2", name: "CS3 CRM Validation", key: "CS3CRM", scores: 15, viable: 12, scoreDetails: [] },
+  { id: "3", name: "CS3 Services v2", key: "CS3SV2", scores: 8, viable: 7, scoreDetails: [] },
 ]
 
 const scoreTypes = ["Numeric", "Percentage", "Boolean", "Text"]
 
+// Define an interface for the scorecard structure
+interface Scorecard {
+  id: string;
+  name: string;
+  key: string;
+  scores: number;
+  viable: number;
+  scoreDetails: Array<{ id: string; name: string; type: string }>;
+}
+
 export default function Scorecards() {
-  const [scorecards, setScorecards] = useState(initialScorecards)
-  const [selectedScorecard, setSelectedScorecard] = useState(null)
+  const [scorecards, setScorecards] = useState<Scorecard[]>(initialScorecards)
+  const [selectedScorecard, setSelectedScorecard] = useState<Scorecard | null>(null)
   const [isEditing, setIsEditing] = useState(false)
-  const [editingScore, setEditingScore] = useState(null)
+  const [editingScore, setEditingScore] = useState<{ id: string; name: string; type: string } | null>(null)
 
   const handleCreate = () => {
-    setSelectedScorecard({ id: "", name: "", key: "", scores: 0, viable: 0, scoreDetails: [] })
+    setSelectedScorecard({
+      id: "",
+      name: "",
+      key: "",
+      scores: 0,
+      viable: 0,
+      scoreDetails: []
+    });
     setIsEditing(true)
     setEditingScore(null) // Ensure we're not in score editing mode
   }
 
-  const handleEdit = (scorecard) => {
+  const handleEdit = (scorecard: Scorecard) => {
     setSelectedScorecard({ ...scorecard })
     setIsEditing(true)
-    setEditingScore(null) // Ensure we're not in score editing mode
+    setEditingScore(null)
   }
 
-  const handleDelete = (id) => {
+  const handleDelete = (id: string) => {
     setScorecards(scorecards.filter(scorecard => scorecard.id !== id))
     if (selectedScorecard && selectedScorecard.id === id) {
       setSelectedScorecard(null)
@@ -65,15 +82,17 @@ export default function Scorecards() {
   }
 
   const handleSave = () => {
-    if (!selectedScorecard.id) {
-      const newId = Date.now().toString()
-      setScorecards([...scorecards, { ...selectedScorecard, id: newId }])
-    } else {
-      setScorecards(scorecards.map(scorecard => 
-        scorecard.id === selectedScorecard.id ? selectedScorecard : scorecard
-      ))
+    if (selectedScorecard) {
+      if (!selectedScorecard.id) {
+        const newId = Date.now().toString()
+        setScorecards([...scorecards, { ...selectedScorecard, id: newId }])
+      } else {
+        setScorecards(scorecards.map(scorecard => 
+          scorecard.id === selectedScorecard.id ? selectedScorecard : scorecard
+        ))
+      }
+      setIsEditing(false)
     }
-    setIsEditing(false)
   }
 
   const handleCancel = () => {
@@ -87,30 +106,34 @@ export default function Scorecards() {
   }
 
   const handleSaveScore = () => {
-    if (!editingScore.id) {
-      const newScore = { ...editingScore, id: Date.now().toString() }
-      setSelectedScorecard({
-        ...selectedScorecard,
-        scores: selectedScorecard.scores + 1,
-        scoreDetails: [...(selectedScorecard.scoreDetails || []), newScore]
-      })
-    } else {
-      setSelectedScorecard({
-        ...selectedScorecard,
-        scoreDetails: (selectedScorecard.scoreDetails || []).map(score => 
-          score.id === editingScore.id ? editingScore : score
-        )
-      })
+    if (selectedScorecard && editingScore) {
+      if (!editingScore.id) {
+        const newScore = { ...editingScore, id: Date.now().toString() }
+        setSelectedScorecard({
+          ...selectedScorecard,
+          scores: selectedScorecard.scores + 1,
+          scoreDetails: [...(selectedScorecard.scoreDetails || []), newScore]
+        })
+      } else {
+        setSelectedScorecard({
+          ...selectedScorecard,
+          scoreDetails: (selectedScorecard.scoreDetails || []).map(score => 
+            score.id === editingScore.id ? editingScore : score
+          )
+        })
+      }
+      setEditingScore(null)
     }
-    setEditingScore(null)
   }
 
-  const handleDeleteScore = (scoreId) => {
-    setSelectedScorecard({
-      ...selectedScorecard,
-      scores: selectedScorecard.scores - 1,
-      scoreDetails: (selectedScorecard.scoreDetails || []).filter(score => score.id !== scoreId)
-    })
+  const handleDeleteScore = (scoreId: string) => {
+    if (selectedScorecard) {
+      setSelectedScorecard({
+        ...selectedScorecard,
+        scores: selectedScorecard.scores - 1,
+        scoreDetails: (selectedScorecard.scoreDetails || []).filter(score => score.id !== scoreId)
+      })
+    }
   }
 
   const renderContent = () => {
