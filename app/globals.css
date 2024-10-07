@@ -24,9 +24,9 @@
     --ring: 224 92% 65%;
     --radius: 0.5rem;
     --light-blue-bg: 210 50% 95%;
-    --chart-primary: 224 50% 70%;
-    --chart-secondary: 344 50% 70%;
-    --chart-accent: 224 50% 70%;
+    --chart-primary: 224 50% 60%;
+    --chart-secondary: 344 50% 60%;
+    --chart-accent: 224 50% 60%;
   }
 
   .dark {
