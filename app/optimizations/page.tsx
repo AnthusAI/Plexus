@@ -5,15 +5,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 export default function Optimizations() {
   return (
     <DashboardLayout signOut={signOut}>
-      <div className="space-y-4">
-        <h1 className="text-3xl font-bold">Optimizations</h1>
+      <div className="px-6 pt-0 pb-6 space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Optimizations</h1>
+          <p className="text-muted-foreground">
+            View and manage your optimization processes.
+          </p>
+        </div>
+
         <Card>
           <CardHeader>
-            <CardTitle>Optimize Your Processes</CardTitle>
-            <CardDescription>Improve efficiency and performance across your operations.</CardDescription>
+            <CardTitle>Optimization Center</CardTitle>
+            <CardDescription>Track and control your optimization efforts.</CardDescription>
           </CardHeader>
           <CardContent>
-            <p>Here you can view optimization suggestions and implement improvements to your workflows.</p>
+            <p>Monitor ongoing optimizations, start new processes, and review completed optimizations.</p>
           </CardContent>
         </Card>
       </div>

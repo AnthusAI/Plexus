@@ -5,15 +5,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 export default function Settings() {
   return (
     <DashboardLayout signOut={signOut}>
-      <div className="space-y-4">
-        <h1 className="text-3xl font-bold">Settings</h1>
+      <div className="px-6 pt-0 pb-6 space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Settings</h1>
+          <p className="text-muted-foreground">
+            Manage your account and application settings.
+          </p>
+        </div>
+
         <Card>
           <CardHeader>
-            <CardTitle>Settings Dashboard</CardTitle>
-            <CardDescription>Manage your application settings here.</CardDescription>
+            <CardTitle>Account Settings</CardTitle>
+            <CardDescription>Customize your account and preferences.</CardDescription>
           </CardHeader>
           <CardContent>
-            <p>Your settings will be displayed here.</p>
+            <p>Update your profile, change notification preferences, and manage security settings.</p>
           </CardContent>
         </Card>
       </div>

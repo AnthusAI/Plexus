@@ -5,15 +5,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 export default function Alerts() {
   return (
     <DashboardLayout signOut={signOut}>
-      <div className="space-y-4">
-        <h1 className="text-3xl font-bold">Alerts</h1>
+      <div className="px-6 pt-0 pb-6 space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Alerts</h1>
+          <p className="text-muted-foreground">
+            View and manage your alerts and notifications.
+          </p>
+        </div>
+
         <Card>
           <CardHeader>
-            <CardTitle>Alerts Dashboard</CardTitle>
-            <CardDescription>View and manage your alerts here.</CardDescription>
+            <CardTitle>Manage Alerts</CardTitle>
+            <CardDescription>Configure and review your alert settings.</CardDescription>
           </CardHeader>
           <CardContent>
-            <p>Your alerts will be displayed here.</p>
+            <p>Here you can view active alerts, set up new ones, or modify existing alert configurations.</p>
           </CardContent>
         </Card>
       </div>
