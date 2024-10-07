@@ -20,7 +20,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 import SquareLogo, { LogoVariant } from './logo-square'
 
-// Custom hook for media query
 const useMediaQuery = (query: string): boolean => {
   const [matches, setMatches] = useState(false)
 
@@ -67,13 +66,13 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   ]
 
   const accounts = [
-    { name: "Account 1", avatar: "/avatar1.png", initials: "A1" },
-    { name: "Account 2", avatar: "/avatar2.png", initials: "A2" },
-    { name: "Account 3", avatar: "/avatar3.png", initials: "A3" },
+    { name: "Call Criteria", avatar: "/avatar1.png", initials: "CC" },
+    { name: "Legal Leads", avatar: "/avatar2.png", initials: "LL" },
+    { name: "Multispectral", avatar: "/avatar3.png", initials: "MS" },
   ]
 
   const Sidebar = () => (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] py-4 bg-[hsl(var(--light-blue-bg))] relative">
+    <div className="flex flex-col h-full py-2 bg-[hsl(var(--light-blue-bg))]">
       <div className={`mb-4 ${isSidebarOpen ? 'px-3' : 'px-3'}`}>
         <Link href="/" className={`block ${isSidebarOpen ? 'w-full max-w-md' : 'w-8'}`}>
           {isSidebarOpen ? (
@@ -83,7 +82,8 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           )}
         </Link>
       </div>
-      <ScrollArea className="flex-1 overflow-y-auto">
+
+      <ScrollArea className="flex-grow overflow-y-auto">
         <div className={`space-y-1 ${isSidebarOpen ? 'px-3' : 'px-3'}`}>
           {menuItems.map((item) => (
             <TooltipProvider key={item.name}>
@@ -117,17 +117,18 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           ))}
         </div>
       </ScrollArea>
-      <div className={`${isSidebarOpen ? 'px-3' : 'px-3'} absolute bottom-4 left-0 right-0 z-20`}>
+
+      <div className="mt-auto px-3 space-y-2 py-4">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button 
-                variant="ghost" 
-                className={`w-full justify-start ${isSidebarOpen ? '' : 'px-2'}`} 
+              <Button
+                variant="ghost"
+                className={`w-full justify-start ${isSidebarOpen ? '' : 'px-2'}`}
                 onClick={toggleSidebar}
               >
-                <PanelLeft className="h-4 w-4 flex-shrink-0" />
-                {isSidebarOpen}
+                <PanelLeft className={`h-4 w-4 flex-shrink-0 ${isSidebarOpen ? 'mr-2' : ''}`} />
+                {isSidebarOpen && <span>Toggle sidebar</span>}
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right">
@@ -135,84 +136,76 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className={`w-full justify-start ${isSidebarOpen ? 'px-2' : 'px-0'}`}>
+              <Avatar className={`h-8 w-8 ${isSidebarOpen ? 'mr-2' : ''}`}>
+                <AvatarImage src={accounts[0].avatar} alt={accounts[0].name} />
+                <AvatarFallback>{accounts[0].initials}</AvatarFallback>
+              </Avatar>
+              {isSidebarOpen && <span>{accounts[0].name}</span>}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuLabel>Switch Account</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {accounts.map((account) => (
+              <DropdownMenuItem key={account.name}>
+                <Avatar className="h-8 w-8 mr-2">
+                  <AvatarImage src={account.avatar} alt={account.name} />
+                  <AvatarFallback>{account.initials}</AvatarFallback>
+                </Avatar>
+                <span>{account.name}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className={`w-full justify-start ${isSidebarOpen ? 'px-2' : 'px-0'}`}>
+              <Avatar className={`h-8 w-8 ${isSidebarOpen ? 'mr-2' : ''}`}>
+                <AvatarImage src="/user-avatar.png" alt="User avatar" />
+                <AvatarFallback>RP</AvatarFallback>
+              </Avatar>
+              {isSidebarOpen && <span>Ryan P</span>}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>My User</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem>Settings</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem>
+              <LogOut className="mr-2 h-4 w-4" />
+              <button onClick={signOut}>Sign out</button>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   )
 
   return (
-    <div className="flex flex-col min-h-screen bg-[hsl(var(--light-blue-bg))]">
-      <header className="flex h-14 items-center gap-4 bg-[hsl(var(--light-blue-bg))] px-2 z-10">
-        {isMobile && (
-          <Button variant="ghost" size="icon" onClick={toggleSidebar} className="mr-2">
-            <Menu className="h-6 w-6" />
-            <span className="sr-only">Toggle sidebar</span>
-          </Button>
-        )}
-        <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="pl-1">
-                <Avatar className="h-8 w-8 mr-2">
-                  <AvatarImage src={accounts[0].avatar} alt={accounts[0].name} />
-                  <AvatarFallback>{accounts[0].initials}</AvatarFallback>
-                </Avatar>
-                <span>{accounts[0].name}</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuLabel>Switch Account</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {accounts.map((account) => (
-                <DropdownMenuItem key={account.name}>
-                  <Avatar className="h-8 w-8 mr-2">
-                    <AvatarImage src={account.avatar} alt={account.name} />
-                    <AvatarFallback>{account.initials}</AvatarFallback>
-                  </Avatar>
-                  <span>{account.name}</span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <div className="ml-auto flex items-center gap-4">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <Avatar>
-                  <AvatarImage src="/user-avatar.png" alt="User avatar" />
-                  <AvatarFallback>RP</AvatarFallback>
-                </Avatar>
-                <span className="sr-only">Toggle user menu</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>My User</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Settings</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <LogOut className="mr-2 h-4 w-4" />
-                <button onClick={signOut}>Sign out</button>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </header>
+    <div className="flex flex-col min-h-screen">
       <div className="flex flex-1 overflow-hidden">
         <aside
           className={`
-            fixed top-14 bottom-0 left-0
+            fixed top-0 bottom-0 left-0 h-full
             ${isSidebarOpen ? (isMobile ? 'w-14' : 'w-48') : (isMobile ? 'w-0' : 'w-14')}
             transition-all duration-300 ease-in-out overflow-hidden
             ${isMobile && !isSidebarOpen ? 'hidden' : ''}
-            bg-[hsl(var(--light-blue-bg))]
           `}
         >
           <Sidebar />
         </aside>
-        <main className={`flex-1 overflow-y-auto ${
-          isMobile && !isSidebarOpen ? 'ml-0' : (isSidebarOpen ? 'ml-48' : 'ml-14')
-        } ${isMobile && !isSidebarOpen ? 'p-2' : 'pr-2 pb-2'}`}>
+        <main 
+          className={`flex-1 overflow-y-auto transition-all duration-300 ease-in-out
+            ${isMobile && !isSidebarOpen ? 'ml-0' : (isSidebarOpen ? 'ml-48' : 'ml-14')}
+            ${isSidebarOpen ? 'p-2' : 'pl-0 pr-2 pt-2 pb-2'}
+          `}
+        >
           <div className="h-full bg-white rounded-lg">
             <div className="h-full p-6 overflow-y-auto">
               {children}
