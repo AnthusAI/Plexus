@@ -91,13 +91,23 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 <TooltipTrigger asChild>
                   <Link href={item.path} passHref>
                     <Button
-                      variant="ghost"
+                      variant={pathname === item.path ? "secondary" : "ghost"}
                       className={`w-full justify-start ${
-                        pathname === item.path ? "bg-gray-100 dark:bg-gray-800" : ""
+                        pathname === item.path
+                          ? "bg-secondary text-secondary-foreground"
+                          : ""
                       } ${isSidebarOpen ? '' : 'px-2'}`}
                     >
-                      <item.icon className={`h-4 w-4 ${isSidebarOpen ? 'mr-2' : ''} flex-shrink-0`} />
-                      {isSidebarOpen && <span>{item.name}</span>}
+                      <item.icon className={`h-4 w-4 ${
+                        isSidebarOpen ? 'mr-2' : ''
+                      } flex-shrink-0 ${
+                        pathname === item.path ? 'text-secondary-foreground' : ''
+                      }`} />
+                      {isSidebarOpen && (
+                        <span className={pathname === item.path ? 'font-semibold' : ''}>
+                          {item.name}
+                        </span>
+                      )}
                     </Button>
                   </Link>
                 </TooltipTrigger>
