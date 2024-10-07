@@ -220,7 +220,19 @@ export default function Scorecards() {
       return (
         <div className="flex flex-col h-full">
           <div className="flex justify-between items-center mb-4">
-            <h1 className="text-2xl font-bold">{selectedScorecard.name || "New Scorecard"}</h1>
+            <div className="flex items-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCancel}
+                className="mr-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <h1 className="text-2xl font-bold">
+                {selectedScorecard.name || "New Scorecard"}
+              </h1>
+            </div>
             {selectedScorecard.id && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -281,26 +293,6 @@ export default function Scorecards() {
                 />
               </div>
               <div>
-                <Label htmlFor="scores">Scores</Label>
-                <Input
-                  id="scores"
-                  type="number"
-                  value={selectedScorecard.scores}
-                  onChange={(e) => setSelectedScorecard({ ...selectedScorecard, scores: parseInt(e.target.value) })}
-                  disabled={!isEditing}
-                />
-              </div>
-              <div>
-                <Label htmlFor="viable">Viable</Label>
-                <Input
-                  id="viable"
-                  type="number"
-                  value={selectedScorecard.viable}
-                  onChange={(e) => setSelectedScorecard({ ...selectedScorecard, viable: parseInt(e.target.value) })}
-                  disabled={!isEditing}
-                />
-              </div>
-              <div>
                 <div className="flex justify-between items-center mb-2">
                   <h2 className="text-xl font-semibold">Scores</h2>
                   <Button onClick={handleAddScore}>
@@ -356,7 +348,19 @@ export default function Scorecards() {
       return (
         <div className="flex flex-col h-full">
           <div className="flex justify-between items-center mb-4">
-            <h1 className="text-2xl font-bold">{editingScore.id ? `Edit Score: ${editingScore.name}` : "Add New Score"}</h1>
+            <div className="flex items-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setEditingScore(null)}
+                className="mr-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <h1 className="text-2xl font-bold">
+                {editingScore.id ? `Edit Score: ${editingScore.name}` : "Add New Score"}
+              </h1>
+            </div>
           </div>
           <ScrollArea className="flex-grow">
             <div className="space-y-6 p-4">
