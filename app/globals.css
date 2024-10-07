@@ -9,9 +9,9 @@
     --muted-foreground: 344 12% 29%;
     --popover: 224 42% 100%;
     --popover-foreground: 224 69% 3%;
-    --card: 0 0% 99%;
+    --card: 210 50% 97%;
     --card-foreground: 224 69% 2%;
-    --border: 224 11% 95%;
+    --border: 224 11% 85%;
     --input: 224 11% 95%;
     --primary: 224 92% 65%;
     --primary-foreground: 0 0% 100%;
@@ -25,7 +25,7 @@
     --radius: 0.5rem;
     --light-blue-bg: 210 50% 95%;
     --chart-primary: 224 50% 60%;
-    --chart-secondary: 344 50% 60%;
+    --chart-secondary: 330 63% 55%;
     --chart-accent: 224 50% 60%;
   }
 

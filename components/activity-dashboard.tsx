@@ -55,7 +55,7 @@ export default function ActivityDashboard() {
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Select>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[180px] border border-secondary">
               <SelectValue placeholder="Scorecard" />
             </SelectTrigger>
             <SelectContent>
@@ -65,7 +65,7 @@ export default function ActivityDashboard() {
             </SelectContent>
           </Select>
           <Select>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[180px] border border-secondary">
               <SelectValue placeholder="Score" />
             </SelectTrigger>
             <SelectContent>
@@ -77,7 +77,7 @@ export default function ActivityDashboard() {
         </div>
         <div className="flex space-x-2">
           {["1h", "3h", "12h", "1d", "3d", "1w"].map((range) => (
-            <Button key={range} variant="outline" size="sm">
+            <Button key={range} variant="outline" size="sm" className="border border-secondary">
               {range}
             </Button>
           ))}
