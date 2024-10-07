@@ -77,7 +77,12 @@ export default function ActivityDashboard() {
         </div>
         <div className="flex space-x-2">
           {["1h", "3h", "12h", "1d", "3d", "1w"].map((range) => (
-            <Button key={range} variant="outline" size="sm" className="border border-secondary">
+            <Button
+              key={range}
+              variant={range === "1w" ? "default" : "outline"}
+              size="sm"
+              className={`border ${range === "1w" ? "border-primary" : "border-secondary"}`}
+            >
               {range}
             </Button>
           ))}
