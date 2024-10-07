@@ -111,8 +111,8 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
         const newFontSize = variant === LogoVariant.Wide ? 
           `${containerWidth / 3}px` :
           variant === LogoVariant.Narrow ?
-            `${containerWidth * 0.7}px` :
-            `${containerWidth / 3}px`;  // Adjusted for Square variant
+            `${containerWidth * 1.4}px` :
+            `${containerWidth / 3}px`;
         setFontSize(newFontSize);
       }
     };
