@@ -79,7 +79,7 @@ export default function ActivityDashboard() {
           {["1h", "3h", "12h", "1d", "3d", "1w"].map((range) => (
             <Button
               key={range}
-              variant={range === "1w" ? "default" : "outline"}
+              variant={range === "1w" ? "secondary" : "outline"}
               size="sm"
               className={`border ${range === "1w" ? "border-primary" : "border-secondary"}`}
             >
