@@ -5,15 +5,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 export default function Experiments() {
   return (
     <DashboardLayout signOut={signOut}>
-      <div className="space-y-4">
-        <h1 className="text-3xl font-bold">Experiments</h1>
+      <div className="px-6 pt-0 pb-6 space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Experiments</h1>
+          <p className="text-muted-foreground">
+            Manage and track your ongoing experiments.
+          </p>
+        </div>
+
         <Card>
           <CardHeader>
-            <CardTitle>Experiments Dashboard</CardTitle>
-            <CardDescription>View and manage your experiments here.</CardDescription>
+            <CardTitle>Experiment Dashboard</CardTitle>
+            <CardDescription>Overview of active and completed experiments.</CardDescription>
           </CardHeader>
           <CardContent>
-            <p>Your experiments will be displayed here.</p>
+            <p>Monitor the progress of your experiments, analyze results, and set up new trials.</p>
           </CardContent>
         </Card>
       </div>

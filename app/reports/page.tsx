@@ -5,15 +5,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 export default function Reports() {
   return (
     <DashboardLayout signOut={signOut}>
-      <div className="space-y-4">
-        <h1 className="text-3xl font-bold">Reports</h1>
+      <div className="px-6 pt-0 pb-6 space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Reports</h1>
+          <p className="text-muted-foreground">
+            Generate and view reports on your data and activities.
+          </p>
+        </div>
+
         <Card>
           <CardHeader>
-            <CardTitle>Reports Dashboard</CardTitle>
-            <CardDescription>View and manage your reports here.</CardDescription>
+            <CardTitle>Report Management</CardTitle>
+            <CardDescription>Create, view, and export reports.</CardDescription>
           </CardHeader>
           <CardContent>
-            <p>Your reports will be displayed here.</p>
+            <p>Access your existing reports or generate new ones based on various metrics and timeframes.</p>
           </CardContent>
         </Card>
       </div>
