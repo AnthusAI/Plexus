@@ -186,9 +186,8 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuLabel>My User</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>Profile</DropdownMenuItem>
               <DropdownMenuItem>Settings</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem>
