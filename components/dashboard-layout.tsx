@@ -128,7 +128,6 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 onClick={toggleSidebar}
               >
                 <PanelLeft className={`h-4 w-4 flex-shrink-0 ${isSidebarOpen ? 'mr-2' : ''}`} />
-                {isSidebarOpen && <span>Toggle sidebar</span>}
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right">
