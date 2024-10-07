@@ -31,9 +31,9 @@ import {
 } from "@/components/ui/select"
 
 const initialScorecards: Scorecard[] = [
-  { id: "1", name: "SelectQuote Term Life v1", key: "SQTL1", scores: 10, viable: 8, scoreDetails: [] },
-  { id: "2", name: "CS3 CRM Validation", key: "CS3CRM", scores: 15, viable: 12, scoreDetails: [] },
-  { id: "3", name: "CS3 Services v2", key: "CS3SV2", scores: 8, viable: 7, scoreDetails: [] },
+  { id: "1", name: "SelectQuote Term Life v1", key: "SQTL1", scores: 10, scoreDetails: [] },
+  { id: "2", name: "CS3 CRM Validation", key: "CS3CRM", scores: 15, scoreDetails: [] },
+  { id: "3", name: "CS3 Services v2", key: "CS3SV2", scores: 8, scoreDetails: [] },
 ]
 
 const scoreTypes = ["Numeric", "Percentage", "Boolean", "Text"]
@@ -44,7 +44,6 @@ interface Scorecard {
   name: string;
   key: string;
   scores: number;
-  viable: number;
   scoreDetails: Array<{ id: string; name: string; type: string }>;
 }
 
@@ -60,11 +59,10 @@ export default function Scorecards() {
       name: "",
       key: "",
       scores: 0,
-      viable: 0,
       scoreDetails: []
     });
     setIsEditing(true)
-    setEditingScore(null) // Ensure we're not in score editing mode
+    setEditingScore(null)
   }
 
   const handleEdit = (scorecard: Scorecard) => {
@@ -155,25 +153,23 @@ export default function Scorecards() {
             <Table className="w-full">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[40%]">Name</TableHead>
-                  <TableHead className="w-[15%]">Scores</TableHead>
-                  <TableHead className="w-[15%]">Viable</TableHead>
-                  <TableHead className="w-[30%]">Actions</TableHead>
+                  <TableHead className="w-[50%]">Name</TableHead>
+                  <TableHead className="w-[20%]">Scores</TableHead>
+                  <TableHead className="w-[30%] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {scorecards.map((scorecard) => (
                   <TableRow key={scorecard.id}>
-                    <TableCell className="w-[40%]">
+                    <TableCell className="w-[50%]">
                       <div className="cursor-pointer" onClick={() => handleEdit(scorecard)}>
                         <div className="font-medium">{scorecard.name}</div>
                         <div className="text-sm text-muted-foreground">{scorecard.id} - {scorecard.key}</div>
                       </div>
                     </TableCell>
-                    <TableCell className="w-[15%]">{scorecard.scores}</TableCell>
-                    <TableCell className="w-[15%]">{scorecard.viable}</TableCell>
+                    <TableCell className="w-[20%]">{scorecard.scores}</TableCell>
                     <TableCell className="w-[30%]">
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center justify-end space-x-2">
                         <Button variant="outline" size="sm" onClick={() => handleEdit(scorecard)}>
                           <Pencil className="h-4 w-4 mr-2" /> Edit
                         </Button>
@@ -186,7 +182,7 @@ export default function Scorecards() {
                               <MoreHorizontal className="h-4 w-4 mr-2" /> More
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent>
+                          <DropdownMenuContent align="end">
                             <DropdownMenuItem>
                               <Activity className="h-4 w-4 mr-2" /> Activity
                             </DropdownMenuItem>
@@ -401,7 +397,7 @@ export default function Scorecards() {
 
   return (
     <DashboardLayout signOut={signOut}>
-      <div className="p-6 space-y-6">
+      <div className="px-6 pt-0 pb-6 space-y-6">
         {renderContent()}
       </div>
     </DashboardLayout>

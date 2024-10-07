@@ -52,27 +52,29 @@ export default function ActivityDashboard() {
         </p>
       </div>
 
-      <div className="flex items-center space-x-4">
-        <Select>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Scorecard" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="scorecard1">Scorecard 1</SelectItem>
-            <SelectItem value="scorecard2">Scorecard 2</SelectItem>
-            <SelectItem value="scorecard3">Scorecard 3</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Score" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="score1">Score 1</SelectItem>
-            <SelectItem value="score2">Score 2</SelectItem>
-            <SelectItem value="score3">Score 3</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <Select>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Scorecard" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="scorecard1">Scorecard 1</SelectItem>
+              <SelectItem value="scorecard2">Scorecard 2</SelectItem>
+              <SelectItem value="scorecard3">Scorecard 3</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Score" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="score1">Score 1</SelectItem>
+              <SelectItem value="score2">Score 2</SelectItem>
+              <SelectItem value="score3">Score 3</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex space-x-2">
           {["1h", "3h", "12h", "1d", "3d", "1w"].map((range) => (
             <Button key={range} variant="outline" size="sm">
@@ -82,7 +84,7 @@ export default function ActivityDashboard() {
         </div>
       </div>
 
-      <Card>
+      <Card className="shadow-none">
         <CardContent className="p-0">
           <ChartContainer
             config={{
