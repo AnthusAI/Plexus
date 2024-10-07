@@ -170,15 +170,15 @@ export default function Scorecards() {
                     <TableCell className="w-[20%]">{scorecard.scores}</TableCell>
                     <TableCell className="w-[30%]">
                       <div className="flex items-center justify-end space-x-2">
-                        <Button variant="outline" size="sm" onClick={() => handleEdit(scorecard)}>
+                        <Button variant="outline" size="sm" className="border border-secondary" onClick={() => handleEdit(scorecard)}>
                           <Pencil className="h-4 w-4 mr-2" /> Edit
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => handleDelete(scorecard.id)}>
+                        <Button variant="outline" size="sm" className="border border-secondary" onClick={() => handleDelete(scorecard.id)}>
                           <Trash2 className="h-4 w-4 mr-2" /> Delete
                         </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm">
+                            <Button variant="outline" size="sm" className="border border-secondary">
                               <MoreHorizontal className="h-4 w-4 mr-2" /> More
                             </Button>
                           </DropdownMenuTrigger>
@@ -221,7 +221,6 @@ export default function Scorecards() {
                 variant="ghost"
                 size="sm"
                 onClick={handleCancel}
-                className="mr-2"
               >
                 <ArrowLeft className="h-4 w-4" />
               </Button>
@@ -232,7 +231,7 @@ export default function Scorecards() {
             {selectedScorecard.id && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline">
+                  <Button variant="outline" className="border border-secondary">
                     Actions <ChevronDown className="ml-2 h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -329,7 +328,7 @@ export default function Scorecards() {
             {isEditing ? (
               <>
                 <Button onClick={handleSave}>Save Scorecard</Button>
-                <Button variant="outline" onClick={handleCancel}>Cancel</Button>
+                <Button variant="outline" className="border border-secondary" onClick={handleCancel}>Cancel</Button>
               </>
             ) : (
               <>
@@ -388,7 +387,7 @@ export default function Scorecards() {
           </ScrollArea>
           <div className="flex justify-end space-x-2 p-4 bg-gray-100">
             <Button onClick={handleSaveScore}>Save Score</Button>
-            <Button variant="outline" onClick={() => setEditingScore(null)}>Cancel</Button>
+            <Button variant="outline" className="border border-secondary" onClick={() => setEditingScore(null)}>Cancel</Button>
           </div>
         </div>
       )
