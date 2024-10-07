@@ -73,7 +73,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   ]
 
   const Sidebar = () => (
-    <div className="flex h-full flex-col py-4 bg-[hsl(var(--light-blue-bg))]">
+    <div className="flex flex-col h-[calc(100vh-3.5rem)] py-4 bg-[hsl(var(--light-blue-bg))] relative">
       <div className={`mb-4 ${isSidebarOpen ? 'px-3' : 'px-3'}`}>
         <Link href="/" className={`block ${isSidebarOpen ? 'w-full max-w-md' : 'w-8'}`}>
           {isSidebarOpen ? (
@@ -83,7 +83,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           )}
         </Link>
       </div>
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 overflow-y-auto">
         <div className={`space-y-1 ${isSidebarOpen ? 'px-3' : 'px-3'}`}>
           {menuItems.map((item) => (
             <TooltipProvider key={item.name}>
@@ -117,7 +117,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           ))}
         </div>
       </ScrollArea>
-      <div className={`mt-auto ${isSidebarOpen ? 'px-3' : 'px-3'}`}>
+      <div className={`${isSidebarOpen ? 'px-3' : 'px-3'} absolute bottom-4 left-0 right-0 z-20`}>
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -127,7 +127,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 onClick={toggleSidebar}
               >
                 <PanelLeft className="h-4 w-4 flex-shrink-0" />
-                {isSidebarOpen && <span className="ml-2"></span>}
+                {isSidebarOpen}
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right">
@@ -141,7 +141,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   return (
     <div className="flex flex-col min-h-screen bg-[hsl(var(--light-blue-bg))]">
-      <header className="flex h-14 items-center gap-4 bg-[hsl(var(--light-blue-bg))] px-2">
+      <header className="flex h-14 items-center gap-4 bg-[hsl(var(--light-blue-bg))] px-2 z-10">
         {isMobile && (
           <Button variant="ghost" size="icon" onClick={toggleSidebar} className="mr-2">
             <Menu className="h-6 w-6" />
@@ -202,15 +202,18 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
       <div className="flex flex-1 overflow-hidden">
         <aside
           className={`
+            fixed top-14 bottom-0 left-0
             ${isSidebarOpen ? (isMobile ? 'w-14' : 'w-48') : (isMobile ? 'w-0' : 'w-14')}
-            flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden
+            transition-all duration-300 ease-in-out overflow-hidden
             ${isMobile && !isSidebarOpen ? 'hidden' : ''}
             bg-[hsl(var(--light-blue-bg))]
           `}
         >
           <Sidebar />
         </aside>
-        <main className={`flex-1 overflow-y-auto ${isMobile && !isSidebarOpen ? 'p-2' : 'pr-2 pb-2'}`}>
+        <main className={`flex-1 overflow-y-auto ${
+          isMobile && !isSidebarOpen ? 'ml-0' : (isSidebarOpen ? 'ml-48' : 'ml-14')
+        } ${isMobile && !isSidebarOpen ? 'p-2' : 'pr-2 pb-2'}`}>
           <div className="h-full bg-white rounded-lg">
             <div className="h-full p-6 overflow-y-auto">
               {children}
