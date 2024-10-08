@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Activity, AudioLines, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, Settings, Sparkles, Siren, Database } from "lucide-react"
+import { Activity, AudioLines, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, Settings, Sparkles, Siren, Database, Sun, Moon } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useTheme } from "next-themes"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -38,6 +39,7 @@ const useMediaQuery = (query: string): boolean => {
 
 const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; signOut: () => void }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const { theme, setTheme } = useTheme()
   const isDesktop = useMediaQuery("(min-width: 1024px)")
   const isMobile = useMediaQuery("(max-width: 767px)")
 
@@ -121,22 +123,47 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
       </ScrollArea>
 
       <div className="mt-auto px-3 space-y-2 py-4">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                className={`w-full justify-start ${isSidebarOpen ? '' : 'px-2'}`}
-                onClick={toggleSidebar}
-              >
-                <PanelLeft className={`h-4 w-4 flex-shrink-0 ${isSidebarOpen ? 'mr-2' : ''}`} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              {isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <div className="flex items-center">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="p-2"
+                  onClick={toggleSidebar}
+                >
+                  <PanelLeft className="h-4 w-4 flex-shrink-0" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                {isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {isSidebarOpen && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="p-2 ml-2"
+                    onClick={toggleTheme}
+                  >
+                    {theme === "dark" ? (
+                      <Sun className="h-4 w-4 flex-shrink-0" />
+                    ) : (
+                      <Moon className="h-4 w-4 flex-shrink-0" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  Toggle {theme === "dark" ? "Light" : "Dark"} Mode
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -188,6 +215,10 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     </div>
   )
 
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark")
+  }
+
   return (
     <div className="flex flex-col min-h-screen">
       <div className="flex flex-1 overflow-hidden">
@@ -207,7 +238,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             ${isSidebarOpen ? 'p-2' : 'pl-0 pr-2 pt-2 pb-2'}
           `}
         >
-          <div className="h-full bg-white rounded-lg">
+          <div className="h-full bg-background rounded-lg">
             <div className="h-full p-6 overflow-y-auto">
               {children}
             </div>
