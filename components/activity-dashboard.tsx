@@ -58,11 +58,11 @@ const barChartData = [
 const recentActivities = [
   {
     id: 0,
-    type: "Experiment Started",
+    type: "Experiment started",
     scorecard: "CS3 Services v2",
     score: "Good Call",
     time: "2m ago",
-    summary: "Progress: 47%",
+    summary: "89% / 47",
     data: {
       progress: 47,
       outerRing: [
@@ -81,7 +81,7 @@ const recentActivities = [
     scorecard: "Prime Edu",
     score: "Agent Branding",
     time: "15m ago",
-    summary: "Inappropriate Content detected",
+    summary: "Inappropriate content detected",
     description: "Score above 1 in the previous 15 minutes",
   },
   {
@@ -94,7 +94,7 @@ const recentActivities = [
   },
   {
     id: 3,
-    type: "Optimization Started",
+    type: "Optimization started",
     scorecard: "SelectQuote TermLife v1",
     score: "Good Call",
     time: "1h ago",
@@ -125,7 +125,7 @@ const recentActivities = [
   },
   {
     id: 4,
-    type: "Experiment Completed",
+    type: "Experiment completed",
     scorecard: "SelectQuote TermLife v1",
     score: "Temperature Check",
     time: "3h ago",
@@ -143,7 +143,7 @@ const recentActivities = [
   },
   {
     id: 5,
-    type: "Score Updated",
+    type: "Score updated",
     scorecard: "SelectQuote TermLife v1",
     score: "Assumptive Close",
     time: "1d ago",
@@ -225,12 +225,12 @@ export default function ActivityDashboard() {
 
   const renderActivityIcon = (type: string) => {
     switch (type) {
-      case "Experiment Completed":
-      case "Experiment Started":
+      case "Experiment completed":
+      case "Experiment started":
         return <FlaskConical className="h-5 w-5" />
-      case "Optimization Started":
+      case "Optimization started":
         return <Sparkles className="h-5 w-5" />
-      case "Score Updated":
+      case "Score updated":
         return <ListTodo className="h-5 w-5" />
       case "Alert":
         return <Siren className="h-5 w-5 text-red-500" />
@@ -245,8 +245,8 @@ export default function ActivityDashboard() {
     if (!activity.data) return null
 
     switch (activity.type) {
-      case "Experiment Completed":
-      case "Experiment Started":
+      case "Experiment completed":
+      case "Experiment started":
         return (
           <ChartContainer config={chartConfig} className="h-[120px] w-[120px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -271,8 +271,8 @@ export default function ActivityDashboard() {
             </ResponsiveContainer>
           </ChartContainer>
         )
-      case "Optimization Started":
-      case "Score Updated":
+      case "Optimization started":
+      case "Score updated":
         return (
           <div className="flex space-x-4">
             <div className="text-center">
@@ -452,7 +452,7 @@ export default function ActivityDashboard() {
                 <div className="flex justify-between items-start">
                   <div className="space-y-1 w-full">
                     <div className="text-lg font-bold mt-2">
-                      {activity.type === "Score Updated" || activity.type === "Optimization Started" ? (
+                      {activity.type === "Score updated" || activity.type === "Optimization started" ? (
                         <div>
                           <div className="flex items-center">
                             <span>{activity.data?.before?.innerRing[0]?.value ?? 0}%</span>
@@ -463,7 +463,7 @@ export default function ActivityDashboard() {
                             Accuracy
                           </div>
                         </div>
-                      ) : activity.type === "Experiment Completed" || activity.type === "Experiment Started" ? (
+                      ) : activity.type === "Experiment completed" || activity.type === "Experiment started" ? (
                         <div>
                           <div>{activity.summary}</div>
                           <div className="text-sm text-muted-foreground">
@@ -491,7 +491,7 @@ export default function ActivityDashboard() {
                     {renderVisualization(activity)}
                   </div>
                 </div>
-                {(activity.type === "Optimization Started" || activity.type === "Experiment Started") && activity.data && (
+                {(activity.type === "Optimization started" || activity.type === "Experiment started") && activity.data && (
                   <div className="mt-4">
                     <div className="text-sm font-medium mb-1">Progress: {activity.data.progress}%</div>
                     <div className="relative">
