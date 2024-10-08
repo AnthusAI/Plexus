@@ -1,38 +1,39 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 @layer base {
   :root {
-    --background: 224 42% 100%;
-    --foreground: 224 69% 3%;
-    --muted: 344 7% 89%;
-    --muted-foreground: 344 12% 29%;
-    --popover: 224 42% 100%;
-    --popover-foreground: 224 69% 3%;
+    --background: 0 0% 100%;
+    --foreground: 224 69% 12%;
+    --muted: 220 14% 94%;
+    --muted-foreground: 224 20% 40%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 69% 12%;
     --card: 210 50% 97%;
-    --card-foreground: 224 69% 2%;
-    --border: 224 11% 85%;
-    --input: 224 11% 95%;
-    --primary: 224 92% 65%;
+    --card-foreground: 224 69% 12%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --primary: 210 100% 56%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 330 92% 65%;
-    --secondary-foreground: 330 0% 100%;
-    --accent: 224.27 92.13% 65.1%;
-    --accent-foreground: 104 0% 100%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 8 0% 100%;
-    --ring: 224 92% 65%;
+    --secondary: 328 100% 42%;
+    --secondary-foreground: 0 0% 100%;
+    --accent: 330 100% 71%;
+    --accent-foreground: 224 69% 12%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --ring: 210 100% 56%;
     --radius: 0.5rem;
     --light-blue-bg: 210 50% 95%;
-    --chart-primary: 224 50% 60%;
-    --chart-secondary: 330 63% 55%;
-    --chart-accent: 224 50% 60%;
+    --chart-primary: 210 70% 50%;
+    --chart-secondary: 328 70% 50%;
+    --chart-accent: 330 70% 50%;
   }
 
   .dark {
-    --background: 240 32.47% 15.1%;
+    --background: 240 32% 15%;
     --foreground: 224 10% 98%;
-    --muted: 217.2 20.32% 36.44%;
+    --muted: 217 20% 36%;
     --muted-foreground: 330 0% 70%;
     --popover: 224 51% 0%;
     --popover-foreground: 224 10% 98%;
@@ -40,19 +41,19 @@
     --card-foreground: 224 10% 99%;
     --border: 215 28% 17%;
     --input: 215 28% 17%;
-    --primary: 224 92% 65%;
+    --primary: 213 94% 68%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 330 92% 65%;
-    --secondary-foreground: 344 0% 100%;
-    --accent: 224.27 92.13% 65.1%;
-    --accent-foreground: 104 0% 100%;
-    --destructive: 0 82% 60%;
+    --secondary: 330 81% 60%;
+    --secondary-foreground: 0 0% 100%;
+    --accent: 316 73% 64%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --ring: 224.27 92.13% 65.1%;
+    --ring: 213 94% 68%;
     --light-blue-bg: 210 50% 15%;
-    --chart-primary: 224 30% 40%;
-    --chart-secondary: 344 30% 40%;
-    --chart-accent: 224 30% 40%;
+    --chart-primary: 213 94% 68%;
+    --chart-secondary: 330 81% 60%;
+    --chart-accent: 316 73% 64%;
   }
 }
 
