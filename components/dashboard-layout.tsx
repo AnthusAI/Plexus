@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { AudioLines, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, Settings, Zap, Siren } from "lucide-react"
+import { Activity, AudioLines, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, Settings, Sparkles, Siren, Database } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
@@ -56,12 +56,14 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   const pathname = usePathname()
 
   const menuItems = [
+    { name: "Activity", icon: Activity, path: "/" },
     { name: "Items", icon: AudioLines, path: "/items" },
     { name: "Alerts", icon: Siren, path: "/alerts" },
     { name: "Reports", icon: FileBarChart, path: "/reports" },
     { name: "Scorecards", icon: ListTodo, path: "/scorecards" },
     { name: "Experiments", icon: FlaskConical, path: "/experiments" },
-    { name: "Optimizations", icon: Zap, path: "/optimizations" },
+    { name: "Optimizations", icon: Sparkles, path: "/optimizations" },
+    { name: "Data Profiling", icon: Database, path: "/data-profiling" },
     { name: "Settings", icon: Settings, path: "/settings" },
   ]
 
