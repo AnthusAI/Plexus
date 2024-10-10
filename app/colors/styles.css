@@ -1,0 +1,77 @@
+body {
+  font-family: Arial, sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  margin: 0;
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+}
+
+.mode {
+  width: 400px;
+  background-color: var(--card);
+}
+
+.color-row {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+}
+
+.color-name {
+  font-weight: bold;
+}
+
+h2 {
+  text-align: center;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  margin: 0;
+  padding: 10px;
+}
+
+.mode-toggle {
+  margin-bottom: 20px;
+  padding: 10px 20px;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.mode-toggle:hover {
+  background-color: var(--secondary);
+}
+
+.color-columns {
+  display: flex;
+  justify-content: space-between;
+  width: 100%; /* Make the columns span the full width */
+}
+
+.color-column {
+  flex: 1;
+  margin: 0 10px; /* Adjust spacing as needed */
+  min-width: 150px; /* Set a minimum width to prevent wrapping */
+  max-width: 33%; /* Ensure each column takes up a third of the space */
+}
+
+.mode-header {
+  width: 100%; /* Make the header span across all columns */
+  text-align: center;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  margin: 0 0 20px 0; /* Add bottom margin to create space below the header */
+  padding: 10px;
+}

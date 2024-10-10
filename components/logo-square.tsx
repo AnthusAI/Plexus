@@ -7,10 +7,10 @@ enum LogoVariant {
 }
 
 const gradientColors = [
-  { position: 0, color: '#85cefa' },
-  { position: 0.12, color: '#0389d7' },
-  { position: 0.55, color: '#d03382' },
-  { position: 1, color: '#85cefa' },
+  { position: 0, color: '#5EB1EF' },
+  { position: 0.12, color: '#0D74CE' },
+  { position: 0.55, color: '#C2298A' },
+  { position: 1, color: '#5EB1EF' },
 ];
 
 const getColorAtPosition = (position: number): string => {
@@ -139,7 +139,7 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
     fontFamily: "'Jersey 20', sans-serif",
     fontSize: fontSize,
     fontWeight: 400,
-    color: 'white',
+    color: 'var(--muted)',
     position: 'absolute' as const,
     top: '50%',
     left: '50%',
@@ -174,7 +174,7 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
             <span 
               key={letter} 
               style={{ 
-                ...letterStyle, 
+                ...letterStyle,
                 left: `${((index + 0.53) * 100) / columns}%`,
                 top: variant === LogoVariant.Square ? '50%' : '50%',
                 width: `${100 / columns}%`,
