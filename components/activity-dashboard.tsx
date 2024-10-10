@@ -66,12 +66,12 @@ const recentActivities = [
     data: {
       progress: 47,
       outerRing: [
-        { category: "Positive", value: 50, fill: "#4ade80" },
-        { category: "Negative", value: 50, fill: "#f87171" },
+        { category: "Positive", value: 50, fill: "var(--true)" },
+        { category: "Negative", value: 50, fill: "var(--false)" },
       ],
       innerRing: [
-        { category: "Positive", value: 89, fill: "#4ade80" },
-        { category: "Negative", value: 11, fill: "#f87171" },
+        { category: "Positive", value: 89, fill: "var(--true)" },
+        { category: "Negative", value: 11, fill: "var(--false)" },
       ],
     },
   },
@@ -103,22 +103,22 @@ const recentActivities = [
       progress: 92,
       before: {
         outerRing: [
-          { category: "Positive", value: 50, fill: "#4ade80" },
-          { category: "Negative", value: 50, fill: "#f87171" },
+          { category: "Positive", value: 50, fill: "var(--true)" },
+          { category: "Negative", value: 50, fill: "var(--false)" },
         ],
         innerRing: [
-          { category: "Positive", value: 75, fill: "#4ade80" },
-          { category: "Negative", value: 25, fill: "#f87171" },
+          { category: "Positive", value: 75, fill: "var(--true)" },
+          { category: "Negative", value: 25, fill: "var(--false)" },
         ],
       },
       after: {
         outerRing: [
-          { category: "Positive", value: 50, fill: "#4ade80" },
-          { category: "Negative", value: 50, fill: "#f87171" },
+          { category: "Positive", value: 50, fill: "var(--true)" },
+          { category: "Negative", value: 50, fill: "var(--false)" },
         ],
         innerRing: [
-          { category: "Positive", value: 92, fill: "#4ade80" },
-          { category: "Negative", value: 8, fill: "#f87171" },
+          { category: "Positive", value: 92, fill: "var(--true)" },
+          { category: "Negative", value: 8, fill: "var(--false)" },
         ],
       },
     },
@@ -132,12 +132,12 @@ const recentActivities = [
     summary: "94% / 100",
     data: {
       outerRing: [
-        { category: "Positive", value: 50, fill: "#4ade80" },
-        { category: "Negative", value: 50, fill: "#f87171" },
+        { category: "Positive", value: 50, fill: "var(--true)" },
+        { category: "Negative", value: 50, fill: "var(--false)" },
       ],
       innerRing: [
-        { category: "Positive", value: 94, fill: "#4ade80" },
-        { category: "Negative", value: 6, fill: "#f87171" },
+        { category: "Positive", value: 94, fill: "var(--true)" },
+        { category: "Negative", value: 6, fill: "var(--false)" },
       ],
     },
   },
@@ -151,22 +151,22 @@ const recentActivities = [
     data: {
       before: {
         outerRing: [
-          { category: "Positive", value: 50, fill: "#4ade80" },
-          { category: "Negative", value: 50, fill: "#f87171" },
+          { category: "Positive", value: 50, fill: "var(--true)" },
+          { category: "Negative", value: 50, fill: "var(--false)" },
         ],
         innerRing: [
-          { category: "Positive", value: 75, fill: "#4ade80" },
-          { category: "Negative", value: 25, fill: "#f87171" },
+          { category: "Positive", value: 75, fill: "var(--true)" },
+          { category: "Negative", value: 25, fill: "var(--false)" },
         ],
       },
       after: {
         outerRing: [
-          { category: "Positive", value: 50, fill: "#4ade80" },
-          { category: "Negative", value: 50, fill: "#f87171" },
+          { category: "Positive", value: 50, fill: "var(--true)" },
+          { category: "Negative", value: 50, fill: "var(--false)" },
         ],
         innerRing: [
-          { category: "Positive", value: 82, fill: "#4ade80" },
-          { category: "Negative", value: 18, fill: "#f87171" },
+          { category: "Positive", value: 82, fill: "var(--true)" },
+          { category: "Negative", value: 18, fill: "var(--false)" },
         ],
       },
     },
@@ -174,11 +174,11 @@ const recentActivities = [
 ]
 
 const chartConfig = {
-  scored: { label: "Scored", color: "hsl(var(--chart-primary))" },
-  experiments: { label: "Experiments", color: "hsl(var(--chart-secondary))" },
-  optimizations: { label: "Optimizations", color: "hsl(var(--chart-accent))" },
-  positive: { label: "Positive", color: "#4ade80" },
-  negative: { label: "Negative", color: "#f87171" },
+  scored: { label: "Scored", color: "var(--chart-1)" },
+  experiments: { label: "Experiments", color: "var(--chart-2)" },
+  optimizations: { label: "Optimizations", color: "var(--chart-3)" },
+  positive: { label: "Positive", color: "var(--true)" },
+  negative: { label: "Negative", color: "var(--false)" },
 }
 
 interface BarData {
@@ -233,7 +233,7 @@ export default function ActivityDashboard() {
       case "Score updated":
         return <ListTodo className="h-5 w-5" />
       case "Alert":
-        return <Siren className="h-5 w-5 text-red-500" />
+        return <Siren className="h-5 w-5 text-destructive" />
       case "Report":
         return <FileText className="h-5 w-5" />
       default:
@@ -257,7 +257,7 @@ export default function ActivityDashboard() {
                   dataKey="value"
                   nameKey="category"
                   outerRadius={40}
-                  fill="#8884d8"
+                  fill="var(--true)"
                 />
                 <Pie
                   data={activity.data.outerRing}
@@ -265,7 +265,7 @@ export default function ActivityDashboard() {
                   nameKey="category"
                   innerRadius={45}
                   outerRadius={55}
-                  fill="#82ca9d"
+                  fill="var(--chart-2)"
                 />
               </PieChart>
             </ResponsiveContainer>
@@ -286,7 +286,7 @@ export default function ActivityDashboard() {
                       dataKey="value"
                       nameKey="category"
                       outerRadius={30}
-                      fill="#8884d8"
+                      fill="var(--chart-1)"
                     />
                     <Pie
                       data={activity.data.before.outerRing}
@@ -294,7 +294,7 @@ export default function ActivityDashboard() {
                       nameKey="category"
                       innerRadius={35}
                       outerRadius={40}
-                      fill="#82ca9d"
+                      fill="var(--chart-2)"
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -311,7 +311,7 @@ export default function ActivityDashboard() {
                       dataKey="value"
                       nameKey="category"
                       outerRadius={30}
-                      fill="#8884d8"
+                      fill="var(--chart-1)"
                     />
                     <Pie
                       data={activity.data.after.outerRing}
@@ -319,7 +319,7 @@ export default function ActivityDashboard() {
                       nameKey="category"
                       innerRadius={35}
                       outerRadius={40}
-                      fill="#82ca9d"
+                      fill="var(--chart-2)"
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -370,7 +370,7 @@ export default function ActivityDashboard() {
               key={range}
               variant={range === "1w" ? "secondary" : "outline"}
               size="sm"
-              className={`border ${range === "1w" ? "border-primary" : "border-secondary"}`}
+              className={`border-primary ${range === "1w" ? "border-secondary" : "border-primary"}`}
             >
               {range}
             </Button>
@@ -389,21 +389,21 @@ export default function ActivityDashboard() {
                 <Bar
                   dataKey="scored"
                   stackId="a"
-                  fill="hsl(var(--chart-primary))"
+                  fill="var(--chart-1)"
                   onClick={handleBarClick}
                   cursor="pointer"
                 />
                 <Bar
                   dataKey="experiments"
                   stackId="a"
-                  fill="hsl(var(--chart-secondary))"
+                  fill="var(--chart-2)"
                   onClick={handleBarClick}
                   cursor="pointer"
                 />
                 <Bar
                   dataKey="optimizations"
                   stackId="a"
-                  fill="hsl(var(--chart-accent))"
+                  fill="var(--chart-3)"
                   onClick={handleBarClick}
                   cursor="pointer"
                 />
@@ -414,7 +414,7 @@ export default function ActivityDashboard() {
       </Card>
 
       <div>
-        <h2 className="text-2xl font-semibold mb-4">Recent Activity</h2>
+        <h2 className="text-2xl font-semibold mb-4">Recent Updates</h2>
         <div className="grid gap-4 md:grid-cols-2">
           {sortedActivities.slice((currentPage - 1) * activitiesPerPage, currentPage * activitiesPerPage).map((activity) => (
             <Card key={activity.id} className="relative">

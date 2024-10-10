@@ -72,12 +72,14 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   const accounts = [
     { name: "Call Criteria", avatar: "/avatar1.png", initials: "CC" },
     { name: "Legal Leads", avatar: "/avatar2.png", initials: "LL" },
-    { name: "Multispectral", avatar: "/avatar3.png", initials: "MS" },
+    { name: "Snap, Inc", avatar: "/avatar4.png", initials: "SN" },
+    { name: "HuggingFace", avatar: "/avatar5.png", initials: "HF" },
+    { name: "MATRE", avatar: "/avatar3.png", initials: "M" },
   ]
 
   const Sidebar = () => (
-    <div className="flex flex-col h-full py-2 bg-[hsl(var(--light-blue-bg))]">
-      <div className={`mb-4 ${isSidebarOpen ? 'px-3' : 'px-3'}`}>
+    <div className="flex flex-col h-full py-2 bg-muted">
+      <div className={`mb-4 ${isSidebarOpen ? 'pl-2' : 'pl-3 pr-3'}`}>
         <Link href="/" className={`block ${isSidebarOpen ? 'w-full max-w-md' : 'w-8'}`}>
           {isSidebarOpen ? (
             <SquareLogo variant={LogoVariant.Wide} />
@@ -88,7 +90,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
       </div>
 
       <ScrollArea className="flex-grow overflow-y-auto">
-        <div className={`space-y-1 ${isSidebarOpen ? 'px-3' : 'px-3'}`}>
+        <div className={`space-y-1 ${isSidebarOpen ? 'pl-2' : 'px-3'}`}>
           {menuItems.map((item) => (
             <TooltipProvider key={item.name}>
               <Tooltip>
@@ -96,16 +98,16 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   <Link href={item.path} passHref>
                     <Button
                       variant={pathname === item.path ? "secondary" : "ghost"}
-                      className={`w-full justify-start ${
+                      className={`w-full justify-start group ${
                         pathname === item.path
                           ? "bg-secondary text-secondary-foreground"
                           : ""
                       } ${isSidebarOpen ? '' : 'px-2'}`}
                     >
-                      <item.icon className={`h-4 w-4 ${
+                      <item.icon className={`h-4 w-4 group-hover:text-accent-foreground ${
                         isSidebarOpen ? 'mr-2' : ''
                       } flex-shrink-0 ${
-                        pathname === item.path ? 'text-secondary-foreground' : ''
+                        pathname === item.path ? 'text-secondary-foreground' : 'text-secondary'
                       }`} />
                       {isSidebarOpen && (
                         <span className={pathname === item.path ? 'font-semibold' : ''}>
@@ -129,10 +131,10 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="p-2"
+                  className="p-2 group"
                   onClick={toggleSidebar}
                 >
-                  <PanelLeft className="h-4 w-4 flex-shrink-0" />
+                  <PanelLeft className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="right">
@@ -147,13 +149,13 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
-                    className="p-2 ml-2"
+                    className="p-2 group"
                     onClick={toggleTheme}
                   >
                     {theme === "dark" ? (
-                      <Sun className="h-4 w-4 flex-shrink-0" />
+                      <Sun className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
                     ) : (
-                      <Moon className="h-4 w-4 flex-shrink-0" />
+                      <Moon className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
                     )}
                   </Button>
                 </TooltipTrigger>
@@ -167,7 +169,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className={`w-full justify-start ${isSidebarOpen ? 'px-2' : 'px-0'}`}>
+            <Button variant="ghost" className={`w-full justify-start px-0`}>
               <Avatar className={`h-8 w-8 ${isSidebarOpen ? 'mr-2' : ''}`}>
                 <AvatarImage src={accounts[0].avatar} alt={accounts[0].name} />
                 <AvatarFallback>{accounts[0].initials}</AvatarFallback>
@@ -192,12 +194,12 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className={`w-full justify-start ${isSidebarOpen ? 'px-2' : 'px-0'}`}>
+            <Button variant="ghost" className={`w-full justify-start px-0`}>
               <Avatar className={`h-8 w-8 ${isSidebarOpen ? 'mr-2' : ''}`}>
                 <AvatarImage src="/user-avatar.png" alt="User avatar" />
                 <AvatarFallback>RP</AvatarFallback>
               </Avatar>
-              {isSidebarOpen && <span>Ryan P</span>}
+              {isSidebarOpen && <span>Ryan Porter</span>}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -221,11 +223,11 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   return (
     <div className="flex flex-col min-h-screen">
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden bg-muted">
         <aside
           className={`
             fixed top-0 bottom-0 left-0 h-full
-            ${isSidebarOpen ? (isMobile ? 'w-14' : 'w-48') : (isMobile ? 'w-0' : 'w-14')}
+            ${isSidebarOpen ? (isMobile ? 'w-14' : 'w-40') : (isMobile ? 'w-0' : 'w-14')}
             transition-all duration-300 ease-in-out overflow-hidden
             ${isMobile && !isSidebarOpen ? 'hidden' : ''}
           `}
@@ -234,7 +236,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         </aside>
         <main 
           className={`flex-1 overflow-y-auto transition-all duration-300 ease-in-out
-            ${isMobile && !isSidebarOpen ? 'ml-0' : (isSidebarOpen ? 'ml-48' : 'ml-14')}
+            ${isMobile && !isSidebarOpen ? 'ml-0' : (isSidebarOpen ? 'ml-40' : 'ml-14')}
             ${isSidebarOpen ? 'p-2' : 'pl-0 pr-2 pt-2 pb-2'}
           `}
         >
@@ -248,5 +250,4 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     </div>
   )
 }
-
 export default DashboardLayout

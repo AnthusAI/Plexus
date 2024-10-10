@@ -2,74 +2,83 @@
 @tailwind components;
 @tailwind utilities;
 
+@import "hsl-radix-colors/mauve.css";
+@import "hsl-radix-colors/blue.css";
+@import "hsl-radix-colors/pink.css";
+@import "hsl-radix-colors/violet.css";
+@import "hsl-radix-colors/crimson.css";
+@import "hsl-radix-colors/purple.css";
+@import "hsl-radix-colors/iris.css";
+@import "hsl-radix-colors/plum.css";
+@import "hsl-radix-colors/green.css";
+@import "hsl-radix-colors/red.css";
+@import "hsl-radix-colors/indigo.css";
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 224 69% 12%;
-    --muted: 220 14% 94%;
-    --muted-foreground: 224 20% 40%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 224 69% 12%;
-    --card: 210 50% 97%;
-    --card-foreground: 224 69% 12%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --primary: 210 100% 56%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 328 100% 42%;
-    --secondary-foreground: 0 0% 100%;
-    --accent: 280 75% 55%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --ring: 210 100% 56%;
+    --background: hsl(var(--mauve-1));
+    --foreground: hsl(var(--mauve-11));
+    --muted: hsl(var(--mauve-4));
+    --muted-foreground: hsl(var(--mauve-11));
+    --popover: hsl(var(--mauve-1));
+    --popover-foreground: hsl(var(--mauve-12));
+    --card: hsl(var(--mauve-2));
+    --card-foreground: hsl(var(--mauve-12));
+    --border: hsl(var(--mauve-6));
+    --input: hsl(var(--mauve-6));
+    --primary: hsl(var(--blue-8));
+    --primary-foreground: hsl(var(--mauve-1));
+    --secondary: hsl(var(--plum-8));
+    --secondary-foreground: hsl(var(--mauve-1));
+    --accent: hsl(var(--violet-8));
+    --accent-foreground: hsl(var(--mauve-1));
+    --destructive: hsl(var(--red-8));
+    --destructive-foreground: hsl(var(--mauve-1));
+    --ring: hsl(var(--blue-7));
     --radius: 0.5rem;
-    --light-blue-bg: 210 50% 95%;
-    --chart-primary: 210 70% 50%;
-    --chart-secondary: 328 70% 50%;
-    --chart-accent: 280 55% 50%;
+    --chart-1: hsl(var(--blue-9));
+    --chart-2: hsl(var(--pink-9));
+    --chart-3: hsl(var(--indigo-9));
+    --chart-4: hsl(var(--plum-9));
+    --chart-5: hsl(var(--violet-9));
+    --chart-6: hsl(var(--crimson-9));
+    --chart-7: hsl(var(--purple-9));
+    --true: hsl(var(--green-9));
+    --false: hsl(var(--red-9));
+    --neutral: hsl(var(--mauve-8));
   }
 
   .dark {
-    --background: 240 32% 15%;
-    --foreground: 224 10% 98%;
-    --muted: 217 20% 36%;
-    --muted-foreground: 330 0% 70%;
-    --popover: 224 51% 0%;
-    --popover-foreground: 224 10% 98%;
-    --card: 0 0% 1%;
-    --card-foreground: 224 10% 99%;
-    --border: 215 28% 17%;
-    --input: 215 28% 17%;
-    --primary: 213 94% 68%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 330 81% 60%;
-    --secondary-foreground: 0 0% 100%;
-    --accent: 280 73% 64%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --ring: 213 94% 68%;
-    --light-blue-bg: 210 50% 15%;
-    --chart-primary: 213 94% 68%;
-    --chart-secondary: 330 81% 60%;
-    --chart-accent: 280 73% 64%;
+    --background: hsl(var(--mauve-1));
+    --foreground: hsl(var(--mauve-11));
+    --muted: hsl(var(--mauve-3));
+    --muted-foreground: hsl(var(--mauve-11));
+    --popover: hsl(var(--mauve-3));
+    --popover-foreground: hsl(var(--mauve-12));
+    --card: hsl(var(--mauve-2));
+    --card-foreground: hsl(var(--mauve-12));
+    --border: hsl(var(--mauve-6));
+    --input: hsl(var(--mauve-6));
+    --primary: hsl(var(--blue-8));
+    --primary-foreground: hsl(var(--mauve-12));
+    --secondary: hsl(var(--pink-8));
+    --secondary-foreground: hsl(var(--mauve-12));
+    --accent: hsl(var(--violet-8));
+    --accent-foreground: hsl(var(--mauve-12));
+    --destructive: hsl(var(--red-8));
+    --destructive-foreground: hsl(var(--mauve-1));
+    --ring: hsl(var(--blue-7));
+    --chart-1: hsl(var(--blue-9));
+    --chart-2: hsl(var(--pink-9));
+    --chart-3: hsl(var(--indigo-9));
+    --chart-4: hsl(var(--plum-9));
+    --chart-5: hsl(var(--violet-9));
+    --chart-6: hsl(var(--crimson-9));
+    --chart-7: hsl(var(--purple-9));
+    --true: hsl(var(--green-9));
+    --false: hsl(var(--red-9));
+    --neutral: hsl(var(--mauve-8));
   }
-}
-
-[data-amplify-authenticator] {
-  --amplify-components-authenticator-router-box-shadow: none;
-  --amplify-components-authenticator-router-border-width: 2px;
-  --amplify-components-authenticator-form-padding: 1rem 2rem;
-  --amplify-components-button-primary-background-color: hsl(var(--primary));
-  --amplify-components-button-primary-foreground-color: hsl(var(--primary-foreground));
-  --amplify-components-button-primary-color: hsl(var(--primary-foreground));
-  --amplify-components-button-primary-hover-background-color: hsl(var(--secondary));
-  --amplify-components-fieldcontrol-focus-box-shadow: 0 0 0 2px hsl(var(--secondary));
-  --amplify-components-tabs-item-active-border-color: hsl(var(--secondary));
-  --amplify-components-tabs-item-color: hsl(var(--muted-foreground));
-  --amplify-components-tabs-item-active-color: hsl(var(--secondary-background));
-  --amplify-components-button-link-color: hsl(var(--accent-foreground));
 }
 
 @layer base {
@@ -77,6 +86,21 @@
     @apply border-border;
   }
   body {
-    @apply bg-[hsl(var(--light-blue-bg))];
+    @apply bg-background text-foreground;
   }
+}
+
+[data-amplify-authenticator] {
+  --amplify-components-authenticator-router-box-shadow: none;
+  --amplify-components-authenticator-router-border-width: 2px;
+  --amplify-components-authenticator-form-padding: 1rem 2rem;
+  --amplify-components-button-primary-background-color: hsl(var(--blue-8));
+  --amplify-components-button-primary-foreground-color: hsl(var(--mauve-1));
+  --amplify-components-button-primary-color: hsl(var(--mauve-1));
+  --amplify-components-button-primary-hover-background-color: hsl(var(--pink-8));
+  --amplify-components-fieldcontrol-focus-box-shadow: 0 0 0 2px hsl(var(--pink-8));
+  --amplify-components-tabs-item-active-border-color: hsl(var(--pink-8));
+  --amplify-components-tabs-item-color: hsl(var(--mauve-11));
+  --amplify-components-tabs-item-active-color: hsl(var(--pink-8));
+  --amplify-components-button-link-color: hsl(var(--violet-11));
 }
