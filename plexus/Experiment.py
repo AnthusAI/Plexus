@@ -626,7 +626,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 score_result = next((result for result in result['results'].values() if result.parameters.name == question), None)
                 match = score_result.metadata['correct']
                 records.append({
-                    'session_id': result['session_id'],
+                    'report_id': result['session_id'],
                     'form_id': result['form_id'],
                     'question_name': question,
                     'human_label': score_result.metadata['human_label'],
