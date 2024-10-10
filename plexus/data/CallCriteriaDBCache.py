@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from sqlalchemy import create_engine, select, func
+from sqlalchemy import create_engine, select, func, text
 from sqlalchemy.orm import sessionmaker
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 import json
 from rich.progress import Progress, TimeElapsedColumn, TimeRemainingColumn
 from datetime import datetime
+import hashlib
 
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -130,6 +131,7 @@ class CallCriteriaDBCache(DataCache):
             f"{search.get('column_name', 'no_column')}_"
             f"{search.get('metadata_item', 'no_metadata')}_"
             f"{search.get('scorecard_id', 'no_scorecard')}"
+            f"{search.get('score_id', 'no_score_id')}"
             for search in searches
         ]
         return "_".join(search_identifiers) or "default"
@@ -260,13 +262,6 @@ class CallCriteriaDBCache(DataCache):
             
             return result
 
-    def generate_unique_query_identifier(self, queries):
-        query_strings = [
-            "_".join(f"{key}_{value}" for key, value in query.items())
-            for query in queries
-        ]
-        return "_".join(sorted(query_strings))
-
     def load_from_queries(self, data, fresh=False):
         queries = data.get('queries', [])
         unique_identifier = self.generate_unique_query_identifier(queries)
@@ -275,24 +270,73 @@ class CallCriteriaDBCache(DataCache):
             return self.load_from_cache(unique_identifier)
         
         all_results = []
-        with DB.get_session() as session:
-            for query in queries:
+        engine = DB.get_engine()
+        SessionFactory = sessionmaker(bind=engine)
+        
+        for query in queries:
+            if 'query' in query:
+                logging.info(f"Executing custom query: {query['query']}")
+                with SessionFactory() as session:
+                    query_results = self.execute_custom_query(query, session)
+            else:
+                logging.info(f"Executing standard query with parameters: {query}")
                 scorecard_id = query['scorecard_id']
                 number = query['number']
-                query_results = self.fetch_data_from_db(query, scorecard_id, number)
-                
-                with ThreadPoolExecutor(max_workers=self.thread_count) as executor:
-                    futures = [executor.submit(self.process_report, row, session) for row in query_results]
-                    for future in as_completed(futures):
-                        result = future.result()
-                        if result is not None:
-                            all_results.append(result)
+                with SessionFactory() as session:
+                    query_results = self.fetch_data_from_db(query, scorecard_id, number)
+            
+            logging.info(f"Query returned {len(query_results)} results")
+            
+            with ThreadPoolExecutor(max_workers=self.thread_count) as executor:
+                futures = [executor.submit(self.process_report, row, SessionFactory) for row in query_results]
+                for future in as_completed(futures):
+                    result = future.result()
+                    if result is not None:
+                        all_results.append(result)
         
         df = pd.DataFrame(all_results)
         
         self.save_to_cache(df, unique_identifier)
         
         return df
+
+    def execute_custom_query(self, query_config, session):
+        query_template = query_config['query']
+        params = {k: v for k, v in query_config.items() if k != 'query'}
+        
+        # Ensure the query selects scorecard_id
+        if 'scorecard_id' not in query_template.lower():
+            query_template = query_template.replace("SELECT TOP", "SELECT TOP {number} a.scorecard,")
+        
+        sql = text(query_template.format(**params))
+        
+        logging.info(f"Executing custom SQL: {sql}")
+        
+        result = session.execute(sql)
+        
+        # Fetch the results and create a list of dictionaries
+        columns = result.keys()
+        results = [dict(zip(columns, row)) for row in result.fetchall()]
+        
+        logging.info(f"Custom query returned {len(results)} results")
+        if results:
+            logging.info(f"First result: {results[0]}")
+        
+        return results
+
+    def generate_unique_query_identifier(self, queries):
+        query_strings = []
+        for query in queries:
+            if 'query' in query:
+                # For custom queries, use a hash of the query and other parameters
+                query_str = f"custom_{query.get('scorecard_id', '')}_{query.get('number', '')}"
+                query_hash = hashlib.md5(query['query'].encode()).hexdigest()[:8]
+                query_str += f"_{query_hash}"
+            else:
+                # For standard queries, use the existing method
+                query_str = "_".join(f"{key}_{value}" for key, value in query.items())
+            query_strings.append(query_str)
+        return "_".join(sorted(query_strings))
 
     def get_report_metadata(self, scorecard_id, report_id):
         metadata_file_path = self._get_metadata_file_path(scorecard_id, report_id)
@@ -338,11 +382,10 @@ class CallCriteriaDBCache(DataCache):
     def store_report_metadata(self, scorecard_id, report_id, report_dict):
         logging.debug(f"Storing metadata for scorecard_id={scorecard_id}, report_id={report_id}")
         with DB.get_session() as session:
-
             report_obj = session.query(Report).get(report_id)
             if not report_obj:
                 logging.error(f"Report with id {report_id} not found in database")
-                return
+                return None
 
             results_data = report_obj.results()
 
@@ -444,37 +487,62 @@ class CallCriteriaDBCache(DataCache):
             'transcript.json'
         )
 
-    def process_report(self, report, session):
-        scorecard_id = report.scorecard_id
-        content_id = report.content_id
+    def process_report(self, report, session_factory):
+        if isinstance(report, dict):
+            scorecard_id = report.get('scorecard_id')
+            f_id = report.get('f_id')
+        else:
+            scorecard_id = report.scorecard_id
+            f_id = report.f_id
 
-        if not scorecard_id or not content_id:
-            logging.error(f"Missing scorecard_id or content_id for report {report}")
+        if not scorecard_id or not f_id:
+            logging.error(f"Missing scorecard_id or f_id for report {report}")
             return None
 
-        with ThreadPoolExecutor() as executor:
-            metadata_future = executor.submit(self.get_report_metadata, scorecard_id, content_id)
-            transcript_future = executor.submit(self.get_report_transcript_text, scorecard_id, content_id)
+        # Create a new session for this report processing
+        with session_factory() as session:
+            # Fetch the Report object using f_id
+            vw_form = session.query(VWForm).filter(VWForm.f_id == f_id).first()
+            if not vw_form:
+                logging.error(f"VWForm with f_id {f_id} not found in database")
+                return None
 
-            metadata = metadata_future.result()
-            transcript_text = transcript_future.result()
+            content_id = vw_form.review_id
 
-        if not metadata:
-            report_dict = report._asdict()
-            metadata = self.store_report_metadata(scorecard_id, content_id, report_dict)
+            with ThreadPoolExecutor() as executor:
+                metadata_future = executor.submit(self.get_report_metadata, scorecard_id, content_id)
+                transcript_future = executor.submit(self.get_report_transcript_text, scorecard_id, content_id)
+
+                metadata = metadata_future.result()
+                transcript_text = transcript_future.result()
+
             if not metadata:
-                return None
+                report_obj = session.query(Report).get(content_id)
+                if not report_obj:
+                    logging.error(f"Report with id {content_id} not found in database")
+                    return None
+                report_dict = {
+                    'scorecard_id': scorecard_id,
+                    'content_id': content_id,
+                    'form_id': f_id,
+                    'session_id': vw_form.session_id,
+                    'date': report_obj.date,
+                    'media_id': report_obj.media_id,
+                }
+                metadata = self.store_report_metadata(scorecard_id, content_id, report_dict)
+                if not metadata:
+                    return None
 
-        if not transcript_text:
-            transcript_text = self.fetch_and_store_transcript(scorecard_id, content_id, session)
             if not transcript_text:
-                logging.error(f"Failed to retrieve transcript for scorecard_id={scorecard_id}, content_id={content_id}")
-                return None
+                transcript_text = self.fetch_and_store_transcript(scorecard_id, content_id, session)
+                if not transcript_text:
+                    logging.error(f"Failed to retrieve transcript for scorecard_id={scorecard_id}, content_id={content_id}")
+                    return None
 
         result = {
             "scorecard_id": scorecard_id,
             "content_id": content_id,
-            "form_id": metadata.get('form_id'),
+            "form_id": f_id,
             "text": transcript_text
         }
 
