@@ -491,14 +491,14 @@ class CallCriteriaDBCache(DataCache):
             f_id = report.get('f_id')
         else:
             scorecard_id = report.scorecard_id
-            f_id = report.f_id
+            f_id = getattr(report, 'f_id', None) or getattr(report, 'form_id', None)
 
         if not scorecard_id or not f_id:
             logging.error(f"Missing scorecard_id or f_id for report {report}")
             return None
 
         # Create a new session for this report processing
-        with session_factory() as session:
+        with DB.get_session() as session:
             # Fetch the Report object using f_id
             vw_form = session.query(VWForm).filter(VWForm.f_id == f_id).first()
             if not vw_form:
