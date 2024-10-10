@@ -127,11 +127,9 @@ class CallCriteriaDBCache(DataCache):
 
     def generate_unique_search_identifier(self, searches):
         search_identifiers = [
-            f"{os.path.basename(search.get('item_list_filename', 'no_filename'))}_"
-            f"{search.get('column_name', 'no_column')}_"
-            f"{search.get('metadata_item', 'no_metadata')}_"
-            f"{search.get('scorecard_id', 'no_scorecard')}"
-            f"{search.get('score_id', 'no_score_id')}"
+            f"{search.get('scorecard_id', 'no_scorecard')}_"
+            f"{search.get('score_id', 'no_score_id')}_"
+            f"{os.path.basename(search.get('item_list_filename', 'no_filename')).replace('.', '_')}"
             for search in searches
         ]
         return "_".join(search_identifiers) or "default"
