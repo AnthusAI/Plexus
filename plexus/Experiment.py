@@ -50,7 +50,7 @@ class Experiment:
         session_ids_to_sample = None,
         subset_of_score_names = None,
         experiment_label = None,
-        max_mismatches_to_report=25
+        max_mismatches_to_report=5
     ):
         self.scorecard_name = scorecard_name
         self.scorecard = scorecard

@@ -8,6 +8,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from plexus.LangChainUser import LangChainUser
 from plexus.scores.LangGraphScore import LangGraphScore
 from plexus.scores.nodes.BaseNode import BaseNode
+import logging
 from typing import Type, Optional, Dict, Any, List
 from langchain_core.messages import AIMessage, HumanMessage
 import asyncio
@@ -46,9 +47,12 @@ class YesOrNoClassifier(BaseNode):
         def parse(self, output: str) -> Dict[str, Any]:
             cleaned_output = ''.join(char.lower() for char in output if char.isalnum() or char.isspace())
             words = cleaned_output.split()
-            
+            logging.info(f"Words: {words}")
             classification = "unknown"
-            for word in words:
+            
+            word_iterator = words if self.parse_from_start else reversed(words)
+            
+            for word in word_iterator:
                 if word == "yes":
                     classification = "yes"
                     break
