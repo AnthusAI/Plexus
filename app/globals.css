@@ -17,7 +17,7 @@
 @layer base {
   :root {
     --background: hsl(var(--mauve-1));
-    --foreground: hsl(var(--mauve-11));
+    --foreground: hsl(var(--mauve-12));
     --muted: hsl(var(--mauve-4));
     --muted-foreground: hsl(var(--mauve-11));
     --popover: hsl(var(--mauve-1));
@@ -50,7 +50,7 @@
 
   .dark {
     --background: hsl(var(--mauve-1));
-    --foreground: hsl(var(--mauve-11));
+    --foreground: hsl(var(--mauve-12));
     --muted: hsl(var(--mauve-3));
     --muted-foreground: hsl(var(--mauve-11));
     --popover: hsl(var(--mauve-3));
