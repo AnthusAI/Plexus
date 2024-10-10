@@ -48,7 +48,7 @@ def load_configuration_from_yaml_file(configuration_file_path):
 @click.option('--number-of-samples', default=1, type=int, help='Number of texts to sample')
 @click.option('--sampling-method', default='random', type=str, help='Method for sampling texts')
 @click.option('--random-seed', default=None, type=int, help='Random seed for sampling')
-@click.option('--session-ids-to-sample', default='', type=str, help='Comma-separated list of session IDs to sample')
+@click.option('--content-ids-to-sample', default='', type=str, help='Comma-separated list of content IDs to sample')
 @click.option('--score-name', default='', type=str, help='Comma-separated list of score names to evaluate')
 @click.option('--experiment-label', default='', type=str, help='Label for the experiment')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
@@ -58,7 +58,7 @@ def accuracy(
     number_of_samples: int,
     sampling_method: str,
     random_seed: int,
-    session_ids_to_sample: str,
+    content_ids_to_sample: str,
     score_name: str,
     experiment_label: str,
     fresh: bool
@@ -116,6 +116,8 @@ def accuracy(
         logging.error("No score names specified")
         return
 
+    content_ids_to_sample_set = set(re.split(r',\s+', content_ids_to_sample.strip())) if content_ids_to_sample.strip() else None
+
     for single_score_name in score_names:
         logging.info(f"Running experiment for score: {single_score_name}")
         
@@ -126,7 +128,7 @@ def accuracy(
             if score_config:
                 single_score_labeled_samples = get_data_driven_samples(
                     scorecard_instance, scorecard_name, single_score_name, 
-                    score_config, fresh)
+                    score_config, fresh, content_ids_to_sample_set)
             else:
                 logging.warning(f"Score '{single_score_name}' not found in scorecard. Skipping.")
                 continue
@@ -141,7 +143,6 @@ def accuracy(
             'number_of_texts_to_sample': number_of_samples,
             'sampling_method': sampling_method,
             'random_seed': random_seed,
-            'session_ids_to_sample': re.split(r',\s+', session_ids_to_sample.strip()) if session_ids_to_sample.strip() else None,
             'subset_of_score_names': [single_score_name],
             'experiment_label': experiment_label
         }
@@ -158,7 +159,7 @@ def accuracy(
 
     logging.info("All score experiments completed.")
 
-def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, score_config, fresh):
+def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, score_config, fresh, content_ids_to_sample_set):
     score_class_name = score_config['class']
     score_module_path = f'plexus.scores.{score_class_name}'
     score_module = importlib.import_module(score_module_path)
@@ -179,14 +180,18 @@ def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, scor
 
     samples = score_instance.dataframe.to_dict('records')
     
-    # Filter out rows that were included in fine-tuning training exmaples,
-    # if a file exists.
     content_ids_to_exclude_filename = f"tuning/{scorecard_name}/{score_name}/training_ids.txt"
     if os.path.exists(content_ids_to_exclude_filename):
         with open(content_ids_to_exclude_filename, 'r') as file:
             content_ids_to_exclude = file.read().splitlines()
         samples = [sample for sample in samples if sample['content_id'] not in content_ids_to_exclude]
-        logging.info(f"Number of samples after filtering: {len(samples)}")
+        logging.info(f"Number of samples after filtering out training examples: {len(samples)}")
+
+    # Filter samples based on content_ids_to_sample if provided
+    if content_ids_to_sample_set:
+        content_ids_as_integers = {int(content_id) for content_id in content_ids_to_sample_set}
+        samples = [sample for sample in samples if sample['content_id'] in content_ids_as_integers]
+        logging.info(f"Number of samples after filtering by specified content IDs: {len(samples)}")
 
     score_name_column_name = score_name
     if score_config.get('label_score_name'):
