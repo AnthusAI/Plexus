@@ -16,7 +16,7 @@ const ColorPaletteContent = () => {
     [
       'primary', 'primary-foreground', 'secondary', 'secondary-foreground',
       'accent', 'accent-foreground', 'destructive', 'destructive-foreground',
-      'ring'
+      'ring', 'user-chat', 'plexus-chat'
     ],
     [
       'chart-1', 'chart-2', 'chart-3', 'chart-4', 'chart-5',

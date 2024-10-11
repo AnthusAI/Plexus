@@ -51,6 +51,8 @@ module.exports = {
                 border: 'var(--border)',
                 input: 'var(--input)',
                 ring: 'var(--ring)',
+                'user-chat': 'var(--user-chat)',
+                'plexus-chat': 'var(--plexus-chat)',
                 'chart-1': 'var(--chart-1)',
                 'chart-2': 'var(--chart-2)',
                 'chart-3': 'var(--chart-3)',
