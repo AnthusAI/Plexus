@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
+import { DateRange } from "react-day-picker"
 
 export interface TimeRangeOption {
   value: string
@@ -47,10 +48,11 @@ export function TimeRangeSelector({ onTimeRangeChange, options = DEFAULT_TIME_RA
     }
   }
 
-  const handleCustomDateRangeChange = (range: { from: Date | undefined; to: Date | undefined } | undefined) => {
+  const handleCustomDateRangeChange = (range: DateRange | undefined) => {
     if (range) {
-      setCustomDateRange(range)
-      onTimeRangeChange("custom", range)
+      const { from, to } = range;
+      setCustomDateRange({ from, to: to || from });
+      onTimeRangeChange("custom", { from, to: to || from });
     }
   }
 
