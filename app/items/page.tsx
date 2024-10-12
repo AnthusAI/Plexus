@@ -1,28 +1,33 @@
-import { signOut } from '../actions'
-import DashboardLayout from '@/components/dashboard-layout'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+"use client";
 
-export default function Items() {
+import { useAuthenticator } from '@aws-amplify/ui-react';
+import DashboardLayout from '@/components/dashboard-layout';
+import ItemsDashboard from '@/components/items-dashboard';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+
+export default function ItemsPage() {
+  const { signOut, authStatus } = useAuthenticator((context) => [context.signOut, context.authStatus]);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated') {
+      router.push('/');
+    }
+  }, [authStatus, router]);
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push('/');
+  };
+
+  if (authStatus !== 'authenticated') {
+    return null; // or a loading spinner
+  }
+
   return (
-    <DashboardLayout signOut={signOut}>
-      <div className="px-6 pt-0 pb-6 space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">Items</h1>
-          <p className="text-muted-foreground">
-            View and edit your item inventory.
-          </p>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Manage Your Items</CardTitle>
-            <CardDescription>Add new items or remove existing ones.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p>Here you can manage all your items, add new ones, or remove existing ones.</p>
-          </CardContent>
-        </Card>
-      </div>
+    <DashboardLayout signOut={handleSignOut}>
+      <ItemsDashboard />
     </DashboardLayout>
-  )
+  );
 }

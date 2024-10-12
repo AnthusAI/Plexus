@@ -422,7 +422,11 @@ export default function ActivityDashboard() {
                   mode="range"
                   defaultMonth={customDateRange.from}
                   selected={customDateRange}
-                  onSelect={setCustomDateRange}
+                  onSelect={(range) => {
+                    if (range) {
+                      setCustomDateRange({ from: range.from, to: range.to });
+                    }
+                  }}
                   numberOfMonths={2}
                 />
               </PopoverContent>
