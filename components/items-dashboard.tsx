@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { TimeRangeSelector, TimeRangeOption } from "@/components/time-range-selector"
 
 // Get the current date and time
 const now = new Date();
@@ -101,6 +102,11 @@ const sampleTranscript = [
   { speaker: "Caller", text: "Ut aut reiciendis voluptatibus maiores alias consequatur aut perferendis doloribus asperiores repellat." },
 ];
 
+const ITEMS_TIME_RANGE_OPTIONS: TimeRangeOption[] = [
+  { value: "recent", label: "Recent" },
+  { value: "custom", label: "Custom" },
+]
+
 export default function ItemsDashboard() {
   const [selectedItem, setSelectedItem] = useState<number | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
@@ -147,6 +153,16 @@ export default function ItemsDashboard() {
     }
   };
 
+  const handleTimeRangeChange = (range: string, customRange?: { from: Date | undefined; to: Date | undefined }) => {
+    console.log("Time range changed:", range, customRange)
+    // Implement the logic for handling "recent" and custom date ranges
+    if (range === "recent") {
+      // Fetch or filter items for the recent time period
+    } else if (range === "custom" && customRange) {
+      // Fetch or filter items for the custom date range
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -172,6 +188,7 @@ export default function ItemsDashboard() {
             </SelectContent>
           </Select>
         </div>
+        <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} options={ITEMS_TIME_RANGE_OPTIONS} />
       </div>
 
       <div className={`flex ${isNarrowViewport || isFullWidth ? 'flex-col' : 'space-x-6'}`}>
