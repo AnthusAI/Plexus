@@ -1,56 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { generateClient } from "aws-amplify/data";
-import type { Schema } from "@/amplify/data/resource";
-import { Amplify } from "aws-amplify";
-import outputs from "@/amplify_outputs.json";
-import { Authenticator, useAuthenticator } from '@aws-amplify/ui-react'
-import '@aws-amplify/ui-react/styles.css';
-import { config } from '@fortawesome/fontawesome-svg-core'
-import '@fortawesome/fontawesome-svg-core/styles.css'
-config.autoAddCss = false
-
-Amplify.configure(outputs);
-
-import DashboardLayout from '../components/dashboard-layout'
-import SquareLogo, { LogoVariant } from '../components/logo-square'
-import ActivityDashboard from '../components/activity-dashboard'
-
-const client = generateClient<Schema>();
-
-function AppContent({ signOut }: { signOut: () => void }) {
-  const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
-
-  function listTodos() {
-    client.models.Todo.observeQuery().subscribe({
-      next: (data) => setTodos([...data.items]),
-    });
-  }
-
-  useEffect(() => {
-    listTodos();
-  }, []);
-
-  function createTodo() {
-    client.models.Todo.create({
-      content: window.prompt("Todo content"),
-    });
-  }
-  
-  function deleteTodo(id: string) {
-    client.models.Todo.delete({ id })
-  }
-
-  return (
-    <DashboardLayout signOut={signOut}>
-      <ActivityDashboard />
-    </DashboardLayout>
-  );
-}
+import { useEffect } from "react";
+import { useAuthenticator, Authenticator } from '@aws-amplify/ui-react';
+import { useRouter } from 'next/navigation';
+import SquareLogo, { LogoVariant } from '../components/logo-square';
 
 function AuthenticatedApp() {
-  const { authStatus, signOut } = useAuthenticator(context => [context.authStatus, context.user]);
+  const { authStatus } = useAuthenticator(context => [context.authStatus]);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (authStatus === 'authenticated') {
+      router.push('/activity');
+    }
+  }, [authStatus, router]);
 
   if (authStatus !== 'authenticated') {
     return (
@@ -59,19 +22,20 @@ function AuthenticatedApp() {
           <SquareLogo variant={LogoVariant.Square} />
         </div>
         <div className="w-full max-w-md">
-          <Authenticator />
+          <Authenticator>
+            {({ signOut, user }) => (
+              <div>
+                <h1>Welcome, {user?.username}!</h1>
+                <button onClick={signOut}>Sign out</button>
+              </div>
+            )}
+          </Authenticator>
         </div>
       </div>
     );
   }
 
-  return <AppContent signOut={signOut} />;
+  return null; // The user will be redirected, so we don't need to render anything here
 }
 
-export default function App() {
-  return (
-    <Authenticator.Provider>
-      <AuthenticatedApp />
-    </Authenticator.Provider>
-  );
-}
+export default AuthenticatedApp;
