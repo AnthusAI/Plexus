@@ -200,7 +200,7 @@ export default function ItemsDashboard() {
                 <TableHead className="w-[15%] hidden sm:table-cell">Inferences</TableHead>
                 <TableHead className="w-[15%] hidden sm:table-cell">Results</TableHead>
                 <TableHead className="w-[15%] hidden sm:table-cell">Cost</TableHead>
-                <TableHead className="w-[15%] hidden sm:table-cell">Status</TableHead>
+                <TableHead className="w-[15%] hidden sm:table-cell text-right">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -234,7 +234,7 @@ export default function ItemsDashboard() {
                   <TableCell className="hidden sm:table-cell">{item.inferences}</TableCell>
                   <TableCell className="hidden sm:table-cell">{item.results}</TableCell>
                   <TableCell className="hidden sm:table-cell">{item.cost}</TableCell>
-                  <TableCell className="hidden sm:table-cell">
+                  <TableCell className="hidden sm:table-cell text-right">
                     <Badge 
                       variant={getBadgeVariant(item.status)}
                       className="w-24 justify-center"
