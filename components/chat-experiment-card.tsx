@@ -42,6 +42,7 @@ function MiniStackedPieChart({ accuracy }: { accuracy: number }) {
             nameKey="category"
             outerRadius={20}
             fill="var(--true)"
+            isAnimationActive={false}
           />
           <Pie
             data={data.outerRing}
@@ -50,6 +51,7 @@ function MiniStackedPieChart({ accuracy }: { accuracy: number }) {
             innerRadius={22}
             outerRadius={27}
             fill="var(--chart-2)"
+            isAnimationActive={false}
           />
         </PieChart>
       </ResponsiveContainer>

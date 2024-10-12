@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input"
 import { ChatExperimentCard } from "@/components/chat-experiment-card"
 
 import SquareLogo, { LogoVariant } from './logo-square'
+import { useSidebar } from "@/app/contexts/SidebarContext"
 
 const useMediaQuery = (query: string): boolean => {
   const [matches, setMatches] = useState(false)
@@ -39,9 +40,9 @@ const useMediaQuery = (query: string): boolean => {
   return matches
 }
 
-const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; signOut: () => void }) => {
+const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; signOut: () => Promise<void> }) => {
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true)
-  const [rightSidebarState, setRightSidebarState] = useState<'collapsed' | 'normal' | 'expanded'>('collapsed')
+  const { rightSidebarState, setRightSidebarState } = useSidebar()
   const { theme, setTheme } = useTheme()
   const isDesktop = useMediaQuery("(min-width: 1024px)")
   const isMobile = useMediaQuery("(max-width: 767px)")
@@ -49,12 +50,14 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   useEffect(() => {
     if (isDesktop) {
       setIsLeftSidebarOpen(true)
-      setRightSidebarState('collapsed')
+      if (rightSidebarState === 'collapsed') {
+        setRightSidebarState('collapsed')
+      }
     } else if (isMobile) {
       setIsLeftSidebarOpen(false)
       setRightSidebarState('collapsed')
     }
-  }, [isDesktop, isMobile])
+  }, [isDesktop, isMobile, rightSidebarState, setRightSidebarState])
 
   const toggleLeftSidebar = () => {
     setIsLeftSidebarOpen(!isLeftSidebarOpen)
@@ -79,7 +82,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   const pathname = usePathname()
 
   const menuItems = [
-    { name: "Activity", icon: Activity, path: "/" },
+    { name: "Activity", icon: Activity, path: "/activity" },
     { name: "Items", icon: AudioLines, path: "/items" },
     { name: "Alerts", icon: Siren, path: "/alerts" },
     { name: "Reports", icon: FileBarChart, path: "/reports" },
@@ -206,7 +209,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="right">
-                {isLeftSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+                {isLeftSidebarOpen ? "Toggle sidebar" : "Expand sidebar"}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -239,107 +242,85 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   )
 
   const RightSidebar = () => {
-    const scrollAreaRef = useRef<HTMLDivElement>(null)
-
-    const scrollToBottom = () => {
-      if (scrollAreaRef.current) {
-        scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
-      }
-    }
-
-    useEffect(() => {
-      scrollToBottom()
-    }, [rightSidebarState]) // This will scroll to bottom when the sidebar opens
-
-    // Add this effect to scroll to bottom when new messages are added
-    useEffect(() => {
-      scrollToBottom()
-    }) // This will run after every render, effectively scrolling to bottom when new messages are added
-
     return (
       <div className="flex flex-col h-full py-2 bg-muted">
         <div className="flex-grow overflow-hidden">
-          <ScrollArea 
-            className="h-full px-4 flex flex-col-reverse"
-            ref={scrollAreaRef}
-          >
-            {rightSidebarState !== 'collapsed' && (
-              <div className="flex flex-col mb-4">
-                {[
-                  <ChatExperimentCard
-                    key="exp1"
-                    experimentId="Experiment started"
-                    status="running"
-                    progress={42}
-                    accuracy={86.7}
-                    elapsedTime="00:02:15"
-                    estimatedTimeRemaining="00:03:05"
-                    scorecard="CS3 Services v2"
-                    score="Good Call"
-                  />,
-                  <div key="msg1" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
-                    Okay, I started a new run:
-                  </div>,
-                  <div key="user1" className="flex items-start space-x-2 justify-end">
-                    <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
-                      Run that again with fresh data.
-                    </div>
-                    <Avatar className="h-8 w-8 mt-1">
-                      <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
-                    </Avatar>
-                  </div>,
-                  <ChatExperimentCard
-                    key="exp2"
-                    experimentId="Experiment completed"
-                    status="completed"
-                    progress={100}
-                    accuracy={92}
-                    elapsedTime="00:05:12"
-                    estimatedTimeRemaining="00:00:00"
-                    scorecard="AW IB Sales"
-                    score="Pain Points"
-                  />,
-                  <div key="msg2" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
-                    The best accuracy was from this version, two days ago, at 92%. That was using a fine-tuned model.
-                  </div>,
-                  <div key="user2" className="flex items-start space-x-2 justify-end">
-                    <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
-                      What's the best accuracy on Pain Points on AW IB Sales?
-                    </div>
-                    <Avatar className="h-8 w-8 mt-1">
-                      <AvatarFallback className="bg-background dark:bg-border">DN</AvatarFallback>
-                    </Avatar>
-                  </div>,
-                  <ChatExperimentCard
-                    key="exp3"
-                    experimentId="New experiment"
-                    status="running"
-                    progress={87}
-                    accuracy={88.2}
-                    elapsedTime="00:04:35"
-                    estimatedTimeRemaining="00:00:40"
-                    scorecard="CS3 Services v2"
-                    score="Good Call"
-                  />,
-                  <div key="msg3" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
-                    Certainly! I'm starting a new experiment run for the "CS3 Services v2" scorecard on the "Good Call" score.
-                  </div>,
-                  <div key="user3" className="flex items-start space-x-2 justify-end">
-                    <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
-                      Start a new experiment run on the "CS3 Services v2" scorecard for the "Good Call" score.
-                    </div>
-                    <Avatar className="h-8 w-8 mt-1">
-                      <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
-                    </Avatar>
-                  </div>,
-                ].reverse().map((element, index) => (
-                  <div key={index} className="mb-4">
-                    {element}
-                  </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
+          <div className="h-full flex flex-col">
+            <div className="flex-grow overflow-y-auto flex flex-col-reverse px-4">
+              {rightSidebarState !== 'collapsed' && (
+                <div className="space-y-4 mb-4">
+                  {[
+                    <ChatExperimentCard
+                      key="exp1"
+                      experimentId="Experiment started"
+                      status="running"
+                      progress={42}
+                      accuracy={86.7}
+                      elapsedTime="00:02:15"
+                      estimatedTimeRemaining="00:03:05"
+                      scorecard="CS3 Services v2"
+                      score="Good Call"
+                    />,
+                    <div key="msg1" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
+                      Okay, I started a new run:
+                    </div>,
+                    <div key="user1" className="flex items-start space-x-2 justify-end">
+                      <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
+                        Run that again with fresh data.
+                      </div>
+                      <Avatar className="h-8 w-8 mt-1">
+                        <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
+                      </Avatar>
+                    </div>,
+                    <ChatExperimentCard
+                      key="exp2"
+                      experimentId="Experiment completed"
+                      status="completed"
+                      progress={100}
+                      accuracy={92}
+                      elapsedTime="00:05:12"
+                      estimatedTimeRemaining="00:00:00"
+                      scorecard="AW IB Sales"
+                      score="Pain Points"
+                    />,
+                    <div key="msg2" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
+                      The best accuracy was from this version, two days ago, at 92%. That was using a fine-tuned model.
+                    </div>,
+                    <div key="user2" className="flex items-start space-x-2 justify-end">
+                      <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
+                        What's the best accuracy on Pain Points on AW IB Sales?
+                      </div>
+                      <Avatar className="h-8 w-8 mt-1">
+                        <AvatarFallback className="bg-background dark:bg-border">DN</AvatarFallback>
+                      </Avatar>
+                    </div>,
+                    <ChatExperimentCard
+                      key="exp3"
+                      experimentId="New experiment"
+                      status="running"
+                      progress={87}
+                      accuracy={88.2}
+                      elapsedTime="00:04:35"
+                      estimatedTimeRemaining="00:00:40"
+                      scorecard="CS3 Services v2"
+                      score="Good Call"
+                    />,
+                    <div key="msg3" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
+                      Certainly! I'm starting a new experiment run for the "CS3 Services v2" scorecard on the "Good Call" score.
+                    </div>,
+                    <div key="user3" className="flex items-start space-x-2 justify-end">
+                      <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
+                        Start a new experiment run on the "CS3 Services v2" scorecard for the "Good Call" score.
+                      </div>
+                      <Avatar className="h-8 w-8 mt-1">
+                        <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
+                      </Avatar>
+                    </div>,
+                  ].reverse()}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
         {rightSidebarState !== 'collapsed' && (
           <div className="px-4 pt-4 pb-2 border-t border-border">
@@ -370,7 +351,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="top">
-                    Toggle microphone
+                    Dictate Message
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -386,7 +367,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="top">
-                    Toggle headphones
+                    Voice Mode
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
