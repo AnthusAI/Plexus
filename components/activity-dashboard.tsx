@@ -8,9 +8,10 @@ import { Button } from "@/components/ui/button"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { PieChart, Pie } from "recharts"
 import { Progress } from "@/components/ui/progress"
-import { Activity, ListTodo, FlaskConical, ArrowRight, Siren, FileText, Sparkles, ChevronLeft, ChevronRight, MoveUpRight, MessageCircleWarning } from "lucide-react"
-
-// Add this function near the top of the file, before the ActivityDashboard component
+import { Activity, ListTodo, FlaskConical, ArrowRight, Siren, FileText, Sparkles, ChevronLeft, ChevronRight, MoveUpRight, MessageCircleWarning, CalendarIcon } from "lucide-react"
+import { format } from "date-fns"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
 const timeToMinutes = (timeString: string): number => {
   const [value, unit] = timeString.toLowerCase().split(' ');
@@ -43,7 +44,6 @@ const timeToMinutes = (timeString: string): number => {
   }
 }
 
-// Existing data for the bar chart
 const barChartData = [
   { name: "Mon", scored: 4, experiments: 3, optimizations: 2 },
   { name: "Tue", scored: 3, experiments: 4, optimizations: 3 },
@@ -206,6 +206,16 @@ export default function ActivityDashboard() {
   const [currentPage, setCurrentPage] = useState(1)
   const activitiesPerPage = 6
 
+  // Add this new state for the selected time range
+  const [selectedTimeRange, setSelectedTimeRange] = useState("last_week")
+  const [customDateRange, setCustomDateRange] = useState<{
+    from: Date | undefined;
+    to: Date | undefined;
+  }>({
+    from: undefined,
+    to: undefined,
+  })
+
   const sortedActivities = useMemo(() => {
     const sorted = [...recentActivities].sort((a, b) => {
       const aMinutes = timeToMinutes(a.time);
@@ -364,17 +374,60 @@ export default function ActivityDashboard() {
             </SelectContent>
           </Select>
         </div>
-        <div className="flex space-x-2">
-          {["1h", "3h", "12h", "1d", "3d", "1w"].map((range) => (
-            <Button
-              key={range}
-              variant={range === "1w" ? "secondary" : "outline"}
-              size="sm"
-              className={`border-primary ${range === "1w" ? "border-secondary" : "border-primary"}`}
-            >
-              {range}
-            </Button>
-          ))}
+        <div className="flex items-center space-x-4">
+          <Select
+            value={selectedTimeRange}
+            onValueChange={setSelectedTimeRange}
+          >
+            <SelectTrigger className="w-[200px] border border-secondary">
+              <SelectValue placeholder="Time Range" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="last_hour">Last hour</SelectItem>
+              <SelectItem value="last_3_hours">Last 3 hours</SelectItem>
+              <SelectItem value="last_12_hours">Last 12 hours</SelectItem>
+              <SelectItem value="last_24_hours">Last 24 hours</SelectItem>
+              <SelectItem value="last_3_days">Last 3 days</SelectItem>
+              <SelectItem value="last_week">Last week</SelectItem>
+              <SelectItem value="custom">Custom</SelectItem>
+            </SelectContent>
+          </Select>
+          {selectedTimeRange === "custom" && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant={"outline"}
+                  className={`w-[300px] justify-start text-left font-normal ${
+                    !customDateRange.from && "text-muted-foreground"
+                  }`}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {customDateRange.from ? (
+                    customDateRange.to ? (
+                      <>
+                        {format(customDateRange.from, "LLL dd, y")} -{" "}
+                        {format(customDateRange.to, "LLL dd, y")}
+                      </>
+                    ) : (
+                      format(customDateRange.from, "LLL dd, y")
+                    )
+                  ) : (
+                    <span>Pick a date range</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  initialFocus
+                  mode="range"
+                  defaultMonth={customDateRange.from}
+                  selected={customDateRange}
+                  onSelect={setCustomDateRange}
+                  numberOfMonths={2}
+                />
+              </PopoverContent>
+            </Popover>
+          )}
         </div>
       </div>
 
