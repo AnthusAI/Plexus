@@ -340,12 +340,6 @@ export default function ActivityDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Activity</h1>
-        <p className="text-muted-foreground">
-          Recent experiments run, optimizations started or completed, and other activity.
-        </p>
-      </div>
 
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
