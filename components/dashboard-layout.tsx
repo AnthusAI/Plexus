@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Activity, AudioLines, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones } from "lucide-react"
+import { Activity, AudioLines, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageSquare } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -244,6 +244,27 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   const RightSidebar = () => {
     return (
       <div className="flex flex-col h-full py-2 bg-muted">
+        {rightSidebarState === 'collapsed' && (
+          <div className="px-3 py-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 p-0 group"
+                    onClick={toggleRightSidebar}
+                  >
+                    <MessageSquare className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  Expand chat
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        )}
         <div className="flex-grow overflow-hidden">
           <div className="h-full flex flex-col">
             <div className="flex-grow overflow-y-auto flex flex-col-reverse px-4">
@@ -386,7 +407,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="left">
-                {rightSidebarState === 'collapsed' ? "Expand sidebar" : "Collapse sidebar"}
+                {rightSidebarState === 'collapsed' ? "Expand chat" : "Collapse chat"}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

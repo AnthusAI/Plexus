@@ -524,7 +524,11 @@ export default function ItemsDashboard() {
               </TableHeader>
               <TableBody>
                 {filteredItems.map((item) => (
-                  <TableRow key={item.id} onClick={() => handleItemClick(item.id)} className="cursor-pointer">
+                  <TableRow 
+                    key={item.id} 
+                    onClick={() => handleItemClick(item.id)} 
+                    className="cursor-pointer transition-colors duration-200 hover:bg-muted"
+                  >
                     <TableCell className="font-medium sm:pr-4">
                       <div className="sm:hidden">
                         <div className="flex justify-between items-start mb-2">
