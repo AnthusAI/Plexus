@@ -66,6 +66,12 @@ const recentActivities = [
     summary: "89% / 47",
     data: {
       progress: 47,
+      accuracy: 89,
+      processedItems: 47,
+      totalItems: 100,
+      elapsedTime: "00:02:15",
+      estimatedTimeRemaining: "00:03:05",
+      processingRate: 23.5,
       outerRing: [
         { category: "Positive", value: 50, fill: "var(--true)" },
         { category: "Negative", value: 50, fill: "var(--false)" },
@@ -102,6 +108,9 @@ const recentActivities = [
     summary: "Progress: 92%",
     data: {
       progress: 92,
+      accuracy: 75,
+      elapsedTime: "00:45:30",
+      estimatedTimeRemaining: "00:05:00",
       before: {
         outerRing: [
           { category: "Positive", value: 50, fill: "var(--true)" },
@@ -162,8 +171,8 @@ const recentActivities = [
       },
       after: {
         outerRing: [
-          { category: "Positive", value: 50, fill: "var(--true)" },
-          { category: "Negative", value: 50, fill: "var(--false)" },
+          { category: "Positive", value: 50, fill: "var(--false)" },
+          { category: "Negative", value: 50, fill: "var(--true)" },
         ],
         innerRing: [
           { category: "Positive", value: 82, fill: "var(--true)" },
@@ -355,6 +364,30 @@ export default function ActivityDashboard() {
             </div>
           </div>
         )
+      case "Experiment started":
+        return (
+          <div className="absolute bottom-4 left-6 right-7 flex flex-col space-y-1">
+            <div className="flex justify-between text-xs">
+              <div className="font-semibold">Progress: {activity.data.progress}%</div>
+              <div>{activity.data.elapsedTime}</div>
+            </div>
+            <Progress value={activity.data.progress} className="w-full h-4" />
+            <div className="flex justify-between text-xs">
+              <div>{activity.data.processedItems}/{activity.data.totalItems}</div>
+              <div>ETA: {activity.data.estimatedTimeRemaining}</div>
+            </div>
+          </div>
+        )
+      case "Optimization started":
+        return (
+          <div className="absolute bottom-4 left-6 right-7 flex flex-col space-y-1">
+            <div className="flex justify-between text-xs">
+              <div className="font-semibold">Progress: {activity.data.progress}%</div>
+              <div>{activity.data.elapsedTime}</div>
+            </div>
+            <Progress value={activity.data.progress} className="w-full h-4" />
+          </div>
+        )
       default:
         return null
     }
@@ -446,33 +479,37 @@ export default function ActivityDashboard() {
                 >
                   <CardHeader className="pr-4 flex flex-col items-start">
                     <div className="flex justify-between items-start w-full">
-                      <div className="text-lg font-bold">
-                        {activity.type}
+                      <div className="flex flex-col">
+                        <div className="text-lg font-bold">
+                          {activity.type}
+                        </div>
+                        <div className={`text-xs ${
+                          selectedActivity?.id === activity.id 
+                            ? 'text-secondary-foreground' 
+                            : 'text-muted-foreground'
+                        }`}>
+                          {activity.scorecard}
+                        </div>
+                        <div className={`text-xs ${
+                          selectedActivity?.id === activity.id 
+                            ? 'text-secondary-foreground' 
+                            : 'text-muted-foreground'
+                        }`}>
+                          {activity.score || "\u00A0"}
+                        </div>
                       </div>
-                      <div className="w-7 flex-shrink-0">
-                        {renderActivityIcon(activity.type)}
+                      <div className="flex flex-col items-end">
+                        <div className="w-7 flex-shrink-0 mb-1">
+                          {renderActivityIcon(activity.type)}
+                        </div>
+                        <div className={`text-xs ${
+                          selectedActivity?.id === activity.id 
+                            ? 'text-secondary-foreground' 
+                            : 'text-muted-foreground'
+                        }`}>
+                          {activity.time}
+                        </div>
                       </div>
-                    </div>
-                    <div className={`text-xs ${
-                      selectedActivity?.id === activity.id 
-                        ? 'text-secondary-foreground' 
-                        : 'text-muted-foreground'
-                    }`}>
-                      {activity.time}
-                    </div>
-                    <div className={`text-xs ${
-                      selectedActivity?.id === activity.id 
-                        ? 'text-secondary-foreground' 
-                        : 'text-muted-foreground'
-                    }`}>
-                      {activity.scorecard}
-                    </div>
-                    <div className={`text-xs ${
-                      selectedActivity?.id === activity.id 
-                        ? 'text-secondary-foreground' 
-                        : 'text-muted-foreground'
-                    }`}>
-                      {activity.score || "\u00A0"}
                     </div>
                   </CardHeader>
                   <CardContent className="pt-0 pb-20 relative min-h-[200px]">
@@ -519,9 +556,18 @@ export default function ActivityDashboard() {
                       </div>
                     )}
                     {(activity.type === "Optimization started" || activity.type === "Experiment started") && activity.data && (
-                      <div className="absolute bottom-4 left-4 right-4">
-                        <div className="text-sm font-medium mb-1">Progress: {activity.data.progress}%</div>
-                        <Progress value={activity.data.progress} className="w-full h-2" />
+                      <div className="absolute bottom-4 left-6 right-7 flex flex-col space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <div className="font-semibold">Progress: {activity.data.progress}%</div>
+                          <div>{activity.data.elapsedTime}</div>
+                        </div>
+                        <Progress value={activity.data.progress} className="w-full h-4" />
+                        {activity.type === "Experiment started" && (
+                          <div className="flex justify-between text-xs">
+                            <div>{activity.data.processedItems}/{activity.data.totalItems}</div>
+                            <div>ETA: {activity.data.estimatedTimeRemaining}</div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </CardContent>
