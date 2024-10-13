@@ -292,11 +292,11 @@ export default function ItemsDashboard() {
     switch (status) {
       case 'new':
       case 'scoring...':
-        return 'bg-neutral text-neutral-foreground';
+        return 'bg-neutral text-primary-foreground';
       case 'scored':
         return 'bg-true text-primary-foreground';
       case 'error':
-        return 'bg-destructive text-destructive-foreground';
+        return 'bg-destructive text-destructive-foreground dark:text-primary-foreground';
       default:
         return 'bg-muted text-muted-foreground';
     }
