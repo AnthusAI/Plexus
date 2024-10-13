@@ -581,7 +581,7 @@ export default function ItemsDashboard() {
 
     return (
       <Card className="rounded-none sm:rounded-lg flex flex-col h-full">
-        <CardHeader className="flex flex-row items-center justify-between py-4 px-4 sm:px-6 flex-shrink-0">
+        <CardHeader className="flex flex-row items-start justify-between py-4 px-4 sm:px-6 flex-shrink-0">
           <div className="space-y-1">
             <h2 className="text-2xl font-semibold">{items.find(item => item.id === selectedItem)?.scorecard}</h2>
             <p className="text-sm text-muted-foreground">

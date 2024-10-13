@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { PieChart, Pie } from "recharts"
 import { Progress } from "@/components/ui/progress"
-import { Activity, ListTodo, FlaskConical, ArrowRight, Siren, FileText, Sparkles, ChevronLeft, ChevronRight, MoveUpRight, MessageCircleWarning, CalendarIcon } from "lucide-react"
+import { Activity, ListTodo, FlaskConical, ArrowRight, Siren, FileText, Sparkles, ChevronLeft, ChevronRight, MoveUpRight, MessageCircleWarning, CalendarIcon, X, Square, Columns2 } from "lucide-react"
 import { format } from "date-fns"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -206,6 +206,20 @@ export default function ActivityDashboard() {
   const [activities] = useState<ActivityData[]>(recentActivities)
   const [currentPage, setCurrentPage] = useState(1)
   const activitiesPerPage = 6
+  const [selectedActivity, setSelectedActivity] = useState<ActivityData | null>(null)
+  const [isFullWidth, setIsFullWidth] = useState(false)
+  const [isNarrowViewport, setIsNarrowViewport] = useState(false)
+
+  useEffect(() => {
+    const checkViewportWidth = () => {
+      setIsNarrowViewport(window.innerWidth < 640)
+    }
+
+    checkViewportWidth()
+    window.addEventListener('resize', checkViewportWidth)
+
+    return () => window.removeEventListener('resize', checkViewportWidth)
+  }, [])
 
   const sortedActivities = useMemo(() => {
     const sorted = [...recentActivities].sort((a, b) => {
@@ -234,7 +248,7 @@ export default function ActivityDashboard() {
       case "Score updated":
         return <ListTodo className="h-5 w-5" />
       case "Alert":
-        return <Siren className="h-5 w-5 text-destructive" />
+        return <Siren className="h-5 w-5" />
       case "Report":
         return <FileText className="h-5 w-5" />
       default:
@@ -339,8 +353,7 @@ export default function ActivityDashboard() {
   }
 
   return (
-    <div className="space-y-6">
-
+    <div className="space-y-6 h-full flex flex-col">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Select>
@@ -367,150 +380,236 @@ export default function ActivityDashboard() {
         <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} />
       </div>
 
-      <Card className="shadow-none">
-        <CardContent className="p-0">
-          <ChartContainer config={chartConfig} className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barChartData}>
-                <XAxis dataKey="name" />
-                <YAxis />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar
-                  dataKey="scored"
-                  stackId="a"
-                  fill="var(--chart-1)"
-                  onClick={handleBarClick}
-                  cursor="pointer"
-                />
-                <Bar
-                  dataKey="experiments"
-                  stackId="a"
-                  fill="var(--chart-2)"
-                  onClick={handleBarClick}
-                  cursor="pointer"
-                />
-                <Bar
-                  dataKey="optimizations"
-                  stackId="a"
-                  fill="var(--chart-3)"
-                  onClick={handleBarClick}
-                  cursor="pointer"
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartContainer>
-        </CardContent>
-      </Card>
+      <div className={`flex flex-grow overflow-hidden ${isNarrowViewport || isFullWidth ? 'flex-col' : 'space-x-6'}`}>
+        <div className={`flex flex-col ${isFullWidth && selectedActivity ? 'hidden' : 'flex-1'} overflow-hidden`}>
+          <Card className="shadow-none mb-6">
+            <CardContent className="p-0">
+              <ChartContainer config={chartConfig} className="h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={barChartData}>
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar
+                      dataKey="scored"
+                      stackId="a"
+                      fill="var(--chart-1)"
+                      onClick={handleBarClick}
+                      cursor="pointer"
+                    />
+                    <Bar
+                      dataKey="experiments"
+                      stackId="a"
+                      fill="var(--chart-2)"
+                      onClick={handleBarClick}
+                      cursor="pointer"
+                    />
+                    <Bar
+                      dataKey="optimizations"
+                      stackId="a"
+                      fill="var(--chart-3)"
+                      onClick={handleBarClick}
+                      cursor="pointer"
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartContainer>
+            </CardContent>
+          </Card>
 
-      <div>
-        <h2 className="text-2xl font-semibold mb-4">Recent Updates</h2>
-        <div className="grid gap-4 md:grid-cols-2">
-          {sortedActivities.slice((currentPage - 1) * activitiesPerPage, currentPage * activitiesPerPage).map((activity) => (
-            <Card key={activity.id} className="relative">
-              <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 pl-10">
-                <div className="flex items-start">
-                  <div className="w-7 flex-shrink-0 -ml-7">
-                    {renderActivityIcon(activity.type)}
-                  </div>
-                  <div>
-                    <CardTitle className="text-sm font-medium">
-                      {activity.type}
-                    </CardTitle>
-                    <div className="text-xs text-muted-foreground">
-                      {activity.time}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {activity.scorecard}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {activity.score || "\u00A0"}
-                    </div>
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-2 text-xs"
-                  onClick={() => console.log(`View details for ${activity.id}`)}
+          <div className="overflow-auto flex-grow">
+            <h2 className="text-2xl font-semibold mb-4">Recent Updates</h2>
+            <div className="grid gap-4 md:grid-cols-2">
+              {sortedActivities.slice((currentPage - 1) * activitiesPerPage, currentPage * activitiesPerPage).map((activity) => (
+                <Card 
+                  key={activity.id} 
+                  className={`relative cursor-pointer transition-colors duration-200 ${
+                    selectedActivity?.id === activity.id 
+                      ? 'bg-secondary text-secondary-foreground hover:bg-secondary/90' 
+                      : 'hover:bg-muted'
+                  }`} 
+                  onClick={() => setSelectedActivity(activity)}
                 >
-                  Details
-                  <ArrowRight className="ml-1 h-3 w-3" />
-                </Button>
-              </CardHeader>
-              <CardContent className="pl-10">
-                <div className="flex justify-between items-start">
-                  <div className="space-y-1 w-full">
-                    <div className="text-lg font-bold mt-2">
-                      {activity.type === "Score updated" || activity.type === "Optimization started" ? (
-                        <div>
-                          <div className="flex items-center">
-                            <span>{activity.data?.before?.innerRing[0]?.value ?? 0}%</span>
-                            <MoveUpRight className="h-5 w-5 mx-1" />
-                            <span>{activity.data?.after?.innerRing[0]?.value ?? 0}%</span>
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            Accuracy
-                          </div>
+                  <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 pl-10">
+                    <div className="flex items-start">
+                      <div className="w-7 flex-shrink-0 -ml-7">
+                        {renderActivityIcon(activity.type)}
+                      </div>
+                      <div>
+                        <CardTitle className="text-sm font-medium">
+                          {activity.type}
+                        </CardTitle>
+                        <div className={`text-xs ${
+                          selectedActivity?.id === activity.id 
+                            ? 'text-secondary-foreground' 
+                            : 'text-muted-foreground'
+                        }`}>
+                          {activity.time}
                         </div>
-                      ) : activity.type === "Experiment completed" || activity.type === "Experiment started" ? (
-                        <div>
-                          <div>{activity.summary}</div>
-                          <div className="text-sm text-muted-foreground">
-                            Accuracy
-                          </div>
+                        <div className={`text-xs ${
+                          selectedActivity?.id === activity.id 
+                            ? 'text-secondary-foreground' 
+                            : 'text-muted-foreground'
+                        }`}>
+                          {activity.scorecard}
                         </div>
-                      ) : (
-                        <div>
-                          <div>{activity.summary}</div>
-                          {activity.description && (
-                            <div className="text-sm text-muted-foreground">
-                              {activity.description}
+                        <div className={`text-xs ${
+                          selectedActivity?.id === activity.id 
+                            ? 'text-secondary-foreground' 
+                            : 'text-muted-foreground'
+                        }`}>
+                          {activity.score || "\u00A0"}
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`h-8 px-2 text-xs ${
+                        selectedActivity?.id === activity.id 
+                          ? 'hover:bg-secondary-foreground/10' 
+                          : 'hover:bg-primary/10'
+                      }`}
+                      onClick={() => console.log(`View details for ${activity.id}`)}
+                    >
+                      Details
+                      <ArrowRight className="ml-1 h-3 w-3" />
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="pl-10">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1 w-full">
+                        <div className="text-lg font-bold mt-2">
+                          {activity.type === "Score updated" || activity.type === "Optimization started" ? (
+                            <div>
+                              <div className={`flex items-center ${selectedActivity?.id === activity.id ? 'text-secondary-foreground' : ''}`}>
+                                <span>{activity.data?.before?.innerRing[0]?.value ?? 0}%</span>
+                                <MoveUpRight className="h-5 w-5 mx-1" />
+                                <span>{activity.data?.after?.innerRing[0]?.value ?? 0}%</span>
+                              </div>
+                              <div className={`text-sm ${selectedActivity?.id === activity.id ? 'text-secondary-foreground' : 'text-muted-foreground'}`}>
+                                Accuracy
+                              </div>
+                            </div>
+                          ) : activity.type === "Experiment completed" || activity.type === "Experiment started" ? (
+                            <div>
+                              <div className={selectedActivity?.id === activity.id ? 'text-secondary-foreground' : ''}>{activity.summary}</div>
+                              <div className={`text-sm ${selectedActivity?.id === activity.id ? 'text-secondary-foreground' : 'text-muted-foreground'}`}>
+                                Accuracy
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className={selectedActivity?.id === activity.id ? 'text-secondary-foreground' : ''}>{activity.summary}</div>
+                              {activity.description && (
+                                <div className={`text-sm ${selectedActivity?.id === activity.id ? 'text-secondary-foreground' : 'text-muted-foreground'}`}>
+                                  {activity.description}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
-                      )}
+                        {activity.type === "Alert" && (
+                          <div className="flex justify-center mt-4">
+                            <MessageCircleWarning className={`h-16 w-16 text-destructive ${selectedActivity?.id === activity.id ? 'text-secondary-foreground' : 'text-destructive'}`} />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-shrink-0 ml-4">
+                        {renderVisualization(activity)}
+                      </div>
                     </div>
-                    {activity.type === "Alert" && (
-                      <div className="flex justify-center mt-4">
-                        <MessageCircleWarning className="h-16 w-16 text-red-500" />
+                    {(activity.type === "Optimization started" || activity.type === "Experiment started") && activity.data && (
+                      <div className="mt-4">
+                        <div className="text-sm font-medium mb-1">Progress: {activity.data.progress}%</div>
+                        <div className="relative">
+                          <Progress value={activity.data.progress} className="w-full h-2 absolute" />
+                        </div>
                       </div>
                     )}
-                  </div>
-                  <div className="flex-shrink-0 ml-4">
-                    {renderVisualization(activity)}
-                  </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <div className="flex justify-between items-center mt-4">
+              <Button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                variant="outline"
+              >
+                <ChevronLeft className="h-4 w-4 mr-2" />
+                Previous
+              </Button>
+              <span>Page {currentPage} of {totalPages}</span>
+              <Button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                variant="outline"
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {selectedActivity && (
+          <div className={`flex-shrink-0 ${isFullWidth ? 'w-full' : 'w-1/2'} overflow-hidden`}>
+            <Card className="rounded-none sm:rounded-lg flex flex-col h-full">
+              <CardHeader className="flex flex-row items-start justify-between py-4 px-4 sm:px-6 flex-shrink-0">
+                <div className="space-y-1">
+                  <h2 className="text-2xl font-semibold">{selectedActivity.score}</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedActivity.time}
+                  </p>
                 </div>
-                {(activity.type === "Optimization started" || activity.type === "Experiment started") && activity.data && (
-                  <div className="mt-4">
-                    <div className="text-sm font-medium mb-1">Progress: {activity.data.progress}%</div>
-                    <div className="relative">
-                      <Progress value={activity.data.progress} className="w-full h-2 absolute" />
+                <div className="flex space-x-2">
+                  {!isNarrowViewport && (
+                    <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
+                      {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                    </Button>
+                  )}
+                  <Button variant="outline" size="icon" onClick={() => {
+                    setSelectedActivity(null)
+                    setIsFullWidth(false)
+                  }}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="flex-grow overflow-auto px-4 sm:px-6">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium">Type</p>
+                      <p>{selectedActivity.type}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Scorecard</p>
+                      <p>{selectedActivity.scorecard}</p>
                     </div>
                   </div>
-                )}
+                  <div>
+                    <p className="text-sm font-medium">Summary</p>
+                    <p>{selectedActivity.summary}</p>
+                  </div>
+                  {selectedActivity.description && (
+                    <div>
+                      <p className="text-sm font-medium">Description</p>
+                      <p>{selectedActivity.description}</p>
+                    </div>
+                  )}
+                  {selectedActivity.data && (
+                    <div>
+                      <p className="text-sm font-medium">Visualization</p>
+                      {renderVisualization(selectedActivity)}
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
-          ))}
-        </div>
-        <div className="flex justify-between items-center mt-4">
-          <Button
-            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-            disabled={currentPage === 1}
-            variant="outline"
-          >
-            <ChevronLeft className="h-4 w-4 mr-2" />
-            Previous
-          </Button>
-          <span>Page {currentPage} of {totalPages}</span>
-          <Button
-            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-            disabled={currentPage === totalPages}
-            variant="outline"
-          >
-            Next
-            <ChevronRight className="h-4 w-4 ml-2" />
-          </Button>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )
