@@ -37,7 +37,7 @@ const items = [
   { id: 30, scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "new", results: 0, inferences: 0, cost: "$0.000" },
   { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "new", results: 0, inferences: 0, cost: "$0.000" },
   { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "new", results: 0, inferences: 0, cost: "$0.000" },
-  { id: 27, scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), status: "scoring...", results: 2, inferences: 4, cost: "$0.005" },
+  { id: 27, scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), status: "error", results: 2, inferences: 4, cost: "$0.005" },
   { id: 26, scorecard: "SelectQuote Term Life v1", score: 83, date: relativeDate(0, 1, 30), status: "scoring...", results: 6, inferences: 24, cost: "$0.031" },
   { id: 25, scorecard: "AW IB Sales", score: 94, date: relativeDate(0, 2, 0), status: "scored", results: 19, inferences: 152, cost: "$0.199" },
   { id: 24, scorecard: "CS3 Audigy", score: 86, date: relativeDate(0, 3, 0), status: "scored", results: 17, inferences: 68, cost: "$0.089" },
@@ -228,6 +228,7 @@ export default function ItemsDashboard() {
   const [expandedAnnotations, setExpandedAnnotations] = useState<string[]>([]);
   const [newAnnotation, setNewAnnotation] = useState({ value: "", explanation: "", annotation: "" });
   const [showNewAnnotationForm, setShowNewAnnotationForm] = useState<string | null>(null);
+  const [isErrorExpanded, setIsErrorExpanded] = useState(true);
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -289,11 +290,14 @@ export default function ItemsDashboard() {
   const getBadgeVariant = (status: string) => {
     switch (status) {
       case 'new':
-        return 'default';
       case 'scoring...':
-        return 'secondary';
+        return 'bg-neutral text-neutral-foreground';
+      case 'scored':
+        return 'bg-true text-primary-foreground';
+      case 'error':
+        return 'bg-destructive text-destructive-foreground';
       default:
-        return 'outline';
+        return 'bg-muted text-muted-foreground';
     }
   };
 
@@ -516,8 +520,7 @@ export default function ItemsDashboard() {
                         <div className="flex justify-between items-start mb-2">
                           <div className="font-semibold">{item.scorecard}</div>
                           <Badge 
-                            variant={getBadgeVariant(item.status)}
-                            className="w-24 justify-center"
+                            className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
                           >
                             {item.status}
                           </Badge>
@@ -541,8 +544,7 @@ export default function ItemsDashboard() {
                     <TableCell className="hidden sm:table-cell">{item.cost}</TableCell>
                     <TableCell className="hidden sm:table-cell text-right">
                       <Badge 
-                        variant={getBadgeVariant(item.status)}
-                        className="w-24 justify-center"
+                        className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
                       >
                         {item.status}
                       </Badge>
@@ -564,6 +566,9 @@ export default function ItemsDashboard() {
   )
 
   function renderSelectedItem() {
+    const selectedItemData = items.find(item => item.id === selectedItem);
+    const isErrorStatus = selectedItemData?.status === 'error';
+
     return (
       <Card className="rounded-none sm:rounded-lg flex flex-col h-full">
         <CardHeader className="flex flex-row items-center justify-between py-4 px-4 sm:px-6 flex-shrink-0">
@@ -598,7 +603,7 @@ export default function ItemsDashboard() {
                 <div className="text-right">
                   <p className="text-sm font-medium">Status</p>
                   <Badge 
-                    variant={items.find(item => item.id === selectedItem)?.status === 'new' ? 'default' : items.find(item => item.id === selectedItem)?.status === 'scoring...' ? 'secondary' : 'outline'}
+                    className={getBadgeVariant(items.find(item => item.id === selectedItem)?.status || '')}
                   >
                     {items.find(item => item.id === selectedItem)?.status}
                   </Badge>
@@ -612,6 +617,37 @@ export default function ItemsDashboard() {
                   <p>{items.find(item => item.id === selectedItem)?.cost}</p>
                 </div>
               </div>
+              
+              {isErrorStatus && (
+                <div className="-mx-4 sm:-mx-6">
+                  <div
+                    className="relative group hover:bg-destructive hover:text-primary-foreground cursor-pointer"
+                    onClick={() => setIsErrorExpanded(!isErrorExpanded)}
+                  >
+                    <div className="flex justify-between items-center px-4 sm:px-6 py-2 bg-destructive text-primary-foreground">
+                      <span className="text-md font-semibold">
+                        Error
+                      </span>
+                      {isErrorExpanded ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </div>
+                  </div>
+                  {isErrorExpanded && (
+                    <div className="mt-2 px-4 sm:px-6">
+                      <Table>
+                        <TableBody>
+                          <TableRow>
+                            <TableCell className="pl-0 pr-0">Response from OpenAI: 429 - You exceeded your current quota, please check your plan and billing details</TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+              )}
               
               <div className="-mx-4 sm:-mx-6">
                 <div
