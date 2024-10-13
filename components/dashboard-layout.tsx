@@ -400,7 +400,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col h-screen">
       <div className="flex flex-1 overflow-hidden bg-muted">
         <aside
           className={`
@@ -413,7 +413,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           <LeftSidebar />
         </aside>
         <main 
-          className={`flex-1 overflow-y-auto transition-all duration-300 ease-in-out
+          className={`flex-1 flex flex-col transition-all duration-300 ease-in-out
             ${isMobile && !isLeftSidebarOpen ? 'ml-0' : (isLeftSidebarOpen ? 'ml-40' : 'ml-14')}
             ${isMobile && rightSidebarState === 'collapsed' ? 'mr-0' : 
               rightSidebarState === 'normal' ? 'mr-80' : 
@@ -423,9 +423,11 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             pt-2 pb-2
           `}
         >
-          <div className="h-full bg-background rounded-lg">
-            <div className="h-full p-6 overflow-y-auto">
-              {children}
+          <div className="flex-1 flex flex-col bg-background rounded-lg overflow-hidden">
+            <div className="flex-1 overflow-y-auto">
+              <div className="h-full p-6">
+                {children}
+              </div>
             </div>
           </div>
         </main>

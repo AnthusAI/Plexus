@@ -462,7 +462,7 @@ export default function ItemsDashboard() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 h-full flex flex-col">
       <div>
         <h1 className="text-3xl font-bold">Items</h1>
         <p className="text-muted-foreground">
@@ -489,266 +489,268 @@ export default function ItemsDashboard() {
         <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} options={ITEMS_TIME_RANGE_OPTIONS} />
       </div>
 
-      <div className={`flex ${isNarrowViewport || isFullWidth ? 'flex-col' : 'space-x-6'}`}>
-        <div className={`${isFullWidth && selectedItem ? 'hidden' : 'flex-1'}`}>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[40%]">Item</TableHead>
-                <TableHead className="w-[15%] hidden sm:table-cell">Inferences</TableHead>
-                <TableHead className="w-[15%] hidden sm:table-cell">Results</TableHead>
-                <TableHead className="w-[15%] hidden sm:table-cell">Cost</TableHead>
-                <TableHead className="w-[15%] hidden sm:table-cell text-right">Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredItems.map((item) => (
-                <TableRow key={item.id} onClick={() => handleItemClick(item.id)} className="cursor-pointer">
-                  <TableCell className="font-medium sm:pr-4">
-                    <div className="sm:hidden">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="font-semibold">{item.scorecard}</div>
-                        <Badge 
-                          variant={getBadgeVariant(item.status)}
-                          className="w-24 justify-center"
-                        >
-                          {item.status}
-                        </Badge>
-                      </div>
-                      <div className="text-sm text-muted-foreground mb-2">{getRelativeTime(item.date)}</div>
-                      <div className="flex justify-between items-end">
-                        <div className="text-sm text-muted-foreground">
-                          {item.inferences} inferences<br />
-                          {item.results} results
-                        </div>
-                        <div className="font-semibold">{item.cost}</div>
-                      </div>
-                    </div>
-                    <div className="hidden sm:block">
-                      {item.scorecard}
-                      <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell">{item.inferences}</TableCell>
-                  <TableCell className="hidden sm:table-cell">{item.results}</TableCell>
-                  <TableCell className="hidden sm:table-cell">{item.cost}</TableCell>
-                  <TableCell className="hidden sm:table-cell text-right">
-                    <Badge 
-                      variant={getBadgeVariant(item.status)}
-                      className="w-24 justify-center"
-                    >
-                      {item.status}
-                    </Badge>
-                  </TableCell>
+      <div className={`flex flex-col flex-grow overflow-hidden ${isNarrowViewport || isFullWidth ? 'space-y-6' : 'space-x-6'}`}>
+        {selectedItem && (isNarrowViewport || isFullWidth) && (
+          <div className="flex-shrink-0">
+            {renderSelectedItem()}
+          </div>
+        )}
+        
+        <div className={`flex ${isNarrowViewport || isFullWidth ? 'flex-col' : 'space-x-6'} h-full overflow-hidden`}>
+          <div className={`${isFullWidth && selectedItem ? 'hidden' : 'flex-1'} overflow-auto`}>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[40%]">Item</TableHead>
+                  <TableHead className="w-[15%] hidden sm:table-cell">Inferences</TableHead>
+                  <TableHead className="w-[15%] hidden sm:table-cell">Results</TableHead>
+                  <TableHead className="w-[15%] hidden sm:table-cell">Cost</TableHead>
+                  <TableHead className="w-[15%] hidden sm:table-cell text-right">Status</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-
-        {selectedItem && (
-          <div className={`${isFullWidth ? 'w-full' : 'flex-1'} ${isNarrowViewport || isFullWidth ? 'mx-0' : ''}`}>
-            <Card className={`rounded-none sm:rounded-lg flex flex-col h-full max-h-[calc(100vh-8rem)]`}>
-              <CardHeader className="flex flex-row items-center justify-between py-4 px-4 sm:px-6">
-                <div className="space-y-1">
-                  <h2 className="text-2xl font-semibold">{items.find(item => item.id === selectedItem)?.scorecard}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    {getRelativeTime(items.find(item => item.id === selectedItem)?.date || '')}
-                  </p>
-                </div>
-                <div className="flex space-x-2">
-                  {!isNarrowViewport && (
-                    <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
-                      {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                    </Button>
-                  )}
-                  <Button variant="outline" size="icon" onClick={() => {
-                    setSelectedItem(null)
-                    setIsFullWidth(false)
-                  }}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="flex-grow overflow-auto px-4 sm:px-6">
-                {selectedItem && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm font-medium">Inferences</p>
-                        <p>{items.find(item => item.id === selectedItem)?.inferences}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium">Status</p>
-                        <Badge 
-                          variant={items.find(item => item.id === selectedItem)?.status === 'new' ? 'default' : items.find(item => item.id === selectedItem)?.status === 'scoring...' ? 'secondary' : 'outline'}
-                        >
-                          {items.find(item => item.id === selectedItem)?.status}
-                        </Badge>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">Results</p>
-                        <p>{items.find(item => item.id === selectedItem)?.results}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium">Cost</p>
-                        <p>{items.find(item => item.id === selectedItem)?.cost}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="-mx-4 sm:-mx-6">
-                      <div
-                        className="relative group hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                        onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
-                      >
-                        <div className="flex justify-between items-center px-4 sm:px-6 py-2">
-                          <span className="text-md font-semibold">
-                            Metadata
-                          </span>
-                          {isMetadataExpanded ? (
-                            <ChevronUp className="h-4 w-4" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4" />
-                          )}
+              </TableHeader>
+              <TableBody>
+                {filteredItems.map((item) => (
+                  <TableRow key={item.id} onClick={() => handleItemClick(item.id)} className="cursor-pointer">
+                    <TableCell className="font-medium sm:pr-4">
+                      <div className="sm:hidden">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="font-semibold">{item.scorecard}</div>
+                          <Badge 
+                            variant={getBadgeVariant(item.status)}
+                            className="w-24 justify-center"
+                          >
+                            {item.status}
+                          </Badge>
                         </div>
-                      </div>
-                    </div>
-                    {isMetadataExpanded && (
-                      <div className="mt-2">
-                        <Table>
-                          <TableBody>
-                            {sampleMetadata.map((meta, index) => (
-                              <TableRow key={index}>
-                                <TableCell className="font-medium pl-0">{meta.key}</TableCell>
-                                <TableCell className="text-right pr-0">{meta.value}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-                    
-                    <div className="-mx-4 sm:-mx-6">
-                      <div
-                        className="relative group hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                        onClick={() => setIsDataExpanded(!isDataExpanded)}
-                      >
-                        <div className="flex justify-between items-center px-4 sm:px-6 py-2">
-                          <span className="text-md font-semibold">
-                            Data
-                          </span>
-                          {isDataExpanded ? (
-                            <ChevronUp className="h-4 w-4" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4" />
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    {isDataExpanded && (
-                      <div className="mt-2">
-                        {sampleTranscript.map((line, index) => (
-                          <p key={index} className="text-sm">
-                            <span className="font-semibold">{line.speaker}: </span>
-                            {line.text}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-                    
-                    <div className="-mx-4 sm:-mx-6">
-                      <div className="relative group hover:bg-accent hover:text-accent-foreground cursor-pointer">
-                        <div className="flex justify-between items-center px-4 sm:px-6 py-2">
-                          <h3 className="text-lg font-semibold">Score Results</h3>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-2 space-y-4">
-                      {sampleScoreResults.map((section, sectionIndex) => (
-                        <div key={sectionIndex}>
-                          <h4 className="text-md font-semibold mb-2">{section.section}</h4>
-                          <div className="space-y-2">
-                            {section.scores.map((score, scoreIndex) => (
-                              <div key={scoreIndex}>
-                                {renderScoreResult(score)}
-                                {expandedAnnotations.includes(score.name) && (
-                                  <div className="mt-2 space-y-2 border-l-2 border-muted-foreground pl-4">
-                                    <div className="flex justify-between items-center mb-2">
-                                      <h6 className="text-sm font-medium">Annotations</h6>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => toggleNewAnnotationForm(score.name)}
-                                        className="text-xs"
-                                      >
-                                        Annotate
-                                      </Button>
-                                    </div>
-                                    {showNewAnnotationForm === score.name && (
-                                      <div className="mb-4">
-                                        <h6 className="text-sm font-medium mb-2">Add New Annotation</h6>
-                                        <div className="space-y-2">
-                                          <Select 
-                                            onValueChange={(value) => setNewAnnotation({...newAnnotation, value})}
-                                            value={newAnnotation.value}
-                                          >
-                                            <SelectTrigger>
-                                              <SelectValue placeholder="Select value" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              <SelectItem value="Yes">Yes</SelectItem>
-                                              <SelectItem value="No">No</SelectItem>
-                                            </SelectContent>
-                                          </Select>
-                                          <Textarea 
-                                            placeholder="Explanation" 
-                                            value={newAnnotation.explanation}
-                                            onChange={(e) => setNewAnnotation({...newAnnotation, explanation: e.target.value})}
-                                          />
-                                          <Input 
-                                            placeholder="Annotation" 
-                                            value={newAnnotation.annotation}
-                                            onChange={(e) => setNewAnnotation({...newAnnotation, annotation: e.target.value})}
-                                          />
-                                          <div className="flex justify-end space-x-2">
-                                            <Button variant="outline" onClick={() => cancelAnnotation(score.name)}>Cancel</Button>
-                                            <Button onClick={() => handleNewAnnotationSubmit(score.name)}>Submit Annotation</Button>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    )}
-                                    {score.annotations && score.annotations.map((annotation, annotationIndex) => (
-                                      <div key={annotationIndex} className="relative">
-                                        {renderScoreResult(annotation, true)}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
+                        <div className="text-sm text-muted-foreground mb-2">{getRelativeTime(item.date)}</div>
+                        <div className="flex justify-between items-end">
+                          <div className="text-sm text-muted-foreground">
+                            {item.inferences} inferences<br />
+                            {item.results} results
                           </div>
+                          <div className="font-semibold">{item.cost}</div>
+                        </div>
+                      </div>
+                      <div className="hidden sm:block">
+                        {item.scorecard}
+                        <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">{item.inferences}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{item.results}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{item.cost}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-right">
+                      <Badge 
+                        variant={getBadgeVariant(item.status)}
+                        className="w-24 justify-center"
+                      >
+                        {item.status}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {selectedItem && !isNarrowViewport && !isFullWidth && (
+            <div className="flex-1 overflow-hidden">
+              {renderSelectedItem()}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+
+  function renderSelectedItem() {
+    return (
+      <Card className="rounded-none sm:rounded-lg flex flex-col h-full">
+        <CardHeader className="flex flex-row items-center justify-between py-4 px-4 sm:px-6 flex-shrink-0">
+          <div className="space-y-1">
+            <h2 className="text-2xl font-semibold">{items.find(item => item.id === selectedItem)?.scorecard}</h2>
+            <p className="text-sm text-muted-foreground">
+              {getRelativeTime(items.find(item => item.id === selectedItem)?.date || '')}
+            </p>
+          </div>
+          <div className="flex space-x-2">
+            {!isNarrowViewport && (
+              <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
+                {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+              </Button>
+            )}
+            <Button variant="outline" size="icon" onClick={() => {
+              setSelectedItem(null)
+              setIsFullWidth(false)
+            }}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="flex-grow overflow-auto px-4 sm:px-6">
+          {selectedItem && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-medium">Inferences</p>
+                  <p>{items.find(item => item.id === selectedItem)?.inferences}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium">Status</p>
+                  <Badge 
+                    variant={items.find(item => item.id === selectedItem)?.status === 'new' ? 'default' : items.find(item => item.id === selectedItem)?.status === 'scoring...' ? 'secondary' : 'outline'}
+                  >
+                    {items.find(item => item.id === selectedItem)?.status}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Results</p>
+                  <p>{items.find(item => item.id === selectedItem)?.results}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium">Cost</p>
+                  <p>{items.find(item => item.id === selectedItem)?.cost}</p>
+                </div>
+              </div>
+              
+              <div className="-mx-4 sm:-mx-6">
+                <div
+                  className="relative group hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                  onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
+                >
+                  <div className="flex justify-between items-center px-4 sm:px-6 py-2">
+                    <span className="text-md font-semibold">
+                      Metadata
+                    </span>
+                    {isMetadataExpanded ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
+                  </div>
+                </div>
+              </div>
+              {isMetadataExpanded && (
+                <div className="mt-2">
+                  <Table>
+                    <TableBody>
+                      {sampleMetadata.map((meta, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium pl-0">{meta.key}</TableCell>
+                          <TableCell className="text-right pr-0">{meta.value}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+              
+              <div className="-mx-4 sm:-mx-6">
+                <div
+                  className="relative group hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                  onClick={() => setIsDataExpanded(!isDataExpanded)}
+                >
+                  <div className="flex justify-between items-center px-4 sm:px-6 py-2">
+                    <span className="text-md font-semibold">
+                      Data
+                    </span>
+                    {isDataExpanded ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
+                  </div>
+                </div>
+              </div>
+              {isDataExpanded && (
+                <div className="mt-2">
+                  {sampleTranscript.map((line, index) => (
+                    <p key={index} className="text-sm">
+                      <span className="font-semibold">{line.speaker}: </span>
+                      {line.text}
+                    </p>
+                  ))}
+                </div>
+              )}
+              
+              <div className="-mx-4 sm:-mx-6">
+                <div className="relative group hover:bg-accent hover:text-accent-foreground cursor-pointer">
+                  <div className="flex justify-between items-center px-4 sm:px-6 py-2">
+                    <h3 className="text-lg font-semibold">Score Results</h3>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-2 space-y-4">
+                {sampleScoreResults.map((section, sectionIndex) => (
+                  <div key={sectionIndex}>
+                    <h4 className="text-md font-semibold mb-2">{section.section}</h4>
+                    <div className="space-y-2">
+                      {section.scores.map((score, scoreIndex) => (
+                        <div key={scoreIndex}>
+                          {renderScoreResult(score)}
+                          {expandedAnnotations.includes(score.name) && (
+                            <div className="mt-2 space-y-2 border-l-2 border-muted-foreground pl-4">
+                              <div className="flex justify-between items-center mb-2">
+                                <h6 className="text-sm font-medium">Annotations</h6>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => toggleNewAnnotationForm(score.name)}
+                                  className="text-xs"
+                                >
+                                  Annotate
+                                </Button>
+                              </div>
+                              {showNewAnnotationForm === score.name && (
+                                <div className="mb-4">
+                                  <h6 className="text-sm font-medium mb-2">Add New Annotation</h6>
+                                  <div className="space-y-2">
+                                    <Select 
+                                      onValueChange={(value) => setNewAnnotation({...newAnnotation, value})}
+                                      value={newAnnotation.value}
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select value" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="Yes">Yes</SelectItem>
+                                        <SelectItem value="No">No</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <Textarea 
+                                      placeholder="Explanation" 
+                                      value={newAnnotation.explanation}
+                                      onChange={(e) => setNewAnnotation({...newAnnotation, explanation: e.target.value})}
+                                    />
+                                    <Input 
+                                      placeholder="Annotation" 
+                                      value={newAnnotation.annotation}
+                                      onChange={(e) => setNewAnnotation({...newAnnotation, annotation: e.target.value})}
+                                    />
+                                    <div className="flex justify-end space-x-2">
+                                      <Button variant="outline" onClick={() => cancelAnnotation(score.name)}>Cancel</Button>
+                                      <Button onClick={() => handleNewAnnotationSubmit(score.name)}>Submit Annotation</Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                              {score.annotations && score.annotations.map((annotation, annotationIndex) => (
+                                <div key={annotationIndex} className="relative">
+                                  {renderScoreResult(annotation, true)}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        )}
-      </div>
-      {selectedScore && (
-        <Card className="mt-4">
-          <CardHeader>
-            <h3 className="text-lg font-semibold">{selectedScore}</h3>
-          </CardHeader>
-          <CardContent>
-            <p><strong>Value:</strong> {sampleScoreResults.find(score => score.name === selectedScore)?.value}</p>
-            <p><strong>Explanation:</strong> {sampleScoreResults.find(score => score.name === selectedScore)?.explanation}</p>
-            {/* Add more details or actions for the selected score here */}
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  )
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
 }
