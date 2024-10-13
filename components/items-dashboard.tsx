@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, Columns2, X } from "lucide-react"
+import { Square, Columns2, X, ChevronDown, ChevronUp } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -112,6 +112,8 @@ export default function ItemsDashboard() {
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
+  const [isMetadataExpanded, setIsMetadataExpanded] = useState(false)
+  const [isDataExpanded, setIsDataExpanded] = useState(false)
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -274,7 +276,7 @@ export default function ItemsDashboard() {
               </CardHeader>
               <CardContent className="flex-grow overflow-auto px-4 sm:px-6">
                 {selectedItem && (
-                  <div className="space-y-2">
+                  <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm font-medium">Inferences</p>
@@ -297,24 +299,58 @@ export default function ItemsDashboard() {
                         <p>{items.find(item => item.id === selectedItem)?.cost}</p>
                       </div>
                     </div>
-                    <div>
-                      <h4 className="text-md font-semibold">Metadata</h4>
-                      <hr className="my-1 border-t border-gray-200" />
-                      <Table>
-                        <TableBody>
-                          {sampleMetadata.map((meta, index) => (
-                            <TableRow key={index}>
-                              <TableCell className="font-medium pl-0">{meta.key}</TableCell>
-                              <TableCell className="text-right pr-0">{meta.value}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                    
+                    <div className="-mx-4 sm:-mx-6">
+                      <div
+                        className="relative group hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                        onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
+                      >
+                        <div className="flex justify-between items-center px-4 sm:px-6 py-2">
+                          <span className="text-md font-semibold">
+                            Metadata
+                          </span>
+                          {isMetadataExpanded ? (
+                            <ChevronUp className="h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4" />
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-md font-semibold">Data</h4>
-                      <hr className="my-1 border-t border-gray-200" />
-                      <div className="space-y-2">
+                    {isMetadataExpanded && (
+                      <div className="mt-2">
+                        <Table>
+                          <TableBody>
+                            {sampleMetadata.map((meta, index) => (
+                              <TableRow key={index}>
+                                <TableCell className="font-medium pl-0">{meta.key}</TableCell>
+                                <TableCell className="text-right pr-0">{meta.value}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                    
+                    <div className="-mx-4 sm:-mx-6">
+                      <div
+                        className="relative group hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                        onClick={() => setIsDataExpanded(!isDataExpanded)}
+                      >
+                        <div className="flex justify-between items-center px-4 sm:px-6 py-2">
+                          <span className="text-md font-semibold">
+                            Data
+                          </span>
+                          {isDataExpanded ? (
+                            <ChevronUp className="h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {isDataExpanded && (
+                      <div className="mt-2">
                         {sampleTranscript.map((line, index) => (
                           <p key={index} className="text-sm">
                             <span className="font-semibold">{line.speaker}: </span>
@@ -322,7 +358,7 @@ export default function ItemsDashboard() {
                           </p>
                         ))}
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
               </CardContent>
