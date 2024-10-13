@@ -342,6 +342,12 @@ export default function ItemsDashboard() {
     setNewAnnotation({ value: "", explanation: "", annotation: "" });
   };
 
+  const setExplanationRef = useCallback((element: HTMLDivElement | null, scoreName: string) => {
+    if (element) {
+      explanationRefs.current[scoreName] = element;
+    }
+  }, []);
+
   const renderScoreResult = (score: any, isAnnotation = false) => (
     <div className={`py-2 ${isAnnotation ? 'pr-4 border-r-2 border-muted-foreground' : 'border-b last:border-b-0'}`}>
       {isAnnotation ? (
@@ -351,7 +357,7 @@ export default function ItemsDashboard() {
           </div>
           <div className="relative">
             <div 
-              ref={el => explanationRefs.current[score.name] = el}
+              ref={(el) => setExplanationRef(el, score.name)}
               className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
               style={{ maxHeight: expandedExplanations.includes(score.name) ? 'none' : '1.5em' }}
               onClick={() => toggleExplanation(score.name)}
@@ -402,7 +408,7 @@ export default function ItemsDashboard() {
           </div>
           <div className="relative">
             <div 
-              ref={el => explanationRefs.current[score.name] = el}
+              ref={(el) => setExplanationRef(el, score.name)}
               className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
               style={{ maxHeight: expandedExplanations.includes(score.name) ? 'none' : '1.5em' }}
               onClick={() => toggleExplanation(score.name)}
