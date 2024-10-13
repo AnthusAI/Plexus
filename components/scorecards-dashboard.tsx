@@ -209,33 +209,44 @@ export default function ScorecardsComponent() {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[50%]">Scorecard</TableHead>
+          <TableHead className="w-[70%]">Scorecard</TableHead>
           <TableHead className="w-[20%] text-right">Scores</TableHead>
-          <TableHead className="w-[30%] text-right">Actions</TableHead>
+          <TableHead className="w-[10%] text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {scorecards.map((scorecard) => (
-          <TableRow key={scorecard.id} onClick={() => setSelectedScorecard(scorecard)} className="cursor-pointer">
-            <TableCell className="w-[50%]">
+          <TableRow 
+            key={scorecard.id} 
+            onClick={() => setSelectedScorecard(scorecard)} 
+            className="cursor-pointer transition-colors duration-200 hover:bg-muted"
+          >
+            <TableCell className="w-[70%]">
               <div>
                 <div className="font-medium">{scorecard.name}</div>
                 <div className="text-sm text-muted-foreground">{scorecard.id} - {scorecard.key}</div>
               </div>
             </TableCell>
             <TableCell className="w-[20%] text-right">{scorecard.scores}</TableCell>
-            <TableCell className="w-[30%]">
+            <TableCell className="w-[10%]">
               <div className="flex items-center justify-end space-x-2">
-                <Button variant="outline" size="sm" className="border border-secondary" onClick={(e) => { e.stopPropagation(); handleEdit(scorecard); }}>
-                  <Pencil className="h-4 w-4 mr-2" /> Edit
-                </Button>
-                <Button variant="outline" size="sm" className="border border-secondary" onClick={(e) => { e.stopPropagation(); handleDelete(scorecard.id); }}>
-                  <Trash2 className="h-4 w-4 mr-2" /> Delete
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={(e) => { e.stopPropagation(); handleEdit(scorecard); }}
+                  className="h-8 w-8 p-0"
+                >
+                  <Pencil className="h-4 w-4" />
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="border border-secondary" onClick={(e) => e.stopPropagation()}>
-                      <MoreHorizontal className="h-4 w-4 mr-2" /> More
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-8 w-8 p-0"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
