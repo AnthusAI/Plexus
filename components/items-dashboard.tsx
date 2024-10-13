@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, Columns2, X, ChevronDown, ChevronUp } from "lucide-react"
+import { Square, Columns2, X, ChevronDown, ChevronUp, Info } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -21,6 +21,7 @@ import ReactMarkdown from 'react-markdown'
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import Link from 'next/link'
 
 // Get the current date and time
 const now = new Date();
@@ -385,8 +386,17 @@ export default function ItemsDashboard() {
         </>
       ) : (
         <>
-          <div className="flex justify-between items-start mb-1">
-            <h5 className="text-sm font-medium">{score.name}</h5>
+          <div className="flex justify-between items-center mb-1">
+            <div className="flex items-center">
+              <h5 className="text-sm font-medium">{score.name}</h5>
+              <div className="inline-flex items-center ml-1">
+                <Link href={`/scorecards?score=${encodeURIComponent(score.name)}`} passHref>
+                  <Button variant="ghost" size="sm" className="p-0 h-auto translate-y-[2px]" title={`More info about ${score.name}`}>
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </Link>
+              </div>
+            </div>
             <div className="flex items-center space-x-2">
               {score.isAnnotated ? (
                 <Button
