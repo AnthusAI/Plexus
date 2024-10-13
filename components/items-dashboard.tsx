@@ -516,9 +516,9 @@ export default function ItemsDashboard() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[40%]">Item</TableHead>
-                  <TableHead className="w-[15%] hidden sm:table-cell">Inferences</TableHead>
-                  <TableHead className="w-[15%] hidden sm:table-cell">Results</TableHead>
-                  <TableHead className="w-[15%] hidden sm:table-cell">Cost</TableHead>
+                  <TableHead className="w-[15%] hidden sm:table-cell text-right">Inferences</TableHead>
+                  <TableHead className="w-[15%] hidden sm:table-cell text-right">Results</TableHead>
+                  <TableHead className="w-[15%] hidden sm:table-cell text-right">Cost</TableHead>
                   <TableHead className="w-[15%] hidden sm:table-cell text-right">Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -549,9 +549,9 @@ export default function ItemsDashboard() {
                         <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
                       </div>
                     </TableCell>
-                    <TableCell className="hidden sm:table-cell">{item.inferences}</TableCell>
-                    <TableCell className="hidden sm:table-cell">{item.results}</TableCell>
-                    <TableCell className="hidden sm:table-cell">{item.cost}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-right">{item.inferences}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-right">{item.results}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-right">{item.cost}</TableCell>
                     <TableCell className="hidden sm:table-cell text-right">
                       <Badge 
                         className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
