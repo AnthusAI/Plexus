@@ -138,13 +138,7 @@ export default function Scorecards() {
     if (!selectedScorecard) {
       return (
         <>
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-3xl font-bold">Scorecards</h1>
-              <p className="text-muted-foreground">
-                Manage your scorecards and their associated scores.
-              </p>
-            </div>
+          <div className="flex justify-end items-center mb-6">
             <Button onClick={handleCreate}>
               <Plus className="mr-2 h-4 w-4" /> Create Scorecard
             </Button>
@@ -153,7 +147,7 @@ export default function Scorecards() {
             <Table className="w-full">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[50%]">Name</TableHead>
+                  <TableHead className="w-[50%]">Scorecard</TableHead>
                   <TableHead className="w-[20%]">Scores</TableHead>
                   <TableHead className="w-[30%] text-right">Actions</TableHead>
                 </TableRow>

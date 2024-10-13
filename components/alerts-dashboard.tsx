@@ -117,12 +117,6 @@ export default function AlertsDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Alerts</h1>
-        <p className="text-muted-foreground">
-          Recent alerts triggered by scoring items, system events, or errors.
-        </p>
-      </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 sm:space-x-4">
         <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
