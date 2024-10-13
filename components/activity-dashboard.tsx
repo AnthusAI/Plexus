@@ -210,6 +210,8 @@ export default function ActivityDashboard() {
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
 
+  const activityListRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     const checkViewportWidth = () => {
       setIsNarrowViewport(window.innerWidth < 640)
@@ -220,6 +222,17 @@ export default function ActivityDashboard() {
 
     return () => window.removeEventListener('resize', checkViewportWidth)
   }, [])
+
+  useEffect(() => {
+    if (selectedActivity && activityListRef.current) {
+      const selectedCard = activityListRef.current.querySelector(
+        `[data-activity-id="${selectedActivity.id}"]`
+      )
+      if (selectedCard) {
+        selectedCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
+    }
+  }, [selectedActivity])
 
   const sortedActivities = useMemo(() => {
     const sorted = [...recentActivities].sort((a, b) => {
@@ -382,47 +395,48 @@ export default function ActivityDashboard() {
 
       <div className={`flex flex-grow overflow-hidden ${isNarrowViewport || isFullWidth ? 'flex-col' : 'space-x-6'}`}>
         <div className={`flex flex-col ${isFullWidth && selectedActivity ? 'hidden' : 'flex-1'} overflow-hidden`}>
-          <Card className="shadow-none mb-6">
-            <CardContent className="p-0">
-              <ChartContainer config={chartConfig} className="h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={barChartData}>
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar
-                      dataKey="scored"
-                      stackId="a"
-                      fill="var(--chart-1)"
-                      onClick={handleBarClick}
-                      cursor="pointer"
-                    />
-                    <Bar
-                      dataKey="experiments"
-                      stackId="a"
-                      fill="var(--chart-2)"
-                      onClick={handleBarClick}
-                      cursor="pointer"
-                    />
-                    <Bar
-                      dataKey="optimizations"
-                      stackId="a"
-                      fill="var(--chart-3)"
-                      onClick={handleBarClick}
-                      cursor="pointer"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartContainer>
-            </CardContent>
-          </Card>
+          <div className="flex-1 overflow-auto">
+            <Card className="shadow-none mb-6">
+              <CardContent className="p-0">
+                <ChartContainer config={chartConfig} className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={barChartData}>
+                      <XAxis dataKey="name" />
+                      <YAxis />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Bar
+                        dataKey="scored"
+                        stackId="a"
+                        fill="var(--chart-1)"
+                        onClick={handleBarClick}
+                        cursor="pointer"
+                      />
+                      <Bar
+                        dataKey="experiments"
+                        stackId="a"
+                        fill="var(--chart-2)"
+                        onClick={handleBarClick}
+                        cursor="pointer"
+                      />
+                      <Bar
+                        dataKey="optimizations"
+                        stackId="a"
+                        fill="var(--chart-3)"
+                        onClick={handleBarClick}
+                        cursor="pointer"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              </CardContent>
+            </Card>
 
-          <div className="overflow-auto flex-grow">
             <h2 className="text-2xl font-semibold mb-4">Recent Updates</h2>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className={`grid gap-4 ${selectedActivity ? 'md:grid-cols-1' : 'md:grid-cols-2'}`}>
               {sortedActivities.slice((currentPage - 1) * activitiesPerPage, currentPage * activitiesPerPage).map((activity) => (
                 <Card 
-                  key={activity.id} 
+                  key={activity.id}
+                  data-activity-id={activity.id}
                   className={`relative cursor-pointer transition-colors duration-200 ${
                     selectedActivity?.id === activity.id 
                       ? 'bg-secondary text-secondary-foreground hover:bg-secondary/90' 
@@ -430,56 +444,41 @@ export default function ActivityDashboard() {
                   }`} 
                   onClick={() => setSelectedActivity(activity)}
                 >
-                  <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 pl-10">
-                    <div className="flex items-start">
-                      <div className="w-7 flex-shrink-0 -ml-7">
+                  <CardHeader className="pr-4 flex flex-col items-start">
+                    <div className="flex justify-between items-start w-full">
+                      <div className="text-lg font-bold">
+                        {activity.type}
+                      </div>
+                      <div className="w-7 flex-shrink-0">
                         {renderActivityIcon(activity.type)}
                       </div>
-                      <div>
-                        <CardTitle className="text-sm font-medium">
-                          {activity.type}
-                        </CardTitle>
-                        <div className={`text-xs ${
-                          selectedActivity?.id === activity.id 
-                            ? 'text-secondary-foreground' 
-                            : 'text-muted-foreground'
-                        }`}>
-                          {activity.time}
-                        </div>
-                        <div className={`text-xs ${
-                          selectedActivity?.id === activity.id 
-                            ? 'text-secondary-foreground' 
-                            : 'text-muted-foreground'
-                        }`}>
-                          {activity.scorecard}
-                        </div>
-                        <div className={`text-xs ${
-                          selectedActivity?.id === activity.id 
-                            ? 'text-secondary-foreground' 
-                            : 'text-muted-foreground'
-                        }`}>
-                          {activity.score || "\u00A0"}
-                        </div>
-                      </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`h-8 px-2 text-xs ${
-                        selectedActivity?.id === activity.id 
-                          ? 'hover:bg-secondary-foreground/10' 
-                          : 'hover:bg-primary/10'
-                      }`}
-                      onClick={() => console.log(`View details for ${activity.id}`)}
-                    >
-                      Details
-                      <ArrowRight className="ml-1 h-3 w-3" />
-                    </Button>
+                    <div className={`text-xs ${
+                      selectedActivity?.id === activity.id 
+                        ? 'text-secondary-foreground' 
+                        : 'text-muted-foreground'
+                    }`}>
+                      {activity.time}
+                    </div>
+                    <div className={`text-xs ${
+                      selectedActivity?.id === activity.id 
+                        ? 'text-secondary-foreground' 
+                        : 'text-muted-foreground'
+                    }`}>
+                      {activity.scorecard}
+                    </div>
+                    <div className={`text-xs ${
+                      selectedActivity?.id === activity.id 
+                        ? 'text-secondary-foreground' 
+                        : 'text-muted-foreground'
+                    }`}>
+                      {activity.score || "\u00A0"}
+                    </div>
                   </CardHeader>
-                  <CardContent className="pl-10">
-                    <div className="flex justify-between items-start">
+                  <CardContent className="pt-0 pb-20 relative min-h-[200px]">
+                    <div className="flex justify-between items-start mt-4">
                       <div className="space-y-1 w-full">
-                        <div className="text-lg font-bold mt-2">
+                        <div className="text-lg font-bold">
                           {activity.type === "Score updated" || activity.type === "Optimization started" ? (
                             <div>
                               <div className={`flex items-center ${selectedActivity?.id === activity.id ? 'text-secondary-foreground' : ''}`}>
@@ -509,22 +508,20 @@ export default function ActivityDashboard() {
                             </div>
                           )}
                         </div>
-                        {activity.type === "Alert" && (
-                          <div className="flex justify-center mt-4">
-                            <MessageCircleWarning className={`h-16 w-16 text-destructive ${selectedActivity?.id === activity.id ? 'text-secondary-foreground' : 'text-destructive'}`} />
-                          </div>
-                        )}
                       </div>
                       <div className="flex-shrink-0 ml-4">
                         {renderVisualization(activity)}
                       </div>
                     </div>
+                    {activity.type === "Alert" && (
+                      <div className="absolute bottom-4 left-0 right-0 flex justify-center">
+                        <MessageCircleWarning className={`h-16 w-16 ${selectedActivity?.id === activity.id ? 'text-secondary-foreground' : 'text-destructive'}`} />
+                      </div>
+                    )}
                     {(activity.type === "Optimization started" || activity.type === "Experiment started") && activity.data && (
-                      <div className="mt-4">
+                      <div className="absolute bottom-4 left-4 right-4">
                         <div className="text-sm font-medium mb-1">Progress: {activity.data.progress}%</div>
-                        <div className="relative">
-                          <Progress value={activity.data.progress} className="w-full h-2 absolute" />
-                        </div>
+                        <Progress value={activity.data.progress} className="w-full h-2" />
                       </div>
                     )}
                   </CardContent>
@@ -554,7 +551,7 @@ export default function ActivityDashboard() {
         </div>
 
         {selectedActivity && (
-          <div className={`flex-shrink-0 ${isFullWidth ? 'w-full' : 'w-1/2'} overflow-hidden`}>
+          <div className={`flex-shrink-0 ${isFullWidth ? 'w-full' : 'w-1/2'} overflow-hidden flex flex-col`}>
             <Card className="rounded-none sm:rounded-lg flex flex-col h-full">
               <CardHeader className="flex flex-row items-start justify-between py-4 px-4 sm:px-6 flex-shrink-0">
                 <div className="space-y-1">
