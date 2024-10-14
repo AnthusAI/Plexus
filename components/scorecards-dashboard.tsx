@@ -86,30 +86,33 @@ function EditableField({ value, onChange, className = "" }: EditableFieldProps) 
 
   return (
     <div className="flex items-center space-x-2">
-      {isEditing ? (
-        <Input
-          ref={inputRef}
-          type="text"
-          value={value}
-          onChange={handleInputChange}
-          onBlur={handleInputBlur}
-          onKeyDown={handleKeyDown}
-          className={`py-1 px-2 ${className}`}
-        />
-      ) : (
-        <span 
-          className={`cursor-pointer hover:bg-gray-100 py-1 px-2 rounded transition-colors duration-200 ${className}`}
-          onClick={handleEditToggle}
-        >
-          {value}
-        </span>
-      )}
+      <div className="flex-grow">
+        {isEditing ? (
+          <Input
+            ref={inputRef}
+            type="text"
+            value={value}
+            onChange={handleInputChange}
+            onBlur={handleInputBlur}
+            onKeyDown={handleKeyDown}
+            className={`py-1 px-2 ${className}`}
+          />
+        ) : (
+          <span 
+            className={`cursor-pointer hover:bg-gray-100 py-1 px-2 rounded transition-colors duration-200 ${className}`}
+            onClick={handleEditToggle}
+          >
+            {value}
+          </span>
+        )}
+      </div>
       <Button 
         variant="outline" 
-        size="sm" 
+        size="icon"
+        className="h-8 w-8 flex-shrink-0"
         onMouseDown={handleEditToggle}
       >
-        {isEditing ? 'Save' : 'Edit'}
+        <Pencil className="h-4 w-4" />
       </Button>
     </div>
   )
@@ -122,6 +125,7 @@ export default function ScorecardsComponent() {
   const [editingScore, setEditingScore] = useState<{ id: string; name: string; type: string } | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
+  const [editingName, setEditingName] = useState(false)
 
   const handleCreate = () => {
     const newScorecard: Scorecard = {
@@ -205,6 +209,17 @@ export default function ScorecardsComponent() {
     }
   }
 
+  const handleNameEdit = () => {
+    setEditingName(true)
+  }
+
+  const handleNameSave = (newName: string) => {
+    if (selectedScorecard) {
+      setSelectedScorecard({ ...selectedScorecard, name: newName })
+      setEditingName(false)
+    }
+  }
+
   const renderScorecardsTable = () => (
     <Table>
       <TableHeader>
@@ -283,18 +298,41 @@ export default function ScorecardsComponent() {
       <CardHeader className="py-4 px-4 sm:px-6 flex-shrink-0">
         <div className="flex flex-col space-y-4 w-full">
           <div className="flex justify-between items-start">
-            <EditableField 
-              value={selectedScorecard?.name || "New Scorecard"} 
-              onChange={(value) => setSelectedScorecard(prev => prev ? { ...prev, name: value } : null)}
-              className="text-2xl font-bold"
-            />
-            <div className="flex space-x-2">
+            <div className="flex-grow flex items-center space-x-2">
+              {editingName ? (
+                <Input
+                  value={selectedScorecard?.name || ""}
+                  onChange={(e) => setSelectedScorecard(prev => prev ? { ...prev, name: e.target.value } : null)}
+                  onBlur={() => setEditingName(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setEditingName(false)
+                    }
+                  }}
+                  className="text-2xl font-bold"
+                  autoFocus
+                />
+              ) : (
+                <span className="text-2xl font-bold">
+                  {selectedScorecard?.name || "New Scorecard"}
+                </span>
+              )}
+              <Button 
+                variant="outline" 
+                size="icon"
+                className="h-8 w-8 flex-shrink-0"
+                onClick={handleNameEdit}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex space-x-2 flex-shrink-0">
               {!isNarrowViewport && (
-                <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
+                <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setIsFullWidth(!isFullWidth)}>
                   {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
                 </Button>
               )}
-              <Button variant="outline" size="icon" onClick={() => {
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => {
                 setSelectedScorecard(null)
                 setIsFullWidth(false)
               }}>
