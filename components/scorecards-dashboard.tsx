@@ -298,7 +298,7 @@ export default function ScorecardsComponent() {
       <CardHeader className="py-4 px-4 sm:px-6 flex-shrink-0">
         <div className="flex flex-col space-y-4 w-full">
           <div className="flex justify-between items-start">
-            <div className="flex-grow flex items-center space-x-2">
+            <div className="flex-grow flex items-start">
               {editingName ? (
                 <Input
                   value={selectedScorecard?.name || ""}
@@ -309,26 +309,26 @@ export default function ScorecardsComponent() {
                       setEditingName(false)
                     }
                   }}
-                  className="text-2xl font-bold"
+                  className="text-2xl font-bold mr-2"
                   autoFocus
                 />
               ) : (
-                <span className="text-2xl font-bold">
+                <span className="text-2xl font-bold mr-2">
                   {selectedScorecard?.name || "New Scorecard"}
                 </span>
               )}
               <Button 
                 variant="outline" 
                 size="icon"
-                className="h-8 w-8 flex-shrink-0"
+                className="h-8 w-8 flex-shrink-0 mr-8"
                 onClick={handleNameEdit}
               >
                 <Pencil className="h-4 w-4" />
               </Button>
             </div>
-            <div className="flex space-x-2 flex-shrink-0">
+            <div className="flex">
               {!isNarrowViewport && (
-                <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setIsFullWidth(!isFullWidth)}>
+                <Button variant="outline" size="icon" className="h-8 w-8 mr-2" onClick={() => setIsFullWidth(!isFullWidth)}>
                   {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
                 </Button>
               )}
