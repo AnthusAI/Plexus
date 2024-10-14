@@ -1,10 +1,10 @@
 "use client"
-
+import React from "react"
 import { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, Columns2, X, ChevronDown, ChevronUp, Info } from "lucide-react"
+import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -354,7 +354,7 @@ export default function ItemsDashboard() {
   }, []);
 
   const renderScoreResult = (score: any, isAnnotation = false) => (
-    <div className={`py-2 ${isAnnotation ? 'pr-4 border-r-2 ' + (score.isSystem ? 'border-secondary' : 'border-primary') : 'border-b last:border-b-0'}`}>
+    <div className={`py-2 ${isAnnotation ? 'pl-4 border-l-2 ' + (score.isSystem ? 'border-secondary' : 'border-primary') : 'border-b last:border-b-0'}`}>
       {isAnnotation ? (
         <>
           <div className="flex justify-end mb-2">
@@ -398,25 +398,24 @@ export default function ItemsDashboard() {
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              {score.isAnnotated ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => toggleAnnotations(score.name)}
-                  className="text-xs bg-accent text-accent-foreground"
-                >
-                  Annotations
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => toggleAnnotations(score.name)}
-                  className="text-xs"
-                >
-                  Annotate
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => score.name === "Profanity" ? toggleAnnotations(score.name) : toggleNewAnnotationForm(score.name)}
+                className={`text-xs ${score.isAnnotated ? 'bg-accent text-accent-foreground' : ''}`}
+              >
+                {score.name === "Profanity" ? (
+                  <>
+                    <MessageCircleMore className="h-4 w-4 mr-1" />
+                    Annotated
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Annotate
+                  </>
+                )}
+              </Button>
               <Badge className={getValueBadgeClass(score.value)}>{score.value}</Badge>
             </div>
           </div>
@@ -722,35 +721,80 @@ export default function ItemsDashboard() {
                 </div>
               )}
               
-              <div className="-mx-4 sm:-mx-6">
-                <div className="relative group hover:bg-accent hover:text-accent-foreground cursor-pointer">
-                  <div className="flex justify-between items-center px-4 sm:px-6 py-2">
-                    <h3 className="text-lg font-semibold">Score Results</h3>
+              <div className="mt-8">
+                <div className="-mx-4 sm:-mx-6 mb-4">
+                  <div className="px-4 sm:px-6 py-2">
+                    <h4 className="text-md font-semibold">Score Results</h4>
                   </div>
                 </div>
-              </div>
-              <div className="mt-2 space-y-4">
                 {sampleScoreResults.map((section, sectionIndex) => (
-                  <div key={sectionIndex}>
-                    <h4 className="text-md font-semibold mb-2">{section.section}</h4>
-                    <div className="space-y-2">
+                  <div key={sectionIndex} className="mb-6">
+                    <div className="-mx-4 sm:-mx-6 mb-4">
+                      <div className="bg-muted px-4 sm:px-6 py-2">
+                        <h4 className="text-md font-semibold">{section.section}</h4>
+                      </div>
+                    </div>
+                    <div>
                       {section.scores.map((score, scoreIndex) => (
-                        <div key={scoreIndex}>
-                          {renderScoreResult(score)}
-                          {expandedAnnotations.includes(score.name) && (
-                            <div className="mt-2 space-y-2 border-l-2 border-muted-foreground pl-4">
-                              <div className="flex justify-between items-center mb-2">
-                                <h6 className="text-sm font-medium">Annotations</h6>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => toggleNewAnnotationForm(score.name)}
-                                  className="text-xs"
-                                >
-                                  Annotate
-                                </Button>
+                        <React.Fragment key={scoreIndex}>
+                          <div>
+                            {renderScoreResult(score)}
+                            {score.name === "Profanity" && expandedAnnotations.includes(score.name) && (
+                              <div className="mt-2 space-y-2">
+                                <div className="flex justify-between items-center mb-2">
+                                  <h6 className="text-sm font-medium">Annotations</h6>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => toggleNewAnnotationForm(score.name)}
+                                    className="text-xs"
+                                  >
+                                    <Plus className="h-4 w-4 mr-1" />
+                                    Annotate
+                                  </Button>
+                                </div>
+                                {showNewAnnotationForm === score.name && (
+                                  <div className="mb-4">
+                                    <h6 className="text-sm font-medium mb-2">Add New Annotation</h6>
+                                    <div className="space-y-2">
+                                      <Select 
+                                        onValueChange={(value) => setNewAnnotation({...newAnnotation, value})}
+                                        value={newAnnotation.value}
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Select value" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="Yes">Yes</SelectItem>
+                                          <SelectItem value="No">No</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <Textarea 
+                                        placeholder="Explanation" 
+                                        value={newAnnotation.explanation}
+                                        onChange={(e) => setNewAnnotation({...newAnnotation, explanation: e.target.value})}
+                                      />
+                                      <Input 
+                                        placeholder="Annotation" 
+                                        value={newAnnotation.annotation}
+                                        onChange={(e) => setNewAnnotation({...newAnnotation, annotation: e.target.value})}
+                                      />
+                                      <div className="flex justify-end space-x-2">
+                                        <Button variant="outline" onClick={() => cancelAnnotation(score.name)}>Cancel</Button>
+                                        <Button onClick={() => handleNewAnnotationSubmit(score.name)}>Submit Annotation</Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                                {score.annotations && score.annotations.map((annotation, annotationIndex) => (
+                                  <div key={annotationIndex} className="relative">
+                                    {renderScoreResult(annotation, true)}
+                                  </div>
+                                ))}
                               </div>
-                              {showNewAnnotationForm === score.name && (
+                            )}
+                            {score.name !== "Profanity" && showNewAnnotationForm === score.name && (
+                              <div className="mt-2 space-y-2 border-l-2 border-muted-foreground pl-4">
                                 <div className="mb-4">
                                   <h6 className="text-sm font-medium mb-2">Add New Annotation</h6>
                                   <div className="space-y-2">
@@ -782,15 +826,13 @@ export default function ItemsDashboard() {
                                     </div>
                                   </div>
                                 </div>
-                              )}
-                              {score.annotations && score.annotations.map((annotation, annotationIndex) => (
-                                <div key={annotationIndex} className="relative">
-                                  {renderScoreResult(annotation, true)}
-                                </div>
-                              ))}
-                            </div>
+                              </div>
+                            )}
+                          </div>
+                          {scoreIndex < section.scores.length - 1 && (
+                            <hr className="my-2 border-t border-border" />
                           )}
-                        </div>
+                        </React.Fragment>
                       ))}
                     </div>
                   </div>
