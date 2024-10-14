@@ -399,7 +399,7 @@ export default function ActivityDashboard() {
   }
 
   return (
-    <div className="space-y-6 h-full flex flex-col">
+    <div className="space-y-4 h-full flex flex-col">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Select>
@@ -426,9 +426,9 @@ export default function ActivityDashboard() {
         <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} />
       </div>
 
-      <div className={`flex flex-grow overflow-hidden ${isNarrowViewport || isFullWidth ? 'flex-col' : 'space-x-6'}`}>
+      <div className={`flex flex-grow overflow-hidden pb-2`}>
         <div className={`flex flex-col ${isFullWidth && selectedActivity ? 'hidden' : 'flex-1'} overflow-hidden`}>
-          <div className="flex-1 overflow-auto">
+          <div className={`flex-1 overflow-auto ${selectedActivity && !isFullWidth ? 'pr-4' : ''}`}>
             <Card className="shadow-none mb-6">
               <CardContent className="p-0">
                 <ChartContainer config={chartConfig} className="h-[300px] w-full">
@@ -620,7 +620,7 @@ export default function ActivityDashboard() {
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="flex-grow overflow-auto px-4 sm:px-6">
+              <CardContent className="flex-grow overflow-auto px-4 sm:px-6 pb-4">
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
