@@ -354,7 +354,7 @@ export default function ItemsDashboard() {
   }, []);
 
   const renderScoreResult = (score: any, isAnnotation = false) => (
-    <div className={`py-2 ${isAnnotation ? 'pr-4 border-r-2 border-muted-foreground' : 'border-b last:border-b-0'}`}>
+    <div className={`py-2 ${isAnnotation ? 'pr-4 border-r-2 ' + (score.isSystem ? 'border-secondary' : 'border-primary') : 'border-b last:border-b-0'}`}>
       {isAnnotation ? (
         <>
           <div className="flex justify-end mb-2">
