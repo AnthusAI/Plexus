@@ -30,9 +30,9 @@ import {
 import { Card, CardHeader, CardContent } from "@/components/ui/card"
 
 const initialScorecards: Scorecard[] = [
-  { id: "1", name: "SelectQuote Term Life v1", key: "SQTL1", scores: 10, scoreDetails: [] },
-  { id: "2", name: "CS3 CRM Validation", key: "CS3CRM", scores: 15, scoreDetails: [] },
-  { id: "3", name: "CS3 Services v2", key: "CS3SV2", scores: 8, scoreDetails: [] },
+  { id: "1329", name: "SelectQuote Term Life v1", key: "termlifev1", scores: 12, scoreDetails: [] },
+  { id: "1321", name: "CS3 Audigy TPA", key: "cs3_audigy_tpa", scores: 1, scoreDetails: [] },
+  { id: "1372", name: "CS3 Services v2", key: "cs3_services_v2", scores: 1, scoreDetails: [] },
 ]
 
 const scoreTypes = ["Numeric", "Percentage", "Boolean", "Text"]
@@ -221,76 +221,83 @@ export default function ScorecardsComponent() {
   }
 
   const renderScorecardsTable = () => (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-[70%]">Scorecard</TableHead>
-          <TableHead className="w-[20%] text-right">Scores</TableHead>
-          <TableHead className="w-[10%] text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {scorecards.map((scorecard) => (
-          <TableRow 
-            key={scorecard.id} 
-            onClick={() => setSelectedScorecard(scorecard)} 
-            className="cursor-pointer transition-colors duration-200 hover:bg-muted"
-          >
-            <TableCell className="w-[70%]">
-              <div>
-                <div className="font-medium">{scorecard.name}</div>
-                <div className="text-sm text-muted-foreground">{scorecard.id} - {scorecard.key}</div>
-              </div>
-            </TableCell>
-            <TableCell className="w-[20%] text-right">{scorecard.scores}</TableCell>
-            <TableCell className="w-[10%]">
-              <div className="flex items-center justify-end space-x-2">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={(e) => { e.stopPropagation(); handleEdit(scorecard); }}
-                  className="h-8 w-8 p-0"
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={(e) => e.stopPropagation()}
-                      className="h-8 w-8 p-0"
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem>
-                      <Activity className="h-4 w-4 mr-2" /> Activity
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
-                      <AudioLines className="h-4 w-4 mr-2" /> Items
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
-                      <Siren className="h-4 w-4 mr-2" /> Alerts
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
-                      <FileBarChart className="h-4 w-4 mr-2" /> Reports
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
-                      <FlaskConical className="h-4 w-4 mr-2" /> Experiments
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
-                      <Zap className="h-4 w-4 mr-2" /> Optimizations
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </TableCell>
+    <div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[70%]">Scorecard</TableHead>
+            <TableHead className="w-[20%] text-right">Scores</TableHead>
+            <TableHead className="w-[10%] text-right">Actions</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {scorecards.map((scorecard) => (
+            <TableRow 
+              key={scorecard.id} 
+              onClick={() => setSelectedScorecard(scorecard)} 
+              className="cursor-pointer transition-colors duration-200 hover:bg-muted"
+            >
+              <TableCell className="w-[70%]">
+                <div>
+                  <div className="font-medium">{scorecard.name}</div>
+                  <div className="text-sm text-muted-foreground">{scorecard.id} - {scorecard.key}</div>
+                </div>
+              </TableCell>
+              <TableCell className="w-[20%] text-right">{scorecard.scores}</TableCell>
+              <TableCell className="w-[10%]">
+                <div className="flex items-center justify-end space-x-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={(e) => { e.stopPropagation(); handleEdit(scorecard); }}
+                    className="h-8 w-8 p-0"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-8 w-8 p-0"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem>
+                        <Activity className="h-4 w-4 mr-2" /> Activity
+                      </DropdownMenuItem>
+                      <DropdownMenuItem>
+                        <AudioLines className="h-4 w-4 mr-2" /> Items
+                      </DropdownMenuItem>
+                      <DropdownMenuItem>
+                        <Siren className="h-4 w-4 mr-2" /> Alerts
+                      </DropdownMenuItem>
+                      <DropdownMenuItem>
+                        <FileBarChart className="h-4 w-4 mr-2" /> Reports
+                      </DropdownMenuItem>
+                      <DropdownMenuItem>
+                        <FlaskConical className="h-4 w-4 mr-2" /> Experiments
+                      </DropdownMenuItem>
+                      <DropdownMenuItem>
+                        <Zap className="h-4 w-4 mr-2" /> Optimizations
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <div className="mt-4">
+        <Button variant="outline" onClick={handleCreate}>
+          <Plus className="mr-2 h-4 w-4" /> Create Scorecard
+        </Button>
+      </div>
+    </div>
   )
 
   const renderSelectedScorecard = () => (
@@ -358,12 +365,7 @@ export default function ScorecardsComponent() {
         <ScrollArea className="h-full">
           <div className="space-y-6">
             <div>
-              <div className="flex justify-between items-center mb-2">
-                <h2 className="text-xl font-semibold">Scores</h2>
-                <Button onClick={handleAddScore}>
-                  <Plus className="mr-2 h-4 w-4" /> Add Score
-                </Button>
-              </div>
+              <h2 className="text-xl font-semibold mb-4">Scores</h2>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -391,6 +393,11 @@ export default function ScorecardsComponent() {
                   ))}
                 </TableBody>
               </Table>
+              <div className="mt-4">
+                <Button variant="outline" onClick={handleAddScore}>
+                  <Plus className="mr-2 h-4 w-4" /> Create Score
+                </Button>
+              </div>
             </div>
           </div>
         </ScrollArea>
@@ -400,12 +407,6 @@ export default function ScorecardsComponent() {
 
   return (
     <div className="space-y-4 h-full flex flex-col">
-      <div className="flex justify-end">
-        <Button onClick={handleCreate}>
-          <Plus className="mr-2 h-4 w-4" /> Create Scorecard
-        </Button>
-      </div>
-
       <div className={`flex flex-col flex-grow overflow-hidden pb-2`}>
         {selectedScorecard && (isNarrowViewport || isFullWidth) && (
           <div className="flex-shrink-0">
