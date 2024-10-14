@@ -89,7 +89,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     { name: "Scorecards", icon: ListTodo, path: "/scorecards" },
     { name: "Experiments", icon: FlaskConical, path: "/experiments" },
     { name: "Optimizations", icon: Sparkles, path: "/optimizations" },
-    { name: "Data Profiling", icon: Database, path: "/data-profiling" },
+    { name: "Data", icon: Database, path: "/data-profiling" },
     { name: "Settings", icon: Settings, path: "/settings" },
   ]
 

@@ -7,7 +7,7 @@ export default function DataProfiling() {
     <DashboardLayout signOut={signOut}>
       <div className="px-6 pt-0 pb-6 space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">Data Profiling</h1>
+          <h1 className="text-3xl font-bold">Data</h1>
           <p className="text-muted-foreground">
             Analyze and understand your data characteristics.
           </p>
@@ -15,7 +15,7 @@ export default function DataProfiling() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Data Profiling Dashboard</CardTitle>
+            <CardTitle>Data Dashboard</CardTitle>
             <CardDescription>
               Overview of data quality, statistics, and patterns.
             </CardDescription>
