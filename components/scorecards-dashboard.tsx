@@ -354,7 +354,7 @@ export default function ScorecardsComponent() {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="flex-grow overflow-auto px-4 sm:px-6">
+      <CardContent className="flex-grow overflow-auto px-4 sm:px-6 pb-4">
         <ScrollArea className="h-full">
           <div className="space-y-6">
             <div>
@@ -399,14 +399,14 @@ export default function ScorecardsComponent() {
   )
 
   return (
-    <div className="space-y-6 h-full flex flex-col">
+    <div className="space-y-4 h-full flex flex-col">
       <div className="flex justify-end">
         <Button onClick={handleCreate}>
           <Plus className="mr-2 h-4 w-4" /> Create Scorecard
         </Button>
       </div>
 
-      <div className={`flex flex-col flex-grow overflow-hidden ${isNarrowViewport || isFullWidth ? 'space-y-6' : 'space-x-6'}`}>
+      <div className={`flex flex-col flex-grow overflow-hidden pb-2`}>
         {selectedScorecard && (isNarrowViewport || isFullWidth) && (
           <div className="flex-shrink-0">
             {renderSelectedScorecard()}

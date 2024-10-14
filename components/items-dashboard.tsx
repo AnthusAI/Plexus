@@ -482,7 +482,7 @@ export default function ItemsDashboard() {
   };
 
   return (
-    <div className="space-y-6 h-full flex flex-col">
+    <div className="space-y-4 h-full flex flex-col">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 sm:space-x-4">
         <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
           <Select onValueChange={(value) => setSelectedScorecard(value === "all" ? null : value)}>
@@ -502,7 +502,7 @@ export default function ItemsDashboard() {
         <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} options={ITEMS_TIME_RANGE_OPTIONS} />
       </div>
 
-      <div className="flex-grow flex flex-col overflow-hidden">
+      <div className="flex-grow flex flex-col overflow-hidden pb-2">
         {selectedItem && (isNarrowViewport || isFullWidth) ? (
           <div className="flex-grow overflow-hidden">
             {renderSelectedItem()}
@@ -605,7 +605,7 @@ export default function ItemsDashboard() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="flex-grow overflow-auto px-4 sm:px-6">
+        <CardContent className="flex-grow overflow-auto px-4 sm:px-6 pb-4">
           {selectedItem && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">

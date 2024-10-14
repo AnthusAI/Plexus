@@ -446,7 +446,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         >
           <div className="flex-1 flex flex-col bg-background rounded-lg overflow-hidden">
             <div className="flex-1 overflow-y-auto">
-              <div className="h-full p-6">
+              <div className="h-full pt-2 pr-4 pb-0 pl-4">
                 {children}
               </div>
             </div>
