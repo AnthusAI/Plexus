@@ -483,7 +483,6 @@ export default function ItemsDashboard() {
 
   return (
     <div className="space-y-6 h-full flex flex-col">
-
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 sm:space-x-4">
         <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
           <Select onValueChange={(value) => setSelectedScorecard(value === "all" ? null : value)}>
@@ -503,78 +502,78 @@ export default function ItemsDashboard() {
         <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} options={ITEMS_TIME_RANGE_OPTIONS} />
       </div>
 
-      <div className={`flex flex-col flex-grow overflow-hidden ${isNarrowViewport || isFullWidth ? 'space-y-6' : 'space-x-6'}`}>
-        {selectedItem && (isNarrowViewport || isFullWidth) && (
-          <div className="flex-shrink-0">
+      <div className="flex-grow flex flex-col overflow-hidden">
+        {selectedItem && (isNarrowViewport || isFullWidth) ? (
+          <div className="flex-grow overflow-hidden">
             {renderSelectedItem()}
           </div>
-        )}
-        
-        <div className={`flex ${isNarrowViewport || isFullWidth ? 'flex-col' : 'space-x-6'} h-full overflow-hidden`}>
-          <div className={`${isFullWidth && selectedItem ? 'hidden' : 'flex-1'} overflow-auto`}>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[40%]">Item</TableHead>
-                  <TableHead className="w-[15%] hidden sm:table-cell text-right">Inferences</TableHead>
-                  <TableHead className="w-[15%] hidden sm:table-cell text-right">Results</TableHead>
-                  <TableHead className="w-[15%] hidden sm:table-cell text-right">Cost</TableHead>
-                  <TableHead className="w-[15%] hidden sm:table-cell text-right">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredItems.map((item) => (
-                  <TableRow 
-                    key={item.id} 
-                    onClick={() => handleItemClick(item.id)} 
-                    className="cursor-pointer transition-colors duration-200 hover:bg-muted"
-                  >
-                    <TableCell className="font-medium sm:pr-4">
-                      <div className="sm:hidden">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="font-semibold">{item.scorecard}</div>
-                          <Badge 
-                            className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
-                          >
-                            {item.status}
-                          </Badge>
-                        </div>
-                        <div className="text-sm text-muted-foreground mb-2">{getRelativeTime(item.date)}</div>
-                        <div className="flex justify-between items-end">
-                          <div className="text-sm text-muted-foreground">
-                            {item.inferences} inferences<br />
-                            {item.results} results
-                          </div>
-                          <div className="font-semibold">{item.cost}</div>
-                        </div>
-                      </div>
-                      <div className="hidden sm:block">
-                        {item.scorecard}
-                        <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell text-right">{item.inferences}</TableCell>
-                    <TableCell className="hidden sm:table-cell text-right">{item.results}</TableCell>
-                    <TableCell className="hidden sm:table-cell text-right">{item.cost}</TableCell>
-                    <TableCell className="hidden sm:table-cell text-right">
-                      <Badge 
-                        className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
-                      >
-                        {item.status}
-                      </Badge>
-                    </TableCell>
+        ) : (
+          <div className={`flex ${isNarrowViewport ? 'flex-col' : 'space-x-6'} h-full`}>
+            <div className={`${isFullWidth ? 'hidden' : 'flex-1'} overflow-auto`}>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[40%]">Item</TableHead>
+                    <TableHead className="w-[15%] hidden sm:table-cell text-right">Inferences</TableHead>
+                    <TableHead className="w-[15%] hidden sm:table-cell text-right">Results</TableHead>
+                    <TableHead className="w-[15%] hidden sm:table-cell text-right">Cost</TableHead>
+                    <TableHead className="w-[15%] hidden sm:table-cell text-right">Status</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-
-          {selectedItem && !isNarrowViewport && !isFullWidth && (
-            <div className="flex-1 overflow-hidden">
-              {renderSelectedItem()}
+                </TableHeader>
+                <TableBody>
+                  {filteredItems.map((item) => (
+                    <TableRow 
+                      key={item.id} 
+                      onClick={() => handleItemClick(item.id)} 
+                      className="cursor-pointer transition-colors duration-200 hover:bg-muted"
+                    >
+                      <TableCell className="font-medium sm:pr-4">
+                        <div className="sm:hidden">
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="font-semibold">{item.scorecard}</div>
+                            <Badge 
+                              className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
+                            >
+                              {item.status}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-muted-foreground mb-2">{getRelativeTime(item.date)}</div>
+                          <div className="flex justify-between items-end">
+                            <div className="text-sm text-muted-foreground">
+                              {item.inferences} inferences<br />
+                              {item.results} results
+                            </div>
+                            <div className="font-semibold">{item.cost}</div>
+                          </div>
+                        </div>
+                        <div className="hidden sm:block">
+                          {item.scorecard}
+                          <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell text-right">{item.inferences}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-right">{item.results}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-right">{item.cost}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-right">
+                        <Badge 
+                          className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
+                        >
+                          {item.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
-          )}
-        </div>
+
+            {selectedItem && !isNarrowViewport && !isFullWidth && (
+              <div className="flex-1 overflow-hidden">
+                {renderSelectedItem()}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -584,8 +583,8 @@ export default function ItemsDashboard() {
     const isErrorStatus = selectedItemData?.status === 'error';
 
     return (
-      <Card className="rounded-none sm:rounded-lg flex flex-col h-full">
-        <CardHeader className="flex flex-row items-start justify-between py-4 px-4 sm:px-6 flex-shrink-0">
+      <Card className="rounded-none sm:rounded-lg h-full flex flex-col">
+        <CardHeader className="flex-shrink-0 flex flex-row items-start justify-between py-4 px-4 sm:px-6">
           <div className="space-y-1">
             <h2 className="text-2xl font-semibold">{items.find(item => item.id === selectedItem)?.scorecard}</h2>
             <p className="text-sm text-muted-foreground">
