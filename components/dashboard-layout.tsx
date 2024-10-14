@@ -420,8 +420,15 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     setTheme(theme === "dark" ? "light" : "dark")
   }
 
+  useEffect(() => {
+    document.body.classList.add('bg-muted')
+    return () => {
+      document.body.classList.remove('bg-muted')
+    }
+  }, [])
+
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-screen bg-muted">
       <div className="flex flex-1 overflow-hidden bg-muted">
         <aside
           className={`
