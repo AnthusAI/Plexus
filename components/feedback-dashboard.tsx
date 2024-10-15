@@ -91,7 +91,22 @@ const scorecardScoreCounts = {
   "SelectQuote Term Life v1": 42,
 };
 
-const initialFeedbackItems = [
+// First, let's define an interface for the feedback item
+interface FeedbackItem {
+  id: number;
+  scorecard: string;
+  score: number;
+  date: string;
+  status: string;
+  hasFeedback: boolean;
+  scoreCount: number;
+  scoreResults?: typeof sampleScoreResults;
+  metadata?: Array<{ key: string; value: string }>;
+  data?: Array<{ speaker: string; text: string }>;
+}
+
+// Now, let's update the initialFeedbackItems declaration
+const initialFeedbackItems: FeedbackItem[] = [
   { id: 30, scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "new", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
   { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "new", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
   { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "new", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"] },
@@ -124,7 +139,7 @@ const initialFeedbackItems = [
   { id: 1, scorecard: "CS3 Nexstar v1", score: 94, date: relativeDate(2, 14, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
 ];
 
-// Modify other items to include scoreResults
+// Now the forEach loop should work without type errors
 initialFeedbackItems.forEach(item => {
   if (!item.scoreResults) {
     item.scoreResults = sampleScoreResults;
@@ -139,6 +154,19 @@ const FEEDBACK_TIME_RANGE_OPTIONS: TimeRangeOption[] = [
   { value: "review", label: "With Feedback" },
   { value: "custom", label: "Custom" },
 ]
+
+// Add this interface near the top of your file, with other type definitions
+interface Annotation {
+  value: string;
+  explanation: string;
+  annotation?: string;
+  timestamp: string;
+  user?: {
+    name: string;
+    initials: string;
+  };
+  isSystem?: boolean;
+}
 
 export default function FeedbackDashboard() {
   const [selectedItem, setSelectedItem] = useState<number | null>(null)
@@ -157,7 +185,7 @@ export default function FeedbackDashboard() {
   const [newAnnotation, setNewAnnotation] = useState({ value: "", explanation: "", annotation: "" });
   const [showNewAnnotationForm, setShowNewAnnotationForm] = useState<string | null>(null);
   const [thumbedUpScores, setThumbedUpScores] = useState<Set<string>>(new Set());
-  const [feedbackItems, setFeedbackItems] = useState<any[]>([]);
+  const [feedbackItems, setFeedbackItems] = useState<FeedbackItem[]>([]);
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -323,7 +351,7 @@ export default function FeedbackDashboard() {
   };
 
   const handleNewAnnotationSubmit = (scoreName: string) => {
-    const newFeedbackItem = {
+    const newAnnotationItem = {
       ...newAnnotation,
       scoreName,
       timestamp: new Date().toISOString(),
@@ -333,29 +361,27 @@ export default function FeedbackDashboard() {
       }
     };
 
-    setFeedbackItems(prev => [...prev, newFeedbackItem]);
-
-    // Find the selected item
-    const selectedItemData = feedbackItems.find(item => item.id === selectedItem);
-
-    if (selectedItemData) {
-      // Update the score to show it's annotated
-      const updatedScoreResults = selectedItemData.scoreResults.map(section => ({
-        ...section,
-        scores: section.scores.map(score => 
-          score.name === scoreName 
-            ? { ...score, isAnnotated: true, annotations: [...(score.annotations || []), newFeedbackItem] }
-            : score
-        )
-      }));
-
-      // Update the feedbackItems with the new score results
-      setFeedbackItems(prev => prev.map(item => 
-        item.id === selectedItem 
-          ? { ...item, scoreResults: updatedScoreResults }
-          : item
-      ));
-    }
+    setFeedbackItems(prev => {
+      const updatedItems = prev.map(item => {
+        if (item.id === selectedItem) {
+          const updatedScoreResults = item.scoreResults?.map(section => ({
+            ...section,
+            scores: section.scores.map(score => 
+              score.name === scoreName 
+                ? { 
+                    ...score, 
+                    isAnnotated: true, 
+                    annotations: [...(score.annotations || []), newAnnotationItem] 
+                  }
+                : score
+            )
+          }));
+          return { ...item, scoreResults: updatedScoreResults };
+        }
+        return item;
+      });
+      return updatedItems;
+    });
 
     setShowNewAnnotationForm(null);
     setNewAnnotation({ value: "", explanation: "", annotation: "" });
@@ -366,7 +392,17 @@ export default function FeedbackDashboard() {
       setShowNewAnnotationForm(null);
     } else {
       setShowNewAnnotationForm(scoreName);
-      initializeNewAnnotation(feedbackItems.flatMap(item => item.scoreResults?.flatMap(section => section.scores)).find(score => score.name === scoreName));
+      const foundScore = feedbackItems
+        .flatMap(item => item.scoreResults?.flatMap(section => section.scores) ?? [])
+        .find(score => score?.name === scoreName);
+      
+      if (foundScore) {
+        initializeNewAnnotation(foundScore);
+      } else {
+        console.warn(`No score found with name: ${scoreName}`);
+        // You might want to set some default values or handle this case differently
+        setNewAnnotation({ value: "", explanation: "", annotation: "" });
+      }
     }
   };
 
@@ -400,6 +436,8 @@ export default function FeedbackDashboard() {
   };
 
   function renderScoreResult(score: any, isAnnotation = false) {
+    const hasAnnotations = score.annotations && score.annotations.length > 0;
+
     return (
       <div className={`py-2 ${isAnnotation ? 'pl-4 border-l-2 ' + (score.isSystem ? 'border-secondary' : 'border-primary') : ''}`}>
         {isAnnotation ? (
@@ -409,7 +447,11 @@ export default function FeedbackDashboard() {
             </div>
             <div className="relative">
               <div 
-                ref={(el) => textRef.current[score.name] = el}
+                ref={(el) => {
+                  if (el) {
+                    textRef.current[score.name] = el;
+                  }
+                }}
                 className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
                 style={{ 
                   display: '-webkit-box',
@@ -451,7 +493,7 @@ export default function FeedbackDashboard() {
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                {(score.isAnnotated || feedbackItems[score.name]?.length > 0) && (
+                {(score.isAnnotated || hasAnnotations) && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -482,7 +524,11 @@ export default function FeedbackDashboard() {
             </div>
             <div className="relative">
               <div 
-                ref={(el) => textRef.current[score.name] = el}
+                ref={(el) => {
+                  if (el) {
+                    textRef.current[score.name] = el;
+                  }
+                }}
                 className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
                 style={{ 
                   display: '-webkit-box',
@@ -529,7 +575,7 @@ export default function FeedbackDashboard() {
             "{score.annotation}"
           </div>
         )}
-        {!isAnnotation && (score.isAnnotated || feedbackItems[score.name]?.length > 0) && expandedAnnotations.includes(score.name) && (
+        {!isAnnotation && (score.isAnnotated || hasAnnotations) && expandedAnnotations.includes(score.name) && (
           <div className="mt-2 space-y-2">
             <div className="flex justify-between items-center mb-2">
               <h6 className="text-sm font-medium">Feedback</h6>
@@ -543,7 +589,7 @@ export default function FeedbackDashboard() {
                 Create
               </Button>
             </div>
-            {[...(score.annotations || []), ...(feedbackItems[score.name] || [])].map((annotation, annotationIndex) => (
+            {(score.annotations || []).map((annotation: Annotation, annotationIndex: number) => (
               <div key={annotationIndex} className="relative">
                 {renderScoreResult(annotation, true)}
               </div>
@@ -640,7 +686,7 @@ export default function FeedbackDashboard() {
                 <div className="mt-2">
                   <Table>
                     <TableBody>
-                      {selectedItemData.metadata?.map((meta, index) => (
+                      {selectedItemData?.metadata?.map((meta, index) => (
                         <TableRow key={index}>
                           <TableCell className="font-medium pl-0">{meta.key}</TableCell>
                           <TableCell className="text-right pr-0">{meta.value}</TableCell>
@@ -671,7 +717,7 @@ export default function FeedbackDashboard() {
               </div>
               {isDataExpanded && (
                 <div className="mt-2">
-                  {selectedItemData.data?.map((line, index) => (
+                  {selectedItemData?.data?.map((line, index) => (
                     <p key={index} className="text-sm">
                       <span className="font-semibold">{line.speaker}: </span>
                       {line.text}

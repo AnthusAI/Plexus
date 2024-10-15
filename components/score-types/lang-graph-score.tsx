@@ -225,7 +225,7 @@ export default function LangGraphScoreComponent({ score, onChange }: LangGraphSc
                   <Checkbox
                     id={`parseCompletionFromStart-${node.id}`}
                     checked={node.parseCompletionFromStart}
-                    onCheckedChange={(checked) => updateNode(node.id, { parseCompletionFromStart: checked })}
+                    onCheckedChange={(checked) => updateNode(node.id, { parseCompletionFromStart: checked === true })}
                   />
                   <Label htmlFor={`parseCompletionFromStart-${node.id}`}>Parse completion from the start</Label>
                 </div>
