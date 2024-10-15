@@ -46,13 +46,13 @@ const timeToMinutes = (timeString: string): number => {
 }
 
 const barChartData = [
-  { name: "Mon", scored: 4, experiments: 3, optimizations: 2 },
-  { name: "Tue", scored: 3, experiments: 4, optimizations: 3 },
-  { name: "Wed", scored: 5, experiments: 2, optimizations: 4 },
-  { name: "Thu", scored: 2, experiments: 5, optimizations: 1 },
-  { name: "Fri", scored: 3, experiments: 3, optimizations: 3 },
-  { name: "Sat", scored: 1, experiments: 2, optimizations: 2 },
-  { name: "Sun", scored: 4, experiments: 1, optimizations: 5 },
+  { name: "Mon", scored: 4, experiments: 3, analysis: 2 },
+  { name: "Tue", scored: 3, experiments: 4, analysis: 3 },
+  { name: "Wed", scored: 5, experiments: 2, analysis: 4 },
+  { name: "Thu", scored: 2, experiments: 5, analysis: 1 },
+  { name: "Fri", scored: 3, experiments: 3, analysis: 3 },
+  { name: "Sat", scored: 1, experiments: 2, analysis: 2 },
+  { name: "Sun", scored: 4, experiments: 1, analysis: 5 },
 ]
 
 // New data for recent activities
@@ -101,7 +101,7 @@ const recentActivities = [
   },
   {
     id: 3,
-    type: "Optimization started",
+    type: "Analysis started",
     scorecard: "SelectQuote TermLife v1",
     score: "Good Call",
     time: "1h ago",
@@ -186,7 +186,7 @@ const recentActivities = [
 const chartConfig = {
   scored: { label: "Scored", color: "var(--chart-1)" },
   experiments: { label: "Experiments", color: "var(--chart-2)" },
-  optimizations: { label: "Optimizations", color: "var(--chart-3)" },
+  analysis: { label: "Analysis", color: "var(--chart-3)" },
   positive: { label: "Positive", color: "var(--true)" },
   negative: { label: "Negative", color: "var(--false)" },
 }
@@ -195,7 +195,7 @@ interface BarData {
   name: string;
   scored: number;
   experiments: number;
-  optimizations: number;
+  analysis: number;
   [key: string]: string | number;
 }
 
@@ -265,7 +265,7 @@ export default function ActivityDashboard() {
       case "Experiment completed":
       case "Experiment started":
         return <FlaskConical className="h-5 w-5" />
-      case "Optimization started":
+      case "Analysis started":
         return <Sparkles className="h-5 w-5" />
       case "Score updated":
         return <ListTodo className="h-5 w-5" />
@@ -308,7 +308,7 @@ export default function ActivityDashboard() {
             </ResponsiveContainer>
           </ChartContainer>
         )
-      case "Optimization started":
+      case "Analysis started":
       case "Score updated":
         return (
           <div className="flex space-x-4">
@@ -378,7 +378,7 @@ export default function ActivityDashboard() {
             </div>
           </div>
         )
-      case "Optimization started":
+      case "Analysis started":
         return (
           <div className="absolute bottom-4 left-6 right-7 flex flex-col space-y-1">
             <div className="flex justify-between text-xs">
@@ -452,7 +452,7 @@ export default function ActivityDashboard() {
                         cursor="pointer"
                       />
                       <Bar
-                        dataKey="optimizations"
+                        dataKey="analysis"
                         stackId="a"
                         fill="var(--chart-3)"
                         onClick={handleBarClick}
@@ -516,7 +516,7 @@ export default function ActivityDashboard() {
                     <div className="flex justify-between items-start mt-4">
                       <div className="space-y-1 w-full">
                         <div className="text-lg font-bold">
-                          {activity.type === "Score updated" || activity.type === "Optimization started" ? (
+                          {activity.type === "Score updated" || activity.type === "Analysis started" ? (
                             <div>
                               <div className={`flex items-center ${selectedActivity?.id === activity.id ? 'text-secondary-foreground' : ''}`}>
                                 <span>{activity.data?.before?.innerRing[0]?.value ?? 0}%</span>
@@ -555,7 +555,7 @@ export default function ActivityDashboard() {
                         <MessageCircleWarning className={`h-16 w-16 ${selectedActivity?.id === activity.id ? 'text-secondary-foreground' : 'text-destructive'}`} />
                       </div>
                     )}
-                    {(activity.type === "Optimization started" || activity.type === "Experiment started") && activity.data && (
+                    {(activity.type === "Analysis started" || activity.type === "Experiment started") && activity.data && (
                       <div className="absolute bottom-4 left-6 right-7 flex flex-col space-y-1">
                         <div className="flex justify-between text-xs">
                           <div className="font-semibold">Progress: {activity.data.progress}%</div>

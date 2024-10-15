@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus } from "lucide-react"
+import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -22,6 +22,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import Link from 'next/link'
+import { FilterControl, FilterConfig } from "@/components/filter-control"
 
 // Get the current date and time
 const now = new Date();
@@ -110,6 +111,7 @@ const sampleTranscript = [
 
 const ITEMS_TIME_RANGE_OPTIONS: TimeRangeOption[] = [
   { value: "recent", label: "Recent" },
+  { value: "review", label: "With Feedback" },
   { value: "custom", label: "Custom" },
 ]
 
@@ -230,6 +232,7 @@ export default function ItemsDashboard() {
   const [newAnnotation, setNewAnnotation] = useState({ value: "", explanation: "", annotation: "" });
   const [showNewAnnotationForm, setShowNewAnnotationForm] = useState<string | null>(null);
   const [isErrorExpanded, setIsErrorExpanded] = useState(true);
+  const [filterConfig, setFilterConfig] = useState<FilterConfig>([])
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -271,10 +274,36 @@ export default function ItemsDashboard() {
   }, [sampleScoreResults]);
 
   const filteredItems = useMemo(() => {
-    return items.filter(item => 
-      !selectedScorecard || item.scorecard === selectedScorecard
-    )
-  }, [selectedScorecard])
+    return items.filter(item => {
+      if (!selectedScorecard && filterConfig.length === 0) return true
+      
+      let scorecardMatch = !selectedScorecard || item.scorecard === selectedScorecard
+      
+      if (filterConfig.length === 0) return scorecardMatch
+
+      return scorecardMatch && filterConfig.some(group => {
+        return group.conditions.every(condition => {
+          const itemValue = String(item[condition.field as keyof typeof item])
+          switch (condition.operator) {
+            case 'equals':
+              return itemValue === condition.value
+            case 'not_equals':
+              return itemValue !== condition.value
+            case 'contains':
+              return itemValue.includes(condition.value)
+            case 'not_contains':
+              return !itemValue.includes(condition.value)
+            case 'greater_than':
+              return Number(itemValue) > Number(condition.value)
+            case 'less_than':
+              return Number(itemValue) < Number(condition.value)
+            default:
+              return true
+          }
+        })
+      })
+    })
+  }, [selectedScorecard, filterConfig, items])
 
   const getRelativeTime = (dateString: string) => {
     const date = parseISO(dateString)
@@ -292,13 +321,13 @@ export default function ItemsDashboard() {
     switch (status) {
       case 'new':
       case 'scoring...':
-        return 'bg-neutral text-primary-foreground';
+        return 'bg-neutral text-primary-foreground h-6';
       case 'scored':
-        return 'bg-true text-primary-foreground';
+        return 'bg-true text-primary-foreground h-6';
       case 'error':
-        return 'bg-destructive text-destructive-foreground dark:text-primary-foreground';
+        return 'bg-destructive text-destructive-foreground dark:text-primary-foreground h-6';
       default:
-        return 'bg-muted text-muted-foreground';
+        return 'bg-muted text-muted-foreground h-6';
     }
   };
 
@@ -399,22 +428,28 @@ export default function ItemsDashboard() {
             </div>
             <div className="flex items-center space-x-2">
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                onClick={() => score.name === "Profanity" ? toggleAnnotations(score.name) : toggleNewAnnotationForm(score.name)}
-                className={`text-xs ${score.isAnnotated ? 'bg-accent text-accent-foreground' : ''}`}
+                onClick={() => handleThumbsUp(score.name)}
+                className="text-xs"
               >
-                {score.name === "Profanity" ? (
-                  <>
-                    <MessageCircleMore className="h-4 w-4 mr-1" />
-                    Annotated
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-4 w-4 mr-1" />
-                    Annotate
-                  </>
-                )}
+                <ThumbsUp className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => toggleNewAnnotationForm(score.name)}
+                className="text-xs"
+              >
+                <ThumbsDown className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => score.isAnnotated ? toggleAnnotations(score.name) : toggleNewAnnotationForm(score.name)}
+                className={`text-xs ${score.isAnnotated ? 'bg-secondary text-secondary-foreground' : ''}`}
+              >
+                <MessageCircleMore className="h-4 w-4" />
               </Button>
               <Badge className={getValueBadgeClass(score.value)}>{score.value}</Badge>
             </div>
@@ -480,6 +515,24 @@ export default function ItemsDashboard() {
     }
   };
 
+  const handleThumbsUp = (scoreName: string) => {
+    console.log(`Thumbs up for ${scoreName}`);
+    // Implement the logic for thumbs up action
+  };
+
+  const handleFilterChange = (newFilters: FilterConfig) => {
+    setFilterConfig(newFilters)
+  }
+
+  const availableFields = [
+    { value: 'scorecard', label: 'Scorecard' },
+    { value: 'score', label: 'Score' },
+    { value: 'status', label: 'Status' },
+    { value: 'results', label: 'Results' },
+    { value: 'inferences', label: 'Inferences' },
+    { value: 'cost', label: 'Cost' },
+  ]
+
   return (
     <div className="space-y-4 h-full flex flex-col">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 sm:space-x-4">
@@ -498,7 +551,10 @@ export default function ItemsDashboard() {
             </SelectContent>
           </Select>
         </div>
-        <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} options={ITEMS_TIME_RANGE_OPTIONS} />
+        <div className="flex space-x-2">
+          <FilterControl onFilterChange={handleFilterChange} availableFields={availableFields} />
+          <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} options={ITEMS_TIME_RANGE_OPTIONS} />
+        </div>
       </div>
 
       <div className="flex-grow flex flex-col overflow-hidden pb-2">
@@ -583,14 +639,14 @@ export default function ItemsDashboard() {
 
     return (
       <Card className="rounded-none sm:rounded-lg h-full flex flex-col">
-        <CardHeader className="flex-shrink-0 flex flex-row items-start justify-between py-4 px-4 sm:px-6">
-          <div className="space-y-1">
-            <h2 className="text-2xl font-semibold">{items.find(item => item.id === selectedItem)?.scorecard}</h2>
+        <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between py-4 px-4 sm:px-6 space-y-0">
+          <div>
+            <h2 className="text-xl font-semibold">{items.find(item => item.id === selectedItem)?.scorecard}</h2>
             <p className="text-sm text-muted-foreground">
               {getRelativeTime(items.find(item => item.id === selectedItem)?.date || '')}
             </p>
           </div>
-          <div className="flex space-x-2">
+          <div className="flex ml-2">
             {!isNarrowViewport && (
               <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
                 {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
@@ -599,7 +655,7 @@ export default function ItemsDashboard() {
             <Button variant="outline" size="icon" onClick={() => {
               setSelectedItem(null)
               setIsFullWidth(false)
-            }}>
+            }} className="ml-2">
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -742,7 +798,7 @@ export default function ItemsDashboard() {
                             {score.name === "Profanity" && expandedAnnotations.includes(score.name) && (
                               <div className="mt-2 space-y-2">
                                 <div className="flex justify-between items-center mb-2">
-                                  <h6 className="text-sm font-medium">Annotations</h6>
+                                  <h6 className="text-sm font-medium">Feedback</h6>
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -750,12 +806,11 @@ export default function ItemsDashboard() {
                                     className="text-xs"
                                   >
                                     <Plus className="h-4 w-4 mr-1" />
-                                    Annotate
+                                    Create
                                   </Button>
                                 </div>
                                 {showNewAnnotationForm === score.name && (
                                   <div className="mb-4">
-                                    <h6 className="text-sm font-medium mb-2">Add New Annotation</h6>
                                     <div className="space-y-2">
                                       <Select 
                                         onValueChange={(value) => setNewAnnotation({...newAnnotation, value})}
@@ -781,7 +836,7 @@ export default function ItemsDashboard() {
                                       />
                                       <div className="flex justify-end space-x-2">
                                         <Button variant="outline" onClick={() => cancelAnnotation(score.name)}>Cancel</Button>
-                                        <Button onClick={() => handleNewAnnotationSubmit(score.name)}>Submit Annotation</Button>
+                                        <Button onClick={() => handleNewAnnotationSubmit(score.name)}>Submit Feedback</Button>
                                       </div>
                                     </div>
                                   </div>
@@ -796,7 +851,7 @@ export default function ItemsDashboard() {
                             {score.name !== "Profanity" && showNewAnnotationForm === score.name && (
                               <div className="mt-2 space-y-2 border-l-2 border-muted-foreground pl-4">
                                 <div className="mb-4">
-                                  <h6 className="text-sm font-medium mb-2">Add New Annotation</h6>
+                                  <h6 className="text-sm font-medium mb-2">Feedback</h6>
                                   <div className="space-y-2">
                                     <Select 
                                       onValueChange={(value) => setNewAnnotation({...newAnnotation, value})}
@@ -816,13 +871,13 @@ export default function ItemsDashboard() {
                                       onChange={(e) => setNewAnnotation({...newAnnotation, explanation: e.target.value})}
                                     />
                                     <Input 
-                                      placeholder="Annotation" 
+                                      placeholder="Feedback" 
                                       value={newAnnotation.annotation}
                                       onChange={(e) => setNewAnnotation({...newAnnotation, annotation: e.target.value})}
                                     />
                                     <div className="flex justify-end space-x-2">
                                       <Button variant="outline" onClick={() => cancelAnnotation(score.name)}>Cancel</Button>
-                                      <Button onClick={() => handleNewAnnotationSubmit(score.name)}>Submit Annotation</Button>
+                                      <Button onClick={() => handleNewAnnotationSubmit(score.name)}>Submit Feedback</Button>
                                     </div>
                                   </div>
                                 </div>
