@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -179,6 +179,8 @@ export default function DataDashboard() {
   const [isDataExpanded, setIsDataExpanded] = useState(false)
   const [expandedExplanations, setExpandedExplanations] = useState<string[]>([])
   const [truncatedExplanations, setTruncatedExplanations] = useState<Record<string, string>>({})
+  const [showExpandButton, setShowExpandButton] = useState<Record<string, boolean>>({})
+  const textRef = useRef<Record<string, HTMLDivElement | null>>({})
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -189,6 +191,24 @@ export default function DataDashboard() {
     window.addEventListener('resize', checkViewportWidth)
 
     return () => window.removeEventListener('resize', checkViewportWidth)
+  }, [])
+
+  useEffect(() => {
+    const measureHeight = () => {
+      const newShowExpandButton: Record<string, boolean> = {}
+      Object.keys(textRef.current).forEach((scoreName) => {
+        const element = textRef.current[scoreName]
+        if (element) {
+          const lineHeight = parseInt(window.getComputedStyle(element).lineHeight)
+          newShowExpandButton[scoreName] = element.scrollHeight > lineHeight * 2
+        }
+      })
+      setShowExpandButton(newShowExpandButton)
+    }
+
+    measureHeight()
+    window.addEventListener('resize', measureHeight)
+    return () => window.removeEventListener('resize', measureHeight)
   }, [])
 
   const filteredItems = useMemo(() => {
@@ -370,9 +390,10 @@ export default function DataDashboard() {
         <CardContent className="flex-grow overflow-auto px-4 sm:px-6 pb-4">
           {selectedItem && (
             <div className="space-y-4">
+              {/* Metadata Section */}
               <div className="-mx-4 sm:-mx-6">
                 <div
-                  className="relative group hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                  className="relative group bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer"
                   onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
                 >
                   <div className="flex justify-between items-center px-4 sm:px-6 py-2">
@@ -402,9 +423,10 @@ export default function DataDashboard() {
                 </div>
               )}
               
+              {/* Data Section */}
               <div className="-mx-4 sm:-mx-6">
                 <div
-                  className="relative group hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                  className="relative group bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer"
                   onClick={() => setIsDataExpanded(!isDataExpanded)}
                 >
                   <div className="flex justify-between items-center px-4 sm:px-6 py-2">
@@ -430,18 +452,20 @@ export default function DataDashboard() {
                 </div>
               )}
               
-              <div className="mt-8">
-                <div className="-mx-4 sm:-mx-6 mb-4">
-                  <div className="px-4 sm:px-6 py-2">
-                    <h4 className="text-md font-semibold">Score Results</h4>
-                  </div>
+              {/* Score Results Section */}
+              <div className="-mx-4 sm:-mx-6 mb-4">
+                <div className="px-4 sm:px-6 py-2 bg-muted">
+                  <h4 className="text-md font-semibold">Score Results</h4>
                 </div>
+              </div>
+              <div>
                 {sampleScoreResults.map((section, sectionIndex) => (
                   <div key={sectionIndex} className="mb-6">
                     <div className="-mx-4 sm:-mx-6 mb-4">
-                      <div className="bg-muted px-4 sm:px-6 py-2">
+                      <div className="px-4 sm:px-6 py-2">
                         <h4 className="text-md font-semibold">{section.section}</h4>
                       </div>
+                      <hr className="border-t border-border" />
                     </div>
                     <div>
                       {section.scores.map((score, scoreIndex) => (
@@ -466,13 +490,20 @@ export default function DataDashboard() {
                             </div>
                             <div className="relative">
                               <div 
+                                ref={(el) => textRef.current[score.name] = el}
                                 className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
-                                style={{ maxHeight: expandedExplanations.includes(score.name) ? 'none' : '1.5em' }}
+                                style={{ 
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: '2',
+                                  WebkitBoxOrient: 'vertical',
+                                  overflow: 'hidden',
+                                  ...(expandedExplanations.includes(score.name) ? { WebkitLineClamp: 'unset', display: 'block' } : {})
+                                }}
                                 onClick={() => toggleExplanation(score.name)}
                               >
                                 <ReactMarkdown>{score.explanation}</ReactMarkdown>
                               </div>
-                              {score.explanation !== truncatedExplanations[score.name] && (
+                              {showExpandButton[score.name] && (
                                 <Button 
                                   variant="link" 
                                   size="sm" 
