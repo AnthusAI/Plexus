@@ -31,10 +31,10 @@ const alerts = [
   { id: 1, message: "Inappropriate language detected", source: "CS3 Services v2", date: relativeDate(0, 0, 5), status: "new", severity: "high" },
   { id: 2, message: "DNC request detected", source: "CS3 Audigy", date: relativeDate(0, 0, 10), status: "new", severity: "medium" },
   { id: 3, message: "Agent gave legal advice", source: "AW IB Sales", date: relativeDate(0, 0, 15), status: "new", severity: "high" },
-  { id: 4, message: "Agent gave guarantee", source: "SelectQuote Term Life v1", date: relativeDate(0, 1, 0), status: "activities...", severity: "medium" },
-  { id: 5, message: "Inappropriate language detected", source: "CS3 Nexstar v1", date: relativeDate(0, 2, 0), status: "activities...", severity: "high" },
-  { id: 6, message: "DNC request detected", source: "CS3 Services v2", date: relativeDate(0, 3, 0), status: "activities...", severity: "medium" },
-  { id: 7, message: "Agent gave legal advice", source: "AW IB Sales", date: relativeDate(0, 4, 0), status: "activities...", severity: "high" },
+  { id: 4, message: "Agent gave guarantee", source: "SelectQuote Term Life v1", date: relativeDate(0, 1, 0), status: "actions...", severity: "medium" },
+  { id: 5, message: "Inappropriate language detected", source: "CS3 Nexstar v1", date: relativeDate(0, 2, 0), status: "actions...", severity: "high" },
+  { id: 6, message: "DNC request detected", source: "CS3 Services v2", date: relativeDate(0, 3, 0), status: "actions...", severity: "medium" },
+  { id: 7, message: "Agent gave legal advice", source: "AW IB Sales", date: relativeDate(0, 4, 0), status: "actions...", severity: "high" },
   { id: 8, message: "No new data in the last 24 hours", source: "System", date: relativeDate(1, 0, 0), status: "resolved", severity: "low" },
   { id: 9, message: "Exception from Plexus processing: NullPointerException at line 237", source: "System", date: relativeDate(2, 0, 0), status: "resolved", severity: "critical" },
   { id: 10, message: "Compliance training overdue for multiple agents", source: "CS3 Audigy", date: relativeDate(3, 0, 0), status: "resolved", severity: "medium" },
@@ -119,10 +119,10 @@ export default function AlertsDashboard() {
     switch (status) {
       case 'new':
         return 'bg-neutral text-primary-foreground h-6';
-      case 'activities...':
+      case 'actions...':
         return 'bg-secondary text-secondary-foreground h-6';
       case 'resolved':
-        return 'bg-muted text-muted-foreground h-6';
+        return 'bg-true text-primary-foreground h-6';
       default:
         return 'bg-muted text-muted-foreground h-6';
     }
@@ -159,9 +159,10 @@ export default function AlertsDashboard() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[60%]">Alert</TableHead>
-                <TableHead className="w-[20%]">Severity</TableHead>
-                <TableHead className="w-[20%] text-right">Status</TableHead>
+                <TableHead className="w-[30%]">Source</TableHead>
+                <TableHead className="w-[40%]">Alert</TableHead>
+                <TableHead className="w-[15%]">Severity</TableHead>
+                <TableHead className="w-[15%] text-right">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -169,10 +170,12 @@ export default function AlertsDashboard() {
                 <TableRow key={alert.id} onClick={() => handleAlertClick(alert.id)} className="cursor-pointer">
                   <TableCell className="font-medium">
                     <div className="space-y-1">
-                      <div className="font-semibold">{alert.message}</div>
-                      <div className="text-sm text-muted-foreground">{alert.source}</div>
+                      <div className="font-semibold">{alert.source}</div>
                       <div className="text-sm text-muted-foreground">{getRelativeTime(alert.date)}</div>
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="font-medium">{alert.message}</div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -184,7 +187,7 @@ export default function AlertsDashboard() {
                     <Badge 
                       className={`${getBadgeVariant(alert.status)} w-24 justify-center`}
                     >
-                      {alert.status}
+                      {alert.status === 'activities...' ? 'actions...' : alert.status}
                     </Badge>
                   </TableCell>
                 </TableRow>
