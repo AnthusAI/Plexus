@@ -233,6 +233,10 @@ export default function ItemsDashboard() {
   const [showNewAnnotationForm, setShowNewAnnotationForm] = useState<string | null>(null);
   const [isErrorExpanded, setIsErrorExpanded] = useState(true);
   const [filterConfig, setFilterConfig] = useState<FilterConfig>([])
+  const [showExpandButton, setShowExpandButton] = useState<Record<string, boolean>>({})
+  const textRef = useRef<Record<string, HTMLDivElement | null>>({})
+  const [thumbedUpScores, setThumbedUpScores] = useState<Set<string>>(new Set());
+  const [feedbackItems, setFeedbackItems] = useState<Record<string, any[]>>({});
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -272,6 +276,24 @@ export default function ItemsDashboard() {
     window.addEventListener('resize', truncateExplanations);
     return () => window.removeEventListener('resize', truncateExplanations);
   }, [sampleScoreResults]);
+
+  useEffect(() => {
+    const measureHeight = () => {
+      const newShowExpandButton: Record<string, boolean> = {}
+      Object.keys(textRef.current).forEach((scoreName) => {
+        const element = textRef.current[scoreName]
+        if (element) {
+          const lineHeight = parseInt(window.getComputedStyle(element).lineHeight)
+          newShowExpandButton[scoreName] = element.scrollHeight > lineHeight * 2
+        }
+      })
+      setShowExpandButton(newShowExpandButton)
+    }
+
+    measureHeight()
+    window.addEventListener('resize', measureHeight)
+    return () => window.removeEventListener('resize', measureHeight)
+  }, [])
 
   const filteredItems = useMemo(() => {
     return items.filter(item => {
@@ -391,14 +413,20 @@ export default function ItemsDashboard() {
           </div>
           <div className="relative">
             <div 
-              ref={(el) => setExplanationRef(el, score.name)}
+              ref={(el) => textRef.current[score.name] = el}
               className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
-              style={{ maxHeight: expandedExplanations.includes(score.name) ? 'none' : '1.5em' }}
+              style={{ 
+                display: '-webkit-box',
+                WebkitLineClamp: '2',
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                ...(expandedExplanations.includes(score.name) ? { WebkitLineClamp: 'unset', display: 'block' } : {})
+              }}
               onClick={() => toggleExplanation(score.name)}
             >
               {renderRichText(score.explanation)}
             </div>
-            {score.explanation !== truncatedExplanations[score.name] && (
+            {showExpandButton[score.name] && (
               <Button 
                 variant="link" 
                 size="sm" 
@@ -427,43 +455,51 @@ export default function ItemsDashboard() {
               </div>
             </div>
             <div className="flex items-center space-x-2">
+              {(score.isAnnotated || feedbackItems[score.name]?.length > 0) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleAnnotations(score.name)}
+                  className={`text-xs bg-secondary text-secondary-foreground hover:bg-secondary hover:text-secondary-foreground`}
+                >
+                  <MessageCircleMore className="h-4 w-4" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => handleThumbsUp(score.name)}
-                className="text-xs"
+                className={`text-xs ${thumbedUpScores.has(score.name) ? 'bg-true text-primary-foreground hover:bg-true hover:text-primary-foreground' : 'hover:bg-muted hover:text-muted-foreground'}`}
               >
                 <ThumbsUp className="h-4 w-4" />
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => toggleNewAnnotationForm(score.name)}
-                className="text-xs"
+                onClick={() => handleThumbsDown(score.name)}
+                className="text-xs hover:bg-muted hover:text-muted-foreground"
               >
                 <ThumbsDown className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => score.isAnnotated ? toggleAnnotations(score.name) : toggleNewAnnotationForm(score.name)}
-                className={`text-xs ${score.isAnnotated ? 'bg-secondary text-secondary-foreground' : ''}`}
-              >
-                <MessageCircleMore className="h-4 w-4" />
               </Button>
               <Badge className={getValueBadgeClass(score.value)}>{score.value}</Badge>
             </div>
           </div>
           <div className="relative">
             <div 
-              ref={(el) => setExplanationRef(el, score.name)}
+              ref={(el) => textRef.current[score.name] = el}
               className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
-              style={{ maxHeight: expandedExplanations.includes(score.name) ? 'none' : '1.5em' }}
+              style={{ 
+                display: '-webkit-box',
+                WebkitLineClamp: '2',
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                ...(expandedExplanations.includes(score.name) ? { WebkitLineClamp: 'unset', display: 'block' } : {})
+              }}
               onClick={() => toggleExplanation(score.name)}
             >
               {renderRichText(score.explanation)}
             </div>
-            {score.explanation !== truncatedExplanations[score.name] && (
+            {showExpandButton[score.name] && (
               <Button 
                 variant="link" 
                 size="sm" 
@@ -497,12 +533,73 @@ export default function ItemsDashboard() {
           "{score.annotation}"
         </div>
       )}
+      {!isAnnotation && (score.isAnnotated || feedbackItems[score.name]?.length > 0) && expandedAnnotations.includes(score.name) && (
+        <div className="mt-2 space-y-2">
+          <div className="flex justify-between items-center mb-2">
+            <h6 className="text-sm font-medium">Feedback</h6>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => toggleNewAnnotationForm(score.name)}
+              className="text-xs"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Create
+            </Button>
+          </div>
+          {[...(score.annotations || []), ...(feedbackItems[score.name] || [])].map((annotation, annotationIndex) => (
+            <div key={annotationIndex} className="relative">
+              {renderScoreResult(annotation, true)}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 
   const handleNewAnnotationSubmit = (scoreName: string) => {
-    console.log("New annotation for", scoreName, newAnnotation);
-    // Reset the form
+    const newFeedbackItem = {
+      ...newAnnotation,
+      scoreName,
+      timestamp: new Date().toISOString(),
+      user: {
+        name: "Current User", // Replace with actual user name
+        initials: "CU" // Replace with actual user initials
+      }
+    };
+
+    setFeedbackItems(prev => ({
+      ...prev,
+      [scoreName]: [...(prev[scoreName] || []), newFeedbackItem]
+    }));
+
+    // Find the selected item
+    const selectedItemData = items.find(item => item.id === selectedItem);
+
+    if (selectedItemData && selectedItemData.scoreResults) {
+      // Update the score to show it's annotated
+      const updatedScoreResults = selectedItemData.scoreResults.map(section => ({
+        ...section,
+        scores: section.scores.map(score => 
+          score.name === scoreName 
+            ? { ...score, isAnnotated: true, annotations: [...(score.annotations || []), newFeedbackItem] }
+            : score
+        )
+      }));
+
+      // Update the items with the new score results
+      setItems(prev => prev.map(item => 
+        item.id === selectedItem 
+          ? { ...item, scoreResults: updatedScoreResults }
+          : item
+      ));
+    } else {
+      console.error('Selected item or scoreResults not found');
+      // Optionally, you can add some user feedback here
+    }
+
+    // Close the form and reset the new annotation state
+    setShowNewAnnotationForm(null);
     setNewAnnotation({ value: "", explanation: "", annotation: "" });
   };
 
@@ -516,8 +613,32 @@ export default function ItemsDashboard() {
   };
 
   const handleThumbsUp = (scoreName: string) => {
-    console.log(`Thumbs up for ${scoreName}`);
-    // Implement the logic for thumbs up action
+    setThumbedUpScores(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(scoreName)) {
+        newSet.delete(scoreName);
+      } else {
+        newSet.add(scoreName);
+      }
+      return newSet;
+    });
+
+    // Close the annotation form if it's open
+    if (showNewAnnotationForm === scoreName) {
+      setShowNewAnnotationForm(null);
+    }
+
+    // Reset the new annotation state
+    setNewAnnotation({ value: "", explanation: "", annotation: "" });
+  };
+
+  const handleThumbsDown = (scoreName: string) => {
+    setThumbedUpScores(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(scoreName);
+      return newSet;
+    });
+    toggleNewAnnotationForm(scoreName);
   };
 
   const handleFilterChange = (newFilters: FilterConfig) => {
@@ -671,7 +792,7 @@ export default function ItemsDashboard() {
                 <div className="text-right">
                   <p className="text-sm font-medium">Status</p>
                   <Badge 
-                    className={getBadgeVariant(items.find(item => item.id === selectedItem)?.status || '')}
+                    className={`w-24 justify-center ${getBadgeVariant(items.find(item => item.id === selectedItem)?.status || '')}`}
                   >
                     {items.find(item => item.id === selectedItem)?.status}
                   </Badge>
@@ -719,7 +840,7 @@ export default function ItemsDashboard() {
               
               <div className="-mx-4 sm:-mx-6">
                 <div
-                  className="relative group hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                  className="relative group bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer"
                   onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
                 >
                   <div className="flex justify-between items-center px-4 sm:px-6 py-2">
@@ -751,7 +872,7 @@ export default function ItemsDashboard() {
               
               <div className="-mx-4 sm:-mx-6">
                 <div
-                  className="relative group hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                  className="relative group bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer"
                   onClick={() => setIsDataExpanded(!isDataExpanded)}
                 >
                   <div className="flex justify-between items-center px-4 sm:px-6 py-2">
@@ -779,16 +900,17 @@ export default function ItemsDashboard() {
               
               <div className="mt-8">
                 <div className="-mx-4 sm:-mx-6 mb-4">
-                  <div className="px-4 sm:px-6 py-2">
+                  <div className="px-4 sm:px-6 py-2 bg-muted">
                     <h4 className="text-md font-semibold">Score Results</h4>
                   </div>
                 </div>
                 {sampleScoreResults.map((section, sectionIndex) => (
                   <div key={sectionIndex} className="mb-6">
                     <div className="-mx-4 sm:-mx-6 mb-4">
-                      <div className="bg-muted px-4 sm:px-6 py-2">
+                      <div className="px-4 sm:px-6 py-2">
                         <h4 className="text-md font-semibold">{section.section}</h4>
                       </div>
+                      <hr className="border-t border-border" />
                     </div>
                     <div>
                       {section.scores.map((score, scoreIndex) => (
