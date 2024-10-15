@@ -490,7 +490,11 @@ export default function DataDashboard() {
                             </div>
                             <div className="relative">
                               <div 
-                                ref={(el) => textRef.current[score.name] = el}
+                                ref={(el) => {
+                                  if (el) {
+                                    textRef.current[score.name] = el;
+                                  }
+                                }}
                                 className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
                                 style={{ 
                                   display: '-webkit-box',

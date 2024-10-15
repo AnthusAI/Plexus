@@ -35,7 +35,21 @@ const relativeDate = (days: number, hours: number, minutes: number) => {
   return date.toISOString();
 };
 
-const items = [
+// First, let's define an interface for the item
+interface Item {
+  id: number;
+  scorecard: string;
+  score: number;
+  date: string;
+  status: string;
+  results: number;
+  inferences: number;
+  cost: string;
+  scoreResults?: typeof sampleScoreResults;  // Make this optional
+}
+
+// Rename this to initialItems
+const initialItems: Item[] = [
   { id: 30, scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "new", results: 0, inferences: 0, cost: "$0.000" },
   { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "new", results: 0, inferences: 0, cost: "$0.000" },
   { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "new", results: 0, inferences: 0, cost: "$0.000" },
@@ -69,7 +83,7 @@ const items = [
 ];
 
 // Sort items by date, newest first
-items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+initialItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
 // Sample metadata and data for all items
 const sampleMetadata = [
@@ -237,6 +251,7 @@ export default function ItemsDashboard() {
   const textRef = useRef<Record<string, HTMLDivElement | null>>({})
   const [thumbedUpScores, setThumbedUpScores] = useState<Set<string>>(new Set());
   const [feedbackItems, setFeedbackItems] = useState<Record<string, any[]>>({});
+  const [items, setItems] = useState<Item[]>(initialItems);
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -413,7 +428,11 @@ export default function ItemsDashboard() {
           </div>
           <div className="relative">
             <div 
-              ref={(el) => textRef.current[score.name] = el}
+              ref={(el) => {
+                if (el) {
+                  textRef.current[score.name] = el;
+                }
+              }}
               className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
               style={{ 
                 display: '-webkit-box',
@@ -486,7 +505,11 @@ export default function ItemsDashboard() {
           </div>
           <div className="relative">
             <div 
-              ref={(el) => textRef.current[score.name] = el}
+              ref={(el) => {
+                if (el) {
+                  textRef.current[score.name] = el;
+                }
+              }}
               className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
               style={{ 
                 display: '-webkit-box',
