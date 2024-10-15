@@ -36,6 +36,7 @@ import {
 import { PieChart, Pie, ResponsiveContainer, Cell } from "recharts"
 import { Badge } from "@/components/ui/badge"
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'  // Change this import
 
 // Add this function near the top of the file, with other utility functions
 const generateHexCode = (length: number = 7): string => {
@@ -63,7 +64,10 @@ const initialScorecards: Scorecard[] = [
               { category: "Positive", value: 85 },
               { category: "Negative", value: 15 }
             ],
-            versionHistory: []
+            versionHistory: [],
+            aiProvider: "OpenAI",
+            aiModel: "gpt-4-turbo",
+            isFineTuned: true  // This score is now fine-tuned
           },
           { 
             id: "2", 
@@ -76,7 +80,10 @@ const initialScorecards: Scorecard[] = [
               { category: "Positive", value: 78 },
               { category: "Negative", value: 22 }
             ],
-            versionHistory: []
+            versionHistory: [],
+            aiProvider: "Anthropic",
+            aiModel: "claude-2",
+            isFineTuned: false
           },
         ]
       },
@@ -361,6 +368,7 @@ function EditableField({ value, onChange, className = "", autoFocus = false }: E
 }
 
 export default function ScorecardsComponent() {
+  const router = useRouter()
   const [scorecards, setScorecards] = useState<Scorecard[]>(initialScorecards)
   const [selectedScorecard, setSelectedScorecard] = useState<Scorecard | null>(null)
   const [isEditing, setIsEditing] = useState(false)
@@ -516,6 +524,10 @@ export default function ScorecardsComponent() {
     }
   }
 
+  const handleEditScore = (scorecardId: string, scoreId: string) => {
+    router.push(`/scorecards/${scorecardId}/scores/${scoreId}/edit`)
+  }
+
   const renderScorecardsTable = () => (
     <div>
       <Table>
@@ -610,7 +622,7 @@ export default function ScorecardsComponent() {
       });
     };
 
-    const renderScoreItem = (score: Scorecard['scoreDetails'][0]['scores'][0]) => {
+    const renderScoreItem = (score: Scorecard['scoreDetails'][0]['scores'][0], scorecardId: string) => {
       const generateVersionHistory = (baseAccuracy: number) => {
         const now = new Date();
         return [
@@ -661,7 +673,7 @@ export default function ScorecardsComponent() {
                 <div className="font-mono">LangGraphScore</div>
                 <div className="flex flex-wrap gap-1">
                   <Badge className="bg-muted-foreground text-muted">{score.aiProvider || 'OpenAI'}</Badge>
-                  <Badge className="bg-muted-foreground text-muted">{score.aiModel || 'gpt-4o-mini'}</Badge>
+                  <Badge className="bg-muted-foreground text-muted">{score.aiModel || 'gpt-4-mini'}</Badge>
                   {score.isFineTuned && <Badge variant="secondary">Fine-tuned</Badge>}
                 </div>
               </div>
@@ -695,7 +707,12 @@ export default function ScorecardsComponent() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button variant="outline" size="sm" className="text-xs">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="text-xs"
+                onClick={() => handleEditScore(scorecardId, score.id)}
+              >
                 <Pencil className="h-4 w-4 mr-1" />
                 Edit
               </Button>
@@ -915,7 +932,7 @@ export default function ScorecardsComponent() {
                     </div>
                   </div>
                   <div>
-                    {section.scores.map((score) => renderScoreItem(score))}
+                    {section.scores.map((score) => renderScoreItem(score, selectedScorecard.id))}
                   </div>
                   <div className="mt-4">
                     <Button variant="outline" onClick={() => handleAddScore(sectionIndex)}>
