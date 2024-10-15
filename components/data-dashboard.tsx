@@ -20,6 +20,7 @@ import { TimeRangeSelector } from "@/components/time-range-selector"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import ReactMarkdown from 'react-markdown'
 import Link from 'next/link'
+import { FilterControl, FilterConfig } from "@/components/filter-control"
 
 // Function to create a date relative to now
 const relativeDate = (days: number, hours: number, minutes: number) => {
@@ -181,6 +182,7 @@ export default function DataDashboard() {
   const [truncatedExplanations, setTruncatedExplanations] = useState<Record<string, string>>({})
   const [showExpandButton, setShowExpandButton] = useState<Record<string, boolean>>({})
   const textRef = useRef<Record<string, HTMLDivElement | null>>({})
+  const [filterConfig, setFilterConfig] = useState<FilterConfig>([])
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -212,10 +214,36 @@ export default function DataDashboard() {
   }, [])
 
   const filteredItems = useMemo(() => {
-    return items.filter(item => 
-      !selectedScorecard || item.scorecard === selectedScorecard
-    )
-  }, [selectedScorecard])
+    return items.filter(item => {
+      if (!selectedScorecard && filterConfig.length === 0) return true
+      
+      let scorecardMatch = !selectedScorecard || item.scorecard === selectedScorecard
+      
+      if (filterConfig.length === 0) return scorecardMatch
+
+      return scorecardMatch && filterConfig.some(group => {
+        return group.conditions.every(condition => {
+          const itemValue = String(item[condition.field as keyof typeof item])
+          switch (condition.operator) {
+            case 'equals':
+              return itemValue === condition.value
+            case 'not_equals':
+              return itemValue !== condition.value
+            case 'contains':
+              return itemValue.includes(condition.value)
+            case 'not_contains':
+              return !itemValue.includes(condition.value)
+            case 'greater_than':
+              return Number(itemValue) > Number(condition.value)
+            case 'less_than':
+              return Number(itemValue) < Number(condition.value)
+            default:
+              return true
+          }
+        })
+      })
+    })
+  }, [selectedScorecard, filterConfig, items])
 
   const getRelativeTime = (dateString: string) => {
     const date = parseISO(dateString)
@@ -261,6 +289,20 @@ export default function DataDashboard() {
         : [...prev, scoreName]
     )
   }
+
+  const handleFilterChange = (newFilters: FilterConfig) => {
+    setFilterConfig(newFilters)
+  }
+
+  const availableFields = [
+    { value: 'scorecard', label: 'Scorecard' },
+    { value: 'id', label: 'ID' },
+    { value: 'status', label: 'Status' },
+    { value: 'score', label: 'Score' },
+    { value: 'results', label: 'Results' },
+    { value: 'inferences', label: 'Inferences' },
+    { value: 'cost', label: 'Cost' },
+  ]
 
   const renderItemsList = () => (
     <Table>
@@ -595,7 +637,10 @@ export default function DataDashboard() {
             </SelectContent>
           </Select>
         </div>
-        <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} options={ITEMS_TIME_RANGE_OPTIONS} />
+        <div className="flex space-x-2">
+          <FilterControl onFilterChange={handleFilterChange} availableFields={availableFields} />
+          <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} options={ITEMS_TIME_RANGE_OPTIONS} />
+        </div>
       </div>
 
       {renderActionButtons()}
