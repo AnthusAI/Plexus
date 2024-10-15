@@ -115,6 +115,19 @@ export default function AlertsDashboard() {
     }
   }
 
+  const getBadgeVariant = (status: string) => {
+    switch (status) {
+      case 'new':
+        return 'bg-neutral text-primary-foreground h-6';
+      case 'activities...':
+        return 'bg-secondary text-secondary-foreground h-6';
+      case 'resolved':
+        return 'bg-muted text-muted-foreground h-6';
+      default:
+        return 'bg-muted text-muted-foreground h-6';
+    }
+  };
+
   return (
     <div className="space-y-6">
 
@@ -169,8 +182,7 @@ export default function AlertsDashboard() {
                   </TableCell>
                   <TableCell className="text-right">
                     <Badge 
-                      variant={alert.status === 'new' ? 'default' : alert.status === 'activities...' ? 'secondary' : 'outline'}
-                      className="w-24 justify-center"
+                      className={`${getBadgeVariant(alert.status)} w-24 justify-center`}
                     >
                       {alert.status}
                     </Badge>
@@ -184,14 +196,14 @@ export default function AlertsDashboard() {
         {selectedAlert && (
           <div className={`${isFullWidth ? 'w-full' : 'w-1/2'} ${isNarrowViewport || isFullWidth ? 'mx-0' : ''}`}>
             <Card className={`rounded-none sm:rounded-lg flex flex-col h-[calc(100vh-8rem)]`}>
-              <CardHeader className="flex flex-row items-center justify-between py-4 px-4 sm:px-6">
-                <div className="space-y-1">
-                  <h3 className="text-2xl font-semibold">{alerts.find(alert => alert.id === selectedAlert)?.message}</h3>
+              <CardHeader className="flex flex-row items-center justify-between py-4 px-4 sm:px-6 space-y-0">
+                <div>
+                  <h3 className="text-xl font-semibold">{alerts.find(alert => alert.id === selectedAlert)?.message}</h3>
                   <p className="text-sm text-muted-foreground">
                     {alerts.find(alert => alert.id === selectedAlert)?.source} • {getRelativeTime(alerts.find(alert => alert.id === selectedAlert)?.date || '')}
                   </p>
                 </div>
-                <div className="flex space-x-2">
+                <div className="flex ml-2">
                   {!isNarrowViewport && (
                     <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
                       {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
@@ -200,7 +212,7 @@ export default function AlertsDashboard() {
                   <Button variant="outline" size="icon" onClick={() => {
                     setSelectedAlert(null)
                     setIsFullWidth(false)
-                  }}>
+                  }} className="ml-2">
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
@@ -219,7 +231,7 @@ export default function AlertsDashboard() {
                       <div className="text-right">
                         <p className="text-sm font-medium">Status</p>
                         <Badge 
-                          variant={alerts.find(alert => alert.id === selectedAlert)?.status === 'new' ? 'default' : alerts.find(alert => alert.id === selectedAlert)?.status === 'activities...' ? 'secondary' : 'outline'}
+                          className={`${getBadgeVariant(alerts.find(alert => alert.id === selectedAlert)?.status || '')} w-24 justify-center`}
                         >
                           {alerts.find(alert => alert.id === selectedAlert)?.status}
                         </Badge>

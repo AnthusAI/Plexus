@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Activity, AudioLines, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageSquare } from "lucide-react"
+import { Activity, AudioLines, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -85,11 +85,12 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     { name: "Activity", icon: Activity, path: "/activity" },
     { name: "Items", icon: AudioLines, path: "/items" },
     { name: "Alerts", icon: Siren, path: "/alerts" },
+    { name: "Feedback", icon: MessageCircleMore, path: "/feedback" },
     { name: "Reports", icon: FileBarChart, path: "/reports" },
     { name: "Scorecards", icon: ListTodo, path: "/scorecards" },
     { name: "Experiments", icon: FlaskConical, path: "/experiments" },
-    { name: "Optimizations", icon: Sparkles, path: "/optimizations" },
-    { name: "Data", icon: Database, path: "/data-profiling" },
+    { name: "Analysis", icon: Sparkles, path: "/analysis" },
+    { name: "Data", icon: Database, path: "/data" },
     { name: "Settings", icon: Settings, path: "/settings" },
   ]
 
