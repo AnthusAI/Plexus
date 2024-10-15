@@ -254,30 +254,6 @@ const renderProgressBar = (progress: number, truePart: number, falsePart: number
   )
 }
 
-const renderExperimentItem = (item: any) => (
-  <TableRow key={item.id} onClick={() => handleItemClick(item.id)} className="cursor-pointer transition-colors duration-200 hover:bg-muted">
-    <TableCell className="font-medium sm:pr-4">
-      <div className="sm:hidden">
-        <div className="font-semibold">{item.scorecard}</div>
-        <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
-      </div>
-      <div className="hidden sm:block">
-        {item.scorecard}
-        <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
-      </div>
-    </TableCell>
-    <TableCell className="text-right">{item.inferences}</TableCell>
-    <TableCell className="text-right">{item.results}</TableCell>
-    <TableCell className="text-right">{item.cost}</TableCell>
-    <TableCell className="text-right w-32">
-      {renderProgressBar(item.progress, item.accuracyTrue, item.accuracyFalse, false)}
-    </TableCell>
-    <TableCell className="text-right w-32">
-      {renderProgressBar(item.progress, item.accuracyTrue, item.accuracyFalse, true)}
-    </TableCell>
-  </TableRow>
-)
-
 export default function ExperimentsDashboard() {
   const [selectedItem, setSelectedItem] = useState<number | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
@@ -301,6 +277,35 @@ export default function ExperimentsDashboard() {
     }
   }
 
+  const getRelativeTime = (dateString: string) => {
+    const date = parseISO(dateString)
+    return formatDistanceToNow(date, { addSuffix: true })
+  }
+
+  const renderExperimentItem = (item: any) => (
+    <TableRow key={item.id} onClick={() => handleItemClick(item.id)} className="cursor-pointer transition-colors duration-200 hover:bg-muted">
+      <TableCell className="font-medium sm:pr-4">
+        <div className="sm:hidden">
+          <div className="font-semibold">{item.scorecard}</div>
+          <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
+        </div>
+        <div className="hidden sm:block">
+          {item.scorecard}
+          <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
+        </div>
+      </TableCell>
+      <TableCell className="text-right">{item.inferences}</TableCell>
+      <TableCell className="text-right">{item.results}</TableCell>
+      <TableCell className="text-right">{item.cost}</TableCell>
+      <TableCell className="w-[15%]">
+        {renderProgressBar(item.progress, item.accuracyTrue, item.accuracyFalse, false)}
+      </TableCell>
+      <TableCell className="w-[15%]">
+        {renderProgressBar(item.progress, item.accuracyTrue, item.accuracyFalse, true)}
+      </TableCell>
+    </TableRow>
+  )
+
   const getBadgeVariant = (status: string) => {
     switch (status) {
       case 'new':
@@ -314,11 +319,6 @@ export default function ExperimentsDashboard() {
         return 'bg-muted text-muted-foreground h-6';
     }
   };
-
-  const getRelativeTime = (dateString: string) => {
-    const date = parseISO(dateString)
-    return formatDistanceToNow(date, { addSuffix: true })
-  }
 
   const renderSelectedItem = () => {
     const selectedItemData = items.find(item => item.id === selectedItem)
@@ -398,33 +398,7 @@ export default function ExperimentsDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map(item => (
-                    <TableRow 
-                      key={item.id} 
-                      onClick={() => handleItemClick(item.id)} 
-                      className="cursor-pointer transition-colors duration-200 hover:bg-muted"
-                    >
-                      <TableCell className="font-medium sm:pr-4">
-                        <div className="sm:hidden">
-                          <div className="font-semibold">{item.scorecard}</div>
-                          <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
-                        </div>
-                        <div className="hidden sm:block">
-                          {item.scorecard}
-                          <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">{item.inferences}</TableCell>
-                      <TableCell className="text-right">{item.results}</TableCell>
-                      <TableCell className="text-right">{item.cost}</TableCell>
-                      <TableCell className="w-[15%]">
-                        {renderProgressBar(item.progress, item.accuracyTrue, item.accuracyFalse, false)}
-                      </TableCell>
-                      <TableCell className="w-[15%]">
-                        {renderProgressBar(item.progress, item.accuracyTrue, item.accuracyFalse, true)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {items.map(renderExperimentItem)}
                 </TableBody>
               </Table>
             </div>

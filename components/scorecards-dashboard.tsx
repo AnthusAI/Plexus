@@ -37,6 +37,11 @@ import { PieChart, Pie, ResponsiveContainer, Cell } from "recharts"
 import { Badge } from "@/components/ui/badge"
 import Link from 'next/link'
 
+// Add this function near the top of the file, with other utility functions
+const generateHexCode = (length: number = 7): string => {
+  return Array.from({length}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+};
+
 const initialScorecards: Scorecard[] = [
   { 
     id: "1329", 
@@ -246,6 +251,7 @@ interface Scorecard {
       distribution: Array<{ category: string; value: number }>;
       versionHistory: Array<{
         version: string;
+        parent: string | null;  // Add this line
         timestamp: Date;
         accuracy: number;
         distribution: Array<{ category: string; value: number }>;
@@ -421,6 +427,8 @@ export default function ScorecardsComponent() {
   }
 
   const handleAddScore = (sectionIndex: number) => {
+    if (!selectedScorecard) return; // Add this line
+
     const baseAccuracy = Math.floor(Math.random() * 30) + 60; // Random accuracy between 60% and 90%
     const newScore = { 
       id: Date.now().toString(), 
@@ -446,34 +454,56 @@ export default function ScorecardsComponent() {
 
   const handleSaveScore = () => {
     if (selectedScorecard && editingScore) {
+      const newScore = {
+        id: editingScore.id || Date.now().toString(),
+        name: editingScore.name,
+        type: editingScore.type,
+        accuracy: 0, // Set a default value
+        version: generateHexCode(),
+        timestamp: new Date(),
+        distribution: [
+          { category: "Positive", value: 0 },
+          { category: "Negative", value: 0 }
+        ],
+        versionHistory: []
+      };
+
       if (!editingScore.id) {
-        const newScore = { ...editingScore, id: Date.now().toString() }
         setSelectedScorecard({
           ...selectedScorecard,
           scores: selectedScorecard.scores + 1,
-          scoreDetails: [...(selectedScorecard.scoreDetails || []), newScore]
-        })
+          scoreDetails: selectedScorecard.scoreDetails.map(section => ({
+            ...section,
+            scores: [...section.scores, newScore]
+          }))
+        });
       } else {
         setSelectedScorecard({
           ...selectedScorecard,
-          scoreDetails: (selectedScorecard.scoreDetails || []).map(score => 
-            score.id === editingScore.id ? editingScore : score
-          )
-        })
+          scoreDetails: selectedScorecard.scoreDetails.map(section => ({
+            ...section,
+            scores: section.scores.map(score => 
+              score.id === editingScore.id ? newScore : score
+            )
+          }))
+        });
       }
-      setEditingScore(null)
+      setEditingScore(null);
     }
-  }
+  };
 
   const handleDeleteScore = (scoreId: string) => {
     if (selectedScorecard) {
       setSelectedScorecard({
         ...selectedScorecard,
         scores: selectedScorecard.scores - 1,
-        scoreDetails: (selectedScorecard.scoreDetails || []).filter(score => score.id !== scoreId)
-      })
+        scoreDetails: selectedScorecard.scoreDetails.map(section => ({
+          ...section,
+          scores: section.scores.filter(score => score.id !== scoreId)
+        }))
+      });
     }
-  }
+  };
 
   const handleNameEdit = () => {
     setEditingName(true)
@@ -587,28 +617,28 @@ export default function ScorecardsComponent() {
           {
             version: generateHexCode(),
             parent: generateHexCode(),
-            timestamp: new Date(now.getTime() - 2 * 60 * 60 * 1000), // 2 hours ago
+            timestamp: new Date(now.getTime() - 2 * 60 * 60 * 1000),
             accuracy: baseAccuracy,
             distribution: [{ category: "Positive", value: baseAccuracy }, { category: "Negative", value: 100 - baseAccuracy }]
           },
           {
             version: generateHexCode(),
             parent: generateHexCode(),
-            timestamp: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000), // 1 day ago
+            timestamp: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000),
             accuracy: baseAccuracy - 3,
             distribution: [{ category: "Positive", value: baseAccuracy - 3 }, { category: "Negative", value: 103 - baseAccuracy }]
           },
           {
             version: generateHexCode(),
             parent: generateHexCode(),
-            timestamp: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
+            timestamp: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000),
             accuracy: baseAccuracy - 7,
             distribution: [{ category: "Positive", value: baseAccuracy - 7 }, { category: "Negative", value: 107 - baseAccuracy }]
           },
           {
             version: generateHexCode(),
             parent: null,
-            timestamp: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
+            timestamp: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
             accuracy: baseAccuracy - 12,
             distribution: [{ category: "Positive", value: baseAccuracy - 12 }, { category: "Negative", value: 112 - baseAccuracy }]
           },
@@ -818,9 +848,9 @@ export default function ScorecardsComponent() {
       );
     };
 
-    // Helper function to generate a random hex code
-    const generateHexCode = () => {
-      return Math.random().toString(16).substr(2, 7);
+    // Replace the existing generateHexCode function in renderSelectedItem with a call to this new function
+    const getHexCode = () => {
+      return generateHexCode(7); // Generate a 7-character hex code
     };
 
     return (
