@@ -82,57 +82,46 @@ const sampleScoreResults = [
   }
 ];
 
+// Define score counts for each scorecard
+const scorecardScoreCounts = {
+  "CS3 Services v2": 1,
+  "CS3 Audigy": 4,
+  "AW IB Sales": 1,
+  "CS3 Nexstar v1": 29,
+  "SelectQuote Term Life v1": 42,
+};
+
 const initialFeedbackItems = [
-  { 
-    id: 30, 
-    scorecard: "CS3 Services v2", 
-    score: 80, 
-    date: relativeDate(0, 0, 5), 
-    status: "new", 
-    results: 0, 
-    inferences: 0, 
-    cost: "$0.000",
-    metadata: [
-      { key: "Duration", value: "1022" },
-      { key: "Dual Channel", value: "true" },
-      { key: "Agent Name", value: "Johnny Appleseed" },
-      { key: "Customer ID", value: "CUS-12345" },
-    ],
-    data: [
-      { speaker: "Agent", text: "Thank you for calling our customer service. How may I assist you today?" },
-      { speaker: "Customer", text: "I'm calling about an issue with my recent order." },
-    ],
-    scoreResults: sampleScoreResults
-  },
-  { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "new", results: 0, inferences: 0, cost: "$0.000" },
-  { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "new", results: 0, inferences: 0, cost: "$0.000" },
-  { id: 27, scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), status: "error", results: 2, inferences: 4, cost: "$0.005" },
-  { id: 26, scorecard: "SelectQuote Term Life v1", score: 83, date: relativeDate(0, 1, 30), status: "scoring...", results: 6, inferences: 24, cost: "$0.031" },
-  { id: 25, scorecard: "AW IB Sales", score: 94, date: relativeDate(0, 2, 0), status: "scored", results: 19, inferences: 152, cost: "$0.199" },
-  { id: 24, scorecard: "CS3 Audigy", score: 86, date: relativeDate(0, 3, 0), status: "scored", results: 17, inferences: 68, cost: "$0.089" },
-  { id: 23, scorecard: "CS3 Services v2", score: 79, date: relativeDate(0, 4, 0), status: "scored", results: 16, inferences: 32, cost: "$0.042" },
-  { id: 22, scorecard: "CS3 Nexstar v1", score: 91, date: relativeDate(0, 5, 0), status: "scored", results: 17, inferences: 68, cost: "$0.089" },
-  { id: 21, scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(0, 6, 0), status: "scored", results: 13, inferences: 52, cost: "$0.068" },
-  { id: 20, scorecard: "CS3 Services v2", score: 82, date: relativeDate(1, 0, 0), status: "scored", results: 15, inferences: 30, cost: "$0.039" },
-  { id: 19, scorecard: "AW IB Sales", score: 93, date: relativeDate(1, 2, 0), status: "scored", results: 18, inferences: 144, cost: "$0.188" },
-  { id: 18, scorecard: "CS3 Audigy", score: 87, date: relativeDate(1, 4, 0), status: "scored", results: 16, inferences: 64, cost: "$0.084" },
-  { id: 17, scorecard: "SelectQuote Term Life v1", score: 85, date: relativeDate(1, 6, 0), status: "scored", results: 14, inferences: 56, cost: "$0.073" },
-  { id: 16, scorecard: "CS3 Nexstar v1", score: 90, date: relativeDate(1, 8, 0), status: "scored", results: 18, inferences: 72, cost: "$0.094" },
-  { id: 15, scorecard: "CS3 Services v2", score: 81, date: relativeDate(1, 10, 0), status: "scored", results: 17, inferences: 34, cost: "$0.044" },
-  { id: 14, scorecard: "AW IB Sales", score: 95, date: relativeDate(1, 12, 0), status: "scored", results: 20, inferences: 160, cost: "$0.209" },
-  { id: 13, scorecard: "CS3 Audigy", score: 88, date: relativeDate(1, 14, 0), status: "scored", results: 18, inferences: 72, cost: "$0.094" },
-  { id: 12, scorecard: "SelectQuote Term Life v1", score: 84, date: relativeDate(1, 16, 0), status: "scored", results: 15, inferences: 60, cost: "$0.078" },
-  { id: 11, scorecard: "CS3 Nexstar v1", score: 92, date: relativeDate(1, 18, 0), status: "scored", results: 19, inferences: 76, cost: "$0.099" },
-  { id: 10, scorecard: "CS3 Services v2", score: 83, date: relativeDate(1, 20, 0), status: "scored", results: 18, inferences: 36, cost: "$0.047" },
-  { id: 9, scorecard: "AW IB Sales", score: 97, date: relativeDate(1, 22, 0), status: "scored", results: 21, inferences: 168, cost: "$0.219" },
-  { id: 8, scorecard: "CS3 Audigy", score: 89, date: relativeDate(2, 0, 0), status: "scored", results: 19, inferences: 76, cost: "$0.099" },
-  { id: 7, scorecard: "SelectQuote Term Life v1", score: 86, date: relativeDate(2, 2, 0), status: "scored", results: 16, inferences: 64, cost: "$0.084" },
-  { id: 6, scorecard: "CS3 Nexstar v1", score: 93, date: relativeDate(2, 4, 0), status: "scored", results: 20, inferences: 80, cost: "$0.104" },
-  { id: 5, scorecard: "CS3 Services v2", score: 84, date: relativeDate(2, 6, 0), status: "scored", results: 19, inferences: 38, cost: "$0.050" },
-  { id: 4, scorecard: "AW IB Sales", score: 98, date: relativeDate(2, 8, 0), status: "scored", results: 22, inferences: 176, cost: "$0.230" },
-  { id: 3, scorecard: "CS3 Audigy", score: 90, date: relativeDate(2, 10, 0), status: "scored", results: 20, inferences: 80, cost: "$0.104" },
-  { id: 2, scorecard: "SelectQuote Term Life v1", score: 87, date: relativeDate(2, 12, 0), status: "scored", results: 17, inferences: 68, cost: "$0.089" },
-  { id: 1, scorecard: "CS3 Nexstar v1", score: 94, date: relativeDate(2, 14, 0), status: "scored", results: 21, inferences: 84, cost: "$0.110" },
+  { id: 30, scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "new", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
+  { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "new", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
+  { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "new", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"] },
+  { id: 27, scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), status: "error", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
+  { id: 26, scorecard: "SelectQuote Term Life v1", score: 83, date: relativeDate(0, 1, 30), status: "scoring...", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
+  { id: 25, scorecard: "AW IB Sales", score: 94, date: relativeDate(0, 2, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"] },
+  { id: 24, scorecard: "CS3 Audigy", score: 86, date: relativeDate(0, 3, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
+  { id: 23, scorecard: "CS3 Services v2", score: 79, date: relativeDate(0, 4, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
+  { id: 22, scorecard: "CS3 Nexstar v1", score: 91, date: relativeDate(0, 5, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
+  { id: 21, scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(0, 6, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
+  { id: 20, scorecard: "CS3 Services v2", score: 82, date: relativeDate(1, 0, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
+  { id: 19, scorecard: "AW IB Sales", score: 93, date: relativeDate(1, 2, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"] },
+  { id: 18, scorecard: "CS3 Audigy", score: 87, date: relativeDate(1, 4, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
+  { id: 17, scorecard: "SelectQuote Term Life v1", score: 85, date: relativeDate(1, 6, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
+  { id: 16, scorecard: "CS3 Nexstar v1", score: 90, date: relativeDate(1, 8, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
+  { id: 15, scorecard: "CS3 Services v2", score: 81, date: relativeDate(1, 10, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
+  { id: 14, scorecard: "AW IB Sales", score: 95, date: relativeDate(1, 12, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"] },
+  { id: 13, scorecard: "CS3 Audigy", score: 88, date: relativeDate(1, 14, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
+  { id: 12, scorecard: "SelectQuote Term Life v1", score: 84, date: relativeDate(1, 16, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
+  { id: 11, scorecard: "CS3 Nexstar v1", score: 92, date: relativeDate(1, 18, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
+  { id: 10, scorecard: "CS3 Services v2", score: 83, date: relativeDate(1, 20, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
+  { id: 9, scorecard: "AW IB Sales", score: 97, date: relativeDate(1, 22, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["AW IB Sales"] },
+  { id: 8, scorecard: "CS3 Audigy", score: 89, date: relativeDate(2, 0, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
+  { id: 7, scorecard: "SelectQuote Term Life v1", score: 86, date: relativeDate(2, 2, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
+  { id: 6, scorecard: "CS3 Nexstar v1", score: 93, date: relativeDate(2, 4, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
+  { id: 5, scorecard: "CS3 Services v2", score: 84, date: relativeDate(2, 6, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
+  { id: 4, scorecard: "AW IB Sales", score: 98, date: relativeDate(2, 8, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["AW IB Sales"] },
+  { id: 3, scorecard: "CS3 Audigy", score: 90, date: relativeDate(2, 10, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
+  { id: 2, scorecard: "SelectQuote Term Life v1", score: 87, date: relativeDate(2, 12, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
+  { id: 1, scorecard: "CS3 Nexstar v1", score: 94, date: relativeDate(2, 14, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
 ];
 
 // Modify other items to include scoreResults
@@ -726,6 +715,12 @@ export default function FeedbackDashboard() {
     )
   }
 
+  const getFeedbackBadgeClass = (hasFeedback: boolean) => {
+    return hasFeedback
+      ? 'bg-true text-primary-foreground w-16 justify-center'
+      : 'bg-false text-primary-foreground w-16 justify-center';
+  };
+
   // Update the initialization of feedbackItems
   useEffect(() => {
     setFeedbackItems(initialFeedbackItems);
@@ -767,11 +762,9 @@ export default function FeedbackDashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[40%]">Item</TableHead>
-                    <TableHead className="w-[15%] hidden sm:table-cell text-right">Inferences</TableHead>
-                    <TableHead className="w-[15%] hidden sm:table-cell text-right">Results</TableHead>
-                    <TableHead className="w-[15%] hidden sm:table-cell text-right">Cost</TableHead>
-                    <TableHead className="w-[15%] hidden sm:table-cell text-right">Status</TableHead>
+                    <TableHead className="w-[50%]">Item</TableHead>
+                    <TableHead className="w-[20%] text-right">Scores</TableHead>
+                    <TableHead className="w-[30%] text-right">Feedback</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -786,33 +779,25 @@ export default function FeedbackDashboard() {
                           <div className="flex justify-between items-start mb-2">
                             <div className="font-semibold">{item.scorecard}</div>
                             <Badge 
-                              className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
+                              className={getFeedbackBadgeClass(item.hasFeedback)}
                             >
-                              {item.status}
+                              {item.hasFeedback ? 'Yes' : 'No'}
                             </Badge>
                           </div>
-                          <div className="text-sm text-muted-foreground mb-2">{getRelativeTime(item.date)}</div>
-                          <div className="flex justify-between items-end">
-                            <div className="text-sm text-muted-foreground">
-                              {item.inferences} inferences<br />
-                              {item.results} results
-                            </div>
-                            <div className="font-semibold">{item.cost}</div>
-                          </div>
+                          <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
+                          <div className="text-sm text-muted-foreground mt-1">Scores: {item.scoreCount}</div>
                         </div>
                         <div className="hidden sm:block">
                           {item.scorecard}
                           <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
                         </div>
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell text-right">{item.inferences}</TableCell>
-                      <TableCell className="hidden sm:table-cell text-right">{item.results}</TableCell>
-                      <TableCell className="hidden sm:table-cell text-right">{item.cost}</TableCell>
-                      <TableCell className="hidden sm:table-cell text-right">
+                      <TableCell className="text-right">{item.scoreCount}</TableCell>
+                      <TableCell className="text-right">
                         <Badge 
-                          className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
+                          className={getFeedbackBadgeClass(item.hasFeedback)}
                         >
-                          {item.status}
+                          {item.hasFeedback ? 'Yes' : 'No'}
                         </Badge>
                       </TableCell>
                     </TableRow>
