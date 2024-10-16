@@ -129,7 +129,7 @@ export default function AlertsDashboard() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 h-full flex flex-col">
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 sm:space-x-4">
         <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
@@ -154,126 +154,185 @@ export default function AlertsDashboard() {
         </Button>
       </div>
 
-      <div className={`flex ${isNarrowViewport || isFullWidth ? 'flex-col' : 'space-x-6'}`}>
-        <div className={`${isFullWidth && selectedAlert ? 'hidden' : 'flex-1'}`}>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[30%]">Source</TableHead>
-                <TableHead className="w-[40%]">Alert</TableHead>
-                <TableHead className="w-[15%]">Severity</TableHead>
-                <TableHead className="w-[15%] text-right">Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredAlerts.map((alert) => (
-                <TableRow key={alert.id} onClick={() => handleAlertClick(alert.id)} className="cursor-pointer">
-                  <TableCell className="font-medium">
-                    <div className="space-y-1">
-                      <div className="font-semibold">{alert.source}</div>
-                      <div className="text-sm text-muted-foreground">{getRelativeTime(alert.date)}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium">{alert.message}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${getSeverityColor(alert.severity)}`} />
-                      {alert.severity}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Badge 
-                      className={`${getBadgeVariant(alert.status)} w-24 justify-center`}
-                    >
-                      {alert.status === 'activities...' ? 'actions...' : alert.status}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-
-        {selectedAlert && (
-          <div className={`${isFullWidth ? 'w-full' : 'w-1/2'} ${isNarrowViewport || isFullWidth ? 'mx-0' : ''}`}>
-            <Card className={`rounded-none sm:rounded-lg flex flex-col h-[calc(100vh-8rem)]`}>
-              <CardHeader className="flex flex-row items-center justify-between py-4 px-4 sm:px-6 space-y-0">
-                <div>
-                  <h3 className="text-xl font-semibold">{alerts.find(alert => alert.id === selectedAlert)?.message}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {alerts.find(alert => alert.id === selectedAlert)?.source} • {getRelativeTime(alerts.find(alert => alert.id === selectedAlert)?.date || '')}
-                  </p>
-                </div>
-                <div className="flex ml-2">
-                  {!isNarrowViewport && (
-                    <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
-                      {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                    </Button>
-                  )}
-                  <Button variant="outline" size="icon" onClick={() => {
-                    setSelectedAlert(null)
-                    setIsFullWidth(false)
-                  }} className="ml-2">
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="flex-grow overflow-auto px-4 sm:px-6">
-                {selectedAlert && (
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm font-medium">Severity</p>
-                        <div className="flex items-center gap-2">
-                          <div className={`w-3 h-3 rounded-full ${getSeverityColor(alerts.find(alert => alert.id === selectedAlert)?.severity || '')}`} />
-                          {alerts.find(alert => alert.id === selectedAlert)?.severity}
+      <div className="flex-grow flex flex-col overflow-hidden pb-2">
+        {selectedAlert && (isNarrowViewport || isFullWidth) ? (
+          <div className="flex-grow overflow-hidden">
+            {renderSelectedAlert({
+              alerts,
+              selectedAlert,
+              isFullWidth,
+              isNarrowViewport,
+              setSelectedAlert,
+              setIsFullWidth,
+              getBadgeVariant,
+              getRelativeTime,
+              getSeverityColor
+            })}
+          </div>
+        ) : (
+          <div className={`flex ${isNarrowViewport ? 'flex-col' : 'space-x-6'} h-full`}>
+            <div className={`${isFullWidth ? 'hidden' : 'flex-1'} overflow-auto`}>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[30%]">Source</TableHead>
+                    <TableHead className="w-[40%]">Alert</TableHead>
+                    <TableHead className="w-[15%]">Severity</TableHead>
+                    <TableHead className="w-[15%] text-right">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredAlerts.map((alert) => (
+                    <TableRow key={alert.id} onClick={() => handleAlertClick(alert.id)} className="cursor-pointer">
+                      <TableCell className="font-medium">
+                        <div className="space-y-1">
+                          <div className="font-semibold">{alert.source}</div>
+                          <div className="text-sm text-muted-foreground">{getRelativeTime(alert.date)}</div>
                         </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium">Status</p>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{alert.message}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-3 h-3 rounded-full ${getSeverityColor(alert.severity)}`} />
+                          {alert.severity}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
                         <Badge 
-                          className={`${getBadgeVariant(alerts.find(alert => alert.id === selectedAlert)?.status || '')} w-24 justify-center`}
+                          className={`${getBadgeVariant(alert.status)} w-24 justify-center`}
                         >
-                          {alerts.find(alert => alert.id === selectedAlert)?.status}
+                          {alert.status === 'activities...' ? 'actions...' : alert.status}
                         </Badge>
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="text-md font-semibold">Metadata</h4>
-                      <hr className="my-2 border-t border-gray-200" />
-                      <Table>
-                        <TableBody>
-                          {sampleMetadata.map((meta, index) => (
-                            <TableRow key={index}>
-                              <TableCell className="font-medium pl-0">{meta.key}</TableCell>
-                              <TableCell className="text-right pr-0">{meta.value}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                    <div>
-                      <h4 className="text-md font-semibold">Description</h4>
-                      <hr className="my-2 border-t border-gray-200" />
-                      <p className="text-sm">
-                        This alert was triggered based on the scoring results of the associated item. 
-                        The system detected a potential issue that requires attention or investigation.
-                        Please review the details and take appropriate action as needed.
-                      </p>
-                    </div>
-                    <div>
-                      <h4 className="text-md font-semibold">Activities</h4>
-                      <hr className="my-2 border-t border-gray-200" />
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {selectedAlert && !isNarrowViewport && !isFullWidth && (
+              <div className="flex-1 overflow-hidden">
+                {renderSelectedAlert({
+                  alerts,
+                  selectedAlert,
+                  isFullWidth,
+                  isNarrowViewport,
+                  setSelectedAlert,
+                  setIsFullWidth,
+                  getBadgeVariant,
+                  getRelativeTime,
+                  getSeverityColor
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
     </div>
+  )
+}
+
+function renderSelectedAlert({
+  alerts,
+  selectedAlert,
+  isFullWidth,
+  isNarrowViewport,
+  setSelectedAlert,
+  setIsFullWidth,
+  getBadgeVariant,
+  getRelativeTime,
+  getSeverityColor
+}: {
+  alerts: typeof alerts;
+  selectedAlert: number | null;
+  isFullWidth: boolean;
+  isNarrowViewport: boolean;
+  setSelectedAlert: (id: number | null) => void;
+  setIsFullWidth: (isFullWidth: boolean) => void;
+  getBadgeVariant: (status: string) => string;
+  getRelativeTime: (date: string) => string;
+  getSeverityColor: (severity: string) => string;
+}) {
+  const selectedAlertData = alerts.find(alert => alert.id === selectedAlert);
+
+  if (!selectedAlertData) return null;
+
+  return (
+    <Card className="rounded-none sm:rounded-lg h-full flex flex-col">
+      <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between py-4 px-4 sm:px-6 space-y-0">
+        <div>
+          <h3 className="text-xl font-semibold">{selectedAlertData.message}</h3>
+          <p className="text-sm text-muted-foreground">
+            {selectedAlertData.source} • {getRelativeTime(selectedAlertData.date)}
+          </p>
+        </div>
+        <div className="flex ml-2">
+          {!isNarrowViewport && (
+            <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
+              {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+            </Button>
+          )}
+          <Button variant="outline" size="icon" onClick={() => {
+            setSelectedAlert(null)
+            setIsFullWidth(false)
+          }} className="ml-2">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="flex-grow overflow-auto px-4 sm:px-6">
+        {selectedAlert && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm font-medium">Severity</p>
+                <div className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded-full ${getSeverityColor(selectedAlertData.severity)}`} />
+                  {selectedAlertData.severity}
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-medium">Status</p>
+                <Badge 
+                  className={`${getBadgeVariant(selectedAlertData.status)} w-24 justify-center`}
+                >
+                  {selectedAlertData.status}
+                </Badge>
+              </div>
+            </div>
+            <div>
+              <h4 className="text-md font-semibold">Metadata</h4>
+              <hr className="my-2 border-t border-gray-200" />
+              <Table>
+                <TableBody>
+                  {sampleMetadata.map((meta, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium pl-0">{meta.key}</TableCell>
+                      <TableCell className="text-right pr-0">{meta.value}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <div>
+              <h4 className="text-md font-semibold">Description</h4>
+              <hr className="my-2 border-t border-gray-200" />
+              <p className="text-sm">
+                This alert was triggered based on the scoring results of the associated item. 
+                The system detected a potential issue that requires attention or investigation.
+                Please review the details and take appropriate action as needed.
+              </p>
+            </div>
+            <div>
+              <h4 className="text-md font-semibold">Activities</h4>
+              <hr className="my-2 border-t border-gray-200" />
+              {/* Add activities content here if needed */}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }

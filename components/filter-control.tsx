@@ -76,12 +76,12 @@ export function FilterControl({ onFilterChange, availableFields }: FilterControl
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" className="w-[150px]">
+        <Button variant="outline" className="">
           <Filter className="mr-2 h-4 w-4" />
           {filters.some(group => group.conditions.length > 0) ? 'Filtered' : 'Filter'}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[350px] p-0" align="start">
+      <PopoverContent className="w-[450px] p-0" align="start">
         <div className="p-4 space-y-4">
           {filters.map((group, groupIndex) => (
             <div key={groupIndex} className="space-y-2">

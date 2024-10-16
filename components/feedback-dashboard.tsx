@@ -38,23 +38,8 @@ const relativeDate = (days: number, hours: number, minutes: number) => {
 
 const sampleScoreResults = [
   {
-    section: "Technical",
-    scores: [
-      { name: "Scoreable Call", value: "Yes", explanation: "The call meets all criteria to be scored. This includes having clear audio, being of sufficient length, and containing relevant content for evaluation." },
-      { name: "Call Efficiency", value: "Yes", explanation: "The agent managed the call time effectively while still addressing the customer's needs." },
-    ]
-  },
-  {
-    section: "Customer Service",
-    scores: [
-      { name: "Rapport", value: "Yes", explanation: "The agent demonstrated excellent rapport-building skills throughout the call." },
-      { name: "Problem Resolution", value: "Yes", explanation: "The agent effectively resolved the customer's issue." },
-    ]
-  },
-  {
     section: "Compliance",
     scores: [
-      { name: "DNC Requested", value: "No", explanation: "The customer did not request to be added to the Do Not Call list." },
       { 
         name: "Profanity", 
         value: "No", 
@@ -103,48 +88,64 @@ interface FeedbackItem {
   scoreCount: number;
   scoreResults?: typeof sampleScoreResults;  // Make this optional
   metadata?: Array<{ key: string; value: string }>;  // Add this line
+  lastUpdated: string;
 }
+
+// First, let's create a function to generate score results based on the item's status
+const getScoreResults = (status: string) => {
+  if (status === "New" || status === "In Review") {
+    return [
+      {
+        section: "Compliance",
+        scores: [
+          { 
+            name: "Profanity", 
+            value: "No", 
+            explanation: "No profanity was detected during the call. Both the agent and the customer maintained professional and respectful language throughout the entire conversation.",
+            isAnnotated: false,
+            annotations: []
+          },
+        ]
+      }
+    ];
+  } else {
+    return sampleScoreResults;
+  }
+};
 
 // Now, let's update the initialFeedbackItems declaration
 const initialFeedbackItems: FeedbackItem[] = [
-  { id: 30, scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "new", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
-  { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "new", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
-  { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "new", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"] },
-  { id: 27, scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), status: "in review...", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
-  { id: 26, scorecard: "SelectQuote Term Life v1", score: 83, date: relativeDate(0, 1, 30), status: "in review...", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
-  { id: 25, scorecard: "AW IB Sales", score: 94, date: relativeDate(0, 2, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"] },
-  { id: 24, scorecard: "CS3 Audigy", score: 86, date: relativeDate(0, 3, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
-  { id: 23, scorecard: "CS3 Services v2", score: 79, date: relativeDate(0, 4, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
-  { id: 22, scorecard: "CS3 Nexstar v1", score: 91, date: relativeDate(0, 5, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
-  { id: 21, scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(0, 6, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
-  { id: 20, scorecard: "CS3 Services v2", score: 82, date: relativeDate(1, 0, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
-  { id: 19, scorecard: "AW IB Sales", score: 93, date: relativeDate(1, 2, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"] },
-  { id: 18, scorecard: "CS3 Audigy", score: 87, date: relativeDate(1, 4, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
-  { id: 17, scorecard: "SelectQuote Term Life v1", score: 85, date: relativeDate(1, 6, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
-  { id: 16, scorecard: "CS3 Nexstar v1", score: 90, date: relativeDate(1, 8, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
-  { id: 15, scorecard: "CS3 Services v2", score: 81, date: relativeDate(1, 10, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
-  { id: 14, scorecard: "AW IB Sales", score: 95, date: relativeDate(1, 12, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"] },
-  { id: 13, scorecard: "CS3 Audigy", score: 88, date: relativeDate(1, 14, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
-  { id: 12, scorecard: "SelectQuote Term Life v1", score: 84, date: relativeDate(1, 16, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
-  { id: 11, scorecard: "CS3 Nexstar v1", score: 92, date: relativeDate(1, 18, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
-  { id: 10, scorecard: "CS3 Services v2", score: 83, date: relativeDate(1, 20, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
-  { id: 9, scorecard: "AW IB Sales", score: 97, date: relativeDate(1, 22, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["AW IB Sales"] },
-  { id: 8, scorecard: "CS3 Audigy", score: 89, date: relativeDate(2, 0, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
-  { id: 7, scorecard: "SelectQuote Term Life v1", score: 86, date: relativeDate(2, 2, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
-  { id: 6, scorecard: "CS3 Nexstar v1", score: 93, date: relativeDate(2, 4, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
-  { id: 5, scorecard: "CS3 Services v2", score: 84, date: relativeDate(2, 6, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
-  { id: 4, scorecard: "AW IB Sales", score: 98, date: relativeDate(2, 8, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["AW IB Sales"] },
-  { id: 3, scorecard: "CS3 Audigy", score: 90, date: relativeDate(2, 10, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
-  { id: 2, scorecard: "SelectQuote Term Life v1", score: 87, date: relativeDate(2, 12, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
-  { id: 1, scorecard: "CS3 Nexstar v1", score: 94, date: relativeDate(2, 14, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
+  { id: 30, scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "New", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: "", scoreResults: getScoreResults("New") },
+  { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "New", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: "", scoreResults: getScoreResults("New") },
+  { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "New", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: "", scoreResults: getScoreResults("New") },
+  { id: 27, scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), status: "In Review...", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(0, 0, 0), scoreResults: getScoreResults("In Review...") },
+  { id: 26, scorecard: "SelectQuote Term Life v1", score: 83, date: relativeDate(0, 1, 30), status: "In Review...", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(0, 1, 0), scoreResults: getScoreResults("In Review...") },
+  { id: 25, scorecard: "AW IB Sales", score: 94, date: relativeDate(0, 2, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: relativeDate(0, 1, 30), scoreResults: getScoreResults("Done") },
+  { id: 24, scorecard: "CS3 Audigy", score: 86, date: relativeDate(0, 3, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: relativeDate(0, 2, 30), scoreResults: getScoreResults("Done") },
+  { id: 23, scorecard: "CS3 Services v2", score: 79, date: relativeDate(0, 4, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: relativeDate(0, 3, 30), scoreResults: getScoreResults("Done") },
+  { id: 22, scorecard: "CS3 Nexstar v1", score: 91, date: relativeDate(0, 5, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(0, 4, 30), scoreResults: getScoreResults("Done") },
+  { id: 21, scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(0, 6, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(0, 5, 30), scoreResults: getScoreResults("Done") },
+  { id: 20, scorecard: "CS3 Services v2", score: 82, date: relativeDate(1, 0, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: relativeDate(0, 23, 30), scoreResults: getScoreResults("Done") },
+  { id: 19, scorecard: "AW IB Sales", score: 93, date: relativeDate(1, 2, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: relativeDate(1, 1, 30), scoreResults: getScoreResults("Done") },
+  { id: 18, scorecard: "CS3 Audigy", score: 87, date: relativeDate(1, 4, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: relativeDate(1, 3, 30), scoreResults: getScoreResults("Done") },
+  { id: 17, scorecard: "SelectQuote Term Life v1", score: 85, date: relativeDate(1, 6, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(1, 5, 30), scoreResults: getScoreResults("Done") },
+  { id: 16, scorecard: "CS3 Nexstar v1", score: 90, date: relativeDate(1, 8, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(1, 7, 30), scoreResults: getScoreResults("Done") },
+  { id: 15, scorecard: "CS3 Services v2", score: 81, date: relativeDate(1, 10, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: relativeDate(1, 9, 30), scoreResults: getScoreResults("Done") },
+  { id: 14, scorecard: "AW IB Sales", score: 95, date: relativeDate(1, 12, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: relativeDate(1, 11, 30), scoreResults: getScoreResults("Done") },
+  { id: 13, scorecard: "CS3 Audigy", score: 88, date: relativeDate(1, 14, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: relativeDate(1, 13, 30), scoreResults: getScoreResults("Done") },
+  { id: 12, scorecard: "SelectQuote Term Life v1", score: 84, date: relativeDate(1, 16, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(1, 15, 30), scoreResults: getScoreResults("Done") },
+  { id: 11, scorecard: "CS3 Nexstar v1", score: 92, date: relativeDate(1, 18, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(1, 17, 30), scoreResults: getScoreResults("Done") },
+  { id: 10, scorecard: "CS3 Services v2", score: 83, date: relativeDate(1, 20, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: relativeDate(1, 19, 30), scoreResults: getScoreResults("Done") },
+  { id: 9, scorecard: "AW IB Sales", score: 97, date: relativeDate(1, 22, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: relativeDate(1, 21, 30), scoreResults: getScoreResults("Done") },
+  { id: 8, scorecard: "CS3 Audigy", score: 89, date: relativeDate(2, 0, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: relativeDate(1, 23, 30), scoreResults: getScoreResults("Done") },
+  { id: 7, scorecard: "SelectQuote Term Life v1", score: 86, date: relativeDate(2, 2, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(2, 1, 30), scoreResults: getScoreResults("Done") },
+  { id: 6, scorecard: "CS3 Nexstar v1", score: 93, date: relativeDate(2, 4, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(2, 3, 30), scoreResults: getScoreResults("Done") },
+  { id: 5, scorecard: "CS3 Services v2", score: 84, date: relativeDate(2, 6, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: relativeDate(2, 5, 30), scoreResults: getScoreResults("Done") },
+  { id: 4, scorecard: "AW IB Sales", score: 98, date: relativeDate(2, 8, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: relativeDate(2, 7, 30), scoreResults: getScoreResults("Done") },
+  { id: 3, scorecard: "CS3 Audigy", score: 90, date: relativeDate(2, 10, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: relativeDate(2, 9, 30), scoreResults: getScoreResults("Done") },
+  { id: 2, scorecard: "SelectQuote Term Life v1", score: 87, date: relativeDate(2, 12, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(2, 11, 30), scoreResults: getScoreResults("Done") },
+  { id: 1, scorecard: "CS3 Nexstar v1", score: 94, date: relativeDate(2, 14, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(2, 13, 30), scoreResults: getScoreResults("Done") },
 ];
-
-// Now the forEach loop should work without type errors
-initialFeedbackItems.forEach(item => {
-  if (!item.scoreResults) {
-    item.scoreResults = sampleScoreResults;
-  }
-});
 
 // Sort items by date, newest first
 initialFeedbackItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -166,6 +167,7 @@ interface Annotation {
     initials: string;
   };
   isSystem?: boolean;
+  isThumbsUp: boolean; // Add this new field
 }
 
 interface QueueData {
@@ -215,7 +217,7 @@ export default function FeedbackDashboard() {
   const textRef = useRef<Record<string, HTMLDivElement | null>>({})
   const [expandedAnnotations, setExpandedAnnotations] = useState<string[]>([]);
   const [newAnnotation, setNewAnnotation] = useState({ value: "", explanation: "", annotation: "" });
-  const [showNewAnnotationForm, setShowNewAnnotationForm] = useState<string | null>(null);
+  const [showNewAnnotationForm, setShowNewAnnotationForm] = useState<{ scoreName: string | null, isThumbsUp: boolean }>({ scoreName: null, isThumbsUp: false });
   const [thumbedUpScores, setThumbedUpScores] = useState<Set<string>>(new Set());
   const [feedbackItems, setFeedbackItems] = useState<FeedbackItem[]>(initialFeedbackItems);
   const [isDataExpandedDefault, setIsDataExpandedDefault] = useState(false);
@@ -320,14 +322,14 @@ export default function FeedbackDashboard() {
 
   const getBadgeVariant = (status: string) => {
     switch (status) {
-      case 'new':
-        return 'bg-neutral text-primary-foreground h-6';
-      case 'in review...':
-        return 'bg-primary text-primary-foreground h-6';
-      case 'done':
-        return 'bg-true text-primary-foreground h-6';
+      case 'New':
+        return 'bg-neutral text-primary-foreground h-6 w-24 justify-center';
+      case 'In Review...':
+        return 'bg-primary text-primary-foreground h-6 w-24 justify-center';
+      case 'Done':
+        return 'bg-true text-primary-foreground h-6 w-24 justify-center';
       default:
-        return 'bg-muted text-muted-foreground h-6';
+        return 'bg-muted text-muted-foreground h-6 w-24 justify-center';
     }
   };
 
@@ -402,7 +404,7 @@ export default function FeedbackDashboard() {
   };
 
   const cancelAnnotation = (scoreName: string) => {
-    setShowNewAnnotationForm(null);
+    setShowNewAnnotationForm({ scoreName: null, isThumbsUp: false });
     setNewAnnotation({ value: "", explanation: "", annotation: "" });
   };
 
@@ -412,9 +414,10 @@ export default function FeedbackDashboard() {
       scoreName,
       timestamp: new Date().toISOString(),
       user: {
-        name: "Current User", // Replace with actual user name
-        initials: "CU" // Replace with actual user initials
-      }
+        name: "Ryan Porter", // Replace with actual user name
+        initials: "RP" // Replace with actual user initials
+      },
+      isThumbsUp: showNewAnnotationForm.isThumbsUp
     };
 
     setFeedbackItems(prev => {
@@ -439,15 +442,20 @@ export default function FeedbackDashboard() {
       return updatedItems;
     });
 
-    setShowNewAnnotationForm(null);
+    // Ensure the annotations for this score remain expanded
+    setExpandedAnnotations(prev => 
+      prev.includes(scoreName) ? prev : [...prev, scoreName]
+    );
+
+    setShowNewAnnotationForm({ scoreName: null, isThumbsUp: false });
     setNewAnnotation({ value: "", explanation: "", annotation: "" });
   };
 
-  const toggleNewAnnotationForm = (scoreName: string) => {
-    if (showNewAnnotationForm === scoreName) {
-      setShowNewAnnotationForm(null);
+  const toggleNewAnnotationForm = (scoreName: string, isThumbsUp: boolean) => {
+    if (showNewAnnotationForm.scoreName === scoreName && showNewAnnotationForm.isThumbsUp === isThumbsUp) {
+      setShowNewAnnotationForm({ scoreName: null, isThumbsUp: false });
     } else {
-      setShowNewAnnotationForm(scoreName);
+      setShowNewAnnotationForm({ scoreName, isThumbsUp });
       const foundScore = feedbackItems
         .flatMap(item => item.scoreResults?.flatMap(section => section.scores) ?? [])
         .find(score => score?.name === scoreName);
@@ -456,7 +464,6 @@ export default function FeedbackDashboard() {
         initializeNewAnnotation(foundScore);
       } else {
         console.warn(`No score found with name: ${scoreName}`);
-        // You might want to set some default values or handle this case differently
         setNewAnnotation({ value: "", explanation: "", annotation: "" });
       }
     }
@@ -473,13 +480,7 @@ export default function FeedbackDashboard() {
       return newSet;
     });
 
-    // Close the annotation form if it's open
-    if (showNewAnnotationForm === scoreName) {
-      setShowNewAnnotationForm(null);
-    }
-
-    // Reset the new annotation state
-    setNewAnnotation({ value: "", explanation: "", annotation: "" });
+    toggleNewAnnotationForm(scoreName, true);
   };
 
   const handleThumbsDown = (scoreName: string) => {
@@ -488,14 +489,42 @@ export default function FeedbackDashboard() {
       newSet.delete(scoreName);
       return newSet;
     });
-    toggleNewAnnotationForm(scoreName);
+    toggleNewAnnotationForm(scoreName, false);
   };
 
   function renderScoreResult(score: any, isAnnotation = false) {
     const hasAnnotations = score.annotations && score.annotations.length > 0;
+    const isThumbedUp = isAnnotation ? score.isThumbsUp : thumbedUpScores.has(score.name);
+
+    const getBorderColor = () => {
+      if (score.isSystem) return 'var(--secondary)';
+      if (isThumbedUp) return 'var(--true)';
+      return 'var(--false)';
+    };
+
+    const hasFeedback = score.isAnnotated || hasAnnotations;
+    const hasThumbsDownFeedback = (score.annotations || []).some((annotation: Annotation) => !annotation.isThumbsUp);
+    const feedbackIconColor = hasFeedback
+      ? hasThumbsDownFeedback
+        ? 'bg-false text-primary-foreground hover:bg-false hover:text-primary-foreground'
+        : 'bg-true text-primary-foreground hover:bg-true hover:text-primary-foreground'
+      : '';
 
     return (
-      <div className={`py-2 ${isAnnotation ? 'pl-4 border-l-2 ' + (score.isSystem ? 'border-secondary' : 'border-primary') : ''}`}>
+      <div 
+        className={`py-2 ${isAnnotation ? 'pl-4 border-l-4' : ''} relative`}
+        style={isAnnotation ? { borderColor: getBorderColor() + ' !important' } : {}}
+      >
+        {isAnnotation && !score.isSystem && (
+          <div className="absolute top-2 left-4 rounded-full p-1" 
+               style={{ backgroundColor: score.isThumbsUp ? 'var(--true)' : 'var(--false)' }}>
+            {score.isThumbsUp ? (
+              <ThumbsUp className="h-3 w-3 text-primary-foreground" />
+            ) : (
+              <ThumbsDown className="h-3 w-3 text-primary-foreground" />
+            )}
+          </div>
+        )}
         {isAnnotation ? (
           <>
             <div className="flex justify-end mb-2">
@@ -549,12 +578,12 @@ export default function FeedbackDashboard() {
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                {(score.isAnnotated || hasAnnotations) && (
+                {hasFeedback && (
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => toggleAnnotations(score.name)}
-                    className={`text-xs bg-secondary text-secondary-foreground hover:bg-secondary hover:text-secondary-foreground`}
+                    className={`text-xs ${feedbackIconColor}`}
                   >
                     <MessageCircleMore className="h-4 w-4" />
                   </Button>
@@ -563,7 +592,7 @@ export default function FeedbackDashboard() {
                   variant="ghost"
                   size="sm"
                   onClick={() => handleThumbsUp(score.name)}
-                  className={`text-xs ${thumbedUpScores.has(score.name) ? 'bg-true text-primary-foreground hover:bg-true hover:text-primary-foreground' : 'hover:bg-muted hover:text-muted-foreground'}`}
+                  className="text-xs hover:bg-true hover:text-primary-foreground"
                 >
                   <ThumbsUp className="h-4 w-4" />
                 </Button>
@@ -571,7 +600,7 @@ export default function FeedbackDashboard() {
                   variant="ghost"
                   size="sm"
                   onClick={() => handleThumbsDown(score.name)}
-                  className="text-xs hover:bg-muted hover:text-muted-foreground"
+                  className="text-xs hover:bg-false hover:text-primary-foreground"
                 >
                   <ThumbsDown className="h-4 w-4" />
                 </Button>
@@ -631,61 +660,71 @@ export default function FeedbackDashboard() {
             "{score.annotation}"
           </div>
         )}
-        {!isAnnotation && (score.isAnnotated || hasAnnotations) && expandedAnnotations.includes(score.name) && (
-          <div className="mt-2 space-y-2">
-            <div className="flex justify-between items-center mb-2">
-              <h6 className="text-sm font-medium">Feedback</h6>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => toggleNewAnnotationForm(score.name)}
-                className="text-xs"
+        {!isAnnotation && (
+          <>
+            {(showNewAnnotationForm.scoreName === score.name) && (
+              <div 
+                className="mb-2 space-y-2 border-l-4 pl-4"
+                style={{ borderColor: (showNewAnnotationForm.isThumbsUp ? 'var(--true)' : 'var(--false)') + ' !important' }}
               >
-                <Plus className="h-4 w-4 mr-1" />
-                Create
-              </Button>
-            </div>
-            {(score.annotations || []).map((annotation: Annotation, annotationIndex: number) => (
-              <div key={annotationIndex} className="relative">
-                {renderScoreResult(annotation, true)}
-              </div>
-            ))}
-          </div>
-        )}
-        {!isAnnotation && showNewAnnotationForm === score.name && (
-          <div className="mt-2 space-y-2 border-l-2 border-muted-foreground pl-4">
-            <div className="mb-4">
-              <h6 className="text-sm font-medium mb-2">Feedback</h6>
-              <div className="space-y-2">
-                <Select 
-                  onValueChange={(value) => setNewAnnotation({...newAnnotation, value})}
-                  value={newAnnotation.value}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select value" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Yes">Yes</SelectItem>
-                    <SelectItem value="No">No</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Textarea 
-                  placeholder="Explanation" 
-                  value={newAnnotation.explanation}
-                  onChange={(e) => setNewAnnotation({...newAnnotation, explanation: e.target.value})}
-                />
-                <Input 
-                  placeholder="Feedback" 
-                  value={newAnnotation.annotation}
-                  onChange={(e) => setNewAnnotation({...newAnnotation, annotation: e.target.value})}
-                />
-                <div className="flex justify-end space-x-2">
-                  <Button variant="outline" onClick={() => cancelAnnotation(score.name)}>Cancel</Button>
-                  <Button onClick={() => handleNewAnnotationSubmit(score.name)}>Submit Feedback</Button>
+                <div className="mb-4">
+                  <h6 className="text-sm font-medium mb-2">Feedback</h6>
+                  <div className="space-y-2">
+                    {showNewAnnotationForm.isThumbsUp ? (
+                      <>
+                        <div className="text-sm font-medium">Value: {newAnnotation.value}</div>
+                        <div className="text-sm">Explanation: {newAnnotation.explanation}</div>
+                      </>
+                    ) : (
+                      <>
+                        <Select 
+                          onValueChange={(value) => setNewAnnotation({...newAnnotation, value})}
+                          value={newAnnotation.value}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select value" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Yes">Yes</SelectItem>
+                            <SelectItem value="No">No</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Textarea 
+                          placeholder="Explanation" 
+                          value={newAnnotation.explanation}
+                          onChange={(e) => setNewAnnotation({...newAnnotation, explanation: e.target.value})}
+                        />
+                      </>
+                    )}
+                    <Input 
+                      placeholder="Feedback" 
+                      value={newAnnotation.annotation}
+                      onChange={(e) => setNewAnnotation({...newAnnotation, annotation: e.target.value})}
+                    />
+                    <div className="flex justify-end space-x-2">
+                      <Button variant="outline" onClick={() => setShowNewAnnotationForm({ scoreName: null, isThumbsUp: false })}>Cancel</Button>
+                      <Button onClick={() => handleNewAnnotationSubmit(score.name)}>Submit Feedback</Button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            )}
+
+            {(score.isAnnotated || hasAnnotations) && expandedAnnotations.includes(score.name) && (
+              <div className="mt-2 space-y-2">
+                <div className="flex justify-between items-center mb-2">
+                  <h6 className="text-sm font-medium">Feedback</h6>
+                </div>
+                {(score.annotations || [])
+                  .sort((a: Annotation, b: Annotation) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                  .map((annotation: Annotation, annotationIndex: number) => (
+                    <div key={annotationIndex} className="relative">
+                      {renderScoreResult({...annotation, isAnnotated: true}, true)}
+                    </div>
+                  ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     )
@@ -841,17 +880,17 @@ export default function FeedbackDashboard() {
             Started {formatDistanceToNow(parseISO(queueData.started), { addSuffix: true })}
           </p>
         </div>
-        <Button variant="ghost" size="icon" onClick={handleCloseQueue}>
+        <Button variant="outline" size="icon" onClick={handleCloseQueue}>
           <X className="h-4 w-4" />
         </Button>
       </div>
       <div className="flex items-center justify-between">
         <div className="w-1/4">
-          <p className="text-sm font-medium">Scores</p>
+          <p className="text-sm font-medium text-muted-foreground">Scores</p>
           <p>{queueData.scores}</p>
         </div>
         <div className="w-1/4">
-          <p className="text-sm font-medium">Last Updated</p>
+          <p className="text-sm font-medium text-muted-foreground">Last Updated</p>
           <p>{formatDistanceToNow(parseISO(queueData.date), { addSuffix: true })}</p>
         </div>
         <div className="w-1/2">
@@ -882,8 +921,15 @@ export default function FeedbackDashboard() {
     <div className="space-y-4 h-full flex flex-col">
       {renderQueueSummary()}
 
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold">{queueData.items} Items</h2>
+      <div className="mb-8">
+        <h3 className="text-xl font-semibold mb-2">Instructions</h3>
+        <p className="text-base text-muted-foreground mb-4">
+          Please review these examples we found that might demonstrate problems with the alignment of our profanity standards. Please pay close attention to words that we're flagging for profanity that are not really profanity by the client's standards.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xl font-semibold">{queueData.items} Items</h3>
       </div>
 
       <div className="flex-grow flex flex-col overflow-hidden pb-2">
@@ -897,8 +943,8 @@ export default function FeedbackDashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[50%]">Item</TableHead>
-                    <TableHead className="w-[20%] text-right">Scores</TableHead>
+                    <TableHead className="w-[40%]">Item</TableHead>
+                    <TableHead className="w-[30%]">Last Updated</TableHead>
                     <TableHead className="w-[30%] text-right">Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -912,22 +958,24 @@ export default function FeedbackDashboard() {
                       <TableCell className="font-medium sm:pr-4">
                         <div className="sm:hidden">
                           <div className="flex justify-between items-start mb-2">
-                            <div className="font-semibold">{item.scorecard}</div>
+                            <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
                             <Badge 
                               className={getBadgeVariant(item.status)}
                             >
                               {item.status}
                             </Badge>
                           </div>
-                          <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
-                          <div className="text-sm text-muted-foreground mt-1">Scores: {item.scoreCount}</div>
+                          <div className="text-sm text-muted-foreground mt-1">
+                            Last Updated: {item.lastUpdated ? getRelativeTime(item.lastUpdated) : '-'}
+                          </div>
                         </div>
                         <div className="hidden sm:block">
-                          {item.scorecard}
                           <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">{item.scoreCount}</TableCell>
+                      <TableCell>
+                        {item.lastUpdated ? getRelativeTime(item.lastUpdated) : '-'}
+                      </TableCell>
                       <TableCell className="text-right">
                         <Badge 
                           className={getBadgeVariant(item.status)}

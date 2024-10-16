@@ -21,6 +21,16 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import ReactMarkdown from 'react-markdown'
 import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { useRouter } from 'next/navigation'
 
 // Function to create a date relative to now
 const relativeDate = (days: number, hours: number, minutes: number) => {
@@ -38,46 +48,45 @@ const generateRandomResult = () => {
 // Generate initial items with sample data
 const generateInitialItems = () => {
   return [
-    { id: "40000001", scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "new", results: 0, inferences: 0, cost: "$0.000", result: generateRandomResult() },
-    { id: "40000002", scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "new", results: 0, inferences: 0, cost: "$0.000", result: generateRandomResult() },
-    { id: "40000003", scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "new", results: 0, inferences: 0, cost: "$0.000", result: generateRandomResult() },
-    { id: "40000004", scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), status: "error", results: 2, inferences: 4, cost: "$0.005", result: generateRandomResult() },
-    { id: "40000005", scorecard: "SelectQuote Term Life v1", score: 83, date: relativeDate(0, 1, 30), status: "scoring...", results: 6, inferences: 24, cost: "$0.031", result: generateRandomResult() },
-    { id: "40000006", scorecard: "AW IB Sales", score: 94, date: relativeDate(0, 2, 0), status: "scored", results: 19, inferences: 152, cost: "$0.199", result: generateRandomResult() },
-    { id: "40000007", scorecard: "CS3 Audigy", score: 86, date: relativeDate(0, 3, 0), status: "scored", results: 17, inferences: 68, cost: "$0.089", result: generateRandomResult() },
-    { id: "40000008", scorecard: "CS3 Services v2", score: 79, date: relativeDate(0, 4, 0), status: "scored", results: 16, inferences: 32, cost: "$0.042", result: generateRandomResult() },
-    { id: "40000009", scorecard: "CS3 Nexstar v1", score: 91, date: relativeDate(0, 5, 0), status: "scored", results: 17, inferences: 68, cost: "$0.089", result: generateRandomResult() },
-    { id: "40000010", scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(0, 6, 0), status: "scored", results: 13, inferences: 52, cost: "$0.068", result: generateRandomResult() },
-    { id: "40000011", scorecard: "CS3 Services v2", score: 82, date: relativeDate(1, 0, 0), status: "scored", results: 15, inferences: 30, cost: "$0.039", result: generateRandomResult() },
-    { id: "40000012", scorecard: "AW IB Sales", score: 93, date: relativeDate(1, 2, 0), status: "scored", results: 18, inferences: 144, cost: "$0.188", result: generateRandomResult() },
-    { id: "40000013", scorecard: "CS3 Audigy", score: 87, date: relativeDate(1, 4, 0), status: "scored", results: 16, inferences: 64, cost: "$0.084", result: generateRandomResult() },
-    { id: "40000014", scorecard: "SelectQuote Term Life v1", score: 85, date: relativeDate(1, 6, 0), status: "scored", results: 14, inferences: 56, cost: "$0.073", result: generateRandomResult() },
-    { id: "40000015", scorecard: "CS3 Nexstar v1", score: 90, date: relativeDate(1, 8, 0), status: "scored", results: 18, inferences: 72, cost: "$0.094", result: generateRandomResult() },
-    { id: "40000016", scorecard: "CS3 Services v2", score: 81, date: relativeDate(1, 10, 0), status: "scored", results: 17, inferences: 34, cost: "$0.044", result: generateRandomResult() },
-    { id: "40000017", scorecard: "AW IB Sales", score: 95, date: relativeDate(1, 12, 0), status: "scored", results: 20, inferences: 160, cost: "$0.209", result: generateRandomResult() },
-    { id: "40000018", scorecard: "CS3 Audigy", score: 88, date: relativeDate(1, 14, 0), status: "scored", results: 18, inferences: 72, cost: "$0.094", result: generateRandomResult() },
-    { id: "40000019", scorecard: "SelectQuote Term Life v1", score: 84, date: relativeDate(1, 16, 0), status: "scored", results: 15, inferences: 60, cost: "$0.078", result: generateRandomResult() },
-    { id: "40000020", scorecard: "CS3 Nexstar v1", score: 92, date: relativeDate(1, 18, 0), status: "scored", results: 19, inferences: 76, cost: "$0.099", result: generateRandomResult() },
-    { id: "40000021", scorecard: "CS3 Services v2", score: 83, date: relativeDate(1, 20, 0), status: "scored", results: 18, inferences: 36, cost: "$0.047", result: generateRandomResult() },
-    { id: "40000022", scorecard: "AW IB Sales", score: 97, date: relativeDate(1, 22, 0), status: "scored", results: 21, inferences: 168, cost: "$0.219", result: generateRandomResult() },
-    { id: "40000023", scorecard: "CS3 Audigy", score: 89, date: relativeDate(2, 0, 0), status: "scored", results: 19, inferences: 76, cost: "$0.099", result: generateRandomResult() },
-    { id: "40000024", scorecard: "SelectQuote Term Life v1", score: 86, date: relativeDate(2, 2, 0), status: "scored", results: 16, inferences: 64, cost: "$0.084", result: generateRandomResult() },
-    { id: "40000025", scorecard: "CS3 Nexstar v1", score: 93, date: relativeDate(2, 4, 0), status: "scored", results: 20, inferences: 80, cost: "$0.104", result: generateRandomResult() },
-    { id: "40000026", scorecard: "CS3 Services v2", score: 84, date: relativeDate(2, 6, 0), status: "scored", results: 19, inferences: 38, cost: "$0.050", result: generateRandomResult() },
-    { id: "40000027", scorecard: "AW IB Sales", score: 98, date: relativeDate(2, 8, 0), status: "scored", results: 22, inferences: 176, cost: "$0.230", result: generateRandomResult() },
-    { id: "40000028", scorecard: "CS3 Audigy", score: 90, date: relativeDate(2, 10, 0), status: "scored", results: 20, inferences: 80, cost: "$0.104", result: generateRandomResult() },
-    { id: "40000029", scorecard: "SelectQuote Term Life v1", score: 87, date: relativeDate(2, 12, 0), status: "scored", results: 17, inferences: 68, cost: "$0.089", result: generateRandomResult() },
-    { id: "40000030", scorecard: "CS3 Nexstar v1", score: 94, date: relativeDate(2, 14, 0), status: "scored", results: 21, inferences: 84, cost: "$0.110", result: generateRandomResult() },
-    { id: "40000031", scorecard: "CS3 Services v2", score: 85, date: relativeDate(2, 16, 0), status: "scored", results: 20, inferences: 40, cost: "$0.052", result: generateRandomResult() },
-    { id: "40000032", scorecard: "AW IB Sales", score: 99, date: relativeDate(2, 18, 0), status: "scored", results: 23, inferences: 184, cost: "$0.240", result: generateRandomResult() },
-    { id: "40000033", scorecard: "CS3 Audigy", score: 91, date: relativeDate(2, 20, 0), status: "scored", results: 21, inferences: 84, cost: "$0.110", result: generateRandomResult() },
-    { id: "40000034", scorecard: "SelectQuote Term Life v1", score: 88, date: relativeDate(2, 22, 0), status: "scored", results: 18, inferences: 72, cost: "$0.094", result: generateRandomResult() },
-    { id: "40000035", scorecard: "CS3 Nexstar v1", score: 95, date: relativeDate(3, 0, 0), status: "scored", results: 22, inferences: 88, cost: "$0.115", result: generateRandomResult() },
-    { id: "40000036", scorecard: "CS3 Services v2", score: 86, date: relativeDate(3, 2, 0), status: "scored", results: 21, inferences: 42, cost: "$0.055", result: generateRandomResult() },
-    { id: "40000037", scorecard: "AW IB Sales", score: 100, date: relativeDate(3, 4, 0), status: "scored", results: 24, inferences: 192, cost: "$0.251", result: generateRandomResult() },
-    { id: "40000038", scorecard: "CS3 Audigy", score: 92, date: relativeDate(3, 6, 0), status: "scored", results: 22, inferences: 88, cost: "$0.115", result: generateRandomResult() },
-    { id: "40000039", scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(3, 8, 0), status: "scored", results: 19, inferences: 76, cost: "$0.099", result: generateRandomResult() },
-    { id: "40000040", scorecard: "CS3 Nexstar v1", score: 96, date: relativeDate(3, 10, 0), status: "scored", results: 23, inferences: 92, cost: "$0.120", result: generateRandomResult() },
+    { id: "40000001", scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), results: 0, inferences: 0, cost: "$0.000", result: generateRandomResult() },
+    { id: "40000002", scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), results: 0, inferences: 0, cost: "$0.000", result: generateRandomResult() },
+    { id: "40000003", scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), results: 0, inferences: 0, cost: "$0.000", result: generateRandomResult() },
+    { id: "40000004", scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), results: 2, inferences: 4, cost: "$0.005", result: generateRandomResult() },
+    { id: "40000006", scorecard: "AW IB Sales", score: 94, date: relativeDate(0, 2, 0), results: 19, inferences: 152, cost: "$0.199", result: generateRandomResult() },
+    { id: "40000007", scorecard: "CS3 Audigy", score: 86, date: relativeDate(0, 3, 0), results: 17, inferences: 68, cost: "$0.089", result: generateRandomResult() },
+    { id: "40000008", scorecard: "CS3 Services v2", score: 79, date: relativeDate(0, 4, 0), results: 16, inferences: 32, cost: "$0.042", result: generateRandomResult() },
+    { id: "40000009", scorecard: "CS3 Nexstar v1", score: 91, date: relativeDate(0, 5, 0), results: 17, inferences: 68, cost: "$0.089", result: generateRandomResult() },
+    { id: "40000010", scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(0, 6, 0), results: 13, inferences: 52, cost: "$0.068", result: generateRandomResult() },
+    { id: "40000011", scorecard: "CS3 Services v2", score: 82, date: relativeDate(1, 0, 0), results: 15, inferences: 30, cost: "$0.039", result: generateRandomResult() },
+    { id: "40000012", scorecard: "AW IB Sales", score: 93, date: relativeDate(1, 2, 0), results: 18, inferences: 144, cost: "$0.188", result: generateRandomResult() },
+    { id: "40000013", scorecard: "CS3 Audigy", score: 87, date: relativeDate(1, 4, 0), results: 16, inferences: 64, cost: "$0.084", result: generateRandomResult() },
+    { id: "40000014", scorecard: "SelectQuote Term Life v1", score: 85, date: relativeDate(1, 6, 0), results: 14, inferences: 56, cost: "$0.073", result: generateRandomResult() },
+    { id: "40000015", scorecard: "CS3 Nexstar v1", score: 90, date: relativeDate(1, 8, 0), results: 18, inferences: 72, cost: "$0.094", result: generateRandomResult() },
+    { id: "40000016", scorecard: "CS3 Services v2", score: 81, date: relativeDate(1, 10, 0), results: 17, inferences: 34, cost: "$0.044", result: generateRandomResult() },
+    { id: "40000017", scorecard: "AW IB Sales", score: 95, date: relativeDate(1, 12, 0), results: 20, inferences: 160, cost: "$0.209", result: generateRandomResult() },
+    { id: "40000018", scorecard: "CS3 Audigy", score: 88, date: relativeDate(1, 14, 0), results: 18, inferences: 72, cost: "$0.094", result: generateRandomResult() },
+    { id: "40000019", scorecard: "SelectQuote Term Life v1", score: 84, date: relativeDate(1, 16, 0), results: 15, inferences: 60, cost: "$0.078", result: generateRandomResult() },
+    { id: "40000020", scorecard: "CS3 Nexstar v1", score: 92, date: relativeDate(1, 18, 0), results: 19, inferences: 76, cost: "$0.099", result: generateRandomResult() },
+    { id: "40000021", scorecard: "CS3 Services v2", score: 83, date: relativeDate(1, 20, 0), results: 18, inferences: 36, cost: "$0.047", result: generateRandomResult() },
+    { id: "40000022", scorecard: "AW IB Sales", score: 97, date: relativeDate(1, 22, 0), results: 21, inferences: 168, cost: "$0.219", result: generateRandomResult() },
+    { id: "40000023", scorecard: "CS3 Audigy", score: 89, date: relativeDate(2, 0, 0), results: 19, inferences: 76, cost: "$0.099", result: generateRandomResult() },
+    { id: "40000024", scorecard: "SelectQuote Term Life v1", score: 86, date: relativeDate(2, 2, 0), results: 16, inferences: 64, cost: "$0.084", result: generateRandomResult() },
+    { id: "40000025", scorecard: "CS3 Nexstar v1", score: 93, date: relativeDate(2, 4, 0), results: 20, inferences: 80, cost: "$0.104", result: generateRandomResult() },
+    { id: "40000026", scorecard: "CS3 Services v2", score: 84, date: relativeDate(2, 6, 0), results: 19, inferences: 38, cost: "$0.050", result: generateRandomResult() },
+    { id: "40000027", scorecard: "AW IB Sales", score: 98, date: relativeDate(2, 8, 0), results: 22, inferences: 176, cost: "$0.230", result: generateRandomResult() },
+    { id: "40000028", scorecard: "CS3 Audigy", score: 90, date: relativeDate(2, 10, 0), results: 20, inferences: 80, cost: "$0.104", result: generateRandomResult() },
+    { id: "40000029", scorecard: "SelectQuote Term Life v1", score: 87, date: relativeDate(2, 12, 0), results: 17, inferences: 68, cost: "$0.089", result: generateRandomResult() },
+    { id: "40000030", scorecard: "CS3 Nexstar v1", score: 94, date: relativeDate(2, 14, 0), results: 21, inferences: 84, cost: "$0.110", result: generateRandomResult() },
+    { id: "40000031", scorecard: "CS3 Services v2", score: 85, date: relativeDate(2, 16, 0), results: 20, inferences: 40, cost: "$0.052", result: generateRandomResult() },
+    { id: "40000032", scorecard: "AW IB Sales", score: 99, date: relativeDate(2, 18, 0), results: 23, inferences: 184, cost: "$0.240", result: generateRandomResult() },
+    { id: "40000033", scorecard: "CS3 Audigy", score: 91, date: relativeDate(2, 20, 0), results: 21, inferences: 84, cost: "$0.110", result: generateRandomResult() },
+    { id: "40000034", scorecard: "SelectQuote Term Life v1", score: 88, date: relativeDate(2, 22, 0), results: 18, inferences: 72, cost: "$0.094", result: generateRandomResult() },
+    { id: "40000035", scorecard: "CS3 Nexstar v1", score: 95, date: relativeDate(3, 0, 0), results: 22, inferences: 88, cost: "$0.115", result: generateRandomResult() },
+    { id: "40000036", scorecard: "CS3 Services v2", score: 86, date: relativeDate(3, 2, 0), results: 21, inferences: 42, cost: "$0.055", result: generateRandomResult() },
+    { id: "40000037", scorecard: "AW IB Sales", score: 100, date: relativeDate(3, 4, 0), results: 24, inferences: 192, cost: "$0.251", result: generateRandomResult() },
+    { id: "40000038", scorecard: "CS3 Audigy", score: 92, date: relativeDate(3, 6, 0), results: 22, inferences: 88, cost: "$0.115", result: generateRandomResult() },
+    { id: "40000039", scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(3, 8, 0), results: 19, inferences: 76, cost: "$0.099", result: generateRandomResult() },
+    { id: "40000040", scorecard: "CS3 Nexstar v1", score: 96, date: relativeDate(3, 10, 0), results: 23, inferences: 92, cost: "$0.120", result: generateRandomResult() },
   ]
 }
 
@@ -175,7 +184,62 @@ const ITEMS_TIME_RANGE_OPTIONS = [
   { value: "custom", label: "Custom" },
 ]
 
+const SampleControl = ({ onSampleChange }: { onSampleChange: (method: string, count: number) => void }) => {
+  const [method, setMethod] = useState("All")
+  const [count, setCount] = useState(100)
+
+  const handleMethodChange = (value: string) => {
+    setMethod(value)
+    onSampleChange(value, count)
+  }
+
+  const handleCountChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newCount = parseInt(event.target.value, 10)
+    setCount(newCount)
+    onSampleChange(method, newCount)
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="w-[150px] justify-start text-left font-normal">
+          <span>Sample: {method}</span>
+          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[200px] p-0" align="start">
+        <div className="p-4 space-y-4">
+          <div className="space-y-2">
+            <Label>Sampling Method</Label>
+            <Select value={method} onValueChange={handleMethodChange}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All</SelectItem>
+                <SelectItem value="Random">Random</SelectItem>
+                <SelectItem value="Sequential">Sequential</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Item Count</Label>
+            <Input
+              type="number"
+              value={count}
+              onChange={handleCountChange}
+              min={1}
+              max={1000}
+            />
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 export default function DataDashboard() {
+  const router = useRouter()
   const [items, setItems] = useState(generateInitialItems)
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
@@ -189,6 +253,8 @@ export default function DataDashboard() {
   const [showExpandButton, setShowExpandButton] = useState<Record<string, boolean>>({})
   const textRef = useRef<Record<string, HTMLDivElement | null>>({})
   const [filterConfig, setFilterConfig] = useState<FilterConfig>([])
+  const [sampleMethod, setSampleMethod] = useState("All")
+  const [sampleCount, setSampleCount] = useState(100)
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -310,15 +376,22 @@ export default function DataDashboard() {
     { value: 'cost', label: 'Cost' },
   ]
 
+  // Add this function to handle sample changes
+  const handleSampleChange = (method: string, count: number) => {
+    setSampleMethod(method)
+    setSampleCount(count)
+    // Implement the logic for applying the sampling here
+    console.log(`Sampling method: ${method}, Count: ${count}`)
+  }
+
   const renderItemsList = () => (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[35%]">Item</TableHead>
+          <TableHead className="w-[40%]">Item</TableHead>
           <TableHead className="w-[20%]">ID</TableHead>
-          <TableHead className="w-[15%]">Status</TableHead>
-          {selectedScore && <TableHead className="w-[15%]">{selectedScore}</TableHead>}
-          <TableHead className={`${selectedScore ? 'w-[15%]' : 'w-[30%]'} text-right`}>Actions</TableHead>
+          {selectedScore && <TableHead className="w-[20%]">{selectedScore}</TableHead>}
+          <TableHead className={`${selectedScore ? 'w-[20%]' : 'w-[40%]'} text-right`}>Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -333,29 +406,20 @@ export default function DataDashboard() {
               <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
             </TableCell>
             <TableCell>{item.id}</TableCell>
-            <TableCell>
-              <Badge className={`${getBadgeVariant(item.status)} w-24 justify-center`}>
-                {item.status}
-              </Badge>
-            </TableCell>
             {selectedScore && (
               <TableCell>
-                {item.status === "scored" ? (
-                  <div className="flex items-center space-x-2">
-                    <Badge 
-                      className={`${item.result.isCorrect ? 'bg-true' : 'bg-false'} text-primary-foreground w-16 justify-center h-6`}
-                    >
-                      {item.result.answer}
-                    </Badge>
-                    {item.result.isCorrect ? (
-                      <SmileIcon className="h-4 w-4 text-true" />
-                    ) : (
-                      <FrownIcon className="h-4 w-4 text-false" />
-                    )}
-                  </div>
-                ) : (
-                  <span className="text-muted-foreground">-</span>
-                )}
+                <div className="flex items-center space-x-2">
+                  <Badge 
+                    className={`${item.result.isCorrect ? 'bg-true' : 'bg-false'} text-primary-foreground w-16 justify-center h-6`}
+                  >
+                    {item.result.answer}
+                  </Badge>
+                  {item.result.isCorrect ? (
+                    <SmileIcon className="h-4 w-4 text-true" />
+                  ) : (
+                    <FrownIcon className="h-4 w-4 text-false" />
+                  )}
+                </div>
               </TableCell>
             )}
             <TableCell className="text-right">
@@ -595,16 +659,28 @@ export default function DataDashboard() {
     return (
       <div className="flex justify-between items-center mt-4">
         <h2 className="text-2xl font-semibold pl-2">{itemCount} {itemCount === 1 ? 'Item' : 'Items'}</h2>
-        <div className="flex space-x-2">
-          <Button onClick={() => console.log("Experiment clicked")}>
-            <FlaskConical className="h-4 w-4 mr-2" />
-            Run Experiment
-          </Button>
-          <Button onClick={() => console.log("Analyze clicked")}>
-            <Sparkles className="h-4 w-4 mr-2" />
-            Analyze
-          </Button>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button>
+              Actions
+              <ChevronDown className="ml-2 h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => router.push('/experiments')}>
+              <FlaskConical className="mr-2 h-4 w-4" />
+              <span>Run Experiment</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push('/analysis')}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              <span>Analyze Items</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push('/feedback')}>
+              <MessageCircleMore className="mr-2 h-4 w-4" />
+              <span>Get Feedback</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     );
   };
@@ -649,6 +725,7 @@ export default function DataDashboard() {
         </div>
         <div className="flex space-x-2">
           <FilterControl onFilterChange={handleFilterChange} availableFields={availableFields} />
+          <SampleControl onSampleChange={handleSampleChange} />
           <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} options={ITEMS_TIME_RANGE_OPTIONS} />
         </div>
       </div>
