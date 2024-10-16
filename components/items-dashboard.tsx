@@ -234,6 +234,26 @@ const sampleScoreResults = [
   },
 ];
 
+// Define the User interface
+interface User {
+  name: string;
+  initials: string;
+}
+
+// Define the Score type
+interface Score {
+  name: string;
+  value: string;
+  explanation: string;
+  isAnnotated?: boolean;
+  annotations?: any[]; // Keep this if you want to store multiple annotations
+  annotation?: string; // Add this line if you want to keep a single annotation
+  allowFeedback?: boolean;
+  isSystem?: boolean;
+  timestamp?: string;
+  user?: User;
+}
+
 const renderRichText = (text: string) => {
   return (
     <ReactMarkdown
@@ -261,7 +281,12 @@ export default function ItemsDashboard() {
   const [truncatedExplanations, setTruncatedExplanations] = useState<{[key: string]: string}>({});
   const explanationRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
   const [expandedAnnotations, setExpandedAnnotations] = useState<string[]>([]);
-  const [newAnnotation, setNewAnnotation] = useState({ value: "", explanation: "", annotation: "" });
+  const [newAnnotation, setNewAnnotation] = useState<{ 
+    value: string; 
+    explanation: string; 
+    annotation: string; 
+    allowFeedback: boolean; // Include allowFeedback in the type definition
+  }>({ value: "", explanation: "", annotation: "", allowFeedback: false });
   const [showNewAnnotationForm, setShowNewAnnotationForm] = useState<string | null>(null);
   const [isErrorExpanded, setIsErrorExpanded] = useState(true);
   const [filterConfig, setFilterConfig] = useState<FilterConfig>([])
@@ -423,13 +448,13 @@ export default function ItemsDashboard() {
       value: score.value, 
       explanation: score.explanation, 
       annotation: "",
-      allowFeedback: score.allowFeedback
+      allowFeedback: score.allowFeedback // Ensure this property is set correctly
     });
   };
 
   const cancelAnnotation = (scoreName: string) => {
     setShowNewAnnotationForm(null);
-    setNewAnnotation({ value: "", explanation: "", annotation: "" });
+    setNewAnnotation({ value: "", explanation: "", annotation: "", allowFeedback: false });
   };
 
   const setExplanationRef = useCallback((element: HTMLDivElement | null, scoreName: string) => {
@@ -565,7 +590,9 @@ export default function ItemsDashboard() {
       )}
       {isAnnotation && (
         <div className="flex justify-between items-center mt-2 text-xs text-muted-foreground">
-          <span>{new Date(score.timestamp).toLocaleString()}</span>
+          <span>
+            {score.timestamp ? new Date(score.timestamp).toLocaleString() : 'Timestamp not available'}
+          </span>
           {score.user && (
             <div className="flex items-center space-x-2">
               <span>{score.user.name}</span>
@@ -576,9 +603,11 @@ export default function ItemsDashboard() {
           )}
         </div>
       )}
-      {score.annotation && (
+      {score.annotations && score.annotations.length > 0 && (
         <div className="mt-2 text-sm italic">
-          "{score.annotation}"
+          {score.annotations.map((annotation, index) => (
+            <div key={index}>"{annotation}"</div> // Adjust this line based on how you want to display annotations
+          ))}
         </div>
       )}
       {!isAnnotation && (score.isAnnotated || feedbackItems[score.name]?.length > 0) && expandedAnnotations.includes(score.name) && (
