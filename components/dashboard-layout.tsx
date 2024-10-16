@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Activity, AudioLines, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare } from "lucide-react"
+import { Activity, AudioLines, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -85,7 +85,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     { name: "Activity", icon: Activity, path: "/activity" },
     { name: "Alerts", icon: Siren, path: "/alerts" },
     { name: "Items", icon: AudioLines, path: "/items" },
-    { name: "Feedback", icon: MessageCircleMore, path: "/feedback" },
+    { name: "Feedback", icon: Inbox, path: "/feedback-queues" },
     { name: "Reports", icon: FileBarChart, path: "/reports" },
     { name: "Scorecards", icon: ListTodo, path: "/scorecards" },
     { name: "Experiments", icon: FlaskConical, path: "/experiments" },
@@ -122,9 +122,17 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 <TooltipTrigger asChild>
                   <Link href={item.path} passHref>
                     <Button
-                      variant={pathname === item.path ? "secondary" : "ghost"}
+                      variant={
+                        (pathname === item.path || 
+                        (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
+                        (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
+                          ? "secondary"
+                          : "ghost"
+                      }
                       className={`w-full justify-start group ${
-                        pathname === item.path
+                        (pathname === item.path || 
+                        (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
+                        (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
                           ? "bg-secondary text-secondary-foreground"
                           : ""
                       } ${isLeftSidebarOpen ? '' : 'px-2'}`}
@@ -132,10 +140,20 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                       <item.icon className={`h-4 w-4 group-hover:text-accent-foreground ${
                         isLeftSidebarOpen ? 'mr-2' : ''
                       } flex-shrink-0 ${
-                        pathname === item.path ? 'text-secondary-foreground' : 'text-secondary'
+                        (pathname === item.path || 
+                        (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
+                        (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
+                          ? 'text-secondary-foreground'
+                          : 'text-secondary'
                       }`} />
                       {isLeftSidebarOpen && (
-                        <span className={pathname === item.path ? 'font-semibold' : ''}>
+                        <span className={
+                          (pathname === item.path || 
+                          (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
+                          (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
+                            ? 'font-semibold'
+                            : ''
+                        }>
                           {item.name}
                         </span>
                       )}

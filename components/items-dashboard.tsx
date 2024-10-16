@@ -704,7 +704,23 @@ export default function ItemsDashboard() {
       <div className="flex-grow flex flex-col overflow-hidden pb-2">
         {selectedItem && (isNarrowViewport || isFullWidth) ? (
           <div className="flex-grow overflow-hidden">
-            {renderSelectedItem()}
+            {renderSelectedItem({
+              items,
+              selectedItem,
+              isFullWidth,
+              isNarrowViewport,
+              setSelectedItem,
+              setIsFullWidth,
+              isMetadataExpanded,
+              setIsMetadataExpanded,
+              isDataExpanded,
+              setIsDataExpanded,
+              isErrorExpanded,
+              setIsErrorExpanded,
+              getBadgeVariant,
+              getRelativeTime,
+              renderScoreResult
+            })}
           </div>
         ) : (
           <div className={`flex ${isNarrowViewport ? 'flex-col' : 'space-x-6'} h-full`}>
@@ -768,7 +784,23 @@ export default function ItemsDashboard() {
 
             {selectedItem && !isNarrowViewport && !isFullWidth && (
               <div className="flex-1 overflow-hidden">
-                {renderSelectedItem()}
+                {renderSelectedItem({
+                  items,
+                  selectedItem,
+                  isFullWidth,
+                  isNarrowViewport,
+                  setSelectedItem,
+                  setIsFullWidth,
+                  isMetadataExpanded,
+                  setIsMetadataExpanded,
+                  isDataExpanded,
+                  setIsDataExpanded,
+                  isErrorExpanded,
+                  setIsErrorExpanded,
+                  getBadgeVariant,
+                  getRelativeTime,
+                  renderScoreResult
+                })}
               </div>
             )}
           </div>
@@ -776,62 +808,98 @@ export default function ItemsDashboard() {
       </div>
     </div>
   )
+}
 
-  function renderSelectedItem() {
-    const selectedItemData = items.find(item => item.id === selectedItem);
-    const isErrorStatus = selectedItemData?.status === 'error';
+function renderSelectedItem({
+  items,
+  selectedItem,
+  isFullWidth,
+  isNarrowViewport,
+  setSelectedItem,
+  setIsFullWidth,
+  isMetadataExpanded,
+  setIsMetadataExpanded,
+  isDataExpanded,
+  setIsDataExpanded,
+  isErrorExpanded,
+  setIsErrorExpanded,
+  getBadgeVariant,
+  getRelativeTime,
+  renderScoreResult
+}: {
+  items: Item[];
+  selectedItem: number | null;
+  isFullWidth: boolean;
+  isNarrowViewport: boolean;
+  setSelectedItem: (id: number | null) => void;
+  setIsFullWidth: (isFullWidth: boolean) => void;
+  isMetadataExpanded: boolean;
+  setIsMetadataExpanded: (isExpanded: boolean) => void;
+  isDataExpanded: boolean;
+  setIsDataExpanded: (isExpanded: boolean) => void;
+  isErrorExpanded: boolean;
+  setIsErrorExpanded: (isExpanded: boolean) => void;
+  getBadgeVariant: (status: string) => string;
+  getRelativeTime: (date: string) => string;
+  renderScoreResult: (score: any) => JSX.Element;
+}) {
+  const selectedItemData = items.find(item => item.id === selectedItem);
+  const isErrorStatus = selectedItemData?.status === 'error';
 
-    return (
-      <Card className="rounded-none sm:rounded-lg h-full flex flex-col">
-        <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between py-4 px-4 sm:px-6 space-y-0">
-          <div>
-            <h2 className="text-xl font-semibold">{items.find(item => item.id === selectedItem)?.scorecard}</h2>
-            <p className="text-sm text-muted-foreground">
-              {getRelativeTime(items.find(item => item.id === selectedItem)?.date || '')}
-            </p>
-          </div>
-          <div className="flex ml-2">
-            {!isNarrowViewport && (
-              <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
-                {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-              </Button>
-            )}
-            <Button variant="outline" size="icon" onClick={() => {
-              setSelectedItem(null)
-              setIsFullWidth(false)
-            }} className="ml-2">
-              <X className="h-4 w-4" />
+  if (!selectedItemData) return null;
+
+  return (
+    <Card className="rounded-none sm:rounded-lg h-full flex flex-col">
+      <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between py-4 px-4 sm:px-6 space-y-0">
+        <div>
+          <h2 className="text-xl font-semibold">{selectedItemData?.scorecard}</h2>
+          <p className="text-sm text-muted-foreground">
+            {getRelativeTime(selectedItemData?.date || '')}
+          </p>
+        </div>
+        <div className="flex ml-2">
+          {!isNarrowViewport && (
+            <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
+              {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
             </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="flex-grow overflow-auto px-4 sm:px-6 pb-4">
-          {selectedItem && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+          )}
+          <Button variant="outline" size="icon" onClick={() => {
+            setSelectedItem(null)
+            setIsFullWidth(false)
+          }} className="ml-2">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="flex-grow overflow-auto px-4 sm:px-6 pb-4">
+        {selectedItem && (
+          <div className={`${isFullWidth ? 'flex gap-16' : ''}`}>
+            <div className={`${isFullWidth ? 'w-1/2' : ''}`}>
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <p className="text-sm font-medium">Inferences</p>
-                  <p>{items.find(item => item.id === selectedItem)?.inferences}</p>
+                  <p>{selectedItemData?.inferences}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-medium">Status</p>
                   <Badge 
-                    className={`w-24 justify-center ${getBadgeVariant(items.find(item => item.id === selectedItem)?.status || '')}`}
+                    className={`w-24 justify-center ${getBadgeVariant(selectedItemData?.status || '')}`}
                   >
-                    {items.find(item => item.id === selectedItem)?.status}
+                    {selectedItemData?.status}
                   </Badge>
                 </div>
                 <div>
                   <p className="text-sm font-medium">Results</p>
-                  <p>{items.find(item => item.id === selectedItem)?.results}</p>
+                  <p>{selectedItemData?.results}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-medium">Cost</p>
-                  <p>{items.find(item => item.id === selectedItem)?.cost}</p>
+                  <p>{selectedItemData?.cost}</p>
                 </div>
               </div>
               
               {isErrorStatus && (
-                <div className="-mx-4 sm:-mx-6">
+                <div className="-mx-4 sm:-mx-6 mb-4">
                   <div
                     className="relative group hover:bg-destructive hover:text-primary-foreground cursor-pointer"
                     onClick={() => setIsErrorExpanded(!isErrorExpanded)}
@@ -861,7 +929,7 @@ export default function ItemsDashboard() {
                 </div>
               )}
               
-              <div className="-mx-4 sm:-mx-6">
+              <div className="-mx-4 sm:-mx-6 mb-4">
                 <div
                   className="relative group bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer"
                   onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
@@ -893,7 +961,7 @@ export default function ItemsDashboard() {
                 </div>
               )}
               
-              <div className="-mx-4 sm:-mx-6">
+              <div className="-mx-4 sm:-mx-6 mt-4">
                 <div
                   className="relative group bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer"
                   onClick={() => setIsDataExpanded(!isDataExpanded)}
@@ -911,7 +979,7 @@ export default function ItemsDashboard() {
                 </div>
               </div>
               {isDataExpanded && (
-                <div className="mt-2">
+                <div className={`mt-2 ${isFullWidth ? 'pr-4' : 'px-4 sm:px-6'}`}>
                   {sampleTranscript.map((line, index) => (
                     <p key={index} className="text-sm">
                       <span className="font-semibold">{line.speaker}: </span>
@@ -920,128 +988,35 @@ export default function ItemsDashboard() {
                   ))}
                 </div>
               )}
-              
-              <div className="mt-8">
-                <div className="-mx-4 sm:-mx-6 mb-4">
-                  <div className="px-4 sm:px-6 py-2 bg-muted">
-                    <h4 className="text-md font-semibold">Score Results</h4>
+            </div>
+
+            <div className={`${isFullWidth ? 'w-1/2' : 'mt-4'}`}>
+              <div className="-mx-4 sm:-mx-6 mb-4">
+                <div className="px-4 sm:px-6 py-2 bg-muted">
+                  <h4 className="text-md font-semibold">Score Results</h4>
+                </div>
+              </div>
+              {sampleScoreResults.map((section, sectionIndex) => (
+                <div key={sectionIndex} className="mb-6">
+                  <div className="-mx-4 sm:-mx-6 mb-4">
+                    <div className="px-4 sm:px-6 py-2">
+                      <h4 className="text-md font-semibold">{section.section}</h4>
+                    </div>
+                    <hr className="border-t border-border" />
+                  </div>
+                  <div>
+                    {section.scores.map((score, scoreIndex) => (
+                      <React.Fragment key={scoreIndex}>
+                        {renderScoreResult(score)}
+                      </React.Fragment>
+                    ))}
                   </div>
                 </div>
-                {sampleScoreResults.map((section, sectionIndex) => (
-                  <div key={sectionIndex} className="mb-6">
-                    <div className="-mx-4 sm:-mx-6 mb-4">
-                      <div className="px-4 sm:px-6 py-2">
-                        <h4 className="text-md font-semibold">{section.section}</h4>
-                      </div>
-                      <hr className="border-t border-border" />
-                    </div>
-                    <div>
-                      {section.scores.map((score, scoreIndex) => (
-                        <React.Fragment key={scoreIndex}>
-                          <div>
-                            {renderScoreResult(score)}
-                            {score.name === "Profanity" && expandedAnnotations.includes(score.name) && (
-                              <div className="mt-2 space-y-2">
-                                <div className="flex justify-between items-center mb-2">
-                                  <h6 className="text-sm font-medium">Feedback</h6>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => toggleNewAnnotationForm(score.name)}
-                                    className="text-xs"
-                                  >
-                                    <Plus className="h-4 w-4 mr-1" />
-                                    Create
-                                  </Button>
-                                </div>
-                                {showNewAnnotationForm === score.name && (
-                                  <div className="mb-4">
-                                    <div className="space-y-2">
-                                      <Select 
-                                        onValueChange={(value) => setNewAnnotation({...newAnnotation, value})}
-                                        value={newAnnotation.value}
-                                      >
-                                        <SelectTrigger>
-                                          <SelectValue placeholder="Select value" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="Yes">Yes</SelectItem>
-                                          <SelectItem value="No">No</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                      <Textarea 
-                                        placeholder="Explanation" 
-                                        value={newAnnotation.explanation}
-                                        onChange={(e) => setNewAnnotation({...newAnnotation, explanation: e.target.value})}
-                                      />
-                                      <Input 
-                                        placeholder="Annotation" 
-                                        value={newAnnotation.annotation}
-                                        onChange={(e) => setNewAnnotation({...newAnnotation, annotation: e.target.value})}
-                                      />
-                                      <div className="flex justify-end space-x-2">
-                                        <Button variant="outline" onClick={() => cancelAnnotation(score.name)}>Cancel</Button>
-                                        <Button onClick={() => handleNewAnnotationSubmit(score.name)}>Submit Feedback</Button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-                                {score.annotations && score.annotations.map((annotation, annotationIndex) => (
-                                  <div key={annotationIndex} className="relative">
-                                    {renderScoreResult(annotation, true)}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {score.name !== "Profanity" && showNewAnnotationForm === score.name && (
-                              <div className="mt-2 space-y-2 border-l-2 border-muted-foreground pl-4">
-                                <div className="mb-4">
-                                  <h6 className="text-sm font-medium mb-2">Feedback</h6>
-                                  <div className="space-y-2">
-                                    <Select 
-                                      onValueChange={(value) => setNewAnnotation({...newAnnotation, value})}
-                                      value={newAnnotation.value}
-                                    >
-                                      <SelectTrigger>
-                                        <SelectValue placeholder="Select value" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="Yes">Yes</SelectItem>
-                                        <SelectItem value="No">No</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    <Textarea 
-                                      placeholder="Explanation" 
-                                      value={newAnnotation.explanation}
-                                      onChange={(e) => setNewAnnotation({...newAnnotation, explanation: e.target.value})}
-                                    />
-                                    <Input 
-                                      placeholder="Feedback" 
-                                      value={newAnnotation.annotation}
-                                      onChange={(e) => setNewAnnotation({...newAnnotation, annotation: e.target.value})}
-                                    />
-                                    <div className="flex justify-end space-x-2">
-                                      <Button variant="outline" onClick={() => cancelAnnotation(score.name)}>Cancel</Button>
-                                      <Button onClick={() => handleNewAnnotationSubmit(score.name)}>Submit Feedback</Button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                          {scoreIndex < section.scores.length - 1 && (
-                            <hr className="my-2 border-t border-border" />
-                          )}
-                        </React.Fragment>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              ))}
             </div>
-          )}
-        </CardContent>
-      </Card>
-    )
-  }
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
 }

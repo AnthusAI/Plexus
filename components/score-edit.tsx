@@ -8,6 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"
 import KeywordClassifierComponent from './score-types/keyword-classifier'
 import LangGraphScoreComponent from './score-types/lang-graph-score'
+import ProgrammaticScoreComponent from './score-types/programmatic-score'
+import FuzzyMatchClassifierComponent from './score-types/fuzzy-match-classifier'
+import SemanticClassifierComponent from './score-types/semantic-classifier'
 
 interface ScoreEditProps {
   scorecardId: string
@@ -147,8 +150,14 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
 
   const renderScoreTypeComponent = () => {
     switch (score.type) {
+      case 'ProgrammaticScore':
+        return <ProgrammaticScoreComponent score={score} onChange={setScore} />
       case 'KeywordClassifier':
         return <KeywordClassifierComponent score={score} onChange={setScore} />
+      case 'FuzzyMatchClassifier':
+        return <FuzzyMatchClassifierComponent score={score} onChange={setScore} />
+      case 'SemanticClassifier':
+        return <SemanticClassifierComponent score={score} onChange={setScore} />
       case 'LangGraphScore':
         return <LangGraphScoreComponent score={score} onChange={setScore} />
       default:
@@ -159,7 +168,7 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
   if (!score) return <div>Loading...</div>
 
   return (
-    <div className="space-y-4 h-full flex flex-col">
+    <div className="h-full flex flex-col">
       <div className="flex justify-between py-4 px-4 sm:px-6">
         <div className="space-y-1">
           <EditableField
@@ -178,8 +187,8 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
           <X className="h-4 w-4" />
         </Button>
       </div>
-      <div className="flex-grow overflow-auto px-4 sm:px-6 pb-4">
-        <div className="space-y-4">
+      <div className="flex-grow flex flex-col overflow-hidden px-4 sm:px-6 pb-4">
+        <div className="space-y-4 mb-6">
           <div className="flex justify-between items-end">
             <div className="space-y-2">
               <Label htmlFor="score-type">Score Type</Label>
@@ -192,7 +201,6 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
                   <SelectItem value="KeywordClassifier">KeywordClassifier</SelectItem>
                   <SelectItem value="FuzzyMatchClassifier">FuzzyMatchClassifier</SelectItem>
                   <SelectItem value="SemanticClassifier">SemanticClassifier</SelectItem>
-                  <SelectItem value="BERTClassifier">BERTClassifier</SelectItem>
                   <SelectItem value="LangGraphScore">LangGraphScore</SelectItem>
                 </SelectContent>
               </Select>
@@ -202,6 +210,8 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
               Dependencies
             </Button>
           </div>
+        </div>
+        <div className="flex-grow overflow-auto">
           {renderScoreTypeComponent()}
         </div>
       </div>

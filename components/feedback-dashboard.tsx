@@ -1,7 +1,7 @@
 "use client"
 
-import React from "react"
-import { useState, useMemo, useEffect, useRef, useCallback } from "react"
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react"
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Progress } from "@/components/ui/progress"
 import { TimeRangeSelector, TimeRangeOption } from "@/components/time-range-selector"
 import ReactMarkdown from 'react-markdown'
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -100,9 +101,7 @@ interface FeedbackItem {
   status: string;
   hasFeedback: boolean;
   scoreCount: number;
-  scoreResults?: typeof sampleScoreResults;
-  metadata?: Array<{ key: string; value: string }>;
-  data?: Array<{ speaker: string; text: string }>;
+  scoreResults?: typeof sampleScoreResults;  // Make this optional
 }
 
 // Now, let's update the initialFeedbackItems declaration
@@ -110,33 +109,33 @@ const initialFeedbackItems: FeedbackItem[] = [
   { id: 30, scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "new", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
   { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "new", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
   { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "new", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"] },
-  { id: 27, scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), status: "error", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
-  { id: 26, scorecard: "SelectQuote Term Life v1", score: 83, date: relativeDate(0, 1, 30), status: "scoring...", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
-  { id: 25, scorecard: "AW IB Sales", score: 94, date: relativeDate(0, 2, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"] },
-  { id: 24, scorecard: "CS3 Audigy", score: 86, date: relativeDate(0, 3, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
-  { id: 23, scorecard: "CS3 Services v2", score: 79, date: relativeDate(0, 4, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
-  { id: 22, scorecard: "CS3 Nexstar v1", score: 91, date: relativeDate(0, 5, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
-  { id: 21, scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(0, 6, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
-  { id: 20, scorecard: "CS3 Services v2", score: 82, date: relativeDate(1, 0, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
-  { id: 19, scorecard: "AW IB Sales", score: 93, date: relativeDate(1, 2, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"] },
-  { id: 18, scorecard: "CS3 Audigy", score: 87, date: relativeDate(1, 4, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
-  { id: 17, scorecard: "SelectQuote Term Life v1", score: 85, date: relativeDate(1, 6, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
-  { id: 16, scorecard: "CS3 Nexstar v1", score: 90, date: relativeDate(1, 8, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
-  { id: 15, scorecard: "CS3 Services v2", score: 81, date: relativeDate(1, 10, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
-  { id: 14, scorecard: "AW IB Sales", score: 95, date: relativeDate(1, 12, 0), status: "scored", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"] },
-  { id: 13, scorecard: "CS3 Audigy", score: 88, date: relativeDate(1, 14, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
-  { id: 12, scorecard: "SelectQuote Term Life v1", score: 84, date: relativeDate(1, 16, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
-  { id: 11, scorecard: "CS3 Nexstar v1", score: 92, date: relativeDate(1, 18, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
-  { id: 10, scorecard: "CS3 Services v2", score: 83, date: relativeDate(1, 20, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
-  { id: 9, scorecard: "AW IB Sales", score: 97, date: relativeDate(1, 22, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["AW IB Sales"] },
-  { id: 8, scorecard: "CS3 Audigy", score: 89, date: relativeDate(2, 0, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
-  { id: 7, scorecard: "SelectQuote Term Life v1", score: 86, date: relativeDate(2, 2, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
-  { id: 6, scorecard: "CS3 Nexstar v1", score: 93, date: relativeDate(2, 4, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
-  { id: 5, scorecard: "CS3 Services v2", score: 84, date: relativeDate(2, 6, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
-  { id: 4, scorecard: "AW IB Sales", score: 98, date: relativeDate(2, 8, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["AW IB Sales"] },
-  { id: 3, scorecard: "CS3 Audigy", score: 90, date: relativeDate(2, 10, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
-  { id: 2, scorecard: "SelectQuote Term Life v1", score: 87, date: relativeDate(2, 12, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
-  { id: 1, scorecard: "CS3 Nexstar v1", score: 94, date: relativeDate(2, 14, 0), status: "scored", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
+  { id: 27, scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), status: "in review...", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
+  { id: 26, scorecard: "SelectQuote Term Life v1", score: 83, date: relativeDate(0, 1, 30), status: "in review...", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
+  { id: 25, scorecard: "AW IB Sales", score: 94, date: relativeDate(0, 2, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"] },
+  { id: 24, scorecard: "CS3 Audigy", score: 86, date: relativeDate(0, 3, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
+  { id: 23, scorecard: "CS3 Services v2", score: 79, date: relativeDate(0, 4, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
+  { id: 22, scorecard: "CS3 Nexstar v1", score: 91, date: relativeDate(0, 5, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
+  { id: 21, scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(0, 6, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
+  { id: 20, scorecard: "CS3 Services v2", score: 82, date: relativeDate(1, 0, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
+  { id: 19, scorecard: "AW IB Sales", score: 93, date: relativeDate(1, 2, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"] },
+  { id: 18, scorecard: "CS3 Audigy", score: 87, date: relativeDate(1, 4, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
+  { id: 17, scorecard: "SelectQuote Term Life v1", score: 85, date: relativeDate(1, 6, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
+  { id: 16, scorecard: "CS3 Nexstar v1", score: 90, date: relativeDate(1, 8, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
+  { id: 15, scorecard: "CS3 Services v2", score: 81, date: relativeDate(1, 10, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
+  { id: 14, scorecard: "AW IB Sales", score: 95, date: relativeDate(1, 12, 0), status: "done", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"] },
+  { id: 13, scorecard: "CS3 Audigy", score: 88, date: relativeDate(1, 14, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
+  { id: 12, scorecard: "SelectQuote Term Life v1", score: 84, date: relativeDate(1, 16, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
+  { id: 11, scorecard: "CS3 Nexstar v1", score: 92, date: relativeDate(1, 18, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
+  { id: 10, scorecard: "CS3 Services v2", score: 83, date: relativeDate(1, 20, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
+  { id: 9, scorecard: "AW IB Sales", score: 97, date: relativeDate(1, 22, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["AW IB Sales"] },
+  { id: 8, scorecard: "CS3 Audigy", score: 89, date: relativeDate(2, 0, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
+  { id: 7, scorecard: "SelectQuote Term Life v1", score: 86, date: relativeDate(2, 2, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
+  { id: 6, scorecard: "CS3 Nexstar v1", score: 93, date: relativeDate(2, 4, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
+  { id: 5, scorecard: "CS3 Services v2", score: 84, date: relativeDate(2, 6, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Services v2"] },
+  { id: 4, scorecard: "AW IB Sales", score: 98, date: relativeDate(2, 8, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["AW IB Sales"] },
+  { id: 3, scorecard: "CS3 Audigy", score: 90, date: relativeDate(2, 10, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"] },
+  { id: 2, scorecard: "SelectQuote Term Life v1", score: 87, date: relativeDate(2, 12, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"] },
+  { id: 1, scorecard: "CS3 Nexstar v1", score: 94, date: relativeDate(2, 14, 0), status: "done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"] },
 ];
 
 // Now the forEach loop should work without type errors
@@ -168,7 +167,39 @@ interface Annotation {
   isSystem?: boolean;
 }
 
+interface QueueData {
+  id: number;
+  name: string;
+  scores: number;
+  items: number;
+  date: string;
+  started: string;
+  progress: number;
+  processedItems: number;
+  totalItems: number;
+  elapsedTime: string;
+  estimatedTimeRemaining: string;
+}
+
+// Add this near the top of the file, with other sample data
+const sampleTranscript = [
+  { speaker: "Agent", text: "Thank you for calling our customer service. My name is Johnny. How may I assist you today?" },
+  { speaker: "Caller", text: "Hi Johnny, I'm calling about an issue with my recent order. It hasn't arrived yet and it's been over a week." },
+  { speaker: "Agent", text: "I apologize for the inconvenience. I'd be happy to look into that for you. May I have your order number, please?" },
+  { speaker: "Caller", text: "Sure, it's ORDER123456." },
+  { speaker: "Agent", text: "Thank you. I'm checking our system now. It looks like there was a slight delay in processing your order due to an inventory issue. However, I can see that it has now been shipped and is on its way to you." },
+  { speaker: "Caller", text: "Oh, I see. When can I expect to receive it?" },
+  { speaker: "Agent", text: "Based on the shipping information, you should receive your order within the next 2-3 business days. I apologize again for the delay. Is there anything else I can help you with today?" },
+  { speaker: "Caller", text: "No, that's all. Thank you for the information." },
+  { speaker: "Agent", text: "You're welcome. I appreciate your patience and understanding. If you have any further questions or concerns, please don't hesitate to call us back. Have a great day!" },
+  { speaker: "Caller", text: "You too, goodbye." },
+  { speaker: "Agent", text: "Goodbye and thank you for choosing our service." },
+];
+
 export default function FeedbackDashboard() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const queueId = searchParams.get('queue')
   const [selectedItem, setSelectedItem] = useState<number | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
@@ -185,18 +216,43 @@ export default function FeedbackDashboard() {
   const [newAnnotation, setNewAnnotation] = useState({ value: "", explanation: "", annotation: "" });
   const [showNewAnnotationForm, setShowNewAnnotationForm] = useState<string | null>(null);
   const [thumbedUpScores, setThumbedUpScores] = useState<Set<string>>(new Set());
-  const [feedbackItems, setFeedbackItems] = useState<FeedbackItem[]>([]);
+  const [feedbackItems, setFeedbackItems] = useState<FeedbackItem[]>(initialFeedbackItems);
+  const [isDataExpandedDefault, setIsDataExpandedDefault] = useState(false);
+
+  // Simulated queue data (replace with actual data fetching logic)
+  const queueData: QueueData = useMemo(() => {
+    // This should be replaced with actual data fetching based on queueId
+    return {
+      id: Number(queueId),
+      name: "CS3 Services v2",
+      scores: 1,
+      items: 150,
+      date: new Date().toISOString(),
+      started: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+      progress: 75,
+      processedItems: 112,
+      totalItems: 150,
+      elapsedTime: "00:45:30",
+      estimatedTimeRemaining: "00:15:00"
+    }
+  }, [queueId])
 
   useEffect(() => {
     const checkViewportWidth = () => {
-      setIsNarrowViewport(window.innerWidth < 640)
+      const isNarrow = window.innerWidth < 640;
+      setIsNarrowViewport(isNarrow);
+      setIsDataExpandedDefault(!isNarrow && isFullWidth);
     }
 
-    checkViewportWidth()
-    window.addEventListener('resize', checkViewportWidth)
+    checkViewportWidth();
+    window.addEventListener('resize', checkViewportWidth);
 
-    return () => window.removeEventListener('resize', checkViewportWidth)
-  }, [])
+    return () => window.removeEventListener('resize', checkViewportWidth);
+  }, [isFullWidth]);
+
+  useEffect(() => {
+    setIsDataExpanded(isDataExpandedDefault);
+  }, [isDataExpandedDefault]);
 
   useEffect(() => {
     const measureHeight = () => {
@@ -264,12 +320,11 @@ export default function FeedbackDashboard() {
   const getBadgeVariant = (status: string) => {
     switch (status) {
       case 'new':
-      case 'scoring...':
         return 'bg-neutral text-primary-foreground h-6';
-      case 'scored':
+      case 'in review...':
+        return 'bg-primary text-primary-foreground h-6';
+      case 'done':
         return 'bg-true text-primary-foreground h-6';
-      case 'error':
-        return 'bg-destructive text-destructive-foreground dark:text-primary-foreground h-6';
       default:
         return 'bg-muted text-muted-foreground h-6';
     }
@@ -637,6 +692,7 @@ export default function FeedbackDashboard() {
 
   function renderSelectedItem() {
     const selectedItemData = feedbackItems.find(item => item.id === selectedItem);
+    if (!selectedItemData) return null;
 
     return (
       <Card className="rounded-none sm:rounded-lg h-full flex flex-col">
@@ -662,97 +718,101 @@ export default function FeedbackDashboard() {
           </div>
         </CardHeader>
         <CardContent className="flex-grow overflow-auto px-4 sm:px-6 pb-4">
-          {selectedItemData && (
-            <div className="space-y-4">
-              {/* Metadata Section */}
-              <div className="-mx-4 sm:-mx-6">
-                <div
-                  className="relative group bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                  onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
-                >
-                  <div className="flex justify-between items-center px-4 sm:px-6 py-2">
-                    <span className="text-md font-semibold">
-                      Metadata
-                    </span>
-                    {isMetadataExpanded ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
+          {selectedItem && (
+            <div className={`${isFullWidth ? 'flex gap-16' : ''}`}>
+              <div className={`${isFullWidth ? 'w-1/2' : ''}`}>
+                {/* Metadata Section */}
+                <div className="-mx-4 sm:-mx-6 mb-4">
+                  <div
+                    className="relative group bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                    onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
+                  >
+                    <div className="flex justify-between items-center px-4 sm:px-6 py-2">
+                      <span className="text-md font-semibold">
+                        Metadata
+                      </span>
+                      {isMetadataExpanded ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-              {isMetadataExpanded && (
-                <div className="mt-2">
-                  <Table>
-                    <TableBody>
-                      {selectedItemData?.metadata?.map((meta, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium pl-0">{meta.key}</TableCell>
-                          <TableCell className="text-right pr-0">{meta.value}</TableCell>
-                        </TableRow>
-                      )) || <TableRow><TableCell>No metadata available</TableCell></TableRow>}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+                {isMetadataExpanded && (
+                  <div className={`mt-2 ${isFullWidth ? 'pr-4' : 'px-4 sm:px-6'}`}>
+                    <Table>
+                      <TableBody>
+                        {selectedItemData.metadata?.map((meta, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="font-medium pl-0">{meta.key}</TableCell>
+                            <TableCell className="text-right pr-0">{meta.value}</TableCell>
+                          </TableRow>
+                        )) || <TableRow><TableCell>No metadata available</TableCell></TableRow>}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
 
-              {/* Data Section */}
-              <div className="-mx-4 sm:-mx-6">
-                <div
-                  className="relative group bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                  onClick={() => setIsDataExpanded(!isDataExpanded)}
-                >
-                  <div className="flex justify-between items-center px-4 sm:px-6 py-2">
-                    <span className="text-md font-semibold">
-                      Data
-                    </span>
-                    {isDataExpanded ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
+                {/* Data Section */}
+                <div className="-mx-4 sm:-mx-6 mt-4">
+                  <div
+                    className="relative group bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                    onClick={() => setIsDataExpanded(!isDataExpanded)}
+                  >
+                    <div className="flex justify-between items-center px-4 sm:px-6 py-2">
+                      <span className="text-md font-semibold">
+                        Data
+                      </span>
+                      {isDataExpanded ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </div>
                   </div>
                 </div>
+                {isDataExpanded && (
+                  <div className={`mt-2 ${isFullWidth ? 'pr-4' : 'px-4 sm:px-6'}`}>
+                    {sampleTranscript.map((line, index) => (
+                      <p key={index} className="text-sm">
+                        <span className="font-semibold">{line.speaker}: </span>
+                        {line.text}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
-              {isDataExpanded && (
-                <div className="mt-2">
-                  {selectedItemData?.data?.map((line, index) => (
-                    <p key={index} className="text-sm">
-                      <span className="font-semibold">{line.speaker}: </span>
-                      {line.text}
-                    </p>
-                  )) || <p>No data available</p>}
-                </div>
-              )}
 
-              {/* Score Results Section */}
-              <div className="-mx-4 sm:-mx-6 mb-4">
-                <div className="px-4 sm:px-6 py-2 bg-muted">
-                  <h4 className="text-md font-semibold">Score Results</h4>
+              <div className={`${isFullWidth ? 'w-1/2' : 'mt-4'}`}>
+                {/* Score Results Section */}
+                <div className="-mx-4 sm:-mx-6 mb-4">
+                  <div className="px-4 sm:px-6 py-2 bg-muted">
+                    <h4 className="text-md font-semibold">Score Results</h4>
+                  </div>
                 </div>
-              </div>
-              <div>
-                {selectedItemData.scoreResults?.map((section, sectionIndex) => (
-                  <div key={sectionIndex} className="mb-6">
-                    <div className="-mx-4 sm:-mx-6 mb-4">
-                      <div className="px-4 sm:px-6 py-2">
-                        <h4 className="text-md font-semibold">{section.section}</h4>
+                <div>
+                  {selectedItemData.scoreResults?.map((section, sectionIndex) => (
+                    <div key={sectionIndex} className="mb-6">
+                      <div className="-mx-4 sm:-mx-6 mb-4">
+                        <div className="px-4 sm:px-6 py-2">
+                          <h4 className="text-md font-semibold">{section.section}</h4>
+                        </div>
+                        <hr className="border-t border-border" />
                       </div>
-                      <hr className="border-t border-border" />
+                      <div>
+                        {section.scores.map((score, scoreIndex) => (
+                          <React.Fragment key={scoreIndex}>
+                            {renderScoreResult(score)}
+                            {scoreIndex < section.scores.length - 1 && (
+                              <hr className="my-2 border-t border-border" />
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </div>
                     </div>
-                    <div>
-                      {section.scores.map((score, scoreIndex) => (
-                        <React.Fragment key={scoreIndex}>
-                          {renderScoreResult(score)}
-                          {scoreIndex < section.scores.length - 1 && (
-                            <hr className="my-2 border-t border-border" />
-                          )}
-                        </React.Fragment>
-                      ))}
-                    </div>
-                  </div>
-                )) || <p>No score results available</p>}
+                  )) || <p>No score results available</p>}
+                </div>
               </div>
             </div>
           )}
@@ -767,34 +827,62 @@ export default function FeedbackDashboard() {
       : 'bg-false text-primary-foreground w-16 justify-center';
   };
 
-  // Update the initialization of feedbackItems
-  useEffect(() => {
-    setFeedbackItems(initialFeedbackItems);
-  }, []);
+  const handleCloseQueue = () => {
+    router.push('/feedback-queues')
+  }
+
+  const renderQueueSummary = () => (
+    <div className="mb-6">
+      <div className="flex justify-between items-center mb-4">
+        <div>
+          <h2 className="text-2xl font-semibold">{queueData.name}</h2>
+          <p className="text-sm text-muted-foreground">
+            Started {formatDistanceToNow(parseISO(queueData.started), { addSuffix: true })}
+          </p>
+        </div>
+        <Button variant="ghost" size="icon" onClick={handleCloseQueue}>
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="w-1/4">
+          <p className="text-sm font-medium">Scores</p>
+          <p>{queueData.scores}</p>
+        </div>
+        <div className="w-1/4">
+          <p className="text-sm font-medium">Last Updated</p>
+          <p>{formatDistanceToNow(parseISO(queueData.date), { addSuffix: true })}</p>
+        </div>
+        <div className="w-1/2">
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs">
+              <div className="font-semibold">Progress: {queueData.progress}%</div>
+              <div>Elapsed Time: {queueData.elapsedTime}</div>
+            </div>
+            <div className="relative w-full h-6 bg-neutral rounded-full">
+              <div
+                className="absolute top-0 left-0 h-full bg-primary flex items-center pl-2 text-xs text-primary-foreground font-medium rounded-full"
+                style={{ width: `${queueData.progress}%` }}
+              >
+                {queueData.progress}%
+              </div>
+            </div>
+            <div className="flex justify-between text-xs">
+              <div>{queueData.processedItems}/{queueData.totalItems}</div>
+              <div>ETA: {queueData.estimatedTimeRemaining}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <div className="space-y-4 h-full flex flex-col">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 sm:space-x-4">
-        <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
-          <Select onValueChange={(value) => setSelectedScorecard(value === "all" ? null : value)}>
-            <SelectTrigger className="w-full sm:w-[280px] border border-secondary">
-              <SelectValue placeholder="Scorecard" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Scorecards</SelectItem>
-              <SelectItem value="SelectQuote Term Life v1">SelectQuote Term Life v1</SelectItem>
-              <SelectItem value="CS3 Nexstar v1">CS3 Nexstar v1</SelectItem>
-              <SelectItem value="CS3 Services v2">CS3 Services v2</SelectItem>
-              <SelectItem value="CS3 Audigy">CS3 Audigy</SelectItem>
-              <SelectItem value="AW IB Sales">AW IB Sales</SelectItem>
-              {/* Add more SelectItem components as needed */}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex space-x-2">
-          <FilterControl onFilterChange={handleFilterChange} availableFields={availableFields} />
-          <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} options={FEEDBACK_TIME_RANGE_OPTIONS} />
-        </div>
+      {renderQueueSummary()}
+
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-semibold">{queueData.items} Items</h2>
       </div>
 
       <div className="flex-grow flex flex-col overflow-hidden pb-2">
@@ -810,11 +898,11 @@ export default function FeedbackDashboard() {
                   <TableRow>
                     <TableHead className="w-[50%]">Item</TableHead>
                     <TableHead className="w-[20%] text-right">Scores</TableHead>
-                    <TableHead className="w-[30%] text-right">Feedback</TableHead>
+                    <TableHead className="w-[30%] text-right">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredItems.map((item) => (
+                  {feedbackItems.map((item) => (
                     <TableRow 
                       key={item.id} 
                       onClick={() => handleItemClick(item.id)} 
@@ -825,9 +913,9 @@ export default function FeedbackDashboard() {
                           <div className="flex justify-between items-start mb-2">
                             <div className="font-semibold">{item.scorecard}</div>
                             <Badge 
-                              className={getFeedbackBadgeClass(item.hasFeedback)}
+                              className={getBadgeVariant(item.status)}
                             >
-                              {item.hasFeedback ? 'Yes' : 'No'}
+                              {item.status}
                             </Badge>
                           </div>
                           <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
@@ -841,9 +929,9 @@ export default function FeedbackDashboard() {
                       <TableCell className="text-right">{item.scoreCount}</TableCell>
                       <TableCell className="text-right">
                         <Badge 
-                          className={getFeedbackBadgeClass(item.hasFeedback)}
+                          className={getBadgeVariant(item.status)}
                         >
-                          {item.hasFeedback ? 'Yes' : 'No'}
+                          {item.status}
                         </Badge>
                       </TableCell>
                     </TableRow>

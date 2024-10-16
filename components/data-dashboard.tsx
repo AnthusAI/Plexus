@@ -97,7 +97,13 @@ const sampleTranscript = [
   { speaker: "Caller", text: "Hi Johnny, I'm calling about an issue with my recent order. It hasn't arrived yet and it's been over a week." },
   { speaker: "Agent", text: "I apologize for the inconvenience. I'd be happy to look into that for you. May I have your order number, please?" },
   { speaker: "Caller", text: "Sure, it's ORDER123456." },
-  // ... (add more transcript lines as needed)
+  { speaker: "Agent", text: "Thank you. I'm checking our system now. It looks like there was a slight delay in processing your order due to an inventory issue. However, I can see that it has now been shipped and is on its way to you." },
+  { speaker: "Caller", text: "Oh, I see. When can I expect to receive it?" },
+  { speaker: "Agent", text: "Based on the shipping information, you should receive your order within the next 2-3 business days. I apologize again for the delay. Is there anything else I can help you with today?" },
+  { speaker: "Caller", text: "No, that's all. Thank you for the information." },
+  { speaker: "Agent", text: "You're welcome. I appreciate your patience and understanding. If you have any further questions or concerns, please don't hesitate to call us back. Have a great day!" },
+  { speaker: "Caller", text: "You too, goodbye." },
+  { speaker: "Agent", text: "Goodbye and thank you for choosing our service." },
 ];
 
 const sampleScoreResults = [
@@ -431,144 +437,148 @@ export default function DataDashboard() {
         </CardHeader>
         <CardContent className="flex-grow overflow-auto px-4 sm:px-6 pb-4">
           {selectedItem && (
-            <div className="space-y-4">
-              {/* Metadata Section */}
-              <div className="-mx-4 sm:-mx-6">
-                <div
-                  className="relative group bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                  onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
-                >
-                  <div className="flex justify-between items-center px-4 sm:px-6 py-2">
-                    <span className="text-md font-semibold">
-                      Metadata
-                    </span>
-                    {isMetadataExpanded ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
+            <div className={`${isFullWidth ? 'flex gap-16' : ''}`}>
+              <div className={`${isFullWidth ? 'w-1/2' : ''}`}>
+                {/* Metadata Section */}
+                <div className="-mx-4 sm:-mx-6 mb-4">
+                  <div
+                    className="relative group bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                    onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
+                  >
+                    <div className="flex justify-between items-center px-4 sm:px-6 py-2">
+                      <span className="text-md font-semibold">
+                        Metadata
+                      </span>
+                      {isMetadataExpanded ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-              {isMetadataExpanded && (
-                <div className="mt-2">
-                  <Table>
-                    <TableBody>
-                      {sampleMetadata.map((meta, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium pl-0">{meta.key}</TableCell>
-                          <TableCell className="text-right pr-0">{meta.value}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-              
-              {/* Data Section */}
-              <div className="-mx-4 sm:-mx-6">
-                <div
-                  className="relative group bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                  onClick={() => setIsDataExpanded(!isDataExpanded)}
-                >
-                  <div className="flex justify-between items-center px-4 sm:px-6 py-2">
-                    <span className="text-md font-semibold">
-                      Data
-                    </span>
-                    {isDataExpanded ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
+                {isMetadataExpanded && (
+                  <div className={`mt-2 ${isFullWidth ? 'pr-4' : 'px-4 sm:px-6'}`}>
+                    <Table>
+                      <TableBody>
+                        {sampleMetadata.map((meta, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="font-medium pl-0">{meta.key}</TableCell>
+                            <TableCell className="text-right pr-0">{meta.value}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+                
+                {/* Data Section */}
+                <div className="-mx-4 sm:-mx-6 mt-4">
+                  <div
+                    className="relative group bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                    onClick={() => setIsDataExpanded(!isDataExpanded)}
+                  >
+                    <div className="flex justify-between items-center px-4 sm:px-6 py-2">
+                      <span className="text-md font-semibold">
+                        Data
+                      </span>
+                      {isDataExpanded ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </div>
                   </div>
                 </div>
+                {isDataExpanded && (
+                  <div className={`mt-2 ${isFullWidth ? 'pr-4' : 'px-4 sm:px-6'}`}>
+                    {sampleTranscript.map((line, index) => (
+                      <p key={index} className="text-sm">
+                        <span className="font-semibold">{line.speaker}: </span>
+                        {line.text}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
-              {isDataExpanded && (
-                <div className="mt-2">
-                  {sampleTranscript.map((line, index) => (
-                    <p key={index} className="text-sm">
-                      <span className="font-semibold">{line.speaker}: </span>
-                      {line.text}
-                    </p>
+
+              <div className={`${isFullWidth ? 'w-1/2' : 'mt-4'}`}>
+                {/* Score Results Section */}
+                <div className="-mx-4 sm:-mx-6 mb-4">
+                  <div className="px-4 sm:px-6 py-2 bg-muted">
+                    <h4 className="text-md font-semibold">Score Results</h4>
+                  </div>
+                </div>
+                <div>
+                  {sampleScoreResults.map((section, sectionIndex) => (
+                    <div key={sectionIndex} className="mb-6">
+                      <div className="-mx-4 sm:-mx-6 mb-4">
+                        <div className="px-4 sm:px-6 py-2">
+                          <h4 className="text-md font-semibold">{section.section}</h4>
+                        </div>
+                        <hr className="border-t border-border" />
+                      </div>
+                      <div>
+                        {section.scores.map((score, scoreIndex) => (
+                          <React.Fragment key={scoreIndex}>
+                            <div className="py-2 border-b last:border-b-0">
+                              <div className="flex justify-between items-center mb-1">
+                                <div className="flex items-center">
+                                  <h5 className="text-sm font-medium">{score.name}</h5>
+                                  <div className="inline-flex items-center ml-1">
+                                    <Link href={`/scorecards?score=${encodeURIComponent(score.name)}`} passHref>
+                                      <Button variant="ghost" size="sm" className="p-0 h-auto translate-y-[2px]" title={`More info about ${score.name}`}>
+                                        <Info className="h-4 w-4 text-muted-foreground" />
+                                      </Button>
+                                    </Link>
+                                  </div>
+                                </div>
+                                <Badge className={score.value.toLowerCase() === 'yes' 
+                                  ? 'bg-true text-primary-foreground w-16 justify-center' 
+                                  : 'bg-false text-primary-foreground w-16 justify-center'}>
+                                  {score.value}
+                                </Badge>
+                              </div>
+                              <div className="relative">
+                                <div 
+                                  ref={(el) => {
+                                    if (el) {
+                                      textRef.current[score.name] = el;
+                                    }
+                                  }}
+                                  className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
+                                  style={{ 
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: '2',
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden',
+                                    ...(expandedExplanations.includes(score.name) ? { WebkitLineClamp: 'unset', display: 'block' } : {})
+                                  }}
+                                  onClick={() => toggleExplanation(score.name)}
+                                >
+                                  <ReactMarkdown>{score.explanation}</ReactMarkdown>
+                                </div>
+                                {showExpandButton[score.name] && (
+                                  <Button 
+                                    variant="link" 
+                                    size="sm" 
+                                    onClick={() => toggleExplanation(score.name)}
+                                    className="absolute bottom-0 right-0 px-0 py-1 h-auto bg-white dark:bg-gray-800"
+                                  >
+                                    {expandedExplanations.includes(score.name) 
+                                      ? <ChevronUp className="h-3 w-3 inline ml-1" />
+                                      : <ChevronDown className="h-3 w-3 inline ml-1" />
+                                    }
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
-              )}
-              
-              {/* Score Results Section */}
-              <div className="-mx-4 sm:-mx-6 mb-4">
-                <div className="px-4 sm:px-6 py-2 bg-muted">
-                  <h4 className="text-md font-semibold">Score Results</h4>
-                </div>
-              </div>
-              <div>
-                {sampleScoreResults.map((section, sectionIndex) => (
-                  <div key={sectionIndex} className="mb-6">
-                    <div className="-mx-4 sm:-mx-6 mb-4">
-                      <div className="px-4 sm:px-6 py-2">
-                        <h4 className="text-md font-semibold">{section.section}</h4>
-                      </div>
-                      <hr className="border-t border-border" />
-                    </div>
-                    <div>
-                      {section.scores.map((score, scoreIndex) => (
-                        <React.Fragment key={scoreIndex}>
-                          <div className="py-2 border-b last:border-b-0">
-                            <div className="flex justify-between items-center mb-1">
-                              <div className="flex items-center">
-                                <h5 className="text-sm font-medium">{score.name}</h5>
-                                <div className="inline-flex items-center ml-1">
-                                  <Link href={`/scorecards?score=${encodeURIComponent(score.name)}`} passHref>
-                                    <Button variant="ghost" size="sm" className="p-0 h-auto translate-y-[2px]" title={`More info about ${score.name}`}>
-                                      <Info className="h-4 w-4 text-muted-foreground" />
-                                    </Button>
-                                  </Link>
-                                </div>
-                              </div>
-                              <Badge className={score.value.toLowerCase() === 'yes' 
-                                ? 'bg-true text-primary-foreground w-16 justify-center' 
-                                : 'bg-false text-primary-foreground w-16 justify-center'}>
-                                {score.value}
-                              </Badge>
-                            </div>
-                            <div className="relative">
-                              <div 
-                                ref={(el) => {
-                                  if (el) {
-                                    textRef.current[score.name] = el;
-                                  }
-                                }}
-                                className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
-                                style={{ 
-                                  display: '-webkit-box',
-                                  WebkitLineClamp: '2',
-                                  WebkitBoxOrient: 'vertical',
-                                  overflow: 'hidden',
-                                  ...(expandedExplanations.includes(score.name) ? { WebkitLineClamp: 'unset', display: 'block' } : {})
-                                }}
-                                onClick={() => toggleExplanation(score.name)}
-                              >
-                                <ReactMarkdown>{score.explanation}</ReactMarkdown>
-                              </div>
-                              {showExpandButton[score.name] && (
-                                <Button 
-                                  variant="link" 
-                                  size="sm" 
-                                  onClick={() => toggleExplanation(score.name)}
-                                  className="absolute bottom-0 right-0 px-0 py-1 h-auto bg-white dark:bg-gray-800"
-                                >
-                                  {expandedExplanations.includes(score.name) 
-                                    ? <ChevronUp className="h-3 w-3 inline ml-1" />
-                                    : <ChevronDown className="h-3 w-3 inline ml-1" />
-                                  }
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        </React.Fragment>
-                      ))}
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           )}
