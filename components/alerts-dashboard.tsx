@@ -245,7 +245,7 @@ function renderSelectedAlert({
   getRelativeTime,
   getSeverityColor
 }: {
-  alerts: typeof alerts;
+  alerts: { id: number; message: string; source: string; date: string; status: string; severity: string }[]; // Explicit type annotation
   selectedAlert: number | null;
   isFullWidth: boolean;
   isNarrowViewport: boolean;
