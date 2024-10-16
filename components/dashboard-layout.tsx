@@ -84,12 +84,12 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   const menuItems = [
     { name: "Activity", icon: Activity, path: "/activity" },
     { name: "Alerts", icon: Siren, path: "/alerts" },
-    { name: "Items", icon: AudioLines, path: "/items" },
     { name: "Feedback", icon: Inbox, path: "/feedback-queues" },
+    { name: "Items", icon: AudioLines, path: "/items" },
     { name: "Reports", icon: FileBarChart, path: "/reports" },
-    { name: "Scorecards", icon: ListTodo, path: "/scorecards" },
     { name: "Experiments", icon: FlaskConical, path: "/experiments" },
     { name: "Analysis", icon: Sparkles, path: "/analysis" },
+    { name: "Scorecards", icon: ListTodo, path: "/scorecards" },
     { name: "Data", icon: Database, path: "/data" },
     { name: "Settings", icon: Settings, path: "/settings" },
   ]
