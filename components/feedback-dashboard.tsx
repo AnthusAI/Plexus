@@ -102,6 +102,7 @@ interface FeedbackItem {
   hasFeedback: boolean;
   scoreCount: number;
   scoreResults?: typeof sampleScoreResults;  // Make this optional
+  metadata?: Array<{ key: string; value: string }>;  // Add this line
 }
 
 // Now, let's update the initialFeedbackItems declaration
