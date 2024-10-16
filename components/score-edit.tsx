@@ -9,8 +9,10 @@ import { Label } from "@/components/ui/label"
 import KeywordClassifierComponent from './score-types/keyword-classifier'
 import LangGraphScoreComponent from './score-types/lang-graph-score'
 import ProgrammaticScoreComponent from './score-types/programmatic-score'
+import ComputedScoreComponent from './score-types/computed-score'
 import FuzzyMatchClassifierComponent from './score-types/fuzzy-match-classifier'
 import SemanticClassifierComponent from './score-types/semantic-classifier'
+import SimpleLLMScoreComponent from './score-types/simple-llm-score'
 
 interface ScoreEditProps {
   scorecardId: string
@@ -152,12 +154,16 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
     switch (score.type) {
       case 'ProgrammaticScore':
         return <ProgrammaticScoreComponent score={score} onChange={setScore} />
+      case 'ComputedScore':
+        return <ComputedScoreComponent score={score} onChange={setScore} />
       case 'KeywordClassifier':
         return <KeywordClassifierComponent score={score} onChange={setScore} />
       case 'FuzzyMatchClassifier':
         return <FuzzyMatchClassifierComponent score={score} onChange={setScore} />
       case 'SemanticClassifier':
         return <SemanticClassifierComponent score={score} onChange={setScore} />
+      case 'SimpleLLMScore':
+        return <SimpleLLMScoreComponent score={score} onChange={setScore} />
       case 'LangGraphScore':
         return <LangGraphScoreComponent score={score} onChange={setScore} />
       default:
@@ -198,10 +204,12 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ProgrammaticScore">ProgrammaticScore</SelectItem>
+                  <SelectItem value="ComputedScore">ComputedScore</SelectItem>
                   <SelectItem value="KeywordClassifier">KeywordClassifier</SelectItem>
                   <SelectItem value="FuzzyMatchClassifier">FuzzyMatchClassifier</SelectItem>
                   <SelectItem value="SemanticClassifier">SemanticClassifier</SelectItem>
                   <SelectItem value="LangGraphScore">LangGraphScore</SelectItem>
+                  <SelectItem value="SimpleLLMScore">SimpleLLMScore</SelectItem>
                 </SelectContent>
               </Select>
             </div>

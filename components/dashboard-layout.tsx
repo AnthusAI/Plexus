@@ -84,7 +84,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   const menuItems = [
     { name: "Activity", icon: Activity, path: "/activity" },
     { name: "Alerts", icon: Siren, path: "/alerts" },
-    { name: "Feedback", icon: Inbox, path: "/feedback-queues" },
+    { name: "Feedback", icon: MessageCircleMore, path: "/feedback-queues" },
     { name: "Items", icon: AudioLines, path: "/items" },
     { name: "Reports", icon: FileBarChart, path: "/reports" },
     { name: "Experiments", icon: FlaskConical, path: "/experiments" },

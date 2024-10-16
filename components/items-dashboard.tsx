@@ -50,36 +50,36 @@ interface Item {
 
 // Rename this to initialItems
 const initialItems: Item[] = [
-  { id: 30, scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "new", results: 0, inferences: 0, cost: "$0.000" },
-  { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "new", results: 0, inferences: 0, cost: "$0.000" },
-  { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "new", results: 0, inferences: 0, cost: "$0.000" },
-  { id: 27, scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), status: "error", results: 2, inferences: 4, cost: "$0.005" },
-  { id: 26, scorecard: "SelectQuote Term Life v1", score: 83, date: relativeDate(0, 1, 30), status: "scoring...", results: 6, inferences: 24, cost: "$0.031" },
-  { id: 25, scorecard: "AW IB Sales", score: 94, date: relativeDate(0, 2, 0), status: "scored", results: 19, inferences: 152, cost: "$0.199" },
-  { id: 24, scorecard: "CS3 Audigy", score: 86, date: relativeDate(0, 3, 0), status: "scored", results: 17, inferences: 68, cost: "$0.089" },
-  { id: 23, scorecard: "CS3 Services v2", score: 79, date: relativeDate(0, 4, 0), status: "scored", results: 16, inferences: 32, cost: "$0.042" },
-  { id: 22, scorecard: "CS3 Nexstar v1", score: 91, date: relativeDate(0, 5, 0), status: "scored", results: 17, inferences: 68, cost: "$0.089" },
-  { id: 21, scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(0, 6, 0), status: "scored", results: 13, inferences: 52, cost: "$0.068" },
-  { id: 20, scorecard: "CS3 Services v2", score: 82, date: relativeDate(1, 0, 0), status: "scored", results: 15, inferences: 30, cost: "$0.039" },
-  { id: 19, scorecard: "AW IB Sales", score: 93, date: relativeDate(1, 2, 0), status: "scored", results: 18, inferences: 144, cost: "$0.188" },
-  { id: 18, scorecard: "CS3 Audigy", score: 87, date: relativeDate(1, 4, 0), status: "scored", results: 16, inferences: 64, cost: "$0.084" },
-  { id: 17, scorecard: "SelectQuote Term Life v1", score: 85, date: relativeDate(1, 6, 0), status: "scored", results: 14, inferences: 56, cost: "$0.073" },
-  { id: 16, scorecard: "CS3 Nexstar v1", score: 90, date: relativeDate(1, 8, 0), status: "scored", results: 18, inferences: 72, cost: "$0.094" },
-  { id: 15, scorecard: "CS3 Services v2", score: 81, date: relativeDate(1, 10, 0), status: "scored", results: 17, inferences: 34, cost: "$0.044" },
-  { id: 14, scorecard: "AW IB Sales", score: 95, date: relativeDate(1, 12, 0), status: "scored", results: 20, inferences: 160, cost: "$0.209" },
-  { id: 13, scorecard: "CS3 Audigy", score: 88, date: relativeDate(1, 14, 0), status: "scored", results: 18, inferences: 72, cost: "$0.094" },
-  { id: 12, scorecard: "SelectQuote Term Life v1", score: 84, date: relativeDate(1, 16, 0), status: "scored", results: 15, inferences: 60, cost: "$0.078" },
-  { id: 11, scorecard: "CS3 Nexstar v1", score: 92, date: relativeDate(1, 18, 0), status: "scored", results: 19, inferences: 76, cost: "$0.099" },
-  { id: 10, scorecard: "CS3 Services v2", score: 83, date: relativeDate(1, 20, 0), status: "scored", results: 18, inferences: 36, cost: "$0.047" },
-  { id: 9, scorecard: "AW IB Sales", score: 97, date: relativeDate(1, 22, 0), status: "scored", results: 21, inferences: 168, cost: "$0.219" },
-  { id: 8, scorecard: "CS3 Audigy", score: 89, date: relativeDate(2, 0, 0), status: "scored", results: 19, inferences: 76, cost: "$0.099" },
-  { id: 7, scorecard: "SelectQuote Term Life v1", score: 86, date: relativeDate(2, 2, 0), status: "scored", results: 16, inferences: 64, cost: "$0.084" },
-  { id: 6, scorecard: "CS3 Nexstar v1", score: 93, date: relativeDate(2, 4, 0), status: "scored", results: 20, inferences: 80, cost: "$0.104" },
-  { id: 5, scorecard: "CS3 Services v2", score: 84, date: relativeDate(2, 6, 0), status: "scored", results: 19, inferences: 38, cost: "$0.050" },
-  { id: 4, scorecard: "AW IB Sales", score: 98, date: relativeDate(2, 8, 0), status: "scored", results: 22, inferences: 176, cost: "$0.230" },
-  { id: 3, scorecard: "CS3 Audigy", score: 90, date: relativeDate(2, 10, 0), status: "scored", results: 20, inferences: 80, cost: "$0.104" },
-  { id: 2, scorecard: "SelectQuote Term Life v1", score: 87, date: relativeDate(2, 12, 0), status: "scored", results: 17, inferences: 68, cost: "$0.089" },
-  { id: 1, scorecard: "CS3 Nexstar v1", score: 94, date: relativeDate(2, 14, 0), status: "scored", results: 21, inferences: 84, cost: "$0.110" },
+  { id: 30, scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "New", results: 0, inferences: 0, cost: "$0.000" },
+  { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "New", results: 0, inferences: 0, cost: "$0.000" },
+  { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "New", results: 0, inferences: 0, cost: "$0.000" },
+  { id: 27, scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), status: "Error", results: 2, inferences: 4, cost: "$0.005" },
+  { id: 26, scorecard: "SelectQuote Term Life v1", score: 83, date: relativeDate(0, 1, 30), status: "Scoring", results: 6, inferences: 24, cost: "$0.031" },
+  { id: 25, scorecard: "AW IB Sales", score: 94, date: relativeDate(0, 2, 0), status: "Done", results: 19, inferences: 152, cost: "$0.199" },
+  { id: 24, scorecard: "CS3 Audigy", score: 86, date: relativeDate(0, 3, 0), status: "Done", results: 17, inferences: 68, cost: "$0.089" },
+  { id: 23, scorecard: "CS3 Services v2", score: 79, date: relativeDate(0, 4, 0), status: "Done", results: 16, inferences: 32, cost: "$0.042" },
+  { id: 22, scorecard: "CS3 Nexstar v1", score: 91, date: relativeDate(0, 5, 0), status: "Done", results: 17, inferences: 68, cost: "$0.089" },
+  { id: 21, scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(0, 6, 0), status: "Done", results: 13, inferences: 52, cost: "$0.068" },
+  { id: 20, scorecard: "CS3 Services v2", score: 82, date: relativeDate(1, 0, 0), status: "Done", results: 15, inferences: 30, cost: "$0.039" },
+  { id: 19, scorecard: "AW IB Sales", score: 93, date: relativeDate(1, 2, 0), status: "Done", results: 18, inferences: 144, cost: "$0.188" },
+  { id: 18, scorecard: "CS3 Audigy", score: 87, date: relativeDate(1, 4, 0), status: "Done", results: 16, inferences: 64, cost: "$0.084" },
+  { id: 17, scorecard: "SelectQuote Term Life v1", score: 85, date: relativeDate(1, 6, 0), status: "Done", results: 14, inferences: 56, cost: "$0.073" },
+  { id: 16, scorecard: "CS3 Nexstar v1", score: 90, date: relativeDate(1, 8, 0), status: "Done", results: 18, inferences: 72, cost: "$0.094" },
+  { id: 15, scorecard: "CS3 Services v2", score: 81, date: relativeDate(1, 10, 0), status: "Done", results: 17, inferences: 34, cost: "$0.044" },
+  { id: 14, scorecard: "AW IB Sales", score: 95, date: relativeDate(1, 12, 0), status: "Done", results: 20, inferences: 160, cost: "$0.209" },
+  { id: 13, scorecard: "CS3 Audigy", score: 88, date: relativeDate(1, 14, 0), status: "Done", results: 18, inferences: 72, cost: "$0.094" },
+  { id: 12, scorecard: "SelectQuote Term Life v1", score: 84, date: relativeDate(1, 16, 0), status: "Done", results: 15, inferences: 60, cost: "$0.078" },
+  { id: 11, scorecard: "CS3 Nexstar v1", score: 92, date: relativeDate(1, 18, 0), status: "Done", results: 19, inferences: 76, cost: "$0.099" },
+  { id: 10, scorecard: "CS3 Services v2", score: 83, date: relativeDate(1, 20, 0), status: "Done", results: 18, inferences: 36, cost: "$0.047" },
+  { id: 9, scorecard: "AW IB Sales", score: 97, date: relativeDate(1, 22, 0), status: "Done", results: 21, inferences: 168, cost: "$0.219" },
+  { id: 8, scorecard: "CS3 Audigy", score: 89, date: relativeDate(2, 0, 0), status: "Done", results: 19, inferences: 76, cost: "$0.099" },
+  { id: 7, scorecard: "SelectQuote Term Life v1", score: 86, date: relativeDate(2, 2, 0), status: "Done", results: 16, inferences: 64, cost: "$0.084" },
+  { id: 6, scorecard: "CS3 Nexstar v1", score: 93, date: relativeDate(2, 4, 0), status: "Done", results: 20, inferences: 80, cost: "$0.104" },
+  { id: 5, scorecard: "CS3 Services v2", score: 84, date: relativeDate(2, 6, 0), status: "Done", results: 19, inferences: 38, cost: "$0.050" },
+  { id: 4, scorecard: "AW IB Sales", score: 98, date: relativeDate(2, 8, 0), status: "Done", results: 22, inferences: 176, cost: "$0.230" },
+  { id: 3, scorecard: "CS3 Audigy", score: 90, date: relativeDate(2, 10, 0), status: "Done", results: 20, inferences: 80, cost: "$0.104" },
+  { id: 2, scorecard: "SelectQuote Term Life v1", score: 87, date: relativeDate(2, 12, 0), status: "Done", results: 17, inferences: 68, cost: "$0.089" },
+  { id: 1, scorecard: "CS3 Nexstar v1", score: 94, date: relativeDate(2, 14, 0), status: "Done", results: 21, inferences: 84, cost: "$0.110" },
 ];
 
 // Sort items by date, newest first
@@ -134,7 +134,7 @@ const sampleScoreResults = [
   {
     section: "Technical",
     scores: [
-      { name: "Scoreable Call", value: "Yes", explanation: "The call meets all criteria to be scored. This includes having clear audio, being of sufficient length, and containing relevant content for evaluation." },
+      { name: "Scoreable Call", value: "Yes", explanation: "The call meets all criteria to be scored. This includes having clear audio, being of sufficient length, and containing relevant content for evaluation.", allowFeedback: true },
       { name: "Call Efficiency", value: "Yes", explanation: `The agent managed the call time effectively while still addressing the customer's needs:
 
 **Proper Call Control:** The agent skillfully guided the conversation, keeping it on track without being abrupt or dismissive.
@@ -145,13 +145,13 @@ const sampleScoreResults = [
 
 **Effective Use of Tools:** The agent demonstrated proficiency with their systems, quickly accessing and updating information without causing undue delays.
 
-**Appropriate Small Talk:** The agent maintained a friendly demeanor while keeping small talk brief and relevant, striking a good balance between building rapport and maintaining efficiency.` },
+**Appropriate Small Talk:** The agent maintained a friendly demeanor while keeping small talk brief and relevant, striking a good balance between building rapport and maintaining efficiency.`, allowFeedback: true },
     ]
   },
   {
     section: "Sales",
     scores: [
-      { name: "Assumptive Close", value: "No", explanation: "The agent did not use an assumptive close technique. Instead, they used a more consultative approach, asking for the customer's decision rather than assuming it." },
+      { name: "Assumptive Close", value: "No", explanation: "The agent did not use an assumptive close technique. Instead, they used a more consultative approach, asking for the customer's decision rather than assuming it.", allowFeedback: true },
       { name: "Problem Resolution", value: "Yes", explanation: `The agent effectively resolved the customer's issue:
 
 **Issue Identification:** The agent quickly and accurately identified the core problem by asking probing questions and actively listening to the customer's responses.
@@ -162,7 +162,7 @@ const sampleScoreResults = [
 
 **Confirmation:** The agent verified that the solution met the customer's needs by asking for confirmation and addressing any lingering concerns.
 
-**Future Prevention:** The agent offered advice on how to prevent similar issues in the future, adding value beyond just solving the immediate problem.` },
+**Future Prevention:** The agent offered advice on how to prevent similar issues in the future, adding value beyond just solving the immediate problem.`, allowFeedback: true },
     ]
   },
   {
@@ -176,16 +176,16 @@ const sampleScoreResults = [
 
 **Encouragement:** The agent provided positive reinforcement throughout the call, praising the customer's efforts and decisions with comments like "That's a great question" and "You're on the right track."
 
-**Personalization:** The agent tailored their approach to the customer's specific situation, referencing previous interactions and using the customer's name naturally throughout the conversation.` },
-      { name: "Friendly Greeting", value: "Yes", explanation: "The agent provided a warm and professional greeting. They used a pleasant tone of voice, introduced themselves clearly, and made the customer feel welcome." },
-      { name: "Agent Offered Name", value: "Yes", explanation: "The agent clearly stated their name at the beginning of the call. This was done in a natural and friendly manner, helping to establish a personal connection with the customer." },
-      { name: "Temperature Check", value: "Yes", explanation: "The agent asked about the customer's satisfaction during the call. This was done at an appropriate time and in a way that invited honest feedback from the customer." },
+**Personalization:** The agent tailored their approach to the customer's specific situation, referencing previous interactions and using the customer's name naturally throughout the conversation.`, allowFeedback: true },
+      { name: "Friendly Greeting", value: "Yes", explanation: "The agent provided a warm and professional greeting. They used a pleasant tone of voice, introduced themselves clearly, and made the customer feel welcome.", allowFeedback: true },
+      { name: "Agent Offered Name", value: "Yes", explanation: "The agent clearly stated their name at the beginning of the call. This was done in a natural and friendly manner, helping to establish a personal connection with the customer.", allowFeedback: true },
+      { name: "Temperature Check", value: "Yes", explanation: "The agent asked about the customer's satisfaction during the call. This was done at an appropriate time and in a way that invited honest feedback from the customer.", allowFeedback: true },
     ]
   },
   {
     section: "Compliance",
     scores: [
-      { name: "DNC Requested", value: "No", explanation: "The customer did not request to be added to the Do Not Call list. The agent properly handled any questions about contact preferences without any DNC requests being made." },
+      { name: "DNC Requested", value: "No", explanation: "The customer did not request to be added to the Do Not Call list. The agent properly handled any questions about contact preferences without any DNC requests being made.", allowFeedback: true },
       { 
         name: "Profanity", 
         value: "No", 
@@ -208,12 +208,30 @@ const sampleScoreResults = [
             timestamp: relativeDate(0, 0, 10),
             isSystem: true
           }
-        ]
+        ],
+        allowFeedback: true
       },
-      { name: "Agent Offered Legal Advice", value: "No", explanation: "The agent did not offer any legal advice during the call, which is outside their scope of expertise and could potentially lead to compliance issues." },
-      { name: "Agent Offered Guarantees", value: "No", explanation: "The agent did not make any unauthorized guarantees or promises that could be construed as binding commitments by the company." },
+      { name: "Agent Offered Legal Advice", value: "No", explanation: "The agent did not offer any legal advice during the call, which is outside their scope of expertise and could potentially lead to compliance issues.", allowFeedback: true },
+      { name: "Agent Offered Guarantees", value: "No", explanation: "The agent did not make any unauthorized guarantees or promises that could be construed as binding commitments by the company.", allowFeedback: true },
     ]
-  }
+  },
+  {
+    section: "Computed Scores",
+    scores: [
+      { 
+        name: "Compliance", 
+        value: "94%", 
+        explanation: "This score represents the overall compliance level of the interaction. It takes into account factors such as adherence to legal requirements, company policies, and industry regulations. A high score indicates that the agent successfully followed compliance guidelines throughout the call.",
+        allowFeedback: false
+      },
+      { 
+        name: "Soft Skills", 
+        value: "87%", 
+        explanation: "This score evaluates the agent's interpersonal abilities and communication effectiveness. It considers aspects such as empathy, active listening, rapport building, and problem-solving skills. A high score suggests that the agent demonstrated strong soft skills, enhancing the overall customer experience.",
+        allowFeedback: false
+      },
+    ]
+  },
 ];
 
 const renderRichText = (text: string) => {
@@ -356,12 +374,12 @@ export default function ItemsDashboard() {
 
   const getBadgeVariant = (status: string) => {
     switch (status) {
-      case 'new':
-      case 'scoring...':
+      case 'New':
+      case 'Scoring...':
         return 'bg-neutral text-primary-foreground h-6';
-      case 'scored':
+      case 'Done':
         return 'bg-true text-primary-foreground h-6';
-      case 'error':
+      case 'Error':
         return 'bg-destructive text-destructive-foreground dark:text-primary-foreground h-6';
       default:
         return 'bg-muted text-muted-foreground h-6';
@@ -404,7 +422,8 @@ export default function ItemsDashboard() {
     setNewAnnotation({ 
       value: score.value, 
       explanation: score.explanation, 
-      annotation: "" 
+      annotation: "",
+      allowFeedback: score.allowFeedback
     });
   };
 
@@ -419,7 +438,7 @@ export default function ItemsDashboard() {
     }
   }, []);
 
-  const renderScoreResult = (score: any, isAnnotation = false) => (
+  const renderScoreResult = (score: Score, isAnnotation = false) => (
     <div className={`py-2 ${isAnnotation ? 'pl-4 border-l-2 ' + (score.isSystem ? 'border-secondary' : 'border-primary') : 'border-b last:border-b-0'}`}>
       {isAnnotation ? (
         <>
@@ -474,33 +493,39 @@ export default function ItemsDashboard() {
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              {(score.isAnnotated || feedbackItems[score.name]?.length > 0) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => toggleAnnotations(score.name)}
-                  className={`text-xs bg-secondary text-secondary-foreground hover:bg-secondary hover:text-secondary-foreground`}
-                >
-                  <MessageCircleMore className="h-4 w-4" />
-                </Button>
+              {score.allowFeedback && (
+                <>
+                  {(score.isAnnotated || feedbackItems[score.name]?.length > 0) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleAnnotations(score.name)}
+                      className={`text-xs bg-secondary text-secondary-foreground hover:bg-secondary hover:text-secondary-foreground`}
+                    >
+                      <MessageCircleMore className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleThumbsUp(score.name)}
+                    className={`text-xs ${thumbedUpScores.has(score.name) ? 'bg-true text-primary-foreground hover:bg-true hover:text-primary-foreground' : 'hover:bg-muted hover:text-muted-foreground'}`}
+                  >
+                    <ThumbsUp className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleThumbsDown(score.name)}
+                    className="text-xs hover:bg-muted hover:text-muted-foreground"
+                  >
+                    <ThumbsDown className="h-4 w-4" />
+                  </Button>
+                </>
               )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleThumbsUp(score.name)}
-                className={`text-xs ${thumbedUpScores.has(score.name) ? 'bg-true text-primary-foreground hover:bg-true hover:text-primary-foreground' : 'hover:bg-muted hover:text-muted-foreground'}`}
-              >
-                <ThumbsUp className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleThumbsDown(score.name)}
-                className="text-xs hover:bg-muted hover:text-muted-foreground"
-              >
-                <ThumbsDown className="h-4 w-4" />
-              </Button>
-              <Badge className={getValueBadgeClass(score.value)}>{score.value}</Badge>
+              <Badge className={score.value.includes('%') ? 'bg-primary text-primary-foreground w-16 justify-center' : getValueBadgeClass(score.value)}>
+                {score.value}
+              </Badge>
             </div>
           </div>
           <div className="relative">
@@ -623,7 +648,7 @@ export default function ItemsDashboard() {
 
     // Close the form and reset the new annotation state
     setShowNewAnnotationForm(null);
-    setNewAnnotation({ value: "", explanation: "", annotation: "" });
+    setNewAnnotation({ value: "", explanation: "", annotation: "", allowFeedback: false });
   };
 
   const toggleNewAnnotationForm = (scoreName: string) => {
@@ -652,7 +677,7 @@ export default function ItemsDashboard() {
     }
 
     // Reset the new annotation state
-    setNewAnnotation({ value: "", explanation: "", annotation: "" });
+    setNewAnnotation({ value: "", explanation: "", annotation: "", allowFeedback: false });
   };
 
   const handleThumbsDown = (scoreName: string) => {
@@ -841,7 +866,7 @@ function renderSelectedItem({
   setIsErrorExpanded: (isExpanded: boolean) => void;
   getBadgeVariant: (status: string) => string;
   getRelativeTime: (date: string) => string;
-  renderScoreResult: (score: any) => JSX.Element;
+  renderScoreResult: (score: Score) => JSX.Element;
 }) {
   const selectedItemData = items.find(item => item.id === selectedItem);
   const isErrorStatus = selectedItemData?.status === 'error';
