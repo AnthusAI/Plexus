@@ -218,6 +218,8 @@ export default function ActivityDashboard() {
   const [selectedActivity, setSelectedActivity] = useState<ActivityData | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
+  const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
+  const [selectedScore, setSelectedScore] = useState<string | null>(null)
 
   const activityListRef = useRef<HTMLDivElement>(null)
 
@@ -398,28 +400,58 @@ export default function ActivityDashboard() {
     // Implement the logic for handling all default time ranges and custom date ranges
   }
 
+  const handleScorecardChange = (value: string) => {
+    const newScorecardValue = value === "all" ? null : value
+    setSelectedScorecard(newScorecardValue)
+    setSelectedScore(null) // Always reset score selection when scorecard changes
+  }
+
+  const handleScoreChange = (value: string) => {
+    setSelectedScore(value === "all" ? null : value)
+  }
+
   return (
     <div className="space-y-4 h-full flex flex-col">
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Select>
-            <SelectTrigger className="w-[180px] border border-secondary">
+        <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
+          <Select onValueChange={handleScorecardChange}>
+            <SelectTrigger className="w-full sm:w-[280px]">
               <SelectValue placeholder="Scorecard" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="scorecard1">Scorecard 1</SelectItem>
-              <SelectItem value="scorecard2">Scorecard 2</SelectItem>
-              <SelectItem value="scorecard3">Scorecard 3</SelectItem>
+              <SelectItem value="all">All Scorecards</SelectItem>
+              <SelectItem value="SelectQuote Term Life v1">SelectQuote Term Life v1</SelectItem>
+              <SelectItem value="CS3 Nexstar v1">CS3 Nexstar v1</SelectItem>
+              <SelectItem value="CS3 Services v2">CS3 Services v2</SelectItem>
+              <SelectItem value="CS3 Audigy">CS3 Audigy</SelectItem>
+              <SelectItem value="AW IB Sales">AW IB Sales</SelectItem>
             </SelectContent>
           </Select>
-          <Select>
-            <SelectTrigger className="w-[180px] border border-secondary">
+          <Select 
+            onValueChange={handleScoreChange}
+            disabled={!selectedScorecard}
+          >
+            <SelectTrigger className="w-full sm:w-[280px]">
               <SelectValue placeholder="Score" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="score1">Score 1</SelectItem>
-              <SelectItem value="score2">Score 2</SelectItem>
-              <SelectItem value="score3">Score 3</SelectItem>
+              <SelectItem value="all">All Scores</SelectItem>
+              {selectedScorecard && (
+                <>
+                  <SelectItem value="Scoreable Call">Scoreable Call</SelectItem>
+                  <SelectItem value="Call Efficiency">Call Efficiency</SelectItem>
+                  <SelectItem value="Assumptive Close">Assumptive Close</SelectItem>
+                  <SelectItem value="Problem Resolution">Problem Resolution</SelectItem>
+                  <SelectItem value="Rapport">Rapport</SelectItem>
+                  <SelectItem value="Friendly Greeting">Friendly Greeting</SelectItem>
+                  <SelectItem value="Agent Offered Name">Agent Offered Name</SelectItem>
+                  <SelectItem value="Temperature Check">Temperature Check</SelectItem>
+                  <SelectItem value="DNC Requested">DNC Requested</SelectItem>
+                  <SelectItem value="Profanity">Profanity</SelectItem>
+                  <SelectItem value="Agent Offered Legal Advice">Agent Offered Legal Advice</SelectItem>
+                  <SelectItem value="Agent Offered Guarantees">Agent Offered Guarantees</SelectItem>
+                </>
+              )}
             </SelectContent>
           </Select>
         </div>

@@ -24,6 +24,14 @@ import { Textarea } from "@/components/ui/textarea"
 import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
 import { Progress } from "@/components/ui/progress"
+import { MoveUpRight } from "lucide-react"
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import { ResponsiveContainer, PieChart, Pie } from "recharts"
+
+const chartConfig = {
+  positive: { label: "Positive", color: "var(--true)" },
+  negative: { label: "Negative", color: "var(--false)" },
+}
 
 // Get the current date and time
 const now = new Date();
@@ -37,36 +45,36 @@ const relativeDate = (days: number, hours: number, minutes: number) => {
 };
 
 const items = [
-  { id: 30, scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "new", results: 0, inferences: 0, cost: "$0.000", progress: 66, accuracyTrue: 58, accuracyFalse: 8, type: "Accuracy" },
-  { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "new", results: 0, inferences: 0, cost: "$0.000", progress: 50, accuracyTrue: 45, accuracyFalse: 5, type: "Consistency" },
-  { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "new", results: 0, inferences: 0, cost: "$0.000", progress: 80, accuracyTrue: 77, accuracyFalse: 3, type: "Accuracy" },
-  { id: 27, scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), status: "error", results: 2, inferences: 4, cost: "$0.005", progress: 100, accuracyTrue: 88, accuracyFalse: 12, type: "Accuracy" },
-  { id: 26, scorecard: "SelectQuote Term Life v1", score: 83, date: relativeDate(0, 1, 30), status: "scoring...", results: 6, inferences: 24, cost: "$0.031", progress: 100, accuracyTrue: 83, accuracyFalse: 17, type: "Accuracy" },
-  { id: 25, scorecard: "AW IB Sales", score: 94, date: relativeDate(0, 2, 0), status: "scored", results: 19, inferences: 152, cost: "$0.199", progress: 100, accuracyTrue: 94, accuracyFalse: 6, type: "Accuracy" },
-  { id: 24, scorecard: "CS3 Audigy", score: 86, date: relativeDate(0, 3, 0), status: "scored", results: 17, inferences: 68, cost: "$0.089", progress: 100, accuracyTrue: 86, accuracyFalse: 14, type: "Accuracy" },
-  { id: 23, scorecard: "CS3 Services v2", score: 79, date: relativeDate(0, 4, 0), status: "scored", results: 16, inferences: 32, cost: "$0.042", progress: 100, accuracyTrue: 79, accuracyFalse: 21, type: "Accuracy" },
-  { id: 22, scorecard: "CS3 Nexstar v1", score: 91, date: relativeDate(0, 5, 0), status: "scored", results: 17, inferences: 68, cost: "$0.089", progress: 100, accuracyTrue: 91, accuracyFalse: 9, type: "Accuracy" },
-  { id: 21, scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(0, 6, 0), status: "scored", results: 13, inferences: 52, cost: "$0.068", progress: 100, accuracyTrue: 89, accuracyFalse: 11, type: "Accuracy" },
-  { id: 20, scorecard: "CS3 Services v2", score: 82, date: relativeDate(1, 0, 0), status: "scored", results: 15, inferences: 30, cost: "$0.039", progress: 100, accuracyTrue: 75, accuracyFalse: 25, type: "Accuracy" },
-  { id: 19, scorecard: "AW IB Sales", score: 93, date: relativeDate(1, 2, 0), status: "scored", results: 18, inferences: 144, cost: "$0.188", progress: 100, accuracyTrue: 85, accuracyFalse: 15, type: "Accuracy" },
-  { id: 18, scorecard: "CS3 Audigy", score: 87, date: relativeDate(1, 4, 0), status: "scored", results: 16, inferences: 64, cost: "$0.084", progress: 100, accuracyTrue: 70, accuracyFalse: 30, type: "Accuracy" },
-  { id: 17, scorecard: "SelectQuote Term Life v1", score: 85, date: relativeDate(1, 6, 0), status: "scored", results: 14, inferences: 56, cost: "$0.073", progress: 100, accuracyTrue: 65, accuracyFalse: 35, type: "Accuracy" },
-  { id: 16, scorecard: "CS3 Nexstar v1", score: 90, date: relativeDate(1, 8, 0), status: "scored", results: 18, inferences: 72, cost: "$0.094", progress: 100, accuracyTrue: 80, accuracyFalse: 20, type: "Accuracy" },
-  { id: 15, scorecard: "CS3 Services v2", score: 81, date: relativeDate(1, 10, 0), status: "scored", results: 17, inferences: 34, cost: "$0.044", progress: 100, accuracyTrue: 70, accuracyFalse: 30, type: "Accuracy" },
-  { id: 14, scorecard: "AW IB Sales", score: 95, date: relativeDate(1, 12, 0), status: "scored", results: 20, inferences: 160, cost: "$0.209", progress: 100, accuracyTrue: 90, accuracyFalse: 10, type: "Accuracy" },
-  { id: 13, scorecard: "CS3 Audigy", score: 88, date: relativeDate(1, 14, 0), status: "scored", results: 18, inferences: 72, cost: "$0.094", progress: 100, accuracyTrue: 75, accuracyFalse: 25, type: "Accuracy" },
-  { id: 12, scorecard: "SelectQuote Term Life v1", score: 84, date: relativeDate(1, 16, 0), status: "scored", results: 15, inferences: 60, cost: "$0.078", progress: 100, accuracyTrue: 65, accuracyFalse: 35, type: "Accuracy" },
-  { id: 11, scorecard: "CS3 Nexstar v1", score: 92, date: relativeDate(1, 18, 0), status: "scored", results: 19, inferences: 76, cost: "$0.099", progress: 100, accuracyTrue: 85, accuracyFalse: 15, type: "Accuracy" },
-  { id: 10, scorecard: "CS3 Services v2", score: 83, date: relativeDate(1, 20, 0), status: "scored", results: 18, inferences: 36, cost: "$0.047", progress: 100, accuracyTrue: 70, accuracyFalse: 30, type: "Accuracy" },
-  { id: 9, scorecard: "AW IB Sales", score: 97, date: relativeDate(1, 22, 0), status: "scored", results: 21, inferences: 168, cost: "$0.219", progress: 100, accuracyTrue: 95, accuracyFalse: 5, type: "Accuracy" },
-  { id: 8, scorecard: "CS3 Audigy", score: 89, date: relativeDate(2, 0, 0), status: "scored", results: 19, inferences: 76, cost: "$0.099", progress: 100, accuracyTrue: 80, accuracyFalse: 20, type: "Accuracy" },
-  { id: 7, scorecard: "SelectQuote Term Life v1", score: 86, date: relativeDate(2, 2, 0), status: "scored", results: 16, inferences: 64, cost: "$0.084", progress: 100, accuracyTrue: 75, accuracyFalse: 25, type: "Accuracy" },
-  { id: 6, scorecard: "CS3 Nexstar v1", score: 93, date: relativeDate(2, 4, 0), status: "scored", results: 20, inferences: 80, cost: "$0.104", progress: 100, accuracyTrue: 85, accuracyFalse: 15, type: "Accuracy" },
-  { id: 5, scorecard: "CS3 Services v2", score: 84, date: relativeDate(2, 6, 0), status: "scored", results: 19, inferences: 38, cost: "$0.050", progress: 100, accuracyTrue: 70, accuracyFalse: 30, type: "Accuracy" },
-  { id: 4, scorecard: "AW IB Sales", score: 98, date: relativeDate(2, 8, 0), status: "scored", results: 22, inferences: 176, cost: "$0.230", progress: 100, accuracyTrue: 95, accuracyFalse: 5, type: "Accuracy" },
-  { id: 3, scorecard: "CS3 Audigy", score: 90, date: relativeDate(2, 10, 0), status: "scored", results: 20, inferences: 80, cost: "$0.104", progress: 100, accuracyTrue: 80, accuracyFalse: 20, type: "Accuracy" },
-  { id: 2, scorecard: "SelectQuote Term Life v1", score: 87, date: relativeDate(2, 12, 0), status: "scored", results: 17, inferences: 68, cost: "$0.089", progress: 100, accuracyTrue: 75, accuracyFalse: 25, type: "Accuracy" },
-  { id: 1, scorecard: "CS3 Nexstar v1", score: 94, date: relativeDate(2, 14, 0), status: "scored", results: 21, inferences: 84, cost: "$0.110", progress: 100, accuracyTrue: 85, accuracyFalse: 15, type: "Accuracy" },
+  { id: 30, scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "new", results: 0, inferences: 0, cost: "$0.000", progress: 66, type: "Prompt Optimization" },
+  { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "new", results: 0, inferences: 0, cost: "$0.000", progress: 50, type: "Error Analysis" },
+  { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "new", results: 0, inferences: 0, cost: "$0.000", progress: 80, type: "Prompt Optimization" },
+  { id: 27, scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), status: "error", results: 2, inferences: 4, cost: "$0.005", progress: 100, type: "IAA Analysis" },
+  { id: 26, scorecard: "SelectQuote Term Life v1", score: 83, date: relativeDate(0, 1, 30), status: "scoring...", results: 6, inferences: 24, cost: "$0.031", progress: 100, type: "Hyperparameter Optimization" },
+  { id: 25, scorecard: "AW IB Sales", score: 94, date: relativeDate(0, 2, 0), status: "scored", results: 19, inferences: 152, cost: "$0.199", progress: 100, type: "Error Analysis" },
+  { id: 24, scorecard: "CS3 Audigy", score: 86, date: relativeDate(0, 3, 0), status: "scored", results: 17, inferences: 68, cost: "$0.089", progress: 100, type: "Prompt Optimization" },
+  { id: 23, scorecard: "CS3 Services v2", score: 79, date: relativeDate(0, 4, 0), status: "scored", results: 16, inferences: 32, cost: "$0.042", progress: 100, type: "Hyperparameter Optimization" },
+  { id: 22, scorecard: "CS3 Nexstar v1", score: 91, date: relativeDate(0, 5, 0), status: "scored", results: 17, inferences: 68, cost: "$0.089", progress: 100, type: "IAA Analysis" },
+  { id: 21, scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(0, 6, 0), status: "scored", results: 13, inferences: 52, cost: "$0.068", progress: 100, type: "Error Analysis" },
+  { id: 20, scorecard: "CS3 Services v2", score: 82, date: relativeDate(1, 0, 0), status: "scored", results: 15, inferences: 30, cost: "$0.039", progress: 100, type: "Prompt Optimization" },
+  { id: 19, scorecard: "AW IB Sales", score: 93, date: relativeDate(1, 2, 0), status: "scored", results: 18, inferences: 144, cost: "$0.188", progress: 100, type: "Error Analysis" },
+  { id: 18, scorecard: "CS3 Audigy", score: 87, date: relativeDate(1, 4, 0), status: "scored", results: 16, inferences: 64, cost: "$0.084", progress: 100, type: "Prompt Optimization" },
+  { id: 17, scorecard: "SelectQuote Term Life v1", score: 85, date: relativeDate(1, 6, 0), status: "scored", results: 14, inferences: 56, cost: "$0.073", progress: 100, type: "Hyperparameter Optimization" },
+  { id: 16, scorecard: "CS3 Nexstar v1", score: 90, date: relativeDate(1, 8, 0), status: "scored", results: 18, inferences: 72, cost: "$0.094", progress: 100, type: "IAA Analysis" },
+  { id: 15, scorecard: "CS3 Services v2", score: 81, date: relativeDate(1, 10, 0), status: "scored", results: 17, inferences: 34, cost: "$0.044", progress: 100, type: "Prompt Optimization" },
+  { id: 14, scorecard: "AW IB Sales", score: 95, date: relativeDate(1, 12, 0), status: "scored", results: 20, inferences: 160, cost: "$0.209", progress: 100, type: "Error Analysis" },
+  { id: 13, scorecard: "CS3 Audigy", score: 88, date: relativeDate(1, 14, 0), status: "scored", results: 18, inferences: 72, cost: "$0.094", progress: 100, type: "Prompt Optimization" },
+  { id: 12, scorecard: "SelectQuote Term Life v1", score: 84, date: relativeDate(1, 16, 0), status: "scored", results: 15, inferences: 60, cost: "$0.078", progress: 100, type: "Hyperparameter Optimization" },
+  { id: 11, scorecard: "CS3 Nexstar v1", score: 92, date: relativeDate(1, 18, 0), status: "scored", results: 19, inferences: 76, cost: "$0.099", progress: 100, type: "IAA Analysis" },
+  { id: 10, scorecard: "CS3 Services v2", score: 83, date: relativeDate(1, 20, 0), status: "scored", results: 18, inferences: 36, cost: "$0.047", progress: 100, type: "Prompt Optimization" },
+  { id: 9, scorecard: "AW IB Sales", score: 97, date: relativeDate(1, 22, 0), status: "scored", results: 21, inferences: 168, cost: "$0.219", progress: 100, type: "Error Analysis" },
+  { id: 8, scorecard: "CS3 Audigy", score: 89, date: relativeDate(2, 0, 0), status: "scored", results: 19, inferences: 76, cost: "$0.099", progress: 100, type: "Prompt Optimization" },
+  { id: 7, scorecard: "SelectQuote Term Life v1", score: 86, date: relativeDate(2, 2, 0), status: "scored", results: 16, inferences: 64, cost: "$0.084", progress: 100, type: "Hyperparameter Optimization" },
+  { id: 6, scorecard: "CS3 Nexstar v1", score: 93, date: relativeDate(2, 4, 0), status: "scored", results: 20, inferences: 80, cost: "$0.104", progress: 100, type: "IAA Analysis" },
+  { id: 5, scorecard: "CS3 Services v2", score: 84, date: relativeDate(2, 6, 0), status: "scored", results: 19, inferences: 38, cost: "$0.050", progress: 100, type: "Prompt Optimization" },
+  { id: 4, scorecard: "AW IB Sales", score: 98, date: relativeDate(2, 8, 0), status: "scored", results: 22, inferences: 176, cost: "$0.230", progress: 100, type: "Error Analysis" },
+  { id: 3, scorecard: "CS3 Audigy", score: 90, date: relativeDate(2, 10, 0), status: "scored", results: 20, inferences: 80, cost: "$0.104", progress: 100, type: "Prompt Optimization" },
+  { id: 2, scorecard: "SelectQuote Term Life v1", score: 87, date: relativeDate(2, 12, 0), status: "scored", results: 17, inferences: 68, cost: "$0.089", progress: 100, type: "Hyperparameter Optimization" },
+  { id: 1, scorecard: "CS3 Nexstar v1", score: 94, date: relativeDate(2, 14, 0), status: "scored", results: 21, inferences: 84, cost: "$0.110", progress: 100, type: "IAA Analysis" },
 ];
 
 // Sort items by date, newest first
@@ -101,7 +109,6 @@ const sampleTranscript = [
   { speaker: "Agent", text: "Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo." },
   { speaker: "Caller", text: "Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt." },
   { speaker: "Agent", text: "Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem." },
-  { speaker: "Caller", text: "Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur?" },
   { speaker: "Agent", text: "Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur, vel illum qui dolorem eum fugiat quo voluptas nulla pariatur?" },
   { speaker: "Caller", text: "At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident." },
   { speaker: "Agent", text: "Similique sunt in culpa qui officia deserunt mollitia animi, id est laborum et dolorum fuga. Et harum quidem rerum facilis est et expedita distinctio." },
@@ -271,7 +278,7 @@ const getStatusText = (status: string, progress: number) => {
   }
 };
 
-export default function ExperimentsDashboard() {
+export default function AnalysisDashboard() {
   const [selectedItem, setSelectedItem] = useState<number | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
@@ -299,7 +306,7 @@ export default function ExperimentsDashboard() {
     return formatDistanceToNow(date, { addSuffix: true })
   }
 
-  const renderExperimentItem = (item: any) => (
+  const renderAnalysisItem = (item: any) => (
     <TableRow key={item.id} onClick={() => handleItemClick(item.id)} className="cursor-pointer transition-colors duration-200 hover:bg-muted">
       <TableCell className="font-medium sm:pr-4">
         <div className="sm:hidden">
@@ -317,13 +324,11 @@ export default function ExperimentsDashboard() {
         </Badge>
       </TableCell>
       <TableCell className="text-right">{item.inferences}</TableCell>
-      <TableCell className="text-right">{item.results}</TableCell>
       <TableCell className="text-right">{item.cost}</TableCell>
       <TableCell className="w-[15%]">
-        {renderProgressBar(item.progress, item.accuracyTrue, item.accuracyFalse, false)}
-      </TableCell>
-      <TableCell className="w-[15%]">
-        {renderProgressBar(item.progress, item.accuracyTrue, item.accuracyFalse, true)}
+        <Badge className={getBadgeVariant(item.status, item.progress)}>
+          {getStatusText(item.status, item.progress)}
+        </Badge>
       </TableCell>
     </TableRow>
   )
@@ -371,8 +376,8 @@ export default function ExperimentsDashboard() {
                 </Badge>
               </div>
               <div>
-                <p className="text-sm font-medium">Results</p>
-                <p>{selectedItemData.results}</p>
+                <p className="text-sm font-medium">Inferences</p>
+                <p>{selectedItemData.inferences}</p>
               </div>
               <div className="text-right">
                 <p className="text-sm font-medium">Cost</p>
@@ -384,25 +389,206 @@ export default function ExperimentsDashboard() {
             <div className="space-y-2">
               <div className="flex justify-between text-xs">
                 <div className="font-semibold">Progress: {selectedItemData.progress}%</div>
-                {selectedItemData.status !== 'scored' && <div>Elapsed Time: 00:45:30</div>}
+                {selectedItemData.status !== 'completed' && <div>Elapsed Time: 00:45:30</div>}
               </div>
               <Progress value={selectedItemData.progress} className="w-full h-6" />
-              {selectedItemData.status !== 'scored' && (
+              {selectedItemData.status !== 'completed' && (
                 <div className="text-xs text-right">
                   Estimated Time Remaining: 00:05:00
                 </div>
               )}
             </div>
             
-            <div>
-              <p className="text-sm font-medium">Accuracy</p>
-              {renderProgressBar(selectedItemData.progress, selectedItemData.accuracyTrue, selectedItemData.accuracyFalse, true)}
-            </div>
+            {renderAnalysisDetails(selectedItemData)}
           </div>
         </CardContent>
       </Card>
     )
   }
+
+  const renderAnalysisDetails = (item: any) => {
+    return (
+      <div className="space-y-4">
+        {/* Specific details for each type */}
+        {(() => {
+          switch (item.type) {
+            case "Error Analysis":
+              return (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Error Analysis</h3>
+                  <div className="bg-muted p-4 rounded-md">
+                    <p><strong>Total items investigated:</strong> 500</p>
+                    <p><strong>Items with feedback:</strong> 327 (65.4%)</p>
+                  </div>
+                  <h4 className="text-md font-semibold mt-4">Key Insights:</h4>
+                  <div className="space-y-4">
+                    <div className="bg-muted p-4 rounded-md">
+                      <p><strong>Contextual Misinterpretation:</strong> Our analysis reveals that the classifier often flags mild expletives (e.g., "darn", "heck") as profanity, while the client's standards consider these acceptable. This suggests that our prompt may be too strict and lacks nuance in understanding the severity of different terms within the client's cultural context.</p>
+                    </div>
+                    <div className="bg-muted p-4 rounded-md">
+                      <p><strong>Idiomatic Expressions:</strong> We've identified a trend where certain idiomatic expressions (e.g., "what the hell", "damn right") are being classified as profanity, despite being considered mild and acceptable in the client's guidelines. This indicates that our prompt needs refinement to better understand and interpret common phrases that may contain traditionally profane words but are used in non-offensive contexts.</p>
+                    </div>
+                    <div className="bg-muted p-4 rounded-md">
+                      <p><strong>False Negatives in Euphemisms:</strong> The analysis shows that our classifier is missing subtle euphemisms and replacements for profane words (e.g., "frick", "shoot") that the client considers unprofessional. This suggests that our prompt should be expanded to recognize a broader range of substitutions and near-profanities that may not be explicitly profane but still fall outside the client's acceptable language standards.</p>
+                    </div>
+                  </div>
+                </div>
+              )
+            case "IAA Analysis":
+              return (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Inter-Annotator Agreement</h3>
+                  <div className="flex items-center justify-between">
+                    <span>Krippendorff's Alpha:</span>
+                    <span className="font-semibold">0.82</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Fleiss' Kappa:</span>
+                    <span className="font-semibold">0.79</span>
+                  </div>
+                </div>
+              )
+            case "Prompt Optimization":
+              return (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Prompt Performance</h3>
+                  <div className="flex items-center justify-between">
+                    <div className="font-semibold">Accuracy</div>
+                    <div className="flex items-center">
+                      <span>75%</span>
+                      <MoveUpRight className="h-5 w-5 mx-1" />
+                      <span>92%</span>
+                    </div>
+                  </div>
+                  <div className="flex space-x-4 justify-center">
+                    <div className="text-center">
+                      <div className="text-sm font-medium mb-1">Before</div>
+                      <ChartContainer config={chartConfig} className="h-[80px] w-[80px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <ChartTooltip content={<ChartTooltipContent />} />
+                            <Pie
+                              data={[
+                                { category: "Positive", value: 75, fill: "var(--true)" },
+                                { category: "Negative", value: 25, fill: "var(--false)" },
+                              ]}
+                              dataKey="value"
+                              nameKey="category"
+                              outerRadius={30}
+                              fill="var(--chart-1)"
+                            />
+                            <Pie
+                              data={[
+                                { category: "Positive", value: 50, fill: "var(--true)" },
+                                { category: "Negative", value: 50, fill: "var(--false)" },
+                              ]}
+                              dataKey="value"
+                              nameKey="category"
+                              innerRadius={35}
+                              outerRadius={40}
+                              fill="var(--chart-2)"
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </ChartContainer>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-sm font-medium mb-1">After</div>
+                      <ChartContainer config={chartConfig} className="h-[80px] w-[80px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <ChartTooltip content={<ChartTooltipContent />} />
+                            <Pie
+                              data={[
+                                { category: "Positive", value: 92, fill: "var(--true)" },
+                                { category: "Negative", value: 8, fill: "var(--false)" },
+                              ]}
+                              dataKey="value"
+                              nameKey="category"
+                              outerRadius={30}
+                              fill="var(--chart-1)"
+                            />
+                            <Pie
+                              data={[
+                                { category: "Positive", value: 50, fill: "var(--true)" },
+                                { category: "Negative", value: 50, fill: "var(--false)" },
+                              ]}
+                              dataKey="value"
+                              nameKey="category"
+                              innerRadius={35}
+                              outerRadius={40}
+                              fill="var(--chart-2)"
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </ChartContainer>
+                    </div>
+                  </div>
+                </div>
+              )
+            case "Hyperparameter Optimization":
+              return (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Best Hyperparameters</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium">Learning Rate</p>
+                      <p>0.001</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Batch Size</p>
+                      <p>32</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Epochs</p>
+                      <p>100</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Dropout</p>
+                      <p>0.2</p>
+                    </div>
+                  </div>
+                </div>
+              )
+            default:
+              return null
+          }
+        })()}
+      </div>
+    )
+  }
+
+  const PieChartVisualization = ({ data }: { data: { name: string; value: number }[] }) => (
+    <ChartContainer config={chartConfig} className="h-[200px] w-[200px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <ChartTooltip content={<ChartTooltipContent />} />
+          <Pie
+            data={data}
+            dataKey="value"
+            nameKey="name"
+            outerRadius={80}
+            fill="var(--chart-1)"
+            label
+          />
+        </PieChart>
+      </ResponsiveContainer>
+    </ChartContainer>
+  )
+
+  const BeforeAfterChart = ({ before, after }: { before: number; after: number }) => (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="font-semibold">Accuracy</div>
+        <div className="flex items-center">
+          <span>{before}%</span>
+          <MoveUpRight className="h-5 w-5 mx-1" />
+          <span>{after}%</span>
+        </div>
+      </div>
+      <Progress value={after} className="w-full h-4" />
+    </div>
+  )
 
   return (
     <div className="space-y-4 h-full flex flex-col">
@@ -417,17 +603,15 @@ export default function ExperimentsDashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[30%]">Experiment</TableHead>
-                    <TableHead className="w-[10%]">Type</TableHead>
-                    <TableHead className="w-[10%] text-right">Inferences</TableHead>
-                    <TableHead className="w-[10%] text-right">Results</TableHead>
-                    <TableHead className="w-[10%] text-right">Cost</TableHead>
-                    <TableHead className="w-[15%] text-left">Progress</TableHead>
-                    <TableHead className="w-[15%] text-right">Accuracy</TableHead>
+                    <TableHead className="w-[35%]">Analysis</TableHead>
+                    <TableHead className="w-[15%]">Type</TableHead>
+                    <TableHead className="w-[15%] text-right">Inferences</TableHead>
+                    <TableHead className="w-[15%] text-right">Cost</TableHead>
+                    <TableHead className="w-[20%] text-left">Progress</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map(renderExperimentItem)}
+                  {items.map(renderAnalysisItem)}
                 </TableBody>
               </Table>
             </div>
