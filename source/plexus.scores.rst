@@ -1,0 +1,41 @@
+plexus.scores package
+=====================
+
+.. automodule:: plexus.scores
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   plexus.scores.composite
+   plexus.scores.core
+   plexus.scores.nodes
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   plexus.scores.AWSComprehendEntityExtractor
+   plexus.scores.AgenticExtractor
+   plexus.scores.AgenticValidator
+   plexus.scores.CompositeScore
+   plexus.scores.DeepLearningOneStepSemanticClassifier
+   plexus.scores.DeepLearningSemanticClassifier
+   plexus.scores.DeepLearningSlidingWindowSemanticClassifier
+   plexus.scores.ExplainableClassifier
+   plexus.scores.FastTextClassifier
+   plexus.scores.KeywordClassifier
+   plexus.scores.LLMClassifier
+   plexus.scores.LLMGenerator
+   plexus.scores.LangGraphClassifier
+   plexus.scores.LangGraphScore
+   plexus.scores.OpenAIEmbeddingsClassifier
+   plexus.scores.SVMClassifier
+   plexus.scores.Score
