@@ -135,12 +135,9 @@ class ScorecardResultsAnalysis:
         with ThreadPoolExecutor() as executor:
             for scorecard_result in self.scorecard_results.data:
                 for score_result in scorecard_result['results']:
-
-                    # Add the session ID to it.
-                    scorecard_result['results'][score_result].metadata['session_id'] = \
-                        scorecard_result['session_id']
+                    scorecard_result['results'][score_result].metadata['session_id'] = scorecard_result['session_id']
+                    scorecard_result['results'][score_result].metadata['form_id'] = scorecard_result.get('form_id', '')  # Add this line
                     
-                    # Add this one to the list if it meets the criteria
                     if not (only_incorrect_scores and scorecard_result['results'][score_result].metadata['correct']):
                         results.append(scorecard_result['results'][score_result])
 
