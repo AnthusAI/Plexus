@@ -29,8 +29,10 @@ const PieChartComponent: React.FC<{
             nameKey="name"
             cx="50%"
             cy="50%"
-            outerRadius={25}
+            outerRadius={24}
             fill="#8884d8"
+            strokeWidth={0}
+            paddingAngle={0}
           />
           <Pie
             data={outerData}
@@ -38,9 +40,11 @@ const PieChartComponent: React.FC<{
             nameKey="name"
             cx="50%"
             cy="50%"
-            innerRadius={27}
+            innerRadius={28}
             outerRadius={35}
             fill="#82ca9d"
+            strokeWidth={0}
+            paddingAngle={0}
           />
         </PieChart>
       </ResponsiveContainer>
