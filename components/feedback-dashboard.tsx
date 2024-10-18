@@ -735,7 +735,7 @@ export default function FeedbackDashboard() {
     if (!selectedItemData) return null;
 
     return (
-      <Card className="rounded-none sm:rounded-lg h-full flex flex-col">
+      <Card className="rounded-none sm:rounded-lg h-full flex flex-col bg-card-light border-none">
         <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between py-4 px-4 sm:px-6 space-y-0">
           <div>
             <h2 className="text-xl font-semibold">{selectedItemData?.scorecard}</h2>
@@ -764,7 +764,7 @@ export default function FeedbackDashboard() {
                 {/* Metadata Section */}
                 <div className="-mx-4 sm:-mx-6 mb-4">
                   <div
-                    className="relative group bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                    className="relative group bg-card hover:bg-accent hover:text-accent-foreground cursor-pointer"
                     onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
                   >
                     <div className="flex justify-between items-center px-4 sm:px-6 py-2">
@@ -797,7 +797,7 @@ export default function FeedbackDashboard() {
                 {/* Data Section */}
                 <div className="-mx-4 sm:-mx-6 mt-4">
                   <div
-                    className="relative group bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                    className="relative group bg-card hover:bg-accent hover:text-accent-foreground cursor-pointer"
                     onClick={() => setIsDataExpanded(!isDataExpanded)}
                   >
                     <div className="flex justify-between items-center px-4 sm:px-6 py-2">
@@ -827,7 +827,7 @@ export default function FeedbackDashboard() {
               <div className={`${isFullWidth ? 'w-1/2' : 'mt-4'}`}>
                 {/* Score Results Section */}
                 <div className="-mx-4 sm:-mx-6 mb-4">
-                  <div className="px-4 sm:px-6 py-2 bg-muted">
+                  <div className="px-4 sm:px-6 py-2 bg-card">
                     <h4 className="text-md font-semibold">Score Results</h4>
                   </div>
                 </div>

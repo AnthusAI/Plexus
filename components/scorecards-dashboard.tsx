@@ -871,7 +871,7 @@ export default function ScorecardsComponent() {
     };
 
     return (
-      <Card className="rounded-none sm:rounded-lg h-full flex flex-col">
+      <Card className="rounded-none sm:rounded-lg h-full flex flex-col bg-card-light border-none">
         <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between py-4 px-4 sm:px-6 space-y-0">
           <div className="flex-grow">
             <EditableField
@@ -919,7 +919,7 @@ export default function ScorecardsComponent() {
               {selectedScorecard.scoreDetails.map((section, sectionIndex) => (
                 <div key={sectionIndex} className="mb-6">
                   <div className="-mx-4 sm:-mx-6 mb-4">
-                    <div className="bg-muted px-4 sm:px-6 py-2">
+                    <div className="bg-card px-4 sm:px-6 py-2">
                       <EditableField
                         value={section.name}
                         onChange={(value) => {
