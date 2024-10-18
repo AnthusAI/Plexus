@@ -1,7 +1,7 @@
 import React from 'react';
 import { StoryFn, Meta } from '@storybook/react';
 import FeedbackTask from '@/components/FeedbackTask';
-import { BaseTaskProps } from '@/components/task';
+import { BaseTaskProps } from '@/components/Task';
 
 export default {
   title: 'Components/FeedbackTask',
@@ -10,65 +10,48 @@ export default {
 
 const Template: StoryFn<BaseTaskProps> = (args) => <FeedbackTask {...args} />;
 
-const createTask = (id: number, score: string, summary: string): BaseTaskProps => ({
+const createTask = (id: number, type: string, summary: string): BaseTaskProps => ({
   variant: 'grid',
   task: {
     id,
-    type: 'Feedback',
-    scorecard: 'SelectQuote TermLife v1',
-    score,
-    time: '1d ago',
+    type,
+    scorecard: 'Feedback',
+    score: 'In Progress',
+    time: '3 hours ago',
     summary,
-    description: 'Feedback progress',
+    description: 'Feedback processing',
     data: {
       progress: 75,
       elapsedTime: '2h 30m',
-      processedItems: 150,
-      totalItems: 200,
-      estimatedTimeRemaining: '45m',
+      numberComplete: 150,
+      numberTotal: 200,
+      eta: '45m',
     },
   },
+  onClick: () => console.log(`Clicked on task ${id}`),
 });
 
-export const MultipleGridItems: StoryFn = () => (
-  <div style={{
-    display: 'grid',
-    gap: '1rem',
-    gridTemplateColumns: '1fr',
-    width: '100vw',
-    maxWidth: '100vw',
-    margin: '0 -1rem',
-    padding: '1rem',
-    boxSizing: 'border-box',
-  }}>
+export const Default = () => (
+  <>
     <style>
       {`
-        @media (min-width: 768px) {
-          div {
-            grid-template-columns: repeat(2, 1fr) !important;
-          }
-        }
-        @media (min-width: 1024px) {
-          div {
-            grid-template-columns: repeat(3, 1fr) !important;
-          }
+        :root {
+          --true: #22c55e;
+          --false: #ef4444;
         }
       `}
     </style>
-    {Template(createTask(1, 'Customer Feedback', 'In progress'))}
-    {Template(createTask(2, 'Agent Performance', 'Review pending'))}
-    {Template(createTask(3, 'Call Quality', 'Feedback collected'))}
-    {Template(createTask(4, 'Training Effectiveness', 'Analysis ongoing'))}
-    {Template(createTask(5, 'Product Knowledge', 'Feedback requested'))}
-    {Template(createTask(6, 'Customer Satisfaction', 'Results available'))}
-  </div>
+    <Template {...createTask(1, 'Customer Feedback', 'Processing customer survey responses')} />
+    <Template {...createTask(2, 'User Reviews', 'Analyzing app store reviews')} />
+    <Template {...createTask(3, 'Support Tickets', 'Categorizing support requests')} />
+  </>
 );
 
 export const SingleGridItem = Template.bind({});
-SingleGridItem.args = createTask(7, 'Sales Pitch Feedback', 'In progress');
+SingleGridItem.args = createTask(4, 'Product Feedback', 'Evaluating feature requests');
 
 export const Detail = Template.bind({});
 Detail.args = {
-  ...createTask(8, 'Customer Service Feedback', 'Review pending'),
+  ...createTask(5, 'Employee Feedback', 'Processing annual survey'),
   variant: 'detail',
 };

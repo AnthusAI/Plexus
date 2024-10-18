@@ -20,6 +20,12 @@ export interface BaseTaskProps {
       accuracy?: number
       progress?: number
       elapsedTime?: string
+      before?: {
+        innerRing: Array<{ value: number }>
+      }
+      after?: {
+        innerRing: Array<{ value: number }>
+      }
     }
   }
   onClick?: () => void
@@ -27,34 +33,41 @@ export interface BaseTaskProps {
   controlButtons?: React.ReactNode
 }
 
-const Task: React.FC<BaseTaskProps & { children?: React.ReactNode }> = ({ 
+interface TaskChildProps extends BaseTaskProps {
+  children?: React.ReactNode
+}
+
+export interface TaskComponentProps extends BaseTaskProps {
+  renderHeader: (props: TaskChildProps) => React.ReactNode
+  renderContent: (props: TaskChildProps) => React.ReactNode
+}
+
+const Task: React.FC<TaskComponentProps> = ({ 
   variant, 
   task, 
-  children, 
   onClick, 
-  controlButtons 
+  controlButtons,
+  renderHeader,
+  renderContent
 }) => {
+  const childProps: TaskChildProps = {
+    variant,
+    task,
+    controlButtons
+  }
+
   return (
     <Card 
       className="bg-card shadow-none border-none rounded-lg cursor-pointer transition-colors duration-200 hover:bg-muted flex flex-col h-full"
       onClick={onClick}
     >
-      {React.Children.map(children, child => {
-        if (React.isValidElement(child)) {
-          return React.cloneElement(child, { task, variant, controlButtons })
-        }
-        return child
-      })}
+      {renderHeader(childProps)}
+      {renderContent(childProps)}
     </Card>
   )
 }
 
-const TaskHeader: React.FC<{ 
-  task: BaseTaskProps['task'], 
-  variant: BaseTaskProps['variant'], 
-  children?: React.ReactNode,
-  controlButtons?: React.ReactNode
-}> = ({ task, variant, children, controlButtons }) => (
+const TaskHeader: React.FC<TaskChildProps> = ({ task, variant, children, controlButtons }) => (
   <CardHeader className="space-y-1.5 p-6 pr-4 flex flex-col items-start">
     <div className="flex justify-between items-start w-full">
       <div className="flex flex-col">
@@ -77,10 +90,7 @@ const TaskHeader: React.FC<{
   </CardHeader>
 )
 
-const TaskContent: React.FC<{ 
-  task: BaseTaskProps['task'], 
-  variant: BaseTaskProps['variant'], 
-  children?: React.ReactNode,
+const TaskContent: React.FC<TaskChildProps & {
   visualization?: React.ReactNode,
   customSummary?: React.ReactNode
 }> = ({ task, variant, children, visualization, customSummary }) => (
@@ -106,4 +116,5 @@ const TaskContent: React.FC<{
   </CardContent>
 )
 
+// Export everything
 export { Task, TaskHeader, TaskContent }

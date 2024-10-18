@@ -1,7 +1,7 @@
 import React from 'react';
 import { StoryFn, Meta } from '@storybook/react';
 import ScoreUpdatedTask from '@/components/ScoreUpdatedTask';
-import { BaseTaskProps } from '@/components/task';
+import { BaseTaskProps } from '@/components/Task';
 
 export default {
   title: 'Components/ScoreUpdatedTask',
@@ -10,80 +10,49 @@ export default {
 
 const Template: StoryFn<BaseTaskProps> = (args) => <ScoreUpdatedTask {...args} />;
 
-const createTask = (id: number, score: string, summary: string): BaseTaskProps => ({
+const createTask = (id: number, type: string, summary: string): BaseTaskProps => ({
   variant: 'grid',
   task: {
     id,
-    type: 'Score updated',
-    scorecard: 'SelectQuote TermLife v1',
-    score,
-    time: '1d ago',
+    type,
+    scorecard: 'Score Update',
+    score: 'Improved',
+    time: '30 minutes ago',
     summary,
-    description: 'Accuracy',
+    description: 'Score update details',
     data: {
       before: {
-        outerRing: [
-          { category: "Positive", value: 50, fill: "var(--true)" },
-          { category: "Negative", value: 50, fill: "var(--false)" },
-        ],
-        innerRing: [
-          { category: "Positive", value: 75, fill: "var(--true)" },
-          { category: "Negative", value: 25, fill: "var(--false)" },
-        ],
+        innerRing: [{ value: 75 }],
       },
       after: {
-        outerRing: [
-          { category: "Positive", value: 50, fill: "var(--true)" },
-          { category: "Negative", value: 50, fill: "var(--false)" },
-        ],
-        innerRing: [
-          { category: "Positive", value: 82, fill: "var(--true)" },
-          { category: "Negative", value: 18, fill: "var(--false)" },
-        ],
+        innerRing: [{ value: 85 }],
       },
     },
   },
+  onClick: () => console.log(`Clicked on task ${id}`),
 });
 
-export const MultipleGridItems: StoryFn = () => (
-  <div style={{
-    display: 'grid',
-    gap: '1rem',
-    gridTemplateColumns: '1fr',
-    width: '100vw',
-    maxWidth: '100vw',
-    margin: '0 -1rem',
-    padding: '1rem',
-    boxSizing: 'border-box',
-  }}>
+export const Default = () => (
+  <>
     <style>
       {`
-        @media (min-width: 768px) {
-          div {
-            grid-template-columns: repeat(2, 1fr) !important;
-          }
-        }
-        @media (min-width: 1024px) {
-          div {
-            grid-template-columns: repeat(3, 1fr) !important;
-          }
+        :root {
+          --true: #22c55e;
+          --false: #ef4444;
         }
       `}
     </style>
-    {Template(createTask(1, 'Assumptive Close', 'Improved from 75% to 82%'))}
-    {Template(createTask(2, 'Objection Handling', 'Decreased from 90% to 85%'))}
-    {Template(createTask(3, 'Needs Assessment', 'Improved from 60% to 72%'))}
-    {Template(createTask(4, 'Product Knowledge', 'Maintained at 95%'))}
-    {Template(createTask(5, 'Closing Techniques', 'Improved from 70% to 78%'))}
-    {Template(createTask(6, 'Customer Rapport', 'Decreased from 88% to 82%'))}
-  </div>
+    <Template {...createTask(1, 'Customer Satisfaction', 'Score improved')} />
+    <Template {...createTask(2, 'Product Quality', 'Score maintained')} />
+    <Template {...createTask(3, 'Employee Performance', 'Score slightly decreased')} />
+  </>
 );
 
 export const SingleGridItem = Template.bind({});
-SingleGridItem.args = createTask(7, 'Assumptive Close', 'Improved from 75% to 82%');
+SingleGridItem.args = createTask(4, 'Team Productivity', 'Score significantly improved');
 
 export const Detail = Template.bind({});
 Detail.args = {
-  ...createTask(8, 'Assumptive Close', 'Improved from 75% to 82%'),
+  ...createTask(5, 'Project Success Rate', 'Score update analysis'),
   variant: 'detail',
 };

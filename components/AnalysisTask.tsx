@@ -1,5 +1,5 @@
 import React from 'react'
-import { Task, TaskHeader, TaskContent, BaseTaskProps } from './Task'
+import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
 import { Progress } from '@/components/ui/progress'
 import { Sparkles, MoveUpRight } from 'lucide-react'
 import { PieChart, Pie, ResponsiveContainer } from 'recharts'
@@ -53,7 +53,7 @@ const PieChartComponent: React.FC<{
   </div>
 ))
 
-const AnalysisTask: React.FC<BaseTaskProps> = ({ variant, task, onClick, controlButtons }) => {
+const AnalysisTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>> = ({ variant, task, onClick, controlButtons }) => {
   const data = task.data as AnalysisTaskData
 
   const beforeInnerPieData = React.useMemo(() => [
@@ -102,35 +102,42 @@ const AnalysisTask: React.FC<BaseTaskProps> = ({ variant, task, onClick, control
   ), [data?.before?.innerRing, data?.after?.innerRing])
 
   return (
-    <Task variant={variant} task={task} onClick={onClick} controlButtons={controlButtons}>
-      <TaskHeader task={task} variant={variant}>
-        <div className="flex flex-col items-end">
-          <div className="w-7 flex-shrink-0 mb-1">
-            <Sparkles className="h-5 w-5" />
-          </div>
-        </div>
-      </TaskHeader>
-      <TaskContent 
-        task={task} 
-        variant={variant} 
-        visualization={visualization}
-        customSummary={customSummary}
-      >
-        {data && (
-          <div className="mt-4">
-            <div className="flex justify-between text-xs mb-1">
-              <div className="font-semibold">Progress: {data.progress}%</div>
-              <div>{data.elapsedTime}</div>
-            </div>
-            <Progress value={data.progress} className="w-full h-4" />
-            <div className="flex justify-between text-xs mt-1">
-              <div>{data.numberComplete}/{data.numberTotal}</div>
-              <div>ETA: {data.eta}</div>
+    <Task 
+      variant={variant} 
+      task={task} 
+      onClick={onClick} 
+      controlButtons={controlButtons}
+      renderHeader={(props) => (
+        <TaskHeader {...props}>
+          <div className="flex flex-col items-end">
+            <div className="w-7 flex-shrink-0 mb-1">
+              <Sparkles className="h-5 w-5" />
             </div>
           </div>
-        )}
-      </TaskContent>
-    </Task>
+        </TaskHeader>
+      )}
+      renderContent={(props) => (
+        <TaskContent 
+          {...props} 
+          visualization={visualization}
+          customSummary={customSummary}
+        >
+          {data && (
+            <div className="mt-4">
+              <div className="flex justify-between text-xs mb-1">
+                <div className="font-semibold">Progress: {data.progress}%</div>
+                <div>{data.elapsedTime}</div>
+              </div>
+              <Progress value={data.progress} className="w-full h-4" />
+              <div className="flex justify-between text-xs mt-1">
+                <div>{data.numberComplete}/{data.numberTotal}</div>
+                <div>ETA: {data.eta}</div>
+              </div>
+            </div>
+          )}
+        </TaskContent>
+      )}
+    />
   )
 }
 

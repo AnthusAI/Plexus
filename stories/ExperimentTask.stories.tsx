@@ -1,7 +1,7 @@
 import React from 'react';
 import { StoryFn, Meta } from '@storybook/react';
 import ExperimentTask from '@/components/ExperimentTask';
-import { BaseTaskProps } from '@/components/task';
+import { BaseTaskProps } from '@/components/Task';
 
 export default {
   title: 'Components/ExperimentTask',
@@ -10,66 +10,49 @@ export default {
 
 const Template: StoryFn<BaseTaskProps> = (args) => <ExperimentTask {...args} />;
 
-const createTask = (id: number, score: string, summary: string): BaseTaskProps => ({
+const createTask = (id: number, type: string, summary: string): BaseTaskProps => ({
   variant: 'grid',
   task: {
     id,
-    type: 'Experiment',
-    scorecard: 'SelectQuote TermLife v1',
-    score,
-    time: '1d ago',
+    type,
+    scorecard: 'Experiment',
+    score: 'In Progress',
+    time: '4 hours ago',
     summary,
     description: 'Experiment progress',
     data: {
-      accuracy: 82,
+      accuracy: 75,
       progress: 65,
       elapsedTime: '3h 15m',
-      processedItems: 130,
-      totalItems: 200,
-      estimatedTimeRemaining: '1h 45m',
+      numberComplete: 130,
+      numberTotal: 200,
+      eta: '1h 45m',
     },
   },
+  onClick: () => console.log(`Clicked on task ${id}`),
 });
 
-export const MultipleGridItems: StoryFn = () => (
-  <div style={{
-    display: 'grid',
-    gap: '1rem',
-    gridTemplateColumns: '1fr',
-    width: '100vw',
-    maxWidth: '100vw',
-    margin: '0 -1rem',
-    padding: '1rem',
-    boxSizing: 'border-box',
-  }}>
+export const Default = () => (
+  <>
     <style>
       {`
-        @media (min-width: 768px) {
-          div {
-            grid-template-columns: repeat(2, 1fr) !important;
-          }
-        }
-        @media (min-width: 1024px) {
-          div {
-            grid-template-columns: repeat(3, 1fr) !important;
-          }
+        :root {
+          --true: #22c55e;
+          --false: #ef4444;
         }
       `}
     </style>
-    {Template(createTask(1, 'A/B Test', 'In progress'))}
-    {Template(createTask(2, 'Feature Trial', 'Results pending'))}
-    {Template(createTask(3, 'Pricing Strategy', 'Experiment running'))}
-    {Template(createTask(4, 'UI Optimization', 'Data collection'))}
-    {Template(createTask(5, 'Customer Segmentation', 'Analysis phase'))}
-    {Template(createTask(6, 'Conversion Funnel', 'Final stage'))}
-  </div>
+    <Template {...createTask(1, 'A/B Test', 'Testing new feature')} />
+    <Template {...createTask(2, 'Multivariate Test', 'Optimizing landing page')} />
+    <Template {...createTask(3, 'Split Test', 'Comparing email campaigns')} />
+  </>
 );
 
 export const SingleGridItem = Template.bind({});
-SingleGridItem.args = createTask(7, 'New Product Test', 'In progress');
+SingleGridItem.args = createTask(4, 'Usability Test', 'Evaluating new UI design');
 
 export const Detail = Template.bind({});
 Detail.args = {
-  ...createTask(8, 'Marketing Campaign Test', 'Results pending'),
+  ...createTask(5, 'Performance Test', 'Measuring load times'),
   variant: 'detail',
 };
