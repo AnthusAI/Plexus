@@ -9,6 +9,9 @@ interface FeedbackTaskData {
   numberComplete?: number
   numberTotal?: number
   eta?: string
+  processedItems: number
+  totalItems: number
+  estimatedTimeRemaining: string
 }
 
 const FeedbackTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>> = ({ variant, task, onClick, controlButtons }) => {
