@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "@aws-amplify/ui-react": "^6.1.13",
@@ -54,6 +56,15 @@
   "devDependencies": {
     "@aws-amplify/backend": "^1.2.1",
     "@aws-amplify/backend-cli": "^1.2.6",
+    "@chromatic-com/storybook": "^1.9.0",
+    "@storybook/addon-essentials": "^8.3.5",
+    "@storybook/addon-interactions": "^8.3.5",
+    "@storybook/addon-links": "^8.3.5",
+    "@storybook/addon-onboarding": "^8.3.5",
+    "@storybook/blocks": "^8.3.5",
+    "@storybook/nextjs": "^8.3.5",
+    "@storybook/react": "^8.3.5",
+    "@storybook/test": "^8.3.5",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
@@ -63,6 +74,7 @@
     "constructs": "^10.3.0",
     "esbuild": "^0.23.1",
     "postcss": "latest",
+    "storybook": "^8.3.5",
     "tailwindcss": "latest",
     "tsx": "^4.19.0",
     "typescript": "^5.6.2"

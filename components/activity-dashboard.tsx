@@ -15,6 +15,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { TimeRangeSelector } from "@/components/time-range-selector"
 import { useInView } from 'react-intersection-observer'
 import { useSidebar } from "@/app/contexts/SidebarContext"
+import React from "react"
+
+// Import new task components
+import ExperimentTask from '@/components/ExperimentTask'
+import AlertTask from '@/components/AlertTask'
+import ReportTask from '@/components/ReportTask'
+import AnalysisTask from '@/components/AnalysisTask'
+import FeedbackTask from '@/components/FeedbackTask'
+import ScoreUpdatedTask from '@/components/ScoreUpdatedTask'
 
 const timeToMinutes = (timeString: string): number => {
   const [value, unit] = timeString.toLowerCase().split(' ');
@@ -65,6 +74,7 @@ const recentActivities = [
     scorecard: "CS3 Services v2",
     score: "Good Call",
     time: "2m ago",
+    description: "Accuracy",
     summary: "89% / 47",
     data: {
       progress: 47,
@@ -107,12 +117,15 @@ const recentActivities = [
     scorecard: "SelectQuote TermLife v1",
     score: "Good Call",
     time: "1h ago",
+    description: "Accuracy",
     summary: "Progress: 92%",
     data: {
       progress: 92,
       accuracy: 75,
       elapsedTime: "00:45:30",
       estimatedTimeRemaining: "00:05:00",
+      numberComplete: 92,
+      numberTotal: 100,
       before: {
         outerRing: [
           { category: "Positive", value: 50, fill: "var(--true)" },
@@ -142,7 +155,15 @@ const recentActivities = [
     score: "Temperature Check",
     time: "3h ago",
     summary: "94% / 100",
+    description: "Accuracy",
     data: {
+      progress: 100,
+      accuracy: 94,
+      processedItems: 100,
+      totalItems: 100,
+      elapsedTime: "00:04:20",
+      estimatedTimeRemaining: "00:00:00",
+      processingRate: 100,
       outerRing: [
         { category: "Positive", value: 50, fill: "var(--true)" },
         { category: "Negative", value: 50, fill: "var(--false)" },
@@ -159,6 +180,7 @@ const recentActivities = [
     scorecard: "SelectQuote TermLife v1",
     score: "Assumptive Close",
     time: "1d ago",
+    description: "Accuracy",
     summary: "Improved from 75% to 82%",
     data: {
       before: {
@@ -189,7 +211,8 @@ const recentActivities = [
     scorecard: "CS3 Services v2",
     score: "",
     time: "5m ago",
-    summary: "150 scores",
+    description: "Getting feedback",
+    summary: "150 items",
     data: {
       progress: 25,
       processedItems: 37,
@@ -205,6 +228,7 @@ const recentActivities = [
     scorecard: "SelectQuote TermLife v1",
     score: "",
     time: "2h ago",
+    description: "Got feedback",
     summary: "200 scores processed",
     data: {
       progress: 100,
@@ -301,7 +325,7 @@ export default function ActivityDashboard() {
 
   useEffect(() => {
     const checkViewportWidth = () => {
-      setIsNarrowViewport(window.innerWidth < 640)
+      setIsNarrowViewport(window.innerWidth < 640) // 640px is the default 'sm' breakpoint in Tailwind
     }
 
     checkViewportWidth()
@@ -452,6 +476,33 @@ export default function ActivityDashboard() {
     setSelectedScore(value === "all" ? null : value)
   }
 
+  const DetailViewControlButtons = (
+    <Button variant="outline" size="icon" onClick={() => setSelectedActivity(null)}>
+      <X className="h-4 w-4" />
+    </Button>
+  )
+
+  const chartContainerRef = useRef<HTMLDivElement>(null)
+  const [chartDimensions, setChartDimensions] = useState({ width: 0, height: 300 })
+
+  useEffect(() => {
+    const updateDimensions = () => {
+      if (chartContainerRef.current) {
+        setChartDimensions({
+          width: chartContainerRef.current.offsetWidth,
+          height: 300 // You can make this dynamic too if needed
+        })
+      }
+    }
+
+    updateDimensions()
+    window.addEventListener('resize', updateDimensions)
+
+    return () => window.removeEventListener('resize', updateDimensions)
+  }, [])
+
+  console.log('rightSidebarState:', rightSidebarState);
+
   return (
     <div className="space-y-4 h-full flex">
       <div className="flex-1 overflow-y-auto pr-4">
@@ -502,11 +553,16 @@ export default function ActivityDashboard() {
             <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} />
           </div>
 
-          <Card className="shadow-none mb-6">
+          <Card className="shadow-none border-none mb-6">
             <CardContent className="p-0">
-              <ChartContainer config={chartConfig} className="h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={barChartData}>
+              <div ref={chartContainerRef} className="w-full h-[300px]">
+                <ChartContainer config={chartConfig} className="h-full w-full">
+                  <BarChart 
+                    data={barChartData} 
+                    width={chartDimensions.width} 
+                    height={chartDimensions.height}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                  >
                     <XAxis dataKey="name" />
                     <YAxis />
                     <ChartTooltip content={<ChartTooltipContent />} />
@@ -541,142 +597,75 @@ export default function ActivityDashboard() {
                     />
                     <ChartLegend content={<ChartLegendContent />} />
                   </BarChart>
-                </ResponsiveContainer>
-              </ChartContainer>
+                </ChartContainer>
+              </div>
             </CardContent>
           </Card>
 
-          <div className={`grid gap-4 pb-8 ${
-            rightSidebarState === 'expanded' || isNarrowViewport
-              ? 'grid-cols-1'
-              : isFullWidth
-                ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
-                : 'grid-cols-1 md:grid-cols-2'
-          }`}>
+          <div className="grid gap-4 pb-8 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
             {displayedActivities.map((activity) => (
-              <Card 
-                key={activity.id}
-                className={`relative cursor-pointer transition-colors duration-200 ${
-                  selectedActivity?.id === activity.id 
-                    ? 'bg-secondary text-secondary-foreground hover:bg-secondary/90' 
-                    : 'hover:bg-muted'
-                }`} 
-                onClick={() => setSelectedActivity(activity)}
-              >
-                <CardHeader className="pr-4 flex flex-col items-start">
-                  <div className="flex justify-between items-start w-full">
-                    <div className="flex flex-col">
-                      <div className="text-lg font-bold">
-                        {activity.type}
-                      </div>
-                      <div className={`text-xs ${
-                        selectedActivity?.id === activity.id 
-                          ? 'text-secondary-foreground' 
-                          : 'text-muted-foreground'
-                      }`}>
-                        {activity.scorecard}
-                      </div>
-                      <div className={`text-xs ${
-                        selectedActivity?.id === activity.id 
-                          ? 'text-secondary-foreground' 
-                          : 'text-muted-foreground'
-                      }`}>
-                        {activity.score || "\u00A0"}
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <div className="w-7 flex-shrink-0 mb-1">
-                        {renderActivityIcon(activity.type)}
-                      </div>
-                      <div className={`text-xs ${
-                        selectedActivity?.id === activity.id 
-                          ? 'text-secondary-foreground' 
-                          : 'text-muted-foreground'
-                      }`}>
-                        {activity.time}
-                      </div>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0 pb-4 relative min-h-[120px]">
-                  <div className="flex justify-between items-start mt-4">
-                    <div className="space-y-1 w-full">
-                      <div className="text-lg font-bold">
-                        {activity.type === "Score updated" || activity.type === "Analysis started" ? (
-                          <div>
-                            <div className={`text-sm ${selectedActivity?.id === activity.id ? 'text-secondary-foreground' : 'text-muted-foreground'}`}>
-                              Accuracy
-                            </div>
-                            <div className={`flex items-center ${selectedActivity?.id === activity.id ? 'text-secondary-foreground' : ''}`}>
-                              <span>{activity.data?.before?.innerRing[0]?.value ?? 0}%</span>
-                              <MoveUpRight className="h-5 w-5 mx-1" />
-                              <span>{activity.data?.after?.innerRing[0]?.value ?? 0}%</span>
-                            </div>
-                          </div>
-                        ) : activity.type === "Experiment completed" || activity.type === "Experiment started" ? (
-                          <div className="mb-4">
-                            <div className={`text-sm ${selectedActivity?.id === activity.id ? 'text-secondary-foreground' : 'text-muted-foreground'}`}>
-                              Accuracy
-                            </div>
-                            <div className={selectedActivity?.id === activity.id ? 'text-secondary-foreground' : ''}>{activity.summary}</div>
-                          </div>
-                        ) : (
-                          <div className={activity.type === "Alert" ? "mb-8" : ""}>
-                            {activity.description && (
-                              <div className={`text-sm ${selectedActivity?.id === activity.id ? 'text-secondary-foreground' : 'text-muted-foreground'}`}>
-                                {activity.description}
-                              </div>
-                            )}
-                            <div className={selectedActivity?.id === activity.id ? 'text-secondary-foreground' : ''}>{activity.summary}</div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex-shrink-0 ml-4">
-                      {activity.type !== "Analysis started" && 
-                       activity.type !== "Experiment started" && 
-                       activity.type !== "Feedback queue started" && 
-                       activity.type !== "Feedback queue completed" && 
-                       renderVisualization(activity)}
-                    </div>
-                  </div>
-                  {activity.type === "Alert" && (
-                    <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-                      <MessageCircleWarning className={`h-16 w-16 ${selectedActivity?.id === activity.id ? 'text-secondary-foreground' : 'text-destructive'}`} />
-                    </div>
-                  )}
-                </CardContent>
-                {(activity.type === "Analysis started" || 
-                  activity.type === "Experiment started" || 
-                  activity.type === "Feedback queue started" || 
-                  activity.type === "Feedback queue completed") && 
-                 activity.data && (
-                  <div className="absolute bottom-0 left-0 right-0 px-6 pb-4">
-                    <div className="flex justify-between text-xs mb-1">
-                      <div className="font-semibold">Progress: {activity.data.progress}%</div>
-                      <div>{activity.data.elapsedTime}</div>
-                    </div>
-                    <Progress value={activity.data.progress} className="w-full h-4" />
-                    {(activity.type === "Experiment started" || 
-                      activity.type === "Feedback queue started" || 
-                      activity.type === "Feedback queue completed") && (
-                      <div className="flex justify-between text-xs mt-1">
-                        <div>{activity.data.processedItems}/{activity.data.totalItems}</div>
-                        <div>
-                          {activity.type === "Feedback queue completed" 
-                            ? `Completed in ${activity.data.elapsedTime}`
-                            : `ETA: ${activity.data.estimatedTimeRemaining}`
-                          }
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </Card>
+              <div key={activity.id} className="w-full">
+                {(() => {
+                  switch (activity.type) {
+                    case 'Experiment completed':
+                    case 'Experiment started':
+                      return (
+                        <ExperimentTask
+                          variant="grid"
+                          task={activity}
+                          onClick={() => setSelectedActivity(activity)}
+                        />
+                      )
+                    case 'Alert':
+                      return (
+                        <AlertTask
+                          variant="grid"
+                          task={activity}
+                          onClick={() => setSelectedActivity(activity)}
+                        />
+                      )
+                    case 'Report':
+                      return (
+                        <ReportTask
+                          variant="grid"
+                          task={activity}
+                          onClick={() => setSelectedActivity(activity)}
+                        />
+                      )
+                    case 'Analysis started':
+                      return (
+                        <AnalysisTask
+                          variant="grid"
+                          task={activity}
+                          onClick={() => setSelectedActivity(activity)}
+                        />
+                      )
+                    case 'Feedback queue started':
+                    case 'Feedback queue completed':
+                      return (
+                        <FeedbackTask
+                          variant="grid"
+                          task={activity}
+                          onClick={() => setSelectedActivity(activity)}
+                        />
+                      )
+                    case 'Score updated':
+                      return (
+                        <ScoreUpdatedTask
+                          variant="grid"
+                          task={activity}
+                          onClick={() => setSelectedActivity(activity)}
+                        />
+                      )
+                    default:
+                      return null
+                  }
+                })()}
+              </div>
             ))}
           </div>
 
-          {/* Reduced height for bottom margin and loading indicator */}
+          {/* Loading indicator */}
           <div ref={ref} className="h-12 flex items-center justify-center">
             {isLoadingMore && (
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -689,78 +678,26 @@ export default function ActivityDashboard() {
         <div className="w-1/3 min-w-[300px] pl-4 overflow-y-auto">
           <div className="space-y-4">
             <div className="" />
-            <Card>
-              <CardHeader className="flex flex-row items-start justify-between py-4">
-                <div className="space-y-1">
-                  <h2 className="text-2xl font-semibold">{selectedActivity.score}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedActivity.time}
-                  </p>
-                </div>
-                <Button variant="outline" size="icon" onClick={() => setSelectedActivity(null)}>
-                  <X className="h-4 w-4" />
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm font-medium">Type</p>
-                      <p>{selectedActivity.type}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">Scorecard</p>
-                      <p>{selectedActivity.scorecard}</p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Summary</p>
-                    <p>{selectedActivity.summary}</p>
-                  </div>
-                  {selectedActivity.description && (
-                    <div>
-                      <p className="text-sm font-medium">Description</p>
-                      <p>{selectedActivity.description}</p>
-                    </div>
-                  )}
-                  {selectedActivity.data && (
-                    <div>
-                      <p className="text-sm font-medium">Visualization</p>
-                      {renderVisualization(selectedActivity)}
-                    </div>
-                  )}
-                  {(selectedActivity.type === "Analysis started" || 
-                    selectedActivity.type === "Experiment started" || 
-                    selectedActivity.type === "Feedback queue started" || 
-                    selectedActivity.type === "Feedback queue completed") && 
-                   selectedActivity.data && (
-                    <div>
-                      <p className="text-sm font-medium mb-2">Progress</p>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs">
-                          <div className="font-semibold">Progress: {selectedActivity.data.progress}%</div>
-                          <div>{selectedActivity.data.elapsedTime}</div>
-                        </div>
-                        <Progress value={selectedActivity.data.progress} className="w-full h-4" />
-                        {(selectedActivity.type === "Experiment started" || 
-                          selectedActivity.type === "Feedback queue started" || 
-                          selectedActivity.type === "Feedback queue completed") && (
-                          <div className="flex justify-between text-xs">
-                            <div>{selectedActivity.data.processedItems}/{selectedActivity.data.totalItems}</div>
-                            <div>
-                              {selectedActivity.type === "Feedback queue completed" 
-                                ? `Completed in ${selectedActivity.data.elapsedTime}`
-                                : `ETA: ${selectedActivity.data.estimatedTimeRemaining}`
-                              }
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            {(() => {
+              switch (selectedActivity.type) {
+                case 'Experiment completed':
+                case 'Experiment started':
+                  return <ExperimentTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                case 'Alert':
+                  return <AlertTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                case 'Report':
+                  return <ReportTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                case 'Analysis started':
+                  return <AnalysisTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                case 'Feedback queue started':
+                case 'Feedback queue completed':
+                  return <FeedbackTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                case 'Score updated':
+                  return <ScoreUpdatedTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                default:
+                  return null
+              }
+            })()}
           </div>
         </div>
       )}
@@ -769,88 +706,26 @@ export default function ActivityDashboard() {
       {selectedActivity && isNarrowViewport && (
         <div className="fixed inset-0 bg-background/80 z-50">
           <div className="container flex items-center justify-center h-full max-w-lg">
-            <Card className="w-full max-h-[90vh] overflow-auto">
-              <CardHeader className="flex flex-row items-start justify-between py-4 px-4 sm:px-6 flex-shrink-0">
-                <div className="space-y-1">
-                  <h2 className="text-2xl font-semibold">{selectedActivity.score}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedActivity.time}
-                  </p>
-                </div>
-                <div className="flex space-x-2">
-                  {!isNarrowViewport && (
-                    <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
-                      {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                    </Button>
-                  )}
-                  <Button variant="outline" size="icon" onClick={() => {
-                    setSelectedActivity(null)
-                    setIsFullWidth(false)
-                  }}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="flex-grow overflow-auto px-4 sm:px-6 pb-4">
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm font-medium">Type</p>
-                      <p>{selectedActivity.type}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">Scorecard</p>
-                      <p>{selectedActivity.scorecard}</p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Summary</p>
-                    <p>{selectedActivity.summary}</p>
-                  </div>
-                  {selectedActivity.description && (
-                    <div>
-                      <p className="text-sm font-medium">Description</p>
-                      <p>{selectedActivity.description}</p>
-                    </div>
-                  )}
-                  {selectedActivity.data && (
-                    <div>
-                      <p className="text-sm font-medium">Visualization</p>
-                      {renderVisualization(selectedActivity)}
-                    </div>
-                  )}
-                  {(selectedActivity.type === "Analysis started" || 
-                    selectedActivity.type === "Experiment started" || 
-                    selectedActivity.type === "Feedback queue started" || 
-                    selectedActivity.type === "Feedback queue completed") && 
-                   selectedActivity.data && (
-                    <div>
-                      <p className="text-sm font-medium mb-2">Progress</p>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs">
-                          <div className="font-semibold">Progress: {selectedActivity.data.progress}%</div>
-                          <div>{selectedActivity.data.elapsedTime}</div>
-                        </div>
-                        <Progress value={selectedActivity.data.progress} className="w-full h-4" />
-                        {(selectedActivity.type === "Experiment started" || 
-                          selectedActivity.type === "Feedback queue started" || 
-                          selectedActivity.type === "Feedback queue completed") && (
-                          <div className="flex justify-between text-xs">
-                            <div>{selectedActivity.data.processedItems}/{selectedActivity.data.totalItems}</div>
-                            <div>
-                              {selectedActivity.type === "Feedback queue completed" 
-                                ? `Completed in ${selectedActivity.data.elapsedTime}`
-                                : `ETA: ${selectedActivity.data.estimatedTimeRemaining}`
-                              }
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            {(() => {
+              switch (selectedActivity.type) {
+                case 'Experiment completed':
+                case 'Experiment started':
+                  return <ExperimentTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                case 'Alert':
+                  return <AlertTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                case 'Report':
+                  return <ReportTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                case 'Analysis started':
+                  return <AnalysisTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                case 'Feedback queue started':
+                case 'Feedback queue completed':
+                  return <FeedbackTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                case 'Score updated':
+                  return <ScoreUpdatedTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                default:
+                  return null
+              }
+            })()}
           </div>
         </div>
       )}
