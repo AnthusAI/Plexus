@@ -4,8 +4,17 @@ import { Progress } from "@/components/ui/progress"
 import { FlaskConical } from 'lucide-react'
 import { PieChart, Pie, ResponsiveContainer } from 'recharts'
 
+interface ExperimentTaskData {
+  accuracy?: number
+  progress?: number
+  elapsedTime?: string
+  numberComplete?: number
+  numberTotal?: number
+  eta?: string
+}
+
 const ExperimentTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>> = ({ variant, task, onClick, controlButtons }) => {
-  const { data } = task
+  const data = task.data as ExperimentTaskData
 
   const innerPieData = [
     { name: 'Positive', value: data?.accuracy || 0, fill: 'var(--true)' },
@@ -70,8 +79,8 @@ const ExperimentTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'render
               </div>
               <Progress value={data.progress} className="w-full h-4" />
               <div className="flex justify-between text-xs mt-1">
-                <div>{data.processedItems}/{data.totalItems}</div>
-                <div>ETA: {data.estimatedTimeRemaining}</div>
+                <div>{data.numberComplete}/{data.numberTotal}</div>
+                <div>ETA: {data.eta}</div>
               </div>
             </div>
           )}
