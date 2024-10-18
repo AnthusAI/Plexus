@@ -22,7 +22,7 @@
     --muted-foreground: hsl(var(--mauve-11));
     --popover: hsl(var(--mauve-1));
     --popover-foreground: hsl(var(--mauve-12));
-    --card: hsl(var(--mauve-2));
+    --card: hsl(var(--mauve-3));
     --card-foreground: hsl(var(--mauve-12));
     --border: hsl(var(--mauve-6));
     --input: hsl(var(--mauve-6));
@@ -57,7 +57,7 @@
     --muted-foreground: hsl(var(--mauve-11));
     --popover: hsl(var(--mauve-3));
     --popover-foreground: hsl(var(--mauve-12));
-    --card: hsl(var(--mauve-2));
+    --card: hsl(var(--mauve-3));
     --card-foreground: hsl(var(--mauve-12));
     --border: hsl(var(--mauve-6));
     --input: hsl(var(--mauve-6));
