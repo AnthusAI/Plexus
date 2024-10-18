@@ -3,8 +3,9 @@ import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
 import { Progress } from '@/components/ui/progress'
 import { Sparkles, MoveUpRight } from 'lucide-react'
 import { PieChart, Pie, ResponsiveContainer } from 'recharts'
+import TaskProgress from './TaskProgress'
 
-interface AnalysisTaskData {
+interface OptimizationTaskData {
   before?: {
     innerRing: Array<{ value: number }>
   }
@@ -57,8 +58,13 @@ const PieChartComponent: React.FC<{
   </div>
 ))
 
-const AnalysisTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>> = ({ variant, task, onClick, controlButtons }) => {
-  const data = task.data as AnalysisTaskData
+const OptimizationTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>> = ({
+  variant,
+  task,
+  onClick,
+  controlButtons,
+}) => {
+  const data = task.data as OptimizationTaskData
 
   const beforeInnerPieData = React.useMemo(() => [
     { name: 'Positive', value: data?.before?.innerRing[0]?.value || 0, fill: 'var(--true)' },
@@ -100,7 +106,7 @@ const AnalysisTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderCo
   const customSummary = React.useMemo(() => (
     <div className="flex items-center">
       <span>{data?.before?.innerRing[0]?.value ?? 0}%</span>
-      <MoveUpRight className="h-5 w-5 mx-1" />
+      <MoveUpRight className="h-6 w-6 mx-1" />
       <span>{data?.after?.innerRing[0]?.value ?? 0}%</span>
     </div>
   ), [data?.before?.innerRing, data?.after?.innerRing])
@@ -114,9 +120,10 @@ const AnalysisTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderCo
       renderHeader={(props) => (
         <TaskHeader {...props}>
           <div className="flex justify-end w-full">
-            <Sparkles className="h-5 w-5" />
+            <Sparkles className="h-6 w-6" />
           </div>
         </TaskHeader>
+
       )}
       renderContent={(props) => (
         <TaskContent 
@@ -125,17 +132,13 @@ const AnalysisTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderCo
           customSummary={customSummary}
         >
           {data && (
-            <div className="mt-4">
-              <div className="flex justify-between text-xs mb-1">
-                <div className="font-semibold">Progress: {data.progress}%</div>
-                <div>{data.elapsedTime}</div>
-              </div>
-              <Progress value={data.progress} className="w-full h-4" />
-              <div className="flex justify-between text-xs mt-1">
-                <div>{data.numberComplete}/{data.numberTotal}</div>
-                <div>ETA: {data.eta}</div>
-              </div>
-            </div>
+            <TaskProgress 
+              progress={data.progress} 
+              elapsedTime={data.elapsedTime} 
+              processedItems={data.numberComplete} 
+              totalItems={data.numberTotal} 
+              estimatedTimeRemaining={data.eta} 
+            />
           )}
         </TaskContent>
       )}
@@ -143,4 +146,4 @@ const AnalysisTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderCo
   )
 }
 
-export default AnalysisTask
+export default OptimizationTask

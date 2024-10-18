@@ -3,8 +3,14 @@ import { StoryFn, Meta } from '@storybook/react';
 import { Task, TaskHeader, TaskContent, BaseTaskProps, TaskComponentProps } from '@/components/Task';
 
 export default {
-  title: 'Components/Task',
+  title: 'Tasks/Task',
   component: Task,
+  argTypes: {
+    variant: {
+      control: { type: 'radio' },
+      options: ['grid', 'detail'],
+    },
+  },
 } as Meta;
 
 const Template: StoryFn<TaskComponentProps> = (args) => (
@@ -30,14 +36,15 @@ const createTask = (id: number, type: string, summary: string): TaskComponentPro
   renderContent: (props) => <TaskContent {...props} />,
 });
 
-export const Default = Template.bind({});
-Default.args = createTask(1, 'Default Task', 'This is a default task');
+export const Grid = () => (
+  <>
+    <Template {...createTask(1, 'Default Task', 'This is a default task')} />
+    <Template {...createTask(2, 'Grid Task', 'This is a grid task')} />
+  </>
+);
 
-export const GridVariant = Template.bind({});
-GridVariant.args = createTask(2, 'Grid Task', 'This is a grid task');
-
-export const DetailVariant = Template.bind({});
-DetailVariant.args = {
+export const Detail = Template.bind({});
+Detail.args = {
   ...createTask(3, 'Detail Task', 'This is a detail task'),
   variant: 'detail',
 };

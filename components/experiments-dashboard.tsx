@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea"
 import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
 import { Progress } from "@/components/ui/progress"
+import ScorecardContext from "@/components/ScorecardContext"
 
 // Get the current date and time
 const now = new Date();
@@ -275,6 +276,8 @@ export default function ExperimentsDashboard() {
   const [selectedItem, setSelectedItem] = useState<number | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
+  const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
+  const [selectedScore, setSelectedScore] = useState<string | null>(null)
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -298,6 +301,13 @@ export default function ExperimentsDashboard() {
     const date = parseISO(dateString)
     return formatDistanceToNow(date, { addSuffix: true })
   }
+
+  const filteredItems = useMemo(() => {
+    return items.filter(item => {
+      if (!selectedScorecard) return true;
+      return item.scorecard === selectedScorecard;
+    });
+  }, [selectedScorecard]);
 
   const renderExperimentItem = (item: any) => (
     <TableRow key={item.id} onClick={() => handleItemClick(item.id)} className="cursor-pointer transition-colors duration-200 hover:bg-muted">
@@ -406,6 +416,16 @@ export default function ExperimentsDashboard() {
 
   return (
     <div className="space-y-4 h-full flex flex-col">
+      <div className="flex flex-wrap justify-between items-start gap-4">
+        <div className="flex-shrink-0">
+          <ScorecardContext 
+            selectedScorecard={selectedScorecard}
+            setSelectedScorecard={setSelectedScorecard}
+            selectedScore={selectedScore}
+            setSelectedScore={setSelectedScore}
+          />
+        </div>
+      </div>
       <div className="flex-grow flex flex-col overflow-hidden pb-2">
         {selectedItem && (isNarrowViewport || isFullWidth) ? (
           <div className="flex-grow overflow-hidden">
@@ -427,7 +447,7 @@ export default function ExperimentsDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map(renderExperimentItem)}
+                  {filteredItems.map(renderExperimentItem)}
                 </TableBody>
               </Table>
             </div>

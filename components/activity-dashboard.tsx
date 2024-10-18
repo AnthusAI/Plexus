@@ -16,12 +16,13 @@ import { TimeRangeSelector } from "@/components/time-range-selector"
 import { useInView } from 'react-intersection-observer'
 import { useSidebar } from "@/app/contexts/SidebarContext"
 import React from "react"
+import ScorecardContext from "@/components/ScorecardContext"
 
 // Import new task components
 import ExperimentTask from '@/components/ExperimentTask'
 import AlertTask from '@/components/AlertTask'
 import ReportTask from '@/components/ReportTask'
-import AnalysisTask from '@/components/AnalysisTask'
+import OptimizationTask from '@/components/OptimizationTask' // Update import
 import FeedbackTask from '@/components/FeedbackTask'
 import ScoreUpdatedTask from '@/components/ScoreUpdatedTask'
 
@@ -113,7 +114,7 @@ const recentActivities = [
   },
   {
     id: 3,
-    type: "Analysis started",
+    type: "Optimization started",
     scorecard: "SelectQuote TermLife v1",
     score: "Good Call",
     time: "1h ago",
@@ -355,20 +356,20 @@ export default function ActivityDashboard() {
     switch (type) {
       case "Experiment completed":
       case "Experiment started":
-        return <FlaskConical className="h-5 w-5" />
-      case "Analysis started":
-        return <Sparkles className="h-5 w-5" />
+        return <FlaskConical className="h-6 w-6" />
+      case "Optimization started":
+        return <Sparkles className="h-6 w-6" />
       case "Score updated":
-        return <ListTodo className="h-5 w-5" />
+        return <ListTodo className="h-6 w-6" />
       case "Alert":
-        return <Siren className="h-5 w-5" />
+        return <Siren className="h-6 w-6" />
       case "Report":
-        return <FileText className="h-5 w-5" />
+        return <FileText className="h-6 w-6" />
       case "Feedback queue started":
       case "Feedback queue completed":
-        return <MessageCircleMore className="h-5 w-5" />
+        return <MessageCircleMore className="h-6 w-6" />
       default:
-        return <Activity className="h-5 w-5" />
+        return <Activity className="h-6 w-6" />
     }
   }
 
@@ -461,19 +462,17 @@ export default function ActivityDashboard() {
     }
   }
 
+  const ACTIVITY_TIME_RANGE_OPTIONS = [
+    { value: "recent", label: "Recent" },
+    { value: "24h", label: "Last 24 hours" },
+    { value: "7d", label: "Last 7 days" },
+    { value: "30d", label: "Last 30 days" },
+    { value: "custom", label: "Custom" },
+  ]
+
   const handleTimeRangeChange = (range: string, customRange?: { from: Date | undefined; to: Date | undefined }) => {
     console.log("Time range changed:", range, customRange)
     // Implement the logic for handling all default time ranges and custom date ranges
-  }
-
-  const handleScorecardChange = (value: string) => {
-    const newScorecardValue = value === "all" ? null : value
-    setSelectedScorecard(newScorecardValue)
-    setSelectedScore(null) // Always reset score selection when scorecard changes
-  }
-
-  const handleScoreChange = (value: string) => {
-    setSelectedScore(value === "all" ? null : value)
   }
 
   const DetailViewControlButtons = (
@@ -508,49 +507,16 @@ export default function ActivityDashboard() {
       <div className="flex-1 overflow-y-auto pr-4">
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
-              <Select onValueChange={handleScorecardChange}>
-                <SelectTrigger className="w-full sm:w-[280px]">
-                  <SelectValue placeholder="Scorecard" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Scorecards</SelectItem>
-                  <SelectItem value="SelectQuote Term Life v1">SelectQuote Term Life v1</SelectItem>
-                  <SelectItem value="CS3 Nexstar v1">CS3 Nexstar v1</SelectItem>
-                  <SelectItem value="CS3 Services v2">CS3 Services v2</SelectItem>
-                  <SelectItem value="CS3 Audigy">CS3 Audigy</SelectItem>
-                  <SelectItem value="AW IB Sales">AW IB Sales</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select 
-                onValueChange={handleScoreChange}
-                disabled={!selectedScorecard}
-              >
-                <SelectTrigger className="w-full sm:w-[280px]">
-                  <SelectValue placeholder="Score" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Scores</SelectItem>
-                  {selectedScorecard && (
-                    <>
-                      <SelectItem value="Scoreable Call">Scoreable Call</SelectItem>
-                      <SelectItem value="Call Efficiency">Call Efficiency</SelectItem>
-                      <SelectItem value="Assumptive Close">Assumptive Close</SelectItem>
-                      <SelectItem value="Problem Resolution">Problem Resolution</SelectItem>
-                      <SelectItem value="Rapport">Rapport</SelectItem>
-                      <SelectItem value="Friendly Greeting">Friendly Greeting</SelectItem>
-                      <SelectItem value="Agent Offered Name">Agent Offered Name</SelectItem>
-                      <SelectItem value="Temperature Check">Temperature Check</SelectItem>
-                      <SelectItem value="DNC Requested">DNC Requested</SelectItem>
-                      <SelectItem value="Profanity">Profanity</SelectItem>
-                      <SelectItem value="Agent Offered Legal Advice">Agent Offered Legal Advice</SelectItem>
-                      <SelectItem value="Agent Offered Guarantees">Agent Offered Guarantees</SelectItem>
-                    </>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} />
+            <ScorecardContext 
+              selectedScorecard={selectedScorecard}
+              setSelectedScorecard={setSelectedScorecard}
+              selectedScore={selectedScore}
+              setSelectedScore={setSelectedScore}
+            />
+            <TimeRangeSelector 
+              onTimeRangeChange={handleTimeRangeChange}
+              options={ACTIVITY_TIME_RANGE_OPTIONS}
+            />
           </div>
 
           <Card className="shadow-none border-none mb-6 bg-card-light">
@@ -632,9 +598,9 @@ export default function ActivityDashboard() {
                           onClick={() => setSelectedActivity(activity)}
                         />
                       )
-                    case 'Analysis started':
+                    case 'Optimization started': // Update case
                       return (
-                        <AnalysisTask
+                        <OptimizationTask // Update component
                           variant="grid"
                           task={activity}
                           onClick={() => setSelectedActivity(activity)}
@@ -687,8 +653,8 @@ export default function ActivityDashboard() {
                   return <AlertTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
                 case 'Report':
                   return <ReportTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
-                case 'Analysis started':
-                  return <AnalysisTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                case 'Optimization started':
+                  return <OptimizationTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
                 case 'Feedback queue started':
                 case 'Feedback queue completed':
                   return <FeedbackTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
@@ -715,8 +681,8 @@ export default function ActivityDashboard() {
                   return <AlertTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
                 case 'Report':
                   return <ReportTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
-                case 'Analysis started':
-                  return <AnalysisTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                case 'Optimization started':
+                  return <OptimizationTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
                 case 'Feedback queue started':
                 case 'Feedback queue completed':
                   return <FeedbackTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />

@@ -31,6 +31,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useRouter } from 'next/navigation'
+import ScorecardContext from "@/components/ScorecardContext"
+import ItemContext from "@/components/ItemContext"
 
 // Function to create a date relative to now
 const relativeDate = (days: number, hours: number, minutes: number) => {
@@ -184,60 +186,6 @@ const ITEMS_TIME_RANGE_OPTIONS = [
   { value: "custom", label: "Custom" },
 ]
 
-const SampleControl = ({ onSampleChange }: { onSampleChange: (method: string, count: number) => void }) => {
-  const [method, setMethod] = useState("All")
-  const [count, setCount] = useState(100)
-
-  const handleMethodChange = (value: string) => {
-    setMethod(value)
-    onSampleChange(value, count)
-  }
-
-  const handleCountChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const newCount = parseInt(event.target.value, 10)
-    setCount(newCount)
-    onSampleChange(method, newCount)
-  }
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" className="w-[150px] justify-start text-left font-normal">
-          <span>Sample: {method}</span>
-          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-0" align="start">
-        <div className="p-4 space-y-4">
-          <div className="space-y-2">
-            <Label>Sampling Method</Label>
-            <Select value={method} onValueChange={handleMethodChange}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">All</SelectItem>
-                <SelectItem value="Random">Random</SelectItem>
-                <SelectItem value="Sequential">Sequential</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Item Count</Label>
-            <Input
-              type="number"
-              value={count}
-              onChange={handleCountChange}
-              min={1}
-              max={1000}
-            />
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
 export default function DataDashboard() {
   const router = useRouter()
   const [items, setItems] = useState(generateInitialItems)
@@ -348,12 +296,6 @@ export default function DataDashboard() {
     // Implement the logic for handling time range changes
   }
 
-  const handleScorecardChange = (value: string) => {
-    const newScorecardValue = value === "all" ? null : value
-    setSelectedScorecard(newScorecardValue)
-    setSelectedScore(null) // Always reset score selection when scorecard changes
-  }
-
   const toggleExplanation = (scoreName: string) => {
     setExpandedExplanations(prev => 
       prev.includes(scoreName) 
@@ -376,12 +318,9 @@ export default function DataDashboard() {
     { value: 'cost', label: 'Cost' },
   ]
 
-  // Add this function to handle sample changes
   const handleSampleChange = (method: string, count: number) => {
-    setSampleMethod(method)
-    setSampleCount(count)
-    // Implement the logic for applying the sampling here
     console.log(`Sampling method: ${method}, Count: ${count}`)
+    // Implement the logic for applying the sampling here
   }
 
   const renderItemsList = () => (
@@ -687,51 +626,26 @@ export default function DataDashboard() {
 
   return (
     <div className="space-y-4 h-full flex flex-col">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 sm:space-x-4">
-        <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
-          <Select onValueChange={handleScorecardChange}>
-            <SelectTrigger className="w-full sm:w-[280px] border border-secondary">
-              <SelectValue placeholder="Scorecard" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Scorecards</SelectItem>
-              <SelectItem value="SelectQuote Term Life v1">SelectQuote Term Life v1</SelectItem>
-              <SelectItem value="CS3 Nexstar v1">CS3 Nexstar v1</SelectItem>
-              <SelectItem value="CS3 Services v2">CS3 Services v2</SelectItem>
-              <SelectItem value="CS3 Audigy">CS3 Audigy</SelectItem>
-              <SelectItem value="AW IB Sales">AW IB Sales</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select 
-            onValueChange={(value) => setSelectedScore(value === "all" ? null : value)}
-            disabled={!selectedScorecard}
-            value={selectedScore || "all"} // Add this line to control the select value
-          >
-            <SelectTrigger className="w-full sm:w-[280px] border border-secondary">
-              <SelectValue placeholder="Score" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Scores</SelectItem>
-              {selectedScorecard && (
-                <>
-                  <SelectItem value="Good Call">Good Call</SelectItem>
-                  <SelectItem value="Agent Branding">Agent Branding</SelectItem>
-                  <SelectItem value="Temperature Check">Temperature Check</SelectItem>
-                  <SelectItem value="Assumptive Close">Assumptive Close</SelectItem>
-                </>
-              )}
-            </SelectContent>
-          </Select>
+      <div className="flex flex-wrap justify-between items-start gap-4">
+        <div className="flex-shrink-0">
+          <ScorecardContext 
+            selectedScorecard={selectedScorecard}
+            setSelectedScorecard={setSelectedScorecard}
+            selectedScore={selectedScore}
+            setSelectedScore={setSelectedScore}
+          />
         </div>
-        <div className="flex space-x-2">
-          <FilterControl onFilterChange={handleFilterChange} availableFields={availableFields} />
-          <SampleControl onSampleChange={handleSampleChange} />
-          <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} options={ITEMS_TIME_RANGE_OPTIONS} />
+        <div className="flex-shrink-0 ml-auto">
+          <ItemContext
+            handleFilterChange={handleFilterChange}
+            handleSampleChange={handleSampleChange}
+            handleTimeRangeChange={handleTimeRangeChange}
+            availableFields={availableFields}
+            timeRangeOptions={ITEMS_TIME_RANGE_OPTIONS}
+          />
         </div>
       </div>
-
       {renderActionButtons()}
-
       <div className="flex-grow flex flex-col overflow-hidden pb-2">
         {selectedItem && (isNarrowViewport || isFullWidth) ? (
           <div className="flex-grow overflow-hidden">

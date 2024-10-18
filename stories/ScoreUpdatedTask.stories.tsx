@@ -4,8 +4,14 @@ import ScoreUpdatedTask from '@/components/ScoreUpdatedTask';
 import { BaseTaskProps } from '@/components/Task';
 
 export default {
-  title: 'Components/ScoreUpdatedTask',
+  title: 'Tasks/Types/ScoreUpdatedTask',
   component: ScoreUpdatedTask,
+  argTypes: {
+    variant: {
+      control: { type: 'radio' },
+      options: ['grid', 'detail'],
+    },
+  },
 } as Meta;
 
 const Template: StoryFn<BaseTaskProps> = (args) => <ScoreUpdatedTask {...args} />;
@@ -32,27 +38,16 @@ const createTask = (id: number, type: string, summary: string): BaseTaskProps =>
   onClick: () => console.log(`Clicked on task ${id}`),
 });
 
-export const Default = () => (
+export const Grid = () => (
   <>
-    <style>
-      {`
-        :root {
-          --true: #22c55e;
-          --false: #ef4444;
-        }
-      `}
-    </style>
     <Template {...createTask(1, 'Customer Satisfaction', 'Score improved')} />
     <Template {...createTask(2, 'Product Quality', 'Score maintained')} />
     <Template {...createTask(3, 'Employee Performance', 'Score slightly decreased')} />
   </>
 );
 
-export const SingleGridItem = Template.bind({});
-SingleGridItem.args = createTask(4, 'Team Productivity', 'Score significantly improved');
-
 export const Detail = Template.bind({});
 Detail.args = {
-  ...createTask(5, 'Project Success Rate', 'Score update analysis'),
+  ...createTask(4, 'Team Productivity', 'Score significantly improved'),
   variant: 'detail',
 };
