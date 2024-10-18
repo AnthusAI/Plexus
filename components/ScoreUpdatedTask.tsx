@@ -1,5 +1,5 @@
 import React from 'react'
-import { Task, TaskHeader, TaskContent, BaseTaskProps } from './Task'
+import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
 import { ListTodo, MoveUpRight } from 'lucide-react'
 import { PieChart, Pie, ResponsiveContainer } from 'recharts'
 
@@ -48,7 +48,7 @@ const PieChartComponent: React.FC<{
   </div>
 ))
 
-const ScoreUpdatedTask: React.FC<BaseTaskProps> = ({ variant, task, onClick, controlButtons }) => {
+const ScoreUpdatedTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>> = ({ variant, task, onClick, controlButtons }) => {
   const data = task.data as ScoreUpdatedTaskData
 
   const beforeInnerPieData = [
@@ -97,21 +97,28 @@ const ScoreUpdatedTask: React.FC<BaseTaskProps> = ({ variant, task, onClick, con
   )
 
   return (
-    <Task variant={variant} task={task} onClick={onClick} controlButtons={controlButtons}>
-      <TaskHeader task={task} variant={variant}>
-        <div className="flex flex-col items-end">
-          <div className="w-7 flex-shrink-0 mb-1">
-            <ListTodo className="h-5 w-5" />
+    <Task 
+      variant={variant} 
+      task={task} 
+      onClick={onClick} 
+      controlButtons={controlButtons}
+      renderHeader={(props) => (
+        <TaskHeader {...props}>
+          <div className="flex flex-col items-end">
+            <div className="w-7 flex-shrink-0 mb-1">
+              <ListTodo className="h-5 w-5" />
+            </div>
           </div>
-        </div>
-      </TaskHeader>
-      <TaskContent 
-        task={task} 
-        variant={variant} 
-        visualization={visualization}
-        customSummary={customSummary}
-      />
-    </Task>
+        </TaskHeader>
+      )}
+      renderContent={(props) => (
+        <TaskContent 
+          {...props} 
+          visualization={visualization}
+          customSummary={customSummary}
+        />
+      )}
+    />
   )
 }
 

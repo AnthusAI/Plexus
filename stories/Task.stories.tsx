@@ -1,52 +1,43 @@
 import React from 'react';
-import { Story, Meta } from '@storybook/react';
-import { Task, TaskHeader, TaskContent, TaskActions, BaseTaskProps } from '@/components/Task';
+import { StoryFn, Meta } from '@storybook/react';
+import { Task, TaskHeader, TaskContent, BaseTaskProps, TaskComponentProps } from '@/components/Task';
 
 export default {
   title: 'Components/Task',
   component: Task,
 } as Meta;
 
-const Template: Story<BaseTaskProps & { children?: React.ReactNode }> = (args) => <Task {...args}>{args.children}</Task>;
+const Template: StoryFn<TaskComponentProps> = (args) => (
+  <Task 
+    {...args}
+    renderHeader={(props) => <TaskHeader {...props} />}
+    renderContent={(props) => <TaskContent {...props} />}
+  />
+);
 
-export const Grid = Template.bind({});
-Grid.args = {
+const createTask = (id: number, type: string, summary: string): TaskComponentProps => ({
   variant: 'grid',
   task: {
-    id: 8,
-    type: 'Generic Task',
-    scorecard: 'Generic Scorecard',
-    score: 'N/A',
-    time: 'Just now',
-    summary: 'This is a generic task summary.',
-    description: 'This is a detailed description of the generic task.',
-    data: {},
+    id,
+    type,
+    scorecard: 'General',
+    score: 'In Progress',
+    time: '1 hour ago',
+    summary,
   },
-  children: (
-    <>
-      <TaskHeader />
-      <TaskContent />
-    </>
-  ),
-};
+  onClick: () => console.log(`Clicked on task ${id}`),
+  renderHeader: (props) => <TaskHeader {...props} />,
+  renderContent: (props) => <TaskContent {...props} />,
+});
 
-export const Detail = Template.bind({});
-Detail.args = {
+export const Default = Template.bind({});
+Default.args = createTask(1, 'Default Task', 'This is a default task');
+
+export const GridVariant = Template.bind({});
+GridVariant.args = createTask(2, 'Grid Task', 'This is a grid task');
+
+export const DetailVariant = Template.bind({});
+DetailVariant.args = {
+  ...createTask(3, 'Detail Task', 'This is a detail task'),
   variant: 'detail',
-  task: {
-    id: 8,
-    type: 'Generic Task',
-    scorecard: 'Generic Scorecard',
-    score: 'N/A',
-    time: 'Just now',
-    summary: 'This is a generic task summary.',
-    description: 'This is a detailed description of the generic task.',
-    data: {},
-  },
-  children: (
-    <>
-      <TaskHeader />
-      <TaskContent />
-    </>
-  ),
 };
