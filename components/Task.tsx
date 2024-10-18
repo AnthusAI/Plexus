@@ -68,7 +68,7 @@ const Task: React.FC<TaskComponentProps> = ({
 }
 
 const TaskHeader: React.FC<TaskChildProps> = ({ task, variant, children, controlButtons }) => (
-  <CardHeader className="space-y-1.5 p-6 pr-4 flex flex-col items-start">
+  <CardHeader className="space-y-1.5 p-4 pr-4 flex flex-col items-start">
     <div className="flex justify-between items-start w-full">
       <div className="flex flex-col">
         <div className="text-lg font-bold">{task.type}</div>
@@ -94,7 +94,7 @@ const TaskContent: React.FC<TaskChildProps & {
   visualization?: React.ReactNode,
   customSummary?: React.ReactNode
 }> = ({ task, variant, children, visualization, customSummary }) => (
-  <CardContent className="p-6 pt-0 pb-4 flex flex-col flex-grow">
+  <CardContent className="p-4 pt-0 pb-4 flex flex-col flex-grow">
     <div className="flex flex-col xs:flex-row justify-between items-start w-full">
       <div className="space-y-1 flex-grow w-full xs:w-auto">
         <div className="text-lg font-bold">
