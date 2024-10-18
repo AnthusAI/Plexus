@@ -43,11 +43,11 @@ const FeedbackTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderCo
               </div>
               <Progress value={data.progress} className="w-full h-4" />
               <div className="flex justify-between text-xs mt-1">
-                <div>{data.numberComplete}/{data.numberTotal}</div>
+                <div>{data.processedItems}/{data.totalItems}</div>
                 <div>
                   {task.type === "Feedback queue completed" 
                     ? `Completed in ${data.elapsedTime}`
-                    : `ETA: ${data.eta}`
+                    : `ETA: ${data.estimatedTimeRemaining}`
                   }
                 </div>
               </div>
