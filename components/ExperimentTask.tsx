@@ -79,8 +79,8 @@ const ExperimentTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'render
               </div>
               <Progress value={data.progress} className="w-full h-4" />
               <div className="flex justify-between text-xs mt-1">
-                <div>{data.numberComplete}/{data.numberTotal}</div>
-                <div>ETA: {data.eta}</div>
+                <div>{data.processedItems}/{data.totalItems}</div>
+                <div>ETA: {data.estimatedTimeRemaining}</div>
               </div>
             </div>
           )}
