@@ -113,10 +113,8 @@ const AnalysisTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderCo
       controlButtons={controlButtons}
       renderHeader={(props) => (
         <TaskHeader {...props}>
-          <div className="flex flex-col items-end">
-            <div className="w-7 flex-shrink-0 mb-1">
-              <Sparkles className="h-5 w-5" />
-            </div>
+          <div className="flex justify-end w-full">
+            <Sparkles className="h-5 w-5" />
           </div>
         </TaskHeader>
       )}

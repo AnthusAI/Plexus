@@ -17,10 +17,8 @@ const AlertTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderConte
       controlButtons={controlButtons}
       renderHeader={(props) => (
         <TaskHeader {...props}>
-          <div className="flex flex-col items-end">
-            <div className="w-7 flex-shrink-0 mb-1">
-              <Siren className="h-5 w-5" />
-            </div>
+          <div className="flex justify-end w-full">
+            <Siren className="h-5 w-5" />
           </div>
         </TaskHeader>
       )}
