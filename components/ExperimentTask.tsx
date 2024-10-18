@@ -29,6 +29,7 @@ const ExperimentTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'render
             cy="50%"
             outerRadius={40}
             fill="#8884d8"
+            strokeWidth={0}
           />
           <Pie
             data={outerPieData}
@@ -39,6 +40,7 @@ const ExperimentTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'render
             innerRadius={45}
             outerRadius={55}
             fill="#82ca9d"
+            strokeWidth={0}
           />
         </PieChart>
       </ResponsiveContainer>
