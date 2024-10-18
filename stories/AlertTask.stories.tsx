@@ -4,13 +4,32 @@ import AlertTask from '@/components/AlertTask';
 import { BaseTaskProps } from '@/components/Task';
 
 export default {
-  title: 'Components/AlertTask',
+  title: 'Tasks/Types/AlertTask',
   component: AlertTask,
+  argTypes: {
+    variant: {
+      control: { type: 'radio' },
+      options: ['grid', 'detail'],
+    },
+    iconType: {
+      control: { type: 'radio' },
+      options: ['info', 'warning'],
+    },
+  },
 } as Meta;
 
-const Template: StoryFn<BaseTaskProps> = (args) => <AlertTask {...args} />;
+interface AlertTaskStoryProps extends BaseTaskProps {
+  iconType: 'info' | 'warning';
+}
 
-const createTask = (id: number, type: string, summary: string): BaseTaskProps => ({
+const Template: StoryFn<AlertTaskStoryProps> = (args) => <AlertTask {...args} />;
+
+const createTask = (
+  id: number, 
+  type: string, 
+  summary: string, 
+  iconType: 'info' | 'warning'
+): AlertTaskStoryProps => ({
   variant: 'grid',
   task: {
     id,
@@ -21,30 +40,20 @@ const createTask = (id: number, type: string, summary: string): BaseTaskProps =>
     summary,
   },
   onClick: () => console.log(`Clicked on task ${id}`),
+  iconType,
 });
 
-export const Default = () => (
+export const Grid = () => (
   <>
-    <style>
-      {`
-        :root {
-          --true: #22c55e;
-          --false: #ef4444;
-        }
-      `}
-    </style>
-    <Template {...createTask(1, 'System Outage', 'Urgent attention required')} />
-    <Template {...createTask(2, 'Security Breach', 'Investigating')} />
-    <Template {...createTask(3, 'Performance Degradation', 'Monitoring')} />
-    <Template {...createTask(4, 'Data Inconsistency', 'Verification needed')} />
+    <Template {...createTask(1, 'System Outage', 'Urgent attention required', 'info')} />
+    <Template {...createTask(2, 'Security Breach', 'Investigating', 'info')} />
+    <Template {...createTask(3, 'Performance Degradation', 'Monitoring', 'warning')} />
+    <Template {...createTask(4, 'Data Inconsistency', 'Verification needed', 'warning')} />
   </>
 );
 
-export const SingleGridItem = Template.bind({});
-SingleGridItem.args = createTask(7, 'Critical Error', 'Urgent attention required');
-
 export const Detail = Template.bind({});
 Detail.args = {
-  ...createTask(8, 'Network Anomaly', 'Investigating'),
+  ...createTask(8, 'Network Anomaly', 'Investigating', 'info'),
   variant: 'detail',
 };

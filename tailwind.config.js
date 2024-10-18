@@ -9,6 +9,9 @@ module.exports = {
     safelist: [
         { pattern: /^bg-/ },
         { pattern: /^text-.*-foreground$/ },
+		'grid',
+		'md:grid-cols-2',
+		'lg:grid-cols-3',
     ],
     theme: {
     	extend: {

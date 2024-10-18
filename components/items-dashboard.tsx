@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { TimeRangeSelector, TimeRangeOption } from "@/components/time-range-selector"
+import { TimeRangeSelector } from "@/components/time-range-selector"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import ReactMarkdown from 'react-markdown'
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -23,6 +23,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
+import ScorecardContext from "@/components/ScorecardContext"
+import ItemContext from "@/components/ItemContext"
 
 // Get the current date and time
 const now = new Date();
@@ -123,7 +125,7 @@ const sampleTranscript = [
   { speaker: "Caller", text: "Ut aut reiciendis voluptatibus maiores alias consequatur aut perferendis doloribus asperiores repellat." },
 ];
 
-const ITEMS_TIME_RANGE_OPTIONS: TimeRangeOption[] = [
+const ITEMS_TIME_RANGE_OPTIONS = [
   { value: "recent", label: "Recent" },
   { value: "review", label: "With Feedback" },
   { value: "custom", label: "Custom" },
@@ -295,6 +297,8 @@ export default function ItemsDashboard() {
   const [thumbedUpScores, setThumbedUpScores] = useState<Set<string>>(new Set());
   const [feedbackItems, setFeedbackItems] = useState<Record<string, any[]>>({});
   const [items, setItems] = useState<Item[]>(initialItems);
+  const [sampleMethod, setSampleMethod] = useState("All");
+  const [sampleCount, setSampleCount] = useState(100);
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -723,6 +727,13 @@ export default function ItemsDashboard() {
     setFilterConfig(newFilters)
   }
 
+  const handleSampleChange = (method: string, count: number) => {
+    setSampleMethod(method);
+    setSampleCount(count);
+    console.log(`Sampling method: ${method}, Count: ${count}`);
+    // Implement the logic for applying the sampling here
+  }
+
   const availableFields = [
     { value: 'scorecard', label: 'Scorecard' },
     { value: 'score', label: 'Score' },
@@ -734,25 +745,23 @@ export default function ItemsDashboard() {
 
   return (
     <div className="space-y-4 h-full flex flex-col">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 sm:space-x-4">
-        <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
-          <Select onValueChange={(value) => setSelectedScorecard(value === "all" ? null : value)}>
-            <SelectTrigger className="w-full sm:w-[280px] border border-secondary">
-              <SelectValue placeholder="Scorecard" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Scorecards</SelectItem>
-              <SelectItem value="SelectQuote Term Life v1">SelectQuote Term Life v1</SelectItem>
-              <SelectItem value="CS3 Nexstar v1">CS3 Nexstar v1</SelectItem>
-              <SelectItem value="CS3 Services v2">CS3 Services v2</SelectItem>
-              <SelectItem value="CS3 Audigy">CS3 Audigy</SelectItem>
-              <SelectItem value="AW IB Sales">AW IB Sales</SelectItem>
-            </SelectContent>
-          </Select>
+      <div className="flex flex-wrap justify-between items-start gap-4">
+        <div className="flex-shrink-0">
+          <ScorecardContext 
+            selectedScorecard={selectedScorecard}
+            setSelectedScorecard={setSelectedScorecard}
+            selectedScore={selectedScore}
+            setSelectedScore={setSelectedScore}
+          />
         </div>
-        <div className="flex space-x-2">
-          <FilterControl onFilterChange={handleFilterChange} availableFields={availableFields} />
-          <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} options={ITEMS_TIME_RANGE_OPTIONS} />
+        <div className="flex-shrink-0 ml-auto">
+          <ItemContext
+            handleFilterChange={handleFilterChange}
+            handleSampleChange={handleSampleChange}
+            handleTimeRangeChange={handleTimeRangeChange}
+            availableFields={availableFields}
+            timeRangeOptions={ITEMS_TIME_RANGE_OPTIONS}
+          />
         </div>
       </div>
 

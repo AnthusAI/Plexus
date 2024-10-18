@@ -58,7 +58,7 @@ const Task: React.FC<TaskComponentProps> = ({
 
   return (
     <Card 
-      className="bg-card-light shadow-none border-none rounded-lg cursor-pointer transition-colors duration-200 hover:bg-card flex flex-col h-full"
+      className="bg-card-light shadow-none border-none rounded-lg cursor-pointer transition-colors duration-200 hover:bg-muted flex flex-col h-full"
       onClick={onClick}
     >
       {renderHeader(childProps)}

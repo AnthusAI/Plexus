@@ -4,55 +4,52 @@ import ExperimentTask from '@/components/ExperimentTask';
 import { BaseTaskProps } from '@/components/Task';
 
 export default {
-  title: 'Components/ExperimentTask',
+  title: 'Tasks/Types/ExperimentTask',
   component: ExperimentTask,
+  argTypes: {
+    variant: {
+      control: { type: 'radio' },
+      options: ['grid', 'detail'],
+    },
+  },
 } as Meta;
 
 const Template: StoryFn<BaseTaskProps> = (args) => <ExperimentTask {...args} />;
 
-const createTask = (id: number, type: string, summary: string): BaseTaskProps => ({
+const createTask = (id: number, processedItems: number, totalItems: number): BaseTaskProps => ({
   variant: 'grid',
   task: {
     id,
-    type,
-    scorecard: 'Experiment',
+    type: 'Experiment',
+    scorecard: 'Experiment Analysis',
     score: 'In Progress',
-    time: '4 hours ago',
-    summary,
-    description: 'Experiment progress',
+    time: '1 hour ago',
     data: {
-      accuracy: 75,
-      progress: 65,
-      elapsedTime: '3h 15m',
-      numberComplete: 130,
-      numberTotal: 200,
-      eta: '1h 45m',
+      accuracy: 85,
+      progress: 70,
+      elapsedTime: '30m',
+      numberComplete: processedItems,
+      numberTotal: totalItems,
+      eta: '15m remaining',
+      processedItems,
+      totalItems,
+      estimatedTimeRemaining: '15m',
     },
   },
   onClick: () => console.log(`Clicked on task ${id}`),
 });
 
-export const Default = () => (
+export const Grid = () => (
   <>
-    <style>
-      {`
-        :root {
-          --true: #22c55e;
-          --false: #ef4444;
-        }
-      `}
-    </style>
-    <Template {...createTask(1, 'A/B Test', 'Testing new feature')} />
-    <Template {...createTask(2, 'Multivariate Test', 'Optimizing landing page')} />
-    <Template {...createTask(3, 'Split Test', 'Comparing email campaigns')} />
+    <Template {...createTask(1, 50, 100)} />
+    <Template {...createTask(2, 30, 60)} />
+    <Template {...createTask(3, 70, 100)} />
+    <Template {...createTask(4, 20, 40)} />
   </>
 );
 
-export const SingleGridItem = Template.bind({});
-SingleGridItem.args = createTask(4, 'Usability Test', 'Evaluating new UI design');
-
 export const Detail = Template.bind({});
 Detail.args = {
-  ...createTask(5, 'Performance Test', 'Measuring load times'),
+  ...createTask(5, 80, 100),
   variant: 'detail',
 };

@@ -95,7 +95,7 @@ const ScoreUpdatedTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'rend
   const customSummary = (
     <div className="flex items-center">
       <span>{data?.before?.innerRing[0]?.value ?? 0}%</span>
-      <MoveUpRight className="h-5 w-5 mx-1" />
+      <MoveUpRight className="h-6 w-6 mx-1" />
       <span>{data?.after?.innerRing[0]?.value ?? 0}%</span>
     </div>
   )
@@ -109,7 +109,7 @@ const ScoreUpdatedTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'rend
       renderHeader={(props) => (
         <TaskHeader {...props}>
           <div className="flex justify-end w-full">
-            <ListTodo className="h-5 w-5" />
+            <ListTodo className="h-6 w-6" />
           </div>
         </TaskHeader>
       )}

@@ -18,7 +18,7 @@ const ReportTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderCont
       renderHeader={(props) => (
         <TaskHeader {...props}>
           <div className="flex justify-end w-full">
-            <FileText className="h-5 w-5" />
+            <FileText className="h-6 w-6" />
           </div>
         </TaskHeader>
       )}

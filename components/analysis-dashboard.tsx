@@ -456,7 +456,7 @@ export default function AnalysisDashboard() {
                     <div className="font-semibold">Accuracy</div>
                     <div className="flex items-center">
                       <span>75%</span>
-                      <MoveUpRight className="h-5 w-5 mx-1" />
+                      <MoveUpRight className="h-6 w-6 mx-1" />
                       <span>92%</span>
                     </div>
                   </div>
@@ -582,7 +582,7 @@ export default function AnalysisDashboard() {
         <div className="font-semibold">Accuracy</div>
         <div className="flex items-center">
           <span>{before}%</span>
-          <MoveUpRight className="h-5 w-5 mx-1" />
+          <MoveUpRight className="h-6 w-6 mx-1" />
           <span>{after}%</span>
         </div>
       </div>

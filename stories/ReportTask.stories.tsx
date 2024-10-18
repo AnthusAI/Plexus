@@ -4,8 +4,14 @@ import ReportTask from '@/components/ReportTask';
 import { BaseTaskProps } from '@/components/Task';
 
 export default {
-  title: 'Components/ReportTask',
+  title: 'Tasks/Types/ReportTask',
   component: ReportTask,
+  argTypes: {
+    variant: {
+      control: { type: 'radio' },
+      options: ['grid', 'detail'],
+    },
+  },
 } as Meta;
 
 const Template: StoryFn<BaseTaskProps> = (args) => <ReportTask {...args} />;
@@ -24,16 +30,8 @@ const createTask = (id: number, type: string, summary: string): BaseTaskProps =>
   onClick: () => console.log(`Clicked on task ${id}`),
 });
 
-export const Default = () => (
+export const Grid = () => (
   <>
-    <style>
-      {`
-        :root {
-          --true: #22c55e;
-          --false: #ef4444;
-        }
-      `}
-    </style>
     <Template {...createTask(1, 'Monthly Report', 'Generated successfully')} />
     <Template {...createTask(2, 'Weekly Summary', 'Ready for review')} />
     <Template {...createTask(3, 'Performance Analysis', 'Awaiting approval')} />
@@ -41,11 +39,8 @@ export const Default = () => (
   </>
 );
 
-export const SingleGridItem = Template.bind({});
-SingleGridItem.args = createTask(5, 'Annual Report', 'Finalizing content');
-
 export const Detail = Template.bind({});
 Detail.args = {
-  ...createTask(6, 'Financial Statement', 'Pending audit'),
+  ...createTask(5, 'Annual Report', 'Finalizing content'),
   variant: 'detail',
 };
