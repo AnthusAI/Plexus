@@ -24,6 +24,10 @@ module.exports = {
     				DEFAULT: 'var(--card)',
     				foreground: 'var(--card-foreground)'
     			},
+    			'card-light': {
+    				DEFAULT: 'var(--card-light)',
+    				foreground: 'var(--card-light-foreground)'
+    			},
     			popover: {
     				DEFAULT: 'var(--popover)',
     				foreground: 'var(--popover-foreground)'

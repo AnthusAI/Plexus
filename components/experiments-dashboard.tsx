@@ -333,7 +333,7 @@ export default function ExperimentsDashboard() {
     if (!selectedItemData) return null
 
     return (
-      <Card className="rounded-none sm:rounded-lg h-full flex flex-col">
+      <Card className="rounded-none sm:rounded-lg h-full flex flex-col bg-card-light border-none">
         <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between py-4 px-4 sm:px-6 space-y-0">
           <div>
             <h2 className="text-xl font-semibold">{selectedItemData.scorecard}</h2>

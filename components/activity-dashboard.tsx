@@ -553,7 +553,7 @@ export default function ActivityDashboard() {
             <TimeRangeSelector onTimeRangeChange={handleTimeRangeChange} />
           </div>
 
-          <Card className="shadow-none border-none mb-6">
+          <Card className="shadow-none border-none mb-6 bg-card-light">
             <CardContent className="p-0">
               <div ref={chartContainerRef} className="w-full h-[300px]">
                 <ChartContainer config={chartConfig} className="h-full w-full">
