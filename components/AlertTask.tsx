@@ -30,7 +30,7 @@ const AlertTask: React.FC<AlertTaskProps> = ({
 
   const visualization = (
     <div className="flex items-center justify-center">
-      <IconComponent className="h-24 w-24 text-destructive" />
+      <IconComponent className="h-[120px] w-[120px] text-destructive" strokeWidth={2.5} />
     </div>
   )
 

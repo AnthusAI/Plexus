@@ -16,8 +16,8 @@ const PieChartComponent: React.FC<{
   label: string
 }> = React.memo(({ innerData, outerData, label }) => (
   <div className="text-center">
-    <div className="text-sm font-medium mb-1">{label}</div>
-    <div className="h-[70px] w-[70px] sm:h-[80px] sm:w-[80px]">
+    <div className="text-sm font-medium">{label}</div>
+    <div className="h-[90px] w-[90px] sm:h-[100px] sm:w-[100px]">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
@@ -26,7 +26,7 @@ const PieChartComponent: React.FC<{
             nameKey="name"
             cx="50%"
             cy="50%"
-            outerRadius={24}
+            outerRadius={34}
             fill="#8884d8"
             strokeWidth={0}
             paddingAngle={0}
@@ -37,8 +37,8 @@ const PieChartComponent: React.FC<{
             nameKey="name"
             cx="50%"
             cy="50%"
-            innerRadius={28}
-            outerRadius={35}
+            innerRadius={40}
+            outerRadius={50}
             fill="#82ca9d"
             strokeWidth={0}
             paddingAngle={0}

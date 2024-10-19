@@ -27,7 +27,6 @@ const createTask = (id: number, processedItems: number, totalItems: number): Exp
       processedItems,
       totalItems,
       estimatedTimeRemaining: '00:30:00',
-      processingRate: 2.5
     }
   },
   onClick: () => console.log(`Clicked task ${id}`),

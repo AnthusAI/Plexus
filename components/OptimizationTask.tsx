@@ -10,7 +10,6 @@ interface OptimizationTaskData {
   numberComplete?: number
   numberTotal?: number
   estimatedTimeRemaining?: string
-  processingRate?: number
   before?: {
     innerRing: Array<{ value: number }>
   }
@@ -56,7 +55,6 @@ const OptimizationTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'rend
               processedItems={data.numberComplete ?? 0}
               totalItems={data.numberTotal ?? 0}
               estimatedTimeRemaining={data.estimatedTimeRemaining ?? ''}
-              processingRate={data.processingRate ?? 0}
             />
           )}
         </TaskContent>

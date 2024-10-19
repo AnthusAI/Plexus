@@ -84,7 +84,6 @@ const recentActivities = [
       totalItems: 100,
       elapsedTime: "00:02:15",
       estimatedTimeRemaining: "00:03:05",
-      processingRate: 23.5,
       outerRing: [
         { category: "Positive", value: 50, fill: "var(--true)" },
         { category: "Negative", value: 50, fill: "var(--false)" },
@@ -164,7 +163,6 @@ const recentActivities = [
       totalItems: 100,
       elapsedTime: "00:04:20",
       estimatedTimeRemaining: "00:00:00",
-      processingRate: 100,
       outerRing: [
         { category: "Positive", value: 50, fill: "var(--true)" },
         { category: "Negative", value: 50, fill: "var(--false)" },
@@ -220,7 +218,6 @@ const recentActivities = [
       totalItems: 150,
       elapsedTime: "00:10:15",
       estimatedTimeRemaining: "00:30:45",
-      processingRate: 3.6,
     },
   },
   {
@@ -237,7 +234,6 @@ const recentActivities = [
       totalItems: 200,
       elapsedTime: "00:45:30",
       estimatedTimeRemaining: "00:00:00",
-      processingRate: 4.4,
     },
   },
 ]
