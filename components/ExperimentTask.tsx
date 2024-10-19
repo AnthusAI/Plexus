@@ -3,6 +3,7 @@ import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
 import { FlaskConical } from 'lucide-react'
 import StackedPieChart from './StackedPieChart'
 import TaskProgress from './TaskProgress'
+import NivoWaffle from './NivoWaffle'
 
 interface ExperimentTaskData {
   accuracy?: number
@@ -34,6 +35,8 @@ const ExperimentTask: React.FC<ExperimentTaskProps> = ({
   controlButtons,
 }) => {
   const data = task.data as ExperimentTaskData
+  
+  console.log('ExperimentTask data:', data);
 
   const visualization = (
     <StackedPieChart accuracy={data?.accuracy || 0} />
@@ -55,13 +58,24 @@ const ExperimentTask: React.FC<ExperimentTaskProps> = ({
       renderContent={(props) => (
         <TaskContent {...props} visualization={visualization}>
           {data && (
-            <TaskProgress 
-              progress={data.progress ?? 0}
-              elapsedTime={data.elapsedTime ?? ''}
-              processedItems={data.processedItems ?? 0}
-              totalItems={data.totalItems ?? 0}
-              estimatedTimeRemaining={data.estimatedTimeRemaining ?? ''}
-            />
+            <>
+              <TaskProgress 
+                progress={data.progress ?? 0}
+                elapsedTime={data.elapsedTime ?? ''}
+                processedItems={data.processedItems ?? 0}
+                totalItems={data.totalItems ?? 0}
+                estimatedTimeRemaining={data.estimatedTimeRemaining ?? ''}
+              />
+              {variant === 'detail' && (
+                <div className="mt-4 h-[164px] w-full">
+                  <NivoWaffle 
+                    processedItems={data.processedItems ?? 0}
+                    totalItems={data.totalItems ?? 1}
+                    accuracy={data.accuracy ?? 0}
+                  />
+                </div>
+              )}
+            </>
           )}
         </TaskContent>
       )}
