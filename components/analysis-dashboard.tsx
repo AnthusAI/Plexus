@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { TimeRangeSelector, TimeRangeOption } from "@/components/time-range-selector"
+import { TimeRangeSelector } from "@/components/time-range-selector"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import ReactMarkdown from 'react-markdown'
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -27,6 +27,12 @@ import { Progress } from "@/components/ui/progress"
 import { MoveUpRight } from "lucide-react"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { ResponsiveContainer, PieChart, Pie } from "recharts"
+
+// Add this type definition
+type TimeRangeOption = {
+  value: string;
+  label: string;
+};
 
 const chartConfig = {
   positive: { label: "Positive", color: "var(--true)" },

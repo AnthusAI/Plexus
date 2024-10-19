@@ -309,13 +309,18 @@ export default function DataDashboard() {
   }
 
   const availableFields = [
-    { value: 'scorecard', label: 'Scorecard' },
-    { value: 'id', label: 'ID' },
-    { value: 'status', label: 'Status' },
-    { value: 'score', label: 'Score' },
-    { value: 'results', label: 'Results' },
-    { value: 'inferences', label: 'Inferences' },
-    { value: 'cost', label: 'Cost' },
+    { value: 'SelectQuote Term Life v1', label: 'SelectQuote Term Life v1' },
+    { value: 'CS3 Nexstar v1', label: 'CS3 Nexstar v1' },
+    { value: 'CS3 Services v2', label: 'CS3 Services v2' },
+    { value: 'CS3 Audigy', label: 'CS3 Audigy' },
+    { value: 'AW IB Sales', label: 'AW IB Sales' },
+  ]
+
+  const scoreOptions = [
+    { value: 'Good Call', label: 'Good Call' },
+    { value: 'Agent Branding', label: 'Agent Branding' },
+    { value: 'Temperature Check', label: 'Temperature Check' },
+    { value: 'Assumptive Close', label: 'Assumptive Close' },
   ]
 
   const handleSampleChange = (method: string, count: number) => {
@@ -633,6 +638,8 @@ export default function DataDashboard() {
             setSelectedScorecard={setSelectedScorecard}
             selectedScore={selectedScore}
             setSelectedScore={setSelectedScore}
+            availableFields={availableFields}
+            timeRangeOptions={scoreOptions}
           />
         </div>
         <div className="flex-shrink-0 ml-auto">

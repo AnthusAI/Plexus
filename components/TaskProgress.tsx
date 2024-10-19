@@ -1,12 +1,13 @@
 import React from 'react'
 import { Progress } from '@/components/ui/progress'
 
-interface TaskProgressProps {
+export interface TaskProgressProps {
   progress: number
   elapsedTime: string
   processedItems: number
   totalItems: number
   estimatedTimeRemaining: string
+  processingRate: number
 }
 
 const TaskProgress: React.FC<TaskProgressProps> = ({
@@ -14,19 +15,25 @@ const TaskProgress: React.FC<TaskProgressProps> = ({
   elapsedTime,
   processedItems,
   totalItems,
-  estimatedTimeRemaining
-}) => (
-  <div className="mt-4">
-    <div className="flex justify-between text-xs mb-1">
-      <div className="font-semibold">Progress: {progress}%</div>
-      <div>{elapsedTime}</div>
+  estimatedTimeRemaining,
+  processingRate
+}) => {
+  return (
+    <div className="space-y-2">
+      <Progress value={progress} className="w-full" />
+      <div className="flex justify-between text-sm text-muted-foreground">
+        <span>{processedItems} / {totalItems}</span>
+        <span>{progress.toFixed(0)}%</span>
+      </div>
+      <div className="flex justify-between text-sm text-muted-foreground">
+        <span>Elapsed: {elapsedTime}</span>
+        <span>ETA: {estimatedTimeRemaining}</span>
+      </div>
+      <div className="text-sm text-muted-foreground">
+        Processing rate: {processingRate.toFixed(2)} items/second
+      </div>
     </div>
-    <Progress value={progress} className="w-full h-4" />
-    <div className="flex justify-between text-xs mt-1">
-      <div>{processedItems}/{totalItems}</div>
-      <div>ETA: {estimatedTimeRemaining}</div>
-    </div>
-  </div>
-)
+  )
+}
 
 export default TaskProgress

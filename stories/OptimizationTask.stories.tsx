@@ -108,6 +108,10 @@ export const Grid = () => (
 
 export const Detail = Template.bind({});
 Detail.args = {
-  ...createTask(5, 'Predictive Analysis', 'Forecasting future trends'),
+  ...createTask({
+    id: 5,
+    type: 'Predictive Analysis',
+    summary: 'Forecasting future trends'
+  }),
   variant: 'detail',
 };

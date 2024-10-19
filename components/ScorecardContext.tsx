@@ -1,18 +1,22 @@
 import React from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
-interface ScorecardContextProps {
+export interface ScorecardContextProps {
   selectedScorecard: string | null;
   setSelectedScorecard: (value: string | null) => void;
   selectedScore: string | null;
   setSelectedScore: (value: string | null) => void;
+  availableFields: Array<{ value: string; label: string }>;
+  timeRangeOptions: Array<{ value: string; label: string }>;
 }
 
 const ScorecardContext: React.FC<ScorecardContextProps> = ({ 
   selectedScorecard, 
   setSelectedScorecard, 
   selectedScore, 
-  setSelectedScore
+  setSelectedScore,
+  availableFields,
+  timeRangeOptions
 }) => {
   return (
     <div className="flex flex-wrap gap-2">
@@ -22,11 +26,9 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Scorecards</SelectItem>
-          <SelectItem value="SelectQuote Term Life v1">SelectQuote Term Life v1</SelectItem>
-          <SelectItem value="CS3 Nexstar v1">CS3 Nexstar v1</SelectItem>
-          <SelectItem value="CS3 Services v2">CS3 Services v2</SelectItem>
-          <SelectItem value="CS3 Audigy">CS3 Audigy</SelectItem>
-          <SelectItem value="AW IB Sales">AW IB Sales</SelectItem>
+          {availableFields.map(field => (
+            <SelectItem key={field.value} value={field.value}>{field.label}</SelectItem>
+          ))}
         </SelectContent>
       </Select>
       <Select 
@@ -39,14 +41,9 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Scores</SelectItem>
-          {selectedScorecard && (
-            <>
-              <SelectItem value="Good Call">Good Call</SelectItem>
-              <SelectItem value="Agent Branding">Agent Branding</SelectItem>
-              <SelectItem value="Temperature Check">Temperature Check</SelectItem>
-              <SelectItem value="Assumptive Close">Assumptive Close</SelectItem>
-            </>
-          )}
+          {selectedScorecard && timeRangeOptions.map(option => (
+            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+          ))}
         </SelectContent>
       </Select>
     </div>

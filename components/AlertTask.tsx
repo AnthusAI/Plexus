@@ -3,7 +3,7 @@ import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
 import { Siren, MessageCircleWarning, Info, LucideIcon } from 'lucide-react'
 
 interface AlertTaskProps extends Omit<TaskComponentProps, 'renderHeader' | 'renderContent'> {
-  iconType: 'siren' | 'warning'
+  iconType: 'siren' | 'warning' | 'info';
 }
 
 const AlertTask: React.FC<AlertTaskProps> = ({
@@ -20,6 +20,9 @@ const AlertTask: React.FC<AlertTaskProps> = ({
       break;
     case 'warning':
       IconComponent = MessageCircleWarning;
+      break;
+    case 'siren':
+      IconComponent = Siren;
       break;
     default:
       IconComponent = Info; // Fallback to Info if iconType is unknown

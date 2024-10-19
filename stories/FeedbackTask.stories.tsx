@@ -1,52 +1,48 @@
 import React from 'react';
-import { StoryFn, Meta } from '@storybook/react';
-import FeedbackTask from '@/components/FeedbackTask';
-import { BaseTaskProps } from '@/components/Task';
+import { Meta, StoryFn } from '@storybook/react';
+import FeedbackTask from '../components/FeedbackTask';
+import { TaskComponentProps } from '../components/Task';
 
 export default {
-  title: 'Tasks/Types/FeedbackTask',
+  title: 'Components/FeedbackTask',
   component: FeedbackTask,
-  argTypes: {
-    variant: {
-      control: { type: 'radio' },
-      options: ['grid', 'detail'],
-    },
-  },
 } as Meta;
 
-const Template: StoryFn<BaseTaskProps> = (args) => <FeedbackTask {...args} />;
+const Template: StoryFn<Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>> = (args) => <FeedbackTask {...args} />;
 
-const createTask = (id: number, type: string, summary: string): BaseTaskProps => ({
+const createTask = (id: number): Omit<TaskComponentProps, 'renderHeader' | 'renderContent'> => ({
   variant: 'grid',
   task: {
     id,
-    type,
-    scorecard: 'Feedback',
-    score: 'In Progress',
-    time: '3 hours ago',
-    summary,
-    description: 'Feedback processing',
+    type: 'Feedback',
+    scorecard: 'Test Scorecard',
+    score: 'Test Score',
+    time: '2 hours ago',
+    summary: 'Feedback Summary',
+    description: 'Feedback Description',
     data: {
+      accuracy: 75,
       progress: 75,
       elapsedTime: '2h 30m',
-      processedItems: 150,
-      totalItems: 200,
-      estimatedTimeRemaining: '45m',
+      numberComplete: 150,
+      numberTotal: 200,
+      eta: '45m',
     },
   },
-  onClick: () => console.log(`Clicked on task ${id}`),
+  onClick: () => console.log(`Clicked task ${id}`),
 });
 
-export const Grid = () => (
-  <>
-    <Template {...createTask(1, 'Customer Feedback', 'Processing customer survey responses')} />
-    <Template {...createTask(2, 'User Reviews', 'Analyzing app store reviews')} />
-    <Template {...createTask(3, 'Support Tickets', 'Categorizing support requests')} />
-  </>
-);
+export const Grid = Template.bind({});
+Grid.args = createTask(1);
 
 export const Detail = Template.bind({});
 Detail.args = {
-  ...createTask(4, 'Product Feedback', 'Evaluating feature requests'),
+  ...createTask(2),
   variant: 'detail',
 };
+
+export const InProgress = Template.bind({});
+InProgress.args = createTask(3);
+
+export const Completed = Template.bind({});
+Completed.args = createTask(4);

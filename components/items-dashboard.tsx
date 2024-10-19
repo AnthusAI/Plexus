@@ -25,6 +25,7 @@ import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
 import ScorecardContext from "@/components/ScorecardContext"
 import ItemContext from "@/components/ItemContext"
+import ItemDetail from './ItemDetail'
 
 // Get the current date and time
 const now = new Date();
@@ -415,15 +416,47 @@ export default function ItemsDashboard() {
     }
   };
 
+  const handleFilterChange = (newFilters: FilterConfig) => {
+    setFilterConfig(newFilters)
+  }
+
+  const handleSampleChange = (method: string, count: number) => {
+    setSampleMethod(method)
+    setSampleCount(count)
+    console.log(`Sampling method: ${method}, Count: ${count}`)
+    // Implement the logic for applying the sampling here
+  }
+
   const handleTimeRangeChange = (range: string, customRange?: { from: Date | undefined; to: Date | undefined }) => {
     console.log("Time range changed:", range, customRange)
-    // Implement the logic for handling "recent" and custom date ranges
+    // Implement the logic for handling all default time ranges and custom date ranges
     if (range === "recent") {
       // Fetch or filter items for the recent time period
     } else if (range === "custom" && customRange) {
       // Fetch or filter items for the custom date range
     }
   }
+
+  const ITEMS_TIME_RANGE_OPTIONS = [
+    { value: "recent", label: "Recent" },
+    { value: "review", label: "With Feedback" },
+    { value: "custom", label: "Custom" },
+  ]
+
+  const availableFields = [
+    { value: 'SelectQuote Term Life v1', label: 'SelectQuote Term Life v1' },
+    { value: 'CS3 Nexstar v1', label: 'CS3 Nexstar v1' },
+    { value: 'CS3 Services v2', label: 'CS3 Services v2' },
+    { value: 'CS3 Audigy', label: 'CS3 Audigy' },
+    { value: 'AW IB Sales', label: 'AW IB Sales' },
+  ]
+
+  const scoreOptions = [
+    { value: 'Good Call', label: 'Good Call' },
+    { value: 'Agent Branding', label: 'Agent Branding' },
+    { value: 'Temperature Check', label: 'Temperature Check' },
+    { value: 'Assumptive Close', label: 'Assumptive Close' },
+  ]
 
   const toggleExplanation = useCallback((scoreName: string) => {
     setExpandedExplanations(prev => 
@@ -467,281 +500,46 @@ export default function ItemsDashboard() {
     }
   }, []);
 
-  const renderScoreResult = (score: Score, isAnnotation = false) => (
-    <div className={`py-2 ${isAnnotation ? 'pl-4 border-l-2 ' + (score.isSystem ? 'border-secondary' : 'border-primary') : 'border-b last:border-b-0'}`}>
-      {isAnnotation ? (
-        <>
-          <div className="flex justify-end mb-2">
-            <Badge className={getValueBadgeClass(score.value)}>{score.value}</Badge>
-          </div>
-          <div className="relative">
-            <div 
-              ref={(el) => {
-                if (el) {
-                  textRef.current[score.name] = el;
-                }
-              }}
-              className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
-              style={{ 
-                display: '-webkit-box',
-                WebkitLineClamp: '2',
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-                ...(expandedExplanations.includes(score.name) ? { WebkitLineClamp: 'unset', display: 'block' } : {})
-              }}
-              onClick={() => toggleExplanation(score.name)}
-            >
-              {renderRichText(score.explanation)}
-            </div>
-            {showExpandButton[score.name] && (
-              <Button 
-                variant="link" 
-                size="sm" 
-                onClick={() => toggleExplanation(score.name)}
-                className="absolute bottom-0 right-0 px-0 py-1 h-auto bg-white dark:bg-gray-800"
-              >
-                {expandedExplanations.includes(score.name) 
-                  ? <ChevronUp className="h-3 w-3 inline ml-1" />
-                  : <ChevronDown className="h-3 w-3 inline ml-1" />
-                }
-              </Button>
-            )}
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="flex justify-between items-center mb-1">
-            <div className="flex items-center">
-              <h5 className="text-sm font-medium">{score.name}</h5>
-              <div className="inline-flex items-center ml-1">
-                <Link href={`/scorecards?score=${encodeURIComponent(score.name)}`} passHref>
-                  <Button variant="ghost" size="sm" className="p-0 h-auto translate-y-[2px]" title={`More info about ${score.name}`}>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </Button>
-                </Link>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2">
-              {score.allowFeedback && (
-                <>
-                  {(score.isAnnotated || feedbackItems[score.name]?.length > 0) && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleAnnotations(score.name)}
-                      className={`text-xs bg-secondary text-secondary-foreground hover:bg-secondary hover:text-secondary-foreground`}
-                    >
-                      <MessageCircleMore className="h-4 w-4" />
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleThumbsUp(score.name)}
-                    className={`text-xs ${thumbedUpScores.has(score.name) ? 'bg-true text-primary-foreground hover:bg-true hover:text-primary-foreground' : 'hover:bg-muted hover:text-muted-foreground'}`}
-                  >
-                    <ThumbsUp className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleThumbsDown(score.name)}
-                    className="text-xs hover:bg-muted hover:text-muted-foreground"
-                  >
-                    <ThumbsDown className="h-4 w-4" />
-                  </Button>
-                </>
-              )}
-              <Badge className={score.value.includes('%') ? 'bg-primary text-primary-foreground w-16 justify-center' : getValueBadgeClass(score.value)}>
-                {score.value}
-              </Badge>
-            </div>
-          </div>
-          <div className="relative">
-            <div 
-              ref={(el) => {
-                if (el) {
-                  textRef.current[score.name] = el;
-                }
-              }}
-              className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
-              style={{ 
-                display: '-webkit-box',
-                WebkitLineClamp: '2',
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-                ...(expandedExplanations.includes(score.name) ? { WebkitLineClamp: 'unset', display: 'block' } : {})
-              }}
-              onClick={() => toggleExplanation(score.name)}
-            >
-              {renderRichText(score.explanation)}
-            </div>
-            {showExpandButton[score.name] && (
-              <Button 
-                variant="link" 
-                size="sm" 
-                onClick={() => toggleExplanation(score.name)}
-                className="absolute bottom-0 right-0 px-0 py-1 h-auto bg-white dark:bg-gray-800"
-              >
-                {expandedExplanations.includes(score.name) 
-                  ? <ChevronUp className="h-3 w-3 inline ml-1" />
-                  : <ChevronDown className="h-3 w-3 inline ml-1" />
-                }
-              </Button>
-            )}
-          </div>
-        </>
-      )}
-      {isAnnotation && (
-        <div className="flex justify-between items-center mt-2 text-xs text-muted-foreground">
-          <span>
-            {score.timestamp ? new Date(score.timestamp).toLocaleString() : 'Timestamp not available'}
-          </span>
-          {score.user && (
-            <div className="flex items-center space-x-2">
-              <span>{score.user.name}</span>
-              <Avatar className="h-6 w-6 bg-muted">
-                <AvatarFallback className="bg-muted">{score.user.initials}</AvatarFallback>
-              </Avatar>
-            </div>
-          )}
-        </div>
-      )}
-      {score.annotations && score.annotations.length > 0 && (
-        <div className="mt-2 text-sm italic">
-          {score.annotations.map((annotation, index) => (
-            // Render specific properties of the annotation object
-            <div key={index}>"{annotation.annotation}"</div>
-          ))}
-        </div>
-      )}
-      {!isAnnotation && (score.isAnnotated || feedbackItems[score.name]?.length > 0) && expandedAnnotations.includes(score.name) && (
-        <div className="mt-2 space-y-2">
-          <div className="flex justify-between items-center mb-2">
-            <h6 className="text-sm font-medium">Feedback</h6>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => toggleNewAnnotationForm(score.name)}
-              className="text-xs"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Create
-            </Button>
-          </div>
-          {[...(score.annotations || []), ...(feedbackItems[score.name] || [])].map((annotation, annotationIndex) => (
-            <div key={annotationIndex} className="relative">
-              {renderScoreResult(annotation, true)}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  const renderSelectedItem = () => {
+    if (!selectedItem) return null
 
-  const handleNewAnnotationSubmit = (scoreName: string) => {
-    const newFeedbackItem = {
-      ...newAnnotation,
-      scoreName,
-      timestamp: new Date().toISOString(),
-      user: {
-        name: "Current User", // Replace with actual user name
-        initials: "CU" // Replace with actual user initials
-      }
-    };
+    const selectedItemData = items.find(item => item.id === selectedItem)
+    if (!selectedItemData) return null
 
-    setFeedbackItems(prev => ({
-      ...prev,
-      [scoreName]: [...(prev[scoreName] || []), newFeedbackItem]
-    }));
+    const DetailViewControlButtons = (
+      <>
+        {!isNarrowViewport && (
+          <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
+            {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+          </Button>
+        )}
+        <Button variant="outline" size="icon" onClick={() => {
+          setSelectedItem(null)
+          setIsFullWidth(false)
+        }} className="ml-2">
+          <X className="h-4 w-4" />
+        </Button>
+      </>
+    )
 
-    // Find the selected item
-    const selectedItemData = items.find(item => item.id === selectedItem);
-
-    if (selectedItemData && selectedItemData.scoreResults) {
-      // Update the score to show it's annotated
-      const updatedScoreResults = selectedItemData.scoreResults.map(section => ({
-        ...section,
-        scores: section.scores.map(score => 
-          score.name === scoreName 
-            ? { ...score, isAnnotated: true, annotations: [...(score.annotations || []), newFeedbackItem] }
-            : score
-        )
-      }));
-
-      // Update the items with the new score results
-      setItems(prev => prev.map(item => 
-        item.id === selectedItem 
-          ? { ...item, scoreResults: updatedScoreResults }
-          : item
-      ));
-    } else {
-      console.error('Selected item or scoreResults not found');
-      // Optionally, you can add some user feedback here
-    }
-
-    // Close the form and reset the new annotation state
-    setShowNewAnnotationForm(null);
-    setNewAnnotation({ value: "", explanation: "", annotation: "", allowFeedback: false });
-  };
-
-  const toggleNewAnnotationForm = (scoreName: string) => {
-    if (showNewAnnotationForm === scoreName) {
-      setShowNewAnnotationForm(null);
-    } else {
-      setShowNewAnnotationForm(scoreName);
-      initializeNewAnnotation(sampleScoreResults.flatMap(section => section.scores).find(score => score.name === scoreName));
-    }
-  };
-
-  const handleThumbsUp = (scoreName: string) => {
-    setThumbedUpScores(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(scoreName)) {
-        newSet.delete(scoreName);
-      } else {
-        newSet.add(scoreName);
-      }
-      return newSet;
-    });
-
-    // Close the annotation form if it's open
-    if (showNewAnnotationForm === scoreName) {
-      setShowNewAnnotationForm(null);
-    }
-
-    // Reset the new annotation state
-    setNewAnnotation({ value: "", explanation: "", annotation: "", allowFeedback: false });
-  };
-
-  const handleThumbsDown = (scoreName: string) => {
-    setThumbedUpScores(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(scoreName);
-      return newSet;
-    });
-    toggleNewAnnotationForm(scoreName);
-  };
-
-  const handleFilterChange = (newFilters: FilterConfig) => {
-    setFilterConfig(newFilters)
+    return (
+      <ItemDetail
+        item={selectedItemData}
+        controlButtons={DetailViewControlButtons}
+        getBadgeVariant={getBadgeVariant}
+        getRelativeTime={getRelativeTime}
+        isMetadataExpanded={isMetadataExpanded}
+        setIsMetadataExpanded={setIsMetadataExpanded}
+        isDataExpanded={isDataExpanded}
+        setIsDataExpanded={setIsDataExpanded}
+        isErrorExpanded={isErrorExpanded}
+        setIsErrorExpanded={setIsErrorExpanded}
+        sampleMetadata={sampleMetadata}
+        sampleTranscript={sampleTranscript}
+        sampleScoreResults={sampleScoreResults}
+      />
+    )
   }
-
-  const handleSampleChange = (method: string, count: number) => {
-    setSampleMethod(method);
-    setSampleCount(count);
-    console.log(`Sampling method: ${method}, Count: ${count}`);
-    // Implement the logic for applying the sampling here
-  }
-
-  const availableFields = [
-    { value: 'scorecard', label: 'Scorecard' },
-    { value: 'score', label: 'Score' },
-    { value: 'status', label: 'Status' },
-    { value: 'results', label: 'Results' },
-    { value: 'inferences', label: 'Inferences' },
-    { value: 'cost', label: 'Cost' },
-  ]
 
   return (
     <div className="space-y-4 h-full flex flex-col">
@@ -752,6 +550,8 @@ export default function ItemsDashboard() {
             setSelectedScorecard={setSelectedScorecard}
             selectedScore={selectedScore}
             setSelectedScore={setSelectedScore}
+            availableFields={availableFields}
+            timeRangeOptions={scoreOptions}
           />
         </div>
         <div className="flex-shrink-0 ml-auto">
@@ -768,23 +568,7 @@ export default function ItemsDashboard() {
       <div className="flex-grow flex flex-col overflow-hidden pb-2">
         {selectedItem && (isNarrowViewport || isFullWidth) ? (
           <div className="flex-grow overflow-hidden">
-            {renderSelectedItem({
-              items,
-              selectedItem,
-              isFullWidth,
-              isNarrowViewport,
-              setSelectedItem,
-              setIsFullWidth,
-              isMetadataExpanded,
-              setIsMetadataExpanded,
-              isDataExpanded,
-              setIsDataExpanded,
-              isErrorExpanded,
-              setIsErrorExpanded,
-              getBadgeVariant,
-              getRelativeTime,
-              renderScoreResult
-            })}
+            {renderSelectedItem()}
           </div>
         ) : (
           <div className={`flex ${isNarrowViewport ? 'flex-col' : 'space-x-6'} h-full`}>
@@ -848,239 +632,12 @@ export default function ItemsDashboard() {
 
             {selectedItem && !isNarrowViewport && !isFullWidth && (
               <div className="flex-1 overflow-hidden">
-                {renderSelectedItem({
-                  items,
-                  selectedItem,
-                  isFullWidth,
-                  isNarrowViewport,
-                  setSelectedItem,
-                  setIsFullWidth,
-                  isMetadataExpanded,
-                  setIsMetadataExpanded,
-                  isDataExpanded,
-                  setIsDataExpanded,
-                  isErrorExpanded,
-                  setIsErrorExpanded,
-                  getBadgeVariant,
-                  getRelativeTime,
-                  renderScoreResult
-                })}
+                {renderSelectedItem()}
               </div>
             )}
           </div>
         )}
       </div>
     </div>
-  )
-}
-
-function renderSelectedItem({
-  items,
-  selectedItem,
-  isFullWidth,
-  isNarrowViewport,
-  setSelectedItem,
-  setIsFullWidth,
-  isMetadataExpanded,
-  setIsMetadataExpanded,
-  isDataExpanded,
-  setIsDataExpanded,
-  isErrorExpanded,
-  setIsErrorExpanded,
-  getBadgeVariant,
-  getRelativeTime,
-  renderScoreResult
-}: {
-  items: Item[];
-  selectedItem: number | null;
-  isFullWidth: boolean;
-  isNarrowViewport: boolean;
-  setSelectedItem: (id: number | null) => void;
-  setIsFullWidth: (isFullWidth: boolean) => void;
-  isMetadataExpanded: boolean;
-  setIsMetadataExpanded: (isExpanded: boolean) => void;
-  isDataExpanded: boolean;
-  setIsDataExpanded: (isExpanded: boolean) => void;
-  isErrorExpanded: boolean;
-  setIsErrorExpanded: (isExpanded: boolean) => void;
-  getBadgeVariant: (status: string) => string;
-  getRelativeTime: (date: string) => string;
-  renderScoreResult: (score: Score) => JSX.Element;
-}) {
-  const selectedItemData = items.find(item => item.id === selectedItem);
-  const isErrorStatus = selectedItemData?.status === 'error';
-
-  if (!selectedItemData) return null;
-
-  return (
-    <Card className="rounded-none sm:rounded-lg h-full flex flex-col bg-card-light border-none">
-      <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between py-4 px-4 sm:px-6 space-y-0">
-        <div>
-          <h2 className="text-xl font-semibold">{selectedItemData?.scorecard}</h2>
-          <p className="text-sm text-muted-foreground">
-            {getRelativeTime(selectedItemData?.date || '')}
-          </p>
-        </div>
-        <div className="flex ml-2">
-          {!isNarrowViewport && (
-            <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
-              {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-            </Button>
-          )}
-          <Button variant="outline" size="icon" onClick={() => {
-            setSelectedItem(null)
-            setIsFullWidth(false)
-          }} className="ml-2">
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="flex-grow overflow-auto px-4 sm:px-6 pb-4">
-        {selectedItem && (
-          <div className={`${isFullWidth ? 'flex gap-16' : ''}`}>
-            <div className={`${isFullWidth ? 'w-1/2' : ''}`}>
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <p className="text-sm font-medium">Inferences</p>
-                  <p>{selectedItemData?.inferences}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium">Status</p>
-                  <Badge 
-                    className={`w-24 justify-center ${getBadgeVariant(selectedItemData?.status || '')}`}
-                  >
-                    {selectedItemData?.status}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Results</p>
-                  <p>{selectedItemData?.results}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium">Cost</p>
-                  <p>{selectedItemData?.cost}</p>
-                </div>
-              </div>
-              
-              {isErrorStatus && (
-                <div className="-mx-4 sm:-mx-6 mb-4">
-                  <div
-                    className="relative group hover:bg-destructive hover:text-primary-foreground cursor-pointer"
-                    onClick={() => setIsErrorExpanded(!isErrorExpanded)}
-                  >
-                    <div className="flex justify-between items-center px-4 sm:px-6 py-2 bg-destructive text-primary-foreground">
-                      <span className="text-md font-semibold">
-                        Error
-                      </span>
-                      {isErrorExpanded ? (
-                        <ChevronUp className="h-4 w-4" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4" />
-                      )}
-                    </div>
-                  </div>
-                  {isErrorExpanded && (
-                    <div className="mt-2 px-4 sm:px-6">
-                      <Table>
-                        <TableBody>
-                          <TableRow>
-                            <TableCell className="pl-0 pr-0">Response from OpenAI: 429 - You exceeded your current quota, please check your plan and billing details</TableCell>
-                          </TableRow>
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              <div className="-mx-4 sm:-mx-6 mb-4">
-                <div
-                  className="relative group bg-card hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                  onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
-                >
-                  <div className="flex justify-between items-center px-4 sm:px-6 py-2">
-                    <span className="text-md font-semibold">
-                      Metadata
-                    </span>
-                    {isMetadataExpanded ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
-                  </div>
-                </div>
-              </div>
-              {isMetadataExpanded && (
-                <div className="mt-2">
-                  <Table>
-                    <TableBody>
-                      {sampleMetadata.map((meta, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium pl-0">{meta.key}</TableCell>
-                          <TableCell className="text-right pr-0">{meta.value}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-              
-              <div className="-mx-4 sm:-mx-6 mt-4">
-                <div
-                  className="relative group bg-card hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                  onClick={() => setIsDataExpanded(!isDataExpanded)}
-                >
-                  <div className="flex justify-between items-center px-4 sm:px-6 py-2">
-                    <span className="text-md font-semibold">
-                      Data
-                    </span>
-                    {isDataExpanded ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
-                  </div>
-                </div>
-              </div>
-              {isDataExpanded && (
-                <div className={`mt-2 ${isFullWidth ? 'pr-4' : 'px-4 sm:px-6'}`}>
-                  {sampleTranscript.map((line, index) => (
-                    <p key={index} className="text-sm">
-                      <span className="font-semibold">{line.speaker}: </span>
-                      {line.text}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className={`${isFullWidth ? 'w-1/2' : 'mt-4'}`}>
-              <div className="-mx-4 sm:-mx-6 mb-4">
-                <div className="px-4 sm:px-6 py-2 bg-card">
-                  <h4 className="text-md font-semibold">Score Results</h4>
-                </div>
-              </div>
-              {sampleScoreResults.map((section, sectionIndex) => (
-                <div key={sectionIndex} className="mb-6">
-                  <div className="-mx-4 sm:-mx-6 mb-4">
-                    <div className="px-4 sm:px-6 py-2">
-                      <h4 className="text-md font-semibold">{section.section}</h4>
-                    </div>
-                    <hr className="border-t border-border" />
-                  </div>
-                  <div>
-                    {section.scores.map((score, scoreIndex) => (
-                      <React.Fragment key={scoreIndex}>
-                        {renderScoreResult(score)}
-                      </React.Fragment>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
   )
 }
