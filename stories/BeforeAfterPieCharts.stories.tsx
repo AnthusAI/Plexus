@@ -1,13 +1,13 @@
 import React from 'react'
-import { Story, Meta } from '@storybook/react'
+import { StoryFn, Meta } from '@storybook/react'
 import BeforeAfterPieCharts from '../components/BeforeAfterPieCharts'
 
 export default {
   title: 'Components/BeforeAfterPieCharts',
   component: BeforeAfterPieCharts,
-} as Meta
+} as Meta<typeof BeforeAfterPieCharts>
 
-const Template: Story = (args) => <BeforeAfterPieCharts {...args} />
+const Template: StoryFn<typeof BeforeAfterPieCharts> = (args) => <BeforeAfterPieCharts {...args} />
 
 export const Default = Template.bind({})
 Default.args = {
