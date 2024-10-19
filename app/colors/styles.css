@@ -46,7 +46,7 @@ h2 {
   background-color: var(--primary);
   color: var(--primary-foreground);
   border: none;
-  border-radius: 5px;
+  border-radius: 4px;
   cursor: pointer;
 }
 

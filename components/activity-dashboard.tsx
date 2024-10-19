@@ -572,7 +572,7 @@ export default function ActivityDashboard() {
                       fill="var(--chart-4)"
                       onClick={handleBarClick}
                       cursor="pointer"
-                      radius={[4, 4, 0, 0]}
+                      radius={[6, 6, 0, 0]}
                     />
                     <ChartLegend content={<ChartLegendContent />} />
                   </BarChart>
