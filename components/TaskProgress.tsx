@@ -22,7 +22,7 @@ const TaskProgress: React.FC<TaskProgressProps> = ({
         <span>{progress.toFixed(0)}%</span>
         <span>{processedItems} / {totalItems}</span>
       </div>
-      <Progress value={progress} className="w-full" />
+      <Progress value={progress} className="w-full rounded-[6px]" />
       <div className="flex justify-between text-sm text-muted-foreground">
         <span>Elapsed: {elapsedTime}</span>
         <span>ETA: {estimatedTimeRemaining}</span>

@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
+import { Button as BaseButton, ButtonProps } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +39,10 @@ const useMediaQuery = (query: string): boolean => {
 
   return matches
 }
+
+const DashboardButton: React.FC<ButtonProps> = ({ className, ...props }) => (
+  <BaseButton className={`!rounded-[6px] ${className}`} {...props} />
+)
 
 const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; signOut: () => Promise<void> }) => {
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true)
@@ -121,7 +125,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Link href={item.path} passHref>
-                    <Button
+                    <DashboardButton
                       variant={
                         (pathname === item.path || 
                         (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
@@ -129,7 +133,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                           ? "secondary"
                           : "ghost"
                       }
-                      className={`w-full justify-start group ${
+                      className={`w-full justify-start group !rounded-[4px] ${
                         (pathname === item.path || 
                         (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
                         (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
@@ -157,7 +161,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                           {item.name}
                         </span>
                       )}
-                    </Button>
+                    </DashboardButton>
                   </Link>
                 </TooltipTrigger>
                 {!isLeftSidebarOpen && <TooltipContent side="right">{item.name}</TooltipContent>}
@@ -170,13 +174,13 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
       <div className="mt-auto px-3 space-y-2 py-4">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className={`w-full justify-start px-0`}>
+            <DashboardButton variant="ghost" className={`w-full justify-start px-0`}>
               <Avatar className={`h-8 w-8 ${isLeftSidebarOpen ? 'mr-2' : ''}`}>
                 <AvatarImage src={accounts[0].avatar} alt={accounts[0].name} />
                 <AvatarFallback className="bg-background dark:bg-border">{accounts[0].initials}</AvatarFallback>
               </Avatar>
               {isLeftSidebarOpen && <span>{accounts[0].name}</span>}
-            </Button>
+            </DashboardButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             <DropdownMenuLabel>Switch Account</DropdownMenuLabel>
@@ -195,13 +199,13 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className={`w-full justify-start px-0`}>
+            <DashboardButton variant="ghost" className={`w-full justify-start px-0`}>
               <Avatar className={`h-8 w-8 ${isLeftSidebarOpen ? 'mr-2' : ''}`}>
                 <AvatarImage src="/user-avatar.png" alt="User avatar" />
                 <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
               </Avatar>
               {isLeftSidebarOpen && <span>Ryan Porter</span>}
-            </Button>
+            </DashboardButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>My User</DropdownMenuLabel>
@@ -219,13 +223,13 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
+                <DashboardButton
                   variant="ghost"
                   className="p-2 group"
                   onClick={toggleLeftSidebar}
                 >
                   <PanelLeft className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
-                </Button>
+                </DashboardButton>
               </TooltipTrigger>
               <TooltipContent side="right">
                 {isLeftSidebarOpen ? "Toggle sidebar" : "Expand sidebar"}
@@ -237,7 +241,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
+                  <DashboardButton
                     variant="ghost"
                     className="p-2 group"
                     onClick={toggleTheme}
@@ -247,7 +251,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     ) : (
                       <Moon className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
                     )}
-                  </Button>
+                  </DashboardButton>
                 </TooltipTrigger>
                 <TooltipContent side="right">
                   Toggle {theme === "dark" ? "Light" : "Dark"} Mode
@@ -268,14 +272,14 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
+                  <DashboardButton
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 p-0 group"
                     onClick={toggleRightSidebar}
                   >
                     <MessageSquare className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
-                  </Button>
+                  </DashboardButton>
                 </TooltipTrigger>
                 <TooltipContent side="left">
                   Expand chat
@@ -370,9 +374,9 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 placeholder="Type a message..." 
                 className="flex-grow mr-2 bg-background" 
               />
-              <Button type="submit" size="icon">
+              <DashboardButton type="submit" size="icon">
                 <Send className="h-4 w-4" />
-              </Button>
+              </DashboardButton>
             </form>
           </div>
         )}
@@ -382,13 +386,13 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button
+                    <DashboardButton
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 p-0 group"
                     >
                       <Mic className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
-                    </Button>
+                    </DashboardButton>
                   </TooltipTrigger>
                   <TooltipContent side="top">
                     Dictate Message
@@ -398,13 +402,13 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button
+                    <DashboardButton
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 p-0 group"
                     >
                       <Headphones className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
-                    </Button>
+                    </DashboardButton>
                   </TooltipTrigger>
                   <TooltipContent side="top">
                     Voice Mode
@@ -416,14 +420,14 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
+                <DashboardButton
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 p-0 ml-auto group"
                   onClick={toggleRightSidebar}
                 >
                   <PanelRight className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
-                </Button>
+                </DashboardButton>
               </TooltipTrigger>
               <TooltipContent side="left">
                 {rightSidebarState === 'collapsed' ? "Expand chat" : "Collapse chat"}
