@@ -1,13 +1,13 @@
 import React from 'react'
-import { Story, Meta } from '@storybook/react'
+import { StoryFn, Meta } from '@storybook/react'
 import StackedPieChart from '../components/StackedPieChart'
 
 export default {
   title: 'Components/StackedPieChart',
   component: StackedPieChart,
-} as Meta
+} as Meta<typeof StackedPieChart>
 
-const Template: Story = (args) => <StackedPieChart {...args} />
+const Template: StoryFn<typeof StackedPieChart> = (args) => <StackedPieChart {...args} />
 
 export const Default = Template.bind({})
 Default.args = {
