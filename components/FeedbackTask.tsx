@@ -9,7 +9,6 @@ interface FeedbackTaskData {
   processedItems?: number
   totalItems?: number
   estimatedTimeRemaining?: string
-  processingRate?: number
 }
 
 const FeedbackTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>> = ({
@@ -48,7 +47,6 @@ const FeedbackTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderCo
               processedItems={data.processedItems ?? 0}
               totalItems={data.totalItems ?? 0}
               estimatedTimeRemaining={data.estimatedTimeRemaining ?? ''}
-              processingRate={data.processingRate ?? 0}
             />
           )}
         </TaskContent>

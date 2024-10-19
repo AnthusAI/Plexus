@@ -16,7 +16,6 @@ Default.args = {
   processedItems: 30,
   totalItems: 40,
   estimatedTimeRemaining: '10 minutes',
-  processingRate: 6,
 };
 
 export const InProgress = Template.bind({});
@@ -26,7 +25,6 @@ InProgress.args = {
   processedItems: 20,
   totalItems: 40,
   estimatedTimeRemaining: '3 minutes',
-  processingRate: 6.67,
 };
 
 export const Completed = Template.bind({});
@@ -36,5 +34,4 @@ Completed.args = {
   processedItems: 40,
   totalItems: 40,
   estimatedTimeRemaining: '0 minutes',
-  processingRate: 4,
 };
