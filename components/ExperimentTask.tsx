@@ -1,6 +1,5 @@
 import React from 'react'
 import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
-import { Progress } from "@/components/ui/progress"
 import { FlaskConical } from 'lucide-react'
 import { PieChart, Pie, ResponsiveContainer } from 'recharts'
 import TaskProgress from './TaskProgress'
@@ -9,15 +8,27 @@ interface ExperimentTaskData {
   accuracy?: number
   progress?: number
   elapsedTime?: string
-  numberComplete?: number
-  numberTotal?: number
-  eta?: string
   processedItems: number
   totalItems: number
   estimatedTimeRemaining: string
+  processingRate?: number
 }
 
-const ExperimentTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>> = ({
+// Export this interface
+export interface ExperimentTaskProps extends Omit<TaskComponentProps, 'renderHeader' | 'renderContent'> {
+  task: {
+    id: number;
+    type: string;
+    scorecard: string;
+    score: string;
+    time: string;
+    summary: string;
+    description?: string;
+    data?: ExperimentTaskData;
+  };
+}
+
+const ExperimentTask: React.FC<ExperimentTaskProps> = ({
   variant,
   task,
   onClick,
@@ -82,11 +93,12 @@ const ExperimentTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'render
         <TaskContent {...props} visualization={visualization}>
           {data && (
             <TaskProgress 
-              progress={data.progress} 
-              elapsedTime={data.elapsedTime} 
-              processedItems={data.processedItems} 
-              totalItems={data.totalItems} 
-              estimatedTimeRemaining={data.estimatedTimeRemaining} 
+              progress={data.progress ?? 0}
+              elapsedTime={data.elapsedTime ?? ''}
+              processedItems={data.processedItems ?? 0}
+              totalItems={data.totalItems ?? 0}
+              estimatedTimeRemaining={data.estimatedTimeRemaining ?? ''}
+              processingRate={data.processingRate ?? 0}
             />
           )}
         </TaskContent>

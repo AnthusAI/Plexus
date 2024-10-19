@@ -1,18 +1,15 @@
 import React from 'react'
 import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
 import { MessageCircleMore } from 'lucide-react'
-import { Progress } from '@/components/ui/progress'
 import TaskProgress from './TaskProgress'
 
 interface FeedbackTaskData {
   progress?: number
   elapsedTime?: string
-  numberComplete?: number
-  numberTotal?: number
-  eta?: string
-  processedItems: number
-  totalItems: number
-  estimatedTimeRemaining: string
+  processedItems?: number
+  totalItems?: number
+  estimatedTimeRemaining?: string
+  processingRate?: number
 }
 
 const FeedbackTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>> = ({
@@ -44,13 +41,14 @@ const FeedbackTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderCo
       )}
       renderContent={(props) => (
         <TaskContent {...props} visualization={visualization}>
-          {data && data.progress !== undefined && (
+          {data && (
             <TaskProgress 
-              progress={data.progress} 
-              elapsedTime={data.elapsedTime} 
-              processedItems={data.processedItems} 
-              totalItems={data.totalItems} 
-              estimatedTimeRemaining={data.estimatedTimeRemaining} 
+              progress={data.progress ?? 0}
+              elapsedTime={data.elapsedTime ?? ''}
+              processedItems={data.processedItems ?? 0}
+              totalItems={data.totalItems ?? 0}
+              estimatedTimeRemaining={data.estimatedTimeRemaining ?? ''}
+              processingRate={data.processingRate ?? 0}
             />
           )}
         </TaskContent>

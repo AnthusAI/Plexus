@@ -502,6 +502,21 @@ export default function ActivityDashboard() {
 
   console.log('rightSidebarState:', rightSidebarState);
 
+  const availableFields = [
+    { value: 'SelectQuote Term Life v1', label: 'SelectQuote Term Life v1' },
+    { value: 'CS3 Nexstar v1', label: 'CS3 Nexstar v1' },
+    { value: 'CS3 Services v2', label: 'CS3 Services v2' },
+    { value: 'CS3 Audigy', label: 'CS3 Audigy' },
+    { value: 'AW IB Sales', label: 'AW IB Sales' },
+  ]
+
+  const scoreOptions = [
+    { value: 'Good Call', label: 'Good Call' },
+    { value: 'Agent Branding', label: 'Agent Branding' },
+    { value: 'Temperature Check', label: 'Temperature Check' },
+    { value: 'Assumptive Close', label: 'Assumptive Close' },
+  ]
+
   return (
     <div className="space-y-4 h-full flex">
       <div className="flex-1 overflow-y-auto pr-4">
@@ -512,6 +527,8 @@ export default function ActivityDashboard() {
               setSelectedScorecard={setSelectedScorecard}
               selectedScore={selectedScore}
               setSelectedScore={setSelectedScore}
+              availableFields={availableFields}
+              timeRangeOptions={scoreOptions}
             />
             <TimeRangeSelector 
               onTimeRangeChange={handleTimeRangeChange}
@@ -588,6 +605,7 @@ export default function ActivityDashboard() {
                           variant="grid"
                           task={activity}
                           onClick={() => setSelectedActivity(activity)}
+                          iconType="warning" // Add this line
                         />
                       )
                     case 'Report':
@@ -650,7 +668,7 @@ export default function ActivityDashboard() {
                 case 'Experiment started':
                   return <ExperimentTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
                 case 'Alert':
-                  return <AlertTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                  return <AlertTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} iconType="warning" />
                 case 'Report':
                   return <ReportTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
                 case 'Optimization started':
@@ -678,7 +696,7 @@ export default function ActivityDashboard() {
                 case 'Experiment started':
                   return <ExperimentTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
                 case 'Alert':
-                  return <AlertTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                  return <AlertTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} iconType="warning" />
                 case 'Report':
                   return <ReportTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
                 case 'Optimization started':

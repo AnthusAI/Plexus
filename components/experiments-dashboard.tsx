@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { TimeRangeSelector, TimeRangeOption } from "@/components/time-range-selector"
+import { TimeRangeSelector } from "@/components/time-range-selector"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import ReactMarkdown from 'react-markdown'
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -111,7 +111,13 @@ const sampleTranscript = [
   { speaker: "Caller", text: "Ut aut reiciendis voluptatibus maiores alias consequatur aut perferendis doloribus asperiores repellat." },
 ];
 
-const ITEMS_TIME_RANGE_OPTIONS: TimeRangeOption[] = [
+// Add this type definition
+type TimeRangeOption = {
+  value: string;
+  label: string;
+};
+
+const EXPERIMENTS_TIME_RANGE_OPTIONS: TimeRangeOption[] = [
   { value: "recent", label: "Recent" },
   { value: "review", label: "With Feedback" },
   { value: "custom", label: "Custom" },
@@ -414,6 +420,19 @@ export default function ExperimentsDashboard() {
     )
   }
 
+  const availableFields = [
+    { value: 'SelectQuote Term Life v1', label: 'SelectQuote Term Life v1' },
+    { value: 'CS3 Nexstar v1', label: 'CS3 Nexstar v1' },
+    { value: 'CS3 Services v2', label: 'CS3 Services v2' },
+    { value: 'CS3 Audigy', label: 'CS3 Audigy' },
+    { value: 'AW IB Sales', label: 'AW IB Sales' },
+  ]
+
+  const scoreOptions = [
+    { value: 'Accuracy', label: 'Accuracy' },
+    { value: 'Consistency', label: 'Consistency' },
+  ]
+
   return (
     <div className="space-y-4 h-full flex flex-col">
       <div className="flex flex-wrap justify-between items-start gap-4">
@@ -423,6 +442,8 @@ export default function ExperimentsDashboard() {
             setSelectedScorecard={setSelectedScorecard}
             selectedScore={selectedScore}
             setSelectedScore={setSelectedScore}
+            availableFields={availableFields}
+            timeRangeOptions={scoreOptions}
           />
         </div>
       </div>

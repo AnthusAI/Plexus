@@ -1,55 +1,49 @@
 import React from 'react';
-import { StoryFn, Meta } from '@storybook/react';
-import ExperimentTask from '@/components/ExperimentTask';
-import { BaseTaskProps } from '@/components/Task';
+import { Meta, StoryFn } from '@storybook/react';
+import ExperimentTask from '../components/ExperimentTask';
+import { ExperimentTaskProps } from '../components/ExperimentTask';
 
 export default {
-  title: 'Tasks/Types/ExperimentTask',
+  title: 'Components/ExperimentTask',
   component: ExperimentTask,
-  argTypes: {
-    variant: {
-      control: { type: 'radio' },
-      options: ['grid', 'detail'],
-    },
-  },
 } as Meta;
 
-const Template: StoryFn<BaseTaskProps> = (args) => <ExperimentTask {...args} />;
+const Template: StoryFn<ExperimentTaskProps> = (args) => <ExperimentTask {...args} />;
 
-const createTask = (id: number, processedItems: number, totalItems: number): BaseTaskProps => ({
+const createTask = (id: number, processedItems: number, totalItems: number): ExperimentTaskProps => ({
   variant: 'grid',
   task: {
     id,
     type: 'Experiment',
-    scorecard: 'Experiment Analysis',
-    score: 'In Progress',
-    time: '1 hour ago',
+    scorecard: 'Test Scorecard',
+    score: 'Test Score',
+    time: '2 hours ago',
+    summary: 'Experiment Summary',
+    description: 'Experiment Description',
     data: {
-      accuracy: 85,
-      progress: 70,
-      elapsedTime: '30m',
-      numberComplete: processedItems,
-      numberTotal: totalItems,
-      eta: '15m remaining',
+      accuracy: 75,
+      progress: (processedItems / totalItems) * 100,
+      elapsedTime: '01:30:00',
       processedItems,
       totalItems,
-      estimatedTimeRemaining: '15m',
-    },
+      estimatedTimeRemaining: '00:30:00',
+      processingRate: 2.5
+    }
   },
-  onClick: () => console.log(`Clicked on task ${id}`),
+  onClick: () => console.log(`Clicked task ${id}`),
 });
 
-export const Grid = () => (
-  <>
-    <Template {...createTask(1, 50, 100)} />
-    <Template {...createTask(2, 30, 60)} />
-    <Template {...createTask(3, 70, 100)} />
-    <Template {...createTask(4, 20, 40)} />
-  </>
-);
+export const Grid = Template.bind({});
+Grid.args = createTask(1, 75, 100);
 
 export const Detail = Template.bind({});
 Detail.args = {
-  ...createTask(5, 80, 100),
+  ...createTask(2, 90, 100),
   variant: 'detail',
 };
+
+export const InProgress = Template.bind({});
+InProgress.args = createTask(3, 50, 100);
+
+export const Completed = Template.bind({});
+Completed.args = createTask(4, 100, 100);

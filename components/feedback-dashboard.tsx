@@ -17,13 +17,19 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Progress } from "@/components/ui/progress"
-import { TimeRangeSelector, TimeRangeOption } from "@/components/time-range-selector"
+import { TimeRangeSelector } from "@/components/time-range-selector"
 import ReactMarkdown from 'react-markdown'
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
+
+// Add this type definition
+type TimeRangeOption = {
+  value: string;
+  label: string;
+};
 
 // Get the current date and time
 const now = new Date();
