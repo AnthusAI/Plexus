@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useRef, useState, useEffect } from 'react'
 import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
 import { FlaskConical } from 'lucide-react'
 import StackedPieChart from './StackedPieChart'
@@ -35,7 +35,23 @@ const ExperimentTask: React.FC<ExperimentTaskProps> = ({
   controlButtons,
 }) => {
   const data = task.data as ExperimentTaskData
-  
+  const waffleContainerRef = useRef<HTMLDivElement>(null)
+  const [waffleHeight, setWaffleHeight] = useState(20)
+
+  useEffect(() => {
+    const updateWaffleHeight = () => {
+      if (waffleContainerRef.current) {
+        const width = waffleContainerRef.current.offsetWidth
+        setWaffleHeight(width / 4)
+      }
+    }
+
+    updateWaffleHeight()
+    window.addEventListener('resize', updateWaffleHeight)
+
+    return () => window.removeEventListener('resize', updateWaffleHeight)
+  }, [])
+
   console.log('ExperimentTask data:', data);
 
   const visualization = (
@@ -67,7 +83,11 @@ const ExperimentTask: React.FC<ExperimentTaskProps> = ({
                 estimatedTimeRemaining={data.estimatedTimeRemaining ?? ''}
               />
               {variant === 'detail' && (
-                <div className="mt-4 h-[164px] w-full">
+                <div 
+                  ref={waffleContainerRef} 
+                  className="mt-4 w-full"
+                  style={{ height: `${waffleHeight}px` }}
+                >
                   <NivoWaffle 
                     processedItems={data.processedItems ?? 0}
                     totalItems={data.totalItems ?? 1}
