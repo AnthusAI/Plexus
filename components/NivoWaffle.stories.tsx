@@ -1,13 +1,13 @@
 import React from 'react';
-import { Story, Meta } from '@storybook/react';
+import { StoryFn, Meta } from '@storybook/react';
 import NivoWaffle, { NivoWaffleProps } from './NivoWaffle';
 
 export default {
   title: 'Components/NivoWaffle',
   component: NivoWaffle,
-} as Meta;
+} as Meta<typeof NivoWaffle>;
 
-const Template: Story<NivoWaffleProps> = (args) => <NivoWaffle {...args} />;
+const Template: StoryFn<NivoWaffleProps> = (args) => <NivoWaffle {...args} />;
 
 export const Default = Template.bind({});
 Default.args = {
