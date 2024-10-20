@@ -2,7 +2,7 @@
 
 import { ResponsiveWaffle } from '@nivo/waffle'
 
-interface NivoWaffleProps {
+export interface NivoWaffleProps {
   processedItems: number;
   totalItems: number;
   accuracy: number;
