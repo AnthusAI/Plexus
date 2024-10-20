@@ -17,7 +17,7 @@ const TaskProgress: React.FC<TaskProgressProps> = ({
   estimatedTimeRemaining,
 }) => {
   return (
-    <div className="space-y-2 mt-4">
+    <div className="mt-4">
       <div className="flex justify-between text-sm text-muted-foreground">
         <span>{progress.toFixed(0)}%</span>
         <span>{processedItems} / {totalItems}</span>
