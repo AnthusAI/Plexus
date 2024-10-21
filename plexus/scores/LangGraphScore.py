@@ -17,13 +17,11 @@ from langgraph.prebuilt import ToolExecutor
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
 from langchain.globals import set_debug, set_verbose
-# Logging.
-# if os.getenv('DEBUG'):
-#     
-set_debug(True)
-# else:
-# set_debug(False)
-# set_verbose(False)
+if os.getenv('DEBUG') or True:
+    set_debug(True)
+else:
+    set_debug(False)
+    set_verbose(False)
 
 class LangGraphScore(Score, LangChainUser):
     """
@@ -57,6 +55,7 @@ class LangGraphScore(Score, LangChainUser):
     class GraphState(BaseModel):
         text: str
         metadata: Optional[dict]
+        results: Optional[dict]
         is_not_empty: Optional[bool]
         value: Optional[str]
         explanation: Optional[str]
@@ -77,6 +76,10 @@ class LangGraphScore(Score, LangChainUser):
         self.model = None  # Will be initialized in async setup
         self.parameters = self.Parameters(**parameters)
         self.node_instances = []
+        
+        self.workflow = self.build_compiled_workflow()
+        # TODO: Enable this only for evaluations by passing in a parameter.
+        # self.generate_graph_visualization()
 
     async def async_setup(self):
         """
@@ -139,7 +142,7 @@ class LangGraphScore(Score, LangChainUser):
         logging.info(f"Parsed explanation: {explanation}")
 
         return validation_result, explanation
-    
+
     def generate_graph_visualization(self, output_path: str = "./tmp/workflow_graph.png"):
         """
         Generate and save a visual representation of the workflow graph.
@@ -150,57 +153,12 @@ class LangGraphScore(Score, LangChainUser):
 
         :param output_path: The file path where the graph image will be saved.
         """
-        try:
-            logging.info("Starting graph visualization generation")
-            
-            # Get the graph
-            graph = self.workflow.get_graph()
-            logging.info("Graph obtained from workflow")
+        from IPython.display import Image, display
+        from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeStyles
 
-            # Ensure the directory exists
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            logging.info(f"Output directory created: {os.path.dirname(output_path)}")
-
-            # Create a new directed graph
-            dot = graphviz.Digraph(comment='Workflow Graph')
-            dot.attr(rankdir='TB', size='8,5', dpi='300')
-            dot.attr('node', shape='rectangle', style='rounded,filled', fontname='Arial', fontsize='10', margin='0.2,0.1')
-            dot.attr('edge', fontname='Arial', fontsize='8')
-
-            # Color scheme
-            colors = {
-                'start': '#73fa97',  # Light green
-                'end': '#f086bb',    # Light pink
-                'other': '#deeffa'   # Light blue
-            }
-
-            # Add nodes
-            for node_id, node in graph.nodes.items():
-                node_label = node_id.replace('\n', '\\n')  # Preserve newlines in labels
-                if node_id == '__start__':
-                    dot.node(node_id, 'Start', fillcolor=colors['start'])
-                elif node_id == '__end__':
-                    dot.node(node_id, 'End', fillcolor=colors['end'])
-                else:
-                    dot.node(node_id, node_label, fillcolor=colors['other'])
-
-            # Add edges
-            for edge in graph.edges:
-                source = edge.source
-                target = edge.target
-                if edge.conditional:
-                    label = str(edge.data)  # Convert edge data to string
-                    dot.edge(source, target, label=label, color='#666666')
-                else:
-                    dot.edge(source, target, color='#666666')
-
-            # # Save the graph as a PNG file
-            # dot.render(output_path, format='png', cleanup=True)
-            # logging.info(f"Graph visualization saved to {output_path}")
-
-        except Exception as e:
-            error_msg = f"Failed to generate graph visualization: {str(e)}\n{traceback.format_exc()}"
-            logging.error(error_msg)
+        graph = self.workflow.get_graph()
+        with open("tmp/workflow_graph.png", "wb") as output_file:
+            output_file.write(graph.draw_mermaid_png(draw_method=MermaidDrawMethod.API))
 
     def register_model(self):
         """
@@ -450,8 +408,9 @@ class LangGraphScore(Score, LangChainUser):
     def build_compiled_workflow(self):
         """
         Build the LangGraph workflow.
-        """
 
+        :param generate_visualization: If True, generate and save a graph visualization.
+        """
         # First pass: Collect node instances
         node_instances = []
         node_names = []
@@ -494,60 +453,71 @@ class LangGraphScore(Score, LangChainUser):
         workflow.add_node('final', final_function)
 
         # Add nodes and edges
-        for i, (node_name, node_instance) in enumerate(node_instances):
+        import concurrent.futures
+        import threading
+
+        def process_node(node_data):
+            node_name, node_instance = node_data
             logging.info(f"Adding node: {node_name}")
-            workflow.add_node(node_name,
-                node_instance.build_compiled_workflow(
-                    graph_state_class=combined_graphstate_class))
-            
-            if i == 0 and entry_point:
-                workflow.add_edge(entry_point, node_name)
-            
-            if i > 0:
-                previous_node = node_instances[i-1][0]
-                node_config = next((node for node in self.parameters.graph if node['name'] == previous_node), None)
-                if node_config and 'conditions' in node_config:
-                    logging.info(f"Node '{previous_node}' has conditions: {node_config['conditions']}")
-                    
-                    conditions = node_config['conditions']
-                    if isinstance(conditions, list):
-                        # Create value setter nodes for each condition
-                        value_setters = {}
-                        for i, condition in enumerate(conditions):
-                            value_setter_name = f"{previous_node}_value_setter_{i}"
-                            value_setters[condition['value'].lower()] = value_setter_name
-                            workflow.add_node(value_setter_name, self.create_value_setter_node(condition.get('output', {})))
+            return node_name, node_instance.build_compiled_workflow(graph_state_class=combined_graphstate_class)
 
-                        # Create a function that generates the routing function for each node
-                        def create_routing_function(conditions, value_setters, node_name):
-                            def routing_function(state):
-                                for condition in conditions:
-                                    if hasattr(state, condition['state']) and \
-                                       getattr(state, condition['state']).lower() == condition['value'].lower():
-                                        return value_setters[condition['value'].lower()]
-                                return node_name  # Default to next node if no condition matches
-                            return routing_function
+        def add_edges(workflow, node_instances, entry_point):
+            for i, (node_name, _) in enumerate(node_instances):
+                if i == 0 and entry_point:
+                    workflow.add_edge(entry_point, node_name)
+                
+                if i > 0:
+                    previous_node = node_instances[i-1][0]
+                    node_config = next((node for node in self.parameters.graph if node['name'] == previous_node), None)
+                    if node_config and 'conditions' in node_config:
+                        logging.info(f"Node '{previous_node}' has conditions: {node_config['conditions']}")
+                        
+                        conditions = node_config['conditions']
+                        if isinstance(conditions, list):
+                            value_setters = {}
+                            for j, condition in enumerate(conditions):
+                                value_setter_name = f"{previous_node}_value_setter_{j}"
+                                value_setters[condition['value'].lower()] = value_setter_name
+                                workflow.add_node(value_setter_name, self.create_value_setter_node(condition.get('output', {})))
 
-                        # Add the conditional edges with the single routing function
-                        workflow.add_conditional_edges(
-                            previous_node,
-                            create_routing_function(conditions, value_setters, node_name)
-                        )
+                            def create_routing_function(conditions, value_setters, node_name):
+                                def routing_function(state):
+                                    for condition in conditions:
+                                        if hasattr(state, condition['state']) and \
+                                           getattr(state, condition['state']).lower() == condition['value'].lower():
+                                            return value_setters[condition['value'].lower()]
+                                    return node_name
+                                return routing_function
 
-                        # Add edges from value setters to their respective next nodes
-                        for condition in conditions:
-                            value_setter_name = value_setters[condition['value'].lower()]
-                            next_node = condition.get('node', 'final')
-                            if next_node != 'END':
-                                workflow.add_edge(value_setter_name, next_node)
-                            else:
-                                workflow.add_edge(value_setter_name, END)
+                            workflow.add_conditional_edges(
+                                previous_node,
+                                create_routing_function(conditions, value_setters, node_name)
+                            )
+
+                            for condition in conditions:
+                                value_setter_name = value_setters[condition['value'].lower()]
+                                next_node = condition.get('node', 'final')
+                                if next_node != 'END':
+                                    workflow.add_edge(value_setter_name, next_node)
+                                else:
+                                    workflow.add_edge(value_setter_name, END)
+                        else:
+                            logging.error(f"Conditions is not a list: {conditions}")
+                            workflow.add_edge(previous_node, node_name)
                     else:
-                        logging.error(f"Conditions is not a list: {conditions}")
+                        logging.debug(f"Node '{previous_node}' does not have conditions")
                         workflow.add_edge(previous_node, node_name)
-                else:
-                    logging.debug(f"Node '{previous_node}' does not have conditions")
-                    workflow.add_edge(previous_node, node_name)
+
+        # Process nodes in parallel
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            processed_nodes = list(executor.map(process_node, node_instances))
+
+        # Add nodes to workflow
+        for node_name, node_workflow in processed_nodes:
+            workflow.add_node(node_name, node_workflow)
+
+        # Add edges (this part remains sequential due to dependencies)
+        add_edges(workflow, node_instances, entry_point)
 
         # Connect the last node to the 'final' node
         workflow.add_edge(node_instances[-1][0], 'final')
@@ -579,14 +549,25 @@ class LangGraphScore(Score, LangChainUser):
         text = model_input.text
         metadata = model_input.metadata
 
-        app = self.build_compiled_workflow()
+        results = {
+            result['name']: {
+                "id": result['id'],
+                "value": result['result'].value,
+                "explanation": result['result'].explanation
+            }
+            for result in model_input.results
+        }
 
         try:
             # Process the text to create a single string input
             processed_text = self.preprocess_text(text)
             
             # Invoke the app with the processed text asynchronously
-            result = await app.ainvoke({"text": processed_text, "metadata": metadata})
+            result = await self.workflow.ainvoke({
+                "text": processed_text,
+                "metadata": metadata,
+                "results": results
+            })
             logging.debug(f"LangGraph result: {result}")
         except Exception as e:
             logging.error(f"Error during app.ainvoke: {str(e)}")
@@ -613,3 +594,4 @@ class LangGraphScore(Score, LangChainUser):
         if isinstance(text, list):
             return " ".join(text)
         return text
+

@@ -101,8 +101,8 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
             if not isinstance(prompt, ChatPromptTemplate):
                 prompt = ChatPromptTemplate.from_template(prompt)
             
-            chain = prompt | model | self.SlicingOutputParser(text=state.text)
-            return chain.invoke({"text": state.text})
+            chain = prompt | model | self.SlicingOutputParser(**state.dict())
+            return chain.invoke({**state.dict()})
 
         return slicer_node
 

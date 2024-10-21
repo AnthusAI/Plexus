@@ -6,7 +6,7 @@ import numpy as np
 import inspect
 import functools
 from pydantic import BaseModel, ValidationError, field_validator
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Any
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -100,6 +100,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         """
         text:     str
         metadata: dict = {}
+        results: Optional[List[Any]] = None
 
     class Result(BaseModel):
         """
