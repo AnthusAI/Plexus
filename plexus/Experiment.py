@@ -44,7 +44,7 @@ class Experiment:
         scorecard: Scorecard,
         labeled_samples_filename: str = None,
         labeled_samples: list = None,
-        number_of_texts_to_sample = 1,
+        number_of_texts_to_sample = 100,
         sampling_method = 'random',
         random_seed = None,
         session_ids_to_sample = None,
@@ -418,7 +418,7 @@ class AccuracyExperiment(Experiment):
         mlflow.log_metric("cost_per_text", expenses['cost_per_text'])
 
         # Generate the Excel report
-        self.generate_excel_report(report_folder_path, results)
+        self.generate_excel_report(report_folder_path, results, selected_sample_rows)
 
         logging.info(f"Expenses: {expenses}")
         logging.info(f"{overall_accuracy:.1f}% accuracy / {len(selected_sample_rows)} samples")
@@ -578,9 +578,13 @@ Total cost:       ${expenses['total_cost']:.6f}
                 column_name = score_identifier
                 human_label = str(human_labels[column_name]).lower().rstrip('.!?')
                 if human_label == 'nan':
+                    human_label = ''
+                if human_label == 'n/a':
                     human_label = 'na'
+                human_explanation = columns.get(f"{label_score_name} comment", 'None')
 
                 score_result.metadata['human_label'] = human_label
+                score_result.metadata['human_explanation'] = human_explanation
                 score_result.metadata['correct'] = score_result_value == human_label
 
                 # Log warnings for mismatches and append to incorrect results
@@ -616,23 +620,26 @@ Total cost:       ${expenses['total_cost']:.6f}
         
         return report
 
-    def generate_excel_report(self, report_folder_path, results):
+    def generate_excel_report(self, report_folder_path, results, selected_sample_rows):
         records = []
         score_names = self.score_names()
         all_score_names = "_".join(score_names).replace(" ", "_")
         filename_safe_score_names = "".join(c for c in all_score_names if c.isalnum() or c in "_-")
         for result in results:
             for question in score_names:
-                score_result = next((result for result in result['results'].values() if result.parameters.name == question), None)
+                score_result = next((r for r in result['results'].values() if r.parameters.name == question), None)
+                human_label = score_result.metadata['human_label']
+                human_explanation = score_result.metadata['human_explanation']
                 match = score_result.metadata['correct']
                 records.append({
                     'report_id': result['session_id'],
                     'form_id': result['form_id'],
                     'question_name': question,
-                    'human_label': score_result.metadata['human_label'],
+                    'human_label': human_label,
+                    'human_explanation': human_explanation,
                     'predicted_answer': score_result.value,
                     'match': match,
-                    'reasoning': score_result.explanation,
+                    'explanation': score_result.explanation,
                     'original_text': score_result.metadata['text'],
                 })
 
