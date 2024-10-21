@@ -164,7 +164,7 @@ class Scorecard:
                 yaml_file_path = os.path.join(directory_path, file_name)
                 cls.create_from_yaml(yaml_file_path)
 
-    async def get_score_result(self, *, scorecard, score, text, metadata, modality):
+    async def get_score_result(self, *, scorecard, score, text, metadata, modality, results):
         """
         Get a result for a score by looking up a Score instance for that question name and calling its
         compute_score_result method with the provided transcript.
@@ -175,20 +175,21 @@ class Scorecard:
         :param modality: The modality.
         :return: The score result.
         """
+        logging.info(f"Getting score result for: {score}")
         
         score_class = self.score_registry.get(score)
         if score_class is None:
             logging.error(f"Score with name '{score}' not found.")
             return
 
-        score_instance = score_class()
         score_configuration = self.score_registry.get_properties(score)
         if (score_class is not None):
-            logging.info("Found score for question: " + score)
+            logging.info(f"Found score class for: {score}")
 
             # Calculate content item length in tokens using a general-purpose encoding
             encoding = tiktoken.get_encoding("cl100k_base")
             item_tokens = len(encoding.encode(text))
+            logging.info(f"Item tokens for {score}: {item_tokens}")
 
             score_configuration.update({
                 'scorecard_name': self.name,
@@ -200,18 +201,21 @@ class Scorecard:
                 logging.error(f"Score with name '{score}' not found in scorecard '{self.name}'.")
                 return
 
+            logging.info(f"Predicting score for: {score}")
             score_result = await score_instance.predict(
                 context=None,
                 model_input=plexus.scores.Score.Input(
                     text=text,
-                    metadata=metadata
+                    metadata=metadata,
+                    results=results
                 )
             )
-            logging.debug(f"Score result: {score_result}")
+            logging.info(f"Prediction complete for: {score}")
+            logging.debug(f"Score result for {score}: {score_result}")
 
             if hasattr(score_instance, 'get_accumulated_costs'):
                 score_total_cost = score_instance.get_accumulated_costs()
-                logging.info(f"Total cost: {score_total_cost}")
+                logging.info(f"Total cost for {score}: {score_total_cost}")
 
                 self.prompt_tokens       += score_total_cost.get('prompt_tokens', 0)
                 self.completion_tokens   += score_total_cost.get('completion_tokens', 0)
@@ -250,40 +254,83 @@ class Scorecard:
 
         else:
             error_string = f"No score found for question: \"{score}\""
-            logging.info(error_string)
+            logging.error(error_string)
             return plexus.scores.Score.Result(value="Error", error=error_string)
 
     async def score_entire_text(self, *, text: str, metadata: dict, modality: Optional[str] = None, subset_of_score_names: Optional[List[str]] = None) -> Dict[str, Score.Result]:
         if subset_of_score_names is None:
             subset_of_score_names = self.score_names_to_process()
+        
+        logging.info(f"Starting to process scores: {subset_of_score_names}")
 
-        async def process_score(score: str) -> List[Score.Result]:
+        # Add dependend scores to the subset of score names.
+        dependent_scores_added = []
+        for score_name in subset_of_score_names:
+            score_info = self.score_registry.get_properties(score_name)
+            if 'depends_on' in score_info:
+                for dependency in score_info['depends_on']:
+                    if dependency not in subset_of_score_names:
+                        dependent_scores_added.append(dependency)
+                        subset_of_score_names.append(dependency)
+        logging.info(f"Added dependent scores: {dependent_scores_added}")
+
+        dependency_graph, name_to_id = self.build_dependency_graph(subset_of_score_names)
+        logging.info(f"Built dependency graph: {dependency_graph}")
+
+        results_by_score_id = {}
+        results = []
+        processing_queue = asyncio.Queue()
+
+        # Initialize queue with scores that have no dependencies
+        for score_id, score_info in dependency_graph.items():
+            if not score_info['deps']:
+                await processing_queue.put(score_id)
+                logging.info(f"Added score with no dependencies to queue: {score_info['name']} (ID: {score_id})")
+
+        async def process_score(score_id: str):
+            score_name = dependency_graph[score_id]['name']
+            logging.info(f"Starting to process score: {score_name} (ID: {score_id})")
             try:
-                return await asyncio.wait_for(
-                    self.get_score_result(scorecard=self.scorecard_identifier, score=score, text=text, metadata=metadata, modality=modality),
+                score_result = await asyncio.wait_for(
+                    self.get_score_result(
+                        scorecard=self.scorecard_identifier,
+                        score=score_name,
+                        text=text,
+                        metadata=metadata,
+                        modality=modality,
+                        results=results
+                    ),
                     timeout=1200
                 )
+                results_by_score_id[score_id] = score_result[0]  # Store result by score ID
+                results.append({
+                    'id': score_id,
+                    'name': score_name,
+                    'result': score_result[0]
+                })
+                logging.info(f"Processed score: {score_name} (ID: {score_id})")
+
+                # Check if any waiting scores can now be processed
+                for waiting_score_id, waiting_score_info in dependency_graph.items():
+                    if waiting_score_id not in results_by_score_id and all(dep in results_by_score_id for dep in waiting_score_info['deps']):
+                        await processing_queue.put(waiting_score_id)
+                        logging.info(f"Added score to queue as dependencies are met: {waiting_score_info['name']} (ID: {waiting_score_id})")
+
             except asyncio.TimeoutError:
-                logging.error(f"Timeout processing score: {score}")
-                return []
+                logging.error(f"Timeout processing score: {score_name} (ID: {score_id})")
             except Exception as e:
-                logging.error(f"Error processing score {score}: {str(e)}")
-                return []
+                logging.error(f"Error processing score {score_name} (ID: {score_id}): {str(e)}")
 
-        score_results_dict = {}
+        while len(results_by_score_id) < len(subset_of_score_names):
+            score_id_to_process = await processing_queue.get()
+            logging.info(f"Retrieved score from queue for processing: {dependency_graph[score_id_to_process]['name']} (ID: {score_id_to_process})")
+            logging.info(f"Current results: {list(results_by_score_id.keys())}")
+            logging.info(f"Remaining scores: {set(dependency_graph.keys()) - set(results_by_score_id.keys())}")
+            await process_score(score_id_to_process)
 
-        async def bounded_process_score(score_name: str) -> None:
-            results_list = await process_score(score_name)
-            for result in results_list:
-                score_results_dict[result.parameters.id] = result
-
-        await asyncio.gather(*(bounded_process_score(score_name) for score_name in subset_of_score_names))
-
-        # Log the total cost for the entire scorecard
-        # self.log_metric_to_cloudwatch('Cost', self.scorecard_total_cost, self.scorecard_identifier, modality=modality)
-
+        logging.info(f"All scores processed. Total scores: {len(results_by_score_id)}")
         logging.info(f"Scorecard total cost: {self.scorecard_total_cost}")
-        return score_results_dict
+        return results_by_score_id
 
     def get_accumulated_costs(self):
         return {
@@ -325,3 +372,21 @@ class Scorecard:
             logging.info(f"Successfully logged {metric_name} to CloudWatch with dimensions: {dimensions}")
         except ClientError as e:
             logging.error(f"Failed to log metric to CloudWatch: {e}")
+
+    def build_dependency_graph(self, subset_of_score_names):
+        graph = {}
+        name_to_id = {}
+        for score in self.scores:
+            if score['name'] in subset_of_score_names:
+                score_id = str(score['id'])
+                score_name = score['name']
+                name_to_id[score_name] = score_id
+                dependencies = score.get('depends_on', [])
+                graph[score_id] = {
+                    'name': score_name,
+                    'deps': [name_to_id.get(dep, dep) for dep in dependencies if dep in subset_of_score_names]
+                }
+        return graph, name_to_id
+
+
+
