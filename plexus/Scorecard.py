@@ -250,6 +250,13 @@ class Scorecard:
                 self.log_metric_to_cloudwatch('ExternalAIRequests', score_total_cost.get('llm_calls', 0), dimensions)
                 self.log_metric_to_cloudwatch('ItemTokens', item_tokens, dimensions)
 
+                scorecard_dimensions = {
+                    'ScoreCardName': str(self.properties['name']),
+                    'Environment': os.getenv('environment') or 'Unknown'
+                }
+
+                self.log_metric_to_cloudwatch('CostByScorecard', score_total_cost.get('total_cost', 0), scorecard_dimensions)
+
             return score_result
 
         else:
