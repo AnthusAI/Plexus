@@ -3,7 +3,7 @@ import { StoryFn, Meta } from '@storybook/react'
 import BeforeAfterPieCharts from '../components/BeforeAfterPieCharts'
 
 export default {
-  title: 'Components/BeforeAfterPieCharts',
+  title: 'Tasks/BeforeAfterPieCharts',
   component: BeforeAfterPieCharts,
 } as Meta<typeof BeforeAfterPieCharts>
 

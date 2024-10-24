@@ -11,7 +11,8 @@ const config: StorybookConfig = {
     "@storybook/addon-interactions",
     "@storybook/addon-themes",
     "storybook-dark-mode",
-    "@storybook/addon-styling-webpack"
+    "@storybook/addon-styling-webpack",
+    "@storybook/addon-interactions"
   ],
   framework: {
     name: "@storybook/nextjs",

@@ -61,7 +61,7 @@ const BeforeAfterPieCharts: React.FC<BeforeAfterPieChartsProps> = ({ before, aft
   ]
 
   return (
-    <div className="flex flex-col items-center w-full mt-4 xs:mt-0">
+    <div data-testid="before-after-charts" className="flex justify-between">
       <div className="flex space-x-4">
         <PieChartComponent
           innerData={createPieData(before)}
