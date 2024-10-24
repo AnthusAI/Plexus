@@ -1,12 +1,35 @@
 import React from 'react';
-import { Meta, StoryFn } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react';
+import { expect, within } from '@storybook/test';
 import ExperimentTask from '../components/ExperimentTask';
 import { ExperimentTaskProps } from '../components/ExperimentTask';
 
-export default {
-  title: 'Components/ExperimentTask',
+const meta: Meta<typeof ExperimentTask> = {
+  title: 'Tasks/Types/ExperimentTask',
   component: ExperimentTask,
-} as Meta;
+  args: {
+    variant: 'grid',
+    task: {
+      id: 1,
+      type: 'experiment',
+      scorecard: 'A+',
+      score: '95%',
+      time: '2h 30m',
+      summary: 'Experiment Summary',
+      data: {
+        accuracy: 95,
+        progress: 75,
+        elapsedTime: '1h 45m',
+        processedItems: 750,
+        totalItems: 1000,
+        estimatedTimeRemaining: '45m'
+      }
+    }
+  }
+};
+
+export default meta;
+type Story = StoryObj<typeof ExperimentTask>;
 
 const Template: StoryFn<ExperimentTaskProps> = (args) => <ExperimentTask {...args} />;
 
@@ -32,17 +55,108 @@ const createTask = (id: number, processedItems: number, totalItems: number): Exp
   onClick: () => console.log(`Clicked task ${id}`),
 });
 
-export const Grid = Template.bind({});
-Grid.args = createTask(1, 75, 100);
-
-export const Detail = Template.bind({});
-Detail.args = {
-  ...createTask(2, 90, 100),
-  variant: 'detail',
+export const Single: Story = {
+  args: createTask(1, 75, 100),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    
+    // Check task metadata
+    await expect(canvas.getByText('Experiment Summary')).toBeInTheDocument();
+    await expect(canvas.getByText('Experiment Description')).toBeInTheDocument();
+    await expect(canvas.getByText('Test Scorecard')).toBeInTheDocument();
+    await expect(canvas.getByText('Test Score')).toBeInTheDocument();
+    await expect(canvas.getByText('2 hours ago')).toBeInTheDocument();
+    await expect(canvas.getByText('Experiment')).toBeInTheDocument();
+    
+    // Check for Flask icon
+    const flaskIcon = canvasElement.querySelector('.lucide.lucide-flask-conical');
+    expect(flaskIcon).toBeInTheDocument();
+    expect(flaskIcon).toHaveClass('h-6', 'w-6');
+    
+    // Check progress numbers and total items
+    const seventyFiveElements = canvas.getAllByText(/75/);
+    expect(seventyFiveElements).toHaveLength(2);
+    await expect(canvas.getByText(/100/)).toBeInTheDocument();
+    
+    // Check progress percentage and time information
+    await expect(canvas.getByText('75%')).toBeInTheDocument();
+    await expect(canvas.getByText('Elapsed: 01:30:00')).toBeInTheDocument();
+    await expect(canvas.getByText('ETA: 00:30:00')).toBeInTheDocument();
+  }
 };
 
-export const InProgress = Template.bind({});
-InProgress.args = createTask(3, 50, 100);
+export const Detail: Story = {
+  args: {
+    ...createTask(2, 90, 100),
+    variant: 'detail',
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    
+    await expect(canvas.getByText('Experiment Summary')).toBeInTheDocument();
+    await expect(canvas.getByText('Experiment Description')).toBeInTheDocument();
+    
+    // Check that we have the right number of matches for 90 and total items
+    const ninetyElements = canvas.getAllByText(/90/);
+    expect(ninetyElements).toHaveLength(2);
+    await expect(canvas.getByText(/100/)).toBeInTheDocument();
+    
+    // Check for progress display
+    const progressElement = canvas.getByText('90%');
+    await expect(progressElement).toBeInTheDocument();
+  }
+};
 
-export const Completed = Template.bind({});
-Completed.args = createTask(4, 100, 100);
+export const Grid: Story = {
+  render: () => (
+    <>
+      <ExperimentTask {...createTask(1, 25, 100)} />
+      <ExperimentTask {...createTask(2, 50, 100)} />
+      <ExperimentTask {...createTask(3, 75, 100)} />
+      <ExperimentTask {...createTask(4, 100, 100)} />
+    </>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    
+    // Verify all four tasks are present
+    const summaries = canvas.getAllByText('Experiment Summary');
+    expect(summaries).toHaveLength(4);
+    
+    // Check that we have all progress states
+    await expect(canvas.getByText('25%')).toBeInTheDocument();
+    await expect(canvas.getByText('50%')).toBeInTheDocument();
+    await expect(canvas.getByText('75%')).toBeInTheDocument();
+    await expect(canvas.getByText('100%')).toBeInTheDocument();
+    
+    // Verify all tasks have Flask icons
+    const flaskIcons = canvasElement.querySelectorAll('.lucide.lucide-flask-conical');
+    expect(flaskIcons).toHaveLength(4);
+    
+    // Check that each task has its description
+    const descriptions = canvas.getAllByText('Experiment Description');
+    expect(descriptions).toHaveLength(4);
+  }
+};
+
+export const InProgress: Story = {
+  args: createTask(4, 50, 100),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const fiftyElements = canvas.getAllByText(/50/);
+    expect(fiftyElements).toHaveLength(2);
+  }
+};
+
+export const Completed: Story = {
+  args: createTask(5, 100, 100),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const hundredElements = canvas.getAllByText(/100/);
+    expect(hundredElements).toHaveLength(2);
+    
+    // Check for 100% progress
+    const progressElement = canvas.getByText('100%');
+    await expect(progressElement).toBeInTheDocument();
+  }
+};
