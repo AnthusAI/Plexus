@@ -20,6 +20,7 @@ from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
 import plexus.scores
 from plexus.scores.Score import Score
+from plexus.logging.Cloudwatch import CloudWatchLogger
 
 class Scorecard:
     """
@@ -57,7 +58,7 @@ class Scorecard:
         self.total_cost =  Decimal('0.0')
         self.scorecard_total_cost = Decimal('0.0')
 
-        self.cloudwatch_client = boto3.client('cloudwatch')
+        self.cloudwatch_logger = CloudWatchLogger()
 
     @classmethod
     def name(cls):
@@ -242,20 +243,20 @@ class Scorecard:
                     'Environment': os.getenv('environment') or 'Unknown'
                 }
                 
-                self.log_metric_to_cloudwatch('Cost', score_total_cost.get('total_cost', 0), dimensions)
-                self.log_metric_to_cloudwatch('PromptTokens', score_total_cost.get('prompt_tokens', 0), dimensions)
-                self.log_metric_to_cloudwatch('CompletionTokens', score_total_cost.get('completion_tokens', 0), dimensions)
-                self.log_metric_to_cloudwatch('TotalTokens', total_tokens, dimensions)
-                self.log_metric_to_cloudwatch('CachedTokens', score_total_cost.get('cached_tokens', 0), dimensions)
-                self.log_metric_to_cloudwatch('ExternalAIRequests', score_total_cost.get('llm_calls', 0), dimensions)
-                self.log_metric_to_cloudwatch('ItemTokens', item_tokens, dimensions)
+                self.cloudwatch_logger.log_metric('Cost', score_total_cost.get('total_cost', 0), dimensions)
+                self.cloudwatch_logger.log_metric('PromptTokens', score_total_cost.get('prompt_tokens', 0), dimensions)
+                self.cloudwatch_logger.log_metric('CompletionTokens', score_total_cost.get('completion_tokens', 0), dimensions)
+                self.cloudwatch_logger.log_metric('TotalTokens', total_tokens, dimensions)
+                self.cloudwatch_logger.log_metric('CachedTokens', score_total_cost.get('cached_tokens', 0), dimensions)
+                self.cloudwatch_logger.log_metric('ExternalAIRequests', score_total_cost.get('llm_calls', 0), dimensions)
+                self.cloudwatch_logger.log_metric('ItemTokens', item_tokens, dimensions)
 
                 scorecard_dimensions = {
                     'ScoreCardName': str(self.properties['name']),
                     'Environment': os.getenv('environment') or 'Unknown'
                 }
 
-                self.log_metric_to_cloudwatch('CostByScorecard', score_total_cost.get('total_cost', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('CostByScorecard', score_total_cost.get('total_cost', 0), scorecard_dimensions)
 
             return score_result
 
@@ -363,23 +364,6 @@ class Scorecard:
                self.properties.get('parameters', {}).get('model_name') or \
                'Unknown'
 
-    def log_metric_to_cloudwatch(self, metric_name, metric_value, dimensions):
-        try:
-            metric_data = {
-                'MetricName': metric_name,
-                'Value': float(metric_value),
-                'Unit': 'None',
-                'Dimensions': [{'Name': k, 'Value': str(v)} for k, v in dimensions.items()]
-            }
-
-            self.cloudwatch_client.put_metric_data(
-                Namespace='Plexus',
-                MetricData=[metric_data]
-            )
-            logging.info(f"Successfully logged {metric_name} to CloudWatch with dimensions: {dimensions}")
-        except ClientError as e:
-            logging.error(f"Failed to log metric to CloudWatch: {e}")
-
     def build_dependency_graph(self, subset_of_score_names):
         graph = {}
         name_to_id = {}
@@ -394,6 +378,7 @@ class Scorecard:
                     'deps': [name_to_id.get(dep, dep) for dep in dependencies if dep in subset_of_score_names]
                 }
         return graph, name_to_id
+
 
 
 
