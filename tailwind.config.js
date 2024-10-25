@@ -69,7 +69,12 @@ module.exports = {
     			'chart-7': 'var(--chart-7)',
     			true: 'var(--true)',
     			false: 'var(--false)',
-    			neutral: 'var(--neutral)'
+    			neutral: 'var(--neutral)',
+    			'gauge-inviable': 'var(--gauge-inviable)',
+    			'gauge-converging': 'var(--gauge-converging)', 
+    			'gauge-almost': 'var(--gauge-almost)',
+    			'gauge-viable': 'var(--gauge-viable)',
+    			'gauge-great': 'var(--gauge-great)',
     		},
     		keyframes: {
     			'accordion-down': {
