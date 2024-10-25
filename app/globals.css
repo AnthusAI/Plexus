@@ -13,6 +13,8 @@
 @import "hsl-radix-colors/green.css";
 @import "hsl-radix-colors/red.css";
 @import "hsl-radix-colors/indigo.css";
+@import "hsl-radix-colors/orange.css";
+@import "hsl-radix-colors/yellow.css";
 
 @layer base {
   :root {
@@ -50,6 +52,11 @@
     --true: hsl(var(--green-9));
     --false: hsl(var(--red-9));
     --neutral: hsl(var(--mauve-8));
+    --gauge-inviable: hsl(var(--mauve-6));
+    --gauge-converging: hsl(var(--green-3));
+    --gauge-almost: hsl(var(--green-5));
+    --gauge-viable: hsl(var(--green-8));
+    --gauge-great: hsl(var(--green-10));
   }
 
   .dark {
@@ -86,6 +93,11 @@
     --true: hsl(var(--green-9));
     --false: hsl(var(--red-9));
     --neutral: hsl(var(--mauve-8));
+    --gauge-inviable: hsl(var(--mauve-6));
+    --gauge-converging: hsl(var(--green-6));
+    --gauge-almost: hsl(var(--green-7));
+    --gauge-viable: hsl(var(--green-8));
+    --gauge-great: hsl(var(--green-10));
   }
 }
 
