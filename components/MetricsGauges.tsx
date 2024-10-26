@@ -2,31 +2,40 @@
 
 import React from 'react'
 import { Gauge } from './gauge'
+import type { Segment } from './gauge'
 
-interface GaugeData {
-  id: string
+interface GaugeConfig {
   value: number
   label: string
+  segments?: Segment[]
+  min?: number
+  max?: number
+  backgroundColor?: string
+  showTicks?: boolean
 }
 
 interface MetricsGaugesProps {
-  gauges: GaugeData[]
+  gauges: GaugeConfig[]
+  className?: string
 }
 
-const SingleGauge: React.FC<GaugeData> = ({ value, label }) => (
-  <div className="text-center">
-    <Gauge value={value} title={label} />
-  </div>
-)
-
-const MetricsGauges: React.FC<MetricsGaugesProps> = ({ gauges }) => {
+const MetricsGauges: React.FC<MetricsGaugesProps> = ({ gauges, className = '' }) => {
   return (
     <div 
       data-testid="metrics-gauges" 
-      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+      className={`flex w-full justify-center space-x-8 ${className}`}
     >
-      {gauges.map((gauge) => (
-        <SingleGauge key={gauge.id} {...gauge} />
+      {gauges.map((gauge, index) => (
+        <Gauge
+          key={index}
+          value={gauge.value}
+          title={gauge.label}
+          segments={gauge.segments}
+          min={gauge.min}
+          max={gauge.max}
+          backgroundColor={gauge.backgroundColor}
+          showTicks={gauge.showTicks}
+        />
       ))}
     </div>
   )
