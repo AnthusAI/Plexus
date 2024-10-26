@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react'
 import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
 import { FlaskConical } from 'lucide-react'
-import StackedPieChart from './StackedPieChart'
+import { Gauge } from './gauge'
 import TaskProgress from './TaskProgress'
 import NivoWaffle from './NivoWaffle'
 
@@ -55,7 +55,10 @@ const ExperimentTask: React.FC<ExperimentTaskProps> = ({
   console.log('ExperimentTask data:', data);
 
   const visualization = (
-    <StackedPieChart accuracy={data?.accuracy || 0} />
+    <Gauge 
+      value={data?.accuracy || 0}
+      title={task.scorecard}
+    />
   )
 
   return (

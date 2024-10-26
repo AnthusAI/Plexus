@@ -1,7 +1,7 @@
 import React from 'react'
 import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
 import { ListTodo, MoveUpRight } from 'lucide-react'
-import BeforeAfterPieCharts from './BeforeAfterPieCharts'
+import BeforeAfterGauges from './BeforeAfterGauges'
 
 interface ScoreUpdatedTaskData {
   before?: {
@@ -12,15 +12,18 @@ interface ScoreUpdatedTaskData {
   }
 }
 
-const ScoreUpdatedTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>> = ({ variant, task, onClick, controlButtons }) => {
+const ScoreUpdatedTask: React.FC<
+  Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>
+> = ({ variant, task, onClick, controlButtons }) => {
   const data = task.data as ScoreUpdatedTaskData
 
   const visualization = React.useMemo(() => (
-    <BeforeAfterPieCharts
-      before={data.before || { innerRing: [{ value: 0 }] }}
-      after={data.after || { innerRing: [{ value: 0 }] }}
+    <BeforeAfterGauges
+      title={task.scorecard}
+      before={data.before?.innerRing[0]?.value ?? 0}
+      after={data.after?.innerRing[0]?.value ?? 0}
     />
-  ), [data.before, data.after])
+  ), [data.before, data.after, task.scorecard])
 
   const customSummary = (
     <div className="flex items-center">

@@ -1,7 +1,7 @@
 import React from 'react'
 import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
 import { Sparkles } from 'lucide-react'
-import BeforeAfterPieCharts from './BeforeAfterPieCharts'
+import BeforeAfterGauges from './BeforeAfterGauges'
 import TaskProgress from './TaskProgress'
 
 interface OptimizationTaskData {
@@ -9,7 +9,7 @@ interface OptimizationTaskData {
   elapsedTime?: string
   numberComplete?: number
   numberTotal?: number
-  estimatedTimeRemaining?: string
+  eta?: string
   before?: {
     innerRing: Array<{ value: number }>
   }
@@ -18,18 +18,16 @@ interface OptimizationTaskData {
   }
 }
 
-const OptimizationTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>> = ({
-  variant,
-  task,
-  onClick,
-  controlButtons,
-}) => {
+const OptimizationTask: React.FC<
+  Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>
+> = ({ variant, task, onClick, controlButtons }) => {
   const data = task.data as OptimizationTaskData
 
   const visualization = (
-    <BeforeAfterPieCharts
-      before={data.before || { innerRing: [{ value: 0 }] }}
-      after={data.after || { innerRing: [{ value: 0 }] }}
+    <BeforeAfterGauges
+      title={task.scorecard}
+      before={data.before?.innerRing[0]?.value ?? 0}
+      after={data.after?.innerRing[0]?.value ?? 0}
     />
   )
 
@@ -54,7 +52,7 @@ const OptimizationTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'rend
               elapsedTime={data.elapsedTime ?? ''}
               processedItems={data.numberComplete ?? 0}
               totalItems={data.numberTotal ?? 0}
-              estimatedTimeRemaining={data.estimatedTimeRemaining ?? ''}
+              estimatedTimeRemaining={data.eta ?? ''}
             />
           )}
         </TaskContent>
