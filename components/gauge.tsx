@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 
-interface Segment {
+export interface Segment {
   start: number
   end: number
   color: string
@@ -37,26 +37,17 @@ const GaugeComponent: React.FC<GaugeProps> = ({
 
   useEffect(() => {
     const startTime = performance.now()
-    const duration = 600  // Slightly faster
+    const duration = 600
     
     const startAngle = animatedValue
-    let targetAngle = normalizedValue
-    
-    if (targetAngle < startAngle) {
-      targetAngle += 100
-    }
+    const targetAngle = normalizedValue
     
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime
       const progress = Math.min(elapsed / duration, 1)
       
-      // Simple cubic ease-out for smooth deceleration
       const easeProgress = 1 - Math.pow(1 - progress, 3)
-      
-      let currentValue = startAngle + (targetAngle - startAngle) * easeProgress
-      if (currentValue >= 100) {
-        currentValue = currentValue % 100
-      }
+      const currentValue = startAngle + (targetAngle - startAngle) * easeProgress
       
       setAnimatedValue(currentValue)
       

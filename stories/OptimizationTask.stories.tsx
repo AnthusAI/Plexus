@@ -23,7 +23,7 @@ const meta: Meta<typeof OptimizationTask> = {
         elapsedTime: '1h 30m',
         numberComplete: 600,
         numberTotal: 1000,
-        estimatedTimeRemaining: '1h remaining'
+        eta: '1h remaining'
       }
     }
   }
@@ -53,7 +53,7 @@ const createTask = (
       elapsedTime: '1h 30m',
       numberComplete,
       numberTotal,
-      estimatedTimeRemaining: '30m remaining'
+      eta: '30m remaining'
     }
   },
   onClick: () => console.log(`Clicked task ${id}`),
