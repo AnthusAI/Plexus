@@ -581,7 +581,7 @@ export default function ActivityDashboard() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-4 pb-8 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          <div className="grid gap-4 pb-8 grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3">
             {displayedActivities.map((activity) => (
               <div key={activity.id} className="w-full">
                 {(() => {

@@ -1,64 +1,54 @@
-import React, { useRef, useState, useEffect } from 'react'
+import React from 'react'
 import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
 import { FlaskConical } from 'lucide-react'
-import { Gauge } from './gauge'
+import MetricsGauges from './MetricsGauges'
 import TaskProgress from './TaskProgress'
-import NivoWaffle from './NivoWaffle'
 
 interface ExperimentTaskData {
-  accuracy?: number
-  progress?: number
-  elapsedTime?: string
+  accuracy: number
+  progress: number
+  elapsedTime: string
   processedItems: number
   totalItems: number
   estimatedTimeRemaining: string
 }
 
-// Export this interface
-export interface ExperimentTaskProps extends Omit<TaskComponentProps, 'renderHeader' | 'renderContent'> {
-  task: {
-    id: number;
-    type: string;
-    scorecard: string;
-    score: string;
-    time: string;
-    summary: string;
-    description?: string;
-    data?: ExperimentTaskData;
-  };
-}
+export interface ExperimentTaskProps extends 
+  Omit<TaskComponentProps, 'renderHeader' | 'renderContent'> {}
 
-const ExperimentTask: React.FC<ExperimentTaskProps> = ({
-  variant,
-  task,
-  onClick,
-  controlButtons,
+const ExperimentTask: React.FC<ExperimentTaskProps> = ({ 
+  variant, 
+  task, 
+  onClick, 
+  controlButtons 
 }) => {
   const data = task.data as ExperimentTaskData
-  const waffleContainerRef = useRef<HTMLDivElement>(null)
-  const [waffleHeight, setWaffleHeight] = useState(20)
 
-  useEffect(() => {
-    const updateWaffleHeight = () => {
-      if (waffleContainerRef.current) {
-        const width = waffleContainerRef.current.offsetWidth
-        setWaffleHeight(width / 4)
-      }
-    }
+  const accuracyConfig = {
+    value: data.accuracy,
+    label: 'Accuracy',
+    segments: [
+      { start: 0, end: 60, color: 'var(--gauge-inviable)' },
+      { start: 60, end: 85, color: 'var(--gauge-converging)' },
+      { start: 85, end: 100, color: 'var(--gauge-great)' }
+    ],
+    backgroundColor: 'var(--background)',
+    showTicks: variant === 'detail'
+  }
 
-    updateWaffleHeight()
-    window.addEventListener('resize', updateWaffleHeight)
-
-    return () => window.removeEventListener('resize', updateWaffleHeight)
-  }, [])
-
-  console.log('ExperimentTask data:', data);
+  const progressConfig = {
+    value: data.progress,
+    label: 'Progress',
+    backgroundColor: 'var(--background)',
+    showTicks: variant === 'detail'
+  }
 
   const visualization = (
-    <Gauge 
-      value={data?.accuracy || 0}
-      title={task.scorecard}
-    />
+    <div className="w-full">
+      <MetricsGauges 
+        gauges={[accuracyConfig, progressConfig]}
+      />
+    </div>
   )
 
   return (
@@ -75,31 +65,17 @@ const ExperimentTask: React.FC<ExperimentTaskProps> = ({
         </TaskHeader>
       )}
       renderContent={(props) => (
-        <TaskContent {...props} visualization={visualization}>
-          {data && (
-            <>
-              <TaskProgress 
-                progress={data.progress ?? 0}
-                elapsedTime={data.elapsedTime ?? ''}
-                processedItems={data.processedItems ?? 0}
-                totalItems={data.totalItems ?? 0}
-                estimatedTimeRemaining={data.estimatedTimeRemaining ?? ''}
-              />
-              {variant === 'detail' && (
-                <div 
-                  ref={waffleContainerRef} 
-                  className="mt-4 w-full"
-                  style={{ height: `${waffleHeight}px` }}
-                >
-                  <NivoWaffle 
-                    processedItems={data.processedItems ?? 0}
-                    totalItems={data.totalItems ?? 1}
-                    accuracy={data.accuracy ?? 0}
-                  />
-                </div>
-              )}
-            </>
-          )}
+        <TaskContent {...props}>
+          <div className="flex flex-col w-full gap-4">
+            {visualization}
+            <TaskProgress 
+              progress={data.progress}
+              elapsedTime={data.elapsedTime}
+              processedItems={data.processedItems}
+              totalItems={data.totalItems}
+              estimatedTimeRemaining={data.estimatedTimeRemaining}
+            />
+          </div>
         </TaskContent>
       )}
     />

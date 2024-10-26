@@ -57,3 +57,11 @@ export const HighValue: Story = {
     title: 'Accuracy'
   }
 }
+
+export const NoTicks: Story = {
+  args: {
+    value: 75,
+    title: 'Accuracy',
+    showTicks: false
+  }
+}
