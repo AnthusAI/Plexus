@@ -18,24 +18,16 @@ const ScoreUpdatedTask: React.FC<
   const data = task.data as ScoreUpdatedTaskData
 
   const visualization = React.useMemo(() => (
-    <div className="w-full">
+    <div className="w-full max-w-full">
       <BeforeAfterGauges
-        title={task.scorecard}
+        title={task.description || 'Metric'}
         before={data.before?.innerRing[0]?.value ?? 0}
         after={data.after?.innerRing[0]?.value ?? 0}
         variant={variant}
-        backgroundColor="var(--background)"
+        backgroundColor="var(--gauge-background)"
       />
     </div>
-  ), [data.before, data.after, task.scorecard, variant])
-
-  const customSummary = (
-    <div className="flex items-center">
-      <span>{data?.before?.innerRing[0]?.value ?? 0}%</span>
-      <MoveUpRight className="h-6 w-6 mx-1" />
-      <span>{data?.after?.innerRing[0]?.value ?? 0}%</span>
-    </div>
-  )
+  ), [data.before, data.after, task.description, variant])
 
   return (
     <Task 
@@ -51,12 +43,7 @@ const ScoreUpdatedTask: React.FC<
         </TaskHeader>
       )}
       renderContent={(props) => (
-        <TaskContent {...props}>
-          <div className="flex flex-col w-full gap-4">
-            {visualization}
-            {customSummary}
-          </div>
-        </TaskContent>
+        <TaskContent {...props} visualization={visualization} />
       )}
     />
   )

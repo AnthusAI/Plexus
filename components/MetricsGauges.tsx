@@ -23,20 +23,22 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({ gauges, className = '' })
   return (
     <div 
       data-testid="metrics-gauges" 
-      className={`flex w-full justify-center space-x-8 ${className}`}
+      className="flex flex-col items-center w-full"
     >
-      {gauges.map((gauge, index) => (
-        <Gauge
-          key={index}
-          value={gauge.value}
-          title={gauge.label}
-          segments={gauge.segments}
-          min={gauge.min}
-          max={gauge.max}
-          backgroundColor={gauge.backgroundColor}
-          showTicks={gauge.showTicks}
-        />
-      ))}
+      <div className="flex w-full justify-center space-x-8">
+        {gauges.map((gauge, index) => (
+          <Gauge
+            key={index}
+            value={gauge.value}
+            title={gauge.label}
+            segments={gauge.segments}
+            min={gauge.min}
+            max={gauge.max}
+            backgroundColor={gauge.backgroundColor}
+            showTicks={gauge.showTicks}
+          />
+        ))}
+      </div>
     </div>
   )
 }

@@ -95,8 +95,8 @@ const TaskContent: React.FC<TaskChildProps & {
   customSummary?: React.ReactNode
 }> = ({ task, variant, children, visualization, customSummary }) => (
   <CardContent className="p-4 pt-0 pb-4 flex flex-col flex-grow">
-    <div className="flex flex-col xs:flex-row justify-between items-start w-full">
-      <div className="space-y-1 flex-grow w-full xs:w-auto">
+    <div className="flex flex-col justify-start items-start w-full">
+      <div className="space-y-1 w-full">
         <div className="text-lg font-bold">
           {task.description && (
             <div className="text-sm text-muted-foreground">
@@ -107,12 +107,10 @@ const TaskContent: React.FC<TaskChildProps & {
         </div>
       </div>
       {visualization && (
-        <div className="flex-shrink-0 xs:ml-4 w-full xs:w-auto">{visualization}</div>
+        <div className="w-full mt-4">{visualization}</div>
       )}
     </div>
-    <div className="mt-auto">
-      {children}
-    </div>
+    {children}
   </CardContent>
 )
 

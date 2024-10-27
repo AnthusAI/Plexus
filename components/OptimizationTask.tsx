@@ -26,11 +26,11 @@ const OptimizationTask: React.FC<
   const visualization = (
     <div className="w-full">
       <BeforeAfterGauges
-        title={task.scorecard}
+        title={task.description || 'Metric'}
         before={data.before?.innerRing[0]?.value ?? 0}
         after={data.after?.innerRing[0]?.value ?? 0}
         variant={variant}
-        backgroundColor="var(--background)"
+        backgroundColor="var(--gauge-background)"
       />
     </div>
   )
@@ -49,9 +49,8 @@ const OptimizationTask: React.FC<
         </TaskHeader>
       )}
       renderContent={(props) => (
-        <TaskContent {...props}>
+        <TaskContent {...props} visualization={visualization}>
           <div className="flex flex-col w-full gap-4">
-            {visualization}
             {data && (
               <TaskProgress 
                 progress={data.progress ?? 0}

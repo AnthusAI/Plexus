@@ -25,7 +25,7 @@ const BeforeAfterGauges: React.FC<BeforeAfterGaugesProps> = ({
 }) => {
   return (
     <div data-testid="before-after-gauges" className="flex flex-col items-center w-full">
-      <div className="text-[1.5rem] font-medium mb-4">{title}</div>
+      <div className="text-lg font-bold mb-0">{title}</div>
       <div className="flex w-full justify-center space-x-8">
         <Gauge 
           value={before} 
