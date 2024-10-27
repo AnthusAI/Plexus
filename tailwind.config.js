@@ -70,6 +70,7 @@ module.exports = {
     			true: 'var(--true)',
     			false: 'var(--false)',
     			neutral: 'var(--neutral)',
+				'gauge-background': 'var(--gauge-background)',
     			'gauge-inviable': 'var(--gauge-inviable)',
     			'gauge-converging': 'var(--gauge-converging)', 
     			'gauge-almost': 'var(--gauge-almost)',

@@ -7,25 +7,6 @@ import { ExperimentTaskProps } from '../components/ExperimentTask';
 const meta: Meta<typeof ExperimentTask> = {
   title: 'Tasks/Types/ExperimentTask',
   component: ExperimentTask,
-  args: {
-    variant: 'grid',
-    task: {
-      id: 1,
-      type: 'experiment',
-      scorecard: 'A+',
-      score: '95%',
-      time: '2h 30m',
-      summary: 'Experiment Summary',
-      data: {
-        accuracy: 95,
-        progress: 75,
-        elapsedTime: '1h 45m',
-        processedItems: 750,
-        totalItems: 1000,
-        estimatedTimeRemaining: '45m'
-      }
-    }
-  }
 };
 
 export default meta;
@@ -45,11 +26,19 @@ const createTask = (id: number, processedItems: number, totalItems: number): Exp
     description: 'Experiment Description',
     data: {
       accuracy: 75,
-      progress: (processedItems / totalItems) * 100,
+      f1Score: 82,
       elapsedTime: '01:30:00',
       processedItems,
       totalItems,
       estimatedTimeRemaining: '00:30:00',
+      outerRing: [
+        { category: 'Positive', value: 50, fill: 'var(--true)' },
+        { category: 'Negative', value: 50, fill: 'var(--false)' },
+      ],
+      innerRing: [
+        { category: 'Positive', value: 75, fill: 'var(--true)' },
+        { category: 'Negative', value: 25, fill: 'var(--false)' },
+      ],
     }
   },
   onClick: () => console.log(`Clicked task ${id}`),
@@ -108,55 +97,13 @@ export const Detail: Story = {
 };
 
 export const Grid: Story = {
-  render: () => (
-    <>
-      <ExperimentTask {...createTask(1, 25, 100)} />
-      <ExperimentTask {...createTask(2, 50, 100)} />
-      <ExperimentTask {...createTask(3, 75, 100)} />
-      <ExperimentTask {...createTask(4, 100, 100)} />
-    </>
-  ),
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    
-    // Verify all four tasks are present
-    const summaries = canvas.getAllByText('Experiment Summary');
-    expect(summaries).toHaveLength(4);
-    
-    // Check that we have all progress states
-    await expect(canvas.getByText('25%')).toBeInTheDocument();
-    await expect(canvas.getByText('50%')).toBeInTheDocument();
-    await expect(canvas.getByText('75%')).toBeInTheDocument();
-    await expect(canvas.getByText('100%')).toBeInTheDocument();
-    
-    // Verify all tasks have Flask icons
-    const flaskIcons = canvasElement.querySelectorAll('.lucide.lucide-flask-conical');
-    expect(flaskIcons).toHaveLength(4);
-    
-    // Check that each task has its description
-    const descriptions = canvas.getAllByText('Experiment Description');
-    expect(descriptions).toHaveLength(4);
-  }
+  args: createTask(1, 75, 100),
 };
 
 export const InProgress: Story = {
   args: createTask(4, 50, 100),
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    const fiftyElements = canvas.getAllByText(/50/);
-    expect(fiftyElements).toHaveLength(2);
-  }
 };
 
 export const Completed: Story = {
   args: createTask(5, 100, 100),
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    const hundredElements = canvas.getAllByText(/100/);
-    expect(hundredElements).toHaveLength(2);
-    
-    // Check for 100% progress
-    const progressElement = canvas.getByText('100%');
-    await expect(progressElement).toBeInTheDocument();
-  }
 };

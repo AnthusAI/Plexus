@@ -139,3 +139,23 @@ export const Grid: Story = {
     await expect(canvas.getByText(/95%/)).toBeInTheDocument();
   }
 };
+
+export const Stretched: Story = {
+  render: () => (
+    <div className="h-64"> {/* Fixed height to stretch the component vertically */}
+      <ScoreUpdatedTask {...createTask(1, 75, 85)} />
+    </div>
+  ),
+};
+
+export const GridWithTallFirst: Story = {
+  render: () => (
+    <div className="grid grid-cols-2 gap-4">
+      <div className="row-span-2 h-64">
+        <ScoreUpdatedTask {...createTask(1, 75, 85)} />
+      </div>
+      <ScoreUpdatedTask {...createTask(2, 60, 80)} />
+      <ScoreUpdatedTask {...createTask(3, 70, 85)} />
+    </div>
+  ),
+};

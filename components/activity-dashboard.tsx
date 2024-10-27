@@ -75,10 +75,10 @@ const recentActivities = [
     scorecard: "CS3 Services v2",
     score: "Good Call",
     time: "2m ago",
-    description: "Accuracy",
-    summary: "89% / 47",
+    description: "Note",
+    summary: '\"Using fine-tuned model.\"',
     data: {
-      progress: 47,
+      f1Score: 85,
       accuracy: 89,
       processedItems: 47,
       totalItems: 100,
@@ -157,7 +157,7 @@ const recentActivities = [
     summary: "94% / 100",
     description: "Accuracy",
     data: {
-      progress: 100,
+      f1Score: 92,  // Added f1Score
       accuracy: 94,
       processedItems: 100,
       totalItems: 100,
@@ -514,7 +514,7 @@ export default function ActivityDashboard() {
   ]
 
   return (
-    <div className="space-y-4 h-full flex">
+    <div className="h-full flex">
       <div className="flex-1 overflow-y-auto pr-4">
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -612,11 +612,14 @@ export default function ActivityDashboard() {
                           onClick={() => setSelectedActivity(activity)}
                         />
                       )
-                    case 'Optimization started': // Update case
+                    case 'Optimization started':
                       return (
-                        <OptimizationTask // Update component
+                        <OptimizationTask
                           variant="grid"
-                          task={activity}
+                          task={{
+                            ...activity,
+                            scorecard: activity.description || 'Metric' // Use description or fallback to 'Metric'
+                          }}
                           onClick={() => setSelectedActivity(activity)}
                         />
                       )
@@ -655,8 +658,8 @@ export default function ActivityDashboard() {
       </div>
 
       {selectedActivity && !isNarrowViewport && (
-        <div className="w-1/3 min-w-[300px] pl-4 overflow-y-auto">
-          <div className="space-y-4">
+        <div className="w-1/3 min-w-[300px] overflow-y-auto">
+          <div className="">
             <div className="" />
             {(() => {
               switch (selectedActivity.type) {
@@ -668,7 +671,16 @@ export default function ActivityDashboard() {
                 case 'Report':
                   return <ReportTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
                 case 'Optimization started':
-                  return <OptimizationTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                  return (
+                    <OptimizationTask
+                      variant="detail"
+                      task={{
+                        ...selectedActivity,
+                        scorecard: selectedActivity.description || 'Metric'
+                      }}
+                      controlButtons={DetailViewControlButtons}
+                    />
+                  )
                 case 'Feedback queue started':
                 case 'Feedback queue completed':
                   return <FeedbackTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
@@ -696,7 +708,16 @@ export default function ActivityDashboard() {
                 case 'Report':
                   return <ReportTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
                 case 'Optimization started':
-                  return <OptimizationTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                  return (
+                    <OptimizationTask
+                      variant="detail"
+                      task={{
+                        ...selectedActivity,
+                        scorecard: selectedActivity.description || 'Metric'
+                      }}
+                      controlButtons={DetailViewControlButtons}
+                    />
+                  )
                 case 'Feedback queue started':
                 case 'Feedback queue completed':
                   return <FeedbackTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />

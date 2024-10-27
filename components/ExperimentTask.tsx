@@ -1,12 +1,13 @@
-import React from 'react'
+import React, { useRef, useState, useEffect } from 'react'
 import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
 import { FlaskConical } from 'lucide-react'
 import MetricsGauges from './MetricsGauges'
 import TaskProgress from './TaskProgress'
+import { ResponsiveWaffle } from '@nivo/waffle'
 
 interface ExperimentTaskData {
   accuracy: number
-  progress: number
+  f1Score: number
   elapsedTime: string
   processedItems: number
   totalItems: number
@@ -23,6 +24,21 @@ const ExperimentTask: React.FC<ExperimentTaskProps> = ({
   controlButtons 
 }) => {
   const data = task.data as ExperimentTaskData
+  const waffleContainerRef = useRef<HTMLDivElement>(null)
+  const [waffleHeight, setWaffleHeight] = useState(20)
+
+  useEffect(() => {
+    const updateWaffleHeight = () => {
+      if (waffleContainerRef.current) {
+        const width = waffleContainerRef.current.offsetWidth
+        setWaffleHeight(width / 4)
+      }
+    }
+
+    updateWaffleHeight()
+    window.addEventListener('resize', updateWaffleHeight)
+    return () => window.removeEventListener('resize', updateWaffleHeight)
+  }, [])
 
   const accuracyConfig = {
     value: data.accuracy,
@@ -32,21 +48,93 @@ const ExperimentTask: React.FC<ExperimentTaskProps> = ({
       { start: 60, end: 85, color: 'var(--gauge-converging)' },
       { start: 85, end: 100, color: 'var(--gauge-great)' }
     ],
-    backgroundColor: 'var(--background)',
+    backgroundColor: 'var(--gauge-background)',
     showTicks: variant === 'detail'
   }
 
-  const progressConfig = {
-    value: data.progress,
-    label: 'Progress',
-    backgroundColor: 'var(--background)',
+  const f1ScoreConfig = {
+    value: data.f1Score,
+    label: 'F1 Score',
+    segments: [
+      { start: 0, end: 60, color: 'var(--gauge-inviable)' },
+      { start: 60, end: 85, color: 'var(--gauge-converging)' },
+      { start: 85, end: 100, color: 'var(--gauge-great)' }
+    ],
+    backgroundColor: 'var(--gauge-background)',
     showTicks: variant === 'detail'
   }
 
-  const visualization = (
-    <div className="w-full">
+  const visualization = variant === 'detail' ? (
+    <div className="w-full mt-8">
       <MetricsGauges 
-        gauges={[accuracyConfig, progressConfig]}
+        gauges={[accuracyConfig, f1ScoreConfig]}
+      />
+      <div 
+        ref={waffleContainerRef}
+        className="mt-8 w-full" 
+        style={{ height: `${waffleHeight}px` }}
+      >
+        <ResponsiveWaffle
+          data={[
+            { 
+              id: 'correct', 
+              label: 'Correct', 
+              value: Math.round(data.processedItems * data.accuracy / 100) 
+            },
+            { 
+              id: 'incorrect', 
+              label: 'Incorrect', 
+              value: data.processedItems - Math.round(data.processedItems * data.accuracy / 100) 
+            },
+            { 
+              id: 'unprocessed', 
+              label: 'Unprocessed', 
+              value: data.totalItems - data.processedItems 
+            }
+          ]}
+          total={data.totalItems}
+          rows={5}
+          columns={20}
+          padding={1}
+          valueFormat=".0f"
+          colors={({ id }) => {
+            const colorMap: Record<string, string> = {
+              correct: 'var(--true)',
+              incorrect: 'var(--false)',
+              unprocessed: 'var(--neutral)'
+            }
+            return colorMap[id] || 'var(--neutral)'
+          }}
+          borderRadius={2}
+          fillDirection="right"
+          margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+          legends={[{
+            anchor: 'bottom',
+            direction: 'row',
+            justify: false,
+            translateX: 0,
+            translateY: 30,
+            itemsSpacing: 4,
+            itemWidth: 100,
+            itemHeight: 20,
+            itemDirection: 'left-to-right',
+            itemOpacity: 1,
+            itemTextColor: 'var(--text-muted)',
+            symbolSize: 20
+          }]}
+        />
+      </div>
+    </div>
+  ) : (
+    <div className="w-full mt-7">
+      <MetricsGauges 
+        gauges={[{
+          ...accuracyConfig,
+          showTicks: false
+        }, {
+          ...f1ScoreConfig,
+          showTicks: false
+        }]}
       />
     </div>
   )
@@ -65,11 +153,10 @@ const ExperimentTask: React.FC<ExperimentTaskProps> = ({
         </TaskHeader>
       )}
       renderContent={(props) => (
-        <TaskContent {...props}>
+        <TaskContent {...props} visualization={visualization}>
           <div className="flex flex-col w-full gap-4">
-            {visualization}
             <TaskProgress 
-              progress={data.progress}
+              progress={(data.processedItems / data.totalItems) * 100}
               elapsedTime={data.elapsedTime}
               processedItems={data.processedItems}
               totalItems={data.totalItems}

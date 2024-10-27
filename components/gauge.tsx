@@ -241,8 +241,9 @@ const GaugeComponent: React.FC<GaugeProps> = ({
             x="0" 
             y={titleY}
             textAnchor="middle" 
-            className="text-[1.5rem] font-medium fill-foreground"
+            className="fill-foreground"
             dominantBaseline="middle"
+            style={{ fontSize: '16px', fontWeight: 500 }}
           >
             {title}
           </text>
