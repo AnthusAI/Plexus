@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj, StoryFn } from '@storybook/react';
 import { expect, within } from '@storybook/test';
 import ExperimentTask from '../components/ExperimentTask';
 import { ExperimentTaskProps } from '../components/ExperimentTask';
@@ -12,7 +12,9 @@ const meta: Meta<typeof ExperimentTask> = {
 export default meta;
 type Story = StoryObj<typeof ExperimentTask>;
 
-const Template: StoryFn<ExperimentTaskProps> = (args) => <ExperimentTask {...args} />;
+const Template: StoryFn<ExperimentTaskProps> = (args: ExperimentTaskProps) => (
+  <ExperimentTask {...args} />
+);
 
 const createTask = (id: number, processedItems: number, totalItems: number): ExperimentTaskProps => ({
   variant: 'grid',
@@ -26,19 +28,10 @@ const createTask = (id: number, processedItems: number, totalItems: number): Exp
     description: 'Experiment Description',
     data: {
       accuracy: 75,
-      f1Score: 82,
       elapsedTime: '01:30:00',
-      processedItems,
-      totalItems,
-      estimatedTimeRemaining: '00:30:00',
-      outerRing: [
-        { category: 'Positive', value: 50, fill: 'var(--true)' },
-        { category: 'Negative', value: 50, fill: 'var(--false)' },
-      ],
-      innerRing: [
-        { category: 'Positive', value: 75, fill: 'var(--true)' },
-        { category: 'Negative', value: 25, fill: 'var(--false)' },
-      ],
+      numberComplete: processedItems,
+      numberTotal: totalItems,
+      eta: '00:30:00'
     }
   },
   onClick: () => console.log(`Clicked task ${id}`),

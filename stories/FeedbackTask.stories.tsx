@@ -21,9 +21,9 @@ const meta: Meta<typeof FeedbackTask> = {
       data: {
         progress: 75,
         elapsedTime: '1h 15m',
-        processedItems: 150,
-        totalItems: 200,
-        estimatedTimeRemaining: '30m'
+        numberComplete: 150,
+        numberTotal: 200,
+        eta: '30m'
       }
     }
   }
@@ -45,9 +45,9 @@ const createTask = (id: number, processedItems: number, totalItems: number): Fee
     data: {
       progress: (processedItems / totalItems) * 100,
       elapsedTime: '01:30:00',
-      processedItems,
-      totalItems,
-      estimatedTimeRemaining: '00:30:00',
+      numberComplete: processedItems,
+      numberTotal: totalItems,
+      eta: '00:30:00',
     }
   },
   onClick: () => console.log(`Clicked task ${id}`),

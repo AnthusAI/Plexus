@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj, StoryFn } from '@storybook/react';
 import { expect, within } from '@storybook/test';
 import AlertTask from '@/components/AlertTask';
 import { BaseTaskProps } from '@/components/Task';
@@ -28,7 +28,9 @@ interface AlertTaskStoryProps extends BaseTaskProps {
   iconType: 'info' | 'warning' | 'siren';
 }
 
-const Template: StoryFn<AlertTaskStoryProps> = (args) => <AlertTask {...args} />;
+const Template: StoryFn<AlertTaskStoryProps> = (args: AlertTaskStoryProps) => (
+  <AlertTask {...args} />
+);
 
 const createTask = (
   id: number, 
