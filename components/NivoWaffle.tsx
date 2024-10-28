@@ -49,7 +49,7 @@ const NivoWaffle: React.FC<NivoWaffleProps> = ({ processedItems, totalItems, acc
         borderColor={{ from: 'color', modifiers: [['darker', 0.3]] }}
         emptyColor="var(--bg-muted)"
         emptyOpacity={0.5}
-        fillDirection="top-right"
+        fillDirection="right"
         legends={[
             {
             anchor: 'bottom',

@@ -4,6 +4,8 @@ import { expect, within } from '@storybook/test';
 import OptimizationTask from '@/components/OptimizationTask';
 import { TaskComponentProps } from '@/components/Task';
 
+type OptimizationTaskProps = Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>;
+
 const meta: Meta<typeof OptimizationTask> = {
   title: 'Tasks/Types/OptimizationTask',
   component: OptimizationTask,
@@ -36,7 +38,7 @@ const createTask = (
   id: number, 
   numberComplete: number, 
   numberTotal: number
-): TaskComponentProps => ({
+): Omit<TaskComponentProps, 'renderHeader' | 'renderContent'> => ({
   variant: 'grid',
   task: {
     id,
