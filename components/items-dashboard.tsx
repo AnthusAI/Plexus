@@ -137,67 +137,85 @@ const sampleScoreResults = [
   {
     section: "Technical",
     scores: [
-      { name: "Scoreable Call", value: "Yes", explanation: "The call meets all criteria to be scored. This includes having clear audio, being of sufficient length, and containing relevant content for evaluation.", allowFeedback: true },
-      { name: "Call Efficiency", value: "Yes", explanation: `The agent managed the call time effectively while still addressing the customer's needs:
-
-**Proper Call Control:** The agent skillfully guided the conversation, keeping it on track without being abrupt or dismissive.
-
-**Efficient Information Gathering:** The agent asked concise, relevant questions to quickly understand the customer's situation without unnecessary repetition.
-
-**Timely Resolution:** The agent resolved the main issue within an appropriate timeframe, balancing thoroughness with efficiency.
-
-**Effective Use of Tools:** The agent demonstrated proficiency with their systems, quickly accessing and updating information without causing undue delays.
-
-**Appropriate Small Talk:** The agent maintained a friendly demeanor while keeping small talk brief and relevant, striking a good balance between building rapport and maintaining efficiency.`, allowFeedback: true },
+      { 
+        name: "Scoreable Call", 
+        value: "Yes", 
+        explanation: "The call meets all criteria to be scored...", 
+        allowFeedback: true
+      },
+      { 
+        name: "Call Efficiency", 
+        value: "Yes", 
+        explanation: `The agent managed the call time effectively...`, 
+        allowFeedback: true
+      },
     ]
   },
   {
     section: "Sales",
     scores: [
-      { name: "Assumptive Close", value: "No", explanation: "The agent did not use an assumptive close technique. Instead, they used a more consultative approach, asking for the customer's decision rather than assuming it.", allowFeedback: true },
-      { name: "Problem Resolution", value: "Yes", explanation: `The agent effectively resolved the customer's issue:
-
-**Issue Identification:** The agent quickly and accurately identified the core problem by asking probing questions and actively listening to the customer's responses.
-
-**Knowledge Application:** The agent demonstrated a thorough understanding of the product/service and company policies, applying this knowledge to address the customer's specific situation.
-
-**Step-by-Step Solution:** The agent provided a clear, logical sequence of steps to resolve the issue, ensuring the customer understood each part of the process.
-
-**Confirmation:** The agent verified that the solution met the customer's needs by asking for confirmation and addressing any lingering concerns.
-
-**Future Prevention:** The agent offered advice on how to prevent similar issues in the future, adding value beyond just solving the immediate problem.`, allowFeedback: true },
+      { 
+        name: "Assumptive Close", 
+        value: "No", 
+        explanation: "The agent did not use an assumptive close technique...", 
+        allowFeedback: true
+      },
+      { 
+        name: "Problem Resolution", 
+        value: "Yes", 
+        explanation: `The agent effectively resolved the customer's issue...`, 
+        allowFeedback: true
+      },
     ]
   },
   {
     section: "Soft Skills",
     scores: [
-      { name: "Rapport", value: "Yes", explanation: `The agent demonstrated excellent rapport-building skills throughout the call:
-
-**Active Listening:** The agent consistently acknowledged the customer's statements and asked relevant follow-up questions, showing they were fully engaged in the conversation.
-
-**Empathy:** The agent expressed understanding and validation of the customer's concerns, using phrases like "I understand how frustrating that must be" and "I can see why that would be important to you."
-
-**Encouragement:** The agent provided positive reinforcement throughout the call, praising the customer's efforts and decisions with comments like "That's a great question" and "You're on the right track."
-
-**Personalization:** The agent tailored their approach to the customer's specific situation, referencing previous interactions and using the customer's name naturally throughout the conversation.`, allowFeedback: true },
-      { name: "Friendly Greeting", value: "Yes", explanation: "The agent provided a warm and professional greeting. They used a pleasant tone of voice, introduced themselves clearly, and made the customer feel welcome.", allowFeedback: true },
-      { name: "Agent Offered Name", value: "Yes", explanation: "The agent clearly stated their name at the beginning of the call. This was done in a natural and friendly manner, helping to establish a personal connection with the customer.", allowFeedback: true },
-      { name: "Temperature Check", value: "Yes", explanation: "The agent asked about the customer's satisfaction during the call. This was done at an appropriate time and in a way that invited honest feedback from the customer.", allowFeedback: true },
+      { 
+        name: "Rapport", 
+        value: "Yes", 
+        explanation: `The agent demonstrated excellent rapport-building skills...`, 
+        allowFeedback: true
+      },
+      { 
+        name: "Friendly Greeting", 
+        value: "Yes", 
+        explanation: "The agent provided a warm and professional greeting...", 
+        allowFeedback: true
+      },
+      { 
+        name: "Agent Offered Name", 
+        value: "Yes", 
+        explanation: "The agent clearly stated their name...", 
+        allowFeedback: true
+      },
+      { 
+        name: "Temperature Check", 
+        value: "Yes", 
+        explanation: "The agent asked about the customer's satisfaction...", 
+        allowFeedback: true
+      },
     ]
   },
   {
     section: "Compliance",
     scores: [
-      { name: "DNC Requested", value: "No", explanation: "The customer did not request to be added to the Do Not Call list. The agent properly handled any questions about contact preferences without any DNC requests being made.", allowFeedback: true },
+      { 
+        name: "DNC Requested", 
+        value: "No", 
+        explanation: "The customer did not request to be added to the Do Not Call list...", 
+        allowFeedback: true
+      },
       { 
         name: "Profanity", 
         value: "No", 
-        explanation: "No profanity was detected during the call. Both the agent and the customer maintained professional and respectful language throughout the entire conversation.",
+        explanation: "No profanity was detected during the call...",
         isAnnotated: true,
+        allowFeedback: true,
         annotations: [
           {
             value: "No",
-            explanation: "No profanity was detected during the call. Both the agent and the customer maintained professional and respectful language throughout the entire conversation.",
+            explanation: "No profanity was detected...",
             annotation: "The word 'dangit' is not profanity by our standards.",
             timestamp: relativeDate(0, 0, 5),
             user: {
@@ -207,15 +225,24 @@ const sampleScoreResults = [
           },
           {
             value: "Yes",
-            explanation: "Profanity was detected during the call. The agent used the word 'dangit!' which was flagged as potentially inappropriate language.",
+            explanation: "Profanity was detected during the call...",
             timestamp: relativeDate(0, 0, 10),
             isSystem: true
           }
-        ],
+        ]
+      },
+      { 
+        name: "Agent Offered Legal Advice", 
+        value: "No", 
+        explanation: "The agent did not offer any legal advice...", 
         allowFeedback: true
       },
-      { name: "Agent Offered Legal Advice", value: "No", explanation: "The agent did not offer any legal advice during the call, which is outside their scope of expertise and could potentially lead to compliance issues.", allowFeedback: true },
-      { name: "Agent Offered Guarantees", value: "No", explanation: "The agent did not make any unauthorized guarantees or promises that could be construed as binding commitments by the company.", allowFeedback: true },
+      { 
+        name: "Agent Offered Guarantees", 
+        value: "No", 
+        explanation: "The agent did not make any unauthorized guarantees...", 
+        allowFeedback: true
+      },
     ]
   },
   {
@@ -224,13 +251,13 @@ const sampleScoreResults = [
       { 
         name: "Compliance", 
         value: "94%", 
-        explanation: "This score represents the overall compliance level of the interaction. It takes into account factors such as adherence to legal requirements, company policies, and industry regulations. A high score indicates that the agent successfully followed compliance guidelines throughout the call.",
+        explanation: "This score represents the overall compliance level...",
         allowFeedback: false
       },
       { 
         name: "Soft Skills", 
         value: "87%", 
-        explanation: "This score evaluates the agent's interpersonal abilities and communication effectiveness. It considers aspects such as empathy, active listening, rapport building, and problem-solving skills. A high score suggests that the agent demonstrated strong soft skills, enhancing the overall customer experience.",
+        explanation: "This score evaluates the agent's interpersonal abilities...",
         allowFeedback: false
       },
     ]
@@ -272,6 +299,20 @@ const renderRichText = (text: string) => {
   )
 }
 
+// Add these interfaces near the top with other interfaces
+interface Annotation {
+  value: string;
+  explanation: string;
+  annotation?: string;
+  timestamp: string;
+  user?: {
+    name: string;
+    initials: string;
+  };
+  isSystem?: boolean;
+  isThumbsUp: boolean;
+}
+
 export default function ItemsDashboard() {
   const [selectedItem, setSelectedItem] = useState<number | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
@@ -284,13 +325,21 @@ export default function ItemsDashboard() {
   const [truncatedExplanations, setTruncatedExplanations] = useState<{[key: string]: string}>({});
   const explanationRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
   const [expandedAnnotations, setExpandedAnnotations] = useState<string[]>([]);
-  const [newAnnotation, setNewAnnotation] = useState<{ 
-    value: string; 
-    explanation: string; 
-    annotation: string; 
-    allowFeedback: boolean; // Include allowFeedback in the type definition
-  }>({ value: "", explanation: "", annotation: "", allowFeedback: false });
-  const [showNewAnnotationForm, setShowNewAnnotationForm] = useState<string | null>(null);
+  const [newAnnotation, setNewAnnotation] = useState<{
+    value: string;
+    explanation: string;
+    annotation: string;
+    allowFeedback?: boolean;
+  }>({ 
+    value: "", 
+    explanation: "", 
+    annotation: "",
+    allowFeedback: false
+  });
+  const [showNewAnnotationForm, setShowNewAnnotationForm] = useState<{ 
+    scoreName: string | null; 
+    isThumbsUp: boolean; 
+  }>({ scoreName: null, isThumbsUp: false });
   const [isErrorExpanded, setIsErrorExpanded] = useState(true);
   const [filterConfig, setFilterConfig] = useState<FilterConfig>([])
   const [showExpandButton, setShowExpandButton] = useState<Record<string, boolean>>({})
@@ -300,6 +349,7 @@ export default function ItemsDashboard() {
   const [items, setItems] = useState<Item[]>(initialItems);
   const [sampleMethod, setSampleMethod] = useState("All");
   const [sampleCount, setSampleCount] = useState(100);
+  const [scoreResults, setScoreResults] = useState(sampleScoreResults);
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -490,7 +540,7 @@ export default function ItemsDashboard() {
   };
 
   const cancelAnnotation = (scoreName: string) => {
-    setShowNewAnnotationForm(null);
+    setShowNewAnnotationForm({ scoreName: null, isThumbsUp: false });
     setNewAnnotation({ value: "", explanation: "", annotation: "", allowFeedback: false });
   };
 
@@ -536,9 +586,232 @@ export default function ItemsDashboard() {
         setIsErrorExpanded={setIsErrorExpanded}
         sampleMetadata={sampleMetadata}
         sampleTranscript={sampleTranscript}
-        sampleScoreResults={sampleScoreResults}
+        sampleScoreResults={scoreResults}
+        handleThumbsUp={handleThumbsUp}
+        handleThumbsDown={handleThumbsDown}
+        handleNewAnnotationSubmit={handleNewAnnotationSubmit}
+        toggleAnnotations={toggleAnnotations}
+        showNewAnnotationForm={showNewAnnotationForm}
+        setShowNewAnnotationForm={setShowNewAnnotationForm}
+        newAnnotation={newAnnotation}
+        setNewAnnotation={setNewAnnotation}
+        expandedAnnotations={expandedAnnotations}
+        thumbedUpScores={thumbedUpScores}
+        setThumbedUpScores={setThumbedUpScores}
+        isFullWidth={isFullWidth}
+        isFeedbackMode={false}
       />
     )
+  }
+
+  const handleThumbsUp = (scoreName: string) => {
+    setThumbedUpScores(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(scoreName)) {
+        newSet.delete(scoreName);
+      } else {
+        newSet.add(scoreName);
+      }
+      return newSet;
+    });
+
+    toggleNewAnnotationForm(scoreName, true);
+  };
+
+  const handleThumbsDown = (scoreName: string) => {
+    setThumbedUpScores(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(scoreName);
+      return newSet;
+    });
+    toggleNewAnnotationForm(scoreName, false);
+  };
+
+  const toggleNewAnnotationForm = (scoreName: string, isThumbsUp: boolean) => {
+    if (showNewAnnotationForm.scoreName === scoreName && 
+        showNewAnnotationForm.isThumbsUp === isThumbsUp) {
+      setShowNewAnnotationForm({ scoreName: null, isThumbsUp: false });
+    } else {
+      setShowNewAnnotationForm({ scoreName, isThumbsUp });
+      const foundScore = sampleScoreResults
+        .flatMap(section => section.scores)
+        .find(score => score.name === scoreName);
+      
+      if (foundScore) {
+        initializeNewAnnotation(foundScore);
+      } else {
+        console.warn(`No score found with name: ${scoreName}`);
+        setNewAnnotation({ value: "", explanation: "", annotation: "", allowFeedback: false });
+      }
+    }
+  };
+
+  const handleNewAnnotationSubmit = (scoreName: string) => {
+    // Create the new annotation
+    const newAnnotationItem = {
+      value: newAnnotation.value,
+      explanation: newAnnotation.explanation,
+      annotation: newAnnotation.annotation,
+      timestamp: new Date().toISOString(),
+      user: {
+        name: "Ryan Porter",
+        initials: "RP"
+      },
+      isThumbsUp: showNewAnnotationForm.isThumbsUp
+    };
+
+    // Update the score results state
+    setScoreResults(prevResults => 
+      prevResults.map(section => ({
+        ...section,
+        scores: section.scores.map(score => 
+          score.name === scoreName 
+            ? { 
+                ...score, 
+                isAnnotated: true, 
+                annotations: [...(score.annotations || []), newAnnotationItem] 
+              }
+            : score
+        )
+      }))
+    );
+
+    // Close the form
+    setShowNewAnnotationForm({ scoreName: null, isThumbsUp: false });
+    
+    // Clear the form data
+    setNewAnnotation({ value: "", explanation: "", annotation: "", allowFeedback: false });
+    
+    // Expand the feedback history
+    setExpandedAnnotations(prev => 
+      prev.includes(scoreName) ? prev : [...prev, scoreName]
+    );
+  };
+
+  function renderScoreResult(score: any, isAnnotation = false) {
+    const hasAnnotations = score.annotations && score.annotations.length > 0;
+    const isThumbedUp = isAnnotation ? score.isThumbsUp : thumbedUpScores.has(score.name);
+
+    const getBorderColor = () => {
+      if (score.isSystem) return 'var(--secondary)';
+      if (isThumbedUp) return 'var(--true)';
+      return 'var(--false)';
+    };
+
+    const hasFeedback = score.isAnnotated || hasAnnotations;
+    const hasThumbsDownFeedback = (score.annotations || [])
+      .some((annotation: Annotation) => !annotation.isThumbsUp);
+    const feedbackIconColor = hasFeedback
+      ? hasThumbsDownFeedback
+        ? 'bg-false text-primary-foreground hover:bg-false hover:text-primary-foreground'
+        : 'bg-true text-primary-foreground hover:bg-true hover:text-primary-foreground'
+      : '';
+
+    return (
+      <div 
+        className={`py-2 ${isAnnotation ? 'pl-4 border-l-4' : ''} relative`}
+        style={isAnnotation ? { borderColor: getBorderColor() + ' !important' } : {}}
+      >
+        {isAnnotation && !score.isSystem && (
+          <div className="absolute top-2 left-4 rounded-full p-1" 
+               style={{ backgroundColor: score.isThumbsUp ? 'var(--true)' : 'var(--false)' }}>
+            {score.isThumbsUp ? (
+              <ThumbsUp className="h-3 w-3 text-primary-foreground" />
+            ) : (
+              <ThumbsDown className="h-3 w-3 text-primary-foreground" />
+            )}
+          </div>
+        )}
+        {isAnnotation ? (
+          <>
+            <div className="flex justify-end mb-2">
+              <Badge className={getValueBadgeClass(score.value)}>{score.value}</Badge>
+            </div>
+            <div className="relative">
+              <div 
+                ref={(el) => {
+                  if (el) {
+                    textRef.current[score.name] = el;
+                  }
+                }}
+                className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
+                style={{ 
+                  display: '-webkit-box',
+                  WebkitLineClamp: '2',
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  ...(expandedExplanations.includes(score.name) ? 
+                      { WebkitLineClamp: 'unset', display: 'block' } : {})
+                }}
+                onClick={() => toggleExplanation(score.name)}
+              >
+                {renderRichText(score.explanation)}
+              </div>
+              {showExpandButton[score.name] && (
+                <Button 
+                  variant="link" 
+                  size="sm" 
+                  onClick={() => toggleExplanation(score.name)}
+                  className="absolute bottom-0 right-0 px-0 py-1 h-auto bg-white dark:bg-gray-800"
+                >
+                  {expandedExplanations.includes(score.name) 
+                    ? <ChevronUp className="h-3 w-3 inline ml-1" />
+                    : <ChevronDown className="h-3 w-3 inline ml-1" />
+                  }
+                </Button>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex justify-between items-center mb-1">
+              <div className="flex items-center">
+                <h5 className="text-sm font-medium">{score.name}</h5>
+                <div className="inline-flex items-center ml-1">
+                  <Link href={`/scorecards?score=${encodeURIComponent(score.name)}`} passHref>
+                    <Button variant="ghost" size="sm" className="p-0 h-auto translate-y-[2px]" 
+                           title={`More info about ${score.name}`}>
+                      <Info className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                {hasFeedback && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggleAnnotations(score.name)}
+                    className={`text-xs ${feedbackIconColor}`}
+                  >
+                    <MessageCircleMore className="h-4 w-4" />
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleThumbsUp(score.name)}
+                  className="text-xs hover:bg-true hover:text-primary-foreground"
+                >
+                  <ThumbsUp className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleThumbsDown(score.name)}
+                  className="text-xs hover:bg-false hover:text-primary-foreground"
+                >
+                  <ThumbsDown className="h-4 w-4" />
+                </Button>
+                <Badge className={getValueBadgeClass(score.value)}>{score.value}</Badge>
+              </div>
+            </div>
+            {/* Rest of the non-annotation rendering code... */}
+          </>
+        )}
+        {/* Rest of the function remains the same... */}
+      </div>
+    );
   }
 
   return (
@@ -572,15 +845,15 @@ export default function ItemsDashboard() {
           </div>
         ) : (
           <div className={`flex ${isNarrowViewport ? 'flex-col' : 'space-x-6'} h-full`}>
-            <div className={`${isFullWidth ? 'hidden' : 'flex-1'} overflow-auto`}>
+            <div className={`${isFullWidth ? 'hidden' : 'flex-1'} @container overflow-auto`}>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[40%]">Item</TableHead>
-                    <TableHead className="w-[15%] hidden sm:table-cell text-right">Inferences</TableHead>
-                    <TableHead className="w-[15%] hidden sm:table-cell text-right">Results</TableHead>
-                    <TableHead className="w-[15%] hidden sm:table-cell text-right">Cost</TableHead>
-                    <TableHead className="w-[15%] hidden sm:table-cell text-right">Status</TableHead>
+                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Inferences</TableHead>
+                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Results</TableHead>
+                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Cost</TableHead>
+                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -590,34 +863,38 @@ export default function ItemsDashboard() {
                       onClick={() => handleItemClick(item.id)} 
                       className="cursor-pointer transition-colors duration-200 hover:bg-muted"
                     >
-                      <TableCell className="font-medium sm:pr-4">
-                        <div className="sm:hidden">
-                          <div className="flex justify-between items-start mb-2">
-                            <div className="font-semibold">{item.scorecard}</div>
-                            <Badge 
-                              className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
-                            >
-                              {item.status}
-                            </Badge>
-                          </div>
-                          <div className="text-sm text-muted-foreground mb-2">{getRelativeTime(item.date)}</div>
-                          <div className="flex justify-between items-end">
-                            <div className="text-sm text-muted-foreground">
-                              {item.inferences} inferences<br />
-                              {item.results} results
+                      <TableCell className="font-medium pr-4">
+                        <div> {/* Removed @container/cell */}
+                          {/* Narrow variant - visible below 630px */}
+                          <div className="block @[630px]:hidden">
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="font-semibold">{item.scorecard}</div>
+                              <Badge 
+                                className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
+                              >
+                                {item.status}
+                              </Badge>
                             </div>
-                            <div className="font-semibold">{item.cost}</div>
+                            <div className="text-sm text-muted-foreground mb-2">{getRelativeTime(item.date)}</div>
+                            <div className="flex justify-between items-end">
+                              <div className="text-sm text-muted-foreground">
+                                {item.inferences} inferences<br />
+                                {item.results} results
+                              </div>
+                              <div className="font-semibold">{item.cost}</div>
+                            </div>
                           </div>
-                        </div>
-                        <div className="hidden sm:block">
-                          {item.scorecard}
-                          <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
+                          {/* Wide variant - visible at 630px and above */}
+                          <div className="hidden @[630px]:block">
+                            {item.scorecard}
+                            <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell text-right">{item.inferences}</TableCell>
-                      <TableCell className="hidden sm:table-cell text-right">{item.results}</TableCell>
-                      <TableCell className="hidden sm:table-cell text-right">{item.cost}</TableCell>
-                      <TableCell className="hidden sm:table-cell text-right">
+                      <TableCell className="hidden @[630px]:table-cell text-right">{item.inferences}</TableCell>
+                      <TableCell className="hidden @[630px]:table-cell text-right">{item.results}</TableCell>
+                      <TableCell className="hidden @[630px]:table-cell text-right">{item.cost}</TableCell>
+                      <TableCell className="hidden @[630px]:table-cell text-right">
                         <Badge 
                           className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
                         >

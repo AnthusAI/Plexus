@@ -85,8 +85,8 @@ export default function ReportsDashboard() {
       <TableHeader>
         <TableRow>
           <TableHead className="w-[60%]">Report Name</TableHead>
-          <TableHead className="w-[30%]">Last Run</TableHead>
-          <TableHead className="w-[10%] text-right">Actions</TableHead>
+          <TableHead className="w-[30%] @[630px]:table-cell hidden">Last Run</TableHead>
+          <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -97,13 +97,48 @@ export default function ReportsDashboard() {
             onClick={() => setSelectedReport(report)}
           >
             <TableCell>
-              <div className="font-medium">{report.name}</div>
-              <div className="text-sm text-muted-foreground">{report.scorecard}</div>
+              <div>
+                {/* Narrow variant - visible below 630px */}
+                <div className="block @[630px]:hidden">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <div className="font-medium">{report.name}</div>
+                      <div className="text-sm text-muted-foreground">{report.scorecard}</div>
+                    </div>
+                    <div className="flex items-center">
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={(e) => { e.stopPropagation(); setSelectedReport(report); }}
+                        className="h-8 w-8"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={(e) => { e.stopPropagation(); console.log("Edit report", report.id); }}
+                        className="h-8 w-8 ml-2"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Last run {formatDistanceToNow(report.lastRun, { addSuffix: true })}
+                  </div>
+                </div>
+                {/* Wide variant - visible at 630px and above */}
+                <div className="hidden @[630px]:block">
+                  <div className="font-medium">{report.name}</div>
+                  <div className="text-sm text-muted-foreground">{report.scorecard}</div>
+                </div>
+              </div>
             </TableCell>
-            <TableCell>
+            <TableCell className="hidden @[630px]:table-cell">
               {formatDistanceToNow(report.lastRun, { addSuffix: true })}
             </TableCell>
-            <TableCell className="text-right">
+            <TableCell className="hidden @[630px]:table-cell text-right">
               <Button 
                 variant="ghost" 
                 size="icon"
@@ -185,9 +220,10 @@ export default function ReportsDashboard() {
     <div className="space-y-4 h-full flex flex-col">
       <div className="flex-grow overflow-hidden pb-2">
         <div className="flex space-x-6 h-full overflow-hidden">
-          <div className={`${isFullWidth && selectedReport ? 'hidden' : 'flex-1'} overflow-auto`}>
+          <div className={`${isFullWidth && selectedReport ? 'hidden' : 'flex-1'} @container overflow-auto`}>
             {renderReportsTable()}
           </div>
+
           {selectedReport && (
             <div className={`${isFullWidth ? 'flex-1' : 'flex-1'} overflow-hidden`}>
               {renderSelectedReport()}

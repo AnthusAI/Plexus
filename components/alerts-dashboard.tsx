@@ -131,8 +131,10 @@ export default function AlertsDashboard() {
   return (
     <div className="space-y-4 h-full flex flex-col">
 
+      {/* Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 sm:space-x-4">
         <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
+          {/* Source Filter */}
           <Select onValueChange={(value) => setSelectedSource(value === "all" ? null : value)}>
             <SelectTrigger className="w-full sm:w-[280px] border border-secondary">
               <SelectValue placeholder="Source" />
@@ -154,6 +156,7 @@ export default function AlertsDashboard() {
         </Button>
       </div>
 
+      {/* Alerts List and Detail View */}
       <div className="flex-grow flex flex-col overflow-hidden pb-2">
         {selectedAlert && (isNarrowViewport || isFullWidth) ? (
           <div className="flex-grow overflow-hidden">
@@ -171,39 +174,57 @@ export default function AlertsDashboard() {
           </div>
         ) : (
           <div className={`flex ${isNarrowViewport ? 'flex-col' : 'space-x-6'} h-full`}>
-            <div className={`${isFullWidth ? 'hidden' : 'flex-1'} overflow-auto`}>
+            <div className={`${isFullWidth ? 'hidden' : 'flex-1'} @container overflow-auto`}>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[30%]">Source</TableHead>
-                    <TableHead className="w-[40%]">Alert</TableHead>
-                    <TableHead className="w-[15%]">Severity</TableHead>
-                    <TableHead className="w-[15%] text-right">Status</TableHead>
+                    <TableHead className="w-[40%] @[630px]:table-cell hidden">Alert</TableHead>
+                    <TableHead className="w-[15%] @[630px]:table-cell hidden">Severity</TableHead>
+                    <TableHead className="w-[15%] @[630px]:table-cell text-right hidden">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredAlerts.map((alert) => (
-                    <TableRow key={alert.id} onClick={() => handleAlertClick(alert.id)} className="cursor-pointer">
-                      <TableCell className="font-medium">
-                        <div className="space-y-1">
-                          <div className="font-semibold">{alert.source}</div>
-                          <div className="text-sm text-muted-foreground">{getRelativeTime(alert.date)}</div>
+                    <TableRow key={alert.id} onClick={() => handleAlertClick(alert.id)} className="cursor-pointer transition-colors duration-200 hover:bg-muted">
+                      <TableCell className="font-medium pr-4">
+                        <div>
+                          {/* Narrow variant - visible below 630px */}
+                          <div className="block @[630px]:hidden">
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="font-semibold">{alert.source}</div>
+                              <Badge 
+                                className={`w-24 justify-center ${getBadgeVariant(alert.status)}`}
+                              >
+                                {alert.status}
+                              </Badge>
+                            </div>
+                            <div className="text-sm text-muted-foreground mb-2">{getRelativeTime(alert.date)}</div>
+                            <div className="flex justify-between items-end">
+                              <div className="text-sm text-muted-foreground">
+                                <span className={`inline-block w-3 h-3 rounded-full ${getSeverityColor(alert.severity)}`}></span> {alert.severity}
+                              </div>
+                            </div>
+                          </div>
+                          {/* Wide variant - visible at 630px and above */}
+                          <div className="hidden @[630px]:block">
+                            {alert.source}
+                            <div className="text-sm text-muted-foreground">{getRelativeTime(alert.date)}</div>
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="font-medium">{alert.message}</div>
-                      </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden @[630px]:table-cell">{alert.message}</TableCell>
+                      <TableCell className="hidden @[630px]:table-cell">
                         <div className="flex items-center gap-2">
-                          <div className={`w-3 h-3 rounded-full ${getSeverityColor(alert.severity)}`} />
+                          <div className={`w-3 h-3 rounded-full ${getSeverityColor(alert.severity)}`}></div>
                           {alert.severity}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="hidden @[630px]:table-cell text-right">
                         <Badge 
-                          className={`${getBadgeVariant(alert.status)} w-24 justify-center`}
+                          className={`w-24 justify-center ${getBadgeVariant(alert.status)}`}
                         >
-                          {alert.status === 'activities...' ? 'actions...' : alert.status}
+                          {alert.status}
                         </Badge>
                       </TableCell>
                     </TableRow>
@@ -320,15 +341,14 @@ function renderSelectedAlert({
               <h4 className="text-md font-semibold">Description</h4>
               <hr className="my-2 border-t border-gray-200" />
               <p className="text-sm">
-                This alert was triggered based on the scoring results of the associated item. 
-                The system detected a potential issue that requires attention or investigation.
+                This alert was triggered based on the system's monitoring tools detecting a potential issue that requires attention or investigation.
                 Please review the details and take appropriate action as needed.
               </p>
             </div>
             <div>
-              <h4 className="text-md font-semibold">Activities</h4>
+              <h4 className="text-md font-semibold">Actions Taken</h4>
               <hr className="my-2 border-t border-gray-200" />
-              {/* Add activities content here if needed */}
+              {/* Add actions content here if needed */}
             </div>
           </div>
         )}

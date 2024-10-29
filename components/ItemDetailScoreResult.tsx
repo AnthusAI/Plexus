@@ -1,28 +1,67 @@
 import React, { useState, useRef } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Info, ChevronUp, ChevronDown, MessageCircleMore, ThumbsUp, ThumbsDown } from 'lucide-react'
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ThumbsUp, ThumbsDown, MessageCircleMore, Info, ChevronUp, ChevronDown } from "lucide-react"
 import Link from 'next/link'
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import ReactMarkdown from 'react-markdown'
 
-interface Score {
-  name: string
-  value: string
-  explanation: string
-  isAnnotated?: boolean
-  annotations?: any[]
-  allowFeedback?: boolean
+// Add type for node prop
+interface MarkdownComponentProps {
+  node?: any;
+  children?: React.ReactNode;
+  [key: string]: any;
 }
 
 interface ItemDetailScoreResultProps {
-  score: Score
+  score: any;
+  isAnnotation: boolean;
+  handleThumbsUp?: (scoreName: string) => void;
+  handleThumbsDown?: (scoreName: string) => void;
+  handleNewAnnotationSubmit?: (scoreName: string) => void;
+  toggleAnnotations?: (scoreName: string) => void;
+  showNewAnnotationForm?: { scoreName: string | null; isThumbsUp: boolean };
+  newAnnotation?: { value: string; explanation: string; annotation: string };
+  setNewAnnotation?: (annotation: { value: string; explanation: string; annotation: string }) => void;
+  expandedAnnotations?: string[];
+  thumbedUpScores?: Set<string>;
+  setShowNewAnnotationForm?: (form: { scoreName: string | null; isThumbsUp: boolean }) => void;
+  setThumbedUpScores?: (scores: Set<string>) => void;
+  isFeedbackMode?: boolean;
 }
 
-const ItemDetailScoreResult: React.FC<ItemDetailScoreResultProps> = ({ score }) => {
+export default function ItemDetailScoreResult({
+  score,
+  isAnnotation,
+  handleThumbsUp,
+  handleThumbsDown,
+  handleNewAnnotationSubmit,
+  toggleAnnotations,
+  showNewAnnotationForm,
+  newAnnotation,
+  setNewAnnotation,
+  expandedAnnotations,
+  thumbedUpScores,
+  setShowNewAnnotationForm,
+  setThumbedUpScores,
+  isFeedbackMode = false
+}: ItemDetailScoreResultProps) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const [isAnnotationsExpanded, setIsAnnotationsExpanded] = useState(false)
   const textRef = useRef<HTMLDivElement>(null)
   const [showExpandButton, setShowExpandButton] = useState(false)
+
+  const hasAnnotations = score.annotations && score.annotations.length > 0
+  const hasFeedback = score.isAnnotated || hasAnnotations
+  const hasThumbsDownFeedback = (score.annotations || [])
+    .some((annotation: any) => !annotation.isThumbsUp)
+  const feedbackIconColor = hasFeedback
+    ? hasThumbsDownFeedback
+      ? 'bg-false text-primary-foreground hover:bg-false hover:text-primary-foreground'
+      : 'bg-true text-primary-foreground hover:bg-true hover:text-primary-foreground'
+    : ''
 
   React.useEffect(() => {
     if (textRef.current) {
@@ -41,15 +80,21 @@ const ItemDetailScoreResult: React.FC<ItemDetailScoreResultProps> = ({ score }) 
     return (
       <ReactMarkdown
         components={{
-          p: ({node, ...props}) => <p className="mb-2" {...props} />,
-          strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
-          ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2" {...props} />,
-          li: ({node, ...props}) => <li className="mb-1" {...props} />,
+          p: ({node, ...props}: MarkdownComponentProps) => <p className="mb-2" {...props} />,
+          strong: ({node, ...props}: MarkdownComponentProps) => <strong className="font-semibold" {...props} />,
+          ul: ({node, ...props}: MarkdownComponentProps) => <ul className="list-disc pl-5 mb-2" {...props} />,
+          li: ({node, ...props}: MarkdownComponentProps) => <li className="mb-1" {...props} />,
         }}
       >
         {text}
       </ReactMarkdown>
     )
+  }
+
+  const getBorderColor = () => {
+    if (score.isSystem) return 'var(--secondary)'
+    if (score.isThumbsUp) return 'var(--true)'
+    return 'var(--false)'
   }
 
   return (
@@ -66,29 +111,33 @@ const ItemDetailScoreResult: React.FC<ItemDetailScoreResultProps> = ({ score }) 
           </div>
         </div>
         <div className="flex items-center space-x-2">
+          {hasFeedback && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => toggleAnnotations?.(score.name)}
+              className={`text-xs ${feedbackIconColor}`}
+            >
+              <MessageCircleMore className="h-4 w-4" />
+            </Button>
+          )}
           {score.allowFeedback && (
             <>
-              {score.isAnnotated && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsAnnotationsExpanded(!isAnnotationsExpanded)}
-                  className="text-xs bg-secondary text-secondary-foreground hover:bg-secondary hover:text-secondary-foreground"
-                >
-                  <MessageCircleMore className="h-4 w-4" />
-                </Button>
-              )}
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs hover:bg-muted hover:text-muted-foreground"
+                onClick={() => handleThumbsUp?.(score.name)}
+                className={`text-xs hover:bg-true hover:text-primary-foreground ${
+                  thumbedUpScores?.has(score.name) ? 'bg-true text-primary-foreground' : ''
+                }`}
               >
                 <ThumbsUp className="h-4 w-4" />
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs hover:bg-muted hover:text-muted-foreground"
+                onClick={() => handleThumbsDown?.(score.name)}
+                className="text-xs hover:bg-false hover:text-primary-foreground"
               >
                 <ThumbsDown className="h-4 w-4" />
               </Button>
@@ -128,27 +177,142 @@ const ItemDetailScoreResult: React.FC<ItemDetailScoreResultProps> = ({ score }) 
           </Button>
         )}
       </div>
-      {score.isAnnotated && isAnnotationsExpanded && (
-        <div className="mt-2 space-y-2">
-          <div className="flex justify-between items-center mb-2">
-            <h6 className="text-sm font-medium">Feedback</h6>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs"
+      {!isAnnotation && (
+        <>
+          {showNewAnnotationForm?.scoreName === score.name && (
+            <div 
+              className="mb-2 space-y-2 border-l-4 pl-4"
+              style={{ borderColor: (showNewAnnotationForm.isThumbsUp ? 'var(--true)' : 'var(--false)') + ' !important' }}
             >
-              Create
-            </Button>
-          </div>
-          {score.annotations && score.annotations.map((annotation, index) => (
-            <div key={index} className="pl-4 border-l-2 border-primary">
-              {/* Render annotation content here */}
+              <div className="mb-4">
+                <h6 className="text-sm font-medium mb-2">Feedback</h6>
+                <div className="space-y-2">
+                  {showNewAnnotationForm.isThumbsUp ? (
+                    <>
+                      <div className="text-sm font-medium">Value: {newAnnotation?.value}</div>
+                      <div className="text-sm">Explanation: {newAnnotation?.explanation}</div>
+                    </>
+                  ) : (
+                    <>
+                      <Select 
+                        onValueChange={(value) => setNewAnnotation?.({ 
+                          ...newAnnotation!, 
+                          value 
+                        })}
+                        value={newAnnotation?.value}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select value" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Yes">Yes</SelectItem>
+                          <SelectItem value="No">No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Textarea 
+                        placeholder="Explanation" 
+                        value={newAnnotation?.explanation}
+                        onChange={(e) => setNewAnnotation?.({
+                          ...newAnnotation!,
+                          explanation: e.target.value
+                        })}
+                      />
+                    </>
+                  )}
+                  <Input 
+                    placeholder="Feedback" 
+                    value={newAnnotation?.annotation}
+                    onChange={(e) => setNewAnnotation?.({
+                      ...newAnnotation!,
+                      annotation: e.target.value
+                    })}
+                  />
+                  <div className="flex justify-end space-x-2">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowNewAnnotationForm?.({ scoreName: null, isThumbsUp: false })}
+                    >
+                      Cancel
+                    </Button>
+                    <Button onClick={() => handleNewAnnotationSubmit?.(score.name)}>
+                      Submit Feedback
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
-          ))}
+          )}
+
+          {hasFeedback && expandedAnnotations?.includes(score.name) && (
+            <div className="mt-2 space-y-2">
+              <div className="flex justify-between items-center mb-2">
+                <h6 className="text-sm font-medium">Feedback History</h6>
+              </div>
+              {(score.annotations || [])
+                .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                .map((annotation: any, annotationIndex: number) => (
+                  <div key={annotationIndex} className="relative">
+                    <div 
+                      className="pl-4 border-l-4"
+                      style={{ borderColor: annotation.isThumbsUp ? 'var(--true)' : 'var(--false)' }}
+                    >
+                      <div className="absolute top-2 left-4 rounded-full p-1" 
+                           style={{ backgroundColor: annotation.isThumbsUp ? 'var(--true)' : 'var(--false)' }}>
+                        {annotation.isThumbsUp ? (
+                          <ThumbsUp className="h-3 w-3 text-primary-foreground" />
+                        ) : (
+                          <ThumbsDown className="h-3 w-3 text-primary-foreground" />
+                        )}
+                      </div>
+                      <div className="flex justify-end mb-2">
+                        <Badge className={getValueBadgeClass(annotation.value)}>{annotation.value}</Badge>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {renderRichText(annotation.explanation)}
+                      </div>
+                      {annotation.annotation && (
+                        <div className="mt-2 text-sm italic">
+                          "{annotation.annotation}"
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center mt-2 text-xs text-muted-foreground">
+                        <span>{new Date(annotation.timestamp).toLocaleString()}</span>
+                        {annotation.user && (
+                          <div className="flex items-center space-x-2">
+                            <span>{annotation.user.name}</span>
+                            <Avatar className="h-6 w-6 bg-muted">
+                              <AvatarFallback className="bg-muted">{annotation.user.initials}</AvatarFallback>
+                            </Avatar>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Add timestamp and user info for annotations */}
+      {isAnnotation && (
+        <div className="flex justify-between items-center mt-2 text-xs text-muted-foreground">
+          <span>{new Date(score.timestamp).toLocaleString()}</span>
+          {score.user && (
+            <div className="flex items-center space-x-2">
+              <span>{score.user.name}</span>
+              <Avatar className="h-6 w-6 bg-muted">
+                <AvatarFallback className="bg-muted">{score.user.initials}</AvatarFallback>
+              </Avatar>
+            </div>
+          )}
+        </div>
+      )}
+      {score.annotation && (
+        <div className="mt-2 text-sm italic">
+          "{score.annotation}"
         </div>
       )}
     </div>
   )
 }
-
-export default ItemDetailScoreResult
