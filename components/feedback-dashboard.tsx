@@ -111,6 +111,7 @@ const getScoreResults = (status: string) => {
             value: "No", 
             explanation: "No profanity was detected during the call. Both the agent and the customer maintained professional and respectful language throughout the entire conversation.",
             isAnnotated: false,
+            allowFeedback: true,
             annotations: []
           },
         ]

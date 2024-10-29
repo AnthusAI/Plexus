@@ -182,12 +182,14 @@ export default function ItemDetailScoreResult({
           {showNewAnnotationForm?.scoreName === score.name && (
             <div 
               className="mb-2 space-y-2 border-l-4 pl-4"
-              style={{ borderColor: (showNewAnnotationForm.isThumbsUp ? 'var(--true)' : 'var(--false)') + ' !important' }}
+              style={{ 
+                borderColor: (showNewAnnotationForm?.isThumbsUp ? 'var(--true)' : 'var(--false)') + ' !important' 
+              }}
             >
               <div className="mb-4">
                 <h6 className="text-sm font-medium mb-2">Feedback</h6>
                 <div className="space-y-2">
-                  {showNewAnnotationForm.isThumbsUp ? (
+                  {showNewAnnotationForm?.isThumbsUp ? (
                     <>
                       <div className="text-sm font-medium">Value: {newAnnotation?.value}</div>
                       <div className="text-sm">Explanation: {newAnnotation?.explanation}</div>
