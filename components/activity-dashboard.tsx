@@ -515,7 +515,8 @@ export default function ActivityDashboard() {
 
   return (
     <div className="h-full flex">
-      <div className="flex-1 overflow-y-auto pr-4">
+      {/* Left side with chart and activities */}
+      <div className="@container flex-1 overflow-y-auto pr-4">
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <ScorecardContext 
@@ -581,7 +582,7 @@ export default function ActivityDashboard() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-4 pb-8 grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3">
+          <div className="grid gap-4 pb-8 grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3">
             {displayedActivities.map((activity) => (
               <div key={activity.id} className="w-full">
                 {(() => {
@@ -648,7 +649,6 @@ export default function ActivityDashboard() {
             ))}
           </div>
 
-          {/* Loading indicator */}
           <div ref={ref} className="h-12 flex items-center justify-center">
             {isLoadingMore && (
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -657,6 +657,7 @@ export default function ActivityDashboard() {
         </div>
       </div>
 
+      {/* Right side detail view */}
       {selectedActivity && !isNarrowViewport && (
         <div className="w-1/3 min-w-[300px] overflow-y-auto">
           <div className="">
@@ -694,7 +695,7 @@ export default function ActivityDashboard() {
         </div>
       )}
 
-      {/* Mobile view for selected activity */}
+      {/* Mobile view stays the same */}
       {selectedActivity && isNarrowViewport && (
         <div className="fixed inset-0 bg-background/80 z-50">
           <div className="container flex items-center justify-center h-full max-w-lg">

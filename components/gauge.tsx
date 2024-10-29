@@ -184,71 +184,71 @@ const GaugeComponent: React.FC<GaugeProps> = ({
 
   // Adjust both padding and clip height based on ticks visibility
   const topPadding = showTicks ? 104 : 80
-  const viewBoxHeight = showTicks ? 200 : 170  // Reduced height for no-ticks
-  const textY = showTicks ? 45 : 45  // Move value label up in no-ticks mode
+  const viewBoxHeight = showTicks ? 200 : 170
+  const textY = showTicks ? 45 : 45
   const clipHeight = showTicks ? 168 : 144
-  const titleY = showTicks ? 80 : 80
+  const titleY = 90  // Position relative to the bottom of the gauge circle
 
   return (
     <div className="flex flex-col items-center relative w-full h-full">
-      <svg 
-        width="100%" 
-        height="100%" 
-        viewBox={`-120 -${topPadding} 240 ${viewBoxHeight}`}
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <defs>
-          <clipPath id="gaugeClip">
-            <rect 
-              x="-120" 
-              y={-topPadding} 
-              width="240" 
-              height={clipHeight} 
-            />
-          </clipPath>
-        </defs>
-        <g clipPath="url(#gaugeClip)">
-          <circle 
-            cx="0" 
-            cy="0" 
-            r={radius} 
-            fill={backgroundColor}
-          />
-          <g transform="rotate(-105)">
-            {renderSegments()}
-            {showTicks && renderTicks()}
-            <g>
-              <circle cx="0" cy="0" r="10" className="fill-foreground" />
-              <path
-                d={`M 0,-${radius} L -6,0 L 6,0 Z`}
-                className="fill-foreground"
-                transform={`rotate(${(animatedValue * 210) / 100})`}
+      <div className="relative w-full overflow-visible">
+        <svg 
+          width="100%" 
+          height="100%" 
+          viewBox={`-120 -${topPadding} 240 ${viewBoxHeight}`}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <defs>
+            <clipPath id="gaugeClip">
+              <rect 
+                x="-120" 
+                y={-topPadding} 
+                width="240" 
+                height={clipHeight} 
               />
+            </clipPath>
+          </defs>
+          <g clipPath="url(#gaugeClip)">
+            <circle 
+              cx="0" 
+              cy="0" 
+              r={radius} 
+              fill={backgroundColor}
+            />
+            <g transform="rotate(-105)">
+              {renderSegments()}
+              {showTicks && renderTicks()}
+              <g>
+                <circle cx="0" cy="0" r="10" className="fill-foreground" />
+                <path
+                  d={`M 0,-${radius} L -6,0 L 6,0 Z`}
+                  className="fill-foreground"
+                  transform={`rotate(${(animatedValue * 210) / 100})`}
+                />
+              </g>
             </g>
+            <text 
+              x="0" 
+              y={textY}
+              textAnchor="middle" 
+              className="text-[2.25rem] font-bold fill-foreground"
+              dominantBaseline="middle"
+            >
+              {value % 1 === 0 ? `${value}%` : `${value.toFixed(1)}%`}
+            </text>
           </g>
-          <text 
-            x="0" 
-            y={textY}
-            textAnchor="middle" 
-            className="text-[2.25rem] font-bold fill-foreground"
-            dominantBaseline="middle"
-          >
-            {value % 1 === 0 ? `${value}%` : `${value.toFixed(1)}%`}
-          </text>
-        </g>
+        </svg>
         {title && (
-          <text 
-            x="0" 
-            y={titleY}
-            textAnchor="middle" 
-            className="fill-foreground"
-            dominantBaseline="middle"
-            style={{ fontSize: '16px', fontWeight: 500 }}
+          <div 
+            className="absolute left-1/2 -translate-x-1/2 text-sm whitespace-nowrap"
+            style={{
+              bottom: 'max(-10px, calc(-12px + 8%))'
+            }}
           >
             {title}
-          </text>
+          </div>
         )}
-      </svg>
+      </div>
     </div>
   )
 }

@@ -963,8 +963,137 @@ export default function ScorecardsComponent() {
         )}
         
         <div className={`flex ${isNarrowViewport || isFullWidth ? 'flex-col' : 'space-x-6'} h-full overflow-hidden`}>
-          <div className={`${isFullWidth && selectedScorecard ? 'hidden' : 'flex-1'} overflow-auto`}>
-            {renderScorecardsTable()}
+          <div className={`${isFullWidth && selectedScorecard ? 'hidden' : 'flex-1'} @container overflow-auto`}>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[70%]">Scorecard</TableHead>
+                  <TableHead className="w-[20%] @[630px]:table-cell hidden text-right">Scores</TableHead>
+                  <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {scorecards.map((scorecard) => (
+                  <TableRow 
+                    key={scorecard.id} 
+                    onClick={() => setSelectedScorecard(scorecard)} 
+                    className="cursor-pointer transition-colors duration-200 hover:bg-muted"
+                  >
+                    <TableCell className="w-[70%]">
+                      <div>
+                        {/* Narrow variant - visible below 630px */}
+                        <div className="block @[630px]:hidden">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <div className="font-medium">{scorecard.name}</div>
+                              <div className="text-sm text-muted-foreground">{scorecard.id} - {scorecard.key}</div>
+                              <div className="text-sm text-muted-foreground mt-1">{scorecard.scores} scores</div>
+                            </div>
+                            <div className="flex items-center">
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={(e) => { e.stopPropagation(); handleEdit(scorecard); }}
+                                className="h-8 w-8"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="h-8 w-8"
+                                  >
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem>
+                                    <Activity className="h-4 w-4 mr-2" /> Activity
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem>
+                                    <AudioLines className="h-4 w-4 mr-2" /> Items
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem>
+                                    <Siren className="h-4 w-4 mr-2" /> Alerts
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem>
+                                    <FileBarChart className="h-4 w-4 mr-2" /> Reports
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem>
+                                    <FlaskConical className="h-4 w-4 mr-2" /> Experiments
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem>
+                                    <Zap className="h-4 w-4 mr-2" /> Optimizations
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </div>
+                        </div>
+                        {/* Wide variant - visible at 630px and above */}
+                        <div className="hidden @[630px]:block">
+                          <div className="font-medium">{scorecard.name}</div>
+                          <div className="text-sm text-muted-foreground">{scorecard.id} - {scorecard.key}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="w-[20%] hidden @[630px]:table-cell text-right">{scorecard.scores}</TableCell>
+                    <TableCell className="w-[10%] hidden @[630px]:table-cell text-right">
+                      <div className="flex items-center justify-end space-x-2">
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={(e) => { e.stopPropagation(); handleEdit(scorecard); }}
+                          className="h-8 w-8 p-0"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-8 w-8 p-0"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem>
+                              <Activity className="h-4 w-4 mr-2" /> Activity
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <AudioLines className="h-4 w-4 mr-2" /> Items
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <Siren className="h-4 w-4 mr-2" /> Alerts
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <FileBarChart className="h-4 w-4 mr-2" /> Reports
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <FlaskConical className="h-4 w-4 mr-2" /> Experiments
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <Zap className="h-4 w-4 mr-2" /> Optimizations
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <div className="mt-4">
+              <Button variant="outline" onClick={handleCreate}>
+                <Plus className="mr-2 h-4 w-4" /> Create Scorecard
+              </Button>
+            </div>
           </div>
 
           {selectedScorecard && !isNarrowViewport && !isFullWidth && (

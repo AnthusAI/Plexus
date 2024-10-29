@@ -93,16 +93,16 @@ export default function FeedbackQueuesDashboard() {
         </Select>
       </div>
       <div className="flex-grow flex flex-col overflow-hidden pb-2">
-        <div className="flex-1 overflow-auto">
+        <div className="@container flex-1 overflow-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[25%]">Feedback Queue</TableHead>
-                <TableHead className="w-[15%]">Started</TableHead>
-                <TableHead className="w-[15%]">Last Updated</TableHead>
-                <TableHead className="w-[10%] text-right">Scores</TableHead>
-                <TableHead className="w-[10%] text-right">Items</TableHead>
-                <TableHead className="w-[25%]">Progress</TableHead>
+                <TableHead className="w-[15%] @[630px]:table-cell hidden">Started</TableHead>
+                <TableHead className="w-[15%] @[630px]:table-cell hidden">Last Updated</TableHead>
+                <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Scores</TableHead>
+                <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Items</TableHead>
+                <TableHead className="w-[25%] @[630px]:table-cell hidden">Progress</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -112,12 +112,33 @@ export default function FeedbackQueuesDashboard() {
                   onClick={() => handleRowClick(queue.id)}
                   className="cursor-pointer hover:bg-muted"
                 >
-                  <TableCell className="font-medium">{queue.name}</TableCell>
-                  <TableCell>{getRelativeTime(queue.started)}</TableCell>
-                  <TableCell>{getRelativeTime(queue.date)}</TableCell>
-                  <TableCell className="text-right">{queue.scores}</TableCell>
-                  <TableCell className="text-right">{queue.items}</TableCell>
-                  <TableCell>{renderProgressBar(queue.progress)}</TableCell>
+                  <TableCell className="font-medium">
+                    <div>
+                      {/* Narrow variant - visible below 630px */}
+                      <div className="block @[630px]:hidden">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="font-semibold">{queue.name}</div>
+                          <div className="text-sm text-muted-foreground text-right">
+                            {queue.scores} scores<br />
+                            {queue.items} items
+                          </div>
+                        </div>
+                        <div className="text-sm text-muted-foreground mb-2">
+                          Started {getRelativeTime(queue.started)}
+                        </div>
+                        {renderProgressBar(queue.progress)}
+                      </div>
+                      {/* Wide variant - visible at 630px and above */}
+                      <div className="hidden @[630px]:block">
+                        {queue.name}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden @[630px]:table-cell">{getRelativeTime(queue.started)}</TableCell>
+                  <TableCell className="hidden @[630px]:table-cell">{getRelativeTime(queue.date)}</TableCell>
+                  <TableCell className="hidden @[630px]:table-cell text-right">{queue.scores}</TableCell>
+                  <TableCell className="hidden @[630px]:table-cell text-right">{queue.items}</TableCell>
+                  <TableCell className="hidden @[630px]:table-cell">{renderProgressBar(queue.progress)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

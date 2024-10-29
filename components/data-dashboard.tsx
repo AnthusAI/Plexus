@@ -333,9 +333,9 @@ export default function DataDashboard() {
       <TableHeader>
         <TableRow>
           <TableHead className="w-[40%]">Item</TableHead>
-          <TableHead className="w-[20%]">ID</TableHead>
-          {selectedScore && <TableHead className="w-[20%]">{selectedScore}</TableHead>}
-          <TableHead className={`${selectedScore ? 'w-[20%]' : 'w-[40%]'} text-right`}>Actions</TableHead>
+          <TableHead className="w-[20%] @[630px]:table-cell hidden">ID</TableHead>
+          {selectedScore && <TableHead className="w-[20%] @[630px]:table-cell hidden">{selectedScore}</TableHead>}
+          <TableHead className={`${selectedScore ? 'w-[20%]' : 'w-[40%]'} @[630px]:table-cell hidden text-right`}>Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -346,12 +346,73 @@ export default function DataDashboard() {
             className="cursor-pointer transition-colors duration-200 hover:bg-muted"
           >
             <TableCell>
-              <div>{item.scorecard}</div>
-              <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
+              <div>
+                {/* Narrow variant - visible below 630px */}
+                <div className="block @[630px]:hidden">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <div className="font-medium">{item.scorecard}</div>
+                      <div className="text-sm text-muted-foreground">{item.id}</div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <FlaskConical className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Run Experiment</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <Sparkles className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Analyze</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MessageCircleMore className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Feedback</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  </div>
+                  <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
+                  {selectedScore && (
+                    <div className="flex items-center space-x-2 mt-2">
+                      <Badge 
+                        className={`${item.result.isCorrect ? 'bg-true' : 'bg-false'} text-primary-foreground w-16 justify-center h-6`}
+                      >
+                        {item.result.answer}
+                      </Badge>
+                      {item.result.isCorrect ? (
+                        <SmileIcon className="h-4 w-4 text-true" />
+                      ) : (
+                        <FrownIcon className="h-4 w-4 text-false" />
+                      )}
+                    </div>
+                  )}
+                </div>
+                {/* Wide variant - visible at 630px and above */}
+                <div className="hidden @[630px]:block">
+                  <div>{item.scorecard}</div>
+                  <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
+                </div>
+              </div>
             </TableCell>
-            <TableCell>{item.id}</TableCell>
+            <TableCell className="hidden @[630px]:table-cell">{item.id}</TableCell>
             {selectedScore && (
-              <TableCell>
+              <TableCell className="hidden @[630px]:table-cell">
                 <div className="flex items-center space-x-2">
                   <Badge 
                     className={`${item.result.isCorrect ? 'bg-true' : 'bg-false'} text-primary-foreground w-16 justify-center h-6`}
@@ -366,7 +427,7 @@ export default function DataDashboard() {
                 </div>
               </TableCell>
             )}
-            <TableCell className="text-right">
+            <TableCell className="hidden @[630px]:table-cell text-right">
               <div className="flex justify-end space-x-2">
                 <TooltipProvider>
                   <Tooltip>
@@ -396,16 +457,6 @@ export default function DataDashboard() {
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>Feedback</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>More</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
@@ -660,8 +711,143 @@ export default function DataDashboard() {
           </div>
         ) : (
           <div className={`flex ${isNarrowViewport ? 'flex-col' : 'space-x-6'} h-full`}>
-            <div className={`${isFullWidth ? 'hidden' : 'flex-1'} overflow-auto`}>
-              {renderItemsList()}
+            <div className={`${isFullWidth ? 'hidden' : 'flex-1'} @container overflow-auto`}>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[40%]">Item</TableHead>
+                    <TableHead className="w-[20%] @[630px]:table-cell hidden">ID</TableHead>
+                    {selectedScore && <TableHead className="w-[20%] @[630px]:table-cell hidden">{selectedScore}</TableHead>}
+                    <TableHead className={`${selectedScore ? 'w-[20%]' : 'w-[40%]'} @[630px]:table-cell hidden text-right`}>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredItems.map((item) => (
+                    <TableRow 
+                      key={item.id} 
+                      onClick={() => handleItemClick(item.id)} 
+                      className="cursor-pointer transition-colors duration-200 hover:bg-muted"
+                    >
+                      <TableCell>
+                        <div>
+                          {/* Narrow variant - visible below 630px */}
+                          <div className="block @[630px]:hidden">
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <div className="font-medium">{item.scorecard}</div>
+                                <div className="text-sm text-muted-foreground">{item.id}</div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button variant="ghost" size="icon">
+                                        <FlaskConical className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Run Experiment</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button variant="ghost" size="icon">
+                                        <Sparkles className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Analyze</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button variant="ghost" size="icon">
+                                        <MessageCircleMore className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Feedback</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </div>
+                            </div>
+                            <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
+                            {selectedScore && (
+                              <div className="flex items-center space-x-2 mt-2">
+                                <Badge 
+                                  className={`${item.result.isCorrect ? 'bg-true' : 'bg-false'} text-primary-foreground w-16 justify-center h-6`}
+                                >
+                                  {item.result.answer}
+                                </Badge>
+                                {item.result.isCorrect ? (
+                                  <SmileIcon className="h-4 w-4 text-true" />
+                                ) : (
+                                  <FrownIcon className="h-4 w-4 text-false" />
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          {/* Wide variant - visible at 630px and above */}
+                          <div className="hidden @[630px]:block">
+                            <div>{item.scorecard}</div>
+                            <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden @[630px]:table-cell">{item.id}</TableCell>
+                      {selectedScore && (
+                        <TableCell className="hidden @[630px]:table-cell">
+                          <div className="flex items-center space-x-2">
+                            <Badge 
+                              className={`${item.result.isCorrect ? 'bg-true' : 'bg-false'} text-primary-foreground w-16 justify-center h-6`}
+                            >
+                              {item.result.answer}
+                            </Badge>
+                            {item.result.isCorrect ? (
+                              <SmileIcon className="h-4 w-4 text-true" />
+                            ) : (
+                              <FrownIcon className="h-4 w-4 text-false" />
+                            )}
+                          </div>
+                        </TableCell>
+                      )}
+                      <TableCell className="hidden @[630px]:table-cell text-right">
+                        <div className="flex justify-end space-x-2">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <FlaskConical className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Run Experiment</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <Sparkles className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Analyze</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <MessageCircleMore className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Feedback</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
 
             {selectedItem && !isNarrowViewport && !isFullWidth && (

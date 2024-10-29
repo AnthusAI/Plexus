@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown } from "lucide-react"
+import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, ChevronLeft } from "lucide-react"
 import { formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
+import ItemDetail from './ItemDetail'
 
 // Add this type definition
 type TimeRangeOption = {
@@ -49,12 +50,13 @@ const sampleScoreResults = [
       { 
         name: "Profanity", 
         value: "No", 
-        explanation: "No profanity was detected during the call. Both the agent and the customer maintained professional and respectful language throughout the entire conversation.",
+        explanation: "No profanity was detected during the call...",
         isAnnotated: true,
+        allowFeedback: true,
         annotations: [
           {
             value: "No",
-            explanation: "No profanity was detected during the call. Both the agent and the customer maintained professional and respectful language throughout the entire conversation.",
+            explanation: "No profanity was detected...",
             annotation: "The word 'dangit' is not profanity by our standards.",
             timestamp: relativeDate(0, 0, 5),
             user: {
@@ -64,7 +66,7 @@ const sampleScoreResults = [
           },
           {
             value: "Yes",
-            explanation: "Profanity was detected during the call. The agent used the word 'dangit!' which was flagged as potentially inappropriate language.",
+            explanation: "Profanity was detected during the call...",
             timestamp: relativeDate(0, 0, 10),
             isSystem: true
           }
@@ -227,6 +229,18 @@ export default function FeedbackDashboard() {
   const [thumbedUpScores, setThumbedUpScores] = useState<Set<string>>(new Set());
   const [feedbackItems, setFeedbackItems] = useState<FeedbackItem[]>(initialFeedbackItems);
   const [isDataExpandedDefault, setIsDataExpandedDefault] = useState(false);
+  const [isErrorExpanded, setIsErrorExpanded] = useState(true);
+  const [sampleMetadata] = useState([
+    { key: "Duration", value: "1022" },
+    { key: "Dual Channel", value: "true" },
+    { key: "Agent Name", value: "Johnny Appleseed" },
+    { key: "Customer ID", value: "CUS-12345" },
+    { key: "Call Type", value: "Inbound" },
+    { key: "Department", value: "Customer Service" },
+    { key: "Language", value: "English" },
+    { key: "Recording ID", value: "REC-67890" },
+  ]);
+  const [scoreResults, setScoreResults] = useState(sampleScoreResults);
 
   // Simulated queue data (replace with actual data fetching logic)
   const queueData: QueueData = useMemo(() => {
@@ -416,18 +430,19 @@ export default function FeedbackDashboard() {
 
   const handleNewAnnotationSubmit = (scoreName: string) => {
     const newAnnotationItem = {
-      ...newAnnotation,
-      scoreName,
+      value: newAnnotation.value,
+      explanation: newAnnotation.explanation,
+      annotation: newAnnotation.annotation,
       timestamp: new Date().toISOString(),
       user: {
-        name: "Ryan Porter", // Replace with actual user name
-        initials: "RP" // Replace with actual user initials
+        name: "Ryan Porter",
+        initials: "RP"
       },
       isThumbsUp: showNewAnnotationForm.isThumbsUp
     };
 
-    setFeedbackItems(prev => {
-      const updatedItems = prev.map(item => {
+    setFeedbackItems(prevItems => {
+      return prevItems.map(item => {
         if (item.id === selectedItem) {
           const updatedScoreResults = item.scoreResults?.map(section => ({
             ...section,
@@ -441,20 +456,36 @@ export default function FeedbackDashboard() {
                 : score
             )
           }));
-          return { ...item, scoreResults: updatedScoreResults };
+          return {
+            ...item,
+            scoreResults: updatedScoreResults,
+            hasFeedback: true
+          };
         }
         return item;
       });
-      return updatedItems;
     });
 
-    // Ensure the annotations for this score remain expanded
-    setExpandedAnnotations(prev => 
-      prev.includes(scoreName) ? prev : [...prev, scoreName]
+    setScoreResults(prevResults => 
+      prevResults.map(section => ({
+        ...section,
+        scores: section.scores.map(score => 
+          score.name === scoreName 
+            ? { 
+                ...score, 
+                isAnnotated: true, 
+                annotations: [...(score.annotations || []), newAnnotationItem] 
+              }
+            : score
+        )
+      }))
     );
 
     setShowNewAnnotationForm({ scoreName: null, isThumbsUp: false });
     setNewAnnotation({ value: "", explanation: "", annotation: "" });
+    setExpandedAnnotations(prev => 
+      prev.includes(scoreName) ? prev : [...prev, scoreName]
+    );
   };
 
   const toggleNewAnnotationForm = (scoreName: string, isThumbsUp: boolean) => {
@@ -497,6 +528,111 @@ export default function FeedbackDashboard() {
     });
     toggleNewAnnotationForm(scoreName, false);
   };
+
+  const renderSelectedItem = () => {
+    if (!selectedItem) return null;
+
+    const selectedItemData = feedbackItems.find(item => item.id === selectedItem);
+    if (!selectedItemData) return null;
+
+    const DetailViewControlButtons = (
+      <>
+        {!isNarrowViewport && (
+          <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
+            {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+          </Button>
+        )}
+        <Button variant="outline" size="icon" onClick={() => {
+          setSelectedItem(null)
+          setIsFullWidth(false)
+        }} className="ml-2">
+          <X className="h-4 w-4" />
+        </Button>
+      </>
+    );
+
+    return (
+      <ItemDetail
+        item={selectedItemData}
+        controlButtons={DetailViewControlButtons}
+        getBadgeVariant={getBadgeVariant}
+        getRelativeTime={getRelativeTime}
+        isMetadataExpanded={isMetadataExpanded}
+        setIsMetadataExpanded={setIsMetadataExpanded}
+        isDataExpanded={isDataExpanded}
+        setIsDataExpanded={setIsDataExpanded}
+        isErrorExpanded={isErrorExpanded}
+        setIsErrorExpanded={setIsErrorExpanded}
+        sampleMetadata={sampleMetadata}
+        sampleTranscript={sampleTranscript}
+        sampleScoreResults={scoreResults}
+        handleThumbsUp={handleThumbsUp}
+        handleThumbsDown={handleThumbsDown}
+        handleNewAnnotationSubmit={handleNewAnnotationSubmit}
+        toggleAnnotations={toggleAnnotations}
+        showNewAnnotationForm={showNewAnnotationForm}
+        newAnnotation={newAnnotation}
+        setNewAnnotation={setNewAnnotation}
+        expandedAnnotations={expandedAnnotations}
+        thumbedUpScores={thumbedUpScores}
+        setShowNewAnnotationForm={setShowNewAnnotationForm}
+        setThumbedUpScores={setThumbedUpScores}
+        isFullWidth={isFullWidth}
+        isFeedbackMode={true}
+      />
+    );
+  };
+
+  const getFeedbackBadgeClass = (hasFeedback: boolean) => {
+    return hasFeedback
+      ? 'bg-true text-primary-foreground w-16 justify-center'
+      : 'bg-false text-primary-foreground w-16 justify-center';
+  };
+
+  const handleCloseQueue = () => {
+    router.push('/feedback-queues')
+  }
+
+  const renderQueueSummary = () => (
+    <div className="mb-6">
+      <div className="mb-4">
+        <h2 className="text-2xl font-semibold">{queueData.name}</h2>
+        <p className="text-sm text-muted-foreground">
+          Started {formatDistanceToNow(parseISO(queueData.started), { addSuffix: true })}
+        </p>
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="w-1/4">
+          <p className="text-sm font-medium text-muted-foreground">Scores</p>
+          <p>{queueData.scores}</p>
+        </div>
+        <div className="w-1/4">
+          <p className="text-sm font-medium text-muted-foreground">Last Updated</p>
+          <p>{formatDistanceToNow(parseISO(queueData.date), { addSuffix: true })}</p>
+        </div>
+        <div className="w-1/2">
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs">
+              <div className="font-semibold">Progress: {queueData.progress}%</div>
+              <div>Elapsed Time: {queueData.elapsedTime}</div>
+            </div>
+            <div className="relative w-full h-6 bg-neutral rounded-full">
+              <div
+                className="absolute top-0 left-0 h-full bg-primary flex items-center pl-2 text-xs text-primary-foreground font-medium rounded-full"
+                style={{ width: `${queueData.progress}%` }}
+              >
+                {queueData.progress}%
+              </div>
+            </div>
+            <div className="flex justify-between text-xs">
+              <div>{queueData.processedItems}/{queueData.totalItems}</div>
+              <div>ETA: {queueData.estimatedTimeRemaining}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 
   function renderScoreResult(score: any, isAnnotation = false) {
     const hasAnnotations = score.annotations && score.annotations.length > 0;
@@ -736,273 +872,93 @@ export default function FeedbackDashboard() {
     )
   }
 
-  function renderSelectedItem() {
-    const selectedItemData = feedbackItems.find(item => item.id === selectedItem);
-    if (!selectedItemData) return null;
+  return (
+    <div className="h-full flex">
+      {/* Left panel - only show when not full width */}
+      {!isFullWidth && (
+        <div className={`${selectedItem && !isNarrowViewport ? 'w-1/2' : 'w-full'} h-full overflow-auto p-4`}>
+          {renderQueueSummary()}
 
-    return (
-      <Card className="rounded-none sm:rounded-lg h-full flex flex-col bg-card-light border-none">
-        <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between py-4 px-4 sm:px-6 space-y-0">
-          <div>
-            <h2 className="text-xl font-semibold">{selectedItemData?.scorecard}</h2>
-            <p className="text-sm text-muted-foreground">
-              {getRelativeTime(selectedItemData?.date)}
+          <div className="mb-8">
+            <h3 className="text-xl font-semibold mb-2">Instructions</h3>
+            <p className="text-base text-muted-foreground mb-4">
+              Please review these examples we found that might demonstrate problems with the alignment 
+              of our profanity standards. Please pay close attention to words that we're flagging for 
+              profanity that are not really profanity by the client's standards.
             </p>
           </div>
-          <div className="flex ml-2">
-            {!isNarrowViewport && (
-              <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
-                {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-              </Button>
-            )}
-            <Button variant="outline" size="icon" onClick={() => {
-              setSelectedItem(null)
-              setIsFullWidth(false)
-            }} className="ml-2">
-              <X className="h-4 w-4" />
-            </Button>
+
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-semibold">{queueData.items} Items</h3>
           </div>
-        </CardHeader>
-        <CardContent className="flex-grow overflow-auto px-4 sm:px-6 pb-4">
-          {selectedItem && (
-            <div className={`${isFullWidth ? 'flex gap-16' : ''}`}>
-              <div className={`${isFullWidth ? 'w-1/2' : ''}`}>
-                {/* Metadata Section */}
-                <div className="-mx-4 sm:-mx-6 mb-4">
-                  <div
-                    className="relative group bg-card hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                    onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
-                  >
-                    <div className="flex justify-between items-center px-4 sm:px-6 py-2">
-                      <span className="text-md font-semibold">
-                        Metadata
-                      </span>
-                      {isMetadataExpanded ? (
-                        <ChevronUp className="h-4 w-4" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4" />
-                      )}
-                    </div>
-                  </div>
-                </div>
-                {isMetadataExpanded && (
-                  <div className={`mt-2 ${isFullWidth ? 'pr-4' : 'px-4 sm:px-6'}`}>
-                    <Table>
-                      <TableBody>
-                        {selectedItemData.metadata?.map((meta, index) => (
-                          <TableRow key={index}>
-                            <TableCell className="font-medium pl-0">{meta.key}</TableCell>
-                            <TableCell className="text-right pr-0">{meta.value}</TableCell>
-                          </TableRow>
-                        )) || <TableRow><TableCell>No metadata available</TableCell></TableRow>}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
 
-                {/* Data Section */}
-                <div className="-mx-4 sm:-mx-6 mt-4">
-                  <div
-                    className="relative group bg-card hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                    onClick={() => setIsDataExpanded(!isDataExpanded)}
-                  >
-                    <div className="flex justify-between items-center px-4 sm:px-6 py-2">
-                      <span className="text-md font-semibold">
-                        Data
-                      </span>
-                      {isDataExpanded ? (
-                        <ChevronUp className="h-4 w-4" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4" />
-                      )}
-                    </div>
-                  </div>
-                </div>
-                {isDataExpanded && (
-                  <div className={`mt-2 ${isFullWidth ? 'pr-4' : 'px-4 sm:px-6'}`}>
-                    {sampleTranscript.map((line, index) => (
-                      <p key={index} className="text-sm">
-                        <span className="font-semibold">{line.speaker}: </span>
-                        {line.text}
-                      </p>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className={`${isFullWidth ? 'w-1/2' : 'mt-4'}`}>
-                {/* Score Results Section */}
-                <div className="-mx-4 sm:-mx-6 mb-4">
-                  <div className="px-4 sm:px-6 py-2 bg-card">
-                    <h4 className="text-md font-semibold">Score Results</h4>
-                  </div>
-                </div>
-                <div>
-                  {selectedItemData.scoreResults?.map((section, sectionIndex) => (
-                    <div key={sectionIndex} className="mb-6">
-                      <div className="-mx-4 sm:-mx-6 mb-4">
-                        <div className="px-4 sm:px-6 py-2">
-                          <h4 className="text-md font-semibold">{section.section}</h4>
-                        </div>
-                        <hr className="border-t border-border" />
-                      </div>
-                      <div>
-                        {section.scores.map((score, scoreIndex) => (
-                          <React.Fragment key={scoreIndex}>
-                            {renderScoreResult(score)}
-                            {scoreIndex < section.scores.length - 1 && (
-                              <hr className="my-2 border-t border-border" />
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </div>
-                    </div>
-                  )) || <p>No score results available</p>}
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    )
-  }
-
-  const getFeedbackBadgeClass = (hasFeedback: boolean) => {
-    return hasFeedback
-      ? 'bg-true text-primary-foreground w-16 justify-center'
-      : 'bg-false text-primary-foreground w-16 justify-center';
-  };
-
-  const handleCloseQueue = () => {
-    router.push('/feedback-queues')
-  }
-
-  const renderQueueSummary = () => (
-    <div className="mb-6">
-      <div className="flex justify-between items-center mb-4">
-        <div>
-          <h2 className="text-2xl font-semibold">{queueData.name}</h2>
-          <p className="text-sm text-muted-foreground">
-            Started {formatDistanceToNow(parseISO(queueData.started), { addSuffix: true })}
-          </p>
-        </div>
-        <Button variant="outline" size="icon" onClick={handleCloseQueue}>
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-      <div className="flex items-center justify-between">
-        <div className="w-1/4">
-          <p className="text-sm font-medium text-muted-foreground">Scores</p>
-          <p>{queueData.scores}</p>
-        </div>
-        <div className="w-1/4">
-          <p className="text-sm font-medium text-muted-foreground">Last Updated</p>
-          <p>{formatDistanceToNow(parseISO(queueData.date), { addSuffix: true })}</p>
-        </div>
-        <div className="w-1/2">
-          <div className="space-y-2">
-            <div className="flex justify-between text-xs">
-              <div className="font-semibold">Progress: {queueData.progress}%</div>
-              <div>Elapsed Time: {queueData.elapsedTime}</div>
-            </div>
-            <div className="relative w-full h-6 bg-neutral rounded-full">
-              <div
-                className="absolute top-0 left-0 h-full bg-primary flex items-center pl-2 text-xs text-primary-foreground font-medium rounded-full"
-                style={{ width: `${queueData.progress}%` }}
-              >
-                {queueData.progress}%
-              </div>
-            </div>
-            <div className="flex justify-between text-xs">
-              <div>{queueData.processedItems}/{queueData.totalItems}</div>
-              <div>ETA: {queueData.estimatedTimeRemaining}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-
-  return (
-    <div className="space-y-4 h-full flex flex-col">
-      {renderQueueSummary()}
-
-      <div className="mb-8">
-        <h3 className="text-xl font-semibold mb-2">Instructions</h3>
-        <p className="text-base text-muted-foreground mb-4">
-          Please review these examples we found that might demonstrate problems with the alignment of our profanity standards. Please pay close attention to words that we're flagging for profanity that are not really profanity by the client's standards.
-        </p>
-      </div>
-
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-semibold">{queueData.items} Items</h3>
-      </div>
-
-      <div className="flex-grow flex flex-col overflow-hidden pb-2">
-        {selectedItem && (isNarrowViewport || isFullWidth) ? (
-          <div className="flex-grow overflow-hidden">
-            {renderSelectedItem()}
-          </div>
-        ) : (
-          <div className={`flex ${isNarrowViewport ? 'flex-col' : 'space-x-6'} h-full`}>
-            <div className={`${isFullWidth ? 'hidden' : 'flex-1'} overflow-auto`}>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[40%]">Item</TableHead>
-                    <TableHead className="w-[30%]">Last Updated</TableHead>
-                    <TableHead className="w-[30%] text-right">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {feedbackItems.map((item) => (
-                    <TableRow 
-                      key={item.id} 
-                      onClick={() => handleItemClick(item.id)} 
-                      className="cursor-pointer transition-colors duration-200 hover:bg-muted"
-                    >
-                      <TableCell className="font-medium sm:pr-4">
-                        <div className="sm:hidden">
-                          <div className="flex justify-between items-start mb-2">
-                            <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
-                            <Badge 
-                              className={getBadgeVariant(item.status)}
-                            >
-                              {item.status}
-                            </Badge>
-                          </div>
-                          <div className="text-sm text-muted-foreground mt-1">
-                            Last Updated: {item.lastUpdated ? getRelativeTime(item.lastUpdated) : '-'}
-                          </div>
-                        </div>
-                        <div className="hidden sm:block">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[40%]">Item</TableHead>
+                <TableHead className="w-[30%] @[630px]:table-cell hidden">Last Updated</TableHead>
+                <TableHead className="w-[30%] @[630px]:table-cell hidden text-right">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {feedbackItems.map((item) => (
+                <TableRow 
+                  key={item.id} 
+                  onClick={() => handleItemClick(item.id)} 
+                  className="cursor-pointer transition-colors duration-200 hover:bg-muted"
+                >
+                  <TableCell className="font-medium pr-4">
+                    <div>
+                      {/* Narrow variant - visible below 630px */}
+                      <div className="block @[630px]:hidden">
+                        <div className="flex justify-between items-start mb-2">
                           <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
+                          <Badge 
+                            className={getBadgeVariant(item.status)}
+                          >
+                            {item.status}
+                          </Badge>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        {item.lastUpdated ? getRelativeTime(item.lastUpdated) : '-'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge 
-                          className={getBadgeVariant(item.status)}
-                        >
-                          {item.status}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          Last Updated: {item.lastUpdated ? getRelativeTime(item.lastUpdated) : '-'}
+                        </div>
+                      </div>
+                      {/* Wide variant - visible at 630px and above */}
+                      <div className="hidden @[630px]:block">
+                        <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden @[630px]:table-cell">
+                    {item.lastUpdated ? getRelativeTime(item.lastUpdated) : '-'}
+                  </TableCell>
+                  <TableCell className="hidden @[630px]:table-cell text-right">
+                    <Badge 
+                      className={getBadgeVariant(item.status)}
+                    >
+                      {item.status}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
-            {selectedItem && !isNarrowViewport && !isFullWidth && (
-              <div className="flex-1 overflow-hidden">
-                {renderSelectedItem()}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      {/* Right panel - item detail */}
+      {selectedItem && !isNarrowViewport && (
+        <div className={`${isFullWidth ? 'w-full' : 'w-1/2'} h-full overflow-auto`}>
+          {renderSelectedItem()}
+        </div>
+      )}
+
+      {/* Mobile view - full screen item detail */}
+      {selectedItem && isNarrowViewport && (
+        <div className="fixed inset-0 bg-background z-50">
+          {renderSelectedItem()}
+        </div>
+      )}
     </div>
   )
 }
