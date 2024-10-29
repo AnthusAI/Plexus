@@ -6,6 +6,26 @@ import { ChevronUp, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import ItemDetailScoreResult from './ItemDetailScoreResult'
 
+interface Score {
+  name: string
+  value: string
+  explanation: string
+  isAnnotated: boolean
+  allowFeedback: boolean
+  annotations: Array<{
+    value: string
+    explanation: string
+    annotation?: string
+    timestamp: string
+    user?: {
+      name: string
+      initials: string
+    }
+    isSystem?: boolean
+    isThumbsUp?: boolean
+  }>
+}
+
 interface ItemDetailProps {
   item: any // Replace 'any' with a more specific type for your item
   controlButtons: React.ReactNode
