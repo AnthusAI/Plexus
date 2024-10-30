@@ -61,7 +61,6 @@ const schema = a.schema({
       name: a.string().required(),
       key: a.string().required(),
       description: a.string(),
-      // Relationships
       scorecards: a.hasMany('Scorecard', 'accountId'),
     })
     .authorization((allow) => [allow.authenticated()])
@@ -74,6 +73,8 @@ const schema = a.schema({
       name: a.string().required(),
       key: a.string().required(),
       description: a.string(),
+      // Add the configuration as a JSON field
+      scoreDetails: a.json(),
       // Foreign keys
       accountId: a.string().required(),
       // Relationships
@@ -92,22 +93,11 @@ const schema = a.schema({
       type: a.string().required(),
       accuracy: a.float(),
       version: a.string(),
-      // Foreign keys
       scorecardId: a.string().required(),
-      // Relationships
       scorecard: a.belongsTo('Scorecard', 'scorecardId'),
     })
     .authorization((allow) => [allow.authenticated()])
     .secondaryIndexes((idx) => [
       idx("scorecardId")
     ]),
-});
-
-export type Schema = ClientSchema<typeof schema>;
-
-export const data = defineData({
-  schema,
-  authorizationModes: {
-    defaultAuthorizationMode: 'userPool'
-  },
 });
