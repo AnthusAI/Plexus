@@ -66,7 +66,7 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.authenticated()])
     .secondaryIndexes((idx) => [
-      idx('byKey', { sortKey: 'name' })
+      idx("key")
     ]),
 
   Scorecard: a
@@ -82,8 +82,8 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.authenticated()])
     .secondaryIndexes((idx) => [
-      idx('byAccountId', { sortKey: 'name' }),
-      idx('byKey', { sortKey: 'name' })
+      idx("accountId"),
+      idx("key")
     ]),
 
   Score: a
@@ -99,7 +99,7 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.authenticated()])
     .secondaryIndexes((idx) => [
-      idx('byScorecardId', { sortKey: 'name' })
+      idx("scorecardId")
     ]),
 });
 
