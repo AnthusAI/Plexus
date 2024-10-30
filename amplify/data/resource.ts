@@ -6,25 +6,25 @@ adding a new "isDone" field as a boolean. The authorization rule below
 specifies that any user authenticated via an API key can "create", "read",
 "update", and "delete" any "Todo" records.
 =========================================================================*/
-const schema = a.schema({
-  Todo: a
-    .model({
-      content: a.string(),
-    })
-    .authorization((allow) => [allow.publicApiKey()]),
-});
+// const schema = a.schema({
+//   Todo: a
+//     .model({
+//       content: a.string(),
+//     })
+//     .authorization((allow) => [allow.publicApiKey()]),
+// });
 
-export type Schema = ClientSchema<typeof schema>;
+// export type Schema = ClientSchema<typeof schema>;
 
-export const data = defineData({
-  schema,
-  authorizationModes: {
-    defaultAuthorizationMode: "apiKey",
-    apiKeyAuthorizationMode: {
-      expiresInDays: 30,
-    },
-  },
-});
+// export const data = defineData({
+//   schema,
+//   authorizationModes: {
+//     defaultAuthorizationMode: "apiKey",
+//     apiKeyAuthorizationMode: {
+//       expiresInDays: 30,
+//     },
+//   },
+// });
 
 /*== STEP 2 ===============================================================
 Go to your frontend source code. From your client-side code, generate a
@@ -54,3 +54,63 @@ Fetch records from the database and use them in your frontend component.
 // const { data: todos } = await client.models.Todo.list()
 
 // return <ul>{todos.map(todo => <li key={todo.id}>{todo.content}</li>)}</ul>
+
+
+import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
+
+const schema = a.schema({
+  Account: a
+    .model({
+      name: a.string().required(),
+      key: a.string().required(),
+      description: a.string(),
+      // Relationships
+      scorecards: a.hasMany('Scorecard', 'accountId'),
+    })
+    .authorization((allow) => [allow.authenticated()])
+    .secondaryIndexes((idx) => [
+      idx('byKey', { sortKey: 'name' })
+    ]),
+
+  Scorecard: a
+    .model({
+      name: a.string().required(),
+      key: a.string().required(),
+      description: a.string(),
+      // Foreign keys
+      accountId: a.string().required(),
+      // Relationships
+      account: a.belongsTo('Account', 'accountId'),
+      scores: a.hasMany('Score', 'scorecardId'),
+    })
+    .authorization((allow) => [allow.authenticated()])
+    .secondaryIndexes((idx) => [
+      idx('byAccountId', { sortKey: 'name' }),
+      idx('byKey', { sortKey: 'name' })
+    ]),
+
+  Score: a
+    .model({
+      name: a.string().required(),
+      type: a.string().required(),
+      accuracy: a.float(),
+      version: a.string(),
+      // Foreign keys
+      scorecardId: a.string().required(),
+      // Relationships
+      scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+    })
+    .authorization((allow) => [allow.authenticated()])
+    .secondaryIndexes((idx) => [
+      idx('byScorecardId', { sortKey: 'name' })
+    ]),
+});
+
+export type Schema = ClientSchema<typeof schema>;
+
+export const data = defineData({
+  schema,
+  authorizationModes: {
+    defaultAuthorizationMode: 'userPool'
+  },
+});
