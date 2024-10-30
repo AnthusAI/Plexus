@@ -55,9 +55,6 @@ Fetch records from the database and use them in your frontend component.
 
 // return <ul>{todos.map(todo => <li key={todo.id}>{todo.content}</li>)}</ul>
 
-
-import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
-
 const schema = a.schema({
   Account: a
     .model({
