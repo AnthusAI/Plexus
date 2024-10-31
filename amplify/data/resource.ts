@@ -101,3 +101,12 @@ const schema = a.schema({
       idx("scorecardId")
     ]),
 });
+
+export type Schema = ClientSchema<typeof schema>;
+
+export const data = defineData({
+  schema,
+  authorizationModes: {
+    defaultAuthorizationMode: 'userPool'
+  },
+});
