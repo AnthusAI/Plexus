@@ -72,6 +72,7 @@ const schema = a.schema({
     .model({
       name: a.string().required(),
       key: a.string().required(),
+      foreignId: a.string(),
       description: a.string(),
       // Add the configuration as a JSON field
       scoreDetails: a.json(),
@@ -84,7 +85,8 @@ const schema = a.schema({
     .authorization((allow) => [allow.authenticated()])
     .secondaryIndexes((idx) => [
       idx("accountId"),
-      idx("key")
+      idx("key"),
+      idx("foreignId")
     ]),
 
   Score: a
