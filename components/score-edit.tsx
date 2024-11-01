@@ -13,6 +13,8 @@ import ComputedScoreComponent from './score-types/computed-score'
 import FuzzyMatchClassifierComponent from './score-types/fuzzy-match-classifier'
 import SemanticClassifierComponent from './score-types/semantic-classifier'
 import SimpleLLMScoreComponent from './score-types/simple-llm-score'
+import { generateClient } from "aws-amplify/data"
+import type { Schema } from "@/amplify/data/resource"
 
 interface ScoreEditProps {
   scorecardId: string
@@ -24,6 +26,8 @@ interface EditableFieldProps {
   onChange: (value: string) => void;
   className?: string;
 }
+
+const client = generateClient<Schema>()
 
 function EditableField({ value, onChange, className = "" }: EditableFieldProps) {
   const [isEditing, setIsEditing] = useState(false)
@@ -111,22 +115,131 @@ function EditableField({ value, onChange, className = "" }: EditableFieldProps) 
 
 export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditProps) {
   const router = useRouter()
-  const [score, setScore] = useState<any>(null)
+  const [score, setScore] = useState<Schema['Score']['type'] | null>(null)
+  const [section, setSection] = useState<Schema['Section']['type'] | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
-    // Fetch the score data here
-    // For now, we'll use dummy data
-    setScore({
-      id: "16732",
-      name: "Sample Score",
-      scorecardName: "SelectQuote Term Life v1",
-      type: "LangGraphScore", // Default type
-      accuracy: 85,
-      aiProvider: "OpenAI",
-      aiModel: "gpt-4-mini",
-      isFineTuned: false
-    })
+    fetchScore()
   }, [scorecardId, scoreId])
+
+  const fetchScore = async () => {
+    try {
+      setIsLoading(true)
+      if (scoreId === 'new') {
+        // For new scores, we need to fetch the section first
+        const sections = await client.models.Section.list({
+          scorecardId: scorecardId
+        })
+        
+        if (!sections.data.length) {
+          throw new Error('No sections found in scorecard')
+        }
+        
+        const defaultSection = sections.data[0]
+        setSection(defaultSection)
+        
+        // Get max order in section
+        const existingScores = await client.models.Score.list({
+          sectionId: defaultSection.id
+        })
+        const maxOrder = Math.max(
+          0, 
+          ...existingScores.data.map(s => s.order)
+        )
+        
+        setScore({
+          id: '',
+          name: 'New Score',
+          type: 'LangGraphScore',
+          order: maxOrder + 1,
+          sectionId: defaultSection.id,
+          accuracy: 0,
+          aiProvider: 'OpenAI',
+          aiModel: 'gpt-4',
+          isFineTuned: false,
+          configuration: {},
+          distribution: [],
+          versionHistory: []
+        })
+      } else {
+        // Fetch existing score
+        const result = await client.models.Score.get({
+          id: scoreId
+        })
+        
+        if (!result.data) {
+          throw new Error('Score not found')
+        }
+        
+        setScore(result.data)
+        
+        // Fetch associated section
+        const sectionResult = await client.models.Section.get({
+          id: result.data.sectionId
+        })
+        
+        if (sectionResult.data) {
+          setSection(sectionResult.data)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching score:', error)
+      // Handle error appropriately
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    if (!score || !section) return
+    
+    try {
+      setIsSaving(true)
+      
+      if (!score.id) {
+        // Create new score
+        const result = await client.models.Score.create({
+          name: score.name,
+          type: score.type,
+          order: score.order,
+          sectionId: section.id,
+          accuracy: score.accuracy,
+          aiProvider: score.aiProvider,
+          aiModel: score.aiModel,
+          isFineTuned: score.isFineTuned,
+          configuration: score.configuration,
+          distribution: score.distribution,
+          versionHistory: score.versionHistory
+        })
+        console.log('Created score:', result)
+      } else {
+        // Update existing score
+        const result = await client.models.Score.update({
+          id: score.id,
+          name: score.name,
+          type: score.type,
+          order: score.order,
+          accuracy: score.accuracy,
+          aiProvider: score.aiProvider,
+          aiModel: score.aiModel,
+          isFineTuned: score.isFineTuned,
+          configuration: score.configuration,
+          distribution: score.distribution,
+          versionHistory: score.versionHistory
+        })
+        console.log('Updated score:', result)
+      }
+      
+      router.back()
+    } catch (error) {
+      console.error('Error saving score:', error)
+      // Handle error appropriately
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   const handleEvaluate = () => {
     // Evaluate the updated score data
@@ -182,9 +295,11 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
             onChange={handleNameChange}
             className="text-2xl font-semibold"
           />
-          <p className="text-sm text-muted-foreground">{score.scorecardName}</p>
+          <p className="text-sm text-muted-foreground">
+            {section?.scorecard?.name} - {section?.name}
+          </p>
           <EditableField
-            value={score.id}
+            value={score.id || 'New Score'}
             onChange={handleIdChange}
             className="text-sm font-mono"
           />
@@ -227,9 +342,12 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
         <Button variant="outline" onClick={handleCancel}>
           Cancel
         </Button>
-        <Button onClick={handleEvaluate}>
+        <Button 
+          onClick={handleSave} 
+          disabled={isSaving}
+        >
           <FlaskConical className="h-4 w-4 mr-2" />
-          Evaluate Changes
+          {isSaving ? 'Saving...' : 'Save Changes'}
         </Button>
       </div>
     </div>

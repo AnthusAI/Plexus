@@ -433,51 +433,36 @@ export default function ScorecardsComponent() {
   const fetchScorecards = async () => {
     try {
       setIsLoading(true)
-      const accountResult = await client.models.Account.listAccountByKey({
-        key: ACCOUNT_KEY
+      const accountResult = await client.models.Account.list({
+        filter: {
+          key: {
+            eq: ACCOUNT_KEY
+          }
+        }
       })
       
-      if (accountResult?.data?.length > 0) {
+      if (accountResult.data.length > 0) {
         const foundAccountId = accountResult.data[0].id
         setAccountId(foundAccountId)
         
-        // Get the list of scorecards with the correct query name and variables
-        const query = `
-          query ListScorecards($accountId: String!) {
-            listScorecards(filter: { accountId: { eq: $accountId } }) {
-              items {
-                id
-                name
-                key
-                externalId
-                description
-                scoreDetails
-                accountId
-                createdAt
-                updatedAt
-              }
+        // Use DataStore instead of GraphQL
+        const scorecardResult = await client.models.Scorecard.list({
+          filter: {
+            accountId: {
+              eq: foundAccountId
             }
           }
-        `
-        
-        const variables = {
-          accountId: foundAccountId
-        }
-        
-        const scorecardResult = await graphqlClient.graphql({
-          query,
-          variables
         })
         
         console.log('Raw scorecard result:', {
-          data: scorecardResult.data?.listScorecards?.items,
-          firstScorecard: scorecardResult.data?.listScorecards?.items?.[0],
-          availableFields: scorecardResult.data?.listScorecards?.items?.[0] ? 
-            Object.keys(scorecardResult.data.listScorecards.items[0]) : []
+          data: scorecardResult.data,
+          firstScorecard: scorecardResult.data[0],
+          availableFields: scorecardResult.data[0] ? 
+            Object.keys(scorecardResult.data[0]) : []
         })
         
-        if (scorecardResult.data?.listScorecards?.items) {
-          setScorecards(scorecardResult.data.listScorecards.items)
+        if (scorecardResult.data) {
+          setScorecards(scorecardResult.data)
         } else {
           setScorecards([])
         }
