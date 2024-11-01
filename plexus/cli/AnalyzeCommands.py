@@ -3,10 +3,15 @@ import logging
 import pandas as pd
 from plexus.Scorecard import Scorecard
 from plexus.Registries import scorecard_registry
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import ResponseSchema, StructuredOutputParser
+from pyairtable import Api
+from pyairtable.formulas import match
+import dotenv
 import os
+
+dotenv.load_dotenv()
 
 @click.group()
 def analyze():
@@ -17,11 +22,13 @@ def analyze():
 
 @analyze.command()
 @click.option('--scorecard-name', required=True, help='Name of the scorecard to analyze')
-@click.option('--csv-path', required=True, help='Path to the CSV file containing feedback')
-@click.option('--score-name', default='', help='Comma-separated list of score names to analyze')
+@click.option('--base-id', required=True, help='Airtable base ID, Example: app87FkAzXqAcmxyC')
+@click.option('--table-name', required=True, help='Airtable table name, Example: Scorecard Data')
+@click.option('--score-name', default='', help='Score name to analyze')
 def feedback(
     scorecard_name: str,
-    csv_path: str,
+    base_id: str,
+    table_name: str,
     score_name: str,
 ):
     """
@@ -36,33 +43,43 @@ def feedback(
         logging.error(f"Scorecard with name '{scorecard_name}' not found.")
         return
 
-    # Initialize LLM
+    # Initialize LLM and Airtable
     llm = ChatOpenAI(
         model="gpt-4o-mini-2024-07-18",
         api_key=os.environ.get("OPENAI_API_KEY"),
         max_tokens=500,
         temperature=0.3,
     )
+    
+    # Initialize the PromptAnalyzer
     prompt_analyzer = PromptAnalyzer(llm)
-
-    # Load CSV data
+    
+    airtable = Api(os.environ.get("AIRTABLE_API_KEY"))
+    table = airtable.table(base_id, table_name)
+    
     try:
-        df = pd.read_csv(csv_path)
-        required_columns = ['form_id', 'TranscriptText', 'Comments']
+        # First, let's get records where question matches our score_name
+        formula = f"AND(question = '{score_name}', Comments != '')"
+        records = table.all(formula=formula)
+        df = pd.DataFrame([record['fields'] for record in records])
+        
+        required_columns = ['TranscriptText', 'Comments', 'QA SCORE']
         if not all(col in df.columns for col in required_columns):
-            logging.error(f"CSV must contain columns: {required_columns}")
+            logging.error(f"Airtable table must contain fields: {required_columns}")
             return
+            
+        logging.info(f"Found {len(df)} records for question: {score_name}")
+        
+        if len(df) == 0:
+            logging.error(f"No records found for question: {score_name}")
+            return
+            
     except Exception as e:
-        logging.error(f"Error loading CSV file: {e}")
+        logging.error(f"Error fetching data from Airtable: {e}")
         return
 
-    # Use the provided score name directly
-    if not score_name:
-        logging.error("score-name is required")
-        return
-        
     scores_to_analyze = [score_name]
-    score_data = df  # Use all rows since we're already looking at score-specific CSV
+    score_data = df  # Already filtered for the specific question
     
     # Analyze each score type
     for score in scores_to_analyze:
