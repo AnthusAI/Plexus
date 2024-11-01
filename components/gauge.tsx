@@ -190,8 +190,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   const titleY = 90  // Position relative to the bottom of the gauge circle
 
   return (
-    <div className="flex flex-col items-center relative w-full h-full">
-      <div className="relative w-full overflow-visible">
+    <div className="flex flex-col items-center relative w-full h-full max-w-[20em]">
+      <div className="relative w-full aspect-square overflow-visible">
         <svg 
           width="100%" 
           height="100%" 

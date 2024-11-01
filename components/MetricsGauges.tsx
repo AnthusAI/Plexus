@@ -27,16 +27,17 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({ gauges, className = '' })
     >
       <div className="flex w-full justify-center space-x-8">
         {gauges.map((gauge, index) => (
-          <Gauge
-            key={index}
-            value={gauge.value}
-            title={gauge.label}
-            segments={gauge.segments}
-            min={gauge.min}
-            max={gauge.max}
-            backgroundColor={gauge.backgroundColor}
-            showTicks={gauge.showTicks}
-          />
+          <div key={index}>
+            <Gauge
+              value={gauge.value}
+              title={gauge.label}
+              segments={gauge.segments}
+              min={gauge.min}
+              max={gauge.max}
+              backgroundColor={gauge.backgroundColor}
+              showTicks={gauge.showTicks}
+            />
+          </div>
         ))}
       </div>
     </div>

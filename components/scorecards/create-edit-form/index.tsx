@@ -249,7 +249,7 @@ export function ScorecardForm({
     <div className="border text-card-foreground shadow rounded-none 
                     sm:rounded-lg h-full flex flex-col bg-card-light border-none">
       {/* Header */}
-      <div className="flex-shrink-0 border-b">
+      <div className="flex-shrink-0 bg-card">
         <div className="px-6 py-4 flex items-center justify-between">
           <Input
             value={formData.name}
@@ -296,11 +296,6 @@ export function ScorecardForm({
       <div className="flex-1 overflow-auto p-6">
         <div className="space-y-4">
           <div className="mt-8">
-            <div className="-mx-4 sm:-mx-6 mb-4">
-              <div className="px-4 sm:px-6 py-2">
-                <h4 className="text-md font-semibold">Scores</h4>
-              </div>
-            </div>
             {formData.scoreDetails.map((section, sectionIndex) => (
               <div key={sectionIndex} className="mb-6">
                 <div className="-mx-4 sm:-mx-6 mb-4">
@@ -349,7 +344,7 @@ export function ScorecardForm({
       </div>
 
       {/* Footer */}
-      <div className="flex-shrink-0 p-6 border-t bg-card rounded-b-lg">
+      <div className="flex-shrink-0 p-6 bg-card rounded-b-lg">
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onCancel}>Cancel</Button>
           <Button onClick={handleSave}>Save Scorecard</Button>
