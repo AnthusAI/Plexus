@@ -37,6 +37,16 @@ import { PieChart, Pie, ResponsiveContainer, Cell } from "recharts"
 import { Badge } from "@/components/ui/badge"
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'  // Change this import
+import { generateClient } from "aws-amplify/data";
+import type { Schema } from "@/amplify/data/resource";
+import { ScorecardForm } from "./scorecards/create-edit-form"
+import { generateClient as generateGraphQLClient } from '@aws-amplify/api'
+
+// Initialize both clients
+const client = generateClient<Schema>()
+const graphqlClient = generateGraphQLClient()
+
+const ACCOUNT_KEY = 'call-criteria';
 
 // Add this function near the top of the file, with other utility functions
 const generateHexCode = (length: number = 7): string => {
@@ -367,16 +377,46 @@ function EditableField({ value, onChange, className = "", autoFocus = false }: E
   )
 }
 
+// Add near the top of the file
+interface ScoreSection {
+  name: string;
+  scores: Array<{
+    id: string;
+    name: string;
+    type: string;
+    accuracy: number;
+    version: string;
+    timestamp: Date;
+    distribution: Array<{ category: string; value: number }>;
+    versionHistory: Array<any>;
+  }>;
+}
+
+interface ParsedScorecard {
+  id: string;
+  name: string;
+  key: string;
+  description?: string;
+  accountId: string;
+  scores?: number;
+  scoreDetails: ScoreSection[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export default function ScorecardsComponent() {
   const router = useRouter()
-  const [scorecards, setScorecards] = useState<Scorecard[]>(initialScorecards)
-  const [selectedScorecard, setSelectedScorecard] = useState<Scorecard | null>(null)
+  const [scorecards, setScorecards] = useState<Schema['Scorecard']['type'][]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedScorecard, setSelectedScorecard] = useState<ParsedScorecard | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [editingScore, setEditingScore] = useState<{ id: string; name: string; type: string } | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [isDetailViewFresh, setIsDetailViewFresh] = useState(true)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [accountId, setAccountId] = useState<string | null>(null)
 
   // Move useEffect to the top level
   useEffect(() => {
@@ -384,6 +424,78 @@ export default function ScorecardsComponent() {
       setIsDetailViewFresh(false);
     }
   }, [isDetailViewFresh, selectedScorecard]);
+
+  useEffect(() => {
+    console.log('Fetching scorecards...')
+    fetchScorecards()
+  }, [refreshTrigger])
+
+  const fetchScorecards = async () => {
+    try {
+      setIsLoading(true)
+      const accountResult = await client.models.Account.listAccountByKey({
+        key: ACCOUNT_KEY
+      })
+      
+      if (accountResult?.data?.length > 0) {
+        const foundAccountId = accountResult.data[0].id
+        setAccountId(foundAccountId)
+        
+        // Get the list of scorecards with the correct query name and variables
+        const query = `
+          query ListScorecards($accountId: String!) {
+            listScorecards(filter: { accountId: { eq: $accountId } }) {
+              items {
+                id
+                name
+                key
+                externalId
+                description
+                scoreDetails
+                accountId
+                createdAt
+                updatedAt
+              }
+            }
+          }
+        `
+        
+        const variables = {
+          accountId: foundAccountId
+        }
+        
+        const scorecardResult = await graphqlClient.graphql({
+          query,
+          variables
+        })
+        
+        console.log('Raw scorecard result:', {
+          data: scorecardResult.data?.listScorecards?.items,
+          firstScorecard: scorecardResult.data?.listScorecards?.items?.[0],
+          availableFields: scorecardResult.data?.listScorecards?.items?.[0] ? 
+            Object.keys(scorecardResult.data.listScorecards.items[0]) : []
+        })
+        
+        if (scorecardResult.data?.listScorecards?.items) {
+          setScorecards(scorecardResult.data.listScorecards.items)
+        } else {
+          setScorecards([])
+        }
+      } else {
+        console.log('No account found with key:', ACCOUNT_KEY)
+        setScorecards([])
+      }
+    } catch (error) {
+      console.error('Error fetching scorecards:', error)
+      setScorecards([])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  if (isLoading) {
+    return <div>Loading scorecards...</div>;
+  }
 
   const handleCreate = () => {
     const newScorecard: Scorecard = {
@@ -399,8 +511,26 @@ export default function ScorecardsComponent() {
     setIsDetailViewFresh(true)
   }
 
-  const handleEdit = (scorecard: Scorecard) => {
-    setSelectedScorecard({ ...scorecard })
+  const handleEdit = (scorecard: Schema['Scorecard']['type']) => {
+    // If we're already editing a scorecard, close the form first
+    if (isEditing) {
+      setIsEditing(false)
+    }
+    
+    // Parse the scoreDetails if it's a string
+    const parsedScorecard = {
+      ...scorecard,
+      scoreDetails: scorecard.scoreDetails ? 
+        (typeof scorecard.scoreDetails === 'string' ? 
+          JSON.parse(scorecard.scoreDetails) : 
+          scorecard.scoreDetails) : 
+        []
+    }
+    
+    console.log('Editing scorecard:', parsedScorecard)
+    
+    // Set the new scorecard and open the form
+    setSelectedScorecard(parsedScorecard)
     setIsEditing(true)
     setEditingScore(null)
     setIsDetailViewFresh(true)
@@ -542,13 +672,15 @@ export default function ScorecardsComponent() {
           {scorecards.map((scorecard) => (
             <TableRow 
               key={scorecard.id} 
-              onClick={() => setSelectedScorecard(scorecard)} 
+              onClick={() => handleEdit(scorecard)} 
               className="cursor-pointer transition-colors duration-200 hover:bg-muted"
             >
               <TableCell className="w-[70%]">
                 <div>
                   <div className="font-medium">{scorecard.name}</div>
-                  <div className="text-sm text-muted-foreground">{scorecard.id} - {scorecard.key}</div>
+                  <div className="text-sm text-muted-foreground font-mono">
+                    {scorecard.externalId || 'No ID'} - {scorecard.key}
+                  </div>
                 </div>
               </TableCell>
               <TableCell className="w-[20%] text-right">{scorecard.scores}</TableCell>
@@ -609,18 +741,56 @@ export default function ScorecardsComponent() {
   )
 
   const renderSelectedItem = () => {
-    if (!selectedScorecard) return null;
+    if (isEditing) {
+      if (!accountId) {
+        return <div>Loading account information...</div>
+      }
+      
+      return (
+        <ScorecardForm
+          scorecard={selectedScorecard}
+          accountId={accountId}
+          onSave={() => {
+            setIsEditing(false)
+            setSelectedScorecard(null)
+            setRefreshTrigger(prev => prev + 1)
+          }}
+          onCancel={() => {
+            setIsEditing(false)
+            setSelectedScorecard(null)
+          }}
+          isFullWidth={isFullWidth}
+          onToggleWidth={() => setIsFullWidth(!isFullWidth)}
+          isNarrowViewport={isNarrowViewport}
+        />
+      )
+    }
+
+    if (!selectedScorecard) {
+      return <div>No scorecard selected</div>
+    }
+
+    // Parse scoreDetails if it's a string
+    const parsedScoreDetails = selectedScorecard.scoreDetails ? 
+      (typeof selectedScorecard.scoreDetails === 'string' ? 
+        JSON.parse(selectedScorecard.scoreDetails) : 
+        selectedScorecard.scoreDetails) : 
+      []
+
+    if (!parsedScoreDetails || parsedScoreDetails.length === 0) {
+      return <div>No score details configured yet</div>
+    }
 
     const handleAddSection = () => {
       const newSection = {
         name: "New section",
         scores: []
-      };
+      }
       setSelectedScorecard({
         ...selectedScorecard,
-        scoreDetails: [...selectedScorecard.scoreDetails, newSection]
-      });
-    };
+        scoreDetails: JSON.stringify([...parsedScoreDetails, newSection])
+      })
+    }
 
     const renderScoreItem = (score: Scorecard['scoreDetails'][0]['scores'][0], scorecardId: string) => {
       const generateVersionHistory = (baseAccuracy: number) => {
@@ -916,16 +1086,16 @@ export default function ScorecardsComponent() {
                   <h4 className="text-md font-semibold">Scores</h4>
                 </div>
               </div>
-              {selectedScorecard.scoreDetails.map((section, sectionIndex) => (
+              {parsedScoreDetails.map((section, sectionIndex) => (
                 <div key={sectionIndex} className="mb-6">
                   <div className="-mx-4 sm:-mx-6 mb-4">
                     <div className="bg-card px-4 sm:px-6 py-2">
                       <EditableField
                         value={section.name}
                         onChange={(value) => {
-                          const updatedScoreDetails = [...selectedScorecard.scoreDetails];
+                          const updatedScoreDetails = [...parsedScoreDetails];
                           updatedScoreDetails[sectionIndex] = { ...section, name: value };
-                          setSelectedScorecard({ ...selectedScorecard, scoreDetails: updatedScoreDetails });
+                          setSelectedScorecard({ ...selectedScorecard, scoreDetails: JSON.stringify(updatedScoreDetails) });
                         }}
                         className="text-md font-semibold"
                       />
@@ -976,7 +1146,7 @@ export default function ScorecardsComponent() {
                 {scorecards.map((scorecard) => (
                   <TableRow 
                     key={scorecard.id} 
-                    onClick={() => setSelectedScorecard(scorecard)} 
+                    onClick={() => handleEdit(scorecard)} 
                     className="cursor-pointer transition-colors duration-200 hover:bg-muted"
                   >
                     <TableCell className="w-[70%]">
@@ -986,7 +1156,9 @@ export default function ScorecardsComponent() {
                           <div className="flex justify-between items-start mb-2">
                             <div>
                               <div className="font-medium">{scorecard.name}</div>
-                              <div className="text-sm text-muted-foreground">{scorecard.id} - {scorecard.key}</div>
+                              <div className="text-sm text-muted-foreground font-mono">
+                                {scorecard.externalId || 'No ID'} - {scorecard.key}
+                              </div>
                               <div className="text-sm text-muted-foreground mt-1">{scorecard.scores} scores</div>
                             </div>
                             <div className="flex items-center">
@@ -1036,7 +1208,9 @@ export default function ScorecardsComponent() {
                         {/* Wide variant - visible at 630px and above */}
                         <div className="hidden @[630px]:block">
                           <div className="font-medium">{scorecard.name}</div>
-                          <div className="text-sm text-muted-foreground">{scorecard.id} - {scorecard.key}</div>
+                          <div className="text-sm text-muted-foreground font-mono">
+                            {scorecard.externalId || 'No ID'} - {scorecard.key}
+                          </div>
                         </div>
                       </div>
                     </TableCell>
@@ -1098,7 +1272,10 @@ export default function ScorecardsComponent() {
 
           {selectedScorecard && !isNarrowViewport && !isFullWidth && (
             <div className="flex-1 overflow-hidden">
-              {renderSelectedItem()}
+              {selectedScorecard.scoreDetails ? 
+                renderSelectedItem() : 
+                <div>No score details configured yet</div>
+              }
             </div>
           )}
         </div>
