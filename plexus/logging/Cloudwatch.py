@@ -28,7 +28,7 @@ class CloudWatchLogger:
                 Namespace=self.namespace,
                 MetricData=[metric_data]
             )
-            logging.info(f"Successfully logged {metric_name} to CloudWatch with dimensions: {dimensions}")
+            logging.debug(f"Successfully logged {metric_name} to CloudWatch with dimensions: {dimensions}")
         except ClientError as e:
             logging.error(f"Failed to log metric to CloudWatch: {e}")
 
