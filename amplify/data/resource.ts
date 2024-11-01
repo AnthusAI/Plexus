@@ -72,7 +72,7 @@ const schema = a.schema({
     .model({
       name: a.string().required(),
       key: a.string().required(),
-      foreignId: a.string().required(),
+      externalId: a.string().required(),
       description: a.string(),
       scoreDetails: a.json(),
       accountId: a.string().required(),
@@ -83,7 +83,7 @@ const schema = a.schema({
     .secondaryIndexes((idx) => [
       idx("accountId"),
       idx("key"),
-      idx("foreignId")
+      idx("externalId")
     ]),
 
   Score: a
