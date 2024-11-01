@@ -74,10 +74,9 @@ const schema = a.schema({
       key: a.string().required(),
       externalId: a.string().required(),
       description: a.string(),
-      scoreDetails: a.json(),
       accountId: a.string().required(),
       account: a.belongsTo('Account', 'accountId'),
-      scores: a.hasMany('Score', 'scorecardId'),
+      sections: a.hasMany('Section', 'scorecardId'),
     })
     .authorization((allow) => [allow.authenticated()])
     .secondaryIndexes((idx) => [
@@ -86,18 +85,38 @@ const schema = a.schema({
       idx("externalId")
     ]),
 
-  Score: a
+  Section: a
     .model({
       name: a.string().required(),
-      type: a.string().required(),
-      accuracy: a.float(),
-      version: a.string(),
+      order: a.integer().required(),
       scorecardId: a.string().required(),
       scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+      scores: a.hasMany('Score', 'sectionId'),
     })
     .authorization((allow) => [allow.authenticated()])
     .secondaryIndexes((idx) => [
       idx("scorecardId")
+    ]),
+
+  Score: a
+    .model({
+      name: a.string().required(),
+      type: a.string().required(),
+      order: a.integer().required(),
+      accuracy: a.float(),
+      version: a.string(),
+      sectionId: a.string().required(),
+      section: a.belongsTo('Section', 'sectionId'),
+      aiProvider: a.string(),
+      aiModel: a.string(),
+      isFineTuned: a.boolean(),
+      configuration: a.json(),
+      distribution: a.json(),
+      versionHistory: a.json(),
+    })
+    .authorization((allow) => [allow.authenticated()])
+    .secondaryIndexes((idx) => [
+      idx("sectionId")
     ]),
 });
 
