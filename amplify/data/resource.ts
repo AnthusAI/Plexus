@@ -72,13 +72,10 @@ const schema = a.schema({
     .model({
       name: a.string().required(),
       key: a.string().required(),
-      foreignId: a.string(),
+      foreignId: a.string().required(),
       description: a.string(),
-      // Add the configuration as a JSON field
       scoreDetails: a.json(),
-      // Foreign keys
       accountId: a.string().required(),
-      // Relationships
       account: a.belongsTo('Account', 'accountId'),
       scores: a.hasMany('Score', 'scorecardId'),
     })
