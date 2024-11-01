@@ -72,7 +72,7 @@ const schema = a.schema({
     .model({
       name: a.string().required(),
       key: a.string().required(),
-      foreignId: a.string(),
+      foreignId: a.string().required(),
       description: a.string(),
       scoreDetails: a.json(),
       accountId: a.string().required(),
