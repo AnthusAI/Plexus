@@ -27,6 +27,25 @@ interface EditableFieldProps {
   className?: string;
 }
 
+interface ScoreState {
+  id: string
+  name: string
+  type: string
+  order: number
+  sectionId: string
+  accuracy: number
+  version: string
+  aiProvider: string
+  aiModel: string
+  isFineTuned: boolean
+  configuration: any
+  distribution: any[]
+  versionHistory: any[]
+  section?: Schema['Section']['type']
+  createdAt?: string
+  updatedAt?: string
+}
+
 const client = generateClient<Schema>()
 
 function EditableField({ value, onChange, className = "" }: EditableFieldProps) {
@@ -115,7 +134,7 @@ function EditableField({ value, onChange, className = "" }: EditableFieldProps) 
 
 export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditProps) {
   const router = useRouter()
-  const [score, setScore] = useState<Schema['Score']['type'] | null>(null)
+  const [score, setScore] = useState<ScoreState | null>(null)
   const [section, setSection] = useState<Schema['Section']['type'] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -130,7 +149,11 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
       if (scoreId === 'new') {
         // For new scores, we need to fetch the section first
         const sections = await client.models.Section.list({
-          scorecardId: scorecardId
+          filter: {
+            scorecardId: {
+              eq: scorecardId
+            }
+          }
         })
         
         if (!sections.data.length) {
@@ -142,7 +165,11 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
         
         // Get max order in section
         const existingScores = await client.models.Score.list({
-          sectionId: defaultSection.id
+          filter: {
+            sectionId: {
+              eq: defaultSection.id
+            }
+          }
         })
         const maxOrder = Math.max(
           0, 
@@ -156,6 +183,7 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
           order: maxOrder + 1,
           sectionId: defaultSection.id,
           accuracy: 0,
+          version: Date.now().toString(),
           aiProvider: 'OpenAI',
           aiModel: 'gpt-4',
           isFineTuned: false,
@@ -173,7 +201,26 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
           throw new Error('Score not found')
         }
         
-        setScore(result.data)
+        // Convert API response to ScoreState, handling nullable values
+        const scoreData: ScoreState = {
+          id: result.data.id,
+          name: result.data.name,
+          type: result.data.type,
+          order: result.data.order,
+          sectionId: result.data.sectionId,
+          accuracy: result.data.accuracy ?? 0,
+          version: result.data.version ?? Date.now().toString(),
+          aiProvider: result.data.aiProvider ?? 'OpenAI',
+          aiModel: result.data.aiModel ?? 'gpt-4',
+          isFineTuned: result.data.isFineTuned ?? false,
+          configuration: result.data.configuration ?? {},
+          distribution: (result.data.distribution as any[] | null) ?? [],
+          versionHistory: (result.data.versionHistory as any[] | null) ?? [],
+          createdAt: result.data.createdAt,
+          updatedAt: result.data.updatedAt
+        }
+        
+        setScore(scoreData)
         
         // Fetch associated section
         const sectionResult = await client.models.Section.get({
@@ -252,18 +299,23 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
   }
 
   const handleNameChange = (newName: string) => {
+    if (!score) return
     setScore({ ...score, name: newName })
   }
 
   const handleIdChange = (newId: string) => {
+    if (!score) return
     setScore({ ...score, id: newId })
   }
 
   const handleTypeChange = (newType: string) => {
+    if (!score) return
     setScore({ ...score, type: newType })
   }
 
   const renderScoreTypeComponent = () => {
+    if (!score) return null
+    
     switch (score.type) {
       case 'ProgrammaticScore':
         return <ProgrammaticScoreComponent score={score} onChange={setScore} />

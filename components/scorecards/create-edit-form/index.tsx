@@ -13,7 +13,7 @@ const client = generateClient<Schema>()
 const graphqlClient = generateGraphQLClient()
 
 interface ScorecardFormProps {
-  scorecard?: Schema['Scorecard']['type']
+  scorecard: Schema['Scorecard']['type'] | null
   accountId: string
   onSave: () => void
   onCancel: () => void
@@ -22,27 +22,39 @@ interface ScorecardFormProps {
   isNarrowViewport?: boolean
 }
 
-interface ScoreSection {
-  name: string;
-  scores: Array<{
-    id: string;
-    name: string;
-    type: string;
-    accuracy: number;
-    version: string;
-    timestamp: Date;
-    distribution: Array<{ category: string; value: number }>;
-    versionHistory: Array<any>; // We can make this more specific if needed
-  }>;
-}
-
 interface FormData {
-  name: string;
-  key: string;
-  description: string;
-  accountId: string;
-  externalId: string;
-  scoreDetails: ScoreSection[];
+  id?: string
+  name: string
+  key: string
+  description: string
+  accountId: string
+  externalId: string
+  sections: Array<{
+    id?: string
+    name: string
+    order: number
+    scores: Array<{
+      id: string
+      name: string
+      type: string
+      order: number
+      accuracy: number
+      version: string
+      timestamp: Date
+      aiProvider?: string
+      aiModel?: string
+      isFineTuned?: boolean
+      configuration?: any
+      distribution: Array<{ category: string; value: number }>
+      versionHistory: Array<{
+        version: string
+        parent: string | null
+        timestamp: Date
+        accuracy: number
+        distribution: Array<{ category: string; value: number }>
+      }>
+    }>
+  }>
 }
 
 export function ScorecardForm({ 
@@ -54,113 +66,114 @@ export function ScorecardForm({
   onToggleWidth,
   isNarrowViewport = false
 }: ScorecardFormProps) {
-  const [formData, setFormData] = useState<FormData>(() => initializeFormData(scorecard, accountId));
-
-  useEffect(() => {
-    console.log('Scorecard prop:', scorecard);
-    console.log('Form data:', formData);
-  }, [scorecard, formData]);
+  const [formData, setFormData] = useState<FormData>(() => initializeFormData(scorecard, accountId))
 
   useEffect(() => {
     if (scorecard) {
-      setFormData(initializeFormData(scorecard, accountId));
+      setFormData(initializeFormData(scorecard, accountId))
     }
-  }, [scorecard, accountId]);
+  }, [scorecard, accountId])
 
-  function initializeFormData(scorecard: Schema['Scorecard']['type'] | undefined, accountId: string): FormData {
+  function initializeFormData(scorecard: Schema['Scorecard']['type'] | null, accountId: string): FormData {
     const defaultData: FormData = {
       name: "",
       key: "",
       description: "",
       accountId,
       externalId: "",
-      scoreDetails: []
-    };
-
-    if (scorecard) {
-      console.log('Initializing form with scorecard:', {
-        raw: scorecard,
-        externalId: scorecard.externalId,
-        keys: Object.keys(scorecard)
-      });
-
-      const parsedDetails = scorecard.scoreDetails ? 
-        (typeof scorecard.scoreDetails === 'string' ? 
-          JSON.parse(scorecard.scoreDetails) : 
-          scorecard.scoreDetails) : 
-        [];
-
-      const formData = {
-        name: scorecard.name ?? defaultData.name,
-        key: scorecard.key ?? defaultData.key,
-        description: scorecard.description ?? defaultData.description,
-        externalId: scorecard.externalId ?? defaultData.externalId,
-        accountId,
-        scoreDetails: parsedDetails
-      };
-
-      console.log('Initialized form data:', formData);
-      return formData;
+      sections: []
     }
 
-    return defaultData;
+    if (!scorecard) return defaultData
+
+    return {
+      id: scorecard.id,
+      name: scorecard.name,
+      key: scorecard.key,
+      description: scorecard.description ?? "",
+      externalId: scorecard.externalId,
+      accountId,
+      sections: [] // Sections will be loaded separately via the relationship
+    }
   }
 
   async function handleSave() {
     try {
-      if (scorecard?.id) {
-        try {
-          const { name, key, accountId, scoreDetails } = formData
-          
-          const updateInput = {
-            id: scorecard.id,
-            name,
-            key,
-            accountId,
-            scoreDetails: JSON.stringify(scoreDetails)
-          } as const
-          
-          console.log('Sending update:', updateInput)
-          
-          const result = await client.models.Scorecard.update(updateInput)
-          
-          console.log('Update result:', result)
-          
-          if (result.errors) {
-            throw new Error(result.errors.map(e => e.message).join(', '))
+      if (formData.id) {
+        // Update existing scorecard
+        await client.models.Scorecard.update({
+          id: formData.id,
+          name: formData.name,
+          key: formData.key,
+          description: formData.description,
+          externalId: formData.externalId
+        })
+        
+        // Update sections
+        for (const section of formData.sections) {
+          if (section.id) {
+            await client.models.Section.update({
+              id: section.id,
+              name: section.name,
+              order: section.order
+            })
+          } else {
+            await client.models.Section.create({
+              name: section.name,
+              order: section.order,
+              scorecardId: formData.id
+            })
           }
-          
-          onSave()
-        } catch (updateError) {
-          console.error('Update failed:', updateError)
-          throw updateError
         }
       } else {
-        // For create, externalId is required
+        // Create new scorecard
         if (!formData.externalId?.trim()) {
           throw new Error('External ID is required')
         }
 
-        const createInput = {
+        const scorecardResult = await client.models.Scorecard.create({
           name: formData.name,
           key: formData.key,
+          description: formData.description,
           accountId: formData.accountId,
-          externalId: formData.externalId.trim(),
-          scoreDetails: JSON.stringify(formData.scoreDetails)
-        } as const
+          externalId: formData.externalId.trim()
+        })
         
-        console.log('Sending create:', createInput)
-        
-        const result = await client.models.Scorecard.create(createInput)
-        console.log('Create result:', result)
-        
-        if (result.errors) {
-          throw new Error('Create failed: ' + 
-            result.errors.map(e => e.message).join(', '))
+        if (!scorecardResult.data) {
+          throw new Error('Failed to create scorecard')
         }
-        
-        onSave()
+
+        // Create sections
+        for (const section of formData.sections) {
+          const sectionResult = await client.models.Section.create({
+            name: section.name,
+            order: section.order,
+            scorecardId: scorecardResult.data.id
+          })
+          
+          if (!sectionResult.data) continue
+
+          // Create scores
+          for (const score of section.scores) {
+            await client.models.Score.create({
+              name: score.name,
+              type: score.type,
+              order: score.order,
+              sectionId: sectionResult.data.id,
+              accuracy: score.accuracy,
+              version: score.version,
+              aiProvider: score.aiProvider,
+              aiModel: score.aiModel,
+              isFineTuned: score.isFineTuned,
+              configuration: score.configuration,
+              distribution: score.distribution,
+              versionHistory: score.versionHistory
+            })
+          }
+        }
       }
+      
+      onSave()
     } catch (error) {
       console.error('Operation failed:', error)
       throw error
@@ -168,25 +181,36 @@ export function ScorecardForm({
   }
 
   const handleAddSection = () => {
+    const maxOrder = Math.max(0, ...formData.sections.map(s => s.order))
     const newSection = {
       name: "New section",
+      order: maxOrder + 1,
       scores: []
     }
     setFormData({
       ...formData,
-      scoreDetails: [...formData.scoreDetails, newSection]
+      sections: [...formData.sections, newSection]
     })
   }
 
   const handleAddScore = (sectionIndex: number) => {
     const baseAccuracy = Math.floor(Math.random() * 30) + 60
+    const section = formData.sections[sectionIndex]
+    const maxOrder = Math.max(0, ...section.scores.map(s => s.order))
+    const now = new Date()
+    
     const newScore = {
-      id: Date.now().toString(),
+      id: `temp_${Date.now()}`,
       name: "New Score",
       type: "Boolean",
+      order: maxOrder + 1,
       accuracy: baseAccuracy,
       version: Date.now().toString(),
-      timestamp: new Date(),
+      timestamp: now,
+      aiProvider: "OpenAI",
+      aiModel: "gpt-4-turbo",
+      isFineTuned: false,
+      configuration: {},
       distribution: [
         { category: "Positive", value: baseAccuracy },
         { category: "Negative", value: 100 - baseAccuracy }
@@ -194,22 +218,19 @@ export function ScorecardForm({
       versionHistory: [{
         version: Date.now().toString(),
         parent: null,
-        timestamp: new Date(),
+        timestamp: now,
         accuracy: baseAccuracy,
         distribution: [
           { category: "Positive", value: baseAccuracy },
           { category: "Negative", value: 100 - baseAccuracy }
         ]
-      }],
-      aiProvider: "OpenAI",
-      aiModel: "gpt-4-turbo",
-      isFineTuned: false
+      }]
     }
-    const updatedScoreDetails = [...formData.scoreDetails]
+    const updatedScoreDetails = [...formData.sections]
     updatedScoreDetails[sectionIndex].scores.push(newScore)
     setFormData({
       ...formData,
-      scoreDetails: updatedScoreDetails
+      sections: updatedScoreDetails
     })
   }
 
@@ -296,16 +317,16 @@ export function ScorecardForm({
       <div className="flex-1 overflow-auto p-6">
         <div className="space-y-4">
           <div className="mt-8">
-            {formData.scoreDetails.map((section, sectionIndex) => (
+            {formData.sections.map((section, sectionIndex) => (
               <div key={sectionIndex} className="mb-6">
                 <div className="-mx-4 sm:-mx-6 mb-4">
                   <div className="bg-card px-4 sm:px-6 py-2">
                     <EditableField
                       value={section.name}
-                      onChange={(value) => {
-                        const updatedScoreDetails = [...formData.scoreDetails]
+                      onChange={(value: string) => {
+                        const updatedScoreDetails = [...formData.sections]
                         updatedScoreDetails[sectionIndex] = { ...section, name: value }
-                        setFormData({ ...formData, scoreDetails: updatedScoreDetails })
+                        setFormData({ ...formData, sections: updatedScoreDetails })
                       }}
                       className="text-md font-semibold"
                     />
@@ -317,12 +338,12 @@ export function ScorecardForm({
                       key={scoreIndex}
                       score={score}
                       onEdit={() => {
-                        const updatedScoreDetails = [...formData.scoreDetails]
+                        const updatedScoreDetails = [...formData.sections]
                         updatedScoreDetails[sectionIndex].scores[scoreIndex] = {
                           ...score,
                           name: score.name
                         }
-                        setFormData({ ...formData, scoreDetails: updatedScoreDetails })
+                        setFormData({ ...formData, sections: updatedScoreDetails })
                       }}
                     />
                   ))}

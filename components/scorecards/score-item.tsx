@@ -40,6 +40,35 @@ interface ScoreItemProps {
   onEdit?: () => void
 }
 
+// Add type for version
+interface Version {
+  accuracy: number
+  distribution: Array<{ category: string; value: number }>
+  // ... other version properties
+}
+
+// Add the GaugeConfig interface at the top with other interfaces
+interface GaugeConfig {
+  value: number
+  label: string
+}
+
+// Update the getMetricsForVersion function with the proper type
+function getMetricsForVersion(version: Version | null): GaugeConfig[] {
+  if (!version) return []
+  
+  return [
+    {
+      value: version.accuracy,
+      label: 'Accuracy'
+    },
+    ...(version.distribution?.map(d => ({
+      value: d.value,
+      label: d.category
+    })) || [])
+  ]
+}
+
 export function ScoreItem({ score, onEdit }: ScoreItemProps) {
   if (!score.versionHistory || score.versionHistory.length === 0) {
     const now = new Date()
@@ -73,16 +102,6 @@ export function ScoreItem({ score, onEdit }: ScoreItemProps) {
 
   const latestVersion = score.versionHistory[0]
   const totalItems = latestVersion?.distribution?.reduce((sum, item) => sum + item.value, 0) ?? 0
-
-  const getMetricsForVersion = (version: typeof latestVersion) => {
-    if (version.accuracy > 0) {
-      return [
-        { value: version.accuracy, label: 'Balanced Accuracy' },
-        { value: version.accuracy * 0.97, label: 'F1 Score' }
-      ]
-    }
-    return null
-  }
 
   return (
     <div className="py-4 border-b last:border-b-0">

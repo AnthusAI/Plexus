@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useRef, useEffect } from "react"
+import React, { useState, useRef, useEffect, useMemo } from "react"
 import { AudioLines, Siren, FileBarChart, FlaskConical, Zap, Plus, Pencil, Trash2, ArrowLeft, MoreHorizontal, Activity, ChevronDown, Square, Columns2, X, Search, Check, Info, ThumbsUp, ThumbsDown, MessageCircleMore } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -37,10 +37,11 @@ import { PieChart, Pie, ResponsiveContainer, Cell } from "recharts"
 import { Badge } from "@/components/ui/badge"
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'  // Change this import
-import { generateClient } from "aws-amplify/data";
-import type { Schema } from "@/amplify/data/resource";
+import { generateClient } from "aws-amplify/data"
+import type { Schema } from "@/amplify/data/resource"
 import { ScorecardForm } from "./scorecards/create-edit-form"
 import { generateClient as generateGraphQLClient } from '@aws-amplify/api'
+import { Amplify } from 'aws-amplify'
 
 // Initialize both clients
 const client = generateClient<Schema>()
@@ -392,16 +393,103 @@ interface ScoreSection {
   }>;
 }
 
+// Remove the extends since we can't extend the Schema type directly
 interface ParsedScorecard {
-  id: string;
-  name: string;
-  key: string;
-  description?: string;
-  accountId: string;
-  scores?: number;
-  scoreDetails: ScoreSection[];
-  createdAt?: string;
-  updatedAt?: string;
+  id: string
+  name: string
+  key: string
+  externalId: string
+  description?: string
+  accountId: string
+  sections: Array<{
+    id: string
+    name: string
+    order: number
+    scores: Array<{
+      id: string
+      name: string
+      type: string
+      order: number
+      accuracy: number
+      version: string
+      aiProvider?: string
+      aiModel?: string
+      isFineTuned?: boolean
+      configuration?: any
+      distribution?: any
+      versionHistory?: any
+    }>
+  }>
+  createdAt: string
+  updatedAt: string
+}
+
+// Add this function to get the score count
+const getScoreCountForScorecard = async (scorecard: Schema['Scorecard']['type']) => {
+  try {
+    console.log('Getting score count for scorecard:', scorecard)
+    console.log('Data Store Client in getScoreCount:', client)
+    console.log('Available models:', client.models)
+    
+    if (!client?.models?.Section) {
+      console.error('Section model not available')
+      return 0
+    }
+
+    const sectionsResult = await client.models.Section.list({
+      filter: {
+        scorecardId: {
+          eq: scorecard.id
+        }
+      }
+    })
+    
+    let count = 0
+    for (const section of sectionsResult.data) {
+      if (!client?.models?.Score) {
+        console.error('Score model not available')
+        continue
+      }
+      
+      const scoresResult = await client.models.Score.list({
+        filter: {
+          sectionId: {
+            eq: section.id
+          }
+        }
+      })
+      count += scoresResult.data.length
+    }
+    return count
+  } catch (error) {
+    console.error('Error getting score count:', error)
+    return 0
+  }
+}
+
+// Add type definitions for distribution and version history items
+interface DistributionItem {
+  category: string
+  value: number
+}
+
+interface VersionHistoryItem {
+  version: string
+  parent: string | null
+  timestamp: Date
+  accuracy: number
+  distribution: DistributionItem[]
+}
+
+// Add this component near the top with other component definitions
+const ScoreCount = ({ scorecard }: { scorecard: Schema['Scorecard']['type'] }) => {
+  const [count, setCount] = useState(0)
+  
+  useEffect(() => {
+    getScoreCountForScorecard(scorecard).then(setCount)
+  }, [scorecard])
+  
+  return <>{count} scores</>
 }
 
 export default function ScorecardsComponent() {
@@ -433,6 +521,8 @@ export default function ScorecardsComponent() {
   const fetchScorecards = async () => {
     try {
       setIsLoading(true)
+      
+      // Get account first
       const accountResult = await client.models.Account.list({
         filter: {
           key: {
@@ -445,30 +535,40 @@ export default function ScorecardsComponent() {
         const foundAccountId = accountResult.data[0].id
         setAccountId(foundAccountId)
         
-        // Use DataStore instead of GraphQL
-        const scorecardResult = await client.models.Scorecard.list({
-          filter: {
-            accountId: {
-              eq: foundAccountId
+        // Use GraphQL query since it works
+        const query = /* GraphQL */ `
+          query ListScorecards {
+            listScorecards {
+              items {
+                id
+                name
+                key
+                externalId
+                accountId
+                description
+                createdAt
+                updatedAt
+              }
             }
           }
-        })
+        `
         
-        console.log('Raw scorecard result:', {
-          data: scorecardResult.data,
-          firstScorecard: scorecardResult.data[0],
-          availableFields: scorecardResult.data[0] ? 
-            Object.keys(scorecardResult.data[0]) : []
-        })
+        const result = await graphqlClient.graphql({ query })
+        const typedResult = result as {
+          data: {
+            listScorecards: {
+              items: Schema['Scorecard']['type'][]
+            }
+          }
+        }
         
-        if (scorecardResult.data) {
-          setScorecards(scorecardResult.data)
+        console.log('GraphQL result:', JSON.stringify(typedResult, null, 2))
+        
+        if (typedResult.data?.listScorecards?.items) {
+          setScorecards(typedResult.data.listScorecards.items)
         } else {
           setScorecards([])
         }
-      } else {
-        console.log('No account found with key:', ACCOUNT_KEY)
-        setScorecards([])
       }
     } catch (error) {
       console.error('Error fetching scorecards:', error)
@@ -483,12 +583,18 @@ export default function ScorecardsComponent() {
   }
 
   const handleCreate = () => {
-    const newScorecard: Scorecard = {
-      id: "",
-      name: "",
-      key: "",
-      scores: 0,
-      scoreDetails: []
+    if (!accountId) return
+
+    const newScorecard: ParsedScorecard = {
+      id: '',
+      name: '',
+      key: '',
+      externalId: '',
+      description: '',
+      accountId,
+      sections: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }
     setSelectedScorecard(newScorecard)
     setIsEditing(true)
@@ -496,29 +602,73 @@ export default function ScorecardsComponent() {
     setIsDetailViewFresh(true)
   }
 
-  const handleEdit = (scorecard: Schema['Scorecard']['type']) => {
-    // If we're already editing a scorecard, close the form first
+  const handleEdit = async (scorecard: Schema['Scorecard']['type']) => {
     if (isEditing) {
       setIsEditing(false)
     }
     
-    // Parse the scoreDetails if it's a string
-    const parsedScorecard = {
-      ...scorecard,
-      scoreDetails: scorecard.scoreDetails ? 
-        (typeof scorecard.scoreDetails === 'string' ? 
-          JSON.parse(scorecard.scoreDetails) : 
-          scorecard.scoreDetails) : 
-        []
+    try {
+      // Fetch sections using Data Store
+      const sectionsResult = await client.models.Section.list({
+        filter: {
+          scorecardId: {
+            eq: scorecard.id
+          }
+        }
+      })
+      
+      // For each section, fetch its scores
+      const sections = await Promise.all(
+        sectionsResult.data.map(async (section) => {
+          const scoresResult = await client.models.Score.list({
+            filter: {
+              sectionId: {
+                eq: section.id
+              }
+            }
+          })
+          
+          return {
+            id: section.id,
+            name: section.name,
+            order: section.order,
+            scores: scoresResult.data.map(score => ({
+              id: score.id,
+              name: score.name,
+              type: score.type,
+              order: score.order,
+              accuracy: score.accuracy ?? 0,
+              version: score.version ?? '',
+              aiProvider: score.aiProvider ?? undefined,
+              aiModel: score.aiModel ?? undefined,
+              isFineTuned: score.isFineTuned ?? false,
+              configuration: score.configuration ?? undefined,
+              distribution: score.distribution ?? undefined,
+              versionHistory: score.versionHistory ?? undefined
+            }))
+          }
+        })
+      )
+      
+      const parsedScorecard: ParsedScorecard = {
+        id: scorecard.id,
+        name: scorecard.name,
+        key: scorecard.key,
+        externalId: scorecard.externalId,
+        description: scorecard.description ?? undefined,
+        accountId: scorecard.accountId,
+        sections,
+        createdAt: scorecard.createdAt,
+        updatedAt: scorecard.updatedAt
+      }
+      
+      setSelectedScorecard(parsedScorecard)
+      setIsEditing(true)
+      setEditingScore(null)
+      setIsDetailViewFresh(true)
+    } catch (error) {
+      console.error('Error fetching sections:', error)
     }
-    
-    console.log('Editing scorecard:', parsedScorecard)
-    
-    // Set the new scorecard and open the form
-    setSelectedScorecard(parsedScorecard)
-    setIsEditing(true)
-    setEditingScore(null)
-    setIsDetailViewFresh(true)
   }
 
   const handleDelete = (id: string) => {
@@ -529,17 +679,86 @@ export default function ScorecardsComponent() {
     }
   }
 
-  const handleSave = () => {
-    if (selectedScorecard) {
+  const handleSave = async () => {
+    if (!selectedScorecard || !accountId) return
+    
+    try {
       if (!selectedScorecard.id) {
-        const newId = Date.now().toString()
-        setScorecards([...scorecards, { ...selectedScorecard, id: newId }])
+        // Create new scorecard
+        const scorecardResult = await client.models.Scorecard.create({
+          name: selectedScorecard.name,
+          key: selectedScorecard.key,
+          externalId: selectedScorecard.externalId,
+          description: selectedScorecard.description,
+          accountId: selectedScorecard.accountId
+        })
+        
+        if (!scorecardResult.data) {
+          throw new Error('Failed to create scorecard')
+        }
+        
+        // Create sections
+        for (const section of selectedScorecard.sections) {
+          const sectionResult = await client.models.Section.create({
+            name: section.name,
+            order: section.order,
+            scorecardId: scorecardResult.data.id
+          })
+          
+          if (!sectionResult.data) {
+            throw new Error('Failed to create section')
+          }
+          
+          // Create scores
+          for (const score of section.scores) {
+            await client.models.Score.create({
+              name: score.name,
+              type: score.type,
+              order: score.order,
+              sectionId: sectionResult.data.id,
+              accuracy: score.accuracy,
+              version: score.version,
+              aiProvider: score.aiProvider,
+              aiModel: score.aiModel,
+              isFineTuned: score.isFineTuned,
+              configuration: score.configuration,
+              distribution: score.distribution,
+              versionHistory: score.versionHistory
+            })
+          }
+        }
       } else {
-        setScorecards(scorecards.map(scorecard => 
-          scorecard.id === selectedScorecard.id ? selectedScorecard : scorecard
-        ))
+        // Update existing scorecard
+        await client.models.Scorecard.update({
+          id: selectedScorecard.id,
+          name: selectedScorecard.name,
+          key: selectedScorecard.key,
+          externalId: selectedScorecard.externalId,
+          description: selectedScorecard.description
+        })
+        
+        // Update sections
+        for (const section of selectedScorecard.sections) {
+          if (section.id) {
+            await client.models.Section.update({
+              id: section.id,
+              name: section.name,
+              order: section.order
+            })
+          } else {
+            await client.models.Section.create({
+              name: section.name,
+              order: section.order,
+              scorecardId: selectedScorecard.id
+            })
+          }
+        }
       }
+      
       setIsEditing(false)
+      setRefreshTrigger(prev => prev + 1)
+    } catch (error) {
+      console.error('Error saving scorecard:', error)
     }
   }
 
@@ -549,84 +768,84 @@ export default function ScorecardsComponent() {
     setEditingScore(null)
   }
 
-  const handleAddScore = (sectionIndex: number) => {
-    if (!selectedScorecard) return; // Add this line
-
-    const baseAccuracy = Math.floor(Math.random() * 30) + 60; // Random accuracy between 60% and 90%
-    const newScore = { 
-      id: Date.now().toString(), 
-      name: "New Score", 
-      type: "Boolean",
-      accuracy: baseAccuracy,
-      version: generateHexCode(),
-      timestamp: new Date(),
-      distribution: [
-        { category: "Positive", value: baseAccuracy },
-        { category: "Negative", value: 100 - baseAccuracy }
-      ],
+  const handleAddScore = async (sectionIndex: number) => {
+    if (!selectedScorecard) return
+    
+    const section = selectedScorecard.sections[sectionIndex]
+    const maxOrder = Math.max(0, ...section.scores.map(s => s.order))
+    
+    const newScore = {
+      id: '',
+      name: "New Score",
+      type: "LangGraphScore",
+      order: maxOrder + 1,
+      accuracy: 0,
+      version: Date.now().toString(),
+      aiProvider: "OpenAI",
+      aiModel: "gpt-4",
+      isFineTuned: false,
+      configuration: {},
+      distribution: [],
       versionHistory: []
-    };
-    const updatedScoreDetails = [...selectedScorecard.scoreDetails];
-    updatedScoreDetails[sectionIndex].scores.push(newScore);
+    }
+    
+    const updatedSections = [...selectedScorecard.sections]
+    updatedSections[sectionIndex] = {
+      ...section,
+      scores: [...section.scores, newScore]
+    }
+    
     setSelectedScorecard({
       ...selectedScorecard,
-      scoreDetails: updatedScoreDetails,
-      scores: selectedScorecard.scores + 1
-    });
-  };
+      sections: updatedSections
+    })
+  }
 
   const handleSaveScore = () => {
-    if (selectedScorecard && editingScore) {
-      const newScore = {
-        id: editingScore.id || Date.now().toString(),
-        name: editingScore.name,
-        type: editingScore.type,
-        accuracy: 0, // Set a default value
-        version: generateHexCode(),
-        timestamp: new Date(),
-        distribution: [
-          { category: "Positive", value: 0 },
-          { category: "Negative", value: 0 }
-        ],
-        versionHistory: []
-      };
-
-      if (!editingScore.id) {
-        setSelectedScorecard({
-          ...selectedScorecard,
-          scores: selectedScorecard.scores + 1,
-          scoreDetails: selectedScorecard.scoreDetails.map(section => ({
-            ...section,
-            scores: [...section.scores, newScore]
-          }))
-        });
-      } else {
-        setSelectedScorecard({
-          ...selectedScorecard,
-          scoreDetails: selectedScorecard.scoreDetails.map(section => ({
-            ...section,
-            scores: section.scores.map(score => 
-              score.id === editingScore.id ? newScore : score
-            )
-          }))
-        });
-      }
-      setEditingScore(null);
+    if (!selectedScorecard || !editingScore) return
+    
+    const newScore = {
+      id: editingScore.id || '',
+      name: editingScore.name,
+      type: editingScore.type,
+      order: 0, // Will be set properly when saving
+      accuracy: 0,
+      version: Date.now().toString(),
+      aiProvider: "OpenAI",
+      aiModel: "gpt-4",
+      isFineTuned: false,
+      configuration: {},
+      distribution: [],
+      versionHistory: []
     }
-  };
+
+    const updatedSections = selectedScorecard.sections.map(section => ({
+      ...section,
+      scores: editingScore.id 
+        ? section.scores.map(score => score.id === editingScore.id ? newScore : score)
+        : [...section.scores, newScore]
+    }))
+
+    setSelectedScorecard({
+      ...selectedScorecard,
+      sections: updatedSections
+    })
+    setEditingScore(null)
+  }
 
   const handleDeleteScore = (scoreId: string) => {
-    if (selectedScorecard) {
-      setSelectedScorecard({
-        ...selectedScorecard,
-        scores: selectedScorecard.scores - 1,
-        scoreDetails: selectedScorecard.scoreDetails.map(section => ({
-          ...section,
-          scores: section.scores.filter(score => score.id !== scoreId)
-        }))
-      });
-    }
-  };
+    if (!selectedScorecard) return
+
+    const updatedSections = selectedScorecard.sections.map(section => ({
+      ...section,
+      scores: section.scores.filter(score => score.id !== scoreId)
+    }))
+
+    setSelectedScorecard({
+      ...selectedScorecard,
+      sections: updatedSections
+    })
+  }
 
   const handleNameEdit = () => {
     setEditingName(true)
@@ -668,7 +887,15 @@ export default function ScorecardsComponent() {
                   </div>
                 </div>
               </TableCell>
-              <TableCell className="w-[20%] text-right">{scorecard.scores}</TableCell>
+              <TableCell className="w-[20%] text-right">
+                {useMemo(() => {
+                  const [count, setCount] = useState(0)
+                  useEffect(() => {
+                    getScoreCountForScorecard(scorecard).then(setCount)
+                  }, [scorecard])
+                  return count
+                }, [scorecard])}
+              </TableCell>
               <TableCell className="w-[10%]">
                 <div className="flex items-center justify-end space-x-2">
                   <Button 
@@ -731,9 +958,38 @@ export default function ScorecardsComponent() {
         return <div>Loading account information...</div>
       }
       
+      const formScorecard = selectedScorecard ? {
+        id: selectedScorecard.id,
+        name: selectedScorecard.name,
+        key: selectedScorecard.key,
+        externalId: selectedScorecard.externalId,
+        description: selectedScorecard.description,
+        accountId: selectedScorecard.accountId,
+        createdAt: selectedScorecard.createdAt,
+        updatedAt: selectedScorecard.updatedAt,
+        account: {
+          get: async () => {
+            const result = await client.models.Account.get({ 
+              id: accountId
+            })
+            return result.data
+          }
+        } as any,
+        sections: {
+          get: async () => {
+            const result = await client.models.Section.list({
+              filter: {
+                scorecardId: { eq: selectedScorecard.id }
+              }
+            })
+            return result.data
+          }
+        } as any
+      } : null
+      
       return (
         <ScorecardForm
-          scorecard={selectedScorecard}
+          scorecard={formScorecard as Schema['Scorecard']['type']}
           accountId={accountId}
           onSave={() => {
             setIsEditing(false)
@@ -755,69 +1011,22 @@ export default function ScorecardsComponent() {
       return <div>No scorecard selected</div>
     }
 
-    // Parse scoreDetails if it's a string
-    const parsedScoreDetails = selectedScorecard.scoreDetails ? 
-      (typeof selectedScorecard.scoreDetails === 'string' ? 
-        JSON.parse(selectedScorecard.scoreDetails) : 
-        selectedScorecard.scoreDetails) : 
-      []
-
-    if (!parsedScoreDetails || parsedScoreDetails.length === 0) {
-      return <div>No score details configured yet</div>
+    if (!selectedScorecard.sections || selectedScorecard.sections.length === 0) {
+      return <div>No sections configured yet</div>
     }
 
-    const handleAddSection = () => {
-      const newSection = {
-        name: "New section",
-        scores: []
-      }
-      setSelectedScorecard({
-        ...selectedScorecard,
-        scoreDetails: JSON.stringify([...parsedScoreDetails, newSection])
-      })
-    }
-
-    const renderScoreItem = (score: Scorecard['scoreDetails'][0]['scores'][0], scorecardId: string) => {
-      const generateVersionHistory = (baseAccuracy: number) => {
-        const now = new Date();
-        return [
-          {
-            version: generateHexCode(),
-            parent: generateHexCode(),
-            timestamp: new Date(now.getTime() - 2 * 60 * 60 * 1000),
-            accuracy: baseAccuracy,
-            distribution: [{ category: "Positive", value: baseAccuracy }, { category: "Negative", value: 100 - baseAccuracy }]
-          },
-          {
-            version: generateHexCode(),
-            parent: generateHexCode(),
-            timestamp: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000),
-            accuracy: baseAccuracy - 3,
-            distribution: [{ category: "Positive", value: baseAccuracy - 3 }, { category: "Negative", value: 103 - baseAccuracy }]
-          },
-          {
-            version: generateHexCode(),
-            parent: generateHexCode(),
-            timestamp: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000),
-            accuracy: baseAccuracy - 7,
-            distribution: [{ category: "Positive", value: baseAccuracy - 7 }, { category: "Negative", value: 107 - baseAccuracy }]
-          },
-          {
-            version: generateHexCode(),
-            parent: null,
-            timestamp: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
-            accuracy: baseAccuracy - 12,
-            distribution: [{ category: "Positive", value: baseAccuracy - 12 }, { category: "Negative", value: 112 - baseAccuracy }]
-          },
-        ];
-      };
-
-      if (!score.versionHistory || score.versionHistory.length === 0) {
-        score.versionHistory = generateVersionHistory(score.accuracy);
+    const renderScoreItem = (score: ParsedScorecard['sections'][0]['scores'][0], sectionId: string) => {
+      const latestVersion = score.versionHistory?.[0] ?? {
+        version: score.version,
+        accuracy: score.accuracy,
+        distribution: score.distribution ?? [
+          { category: "Positive", value: score.accuracy },
+          { category: "Negative", value: 100 - score.accuracy }
+        ]
       }
 
-      const latestVersion = score.versionHistory[0];
-      const totalItems = latestVersion.distribution.reduce((sum, item) => sum + item.value, 0);
+      const totalItems = latestVersion.distribution?.reduce((sum: number, item: DistributionItem) => 
+        sum + item.value, 0) ?? 0
 
       return (
         <div key={score.id} className="py-4 border-b last:border-b-0">
@@ -827,46 +1036,22 @@ export default function ScorecardsComponent() {
               <div className="text-xs text-muted-foreground mt-1 space-y-1">
                 <div className="font-mono">LangGraphScore</div>
                 <div className="flex flex-wrap gap-1">
-                  <Badge className="bg-muted-foreground text-muted">{score.aiProvider || 'OpenAI'}</Badge>
-                  <Badge className="bg-muted-foreground text-muted">{score.aiModel || 'gpt-4-mini'}</Badge>
+                  <Badge className="bg-muted-foreground text-muted">
+                    {score.aiProvider || 'OpenAI'}
+                  </Badge>
+                  <Badge className="bg-muted-foreground text-muted">
+                    {score.aiModel || 'gpt-4-mini'}
+                  </Badge>
                   {score.isFineTuned && <Badge variant="secondary">Fine-tuned</Badge>}
                 </div>
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="text-xs">
-                    <Search className="h-4 w-4 mr-1" />
-                    Find
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem>
-                    <Activity className="h-4 w-4 mr-2" /> Activity
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <AudioLines className="h-4 w-4 mr-2" /> Items
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <Siren className="h-4 w-4 mr-2" /> Alerts
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <FileBarChart className="h-4 w-4 mr-2" /> Reports
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <FlaskConical className="h-4 w-4 mr-2" /> Experiments
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <Zap className="h-4 w-4 mr-2" /> Optimizations
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
               <Button 
                 variant="outline" 
                 size="sm" 
                 className="text-xs"
-                onClick={() => handleEditScore(scorecardId, score.id)}
+                onClick={() => handleEditScore(selectedScorecard.id, score.id)}
               >
                 <Pencil className="h-4 w-4 mr-1" />
                 Edit
@@ -896,7 +1081,7 @@ export default function ScorecardsComponent() {
                     fill="var(--true)"
                     strokeWidth={0}
                   >
-                    {latestVersion.distribution.map((entry, index) => (
+                    {latestVersion.distribution.map((entry: DistributionItem, index: number) => (
                       <Cell key={`cell-${index}`} fill={index === 0 ? "var(--true)" : "var(--false)"} />
                     ))}
                   </Pie>
@@ -914,7 +1099,7 @@ export default function ScorecardsComponent() {
                     fill="var(--chart-2)"
                     strokeWidth={0}
                   >
-                    {[0, 1].map((entry, index) => (
+                    {[0, 1].map((_, index) => (
                       <Cell key={`cell-${index}`} fill={index === 0 ? "var(--true)" : "var(--false)"} />
                     ))}
                   </Pie>
@@ -930,7 +1115,7 @@ export default function ScorecardsComponent() {
             <CollapsibleContent className="border-l-4 border-primary pl-4 mt-2">
               <div className="max-h-80 overflow-y-auto pr-4">
                 <div className="space-y-4">
-                  {score.versionHistory.map((version, index) => (
+                  {score.versionHistory.map((version: VersionHistoryItem, index: number) => (
                     <div key={index} className="border-b last:border-b-0 pb-4">
                       <div className="flex justify-between items-start">
                         <div>
@@ -964,7 +1149,8 @@ export default function ScorecardsComponent() {
                       <div className="flex items-center justify-end mt-2">
                         <div className="text-right mr-4">
                           <div className="text-lg font-bold">
-                            {version.accuracy}% / {version.distribution.reduce((sum, item) => sum + item.value, 0)}
+                            {version.accuracy}% / {version.distribution.reduce((sum: number, item: DistributionItem) => 
+                              sum + item.value, 0)}
                           </div>
                           <div className="text-sm text-muted-foreground">
                             Accuracy
@@ -984,7 +1170,7 @@ export default function ScorecardsComponent() {
                                 fill="var(--true)"
                                 strokeWidth={0}
                               >
-                                {version.distribution.map((entry, index) => (
+                                {version.distribution.map((entry: DistributionItem, index: number) => (
                                   <Cell key={`cell-${index}`} fill={index === 0 ? "var(--true)" : "var(--false)"} />
                                 ))}
                               </Pie>
@@ -1002,7 +1188,7 @@ export default function ScorecardsComponent() {
                                 fill="var(--chart-2)"
                                 strokeWidth={0}
                               >
-                                {[0, 1].map((entry, index) => (
+                                {[0, 1].map((_, index) => (
                                   <Cell key={`cell-${index}`} fill={index === 0 ? "var(--true)" : "var(--false)"} />
                                 ))}
                               </Pie>
@@ -1020,10 +1206,23 @@ export default function ScorecardsComponent() {
       );
     };
 
-    // Replace the existing generateHexCode function in renderSelectedItem with a call to this new function
-    const getHexCode = () => {
-      return generateHexCode(7); // Generate a 7-character hex code
-    };
+    const handleAddSection = async () => {
+      if (!selectedScorecard) return
+      
+      const maxOrder = Math.max(0, ...selectedScorecard.sections.map(s => s.order))
+      
+      const newSection = {
+        id: '',
+        name: "New section",
+        order: maxOrder + 1,
+        scores: []
+      }
+      
+      setSelectedScorecard({
+        ...selectedScorecard,
+        sections: [...selectedScorecard.sections, newSection]
+      })
+    }
 
     return (
       <Card className="rounded-none sm:rounded-lg h-full flex flex-col bg-card-light border-none">
@@ -1066,28 +1265,23 @@ export default function ScorecardsComponent() {
             </div>
             
             <div className="mt-8">
-              <div className="-mx-4 sm:-mx-6 mb-4">
-                <div className="px-4 sm:px-6 py-2">
-                  <h4 className="text-md font-semibold">Scores</h4>
-                </div>
-              </div>
-              {parsedScoreDetails.map((section, sectionIndex) => (
-                <div key={sectionIndex} className="mb-6">
+              {selectedScorecard.sections.map((section, sectionIndex) => (
+                <div key={section.id || sectionIndex} className="mb-6">
                   <div className="-mx-4 sm:-mx-6 mb-4">
                     <div className="bg-card px-4 sm:px-6 py-2">
                       <EditableField
                         value={section.name}
                         onChange={(value) => {
-                          const updatedScoreDetails = [...parsedScoreDetails];
-                          updatedScoreDetails[sectionIndex] = { ...section, name: value };
-                          setSelectedScorecard({ ...selectedScorecard, scoreDetails: JSON.stringify(updatedScoreDetails) });
+                          const updatedSections = [...selectedScorecard.sections]
+                          updatedSections[sectionIndex] = { ...section, name: value }
+                          setSelectedScorecard({ ...selectedScorecard, sections: updatedSections })
                         }}
                         className="text-md font-semibold"
                       />
                     </div>
                   </div>
                   <div>
-                    {section.scores.map((score) => renderScoreItem(score, selectedScorecard.id))}
+                    {section.scores.map((score) => renderScoreItem(score, section.id))}
                   </div>
                   <div className="mt-4">
                     <Button variant="outline" onClick={() => handleAddScore(sectionIndex)}>
@@ -1105,7 +1299,7 @@ export default function ScorecardsComponent() {
           </div>
         </CardContent>
       </Card>
-    );
+    )
   }
 
   return (
@@ -1144,7 +1338,9 @@ export default function ScorecardsComponent() {
                               <div className="text-sm text-muted-foreground font-mono">
                                 {scorecard.externalId || 'No ID'} - {scorecard.key}
                               </div>
-                              <div className="text-sm text-muted-foreground mt-1">{scorecard.scores} scores</div>
+                              <div className="text-sm text-muted-foreground mt-1">
+                                <ScoreCount scorecard={scorecard} />
+                              </div>
                             </div>
                             <div className="flex items-center">
                               <Button 
@@ -1199,7 +1395,9 @@ export default function ScorecardsComponent() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="w-[20%] hidden @[630px]:table-cell text-right">{scorecard.scores}</TableCell>
+                    <TableCell className="w-[20%] hidden @[630px]:table-cell text-right">
+                      <ScoreCount scorecard={scorecard} />
+                    </TableCell>
                     <TableCell className="w-[10%] hidden @[630px]:table-cell text-right">
                       <div className="flex items-center justify-end space-x-2">
                         <Button 
@@ -1257,9 +1455,9 @@ export default function ScorecardsComponent() {
 
           {selectedScorecard && !isNarrowViewport && !isFullWidth && (
             <div className="flex-1 overflow-hidden">
-              {selectedScorecard.scoreDetails ? 
+              {selectedScorecard.sections.length > 0 ? 
                 renderSelectedItem() : 
-                <div>No score details configured yet</div>
+                <div>No sections configured yet</div>
               }
             </div>
           )}
