@@ -41,7 +41,7 @@ interface ScoreState {
   configuration: any
   distribution: any[]
   versionHistory: any[]
-  section?: Schema['Section']['type']
+  section?: Schema['ScorecardSection']['type']
   createdAt?: string
   updatedAt?: string
 }
@@ -135,7 +135,7 @@ function EditableField({ value, onChange, className = "" }: EditableFieldProps) 
 export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditProps) {
   const router = useRouter()
   const [score, setScore] = useState<ScoreState | null>(null)
-  const [section, setSection] = useState<Schema['Section']['type'] | null>(null)
+  const [section, setSection] = useState<Schema['ScorecardSection']['type'] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -148,7 +148,7 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
       setIsLoading(true)
       if (scoreId === 'new') {
         // For new scores, we need to fetch the section first
-        const sections = await client.models.Section.list({
+        const sections = await client.models.ScorecardSection.list({
           filter: {
             scorecardId: {
               eq: scorecardId
@@ -223,7 +223,7 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
         setScore(scoreData)
         
         // Fetch associated section
-        const sectionResult = await client.models.Section.get({
+        const sectionResult = await client.models.ScorecardSection.get({
           id: result.data.sectionId
         })
         

@@ -431,12 +431,12 @@ const getScoreCountForScorecard = async (scorecard: Schema['Scorecard']['type'])
     console.log('Data Store Client in getScoreCount:', client)
     console.log('Available models:', client.models)
     
-    if (!client?.models?.Section) {
+    if (!client?.models?.ScorecardSection) {
       console.error('Section model not available')
       return 0
     }
 
-    const sectionsResult = await client.models.Section.list({
+    const sectionsResult = await client.models.ScorecardSection.list({
       filter: {
         scorecardId: {
           eq: scorecard.id
@@ -609,7 +609,7 @@ export default function ScorecardsComponent() {
     
     try {
       // Fetch sections using Data Store
-      const sectionsResult = await client.models.Section.list({
+      const sectionsResult = await client.models.ScorecardSection.list({
         filter: {
           scorecardId: {
             eq: scorecard.id
@@ -699,7 +699,7 @@ export default function ScorecardsComponent() {
         
         // Create sections
         for (const section of selectedScorecard.sections) {
-          const sectionResult = await client.models.Section.create({
+          const sectionResult = await client.models.ScorecardSection.create({
             name: section.name,
             order: section.order,
             scorecardId: scorecardResult.data.id
@@ -740,13 +740,13 @@ export default function ScorecardsComponent() {
         // Update sections
         for (const section of selectedScorecard.sections) {
           if (section.id) {
-            await client.models.Section.update({
+            await client.models.ScorecardSection.update({
               id: section.id,
               name: section.name,
               order: section.order
             })
           } else {
-            await client.models.Section.create({
+            await client.models.ScorecardSection.create({
               name: section.name,
               order: section.order,
               scorecardId: selectedScorecard.id
@@ -977,7 +977,7 @@ export default function ScorecardsComponent() {
         } as any,
         sections: {
           get: async () => {
-            const result = await client.models.Section.list({
+            const result = await client.models.ScorecardSection.list({
               filter: {
                 scorecardId: { eq: selectedScorecard.id }
               }

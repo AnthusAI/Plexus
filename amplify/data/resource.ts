@@ -76,7 +76,7 @@ const schema = a.schema({
       description: a.string(),
       accountId: a.string().required(),
       account: a.belongsTo('Account', 'accountId'),
-      sections: a.hasMany('Section', 'scorecardId'),
+      sections: a.hasMany('ScorecardSection', 'scorecardId'),
     })
     .authorization((allow) => [allow.authenticated()])
     .secondaryIndexes((idx) => [

@@ -112,13 +112,13 @@ export function ScorecardForm({
         // Update sections
         for (const section of formData.sections) {
           if (section.id) {
-            await client.models.Section.update({
+            await client.models.ScorecardSection.update({
               id: section.id,
               name: section.name,
               order: section.order
             })
           } else {
-            await client.models.Section.create({
+            await client.models.ScorecardSection.create({
               name: section.name,
               order: section.order,
               scorecardId: formData.id
@@ -145,7 +145,7 @@ export function ScorecardForm({
 
         // Create sections
         for (const section of formData.sections) {
-          const sectionResult = await client.models.Section.create({
+          const sectionResult = await client.models.ScorecardSection.create({
             name: section.name,
             order: section.order,
             scorecardId: scorecardResult.data.id
