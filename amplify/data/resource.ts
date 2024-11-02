@@ -85,7 +85,7 @@ const schema = a.schema({
       idx("externalId")
     ]),
 
-  Section: a
+  ScorecardSection: a
     .model({
       name: a.string().required(),
       order: a.integer().required(),
@@ -106,7 +106,7 @@ const schema = a.schema({
       accuracy: a.float(),
       version: a.string(),
       sectionId: a.string().required(),
-      section: a.belongsTo('Section', 'sectionId'),
+      section: a.belongsTo('ScorecardSection', 'sectionId'),
       aiProvider: a.string(),
       aiModel: a.string(),
       isFineTuned: a.boolean(),
@@ -127,4 +127,4 @@ export const data = defineData({
   authorizationModes: {
     defaultAuthorizationMode: 'userPool'
   },
-});
+});``
