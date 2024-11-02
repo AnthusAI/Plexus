@@ -1,8 +1,8 @@
 "use client"
-import React, { useState, useRef, useEffect } from "react"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Check, X, Pencil } from "lucide-react"
+import { useState, useRef, useEffect } from "react"
+import { Input } from "./input"
+import { Button } from "./button"
+import { Pencil, Check, X } from "lucide-react"
 
 interface EditableFieldProps {
   value: string
@@ -27,9 +27,7 @@ export function EditableField({
     }
   }, [isEditing, autoFocus])
 
-  const handleEditToggle = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const handleEditToggle = () => {
     setIsEditing((prev) => !prev)
     setTempValue(value)
   }
@@ -66,7 +64,7 @@ export function EditableField({
             value={tempValue}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            className={`py-1 px-2 -ml-2 ${className}`}
+            className={`py-1 px-2 ${className}`}
           />
           <Button 
             variant="ghost" 
@@ -87,13 +85,7 @@ export function EditableField({
         </>
       ) : (
         <>
-          <span 
-            className={`cursor-pointer hover:bg-accent hover:text-accent-foreground 
-                       py-1 px-2 -ml-2 rounded border border-transparent 
-                       transition-colors duration-200 ${className}`}
-          >
-            {value}
-          </span>
+          <span className={`${className}`}>{value}</span>
           <Button 
             variant="ghost" 
             size="icon"
