@@ -78,6 +78,7 @@ export function ScorecardForm({
 }: ScorecardFormProps) {
   const [formData, setFormData] = useState<FormData>(() => initializeFormData(scorecard, accountId))
   const [sectionToDelete, setSectionToDelete] = useState<number | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
     if (scorecard) {
@@ -136,149 +137,212 @@ export function ScorecardForm({
   }
 
   async function handleSave() {
+    if (!formData || !accountId) {
+      console.log('Missing formData or accountId:', { formData, accountId })
+      return
+    }
+    
     try {
-      let scorecardId: string;
+      setIsSaving(true)
+      console.log('Starting save with formData:', formData)
+      let scorecardId: string
       
-      if (formData.id) {
-        // Update existing scorecard
-        const updateResult = await client.models.Scorecard.update({
-          id: formData.id,
+      if (!formData.id) {
+        console.log('Creating new scorecard...')
+        // Create new scorecard
+        const scorecardResult = await client.models.Scorecard.create({
           name: formData.name,
           key: formData.key,
+          externalId: formData.externalId,
           description: formData.description,
-          externalId: formData.externalId
+          accountId: formData.accountId
         })
         
-        if (!updateResult.data) {
-          throw new Error('Failed to update scorecard')
+        if (!scorecardResult.data) {
+          throw new Error('Failed to create scorecard')
+        }
+        scorecardId = scorecardResult.data.id
+        
+        // Create sections and their scores
+        for (const section of formData.sections) {
+          const sectionResult = await client.models.ScorecardSection.create({
+            name: section.name,
+            order: section.order,
+            scorecardId: scorecardId
+          })
+          
+          if (!sectionResult.data) {
+            throw new Error('Failed to create section')
+          }
+          
+          // Create scores for this section
+          for (const score of section.scores) {
+            await client.models.Score.create({
+              name: score.name,
+              type: score.type,
+              order: score.order,
+              sectionId: sectionResult.data.id,
+              accuracy: score.accuracy,
+              version: score.version,
+              aiProvider: score.aiProvider,
+              aiModel: score.aiModel,
+              isFineTuned: score.isFineTuned,
+              configuration: score.configuration,
+              distribution: score.distribution,
+              versionHistory: score.versionHistory
+            })
+          }
+        }
+      } else {
+        console.log('Updating existing scorecard:', formData.id)
+        scorecardId = formData.id
+        
+        const updateResult = await client.models.Scorecard.update({
+          id: scorecardId,
+          name: formData.name,
+          key: formData.key,
+          externalId: formData.externalId,
+          description: formData.description
+        })
+        console.log('Scorecard update result:', updateResult)
+        
+        // Handle sections and scores updates
+        console.log('Processing sections:', formData.sections)
+        for (const section of formData.sections) {
+          let sectionId: string
+          
+          if (section.id) {
+            console.log('Updating section:', section.id)
+            const updateResult = await client.models.ScorecardSection.update({
+              id: section.id,
+              name: section.name,
+              order: section.order
+            })
+            console.log('Section update result:', updateResult)
+            sectionId = section.id
+          } else {
+            console.log('Creating new section for scorecard:', scorecardId)
+            const sectionResult = await client.models.ScorecardSection.create({
+              name: section.name,
+              order: section.order,
+              scorecardId: scorecardId
+            })
+            console.log('New section result:', sectionResult)
+            if (!sectionResult.data) {
+              throw new Error('Failed to create section')
+            }
+            sectionId = sectionResult.data.id
+          }
+          
+          // Handle scores for this section
+          console.log('Processing scores for section:', sectionId, section.scores)
+          for (const score of section.scores) {
+            if (score.id && !score.id.startsWith('temp_')) {
+              console.log('Updating existing score:', score.id)
+              const updateResult = await client.models.Score.update({
+                id: score.id,
+                name: score.name,
+                type: score.type,
+                order: score.order,
+                sectionId: sectionId,
+                accuracy: score.accuracy,
+                version: score.version,
+                aiProvider: score.aiProvider,
+                aiModel: score.aiModel,
+                isFineTuned: score.isFineTuned,
+                configuration: score.configuration ? JSON.stringify(score.configuration) : null,
+                distribution: score.distribution ? JSON.stringify(score.distribution) : null,
+                versionHistory: score.versionHistory ? JSON.stringify(score.versionHistory) : null
+              })
+              console.log('Score update result:', updateResult)
+            } else {
+              console.log('Creating new score for section:', sectionId)
+              const createResult = await client.models.Score.create({
+                name: score.name,
+                type: score.type || 'Boolean',
+                order: score.order,
+                sectionId: sectionId,
+                accuracy: score.accuracy || 0,
+                version: score.version || Date.now().toString(),
+                aiProvider: score.aiProvider || undefined,
+                aiModel: score.aiModel || undefined,
+                isFineTuned: score.isFineTuned || false,
+                configuration: score.configuration ? JSON.stringify(score.configuration) : null,
+                distribution: score.distribution ? JSON.stringify(score.distribution) : null,
+                versionHistory: score.versionHistory ? JSON.stringify(score.versionHistory) : null
+              })
+              console.log('New score result:', createResult)
+              if (!createResult.data) {
+                console.error('Score creation failed:', createResult.errors)
+                throw new Error(`Failed to create score: ${JSON.stringify(createResult.errors)}`)
+              }
+
+              // Update formData with the real ID
+              const sectionIndex = formData.sections.findIndex(s => s.id === sectionId)
+              if (sectionIndex !== -1) {
+                const scoreIndex = formData.sections[sectionIndex].scores.findIndex(
+                  s => s.id === score.id
+                )
+                if (scoreIndex !== -1) {
+                  formData.sections[sectionIndex].scores[scoreIndex].id = createResult.data.id
+                }
+              }
+            }
+          }
         }
         
-        scorecardId = formData.id
-
-        // Get existing sections to handle deletions
+        // Handle score deletions
+        console.log('Checking for scores to delete...')
         const existingSections = await client.models.ScorecardSection.list({
           filter: {
             scorecardId: { eq: scorecardId }
           }
         })
-
-        // Delete sections that are no longer in formData
-        const currentSectionIds = new Set(formData.sections.map(s => s.id).filter(Boolean))
+        console.log('Existing sections:', existingSections)
+        
         for (const section of existingSections.data) {
-          if (!currentSectionIds.has(section.id)) {
-            // Delete scores first
-            const scores = await client.models.Score.list({
-              filter: {
-                sectionId: { eq: section.id }
-              }
-            })
-            
-            for (const score of scores.data) {
-              await client.models.Score.delete({
+          const existingScores = await client.models.Score.list({
+            filter: {
+              sectionId: { eq: section.id }
+            }
+          })
+          console.log('Existing scores for section:', section.id, existingScores)
+          
+          // Get current score IDs from form data
+          const currentScoreIds = new Set(
+            formData.sections
+              .find((s) => s.id && s.id === section.id)
+              ?.scores
+              .map(s => s.id)
+              ?? []
+          )
+          console.log('Current score IDs:', currentScoreIds)
+          
+          // Delete scores that are no longer in the form
+          for (const score of existingScores.data) {
+            if (!currentScoreIds.has(score.id)) {
+              console.log('Deleting score:', score.id)
+              const deleteResult = await client.models.Score.delete({
                 id: score.id
               })
+              console.log('Delete result:', deleteResult)
             }
-            
-            // Then delete the section
-            await client.models.ScorecardSection.delete({
-              id: section.id
-            })
-          }
-        }
-      } else {
-        // Create new scorecard
-        if (!formData.externalId?.trim()) {
-          throw new Error('External ID is required')
-        }
-
-        const createResult = await client.models.Scorecard.create({
-          name: formData.name,
-          key: formData.key,
-          description: formData.description,
-          accountId: formData.accountId,
-          externalId: formData.externalId.trim()
-        })
-        
-        if (!createResult.data) {
-          throw new Error('Failed to create scorecard')
-        }
-        
-        scorecardId = createResult.data.id
-      }
-
-      // Handle sections - process in order
-      for (let index = 0; index < formData.sections.length; index++) {
-        const section = formData.sections[index]
-        let sectionId: string;
-        
-        if (section.id) {
-          // Update existing section with new order
-          const updateResult = await client.models.ScorecardSection.update({
-            id: section.id,
-            name: section.name,
-            order: index // Use current array index as order
-          })
-          
-          if (!updateResult.data) continue
-          sectionId = section.id
-        } else {
-          // Create new section
-          const createResult = await client.models.ScorecardSection.create({
-            name: section.name,
-            order: index, // Use current array index as order
-            scorecardId: scorecardId
-          })
-          
-          if (!createResult.data) continue
-          sectionId = createResult.data.id
-        }
-
-        // Handle scores for this section
-        for (let scoreIndex = 0; scoreIndex < section.scores.length; scoreIndex++) {
-          const score = section.scores[scoreIndex]
-          if (score.id && !score.id.startsWith('temp_')) {
-            // Update existing score
-            await client.models.Score.update({
-              id: score.id,
-              name: score.name,
-              type: score.type,
-              order: scoreIndex,
-              sectionId: sectionId,
-              accuracy: score.accuracy,
-              version: score.version,
-              aiProvider: score.aiProvider,
-              aiModel: score.aiModel,
-              isFineTuned: score.isFineTuned,
-              configuration: score.configuration,
-              distribution: score.distribution,
-              versionHistory: score.versionHistory
-            })
-          } else {
-            // Create new score
-            await client.models.Score.create({
-              name: score.name,
-              type: score.type,
-              order: scoreIndex,
-              sectionId: sectionId,
-              accuracy: score.accuracy,
-              version: score.version,
-              aiProvider: score.aiProvider,
-              aiModel: score.aiModel,
-              isFineTuned: score.isFineTuned,
-              configuration: score.configuration,
-              distribution: score.distribution,
-              versionHistory: score.versionHistory
-            })
           }
         }
       }
-
+      
       // Wait for all updates to complete and data to sync
       await new Promise(resolve => setTimeout(resolve, 500))
+      console.log('Save completed successfully')
       onSave()
-    } catch (error) {
-      console.error('Operation failed:', error)
+    } catch (error: unknown) {
+      console.error('Error saving scorecard:', error)
+      if (error && typeof error === 'object' && 'errors' in error) {
+        console.error('Validation errors:', (error as { errors: unknown[] }).errors)
+      }
       throw error
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -506,11 +570,11 @@ export function ScorecardForm({
                     <ScoreItem
                       key={scoreIndex}
                       score={score}
-                      onEdit={() => {
+                      onEdit={(updatedScore) => {
                         const updatedScoreDetails = [...formData.sections]
                         updatedScoreDetails[sectionIndex].scores[scoreIndex] = {
                           ...score,
-                          name: score.name
+                          ...updatedScore
                         }
                         setFormData({ ...formData, sections: updatedScoreDetails })
                       }}
