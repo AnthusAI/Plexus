@@ -40,12 +40,10 @@ import { useRouter } from 'next/navigation'  // Change this import
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 import { ScorecardForm } from "./scorecards/create-edit-form"
-import { generateClient as generateGraphQLClient } from '@aws-amplify/api'
 import { Amplify } from 'aws-amplify'
 
 // Initialize both clients
 const client = generateClient<Schema>()
-const graphqlClient = generateGraphQLClient()
 
 const ACCOUNT_KEY = 'call-criteria';
 
@@ -432,7 +430,7 @@ const getScoreCountForScorecard = async (scorecard: Schema['Scorecard']['type'])
     console.log('Available models:', client.models)
     
     if (!client?.models?.ScorecardSection) {
-      console.error('Section model not available')
+      console.error('ScorecardSection model not available')
       return 0
     }
 
@@ -505,6 +503,7 @@ export default function ScorecardsComponent() {
   const [isDetailViewFresh, setIsDetailViewFresh] = useState(true)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [accountId, setAccountId] = useState<string | null>(null)
+  const [error, setError] = useState<Error | null>(null)
 
   // Move useEffect to the top level
   useEffect(() => {
@@ -514,9 +513,51 @@ export default function ScorecardsComponent() {
   }, [isDetailViewFresh, selectedScorecard]);
 
   useEffect(() => {
-    console.log('Fetching scorecards...')
-    fetchScorecards()
+    let isSubscribed = true
+    
+    const fetchData = async () => {
+      try {
+        setIsLoading(true)
+        const result = await fetchScorecards()
+        if (isSubscribed) {
+          setScorecards(result)
+        }
+      } finally {
+        if (isSubscribed) {
+          setIsLoading(false)
+        }
+      }
+    }
+    
+    fetchData()
+    
+    return () => {
+      isSubscribed = false
+    }
   }, [refreshTrigger])
+
+  useEffect(() => {
+    if (!accountId) return
+
+    // Subscribe to changes to scorecards for this account
+    const subscription = client.models.Scorecard.observeQuery({
+      filter: {
+        accountId: {
+          eq: accountId
+        }
+      }
+    }).subscribe({
+      next: ({ items }) => {
+        console.log('Received scorecard update:', items)
+        setScorecards(items)
+      },
+      error: (error) => console.error('Subscription error:', error)
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [accountId])
 
   const fetchScorecards = async () => {
     try {
@@ -535,44 +576,21 @@ export default function ScorecardsComponent() {
         const foundAccountId = accountResult.data[0].id
         setAccountId(foundAccountId)
         
-        // Use GraphQL query since it works
-        const query = /* GraphQL */ `
-          query ListScorecards {
-            listScorecards {
-              items {
-                id
-                name
-                key
-                externalId
-                accountId
-                description
-                createdAt
-                updatedAt
-              }
+        // Replace GraphQL query with DataStore query
+        const scorecardResult = await client.models.Scorecard.list({
+          filter: {
+            accountId: {
+              eq: foundAccountId
             }
           }
-        `
+        })
         
-        const result = await graphqlClient.graphql({ query })
-        const typedResult = result as {
-          data: {
-            listScorecards: {
-              items: Schema['Scorecard']['type'][]
-            }
-          }
-        }
-        
-        console.log('GraphQL result:', JSON.stringify(typedResult, null, 2))
-        
-        if (typedResult.data?.listScorecards?.items) {
-          setScorecards(typedResult.data.listScorecards.items)
-        } else {
-          setScorecards([])
-        }
+        return scorecardResult.data
       }
     } catch (error) {
       console.error('Error fetching scorecards:', error)
       setScorecards([])
+      setError(error as Error)
     } finally {
       setIsLoading(false)
     }
@@ -580,6 +598,14 @@ export default function ScorecardsComponent() {
 
   if (isLoading) {
     return <div>Loading scorecards...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 text-red-500">
+        Error loading scorecards: {error.message}
+      </div>
+    )
   }
 
   const handleCreate = () => {
@@ -608,71 +634,86 @@ export default function ScorecardsComponent() {
     }
     
     try {
-      // Fetch sections using Data Store
+      // First get the full scorecard with its relationships
+      const fullScorecard = await client.models.Scorecard.get({ id: scorecard.id })
+      if (!fullScorecard.data) {
+        throw new Error('Scorecard not found')
+      }
+      
+      // Fetch sections and sort by order
       const sectionsResult = await client.models.ScorecardSection.list({
         filter: {
-          scorecardId: {
-            eq: scorecard.id
-          }
+          scorecardId: { eq: scorecard.id }
         }
       })
       
+      // Sort sections by order
+      const sortedSections = sectionsResult.data.sort((a, b) => a.order - b.order)
+      
       // For each section, fetch its scores
-      const sections = await Promise.all(
-        sectionsResult.data.map(async (section) => {
+      const sectionsWithScores = await Promise.all(
+        sortedSections.map(async (section) => {
           const scoresResult = await client.models.Score.list({
             filter: {
-              sectionId: {
-                eq: section.id
-              }
+              sectionId: { eq: section.id }
             }
           })
+          
+          // Sort scores by order
+          const sortedScores = scoresResult.data.sort((a, b) => a.order - b.order)
           
           return {
             id: section.id,
             name: section.name,
             order: section.order,
-            scores: scoresResult.data.map(score => ({
+            scores: sortedScores.map(score => ({
               id: score.id,
               name: score.name,
               type: score.type,
               order: score.order,
               accuracy: score.accuracy ?? 0,
               version: score.version ?? '',
-              aiProvider: score.aiProvider ?? undefined,
-              aiModel: score.aiModel ?? undefined,
-              isFineTuned: score.isFineTuned ?? false,
-              configuration: score.configuration ?? undefined,
-              distribution: score.distribution ?? undefined,
-              versionHistory: score.versionHistory ?? undefined
+              timestamp: new Date(),
+              aiProvider: score.aiProvider,
+              aiModel: score.aiModel,
+              isFineTuned: score.isFineTuned,
+              configuration: score.configuration,
+              distribution: score.distribution ?? [],
+              versionHistory: score.versionHistory ?? []
             }))
           }
         })
       )
       
-      const parsedScorecard: ParsedScorecard = {
-        id: scorecard.id,
-        name: scorecard.name,
-        key: scorecard.key,
-        externalId: scorecard.externalId,
-        description: scorecard.description ?? undefined,
-        accountId: scorecard.accountId,
-        sections,
-        createdAt: scorecard.createdAt,
-        updatedAt: scorecard.updatedAt
+      // Create the full scorecard object
+      const fullScorecardData = {
+        ...fullScorecard.data,
+        sections: sectionsWithScores
       }
       
-      setSelectedScorecard(parsedScorecard)
+      setSelectedScorecard(fullScorecardData)
       setIsEditing(true)
       setEditingScore(null)
       setIsDetailViewFresh(true)
     } catch (error) {
-      console.error('Error fetching sections:', error)
+      console.error('Error fetching scorecard details:', error)
     }
   }
 
-  const handleDelete = (id: string) => {
-    setScorecards(scorecards.filter(scorecard => scorecard.id !== id))
+  const handleDelete = async (id: string) => {
+    // Optimistically update UI
+    setScorecards(prev => prev.filter(sc => sc.id !== id))
+    
+    try {
+      await client.models.Scorecard.delete({
+        id
+      })
+    } catch (error) {
+      console.error('Error deleting scorecard:', error)
+      // Revert on error
+      fetchScorecards()
+    }
+    
     if (selectedScorecard && selectedScorecard.id === id) {
       setSelectedScorecard(null)
       setIsEditing(false)
@@ -953,352 +994,39 @@ export default function ScorecardsComponent() {
   )
 
   const renderSelectedItem = () => {
-    if (isEditing) {
-      if (!accountId) {
-        return <div>Loading account information...</div>
-      }
-      
-      const formScorecard = selectedScorecard ? {
-        id: selectedScorecard.id,
-        name: selectedScorecard.name,
-        key: selectedScorecard.key,
-        externalId: selectedScorecard.externalId,
-        description: selectedScorecard.description,
-        accountId: selectedScorecard.accountId,
-        createdAt: selectedScorecard.createdAt,
-        updatedAt: selectedScorecard.updatedAt,
-        account: {
-          get: async () => {
-            const result = await client.models.Account.get({ 
-              id: accountId
-            })
-            return result.data
-          }
-        } as any,
-        sections: {
-          get: async () => {
-            const result = await client.models.ScorecardSection.list({
-              filter: {
-                scorecardId: { eq: selectedScorecard.id }
-              }
-            })
-            return result.data
-          }
-        } as any
-      } : null
-      
-      return (
-        <ScorecardForm
-          scorecard={formScorecard as Schema['Scorecard']['type']}
-          accountId={accountId}
-          onSave={() => {
-            setIsEditing(false)
-            setSelectedScorecard(null)
-            setRefreshTrigger(prev => prev + 1)
-          }}
-          onCancel={() => {
-            setIsEditing(false)
-            setSelectedScorecard(null)
-          }}
-          isFullWidth={isFullWidth}
-          onToggleWidth={() => setIsFullWidth(!isFullWidth)}
-          isNarrowViewport={isNarrowViewport}
-        />
-      )
-    }
-
     if (!selectedScorecard) {
       return <div>No scorecard selected</div>
     }
 
-    if (!selectedScorecard.sections || selectedScorecard.sections.length === 0) {
-      return <div>No sections configured yet</div>
-    }
-
-    const renderScoreItem = (score: ParsedScorecard['sections'][0]['scores'][0], sectionId: string) => {
-      const latestVersion = score.versionHistory?.[0] ?? {
-        version: score.version,
-        accuracy: score.accuracy,
-        distribution: score.distribution ?? [
-          { category: "Positive", value: score.accuracy },
-          { category: "Negative", value: 100 - score.accuracy }
-        ]
+    const formScorecard = {
+      ...selectedScorecard,
+      account: {
+        get: async () => {
+          const result = await client.models.Account.get({ 
+            id: selectedScorecard.accountId 
+          })
+          return result.data
+        }
       }
-
-      const totalItems = latestVersion.distribution?.reduce((sum: number, item: DistributionItem) => 
-        sum + item.value, 0) ?? 0
-
-      return (
-        <div key={score.id} className="py-4 border-b last:border-b-0">
-          <div className="flex justify-between items-start mb-1">
-            <div className="flex flex-col">
-              <h5 className="text-sm font-medium">{score.name}</h5>
-              <div className="text-xs text-muted-foreground mt-1 space-y-1">
-                <div className="font-mono">LangGraphScore</div>
-                <div className="flex flex-wrap gap-1">
-                  <Badge className="bg-muted-foreground text-muted">
-                    {score.aiProvider || 'OpenAI'}
-                  </Badge>
-                  <Badge className="bg-muted-foreground text-muted">
-                    {score.aiModel || 'gpt-4-mini'}
-                  </Badge>
-                  {score.isFineTuned && <Badge variant="secondary">Fine-tuned</Badge>}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="text-xs"
-                onClick={() => handleEditScore(selectedScorecard.id, score.id)}
-              >
-                <Pencil className="h-4 w-4 mr-1" />
-                Edit
-              </Button>
-            </div>
-          </div>
-          <div className="flex items-center justify-end mt-2">
-            <div className="text-right mr-4">
-              <div className="text-lg font-bold">
-                {latestVersion.accuracy}% / {totalItems}
-              </div>
-              <div className="text-sm text-muted-foreground">
-                Accuracy
-              </div>
-            </div>
-            <div className="w-[80px] h-[80px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={latestVersion.distribution}
-                    dataKey="value"
-                    nameKey="category"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={0}
-                    outerRadius={30}
-                    fill="var(--true)"
-                    strokeWidth={0}
-                  >
-                    {latestVersion.distribution.map((entry: DistributionItem, index: number) => (
-                      <Cell key={`cell-${index}`} fill={index === 0 ? "var(--true)" : "var(--false)"} />
-                    ))}
-                  </Pie>
-                  <Pie
-                    data={[
-                      { category: "Positive", value: 50 },
-                      { category: "Negative", value: 50 },
-                    ]}
-                    dataKey="value"
-                    nameKey="category"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={35}
-                    outerRadius={40}
-                    fill="var(--chart-2)"
-                    strokeWidth={0}
-                  >
-                    {[0, 1].map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={index === 0 ? "var(--true)" : "var(--false)"} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <Collapsible className="w-full mt-2">
-            <CollapsibleTrigger className="flex items-center text-sm text-muted-foreground">
-              <span>Version History</span>
-              <ChevronDown className="h-4 w-4 ml-1" />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="border-l-4 border-primary pl-4 mt-2">
-              <div className="max-h-80 overflow-y-auto pr-4">
-                <div className="space-y-4">
-                  {score.versionHistory.map((version: VersionHistoryItem, index: number) => (
-                    <div key={index} className="border-b last:border-b-0 pb-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="text-sm font-medium">
-                            Version {version.version.substring(0, 7)}
-                            {index === 0 && (
-                              <span className="ml-2 text-xs bg-secondary text-secondary-foreground px-2 py-1 rounded-full">
-                                Current
-                              </span>
-                            )}
-                          </div>
-                          {version.parent && (
-                            <div className="text-xs text-muted-foreground">
-                              Parent: <a href="#" className="text-primary hover:underline" onClick={(e) => {
-                                e.preventDefault();
-                                console.log(`Navigate to parent version: ${version.parent}`);
-                              }}>{version.parent.substring(0, 7)}</a>
-                            </div>
-                          )}
-                          <div className="text-xs text-muted-foreground">
-                            {formatDistanceToNow(version.timestamp, { addSuffix: true })}
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          {index !== 0 && (
-                            <Button variant="outline" size="sm">Use</Button>
-                          )}
-                          <Button variant="outline" size="sm">Edit</Button>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-end mt-2">
-                        <div className="text-right mr-4">
-                          <div className="text-lg font-bold">
-                            {version.accuracy}% / {version.distribution.reduce((sum: number, item: DistributionItem) => 
-                              sum + item.value, 0)}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            Accuracy
-                          </div>
-                        </div>
-                        <div className="w-[60px] h-[60px]">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                              <Pie
-                                data={version.distribution}
-                                dataKey="value"
-                                nameKey="category"
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={0}
-                                outerRadius={25}
-                                fill="var(--true)"
-                                strokeWidth={0}
-                              >
-                                {version.distribution.map((entry: DistributionItem, index: number) => (
-                                  <Cell key={`cell-${index}`} fill={index === 0 ? "var(--true)" : "var(--false)"} />
-                                ))}
-                              </Pie>
-                              <Pie
-                                data={[
-                                  { category: "Positive", value: 50 },
-                                  { category: "Negative", value: 50 },
-                                ]}
-                                dataKey="value"
-                                nameKey="category"
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={27}
-                                outerRadius={30}
-                                fill="var(--chart-2)"
-                                strokeWidth={0}
-                              >
-                                {[0, 1].map((_, index) => (
-                                  <Cell key={`cell-${index}`} fill={index === 0 ? "var(--true)" : "var(--false)"} />
-                                ))}
-                              </Pie>
-                            </PieChart>
-                          </ResponsiveContainer>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        </div>
-      );
-    };
-
-    const handleAddSection = async () => {
-      if (!selectedScorecard) return
-      
-      const maxOrder = Math.max(0, ...selectedScorecard.sections.map(s => s.order))
-      
-      const newSection = {
-        id: '',
-        name: "New section",
-        order: maxOrder + 1,
-        scores: []
-      }
-      
-      setSelectedScorecard({
-        ...selectedScorecard,
-        sections: [...selectedScorecard.sections, newSection]
-      })
     }
 
     return (
-      <Card className="rounded-none sm:rounded-lg h-full flex flex-col bg-card-light border-none">
-        <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between py-4 px-4 sm:px-6 space-y-0">
-          <div className="flex-grow">
-            <EditableField
-              value={selectedScorecard.name}
-              onChange={(value) => setSelectedScorecard({ ...selectedScorecard, name: value })}
-              className="text-xl font-semibold"
-            />
-          </div>
-          <div className="flex ml-2">
-            {!isNarrowViewport && (
-              <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
-                {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-              </Button>
-            )}
-            <Button variant="outline" size="icon" onClick={() => {
-              setSelectedScorecard(null);
-              setIsFullWidth(false);
-              setIsDetailViewFresh(true);
-            }} className="ml-2">
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="flex-grow overflow-auto px-4 sm:px-6 pb-4">
-          <div className="space-y-4">
-            <div className="flex justify-between">
-              <EditableField 
-                value={selectedScorecard.key} 
-                onChange={(value) => setSelectedScorecard({ ...selectedScorecard, key: value })}
-                className="font-mono"
-              />
-              <EditableField 
-                value={selectedScorecard.id} 
-                onChange={(value) => setSelectedScorecard({ ...selectedScorecard, id: value })}
-                className="font-mono"
-              />
-            </div>
-            
-            <div className="mt-8">
-              {selectedScorecard.sections.map((section, sectionIndex) => (
-                <div key={section.id || sectionIndex} className="mb-6">
-                  <div className="-mx-4 sm:-mx-6 mb-4">
-                    <div className="bg-card px-4 sm:px-6 py-2">
-                      <EditableField
-                        value={section.name}
-                        onChange={(value) => {
-                          const updatedSections = [...selectedScorecard.sections]
-                          updatedSections[sectionIndex] = { ...section, name: value }
-                          setSelectedScorecard({ ...selectedScorecard, sections: updatedSections })
-                        }}
-                        className="text-md font-semibold"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    {section.scores.map((score) => renderScoreItem(score, section.id))}
-                  </div>
-                  <div className="mt-4">
-                    <Button variant="outline" onClick={() => handleAddScore(sectionIndex)}>
-                      <Plus className="mr-2 h-4 w-4" /> Create Score
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              <div className="mt-6">
-                <Button variant="outline" onClick={handleAddSection}>
-                  <Plus className="mr-2 h-4 w-4" /> Create Section
-                </Button>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <ScorecardForm
+        scorecard={formScorecard as Schema['Scorecard']['type']}
+        accountId={accountId!}
+        onSave={async () => {
+          await fetchScorecards()
+          setIsEditing(false)
+          setSelectedScorecard(null)
+        }}
+        onCancel={() => {
+          setIsEditing(false)
+          setSelectedScorecard(null)
+        }}
+        isFullWidth={isFullWidth}
+        onToggleWidth={() => setIsFullWidth(!isFullWidth)}
+        isNarrowViewport={isNarrowViewport}
+      />
     )
   }
 
@@ -1455,10 +1183,7 @@ export default function ScorecardsComponent() {
 
           {selectedScorecard && !isNarrowViewport && !isFullWidth && (
             <div className="flex-1 overflow-hidden">
-              {selectedScorecard.sections.length > 0 ? 
-                renderSelectedItem() : 
-                <div>No sections configured yet</div>
-              }
+              {renderSelectedItem()}
             </div>
           )}
         </div>
@@ -1466,3 +1191,4 @@ export default function ScorecardsComponent() {
     </div>
   )
 }
+
