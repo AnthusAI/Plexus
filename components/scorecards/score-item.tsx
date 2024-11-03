@@ -38,7 +38,7 @@ interface ScoreItemProps {
     aiModel?: string
     isFineTuned?: boolean
   }
-  onEdit?: () => void
+  onEdit: (score: ScoreItemProps['score']) => void
 }
 
 // Add type for version

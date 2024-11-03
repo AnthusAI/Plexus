@@ -234,7 +234,8 @@ export function ScorecardForm({
         }
 
         // Handle scores for this section
-        for (const [scoreIndex, score] of section.scores.entries()) {
+        for (let scoreIndex = 0; scoreIndex < section.scores.length; scoreIndex++) {
+          const score = section.scores[scoreIndex]
           if (score.id && !score.id.startsWith('temp_')) {
             // Update existing score
             await client.models.Score.update({

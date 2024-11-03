@@ -397,7 +397,7 @@ interface ParsedScorecard {
   name: string
   key: string
   externalId: string
-  description?: string
+  description: string | undefined
   accountId: string
   sections: Array<{
     id: string
@@ -410,12 +410,19 @@ interface ParsedScorecard {
       order: number
       accuracy: number
       version: string
+      timestamp: Date
       aiProvider?: string
       aiModel?: string
       isFineTuned?: boolean
       configuration?: any
-      distribution?: any
-      versionHistory?: any
+      distribution: Array<{ category: string; value: number }>
+      versionHistory: Array<{
+        version: string
+        parent: string | null
+        timestamp: Date
+        accuracy: number
+        distribution: Array<{ category: string; value: number }>
+      }>
     }>
   }>
   createdAt: string
@@ -520,7 +527,7 @@ export default function ScorecardsComponent() {
         setIsLoading(true)
         const result = await fetchScorecards()
         if (isSubscribed) {
-          setScorecards(result)
+          setScorecards(result || [])
         }
       } finally {
         if (isSubscribed) {
@@ -587,10 +594,13 @@ export default function ScorecardsComponent() {
         
         return scorecardResult.data
       }
+      
+      // Return empty array if no account found
+      return []
     } catch (error) {
       console.error('Error fetching scorecards:', error)
-      setScorecards([])
       setError(error as Error)
+      return [] // Return empty array on error
     } finally {
       setIsLoading(false)
     }
@@ -659,14 +669,10 @@ export default function ScorecardsComponent() {
             }
           })
           
-          // Sort scores by order
-          const sortedScores = scoresResult.data.sort((a, b) => a.order - b.order)
-          
-          return {
-            id: section.id,
-            name: section.name,
-            order: section.order,
-            scores: sortedScores.map(score => ({
+          // Sort scores by order and handle nullable fields
+          const sortedScores = scoresResult.data
+            .sort((a, b) => a.order - b.order)
+            .map(score => ({
               id: score.id,
               name: score.name,
               type: score.type,
@@ -674,21 +680,34 @@ export default function ScorecardsComponent() {
               accuracy: score.accuracy ?? 0,
               version: score.version ?? '',
               timestamp: new Date(),
-              aiProvider: score.aiProvider,
-              aiModel: score.aiModel,
-              isFineTuned: score.isFineTuned,
-              configuration: score.configuration,
-              distribution: score.distribution ?? [],
-              versionHistory: score.versionHistory ?? []
+              aiProvider: score.aiProvider ?? undefined,
+              aiModel: score.aiModel ?? undefined,
+              isFineTuned: score.isFineTuned ?? undefined,
+              configuration: score.configuration ?? undefined,
+              distribution: Array.isArray(score.distribution) ? score.distribution : [],
+              versionHistory: Array.isArray(score.versionHistory) ? score.versionHistory : []
             }))
+          
+          return {
+            id: section.id,
+            name: section.name,
+            order: section.order,
+            scores: sortedScores
           }
         })
       )
       
-      // Create the full scorecard object
-      const fullScorecardData = {
-        ...fullScorecard.data,
-        sections: sectionsWithScores
+      // Create the full scorecard object with proper type conversion
+      const fullScorecardData: ParsedScorecard = {
+        id: fullScorecard.data.id,
+        name: fullScorecard.data.name,
+        key: fullScorecard.data.key,
+        externalId: fullScorecard.data.externalId,
+        description: fullScorecard.data.description ?? undefined,
+        accountId: fullScorecard.data.accountId,
+        sections: sectionsWithScores,
+        createdAt: fullScorecard.data.createdAt,
+        updatedAt: fullScorecard.data.updatedAt
       }
       
       setSelectedScorecard(fullScorecardData)
@@ -809,27 +828,41 @@ export default function ScorecardsComponent() {
     setEditingScore(null)
   }
 
-  const handleAddScore = async (sectionIndex: number) => {
+  const handleAddScore = (sectionIndex: number) => {
     if (!selectedScorecard) return
     
     const section = selectedScorecard.sections[sectionIndex]
     const maxOrder = Math.max(0, ...section.scores.map(s => s.order))
+    const now = new Date()
     
-    const newScore = {
-      id: '',
+    const newScore: ParsedScorecard['sections'][0]['scores'][0] = {
+      id: `temp_${Date.now()}`,
       name: "New Score",
-      type: "LangGraphScore",
+      type: "Boolean",
       order: maxOrder + 1,
       accuracy: 0,
       version: Date.now().toString(),
+      timestamp: now,
       aiProvider: "OpenAI",
-      aiModel: "gpt-4",
+      aiModel: "gpt-4-turbo",
       isFineTuned: false,
       configuration: {},
-      distribution: [],
-      versionHistory: []
+      distribution: [
+        { category: "Positive", value: 0 },
+        { category: "Negative", value: 0 }
+      ],
+      versionHistory: [{
+        version: Date.now().toString(),
+        parent: null,
+        timestamp: now,
+        accuracy: 0,
+        distribution: [
+          { category: "Positive", value: 0 },
+          { category: "Negative", value: 0 }
+        ]
+      }]
     }
-    
+
     const updatedSections = [...selectedScorecard.sections]
     updatedSections[sectionIndex] = {
       ...section,
@@ -840,18 +873,21 @@ export default function ScorecardsComponent() {
       ...selectedScorecard,
       sections: updatedSections
     })
+    setEditingScore(null)
   }
 
   const handleSaveScore = () => {
     if (!selectedScorecard || !editingScore) return
     
-    const newScore = {
+    const now = new Date()
+    const newScore: ParsedScorecard['sections'][0]['scores'][0] = {
       id: editingScore.id || '',
       name: editingScore.name,
       type: editingScore.type,
       order: 0, // Will be set properly when saving
       accuracy: 0,
       version: Date.now().toString(),
+      timestamp: now,
       aiProvider: "OpenAI",
       aiModel: "gpt-4",
       isFineTuned: false,
@@ -998,21 +1034,25 @@ export default function ScorecardsComponent() {
       return <div>No scorecard selected</div>
     }
 
-    const formScorecard = {
+    // Create a properly typed account loader
+    const formScorecard: Schema['Scorecard']['type'] = {
       ...selectedScorecard,
       account: {
-        get: async () => {
+        get: async (options?: { 
+          headers?: Record<string, string>
+        }) => {
           const result = await client.models.Account.get({ 
             id: selectedScorecard.accountId 
           })
-          return result.data
+          return result
         }
-      }
+      } as any,
+      sections: selectedScorecard.sections as any
     }
 
     return (
       <ScorecardForm
-        scorecard={formScorecard as Schema['Scorecard']['type']}
+        scorecard={formScorecard}
         accountId={accountId!}
         onSave={async () => {
           await fetchScorecards()
