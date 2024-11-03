@@ -2,12 +2,22 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, X, Square, Columns2 } from "lucide-react"
+import { Plus, X, Square, Columns2, ChevronUp, ChevronDown } from "lucide-react"
 import { generateClient } from "aws-amplify/data"
 import { generateClient as generateGraphQLClient } from '@aws-amplify/api'
 import type { Schema } from "@/amplify/data/resource"
 import { EditableField } from "@/components/ui/editable-field"
 import { ScoreItem } from "../score-item"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 const client = generateClient<Schema>()
 const graphqlClient = generateGraphQLClient()
@@ -67,6 +77,7 @@ export function ScorecardForm({
   isNarrowViewport = false
 }: ScorecardFormProps) {
   const [formData, setFormData] = useState<FormData>(() => initializeFormData(scorecard, accountId))
+  const [sectionToDelete, setSectionToDelete] = useState<number | null>(null)
 
   useEffect(() => {
     if (scorecard) {
@@ -86,6 +97,11 @@ export function ScorecardForm({
 
     if (!scorecard) return defaultData
 
+    // Ensure sections are sorted by order
+    const sections = Array.isArray(scorecard.sections) ? 
+      [...scorecard.sections].sort((a, b) => a.order - b.order) : 
+      []
+
     return {
       id: scorecard.id,
       name: scorecard.name,
@@ -93,15 +109,39 @@ export function ScorecardForm({
       description: scorecard.description ?? "",
       externalId: scorecard.externalId,
       accountId,
-      sections: [] // Sections will be loaded separately via the relationship
+      sections: sections.map(section => ({
+        id: section.id,
+        name: section.name,
+        order: section.order,
+        scores: Array.isArray(section.scores) ? 
+          [...section.scores]
+            .sort((a, b) => a.order - b.order)
+            .map(score => ({
+              id: score.id,
+              name: score.name,
+              type: score.type,
+              order: score.order,
+              accuracy: score.accuracy ?? 0,
+              version: score.version ?? Date.now().toString(),
+              timestamp: new Date(),
+              aiProvider: score.aiProvider ?? 'OpenAI',
+              aiModel: score.aiModel ?? 'gpt-4',
+              isFineTuned: score.isFineTuned ?? false,
+              configuration: score.configuration ?? {},
+              distribution: score.distribution ?? [],
+              versionHistory: score.versionHistory ?? []
+            })) : []
+      }))
     }
   }
 
   async function handleSave() {
     try {
+      let scorecardId: string;
+      
       if (formData.id) {
         // Update existing scorecard
-        await client.models.Scorecard.update({
+        const updateResult = await client.models.Scorecard.update({
           id: formData.id,
           name: formData.name,
           key: formData.key,
@@ -109,19 +149,39 @@ export function ScorecardForm({
           externalId: formData.externalId
         })
         
-        // Update sections
-        for (const section of formData.sections) {
-          if (section.id) {
-            await client.models.ScorecardSection.update({
-              id: section.id,
-              name: section.name,
-              order: section.order
+        if (!updateResult.data) {
+          throw new Error('Failed to update scorecard')
+        }
+        
+        scorecardId = formData.id
+
+        // Get existing sections to handle deletions
+        const existingSections = await client.models.ScorecardSection.list({
+          filter: {
+            scorecardId: { eq: scorecardId }
+          }
+        })
+
+        // Delete sections that are no longer in formData
+        const currentSectionIds = new Set(formData.sections.map(s => s.id).filter(Boolean))
+        for (const section of existingSections.data) {
+          if (!currentSectionIds.has(section.id)) {
+            // Delete scores first
+            const scores = await client.models.Score.list({
+              filter: {
+                sectionId: { eq: section.id }
+              }
             })
-          } else {
-            await client.models.ScorecardSection.create({
-              name: section.name,
-              order: section.order,
-              scorecardId: formData.id
+            
+            for (const score of scores.data) {
+              await client.models.Score.delete({
+                id: score.id
+              })
+            }
+            
+            // Then delete the section
+            await client.models.ScorecardSection.delete({
+              id: section.id
             })
           }
         }
@@ -131,7 +191,7 @@ export function ScorecardForm({
           throw new Error('External ID is required')
         }
 
-        const scorecardResult = await client.models.Scorecard.create({
+        const createResult = await client.models.Scorecard.create({
           name: formData.name,
           key: formData.key,
           description: formData.description,
@@ -139,27 +199,66 @@ export function ScorecardForm({
           externalId: formData.externalId.trim()
         })
         
-        if (!scorecardResult.data) {
+        if (!createResult.data) {
           throw new Error('Failed to create scorecard')
         }
+        
+        scorecardId = createResult.data.id
+      }
 
-        // Create sections
-        for (const section of formData.sections) {
-          const sectionResult = await client.models.ScorecardSection.create({
+      // Handle sections - process in order
+      for (let index = 0; index < formData.sections.length; index++) {
+        const section = formData.sections[index]
+        let sectionId: string;
+        
+        if (section.id) {
+          // Update existing section with new order
+          const updateResult = await client.models.ScorecardSection.update({
+            id: section.id,
             name: section.name,
-            order: section.order,
-            scorecardId: scorecardResult.data.id
+            order: index // Use current array index as order
           })
           
-          if (!sectionResult.data) continue
+          if (!updateResult.data) continue
+          sectionId = section.id
+        } else {
+          // Create new section
+          const createResult = await client.models.ScorecardSection.create({
+            name: section.name,
+            order: index, // Use current array index as order
+            scorecardId: scorecardId
+          })
+          
+          if (!createResult.data) continue
+          sectionId = createResult.data.id
+        }
 
-          // Create scores
-          for (const score of section.scores) {
+        // Handle scores for this section
+        for (const [scoreIndex, score] of section.scores.entries()) {
+          if (score.id && !score.id.startsWith('temp_')) {
+            // Update existing score
+            await client.models.Score.update({
+              id: score.id,
+              name: score.name,
+              type: score.type,
+              order: scoreIndex,
+              sectionId: sectionId,
+              accuracy: score.accuracy,
+              version: score.version,
+              aiProvider: score.aiProvider,
+              aiModel: score.aiModel,
+              isFineTuned: score.isFineTuned,
+              configuration: score.configuration,
+              distribution: score.distribution,
+              versionHistory: score.versionHistory
+            })
+          } else {
+            // Create new score
             await client.models.Score.create({
               name: score.name,
               type: score.type,
-              order: score.order,
-              sectionId: sectionResult.data.id,
+              order: scoreIndex,
+              sectionId: sectionId,
               accuracy: score.accuracy,
               version: score.version,
               aiProvider: score.aiProvider,
@@ -172,7 +271,9 @@ export function ScorecardForm({
           }
         }
       }
-      
+
+      // Wait for all updates to complete and data to sync
+      await new Promise(resolve => setTimeout(resolve, 500))
       onSave()
     } catch (error) {
       console.error('Operation failed:', error)
@@ -266,6 +367,39 @@ export function ScorecardForm({
     }
   }
 
+  const handleMoveSection = (index: number, direction: 'up' | 'down') => {
+    const newSections = [...formData.sections]
+    const newIndex = direction === 'up' ? index - 1 : index + 1
+    
+    // Swap sections
+    const temp = newSections[index]
+    newSections[index] = newSections[newIndex]
+    newSections[newIndex] = temp
+    
+    // Update order values
+    newSections[index].order = index
+    newSections[newIndex].order = newIndex
+    
+    setFormData({
+      ...formData,
+      sections: newSections
+    })
+  }
+
+  const handleDeleteSection = (sectionIndex: number) => {
+    const updatedSections = [...formData.sections]
+    updatedSections.splice(sectionIndex, 1)
+    // Update order values for remaining sections
+    updatedSections.forEach((section, index) => {
+      section.order = index
+    })
+    setFormData({
+      ...formData,
+      sections: updatedSections
+    })
+    setSectionToDelete(null)
+  }
+
   return (
     <div className="border text-card-foreground shadow rounded-none 
                     sm:rounded-lg h-full flex flex-col bg-card-light border-none">
@@ -315,23 +449,57 @@ export function ScorecardForm({
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
-        <div className="space-y-4">
-          <div className="mt-8">
+        <div className="space-y-8">
+          {/* Sections list */}
+          <div className="space-y-8">
             {formData.sections.map((section, sectionIndex) => (
-              <div key={sectionIndex} className="mb-6">
-                <div className="-mx-4 sm:-mx-6 mb-4">
-                  <div className="bg-card px-4 sm:px-6 py-2">
-                    <EditableField
-                      value={section.name}
-                      onChange={(value: string) => {
-                        const updatedScoreDetails = [...formData.sections]
-                        updatedScoreDetails[sectionIndex] = { ...section, name: value }
-                        setFormData({ ...formData, sections: updatedScoreDetails })
-                      }}
-                      className="text-md font-semibold"
-                    />
+              <div key={sectionIndex}>
+                <div className="flex justify-between items-center mb-2">
+                  <EditableField
+                    value={section.name}
+                    onChange={(value: string) => {
+                      const updatedScoreDetails = [...formData.sections]
+                      updatedScoreDetails[sectionIndex] = { ...section, name: value }
+                      setFormData({ ...formData, sections: updatedScoreDetails })
+                    }}
+                    className="text-2xl font-semibold"
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => setSectionToDelete(sectionIndex)}
+                      disabled={section.scores.length > 0}
+                      className={section.scores.length > 0 ? 'opacity-30' : ''}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => handleMoveSection(sectionIndex, 'up')}
+                      disabled={sectionIndex === 0}
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => handleMoveSection(sectionIndex, 'down')}
+                      disabled={sectionIndex === formData.sections.length - 1}
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleAddScore(sectionIndex)}
+                    >
+                      <Plus className="mr-2 h-4 w-4" /> Create Score
+                    </Button>
                   </div>
                 </div>
+                <hr className="mb-4" />
                 <div>
                   {section.scores.map((score, scoreIndex) => (
                     <ScoreItem
@@ -348,18 +516,15 @@ export function ScorecardForm({
                     />
                   ))}
                 </div>
-                <div className="mt-4">
-                  <Button variant="outline" onClick={() => handleAddScore(sectionIndex)}>
-                    <Plus className="mr-2 h-4 w-4" /> Create Score
-                  </Button>
-                </div>
               </div>
             ))}
-            <div className="mt-6">
-              <Button variant="outline" onClick={handleAddSection}>
-                <Plus className="mr-2 h-4 w-4" /> Create Section
-              </Button>
-            </div>
+          </div>
+
+          {/* Create Section button at bottom */}
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={handleAddSection}>
+              <Plus className="mr-2 h-4 w-4" /> Create Section
+            </Button>
           </div>
         </div>
       </div>
@@ -371,6 +536,32 @@ export function ScorecardForm({
           <Button onClick={handleSave}>Save Scorecard</Button>
         </div>
       </div>
+
+      <AlertDialog 
+        open={sectionToDelete !== null} 
+        onOpenChange={() => setSectionToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Section</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this section? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                if (sectionToDelete !== null) {
+                  handleDeleteSection(sectionToDelete)
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

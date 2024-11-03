@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/collapsible"
 import { formatDistanceToNow } from "date-fns"
 import MetricsGauges from "@/components/MetricsGauges"
+import { EditableField } from "@/components/ui/editable-field"
 
 interface ScoreItemProps {
   score: {
@@ -107,7 +108,13 @@ export function ScoreItem({ score, onEdit }: ScoreItemProps) {
     <div className="py-4 border-b last:border-b-0">
       <div className="flex justify-between items-start mb-1">
         <div className="flex flex-col">
-          <h5 className="text-sm font-medium">{score.name}</h5>
+          <EditableField
+            value={score.name}
+            onChange={(newName) => {
+              onEdit({ ...score, name: newName })
+            }}
+            className="text-xl font-semibold" // H3 styling
+          />
           <div className="text-xs text-muted-foreground mt-1 space-y-1">
             <div className="font-mono">LangGraphScore</div>
             <div className="flex flex-wrap gap-1">
@@ -122,15 +129,11 @@ export function ScoreItem({ score, onEdit }: ScoreItemProps) {
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" className="text-xs">
-            <Search className="h-4 w-4 mr-1" />
-            Find
-          </Button>
           <Button 
             variant="outline" 
             size="sm" 
             className="text-xs"
-            onClick={onEdit}
+            onClick={() => onEdit(score)}
           >
             <Pencil className="h-4 w-4 mr-1" />
             Edit
