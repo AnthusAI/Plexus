@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { cn } from '@/lib/utils'
 
 export interface Segment {
   start: number
@@ -182,12 +183,10 @@ const GaugeComponent: React.FC<GaugeProps> = ({
     })
   }
 
-  // Adjust both padding and clip height based on ticks visibility
   const topPadding = showTicks ? 104 : 80
   const viewBoxHeight = showTicks ? 200 : 170
   const textY = showTicks ? 45 : 45
   const clipHeight = showTicks ? 168 : 144
-  const titleY = 90  // Position relative to the bottom of the gauge circle
 
   return (
     <div className="flex flex-col items-center relative w-full h-full max-w-[20em]">
