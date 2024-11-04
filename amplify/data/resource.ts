@@ -72,6 +72,10 @@ const schema = a.schema({
       inferences: a.integer(),
       results: a.integer(),
       cost: a.float(),
+      progress: a.float(),
+      accuracy: a.float(),
+      createdAt: a.datetime().required(),
+      updatedAt: a.datetime().required(),
       accountId: a.string().required(),
       account: a.belongsTo('Account', 'accountId'),
       scorecardId: a.string(),
@@ -82,7 +86,12 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.authenticated()])
     .secondaryIndexes((idx) => [
-      idx("accountId")
+      idx("accountId").sortKeys(["updatedAt", "createdAt"]),
+      idx("scorecardId").sortKeys(["updatedAt", "createdAt"]),
+      idx("scoreId").sortKeys(["updatedAt", "createdAt"]),
+      idx("accountId").sortKey("accuracy"),
+      idx("scorecardId").sortKey("accuracy"),
+      idx("scoreId").sortKey("accuracy")
     ]),
 
   Sample: a
@@ -90,6 +99,8 @@ const schema = a.schema({
       experimentId: a.string().required(),
       experiment: a.belongsTo('Experiment', 'experimentId'),
       data: a.json(),
+      createdAt: a.datetime().required(),
+      updatedAt: a.datetime().required(),
     })
     .authorization((allow) => [allow.authenticated()])
     .secondaryIndexes((idx) => [
