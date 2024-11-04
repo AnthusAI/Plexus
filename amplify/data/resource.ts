@@ -86,12 +86,9 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.authenticated()])
     .secondaryIndexes((idx) => [
-      idx("accountId").sortKeys(["updatedAt", "createdAt"]),
-      idx("scorecardId").sortKeys(["updatedAt", "createdAt"]),
-      idx("scoreId").sortKeys(["updatedAt", "createdAt"]),
-      idx("accountId").sortKey("accuracy"),
-      idx("scorecardId").sortKey("accuracy"),
-      idx("scoreId").sortKey("accuracy")
+      idx("accountId").sortKeys(["updatedAt"]),
+      idx("scorecardId").sortKeys(["updatedAt"]),
+      idx("scoreId").sortKeys(["updatedAt"])
     ]),
 
   Sample: a
