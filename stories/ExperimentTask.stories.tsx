@@ -28,10 +28,11 @@ const createTask = (id: number, processedItems: number, totalItems: number): Exp
     description: 'Experiment Description',
     data: {
       accuracy: 75,
+      f1Score: 80,
       elapsedTime: '01:30:00',
-      numberComplete: processedItems,
-      numberTotal: totalItems,
-      eta: '00:30:00'
+      processedItems: processedItems,
+      totalItems: totalItems,
+      estimatedTimeRemaining: '00:30:00'
     }
   },
   onClick: () => console.log(`Clicked task ${id}`),
