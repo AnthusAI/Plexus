@@ -519,8 +519,6 @@ export default function ActivityDashboard() {
               setSelectedScorecard={setSelectedScorecard}
               selectedScore={selectedScore}
               setSelectedScore={setSelectedScore}
-              availableFields={availableFields}
-              timeRangeOptions={scoreOptions}
             />
             <TimeRangeSelector 
               onTimeRangeChange={handleTimeRangeChange}
