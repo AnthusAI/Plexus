@@ -67,6 +67,19 @@ interface FormData {
   }>
 }
 
+interface DistributionItem {
+  category: string
+  value: number
+}
+
+interface VersionHistoryItem {
+  version: string
+  parent: string | null
+  timestamp: Date | string
+  accuracy: number
+  distribution: DistributionItem[]
+}
+
 export function ScorecardForm({ 
   scorecard, 
   accountId, 
@@ -86,7 +99,76 @@ export function ScorecardForm({
     }
   }, [scorecard, accountId])
 
+  useEffect(() => {
+    async function loadSections() {
+      if (scorecard) {
+        console.log('ScorecardForm received scorecard:', scorecard)
+        const sectionsResult = await scorecard.sections()
+        console.log('Loaded sections:', sectionsResult)
+        
+        if (sectionsResult.data) {
+          // Load sections with their scores
+          const sectionsWithScores = await Promise.all(
+            sectionsResult.data.map(async section => {
+              const scoresResult = await section.scores()
+              console.log(`Loaded scores for section ${section.id}:`, scoresResult)
+              
+              return {
+                id: section.id,
+                name: section.name,
+                order: section.order,
+                scores: scoresResult.data?.map(score => ({
+                  id: score.id,
+                  name: score.name,
+                  type: score.type,
+                  order: score.order,
+                  accuracy: score.accuracy ?? 0,
+                  version: score.version ?? Date.now().toString(),
+                  timestamp: new Date(score.createdAt ?? Date.now()),
+                  aiProvider: score.aiProvider ?? undefined,
+                  aiModel: score.aiModel ?? undefined,
+                  isFineTuned: score.isFineTuned ?? false,
+                  configuration: score.configuration ?? {},
+                  distribution: Array.isArray(score.distribution) 
+                    ? score.distribution.map((d: DistributionItem) => ({
+                        category: String(d.category),
+                        value: Number(d.value)
+                      }))
+                    : [],
+                  versionHistory: Array.isArray(score.versionHistory)
+                    ? score.versionHistory.map((v: VersionHistoryItem) => ({
+                        version: String(v.version),
+                        parent: v.parent ? String(v.parent) : null,
+                        timestamp: new Date(v.timestamp),
+                        accuracy: Number(v.accuracy),
+                        distribution: Array.isArray(v.distribution)
+                          ? v.distribution.map((d: DistributionItem) => ({
+                              category: String(d.category),
+                              value: Number(d.value)
+                            }))
+                          : []
+                      }))
+                    : []
+                })) ?? []
+              }
+            })
+          )
+          
+          // Update formData with sections and their scores
+          setFormData(prevData => ({
+            ...prevData,
+            sections: sectionsWithScores
+          }))
+        }
+      }
+    }
+    
+    loadSections()
+  }, [scorecard])
+
   function initializeFormData(scorecard: Schema['Scorecard']['type'] | null, accountId: string): FormData {
+    console.log('Initializing form data with scorecard:', scorecard)
+    
     const defaultData: FormData = {
       name: "",
       key: "",
@@ -98,11 +180,6 @@ export function ScorecardForm({
 
     if (!scorecard) return defaultData
 
-    // Ensure sections are sorted by order
-    const sections = Array.isArray(scorecard.sections) ? 
-      [...scorecard.sections].sort((a, b) => a.order - b.order) : 
-      []
-
     return {
       id: scorecard.id,
       name: scorecard.name,
@@ -110,29 +187,7 @@ export function ScorecardForm({
       description: scorecard.description ?? "",
       externalId: scorecard.externalId,
       accountId,
-      sections: sections.map(section => ({
-        id: section.id,
-        name: section.name,
-        order: section.order,
-        scores: Array.isArray(section.scores) ? 
-          [...section.scores]
-            .sort((a, b) => a.order - b.order)
-            .map(score => ({
-              id: score.id,
-              name: score.name,
-              type: score.type,
-              order: score.order,
-              accuracy: score.accuracy ?? 0,
-              version: score.version ?? Date.now().toString(),
-              timestamp: new Date(),
-              aiProvider: score.aiProvider ?? 'OpenAI',
-              aiModel: score.aiModel ?? 'gpt-4',
-              isFineTuned: score.isFineTuned ?? false,
-              configuration: score.configuration ?? {},
-              distribution: score.distribution ?? [],
-              versionHistory: score.versionHistory ?? []
-            })) : []
-      }))
+      sections: []  // We'll load sections through the useEffect
     }
   }
 
@@ -187,9 +242,9 @@ export function ScorecardForm({
               aiProvider: score.aiProvider,
               aiModel: score.aiModel,
               isFineTuned: score.isFineTuned,
-              configuration: score.configuration,
-              distribution: score.distribution,
-              versionHistory: score.versionHistory
+              configuration: score.configuration ?? {},
+              distribution: score.distribution ?? [],
+              versionHistory: score.versionHistory ?? []
             })
           }
         }
@@ -206,28 +261,72 @@ export function ScorecardForm({
         })
         console.log('Scorecard update result:', updateResult)
         
+        // Get existing sections and their scores to handle deletions
+        const existingSections = await client.models.ScorecardSection.list({
+          filter: { scorecardId: { eq: scorecardId } }
+        })
+        
+        // Create Set of current section IDs for easy lookup
+        const currentSectionIds = new Set(formData.sections.map(s => s.id))
+        
+        // Delete sections that are no longer in formData
+        for (const section of existingSections.data) {
+          if (!currentSectionIds.has(section.id)) {
+            console.log('Deleting section:', section.id)
+            // First delete all scores in this section
+            const sectionScores = await client.models.Score.list({
+              filter: { sectionId: { eq: section.id } }
+            })
+            for (const score of sectionScores.data) {
+              await client.models.Score.delete({
+                id: score.id
+              })
+            }
+            // Then delete the section
+            await client.models.ScorecardSection.delete({
+              id: section.id
+            })
+          } else {
+            // For sections we're keeping, check for deleted scores
+            const existingScores = await client.models.Score.list({
+              filter: { sectionId: { eq: section.id } }
+            })
+            
+            const formSection = formData.sections.find(s => s.id === section.id)
+            const currentScoreIds = new Set(formSection?.scores.map(s => s.id) ?? [])
+            
+            // Delete scores that are no longer in the form
+            for (const score of existingScores.data) {
+              if (!currentScoreIds.has(score.id)) {
+                console.log('Deleting score:', score.id)
+                await client.models.Score.delete({
+                  id: score.id
+                })
+              }
+            }
+          }
+        }
+        
         // Handle sections and scores updates
         console.log('Processing sections:', formData.sections)
         for (const section of formData.sections) {
           let sectionId: string
           
           if (section.id) {
-            console.log('Updating section:', section.id)
+            // Update existing section
             const updateResult = await client.models.ScorecardSection.update({
               id: section.id,
               name: section.name,
               order: section.order
             })
-            console.log('Section update result:', updateResult)
             sectionId = section.id
           } else {
-            console.log('Creating new section for scorecard:', scorecardId)
+            // Create new section
             const sectionResult = await client.models.ScorecardSection.create({
               name: section.name,
               order: section.order,
               scorecardId: scorecardId
             })
-            console.log('New section result:', sectionResult)
             if (!sectionResult.data) {
               throw new Error('Failed to create section')
             }
@@ -287,45 +386,6 @@ export function ScorecardForm({
                   formData.sections[sectionIndex].scores[scoreIndex].id = createResult.data.id
                 }
               }
-            }
-          }
-        }
-        
-        // Handle score deletions
-        console.log('Checking for scores to delete...')
-        const existingSections = await client.models.ScorecardSection.list({
-          filter: {
-            scorecardId: { eq: scorecardId }
-          }
-        })
-        console.log('Existing sections:', existingSections)
-        
-        for (const section of existingSections.data) {
-          const existingScores = await client.models.Score.list({
-            filter: {
-              sectionId: { eq: section.id }
-            }
-          })
-          console.log('Existing scores for section:', section.id, existingScores)
-          
-          // Get current score IDs from form data
-          const currentScoreIds = new Set(
-            formData.sections
-              .find((s) => s.id && s.id === section.id)
-              ?.scores
-              .map(s => s.id)
-              ?? []
-          )
-          console.log('Current score IDs:', currentScoreIds)
-          
-          // Delete scores that are no longer in the form
-          for (const score of existingScores.data) {
-            if (!currentScoreIds.has(score.id)) {
-              console.log('Deleting score:', score.id)
-              const deleteResult = await client.models.Score.delete({
-                id: score.id
-              })
-              console.log('Delete result:', deleteResult)
             }
           }
         }
@@ -570,6 +630,7 @@ export function ScorecardForm({
                     <ScoreItem
                       key={scoreIndex}
                       score={score}
+                      scorecardId={formData.id!}
                       onEdit={(updatedScore) => {
                         const updatedScoreDetails = [...formData.sections]
                         updatedScoreDetails[sectionIndex].scores[scoreIndex] = {

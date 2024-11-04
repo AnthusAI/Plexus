@@ -1,5 +1,6 @@
 "use client"
 import { useState } from "react"
+import { useRouter } from 'next/navigation'
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { 
@@ -38,6 +39,7 @@ interface ScoreItemProps {
     aiModel?: string
     isFineTuned?: boolean
   }
+  scorecardId: string
   onEdit: (score: ScoreItemProps['score']) => void
 }
 
@@ -70,7 +72,9 @@ function getMetricsForVersion(version: Version | null): GaugeConfig[] {
   ]
 }
 
-export function ScoreItem({ score, onEdit }: ScoreItemProps) {
+export function ScoreItem({ score, scorecardId, onEdit }: ScoreItemProps) {
+  const router = useRouter()
+
   if (!score.versionHistory || score.versionHistory.length === 0) {
     const now = new Date()
     score.versionHistory = [
@@ -133,7 +137,7 @@ export function ScoreItem({ score, onEdit }: ScoreItemProps) {
             variant="outline" 
             size="sm" 
             className="text-xs"
-            onClick={() => onEdit(score)}
+            onClick={() => router.push(`/scorecards/${scorecardId}/scores/${score.id}/edit`)}
           >
             <Pencil className="h-4 w-4 mr-1" />
             Edit
