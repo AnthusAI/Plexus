@@ -52,29 +52,33 @@ export default function ScorecardsComponent() {
 
     async function setupRealTimeSync() {
       try {
-        setIsLoading(true)
-        // First get the account ID
-        const accountResult = await client.models.Account.list({
-          filter: { key: { eq: ACCOUNT_KEY } }
-        })
+        // Get the account ID and initial scorecards in parallel
+        const [accountResult, initialScorecards] = await Promise.all([
+          client.models.Account.list({
+            filter: { key: { eq: ACCOUNT_KEY } }
+          }),
+          client.models.Scorecard.list()
+        ])
 
         if (accountResult.data.length > 0) {
           const foundAccountId = accountResult.data[0].id
           setAccountId(foundAccountId)
+          
+          // Show initial data immediately
+          setScorecards(initialScorecards.data.filter(s => s.accountId === foundAccountId))
+          setIsLoading(false)
 
-          // Set up real-time subscription for scorecards
+          // Set up real-time subscription for future updates
           subscription = client.models.Scorecard.observeQuery({
             filter: { accountId: { eq: foundAccountId } }
           }).subscribe({
             next: ({ items }) => {
               console.log('Received real-time scorecard update:', items)
               setScorecards(items)
-              setIsLoading(false)
             },
             error: (error) => {
               console.error('Subscription error:', error)
               setError(error as Error)
-              setIsLoading(false)
             }
           })
         } else {
@@ -89,13 +93,12 @@ export default function ScorecardsComponent() {
 
     setupRealTimeSync()
 
-    // Cleanup subscription when component unmounts
     return () => {
       if (subscription) {
         subscription.unsubscribe()
       }
     }
-  }, []) // Empty dependency array since we only want to set this up once
+  }, [])
 
   // Helper function to fetch sections with scores
   const fetchSectionsWithScores = async (scorecardId: string) => {

@@ -298,25 +298,20 @@ export default function ActivityDashboard() {
   }, []);
 
   useEffect(() => {
-    // Simulate initial loading
-    setTimeout(() => {
-      setDisplayedActivities(sortedActivities.slice(0, 9))
-      setIsInitialLoading(false)
-    }, 1000) // Reduced from 1500 to 1000 milliseconds
+    setDisplayedActivities(sortedActivities.slice(0, 9))
+    setIsInitialLoading(false)
   }, [sortedActivities])
 
   useEffect(() => {
     if (inView && !isLoadingMore && !isInitialLoading) {
       setIsLoadingMore(true)
-      setTimeout(() => {
-        setIsLoadingMore(false)
-        // Simulate loading more items
-        const currentLength = displayedActivities.length
-        const more = sortedActivities.slice(currentLength, currentLength + 9)
-        if (more.length > 0) {
-          setDisplayedActivities(prev => [...prev, ...more])
-        }
-      }, 1500) // Show loading spinner for 1.5 seconds
+      // Load more items immediately
+      const currentLength = displayedActivities.length
+      const more = sortedActivities.slice(currentLength, currentLength + 9)
+      if (more.length > 0) {
+        setDisplayedActivities(prev => [...prev, ...more])
+      }
+      setIsLoadingMore(false)
     }
   }, [inView, isLoadingMore, isInitialLoading, displayedActivities, sortedActivities])
 
