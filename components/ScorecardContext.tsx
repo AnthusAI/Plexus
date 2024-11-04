@@ -54,8 +54,10 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
 
     async function fetchScores() {
       try {
+        const scorecardId = selectedScorecard || undefined
+
         const sections = await client.models.ScorecardSection.list({
-          filter: { scorecardId: { eq: selectedScorecard } }
+          filter: { scorecardId: { eq: scorecardId } }
         })
         
         const allScores = await Promise.all(
