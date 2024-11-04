@@ -7,6 +7,7 @@ const schema = a.schema({
       key: a.string().required(),
       description: a.string(),
       scorecards: a.hasMany('Scorecard', 'accountId'),
+      experiments: a.hasMany('Experiment', 'accountId'),
     })
     .authorization((allow) => [allow.authenticated()])
     .secondaryIndexes((idx) => [
@@ -22,6 +23,7 @@ const schema = a.schema({
       accountId: a.string().required(),
       account: a.belongsTo('Account', 'accountId'),
       sections: a.hasMany('ScorecardSection', 'scorecardId'),
+      experiments: a.hasMany('Experiment', 'scorecardId'),
     })
     .authorization((allow) => [allow.authenticated()])
     .secondaryIndexes((idx) => [
@@ -58,6 +60,7 @@ const schema = a.schema({
       configuration: a.json(),
       distribution: a.json(),
       versionHistory: a.json(),
+      experiments: a.hasMany('Experiment', 'scoreId'),
     })
     .authorization((allow) => [allow.authenticated()])
     .secondaryIndexes((idx) => [
@@ -86,9 +89,9 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.authenticated()])
     .secondaryIndexes((idx) => [
-      idx("accountId").sortKeys(["updatedAt"]),
-      idx("scorecardId").sortKeys(["updatedAt"]),
-      idx("scoreId").sortKeys(["updatedAt"])
+      idx("accountId"),
+      idx("scorecardId"),
+      idx("scoreId")
     ]),
 
   Sample: a
