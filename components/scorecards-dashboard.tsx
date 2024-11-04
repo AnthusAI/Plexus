@@ -25,7 +25,7 @@ import {
   MoreHorizontal,
   Plus 
 } from "lucide-react"
-import { ScoreCount } from "@/components/scorecards/score-count"
+import { ScoreCount } from "./scorecards/score-count"
 
 // Initialize client
 const client = generateClient<Schema>()
@@ -47,38 +47,55 @@ export default function ScorecardsComponent() {
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
 
-  // Fetch scorecards and set state
-  const fetchScorecards = async () => {
-    try {
-      setIsLoading(true)
-      const accountResult = await client.models.Account.list({
-        filter: { key: { eq: ACCOUNT_KEY } }
-      })
-      if (accountResult.data.length > 0) {
-        const foundAccountId = accountResult.data[0].id
-        setAccountId(foundAccountId)
-        const scorecardResult = await client.models.Scorecard.list({
-          filter: { accountId: { eq: foundAccountId } }
-        })
-        return scorecardResult.data
-      }
-      return []
-    } catch (error) {
-      console.error('Error fetching scorecards:', error)
-      setError(error as Error)
-      return []
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   useEffect(() => {
-    const fetchData = async () => {
-      const result = await fetchScorecards()
-      setScorecards(result || [])
+    let subscription: { unsubscribe: () => void } | null = null
+
+    async function setupRealTimeSync() {
+      try {
+        setIsLoading(true)
+        // First get the account ID
+        const accountResult = await client.models.Account.list({
+          filter: { key: { eq: ACCOUNT_KEY } }
+        })
+
+        if (accountResult.data.length > 0) {
+          const foundAccountId = accountResult.data[0].id
+          setAccountId(foundAccountId)
+
+          // Set up real-time subscription for scorecards
+          subscription = client.models.Scorecard.observeQuery({
+            filter: { accountId: { eq: foundAccountId } }
+          }).subscribe({
+            next: ({ items }) => {
+              console.log('Received real-time scorecard update:', items)
+              setScorecards(items)
+              setIsLoading(false)
+            },
+            error: (error) => {
+              console.error('Subscription error:', error)
+              setError(error as Error)
+              setIsLoading(false)
+            }
+          })
+        } else {
+          setIsLoading(false)
+        }
+      } catch (error) {
+        console.error('Error setting up real-time sync:', error)
+        setError(error as Error)
+        setIsLoading(false)
+      }
     }
-    fetchData()
-  }, [refreshTrigger])
+
+    setupRealTimeSync()
+
+    // Cleanup subscription when component unmounts
+    return () => {
+      if (subscription) {
+        subscription.unsubscribe()
+      }
+    }
+  }, []) // Empty dependency array since we only want to set this up once
 
   // Helper function to fetch sections with scores
   const fetchSectionsWithScores = async (scorecardId: string) => {
@@ -249,7 +266,6 @@ export default function ScorecardsComponent() {
               scorecard={selectedScorecard}
               accountId={accountId!}
               onSave={async () => {
-                await fetchScorecards()
                 setIsEditing(false)
                 setSelectedScorecard(null)
               }}
@@ -384,7 +400,6 @@ export default function ScorecardsComponent() {
                 scorecard={selectedScorecard}
                 accountId={accountId!}
                 onSave={async () => {
-                  await fetchScorecards()
                   setIsEditing(false)
                   setSelectedScorecard(null)
                 }}
