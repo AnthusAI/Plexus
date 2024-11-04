@@ -63,6 +63,38 @@ const schema = a.schema({
     .secondaryIndexes((idx) => [
       idx("sectionId")
     ]),
+
+  Experiment: a
+    .model({
+      type: a.string().required(),
+      parameters: a.json(),
+      metrics: a.json(),
+      inferences: a.integer(),
+      results: a.integer(),
+      cost: a.float(),
+      accountId: a.string().required(),
+      account: a.belongsTo('Account', 'accountId'),
+      scorecardId: a.string(),
+      scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+      scoreId: a.string(),
+      score: a.belongsTo('Score', 'scoreId'),
+      samples: a.hasMany('Sample', 'experimentId'),
+    })
+    .authorization((allow) => [allow.authenticated()])
+    .secondaryIndexes((idx) => [
+      idx("accountId")
+    ]),
+
+  Sample: a
+    .model({
+      experimentId: a.string().required(),
+      experiment: a.belongsTo('Experiment', 'experimentId'),
+      data: a.json(),
+    })
+    .authorization((allow) => [allow.authenticated()])
+    .secondaryIndexes((idx) => [
+      idx("experimentId")
+    ]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
