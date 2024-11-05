@@ -78,20 +78,14 @@ const recentActivities = [
     description: "Note",
     summary: '\"Using fine-tuned model.\"',
     data: {
-      f1Score: 85,
       accuracy: 89,
+      sensitivity: 87,
+      specificity: 91,
+      precision: 88,
       processedItems: 47,
       totalItems: 100,
       elapsedTime: "00:02:15",
       estimatedTimeRemaining: "00:03:05",
-      outerRing: [
-        { category: "Positive", value: 50, fill: "var(--true)" },
-        { category: "Negative", value: 50, fill: "var(--false)" },
-      ],
-      innerRing: [
-        { category: "Positive", value: 89, fill: "var(--true)" },
-        { category: "Negative", value: 11, fill: "var(--false)" },
-      ],
     },
   },
   {
@@ -157,20 +151,14 @@ const recentActivities = [
     summary: "94% / 100",
     description: "Accuracy",
     data: {
-      f1Score: 92,  // Added f1Score
       accuracy: 94,
+      sensitivity: 93,
+      specificity: 95,
+      precision: 92,
       processedItems: 100,
       totalItems: 100,
       elapsedTime: "00:04:20",
       estimatedTimeRemaining: "00:00:00",
-      outerRing: [
-        { category: "Positive", value: 50, fill: "var(--true)" },
-        { category: "Negative", value: 50, fill: "var(--false)" },
-      ],
-      innerRing: [
-        { category: "Positive", value: 94, fill: "var(--true)" },
-        { category: "Negative", value: 6, fill: "var(--false)" },
-      ],
     },
   },
   {

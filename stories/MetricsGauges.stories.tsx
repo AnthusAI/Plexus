@@ -1,55 +1,95 @@
 import React from 'react'
 import type { Meta, StoryObj } from '@storybook/react'
-import MetricsGauges from '../components/MetricsGauges'
+import { expect, within } from '@storybook/test'
+import MetricsGauges from '@/components/MetricsGauges'
 
 const meta = {
   title: 'Components/MetricsGauges',
   component: MetricsGauges,
-  args: {
-    gauges: [
-      { value: 92, label: 'Accuracy' },
-      { value: 89.8, label: 'Balanced Accuracy' },
-      { value: 95.2, label: 'ROC AUC' },
-      { value: 88.7, label: 'PR AUC' },
-    ]
-  }
-} satisfies Meta<typeof MetricsGauges>;
+  parameters: {
+    layout: 'centered',
+  },
+  tags: ['autodocs'],
+} satisfies Meta<typeof MetricsGauges>
 
-export default meta;
-type Story = StoryObj<typeof MetricsGauges>;
+export default meta
+type Story = StoryObj<typeof MetricsGauges>
 
-export const Default: Story = {
+const otherMetricsSegments = [
+  { start: 0, end: 60, color: 'var(--gauge-inviable)' },
+  { start: 60, end: 85, color: 'var(--gauge-converging)' },
+  { start: 85, end: 100, color: 'var(--gauge-great)' }
+]
+
+const createGaugeConfig = (accuracy: number) => ({
+  gauges: [{
+    value: accuracy,
+    label: 'Accuracy',
+    backgroundColor: 'var(--gauge-background)',
+  }]
+})
+
+const createDetailGaugeConfig = (
+  accuracy: number,
+  sensitivity: number,
+  specificity: number,
+  precision: number
+) => ({
+  gauges: [
+    {
+      value: accuracy,
+      label: 'Accuracy',
+      backgroundColor: 'var(--gauge-background)',
+    },
+    {
+      value: sensitivity,
+      label: 'Sensitivity',
+      segments: otherMetricsSegments,
+      backgroundColor: 'var(--gauge-background)',
+    },
+    {
+      value: specificity,
+      label: 'Specificity',
+      segments: otherMetricsSegments,
+      backgroundColor: 'var(--gauge-background)',
+    },
+    {
+      value: precision,
+      label: 'Precision',
+      segments: otherMetricsSegments,
+      backgroundColor: 'var(--gauge-background)',
+    }
+  ]
+})
+
+export const Single: Story = {
   args: {
-    gauges: [
-      { value: 92, label: 'Accuracy' },
-      { value: 89.8, label: 'Balanced Accuracy' },
-      { value: 95.2, label: 'ROC AUC' },
-      { value: 88.7, label: 'PR AUC' },
-      { value: 90, label: 'Precision' },
-      { value: 87.4, label: 'Recall' },
-      { value: 88.7, label: 'F1 Score' },
-      { value: 86.9, label: 'F-Beta Score' },
-    ]
+    ...createGaugeConfig(75),
+    variant: 'grid'
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByText('Accuracy')).toBeInTheDocument()
+    await expect(canvas.getByText('75%')).toBeInTheDocument()
   }
 }
 
-export const FourMetrics: Story = {
+export const Detail: Story = {
   args: {
-    gauges: [
-      { value: 92, label: 'Accuracy' },
-      { value: 90, label: 'Precision' },
-      { value: 87.4, label: 'Recall' },
-      { value: 88.7, label: 'F1 Score' },
-    ]
-  }
-}
-
-export const ThreeMetrics: Story = {
-  args: {
-    gauges: [
-      { value: 92, label: 'Accuracy' },
-      { value: 95, label: 'ROC AUC' },
-      { value: 88.7, label: 'PR AUC' },
-    ]
+    ...createDetailGaugeConfig(92, 89, 95, 91),
+    variant: 'detail'
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    
+    await expect(canvas.getByText('Accuracy')).toBeInTheDocument()
+    await expect(canvas.getByText('Sensitivity')).toBeInTheDocument()
+    await expect(canvas.getByText('Specificity')).toBeInTheDocument()
+    await expect(canvas.getByText('Precision')).toBeInTheDocument()
+    
+    await expect(canvas.getByText('92%')).toBeInTheDocument()
+    await expect(canvas.getByText('89%')).toBeInTheDocument()
+    await expect(canvas.getByText('95%')).toBeInTheDocument()
+    await expect(canvas.getByText('91%')).toBeInTheDocument()
   }
 }

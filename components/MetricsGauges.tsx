@@ -3,6 +3,7 @@
 import React from 'react'
 import { Gauge } from './gauge'
 import type { Segment } from './gauge'
+import { cn } from '@/lib/utils'
 
 interface GaugeConfig {
   value: number
@@ -17,25 +18,34 @@ interface GaugeConfig {
 interface MetricsGaugesProps {
   gauges: GaugeConfig[]
   className?: string
+  variant?: 'grid' | 'detail'
 }
 
-const MetricsGauges: React.FC<MetricsGaugesProps> = ({ gauges, className = '' }) => {
+const MetricsGauges: React.FC<MetricsGaugesProps> = ({ 
+  gauges, 
+  className = '',
+  variant = 'detail'
+}) => {
   return (
     <div 
       data-testid="metrics-gauges" 
       className="flex flex-col items-center w-full"
     >
-      <div className="flex w-full justify-center space-x-8">
+      <div className={cn(
+        "w-full",
+        variant === 'detail' 
+          ? 'grid grid-cols-2 gap-2' 
+          : 'flex justify-center'
+      )}>
         {gauges.map((gauge, index) => (
           <div key={index}>
             <Gauge
               value={gauge.value}
               title={gauge.label}
-              segments={gauge.segments}
               min={gauge.min}
               max={gauge.max}
               backgroundColor={gauge.backgroundColor}
-              showTicks={gauge.showTicks}
+              showTicks={variant === 'detail'}
             />
           </div>
         ))}
