@@ -19,12 +19,106 @@ import React from "react"
 import ScorecardContext from "@/components/ScorecardContext"
 
 // Import new task components
-import ExperimentTask from '@/components/ExperimentTask'
+import ExperimentTaskComponent from '@/components/ExperimentTask'
 import AlertTask from '@/components/AlertTask'
 import ReportTask from '@/components/ReportTask'
-import OptimizationTask from '@/components/OptimizationTask' // Update import
+import OptimizationTask from '@/components/OptimizationTask'
 import FeedbackTask from '@/components/FeedbackTask'
 import ScoreUpdatedTask from '@/components/ScoreUpdatedTask'
+
+// Import the type from ExperimentTask
+import type { ExperimentTask } from '@/components/ExperimentTask'
+
+interface OptimizationTask {
+  id: number
+  type: 'Optimization started'
+  scorecard: string
+  score: string
+  time: string
+  summary: string
+  description?: string
+  data: {
+    progress: number
+    accuracy: number
+    elapsedTime: string
+    estimatedTimeRemaining: string
+    numberComplete: number
+    numberTotal: number
+    before: {
+      outerRing: Array<{ category: string; value: number; fill: string }>
+      innerRing: Array<{ category: string; value: number; fill: string }>
+    }
+    after: {
+      outerRing: Array<{ category: string; value: number; fill: string }>
+      innerRing: Array<{ category: string; value: number; fill: string }>
+    }
+  }
+}
+
+interface FeedbackTask {
+  id: number
+  type: 'Feedback queue started' | 'Feedback queue completed'
+  scorecard: string
+  score: string
+  time: string
+  summary: string
+  description?: string
+  data: {
+    progress: number
+    processedItems: number
+    totalItems: number
+    elapsedTime: string
+    estimatedTimeRemaining: string
+  }
+}
+
+interface AlertTask {
+  id: number
+  type: 'Alert'
+  scorecard: string
+  score: string
+  time: string
+  summary: string
+  description?: string
+}
+
+interface ReportTask {
+  id: number
+  type: 'Report'
+  scorecard: string
+  score: string
+  time: string
+  summary: string
+  description?: string
+}
+
+interface ScoreUpdatedTask {
+  id: number
+  type: 'Score updated'
+  scorecard: string
+  score: string
+  time: string
+  summary: string
+  description?: string
+  data: {
+    before: {
+      outerRing: Array<{ category: string; value: number; fill: string }>
+      innerRing: Array<{ category: string; value: number; fill: string }>
+    }
+    after: {
+      outerRing: Array<{ category: string; value: number; fill: string }>
+      innerRing: Array<{ category: string; value: number; fill: string }>
+    }
+  }
+}
+
+type ActivityData = 
+  | ExperimentTask 
+  | OptimizationTask 
+  | FeedbackTask 
+  | AlertTask 
+  | ReportTask 
+  | ScoreUpdatedTask
 
 const timeToMinutes = (timeString: string): number => {
   const [value, unit] = timeString.toLowerCase().split(' ');
@@ -68,7 +162,7 @@ const barChartData = [
 ]
 
 // New data for recent activities
-const recentActivities = [
+const recentActivities: ActivityData[] = [
   {
     id: 0,
     type: "Experiment started",
@@ -244,15 +338,13 @@ interface BarData {
   [key: string]: string | number;
 }
 
-interface ActivityData {
-  id: number;
-  type: string;
-  scorecard: string;
-  score: string;
-  time: string;
-  summary: string;
-  description?: string;
-  data?: any;
+function isExperimentActivity(activity: ActivityData): activity is ExperimentTask {
+  return (activity.type === "Experiment started" || activity.type === "Experiment completed") 
+    && activity.data !== undefined
+    && 'accuracy' in activity.data 
+    && 'sensitivity' in activity.data
+    && 'specificity' in activity.data
+    && 'precision' in activity.data
 }
 
 export default function ActivityDashboard() {
@@ -353,34 +445,48 @@ export default function ActivityDashboard() {
   }
 
   const renderVisualization = (activity: ActivityData) => {
-    if (!activity.data) return null
-
     switch (activity.type) {
       case "Experiment completed":
-        return (
-          <ChartContainer config={chartConfig} className="h-[120px] w-[120px] mx-auto mb-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Pie
-                  data={activity.data.innerRing}
-                  dataKey="value"
-                  nameKey="category"
-                  outerRadius={40}
-                  fill="var(--true)"
-                />
-                <Pie
-                  data={activity.data.outerRing}
-                  dataKey="value"
-                  nameKey="category"
-                  innerRadius={45}
-                  outerRadius={55}
-                  fill="var(--chart-2)"
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </ChartContainer>
-        )
+      case "Experiment started":
+        if (isExperimentActivity(activity)) {
+          return (
+            <ChartContainer config={chartConfig} className="h-[120px] w-[120px] mx-auto mb-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Pie
+                    data={[
+                      { 
+                        category: 'Correct', 
+                        value: Math.round(activity.data.processedItems * activity.data.accuracy / 100),
+                        fill: "var(--true)"
+                      },
+                      { 
+                        category: 'Incorrect', 
+                        value: activity.data.processedItems - Math.round(activity.data.processedItems * activity.data.accuracy / 100),
+                        fill: "var(--false)"
+                      }
+                    ]}
+                    dataKey="value"
+                    nameKey="category"
+                    outerRadius={40}
+                  />
+                  <Pie
+                    data={[
+                      { category: 'Processed', value: activity.data.processedItems, fill: "var(--true)" },
+                      { category: 'Remaining', value: activity.data.totalItems - activity.data.processedItems, fill: "var(--neutral)" }
+                    ]}
+                    dataKey="value"
+                    nameKey="category"
+                    innerRadius={45}
+                    outerRadius={55}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartContainer>
+          )
+        }
+        return null
       case "Score updated":
         return (
           <div className="flex space-x-4 justify-center mb-4">
@@ -570,13 +676,13 @@ export default function ActivityDashboard() {
                   switch (activity.type) {
                     case 'Experiment completed':
                     case 'Experiment started':
-                      return (
-                        <ExperimentTask
+                      return isExperimentActivity(activity) ? (
+                        <ExperimentTaskComponent
                           variant="grid"
                           task={activity}
                           onClick={() => setSelectedActivity(activity)}
                         />
-                      )
+                      ) : null
                     case 'Alert':
                       return (
                         <AlertTask
@@ -647,7 +753,7 @@ export default function ActivityDashboard() {
               switch (selectedActivity.type) {
                 case 'Experiment completed':
                 case 'Experiment started':
-                  return <ExperimentTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                  return <ExperimentTaskComponent variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
                 case 'Alert':
                   return <AlertTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} iconType="warning" />
                 case 'Report':
@@ -684,7 +790,7 @@ export default function ActivityDashboard() {
               switch (selectedActivity.type) {
                 case 'Experiment completed':
                 case 'Experiment started':
-                  return <ExperimentTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
+                  return <ExperimentTaskComponent variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} />
                 case 'Alert':
                   return <AlertTask variant="detail" task={selectedActivity} controlButtons={DetailViewControlButtons} iconType="warning" />
                 case 'Report':
