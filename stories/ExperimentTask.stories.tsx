@@ -1,18 +1,20 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { expect, within } from '@storybook/test';
-import ExperimentTask from '../components/ExperimentTask';
-import { TaskProps } from '../components/TaskProgress';
+import ExperimentTask from '@/components/ExperimentTask';
+import { BaseTaskProps } from '@/components/Task';
 
-const meta: Meta<typeof ExperimentTask> = {
+const meta = {
   title: 'Tasks/Types/ExperimentTask',
   component: ExperimentTask,
-};
+  parameters: {
+    layout: 'centered',
+  },
+} satisfies Meta<typeof ExperimentTask>;
 
 export default meta;
 type Story = StoryObj<typeof ExperimentTask>;
 
-const createTask = (id: number, processedItems: number, totalItems: number): TaskProps => ({
+const createTask = (id: number, processedItems: number, totalItems: number): BaseTaskProps => ({
   variant: 'grid',
   task: {
     id,
@@ -24,24 +26,17 @@ const createTask = (id: number, processedItems: number, totalItems: number): Tas
     description: 'Experiment Description',
     data: {
       accuracy: 75,
+      f1Score: 82,
       elapsedTime: '01:30:00',
       processedItems,
       totalItems,
       estimatedTimeRemaining: '00:30:00',
-      outerRing: [
-        { category: 'Positive', value: 50, fill: 'var(--true)' },
-        { category: 'Negative', value: 50, fill: 'var(--false)' },
-      ],
-      innerRing: [
-        { category: 'Positive', value: 75, fill: 'var(--true)' },
-        { category: 'Negative', value: 25, fill: 'var(--false)' },
-      ],
     },
   },
   onClick: () => console.log(`Clicked task ${id}`),
 });
 
-export const Single: Story = {
+export const Grid: Story = {
   args: createTask(1, 75, 100),
 };
 
@@ -52,14 +47,10 @@ export const Detail: Story = {
   },
 };
 
-export const Grid: Story = {
-  args: createTask(1, 75, 100),
-};
-
 export const InProgress: Story = {
-  args: createTask(4, 50, 100),
+  args: createTask(3, 50, 100),
 };
 
 export const Completed: Story = {
-  args: createTask(5, 100, 100),
+  args: createTask(4, 100, 100),
 };

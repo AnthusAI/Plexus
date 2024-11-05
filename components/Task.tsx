@@ -18,8 +18,12 @@ export interface BaseTaskProps {
       numberFalse?: number
       numberTotal?: number
       accuracy?: number
+      f1Score?: number
       progress?: number
       elapsedTime?: string
+      processedItems?: number
+      totalItems?: number
+      estimatedTimeRemaining?: string
       before?: {
         innerRing: Array<{ value: number }>
       }
