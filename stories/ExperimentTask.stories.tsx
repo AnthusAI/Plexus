@@ -26,7 +26,9 @@ const createTask = (id: number, processedItems: number, totalItems: number): Bas
     description: 'Experiment Description',
     data: {
       accuracy: 75,
-      f1Score: 82,
+      sensitivity: 78,
+      specificity: 82,
+      precision: 80,
       elapsedTime: '01:30:00',
       processedItems,
       totalItems,

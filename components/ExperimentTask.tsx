@@ -5,9 +5,25 @@ import MetricsGauges from '@/components/MetricsGauges'
 import { TaskProgress } from '@/components/TaskProgress'
 import { ResponsiveWaffle } from '@nivo/waffle'
 
+const accuracySegments = [
+  { start: 0, end: 60, color: 'var(--gauge-inviable)' },
+  { start: 60, end: 85, color: 'var(--gauge-converging)' },
+  { start: 85, end: 100, color: 'var(--gauge-great)' }
+]
+
+const defaultSegments = [
+  { start: 0, end: 50, color: 'var(--gauge-inviable)' },
+  { start: 50, end: 80, color: 'var(--gauge-converging)' },
+  { start: 80, end: 90, color: 'var(--gauge-almost)' },
+  { start: 90, end: 95, color: 'var(--gauge-viable)' },
+  { start: 95, end: 100, color: 'var(--gauge-great)' },
+]
+
 interface ExperimentTaskData {
   accuracy: number
-  f1Score: number
+  sensitivity: number
+  specificity: number
+  precision: number
   elapsedTime: string
   processedItems: number
   totalItems: number
@@ -39,33 +55,43 @@ export default function ExperimentTask({
     return () => window.removeEventListener('resize', updateWaffleHeight)
   }, [])
 
-  const accuracyConfig = {
-    value: data.accuracy,
-    label: 'Accuracy',
-    segments: [
-      { start: 0, end: 60, color: 'var(--gauge-inviable)' },
-      { start: 60, end: 85, color: 'var(--gauge-converging)' },
-      { start: 85, end: 100, color: 'var(--gauge-great)' }
-    ],
-    backgroundColor: 'var(--gauge-background)',
-    showTicks: variant === 'detail'
-  }
-
-  const f1ScoreConfig = {
-    value: data.f1Score,
-    label: 'F1 Score',
-    segments: [
-      { start: 0, end: 60, color: 'var(--gauge-inviable)' },
-      { start: 60, end: 85, color: 'var(--gauge-converging)' },
-      { start: 85, end: 100, color: 'var(--gauge-great)' }
-    ],
-    backgroundColor: 'var(--gauge-background)',
-    showTicks: variant === 'detail'
-  }
+  const metrics = variant === 'detail' ? [
+    {
+      value: data.accuracy,
+      label: 'Accuracy',
+      segments: accuracySegments,
+      backgroundColor: 'var(--gauge-background)',
+    },
+    {
+      value: data.sensitivity,
+      label: 'Sensitivity',
+      segments: defaultSegments,
+      backgroundColor: 'var(--gauge-background)',
+    },
+    {
+      value: data.specificity,
+      label: 'Specificity',
+      segments: defaultSegments,
+      backgroundColor: 'var(--gauge-background)',
+    },
+    {
+      value: data.precision,
+      label: 'Precision',
+      segments: defaultSegments,
+      backgroundColor: 'var(--gauge-background)',
+    }
+  ] : [
+    {
+      value: data.accuracy,
+      label: 'Accuracy',
+      segments: accuracySegments,
+      backgroundColor: 'var(--gauge-background)',
+    }
+  ]
 
   const visualization = variant === 'detail' ? (
     <div className="w-full">
-      <MetricsGauges gauges={[accuracyConfig, f1ScoreConfig]} />
+      <MetricsGauges gauges={metrics} variant={variant} />
       <div className="mt-4">
         <TaskProgress 
           progress={(data.processedItems / data.totalItems) * 100}
@@ -133,15 +159,7 @@ export default function ExperimentTask({
     </div>
   ) : (
     <div className="w-full">
-      <MetricsGauges 
-        gauges={[{
-          ...accuracyConfig,
-          showTicks: false
-        }, {
-          ...f1ScoreConfig,
-          showTicks: false
-        }]}
-      />
+      <MetricsGauges gauges={metrics} variant={variant} />
       <div className="mt-4">
         <TaskProgress 
           progress={(data.processedItems / data.totalItems) * 100}

@@ -255,8 +255,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
 }
 
 const defaultSegments = [
-  { start: 0, end: 50, color: 'var(--gauge-inviable)' },
-  { start: 50, end: 80, color: 'var(--gauge-converging)' },
+  { start: 0, end: 60, color: 'var(--gauge-inviable)' },
+  { start: 60, end: 80, color: 'var(--gauge-converging)' },
   { start: 80, end: 90, color: 'var(--gauge-almost)' },
   { start: 90, end: 95, color: 'var(--gauge-viable)' },
   { start: 95, end: 100, color: 'var(--gauge-great)' },
