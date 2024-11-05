@@ -143,6 +143,10 @@ export default function ScorecardsComponent() {
       accountId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      experiments: async () => ({
+        data: [],
+        nextToken: null
+      }),
       account: async () => ({
         data: {
           id: accountId,
@@ -151,6 +155,10 @@ export default function ScorecardsComponent() {
           description: '',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
+          experiments: async () => ({
+            data: [],
+            nextToken: null
+          }),
           scorecards: async () => ({
             data: [],
             nextToken: null
@@ -218,12 +226,20 @@ export default function ScorecardsComponent() {
       
       const fullScorecardData: Schema['Scorecard']['type'] = {
         ...scorecardData,
+        experiments: async () => ({
+          data: [],
+          nextToken: null
+        }),
         account: async () => ({
           data: {
             id: accountData.id,
             name: accountData.name!,
             key: accountData.key!,
             description: accountData.description ?? '',
+            experiments: async () => ({
+              data: [],
+              nextToken: null
+            }),
             scorecards: async () => ({
               data: await client.models.Scorecard.list({
                 filter: { accountId: { eq: accountData.id } }

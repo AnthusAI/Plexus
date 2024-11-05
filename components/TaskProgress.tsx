@@ -60,20 +60,21 @@ export function TaskProgress({
   estimatedTimeRemaining 
 }: TaskProgressProps) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
+      {(processedItems !== undefined && totalItems !== undefined) && (
+        <div className="flex justify-between text-sm text-muted-foreground">
+          <span>{progress}%</span>
+          <span>{processedItems} / {totalItems}</span>
+        </div>
+      )}
       <Progress
         value={progress}
-        className={cn("h-2", className)}
+        className={cn("h-4", className)}
       />
       {(elapsedTime || estimatedTimeRemaining) && (
         <div className="flex justify-between text-sm text-muted-foreground">
-          {elapsedTime && <div>Elapsed: {elapsedTime}</div>}
-          {estimatedTimeRemaining && <div>ETA: {estimatedTimeRemaining}</div>}
-        </div>
-      )}
-      {(processedItems !== undefined && totalItems !== undefined) && (
-        <div className="text-sm text-muted-foreground">
-          {processedItems} / {totalItems} items
+          {elapsedTime && <span>Elapsed: {elapsedTime}</span>}
+          {estimatedTimeRemaining && <span>ETA: {estimatedTimeRemaining}</span>}
         </div>
       )}
     </div>
