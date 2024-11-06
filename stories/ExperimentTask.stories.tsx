@@ -23,14 +23,22 @@ const createTask = (id: number, processedItems: number, totalItems: number): Exp
   summary: 'Experiment Summary',
   description: 'Experiment Description',
   data: {
-    accuracy: 75,
-    sensitivity: 78,
-    specificity: 82,
-    precision: 80,
+    accuracy: 90,
+    sensitivity: 92,
+    specificity: 89,
+    precision: 91,
     elapsedTime: '01:30:00',
     processedItems,
     totalItems,
     estimatedTimeRemaining: '00:30:00',
+    confusionMatrix: {
+      matrix: [
+        [45, 3, 2],
+        [2, 43, 2],
+        [1, 2, 40],
+      ],
+      labels: ["Positive", "Negative", "Neutral"],
+    },
   },
 });
 
