@@ -30,30 +30,32 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
     <div className="w-full flex flex-col">
       <div className="relative w-full" style={{ paddingTop: 'calc(100% - 2.5rem)' }}>
         <div className="absolute inset-0 grid" style={{ 
-          gridTemplateColumns: `minmax(1.5rem, auto) 1.5rem 1fr`
+          gridTemplateColumns: `1rem 1.25rem 1fr`,
         }}>
           {/* Actual label */}
-          <div className="flex items-center justify-center">
-            <div className="transform -rotate-90 origin-[50%_50%] whitespace-nowrap text-sm font-medium text-muted-foreground min-w-[1.5rem]">
+          <div className="relative w-full h-full">
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 transform -rotate-90 whitespace-nowrap text-sm font-medium text-muted-foreground">
               Actual
             </div>
           </div>
 
           {/* Row labels */}
-          <div className="grid" style={{ 
-            gridTemplateRows: `repeat(${data.labels.length}, 1fr)`
-          }}>
-            {data.labels.map((label, index) => (
-              <div key={`row-label-${index}`} className="flex items-center justify-end min-w-[1.5rem]">
-                <div className="transform -rotate-90 origin-[50%_50%] whitespace-nowrap text-xs font-medium text-muted-foreground">
-                  {label}
+          <div className="relative w-full h-full">
+            <div className="absolute inset-0 grid" style={{ 
+              gridTemplateRows: `repeat(${data.labels.length}, 1fr)`
+            }}>
+              {data.labels.map((label, index) => (
+                <div key={`row-label-${index}`} className="relative w-full h-full">
+                  <div className="absolute right-1 top-[calc(50%_-_0.5em)] -translate-y-1/2 transform -rotate-90 origin-right whitespace-nowrap text-xs font-medium text-muted-foreground">
+                    {label}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           {/* Matrix cells */}
-          <div className="grid" style={{ 
+          <div className="grid ml-1" style={{ 
             gridTemplateColumns: `repeat(${data.labels.length}, 1fr)`,
             gridTemplateRows: `repeat(${data.labels.length}, 1fr)`,
           }}>
@@ -72,9 +74,9 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
         </div>
       </div>
 
-      {/* Bottom labels stay the same */}
+      {/* Bottom labels */}
       <div className="h-5 flex items-center justify-center" 
-        style={{ paddingLeft: "calc(1.5rem + 1.5rem)" }}>
+        style={{ paddingLeft: "calc(1rem + 1.25rem)" }}>
         {data.labels.map((label, index) => (
           <div key={`header-${index}`} className="flex-1 text-center text-xs font-medium text-muted-foreground">
             {label}
@@ -82,7 +84,7 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
         ))}
       </div>
       <div className="h-5 flex items-center justify-center"
-        style={{ paddingLeft: "calc(1.5rem + 1.5rem)" }}>
+        style={{ paddingLeft: "calc(1rem + 1.25rem)" }}>
         <div className="text-sm font-medium text-muted-foreground">Predicted</div>
       </div>
     </div>
