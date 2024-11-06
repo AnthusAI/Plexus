@@ -24,7 +24,7 @@ const OptimizationTask: React.FC<
   const data = task.data as OptimizationTaskData
 
   const visualization = (
-    <div className="w-full">
+    <div className="flex flex-col items-center w-full">
       <BeforeAfterGauges
         title={task.description || 'Metric'}
         before={data.before?.innerRing[0]?.value ?? 0}
@@ -32,6 +32,17 @@ const OptimizationTask: React.FC<
         variant={variant}
         backgroundColor="var(--gauge-background)"
       />
+      {data && (
+        <div className="mt-4 w-full">
+          <TaskProgress 
+            progress={data.progress ?? 0}
+            elapsedTime={data.elapsedTime ?? ''}
+            processedItems={data.numberComplete ?? 0}
+            totalItems={data.numberTotal ?? 0}
+            estimatedTimeRemaining={data.eta ?? ''}
+          />
+        </div>
+      )}
     </div>
   )
 
@@ -49,19 +60,7 @@ const OptimizationTask: React.FC<
         </TaskHeader>
       )}
       renderContent={(props) => (
-        <TaskContent {...props} visualization={visualization}>
-          <div className="flex flex-col w-full gap-4">
-            {data && (
-              <TaskProgress 
-                progress={data.progress ?? 0}
-                elapsedTime={data.elapsedTime ?? ''}
-                processedItems={data.numberComplete ?? 0}
-                totalItems={data.numberTotal ?? 0}
-                estimatedTimeRemaining={data.eta ?? ''}
-              />
-            )}
-          </div>
-        </TaskContent>
+        <TaskContent {...props} visualization={visualization} />
       )}
     />
   )
