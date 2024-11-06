@@ -1,6 +1,7 @@
 import React from 'react'
 import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
 import { Siren, MessageCircleWarning, Info, LucideIcon } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface AlertTaskProps extends Omit<TaskComponentProps, 'renderHeader' | 'renderContent'> {
   iconType: 'siren' | 'warning' | 'info';
@@ -25,12 +26,21 @@ const AlertTask: React.FC<AlertTaskProps> = ({
       IconComponent = Siren;
       break;
     default:
-      IconComponent = Info; // Fallback to Info if iconType is unknown
+      IconComponent = Info;
   }
 
   const visualization = (
-    <div className="flex items-center justify-center">
-      <IconComponent className="h-[120px] w-[120px] text-destructive" strokeWidth={2.5} />
+    <div className={cn(
+      "flex flex-col items-center w-full",
+      variant === 'detail' ? 'grid grid-cols-2 gap-2' : 'flex justify-center'
+    )}>
+      <div className="relative w-full aspect-square flex items-center justify-center max-w-[20em]">
+        <IconComponent 
+          className="text-destructive absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" 
+          style={{ width: '70%', height: '70%' }}
+          strokeWidth={2.5} 
+        />
+      </div>
     </div>
   )
 
@@ -43,14 +53,12 @@ const AlertTask: React.FC<AlertTaskProps> = ({
       renderHeader={(props) => (
         <TaskHeader {...props}>
           <div className="flex justify-end w-full">
-            <Siren className="h-6 w-6" />
+            <IconComponent className="h-6 w-6" />
           </div>
         </TaskHeader>
       )}
       renderContent={(props) => (
-        <TaskContent {...props} visualization={visualization}>
-          {/* Additional content can be added here if needed */}
-        </TaskContent>
+        <TaskContent {...props} visualization={visualization} />
       )}
     />
   )
