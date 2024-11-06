@@ -1,6 +1,5 @@
 import React from 'react'
-import { Gauge } from './gauge'
-import type { Segment } from './gauge'
+import { Gauge, type Segment } from './gauge'
 
 interface BeforeAfterGaugesProps {
   title: string
@@ -13,6 +12,21 @@ interface BeforeAfterGaugesProps {
   backgroundColor?: string
 }
 
+const getChangeArrow = (before: number, after: number) => {
+  const difference = after - before
+  const percentChange = (difference / before) * 100
+  
+  if (difference === 0) return '→'
+  
+  if (difference > 0) {
+    if (percentChange >= 50) return '↑'
+    return '↗'
+  } else {
+    if (percentChange <= -50) return '↓'
+    return '↘'
+  }
+}
+
 const BeforeAfterGauges: React.FC<BeforeAfterGaugesProps> = ({
   title,
   before,
@@ -23,28 +37,29 @@ const BeforeAfterGauges: React.FC<BeforeAfterGaugesProps> = ({
   variant = 'grid',
   backgroundColor
 }) => {
+  const arrowCharacter = getChangeArrow(before, after)
+  
   return (
     <div data-testid="before-after-gauges" className="flex flex-col items-center w-full">
-      <div className="text-lg font-bold mb-0">{title}</div>
-      <div className="flex w-full justify-center space-x-8">
+      <div className="relative w-full">
         <Gauge 
-          value={before} 
-          title="Before"
+          value={after}
+          beforeValue={before}
+          title={title}
           segments={segments}
           min={min}
           max={max}
           showTicks={variant === 'detail'}
           backgroundColor={backgroundColor}
         />
-        <Gauge 
-          value={after} 
-          title="After"
-          segments={segments}
-          min={min}
-          max={max}
-          showTicks={variant === 'detail'}
-          backgroundColor={backgroundColor}
-        />
+        <div 
+          className="absolute left-1/2 -translate-x-1/2 text-xs text-muted-foreground whitespace-nowrap"
+          style={{
+            bottom: variant === 'detail' ? '24px' : '20px'
+          }}
+        >
+          {before}% {arrowCharacter} {after}%
+        </div>
       </div>
     </div>
   )

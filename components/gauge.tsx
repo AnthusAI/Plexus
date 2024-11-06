@@ -11,10 +11,11 @@ export interface Segment {
 
 interface GaugeProps {
   value: number
+  beforeValue?: number
   segments?: Segment[]
   min?: number
   max?: number
-  title?: string
+  title?: React.ReactNode
   backgroundColor?: string
   showTicks?: boolean
 }
@@ -26,6 +27,7 @@ const calculateAngle = (percent: number) => {
 
 const GaugeComponent: React.FC<GaugeProps> = ({ 
   value, 
+  beforeValue,
   segments, 
   min = 0, 
   max = 100,
@@ -34,9 +36,13 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   showTicks = true
 }) => {
   const [animatedValue, setAnimatedValue] = useState(0)
+  const [animatedBeforeValue, setAnimatedBeforeValue] = useState(0)
   const radius = 80
   const strokeWidth = 25
   const normalizedValue = ((value - min) / (max - min)) * 100
+  const normalizedBeforeValue = beforeValue !== undefined 
+    ? ((beforeValue - min) / (max - min)) * 100 
+    : null
 
   useEffect(() => {
     const startTime = performance.now()
@@ -44,6 +50,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
     
     const startAngle = animatedValue
     const targetAngle = normalizedValue
+    const startBeforeAngle = animatedBeforeValue
+    const targetBeforeAngle = normalizedBeforeValue ?? 0
     
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime
@@ -51,8 +59,13 @@ const GaugeComponent: React.FC<GaugeProps> = ({
       
       const easeProgress = 1 - Math.pow(1 - progress, 3)
       const currentValue = startAngle + (targetAngle - startAngle) * easeProgress
+      const currentBeforeValue = startBeforeAngle + 
+        (targetBeforeAngle - startBeforeAngle) * easeProgress
       
       setAnimatedValue(currentValue)
+      if (normalizedBeforeValue !== null) {
+        setAnimatedBeforeValue(currentBeforeValue)
+      }
       
       if (progress < 1) {
         requestAnimationFrame(animate)
@@ -60,7 +73,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
     }
     
     requestAnimationFrame(animate)
-  }, [normalizedValue])
+  }, [normalizedValue, normalizedBeforeValue])
 
   const calculateCoordinates = (angle: number, r: number = radius) => {
     const x = r * Math.cos(angle - Math.PI / 2)
@@ -218,6 +231,13 @@ const GaugeComponent: React.FC<GaugeProps> = ({
               {renderSegments()}
               {showTicks && renderTicks()}
               <g>
+                {normalizedBeforeValue !== null && (
+                  <path
+                    d={`M 0,-${radius} L -6,0 L 6,0 Z`}
+                    className="fill-muted-foreground opacity-40"
+                    transform={`rotate(${(animatedBeforeValue * 210) / 100})`}
+                  />
+                )}
                 <circle cx="0" cy="0" r="10" className="fill-foreground" />
                 <path
                   d={`M 0,-${radius} L -6,0 L 6,0 Z`}
