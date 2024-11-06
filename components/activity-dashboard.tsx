@@ -180,6 +180,14 @@ const recentActivities: ActivityData[] = [
       totalItems: 100,
       elapsedTime: "00:02:15",
       estimatedTimeRemaining: "00:03:05",
+      confusionMatrix: {
+        matrix: [
+          [21, 2, 1],
+          [1, 19, 1],
+          [0, 1, 18],
+        ],
+        labels: ["Yes", "No", "NA"],
+      },
     },
   },
   {
@@ -253,6 +261,14 @@ const recentActivities: ActivityData[] = [
       totalItems: 100,
       elapsedTime: "00:04:20",
       estimatedTimeRemaining: "00:00:00",
+      confusionMatrix: {
+        matrix: [
+          [45, 3, 2],
+          [2, 43, 2],
+          [1, 2, 40],
+        ],
+        labels: ["Yes", "No", "NA"],
+      },
     },
   },
   {

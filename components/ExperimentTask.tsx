@@ -4,6 +4,7 @@ import { FlaskConical } from 'lucide-react'
 import MetricsGauges from '@/components/MetricsGauges'
 import { TaskProgress } from '@/components/TaskProgress'
 import { ResponsiveWaffle } from '@nivo/waffle'
+import { ConfusionMatrix } from '@/components/confusion-matrix'
 
 export interface ExperimentTaskData {
   accuracy: number
@@ -14,6 +15,10 @@ export interface ExperimentTaskData {
   processedItems: number
   totalItems: number
   estimatedTimeRemaining: string
+  confusionMatrix?: {
+    matrix: number[][]
+    labels: string[]
+  }
 }
 
 export type ExperimentTask = {
@@ -153,6 +158,11 @@ export default function ExperimentTask({
           }]}
         />
       </div>
+      {data.confusionMatrix && (
+        <div className="mt-8">
+          <ConfusionMatrix data={data.confusionMatrix} />
+        </div>
+      )}
     </div>
   ) : (
     <div className="w-full">
