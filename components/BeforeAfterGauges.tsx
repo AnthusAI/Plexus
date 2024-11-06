@@ -40,8 +40,8 @@ const BeforeAfterGauges: React.FC<BeforeAfterGaugesProps> = ({
   const arrowCharacter = getChangeArrow(before, after)
   
   return (
-    <div data-testid="before-after-gauges" className="flex flex-col items-center w-full">
-      <div className="relative w-full">
+    <div data-testid="before-after-gauges" className="flex justify-center w-full">
+      <div className="relative">
         <Gauge 
           value={after}
           beforeValue={before}

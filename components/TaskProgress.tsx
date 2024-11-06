@@ -59,9 +59,12 @@ export function TaskProgress({
   totalItems,
   estimatedTimeRemaining 
 }: TaskProgressProps) {
+  const showTopRow = processedItems !== undefined && totalItems !== undefined
+  const showBottomRow = elapsedTime || estimatedTimeRemaining
+
   return (
-    <div className="space-y-1">
-      {(processedItems !== undefined && totalItems !== undefined) && (
+    <div className="flex flex-col gap-1">
+      {showTopRow && (
         <div className="flex justify-between text-sm text-muted-foreground">
           <span>{progress}%</span>
           <span>{processedItems} / {totalItems}</span>
@@ -71,7 +74,7 @@ export function TaskProgress({
         value={progress}
         className={cn("h-4", className)}
       />
-      {(elapsedTime || estimatedTimeRemaining) && (
+      {showBottomRow && (
         <div className="flex justify-between text-sm text-muted-foreground">
           {elapsedTime && <span>Elapsed: {elapsedTime}</span>}
           {estimatedTimeRemaining && <span>ETA: {estimatedTimeRemaining}</span>}
