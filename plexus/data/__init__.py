@@ -5,4 +5,3 @@ Each should override the parameters to define whatever parameters it needs, and 
 """
 from .DataCache import DataCache
 from .AWSDataLakeCache import AWSDataLakeCache
-from .CallCriteriaDBCache import CallCriteriaDBCache
