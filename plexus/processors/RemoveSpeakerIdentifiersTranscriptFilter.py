@@ -10,7 +10,7 @@ class RemoveSpeakerIdentifiersTranscriptFilter(DataframeProcessor):
         truncated_original_transcript = (original_transcript[:512] + '...') if len(original_transcript) > 512 else original_transcript
 
         dataframe['text'] = dataframe['text'].apply(
-            lambda text: re.sub(r'^\w+:\s*', '', str(text), flags=re.MULTILINE)
+            lambda text: re.sub(r'(?:^|\b)\w+:\s*', '', str(text), flags=re.MULTILINE)
         )
 
         modified_transcript = dataframe.at[random_row_index, 'text']
