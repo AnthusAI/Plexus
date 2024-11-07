@@ -40,3 +40,58 @@ next-env.d.ts
 amplify_outputs*
 amplifyconfiguration*
 *storybook.log
+
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.env
+.venv
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Next.js
+.next/
+out/
+node_modules/
+
+# Amplify
+amplify/team-provider-info.json
+amplify/backend/amplify-meta.json
+amplify/backend/awscloudformation/
+amplify/backend/api/generated/
+amplify/backend/auth/generated/
+amplify/backend/function/generated/
+amplify/backend/storage/generated/
+amplify/#current-cloud-backend
