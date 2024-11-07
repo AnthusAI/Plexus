@@ -132,8 +132,8 @@ export const data = defineData({
     apiKeyAuthorizationMode: {
       expiresInDays: 30,
     },
-    iamAuthorizationMode: {
+    identityPoolAuthorizationMode: {
       enabled: true,
-    },
+    }
   },
 });
