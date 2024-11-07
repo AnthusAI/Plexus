@@ -1,50 +1,113 @@
-import React from 'react';
-import { StoryFn, Meta } from '@storybook/react';
-import { Task, TaskHeader, TaskContent, BaseTaskProps, TaskComponentProps } from '@/components/Task';
+import React from 'react'
+import type { Meta, StoryObj } from '@storybook/react'
+import { Task, TaskHeader, TaskContent } from '@/components/Task'
+import { Activity } from 'lucide-react'
 
-export default {
-  title: 'Tasks/Task',
+const meta = {
+  title: 'Components/Task',
   component: Task,
-  argTypes: {
-    variant: {
-      control: { type: 'radio' },
-      options: ['grid', 'detail'],
-    },
+  parameters: {
+    layout: 'centered',
   },
-} as Meta;
+} satisfies Meta<typeof Task>
 
-const Template: StoryFn<TaskComponentProps> = (args) => (
-  <Task 
-    {...args}
-    renderHeader={(props) => <TaskHeader {...props} />}
-    renderContent={(props) => <TaskContent {...props} />}
-  />
-);
+export default meta
+type Story = StoryObj<typeof Task>
 
-const createTask = (id: number, type: string, summary: string): TaskComponentProps => ({
-  variant: 'grid',
-  task: {
-    id,
-    type,
-    scorecard: 'General',
-    score: 'In Progress',
-    time: '1 hour ago',
-    summary,
+const sampleTask = {
+  id: 1,
+  type: 'Sample Task',
+  scorecard: 'Test Scorecard',
+  score: 'Test Score',
+  time: '2 hours ago',
+  summary: 'Task Summary',
+  description: 'Task Description',
+}
+
+const TaskStoryHeader = (props: any) => (
+  <TaskHeader {...props}>
+    <div className="flex justify-end w-full">
+      <Activity className="h-6 w-6" />
+    </div>
+  </TaskHeader>
+)
+
+const TaskStoryContent = (props: any) => (
+  <TaskContent {...props} />
+)
+
+export const Grid: Story = {
+  args: {
+    variant: 'grid',
+    task: sampleTask,
+    renderHeader: TaskStoryHeader,
+    renderContent: TaskStoryContent,
   },
-  onClick: () => console.log(`Clicked on task ${id}`),
-  renderHeader: (props) => <TaskHeader {...props} />,
-  renderContent: (props) => <TaskContent {...props} />,
-});
+}
 
-export const Grid = () => (
-  <>
-    <Template {...createTask(1, 'Default Task', 'This is a default task')} />
-    <Template {...createTask(2, 'Grid Task', 'This is a grid task')} />
-  </>
-);
+export const Detail: Story = {
+  args: {
+    variant: 'detail',
+    task: sampleTask,
+    isFullWidth: false,
+    onToggleFullWidth: () => console.log('Toggle full width'),
+    onClose: () => console.log('Close'),
+    renderHeader: TaskStoryHeader,
+    renderContent: TaskStoryContent,
+  },
+  decorators: [
+    (Story) => (
+      <div className="w-[600px]">
+        <Story />
+      </div>
+    ),
+  ],
+}
 
-export const Detail = Template.bind({});
-Detail.args = {
-  ...createTask(3, 'Detail Task', 'This is a detail task'),
-  variant: 'detail',
-};
+export const DetailFullWidth: Story = {
+  args: {
+    ...Detail.args,
+    isFullWidth: true,
+  },
+  parameters: {
+    layout: 'fullscreen',
+  },
+  decorators: [
+    (Story) => (
+      <div className="w-full h-screen p-4">
+        <Story />
+      </div>
+    ),
+  ],
+}
+
+export const GridWithMany = {
+  render: () => (
+    <div className="grid grid-cols-2 gap-4">
+      <Task
+        variant="grid"
+        task={{ ...sampleTask, id: 1, summary: 'First Task' }}
+        renderHeader={TaskStoryHeader}
+        renderContent={TaskStoryContent}
+      />
+      <Task
+        variant="grid"
+        task={{ ...sampleTask, id: 2, summary: 'Second Task' }}
+        renderHeader={TaskStoryHeader}
+        renderContent={TaskStoryContent}
+      />
+      <Task
+        variant="grid"
+        task={{ ...sampleTask, id: 3, summary: 'Third Task' }}
+        renderHeader={TaskStoryHeader}
+        renderContent={TaskStoryContent}
+      />
+      <Task
+        variant="grid"
+        task={{ ...sampleTask, id: 4, summary: 'Fourth Task' }}
+        renderHeader={TaskStoryHeader}
+        renderContent={TaskStoryContent}
+      />
+    </div>
+  ),
+}

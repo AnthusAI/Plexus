@@ -1,5 +1,5 @@
 import React from 'react'
-import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
+import { Task, TaskHeader, TaskContent, BaseTaskProps } from './Task'
 import { Sparkles } from 'lucide-react'
 import BeforeAfterGauges from './BeforeAfterGauges'
 import TaskProgress from './TaskProgress'
@@ -18,9 +18,21 @@ interface OptimizationTaskData {
   }
 }
 
-const OptimizationTask: React.FC<
-  Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>
-> = ({ variant, task, onClick, controlButtons }) => {
+interface OptimizationTaskProps extends Omit<BaseTaskProps, 'task'> {
+  task: BaseTaskProps['task'] & {
+    data?: OptimizationTaskData
+  }
+}
+
+const OptimizationTask: React.FC<OptimizationTaskProps> = ({ 
+  variant, 
+  task, 
+  onClick, 
+  controlButtons,
+  isFullWidth,
+  onToggleFullWidth,
+  onClose
+}) => {
   const data = task.data as OptimizationTaskData
 
   const visualization = (
@@ -52,6 +64,9 @@ const OptimizationTask: React.FC<
       task={task} 
       onClick={onClick} 
       controlButtons={controlButtons}
+      isFullWidth={isFullWidth}
+      onToggleFullWidth={onToggleFullWidth}
+      onClose={onClose}
       renderHeader={(props) => (
         <TaskHeader {...props}>
           <div className="flex justify-end w-full">

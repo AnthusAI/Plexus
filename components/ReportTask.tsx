@@ -1,8 +1,20 @@
 import React from 'react'
-import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
+import { Task, TaskHeader, TaskContent, BaseTaskProps } from './Task'
 import { FileText } from 'lucide-react'
 
-const ReportTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>> = ({ variant, task, onClick, controlButtons }) => {
+interface ReportTaskProps extends Omit<BaseTaskProps, 'task'> {
+  task: BaseTaskProps['task']
+}
+
+const ReportTask: React.FC<ReportTaskProps> = ({ 
+  variant, 
+  task, 
+  onClick, 
+  controlButtons,
+  isFullWidth,
+  onToggleFullWidth,
+  onClose
+}) => {
   const visualization = (
     <div className="flex items-center justify-center h-[120px] w-[120px]">
       {/* Add any specific visualization for ReportTask here */}
@@ -15,6 +27,9 @@ const ReportTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderCont
       task={task} 
       onClick={onClick} 
       controlButtons={controlButtons}
+      isFullWidth={isFullWidth}
+      onToggleFullWidth={onToggleFullWidth}
+      onClose={onClose}
       renderHeader={(props) => (
         <TaskHeader {...props}>
           <div className="flex justify-end w-full">

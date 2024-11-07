@@ -1,10 +1,11 @@
 import React from 'react'
-import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
+import { Task, TaskHeader, TaskContent, BaseTaskProps } from './Task'
 import { Siren, MessageCircleWarning, Info, LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-interface AlertTaskProps extends Omit<TaskComponentProps, 'renderHeader' | 'renderContent'> {
-  iconType: 'siren' | 'warning' | 'info';
+interface AlertTaskProps extends Omit<BaseTaskProps, 'task'> {
+  task: BaseTaskProps['task']
+  iconType: 'siren' | 'warning' | 'info'
 }
 
 const AlertTask: React.FC<AlertTaskProps> = ({
@@ -13,6 +14,9 @@ const AlertTask: React.FC<AlertTaskProps> = ({
   onClick,
   controlButtons,
   iconType,
+  isFullWidth,
+  onToggleFullWidth,
+  onClose
 }) => {
   let IconComponent: LucideIcon;
   switch (iconType) {
@@ -50,6 +54,9 @@ const AlertTask: React.FC<AlertTaskProps> = ({
       task={task} 
       onClick={onClick} 
       controlButtons={controlButtons}
+      isFullWidth={isFullWidth}
+      onToggleFullWidth={onToggleFullWidth}
+      onClose={onClose}
       renderHeader={(props) => (
         <TaskHeader {...props}>
           <div className="flex justify-end w-full">

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
+import { Task, TaskHeader, TaskContent, BaseTaskProps } from './Task'
 import { ListTodo, MoveUpRight } from 'lucide-react'
 import BeforeAfterGauges from './BeforeAfterGauges'
 
@@ -12,9 +12,21 @@ interface ScoreUpdatedTaskData {
   }
 }
 
-const ScoreUpdatedTask: React.FC<
-  Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>
-> = ({ variant, task, onClick, controlButtons }) => {
+interface ScoreUpdatedTaskProps extends Omit<BaseTaskProps, 'task'> {
+  task: BaseTaskProps['task'] & {
+    data?: ScoreUpdatedTaskData
+  }
+}
+
+const ScoreUpdatedTask: React.FC<ScoreUpdatedTaskProps> = ({ 
+  variant, 
+  task, 
+  onClick, 
+  controlButtons,
+  isFullWidth,
+  onToggleFullWidth,
+  onClose
+}) => {
   const data = task.data as ScoreUpdatedTaskData
 
   const visualization = React.useMemo(() => (
@@ -35,6 +47,9 @@ const ScoreUpdatedTask: React.FC<
       task={task} 
       onClick={onClick} 
       controlButtons={controlButtons}
+      isFullWidth={isFullWidth}
+      onToggleFullWidth={onToggleFullWidth}
+      onClose={onClose}
       renderHeader={(props) => (
         <TaskHeader {...props}>
           <div className="flex justify-end w-full">

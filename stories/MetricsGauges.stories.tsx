@@ -62,7 +62,7 @@ const createDetailGaugeConfig = (
   ]
 })
 
-export const Single: Story = {
+export const Grid: Story = {
   args: {
     ...createGaugeConfig(75),
     variant: 'grid'

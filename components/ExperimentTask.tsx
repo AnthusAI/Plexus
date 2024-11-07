@@ -37,13 +37,19 @@ export interface ExperimentTaskProps {
   task: ExperimentTask
   onClick?: () => void
   controlButtons?: React.ReactNode
+  isFullWidth?: boolean
+  onToggleFullWidth?: () => void
+  onClose?: () => void
 }
 
 export default function ExperimentTask({ 
   variant = "grid",
   task,
   onClick,
-  controlButtons
+  controlButtons,
+  isFullWidth,
+  onToggleFullWidth,
+  onClose
 }: ExperimentTaskProps) {
   const data = task.data
   const waffleContainerRef = useRef<HTMLDivElement>(null)
@@ -185,6 +191,9 @@ export default function ExperimentTask({
       task={task}
       onClick={onClick}
       controlButtons={controlButtons}
+      isFullWidth={isFullWidth}
+      onToggleFullWidth={onToggleFullWidth}
+      onClose={onClose}
       renderHeader={(props) => (
         <TaskHeader {...props}>
           <div className="flex justify-end w-full">

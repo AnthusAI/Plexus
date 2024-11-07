@@ -1,5 +1,5 @@
 import React from 'react'
-import { Task, TaskHeader, TaskContent, TaskComponentProps } from './Task'
+import { Task, TaskHeader, TaskContent, BaseTaskProps } from './Task'
 import { MessageCircleMore } from 'lucide-react'
 import TaskProgress from './TaskProgress'
 
@@ -11,11 +11,20 @@ interface FeedbackTaskData {
   estimatedTimeRemaining?: string
 }
 
-const FeedbackTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderContent'>> = ({
+interface FeedbackTaskProps extends Omit<BaseTaskProps, 'task'> {
+  task: BaseTaskProps['task'] & {
+    data?: FeedbackTaskData
+  }
+}
+
+const FeedbackTask: React.FC<FeedbackTaskProps> = ({
   variant,
   task,
   onClick,
   controlButtons,
+  isFullWidth,
+  onToggleFullWidth,
+  onClose
 }) => {
   const data = task.data as FeedbackTaskData
 
@@ -31,6 +40,9 @@ const FeedbackTask: React.FC<Omit<TaskComponentProps, 'renderHeader' | 'renderCo
       task={task} 
       onClick={onClick} 
       controlButtons={controlButtons}
+      isFullWidth={isFullWidth}
+      onToggleFullWidth={onToggleFullWidth}
+      onClose={onClose}
       renderHeader={(props) => (
         <TaskHeader {...props}>
           <div className="flex justify-end w-full">

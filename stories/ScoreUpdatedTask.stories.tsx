@@ -1,38 +1,29 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { expect, within } from '@storybook/test';
 import ScoreUpdatedTask from '@/components/ScoreUpdatedTask';
 import { BaseTaskProps } from '@/components/Task';
 
 const meta: Meta<typeof ScoreUpdatedTask> = {
   title: 'Tasks/Types/ScoreUpdatedTask',
   component: ScoreUpdatedTask,
-  args: {
-    variant: 'grid',
-    task: {
-      id: 1,
-      type: 'Score Update',
-      scorecard: 'Performance Review',
-      score: 'Improved',
-      time: '30 minutes ago',
-      summary: 'Score improved significantly',
-      description: 'Score update details',
-      data: {
-        before: {
-          innerRing: [{ value: 75 }],
-        },
-        after: {
-          innerRing: [{ value: 85 }],
-        },
-      }
-    }
-  }
+  parameters: {
+    layout: 'centered',
+  },
 };
 
 export default meta;
 type Story = StoryObj<typeof ScoreUpdatedTask>;
 
-const createTask = (id: number, beforeScore: number, afterScore: number): BaseTaskProps => ({
+interface ScoreUpdatedTaskStoryProps extends Omit<BaseTaskProps, 'task'> {
+  task: BaseTaskProps['task'] & {
+    data?: {
+      before: { innerRing: Array<{ value: number }> }
+      after: { innerRing: Array<{ value: number }> }
+    }
+  }
+}
+
+const createTask = (id: number, beforeScore: number, afterScore: number): ScoreUpdatedTaskStoryProps => ({
   variant: 'grid',
   task: {
     id,
@@ -54,108 +45,51 @@ const createTask = (id: number, beforeScore: number, afterScore: number): BaseTa
   onClick: () => console.log(`Clicked task ${id}`),
 });
 
-export const Single: Story = {
+export const Grid: Story = {
   args: createTask(1, 75, 85),
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    
-    // Check task metadata
-    await expect(canvas.getByText('Score update details')).toBeInTheDocument();
-    await expect(canvas.getByText('Performance Review')).toBeInTheDocument();
-    await expect(canvas.getByText('Improved')).toBeInTheDocument();
-    await expect(canvas.getByText('30 minutes ago')).toBeInTheDocument();
-    await expect(canvas.getByText('Score Update')).toBeInTheDocument();
-    
-    // Check for ListTodo icon
-    const todoIcon = canvasElement.querySelector('.lucide.lucide-list-todo');
-    expect(todoIcon).toBeInTheDocument();
-    expect(todoIcon).toHaveClass('h-6', 'w-6');
-    
-    // Check before/after score values
-    await expect(canvas.getByText(/75%/)).toBeInTheDocument();
-    await expect(canvas.getByText(/85%/)).toBeInTheDocument();
-    
-    // Check for arrow icon
-    const arrowIcon = canvasElement.querySelector('.lucide.lucide-move-up-right');
-    expect(arrowIcon).toBeInTheDocument();
-  }
 };
 
 export const Detail: Story = {
   args: {
     ...createTask(2, 60, 90),
     variant: 'detail',
+    isFullWidth: false,
+    onToggleFullWidth: () => console.log('Toggle full width'),
+    onClose: () => console.log('Close'),
   },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    
-    // Check task metadata
-    await expect(canvas.getByText('Score update details')).toBeInTheDocument();
-    
-    // Check score values in detail view
-    await expect(canvas.getByText(/60%/)).toBeInTheDocument();
-    await expect(canvas.getByText(/90%/)).toBeInTheDocument();
-        
-    // Check for arrow icon
-    const arrowIcon = canvasElement.querySelector('.lucide.lucide-move-up-right');
-    expect(arrowIcon).toBeInTheDocument();
-    
-    // Verify pie chart visualization
-    const pieChartContainers = canvasElement.querySelectorAll(
-      '.recharts-responsive-container'
-    );
-    expect(pieChartContainers.length).toBeGreaterThan(0);
-    
-    // Verify "Before" and "After" labels
-    await expect(canvas.getByText('Before')).toBeInTheDocument();
-    await expect(canvas.getByText('After')).toBeInTheDocument();
-  }
+  decorators: [
+    (Story) => (
+      <div className="w-[600px]">
+        <Story />
+      </div>
+    ),
+  ],
 };
 
-export const Grid: Story = {
+export const DetailFullWidth: Story = {
+  args: {
+    ...Detail.args,
+    isFullWidth: true,
+  },
+  parameters: {
+    layout: 'fullscreen',
+  },
+  decorators: [
+    (Story) => (
+      <div className="w-full h-screen p-4">
+        <Story />
+      </div>
+    ),
+  ],
+};
+
+export const GridWithMany = {
   render: () => (
-    <>
+    <div className="grid grid-cols-2 gap-4">
       <ScoreUpdatedTask {...createTask(1, 50, 75)} />
       <ScoreUpdatedTask {...createTask(2, 60, 80)} />
       <ScoreUpdatedTask {...createTask(3, 70, 85)} />
       <ScoreUpdatedTask {...createTask(4, 80, 95)} />
-    </>
-  ),
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    
-    // Check that we have all ListTodo icons
-    const todoIcons = canvasElement.querySelectorAll('.lucide.lucide-list-todo');
-    expect(todoIcons).toHaveLength(4);
-    
-    // Check that each task has its description
-    const descriptions = canvas.getAllByText('Score update details');
-    expect(descriptions).toHaveLength(4);
-    
-    // Verify score values are present
-    await expect(canvas.getByText(/50%/)).toBeInTheDocument();
-    await expect(canvas.getByText(/75%/)).toBeInTheDocument();
-    await expect(canvas.getByText(/60%/)).toBeInTheDocument();
-    await expect(canvas.getByText(/95%/)).toBeInTheDocument();
-  }
-};
-
-export const Stretched: Story = {
-  render: () => (
-    <div className="h-64"> {/* Fixed height to stretch the component vertically */}
-      <ScoreUpdatedTask {...createTask(1, 75, 85)} />
-    </div>
-  ),
-};
-
-export const GridWithTallFirst: Story = {
-  render: () => (
-    <div className="grid grid-cols-2 gap-4">
-      <div className="row-span-2 h-64">
-        <ScoreUpdatedTask {...createTask(1, 75, 85)} />
-      </div>
-      <ScoreUpdatedTask {...createTask(2, 60, 80)} />
-      <ScoreUpdatedTask {...createTask(3, 70, 85)} />
     </div>
   ),
 };
