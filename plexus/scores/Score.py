@@ -67,6 +67,8 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         dependencies: Optional[List[dict]] = None
         data: Optional[dict] = None
         number_of_classes: Optional[int] = None
+        label_score_name: Optional[str] = None
+        label_field: Optional[str] = None
 
         @field_validator('data')
         def convert_data_percentage(cls, value):
@@ -463,6 +465,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         score_name = self.parameters.name
         if hasattr(self.parameters, 'label_score_name') and self.parameters.label_score_name:
             score_name = self.parameters.label_score_name
+            logging.info(f"Using label_score_name: {score_name}")
         if hasattr(self.parameters, 'label_field') and self.parameters.label_field:
             score_name = f"{score_name} {self.parameters.label_field}"
         return score_name
