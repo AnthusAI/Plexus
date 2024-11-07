@@ -5,36 +5,40 @@ import MetricsGauges from '@/components/MetricsGauges'
 import { TaskProgress } from '@/components/TaskProgress'
 import { ResponsiveWaffle } from '@nivo/waffle'
 import { ConfusionMatrix } from '@/components/confusion-matrix'
+import { formatDuration, intervalToDuration, formatDistanceToNow } from 'date-fns'
 
 export interface ExperimentTaskData {
   accuracy: number
   sensitivity: number
   specificity: number
   precision: number
-  elapsedTime: string
   processedItems: number
   totalItems: number
-  estimatedTimeRemaining: string
+  progress: number
+  inferences: number
+  results: number
+  cost: number
+  status: string
+  startedAt?: string
+  estimatedEndAt?: string
   confusionMatrix?: {
     matrix: number[][]
     labels: string[]
   }
 }
 
-export type ExperimentTask = {
-  id: number
-  type: 'Experiment started' | 'Experiment completed'
-  scorecard: string
-  score: string
-  time: string
-  summary: string
-  description?: string
-  data: ExperimentTaskData
-}
-
-export interface ExperimentTaskProps {
+export type ExperimentTaskProps = {
   variant?: 'grid' | 'detail'
-  task: ExperimentTask
+  task: {
+    id: number
+    type: string
+    scorecard: string
+    score: string
+    time: string
+    summary: string
+    description?: string
+    data: ExperimentTaskData
+  }
   onClick?: () => void
   controlButtons?: React.ReactNode
   isFullWidth?: boolean
@@ -67,6 +71,23 @@ export default function ExperimentTask({
     window.addEventListener('resize', updateWaffleHeight)
     return () => window.removeEventListener('resize', updateWaffleHeight)
   }, [])
+
+  const getElapsedTime = () => {
+    if (!data.startedAt) return "00:00:00"
+    const start = new Date(data.startedAt)
+    const now = new Date()
+    const duration = intervalToDuration({ start, end: now })
+    return formatDuration(duration, { format: ['hours', 'minutes', 'seconds'] })
+  }
+
+  const getEstimatedTimeRemaining = () => {
+    if (!data.estimatedEndAt) return "00:00:00"
+    const now = new Date()
+    const end = new Date(data.estimatedEndAt)
+    if (end < now) return "00:00:00"
+    const duration = intervalToDuration({ start: now, end })
+    return formatDuration(duration, { format: ['hours', 'minutes', 'seconds'] })
+  }
 
   const metrics = variant === 'detail' ? [
     {
@@ -103,10 +124,10 @@ export default function ExperimentTask({
       <div className="mt-4">
         <TaskProgress 
           progress={(data.processedItems / data.totalItems) * 100}
-          elapsedTime={data.elapsedTime}
+          elapsedTime={getElapsedTime()}
           processedItems={data.processedItems}
           totalItems={data.totalItems}
-          estimatedTimeRemaining={data.estimatedTimeRemaining}
+          estimatedTimeRemaining={getEstimatedTimeRemaining()}
         />
       </div>
       <div 
@@ -176,10 +197,10 @@ export default function ExperimentTask({
       <div className="mt-4">
         <TaskProgress 
           progress={(data.processedItems / data.totalItems) * 100}
-          elapsedTime={data.elapsedTime}
+          elapsedTime={getElapsedTime()}
           processedItems={data.processedItems}
           totalItems={data.totalItems}
-          estimatedTimeRemaining={data.estimatedTimeRemaining}
+          estimatedTimeRemaining={getEstimatedTimeRemaining()}
         />
       </div>
     </div>
