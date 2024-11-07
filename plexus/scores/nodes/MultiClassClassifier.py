@@ -57,22 +57,25 @@ class MultiClassClassifier(BaseNode):
             cleaned_output = ' '.join(word.lower() for word in output.split())
             logging.debug(f"Cleaned output: {cleaned_output}")
 
+            # Determine max words in any valid class
+            max_words = max(len(class_name.split()) for class_name in self.valid_classes)
+            logging.debug(f"Max words in valid classes: {max_words}")
+
+            # Split into words but keep more context for multi-word matches
             words = cleaned_output.split()
             if not self.parse_from_start:
-                words = list(reversed(words))
-            
-            start_words = ' '.join(words[:1])
-            end_words = ' '.join(words[-1:])
-            logging.debug(f'Start words: {start_words}, End words: {end_words}')
+                # Take the last N words where N is the length of the longest valid class
+                end_phrase = ' '.join(words[-max_words:])
+                logging.debug(f'End phrase: {end_phrase}')
+            else:
+                # Take the first N words where N is the length of the longest valid class
+                end_phrase = ' '.join(words[:max_words])
+                logging.debug(f'Start phrase: {end_phrase}')
 
-            if not self.valid_classes:
-                logging.error("No valid classes provided")
-                raise RuntimeError("No valid classes provided")
-
-            # Check start/end words first
+            # Check for exact matches in the end/start phrase first
             for class_name in self.valid_classes:
                 clean_class = class_name.lower()
-                if clean_class in start_words or clean_class in end_words:
+                if clean_class in end_phrase:
                     return {"classification": class_name}
 
             # Check for exact matches in the entire output
