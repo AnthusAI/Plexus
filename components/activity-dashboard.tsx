@@ -27,7 +27,7 @@ import FeedbackTask from '@/components/FeedbackTask'
 import ScoreUpdatedTask from '@/components/ScoreUpdatedTask'
 
 // Import the type from ExperimentTask
-import type { ExperimentTask } from '@/components/ExperimentTask'
+import type { ExperimentTaskData } from '@/components/ExperimentTask'
 
 interface OptimizationTask {
   id: number
@@ -113,7 +113,7 @@ interface ScoreUpdatedTask {
 }
 
 type ActivityData = 
-  | ExperimentTask 
+  | { id: number; type: 'Experiment started' | 'Experiment completed'; scorecard: string; score: string; time: string; summary: string; description?: string; data: ExperimentTaskData }
   | OptimizationTask 
   | FeedbackTask 
   | AlertTask 
@@ -188,6 +188,11 @@ const recentActivities: ActivityData[] = [
         ],
         labels: ["Yes", "No", "NA"],
       },
+      progress: 50,
+      inferences: 100,
+      results: 50,
+      cost: 10,
+      status: "In Progress"
     },
   },
   {
@@ -269,6 +274,11 @@ const recentActivities: ActivityData[] = [
         ],
         labels: ["Yes", "No", "NA"],
       },
+      progress: 100,
+      inferences: 200,
+      results: 100,
+      cost: 20,
+      status: "Completed"
     },
   },
   {
@@ -354,7 +364,7 @@ interface BarData {
   [key: string]: string | number;
 }
 
-function isExperimentActivity(activity: ActivityData): activity is ExperimentTask {
+function isExperimentActivity(activity: ActivityData): activity is { id: number; type: 'Experiment started' | 'Experiment completed'; scorecard: string; score: string; time: string; summary: string; description?: string; data: ExperimentTaskData } {
   return (activity.type === "Experiment started" || activity.type === "Experiment completed") 
     && activity.data !== undefined
     && 'accuracy' in activity.data 
