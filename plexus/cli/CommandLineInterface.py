@@ -1,4 +1,8 @@
+import os
+import sys
 import click
+import importlib
+import builtins
 from rich.console import Console
 from collections import OrderedDict
 from .DataCommands import data
@@ -41,3 +45,37 @@ main.add_command(train)
 main.add_command(report)
 main.add_command(predict)
 main.add_command(tuning)
+
+def load_plexus_extensions():
+    # Define the path to the `plexus_extensions` directory
+    extensions_path = os.path.join(os.getcwd(), 'plexus_extensions')
+    
+    # Add the `plexus_extensions` path to `sys.path` if it exists
+    if os.path.isdir(extensions_path):
+        sys.path.insert(0, extensions_path)
+        
+        # Walk through the `plexus_extensions` directory
+        for root, _, files in os.walk(extensions_path):
+            for file in files:
+                if file.endswith(".py") and file != "__init__.py":
+                    # Construct the module name from the file path
+                    module_name = file[:-3]  # Remove `.py` from the filename
+                    
+                    try:
+                        # Import the module and print debug info
+                        imported_module = importlib.import_module(module_name)
+                        print(f"Loaded extension module: {module_name}")
+                        
+                        # Register each class in the module by adding it to builtins
+                        for attr_name in dir(imported_module):
+                            attr = getattr(imported_module, attr_name)
+                            if isinstance(attr, type):  # Check if attr is a class
+                                setattr(builtins, attr_name, attr)  # Register in builtins
+                                print(f"Registered class {attr_name} globally in builtins")
+                    except ImportError as e:
+                        print(f"Error loading module {module_name}: {e}")
+    else:
+        print("No extensions folder found.")
+
+# Call this function during CLI initialization
+load_plexus_extensions()
