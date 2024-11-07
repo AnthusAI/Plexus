@@ -9,7 +9,7 @@ const schema = a.schema({
       scorecards: a.hasMany('Scorecard', 'accountId'),
       experiments: a.hasMany('Experiment', 'accountId'),
     })
-    .authorization((allow) => [allow.authenticated()])
+    .authorization((allow) => [allow.publicApiKey()])
     .secondaryIndexes((idx) => [
       idx("key")
     ]),
@@ -25,7 +25,7 @@ const schema = a.schema({
       sections: a.hasMany('ScorecardSection', 'scorecardId'),
       experiments: a.hasMany('Experiment', 'scorecardId'),
     })
-    .authorization((allow) => [allow.authenticated()])
+    .authorization((allow) => [allow.publicApiKey()])
     .secondaryIndexes((idx) => [
       idx("accountId"),
       idx("key"),
@@ -40,7 +40,7 @@ const schema = a.schema({
       scorecard: a.belongsTo('Scorecard', 'scorecardId'),
       scores: a.hasMany('Score', 'sectionId'),
     })
-    .authorization((allow) => [allow.authenticated()])
+    .authorization((allow) => [allow.publicApiKey()])
     .secondaryIndexes((idx) => [
       idx("scorecardId")
     ]),
@@ -62,7 +62,7 @@ const schema = a.schema({
       versionHistory: a.json(),
       experiments: a.hasMany('Experiment', 'scoreId'),
     })
-    .authorization((allow) => [allow.authenticated()])
+    .authorization((allow) => [allow.publicApiKey()])
     .secondaryIndexes((idx) => [
       idx("sectionId")
     ]),
@@ -99,7 +99,7 @@ const schema = a.schema({
       samples: a.hasMany('Sample', 'experimentId'),
       confusionMatrix: a.json(),
     })
-    .authorization((allow) => [allow.authenticated()])
+    .authorization((allow) => [allow.publicApiKey()])
     .secondaryIndexes((idx) => [
       idx("accountId"),
       idx("scorecardId"),
@@ -117,7 +117,7 @@ const schema = a.schema({
       createdAt: a.datetime().required(),
       updatedAt: a.datetime().required(),
     })
-    .authorization((allow) => [allow.authenticated()])
+    .authorization((allow) => [allow.publicApiKey()])
     .secondaryIndexes((idx) => [
       idx("experimentId")
     ]),
@@ -130,10 +130,7 @@ export const data = defineData({
   authorizationModes: {
     defaultAuthorizationMode: 'userPool',
     apiKeyAuthorizationMode: {
-      expiresInDays: 30,
-    },
-    identityPoolAuthorizationMode: {
-      enabled: true,
+      expiresInDays: 0  // Never expires
     }
   },
 });
