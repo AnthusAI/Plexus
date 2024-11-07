@@ -65,7 +65,9 @@ export default function ScorecardsComponent() {
           setAccountId(foundAccountId)
           
           // Show initial data immediately
-          setScorecards(initialScorecards.data.filter(s => s.accountId === foundAccountId))
+          setScorecards(initialScorecards.data.filter(s => 
+            s.accountId === foundAccountId
+          ))
           setIsLoading(false)
 
           // Set up real-time subscription for future updates
@@ -73,12 +75,14 @@ export default function ScorecardsComponent() {
             filter: { accountId: { eq: foundAccountId } }
           }).subscribe({
             next: ({ items }) => {
-              console.log('Received real-time scorecard update:', items)
-              setScorecards(items)
+              console.log('Subscription event:', JSON.stringify(items, null, 2))
+              setScorecards(items.filter(item => 
+                item && item.accountId === foundAccountId
+              ))
             },
-            error: (error) => {
+            error: (error: Error) => {
               console.error('Subscription error:', error)
-              setError(error as Error)
+              setError(error)
             }
           })
         } else {
