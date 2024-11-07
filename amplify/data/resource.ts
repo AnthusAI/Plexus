@@ -9,7 +9,10 @@ const schema = a.schema({
       scorecards: a.hasMany('Scorecard', 'accountId'),
       experiments: a.hasMany('Experiment', 'accountId'),
     })
-    .authorization((allow) => [allow.publicApiKey()])
+    .authorization((allow) => [
+      allow.publicApiKey(),
+      allow.authenticated()
+    ])
     .secondaryIndexes((idx) => [
       idx("key")
     ]),
@@ -25,7 +28,10 @@ const schema = a.schema({
       sections: a.hasMany('ScorecardSection', 'scorecardId'),
       experiments: a.hasMany('Experiment', 'scorecardId'),
     })
-    .authorization((allow) => [allow.publicApiKey()])
+    .authorization((allow) => [
+      allow.publicApiKey(),
+      allow.authenticated()
+    ])
     .secondaryIndexes((idx) => [
       idx("accountId"),
       idx("key"),
@@ -40,7 +46,10 @@ const schema = a.schema({
       scorecard: a.belongsTo('Scorecard', 'scorecardId'),
       scores: a.hasMany('Score', 'sectionId'),
     })
-    .authorization((allow) => [allow.publicApiKey()])
+    .authorization((allow) => [
+      allow.publicApiKey(),
+      allow.authenticated()
+    ])
     .secondaryIndexes((idx) => [
       idx("scorecardId")
     ]),
@@ -62,7 +71,10 @@ const schema = a.schema({
       versionHistory: a.json(),
       experiments: a.hasMany('Experiment', 'scoreId'),
     })
-    .authorization((allow) => [allow.publicApiKey()])
+    .authorization((allow) => [
+      allow.publicApiKey(),
+      allow.authenticated()
+    ])
     .secondaryIndexes((idx) => [
       idx("sectionId")
     ]),
@@ -99,7 +111,10 @@ const schema = a.schema({
       samples: a.hasMany('Sample', 'experimentId'),
       confusionMatrix: a.json(),
     })
-    .authorization((allow) => [allow.publicApiKey()])
+    .authorization((allow) => [
+      allow.publicApiKey(),
+      allow.authenticated()
+    ])
     .secondaryIndexes((idx) => [
       idx("accountId"),
       idx("scorecardId"),
@@ -117,7 +132,10 @@ const schema = a.schema({
       createdAt: a.datetime().required(),
       updatedAt: a.datetime().required(),
     })
-    .authorization((allow) => [allow.publicApiKey()])
+    .authorization((allow) => [
+      allow.publicApiKey(),
+      allow.authenticated()
+    ])
     .secondaryIndexes((idx) => [
       idx("experimentId")
     ]),
