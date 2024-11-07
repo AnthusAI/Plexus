@@ -77,8 +77,19 @@ const schema = a.schema({
       cost: a.float(),
       progress: a.float(),
       accuracy: a.float(),
+      accuracyType: a.string(),
+      sensitivity: a.float(),
+      specificity: a.float(),
+      precision: a.float(),
       createdAt: a.datetime().required(),
       updatedAt: a.datetime().required(),
+      status: a.string().required(),
+      startedAt: a.datetime(),
+      estimatedEndAt: a.datetime(),
+      totalItems: a.integer(),
+      processedItems: a.integer(),
+      errorMessage: a.string(),
+      errorDetails: a.json(),
       accountId: a.string().required(),
       account: a.belongsTo('Account', 'accountId'),
       scorecardId: a.string(),
@@ -86,6 +97,7 @@ const schema = a.schema({
       scoreId: a.string(),
       score: a.belongsTo('Score', 'scoreId'),
       samples: a.hasMany('Sample', 'experimentId'),
+      confusionMatrix: a.json(),
     })
     .authorization((allow) => [allow.authenticated()])
     .secondaryIndexes((idx) => [
@@ -99,6 +111,9 @@ const schema = a.schema({
       experimentId: a.string().required(),
       experiment: a.belongsTo('Experiment', 'experimentId'),
       data: a.json(),
+      prediction: a.string(),
+      groundTruth: a.string(),
+      isCorrect: a.boolean(),
       createdAt: a.datetime().required(),
       updatedAt: a.datetime().required(),
     })
