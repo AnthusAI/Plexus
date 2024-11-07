@@ -25,6 +25,7 @@ import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
 import { Progress } from "@/components/ui/progress"
 import ScorecardContext from "@/components/ScorecardContext"
+import ExperimentTask from "@/components/ExperimentTask"
 
 // Get the current date and time
 const now = new Date();
@@ -349,74 +350,34 @@ export default function ExperimentsDashboard() {
     if (!selectedItemData) return null
 
     return (
-      <Card className="rounded-none sm:rounded-lg h-full flex flex-col bg-card-light border-none">
-        <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between py-4 px-4 sm:px-6 space-y-0">
-          <div>
-            <h2 className="text-xl font-semibold">{selectedItemData.scorecard}</h2>
-            <p className="text-sm text-muted-foreground">
-              {formatDistanceToNow(parseISO(selectedItemData.date), { addSuffix: true })}
-            </p>
-          </div>
-          <div className="flex ml-2">
-            {!isNarrowViewport && (
-              <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
-                {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-              </Button>
-            )}
-            <Button variant="outline" size="icon" onClick={() => {
-              setSelectedItem(null)
-              setIsFullWidth(false)
-            }} className="ml-2">
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="flex-grow overflow-auto px-4 sm:px-6 pb-4">
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm font-medium">Type</p>
-                <Badge variant="secondary" className="bg-neutral text-primary-foreground">
-                  {selectedItemData.type}
-                </Badge>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-medium">Status</p>
-                <Badge className={getBadgeVariant(selectedItemData.status, selectedItemData.progress)}>
-                  {getStatusText(selectedItemData.status, selectedItemData.progress)}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-sm font-medium">Results</p>
-                <p>{selectedItemData.results}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-medium">Cost</p>
-                <p>{selectedItemData.cost}</p>
-              </div>
-            </div>
-            
-            {/* Progress indicator */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <div className="font-semibold">Progress: {selectedItemData.progress}%</div>
-                {selectedItemData.status !== 'scored' && <div>Elapsed Time: 00:45:30</div>}
-              </div>
-              <Progress value={selectedItemData.progress} className="w-full h-6" />
-              {selectedItemData.status !== 'scored' && (
-                <div className="text-xs text-right">
-                  Estimated Time Remaining: 00:05:00
-                </div>
-              )}
-            </div>
-            
-            <div>
-              <p className="text-sm font-medium">Accuracy</p>
-              {renderProgressBar(selectedItemData.progress, selectedItemData.accuracyTrue, selectedItemData.accuracyFalse, true)}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <ExperimentTask
+        variant="detail"
+        task={{
+          id: selectedItemData.id,
+          type: 'Experiment started',
+          scorecard: selectedItemData.scorecard,
+          score: selectedItemData.score.toString(),
+          time: formatDistanceToNow(parseISO(selectedItemData.date), { addSuffix: true }),
+          summary: `${selectedItemData.accuracyTrue}% accuracy`,
+          description: selectedItemData.type,
+          data: {
+            accuracy: selectedItemData.accuracyTrue,
+            sensitivity: selectedItemData.accuracyTrue,  // Using accuracyTrue as a placeholder
+            specificity: selectedItemData.accuracyTrue,  // Using accuracyTrue as a placeholder
+            precision: selectedItemData.accuracyTrue,    // Using accuracyTrue as a placeholder
+            processedItems: selectedItemData.results,
+            totalItems: selectedItemData.inferences,
+            elapsedTime: "00:45:30",
+            estimatedTimeRemaining: "00:05:00"
+          }
+        }}
+        isFullWidth={isFullWidth}
+        onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+        onClose={() => {
+          setSelectedItem(null)
+          setIsFullWidth(false)
+        }}
+      />
     )
   }
 
@@ -449,7 +410,7 @@ export default function ExperimentsDashboard() {
       </div>
       <div className="flex-grow flex flex-col overflow-hidden pb-2">
         {selectedItem && (isNarrowViewport || isFullWidth) ? (
-          <div className="flex-grow overflow-hidden">
+          <div className="flex-grow overflow-y-auto">
             {renderSelectedItem()}
           </div>
         ) : (
@@ -525,7 +486,7 @@ export default function ExperimentsDashboard() {
             </div>
 
             {selectedItem && !isNarrowViewport && !isFullWidth && (
-              <div className="flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto">
                 {renderSelectedItem()}
               </div>
             )}

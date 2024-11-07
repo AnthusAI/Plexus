@@ -541,11 +541,21 @@ export function ScorecardForm({
           />
           <div className="flex items-center flex-shrink-0">
             {!isNarrowViewport && onToggleWidth && (
-              <Button variant="ghost" size="icon" onClick={onToggleWidth}>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={onToggleWidth}
+                className="bg-background hover:bg-background/90"
+              >
                 {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
               </Button>
             )}
-            <Button variant="ghost" size="icon" onClick={onCancel} className="ml-2">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={onCancel} 
+              className="ml-2 bg-background hover:bg-background/90"
+            >
               <X className="h-4 w-4" />
             </Button>
           </div>
