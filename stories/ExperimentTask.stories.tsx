@@ -42,30 +42,51 @@ const createTask = (id: number, processedItems: number, totalItems: number): Exp
   },
 });
 
-export const Single: Story = {
-  args: {
-    variant: 'grid',
-    task: createTask(1, 75, 100),
-  }
+export const Grid: Story = {
+  args: createTask(1, 75, 100),
 };
 
 export const Detail: Story = {
   args: {
+    ...createTask(2, 90, 100),
     variant: 'detail',
-    task: createTask(2, 90, 100),
-  }
+    isFullWidth: false,
+    onToggleFullWidth: () => console.log('Toggle full width'),
+    onClose: () => console.log('Close'),
+  },
+  decorators: [
+    (Story) => (
+      <div className="w-[600px]">
+        <Story />
+      </div>
+    ),
+  ],
 };
 
-export const InProgress: Story = {
+export const DetailFullWidth: Story = {
   args: {
-    variant: 'grid',
-    task: createTask(3, 50, 100),
-  }
+    ...Detail.args,
+    isFullWidth: true,
+  },
+  parameters: {
+    layout: 'fullscreen',
+  },
+  decorators: [
+    (Story) => (
+      <div className="w-full h-screen p-4">
+        <Story />
+      </div>
+    ),
+  ],
 };
 
-export const Completed: Story = {
-  args: {
-    variant: 'grid',
-    task: createTask(4, 100, 100),
-  }
+export const GridWithMany = {
+  render: () => (
+    <div className="grid grid-cols-2 gap-4">
+      <ExperimentTask {...createTask(1, 25, 100)} />
+      <ExperimentTask {...createTask(2, 50, 100)} />
+      <ExperimentTask {...createTask(3, 75, 100)} />
+      <ExperimentTask {...createTask(4, 100, 100)} />
+    </div>
+  ),
 };
