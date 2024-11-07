@@ -139,6 +139,38 @@ const schema = a.schema({
     .secondaryIndexes((idx) => [
       idx("experimentId")
     ]),
+
+  BatchJob: a
+    .model({
+      provider: a.string().required(),
+      type: a.string().required(),
+      batchId: a.string().required(),
+      status: a.string().required(),
+      startedAt: a.datetime(),
+      estimatedEndAt: a.datetime(),
+      completedAt: a.datetime(),
+      totalRequests: a.integer(),
+      completedRequests: a.integer(),
+      failedRequests: a.integer(),
+      errorMessage: a.string(),
+      errorDetails: a.json(),
+      accountId: a.string().required(),
+      account: a.belongsTo('Account', 'accountId'),
+      scorecardId: a.string(),
+      scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+      scoreId: a.string(),
+      score: a.belongsTo('Score', 'scoreId'),
+    })
+    .authorization((allow) => [
+      allow.publicApiKey(),
+      allow.authenticated()
+    ])
+    .secondaryIndexes((idx) => [
+      idx("accountId"),
+      idx("scorecardId"),
+      idx("scoreId"),
+      idx("batchId")
+    ]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
