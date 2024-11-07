@@ -19,6 +19,8 @@ export interface ExperimentTaskData {
   results: number
   cost: number
   status: string
+  elapsedTime: string
+  estimatedTimeRemaining: string
   startedAt?: string
   estimatedEndAt?: string
   confusionMatrix?: {

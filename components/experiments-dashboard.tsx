@@ -87,37 +87,33 @@ export default function ExperimentsDashboard() {
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
   const [scorecardNames, setScorecardNames] = useState<Record<string, string>>({})
 
-  const getExperimentTaskProps = async (experiment: Schema['Experiment']['type']) => {
-    const scorecardName = await experiment.scorecard?.().then(r => r.data?.name) ?? '';
+  const getExperimentTaskProps = async (experiment: any) => {
     return {
-      id: parseInt(experiment.id),
+      id: experiment.id,
       type: experiment.type,
-      scorecard: scorecardName,
-      score: experiment.accuracy?.toString() ?? '',
-      time: formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true }),
-      summary: `${experiment.accuracy?.toFixed(1) ?? 0}% accuracy`,
-      description: experiment.type,
+      scorecard: experiment.scorecardId,
+      score: experiment.scoreId,
+      time: experiment.createdAt,
+      summary: 'Experiment Summary',
+      description: 'Experiment Description',
       data: {
-        accuracy: experiment.accuracy ?? 0,
-        sensitivity: experiment.sensitivity ?? 0,
-        specificity: experiment.specificity ?? 0,
-        precision: experiment.precision ?? 0,
-        processedItems: experiment.processedItems ?? 0,
-        totalItems: experiment.totalItems ?? 0,
-        progress: experiment.progress ?? 0,
-        inferences: experiment.inferences ?? 0,
-        results: experiment.results ?? 0,
-        cost: experiment.cost ?? 0,
-        status: experiment.status,
-        startedAt: experiment.startedAt,
-        estimatedEndAt: experiment.estimatedEndAt,
-        confusionMatrix: experiment.confusionMatrix as {
-          matrix: number[][];
-          labels: string[];
-        }
-      }
-    };
-  };
+        accuracy: experiment.accuracy || 0,
+        sensitivity: experiment.sensitivity || 0,
+        specificity: experiment.specificity || 0,
+        precision: experiment.precision || 0,
+        processedItems: experiment.processedItems || 0,
+        totalItems: experiment.totalItems || 0,
+        progress: experiment.progress || 0,
+        inferences: experiment.inferences || 0,
+        results: experiment.results || 0,
+        cost: experiment.cost || 0,
+        status: experiment.status || 'Unknown',
+        elapsedTime: '00:00:00',
+        estimatedTimeRemaining: '00:00:00',
+        confusionMatrix: experiment.confusionMatrix || { matrix: [], labels: [] },
+      },
+    }
+  }
 
   // Effect to update experimentTaskProps when selectedExperiment changes
   useEffect(() => {
@@ -198,12 +194,17 @@ export default function ExperimentsDashboard() {
           setIsLoading(false)
         }
       } catch (error) {
-        console.error('Error details:', {
-          name: error.name,
-          message: error.message,
-          stack: error.stack
-        });
-        setError(error as Error);
+        if (error instanceof Error) {
+          console.error('Error details:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack
+          });
+          setError(error);
+        } else {
+          console.error('Unexpected error:', error);
+          setError(new Error('An unexpected error occurred'));
+        }
         setIsLoading(false);
       }
     }
