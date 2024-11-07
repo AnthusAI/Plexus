@@ -50,7 +50,7 @@ class Experiment:
         session_ids_to_sample = None,
         subset_of_score_names = None,
         experiment_label = None,
-        max_mismatches_to_report=5
+        max_mismatches_to_report=20
     ):
         self.scorecard_name = scorecard_name
         self.scorecard = scorecard
@@ -160,13 +160,13 @@ class AccuracyExperiment(Experiment):
                     try:
                         df = pd.read_csv(filepath, keep_default_na=False)  # Prevents automatic conversion of "NA" to NaN
                         for _, row in df.iterrows():
-                            session_id = row['session_id']
-                            question_name = row['question_name'].strip()
-                            correct_value = row['correct_value'].strip()
+                            form_id = row['form_id'] or row['f_id']
+                            question_name = row['question_name'] or row['question']
+                            correct_value = row['correct_value'].strip() or row['Spot Check Answer'].strip()
                             if correct_value:  # Ignore rows where correct_value is an empty string
-                                if session_id not in override_data:
-                                    override_data[session_id] = {}
-                                override_data[session_id][question_name] = correct_value
+                                if form_id not in override_data:
+                                    override_data[form_id] = {}
+                                override_data[form_id][question_name] = correct_value
                     except Exception as e:
                         print(f"Could not read {filepath}: {e}")
         return override_data
@@ -548,40 +548,48 @@ Total cost:       ${expenses['total_cost']:.6f}
         human_labels = {}
         for score_identifier in scorecard_results.keys():
             score_instance = Score.from_name(
-                self.scorecard.properties['id'], score_identifier)
+                self.scorecard.properties['name'], score_identifier)
             label_score_name = score_instance.get_label_score_name()
+            score_name = score_instance.parameters.name  # Get the score name
             label_column = label_score_name + '_label'
+            logging.info(f"Label column: {label_column}")
+            logging.info(f"Available columns: {row.index.tolist()}")
             if label_column in row.index:
-                human_labels[score_identifier] = row[label_column]
+                logging.info(f"Using label column: {label_column}")
+                human_labels[score_name] = row[label_column]  # Use score_name instead of score_identifier
+                logging.info(f"Human label: {human_labels[score_name]}")
+                logging.info(f"Row: {row[label_column]}")
             elif label_score_name in row.index:
-                human_labels[score_identifier] = row[label_score_name]
+                human_labels[score_name] = row[label_score_name]  # Use score_name instead of score_identifier
             else:
                 logging.warning(f"Neither '{score_identifier}' nor '{label_score_name}' found in the row. Available columns: {row.index.tolist()}")
-                human_labels[score_identifier] = 'N/A'
+                human_labels[score_name] = 'N/A'  # Use score_name instead of score_identifier
 
         for score_identifier in scorecard_results.keys():
             try:
                 score_result = scorecard_results[score_identifier]
 
-                # Normalize the score result value for comparison
-                score_result_value = score_result.value.strip().lower()
-                if not score_result_value:
-                    score_result_value = 'na'
-
-                # Apply overrides if available
-                if session_id in self.override_data:
-                    for override_question_name, correct_value in self.override_data[session_id].items():
-                        if override_question_name in human_labels:
-                            logging.info(f"OVERRIDING human label for question '{override_question_name}' in session '{session_id}' from '{human_labels[override_question_name]}' to '{correct_value}'")
-                            human_labels[override_question_name] = correct_value
-
+                # Use score_name instead of column_name/score_identifier
                 column_name = score_identifier
-                human_label = str(human_labels[column_name]).lower().rstrip('.!?')
+                human_label = str(human_labels.get(score_name, 'N/A')).lower().rstrip('.!?')
                 if human_label == 'nan':
                     human_label = ''
                 if human_label == 'n/a':
                     human_label = 'na'
                 human_explanation = columns.get(f"{label_score_name} comment", 'None')
+
+                # Normalize both values before comparison
+                score_result_value = ' '.join(str(score_result.value).lower().strip().split())
+                human_label = ' '.join(human_label.strip().split())
+                if not score_result_value:
+                    score_result_value = 'na'
+
+                # Apply overrides if available
+                if form_id in self.override_data:
+                    for override_question_name, correct_value in self.override_data[form_id].items():
+                        if str(override_question_name) in human_labels:
+                            logging.info(f"OVERRIDING human label for question '{override_question_name}' in form '{form_id}' from '{human_labels[str(override_question_name)]}' to '{correct_value}'")
+                            human_labels[str(override_question_name)] = correct_value
 
                 score_result.metadata['human_label'] = human_label
                 score_result.metadata['human_explanation'] = human_explanation
