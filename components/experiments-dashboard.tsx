@@ -28,45 +28,27 @@ import { FilterControl, FilterConfig } from "@/components/filter-control"
 import { Progress } from "@/components/ui/progress"
 import ScorecardContext from "@/components/ScorecardContext"
 import ExperimentTask, { type ExperimentTaskProps } from "@/components/ExperimentTask"
+import { ExperimentListProgressBar } from "@/components/ExperimentListProgressBar"
+import { ExperimentListAccuracyBar } from "@/components/ExperimentListAccuracyBar"
 
 const ACCOUNT_KEY = 'call-criteria'
 
-const renderProgressBar = (progress: number, truePart: number, falsePart: number, isAccuracy: boolean) => {
-  const accuracy = Math.round((truePart / (truePart + falsePart)) * 100);
-  const trueWidth = (accuracy / 100) * progress;
-  const falseWidth = progress - trueWidth;
+const formatStatus = (status: string) => {
+  return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+};
 
-  return (
-    <div className="relative w-full h-6 bg-neutral rounded-full">
-      {isAccuracy ? (
-        <>
-          <div
-            className="absolute top-0 left-0 h-full bg-true flex items-center pl-2 text-xs text-primary-foreground font-medium"
-            style={{ width: `${trueWidth}%`, borderTopLeftRadius: 'inherit', borderBottomLeftRadius: 'inherit' }}
-          >
-            {accuracy}%
-          </div>
-          <div
-            className="absolute top-0 h-full bg-false"
-            style={{ 
-              left: `${trueWidth}%`, 
-              width: `${falseWidth}%`,
-              borderTopRightRadius: 'inherit',
-              borderBottomRightRadius: 'inherit'
-            }}
-          />
-        </>
-      ) : (
-        <div
-          className="absolute top-0 left-0 h-full bg-secondary flex items-center pl-2 text-xs text-primary-foreground font-medium"
-          style={{ width: `${progress}%`, borderRadius: 'inherit' }}
-        >
-          {progress}%
-        </div>
-      )}
-    </div>
-  )
-}
+const getBadgeVariant = (status: string) => {
+  const formattedStatus = status.toLowerCase();
+  if (formattedStatus === 'done') {
+    return 'bg-true text-primary-foreground';
+  }
+  return 'bg-neutral text-primary-foreground';
+};
+
+const calculateProgress = (processedItems?: number, totalItems?: number): number => {
+  if (!processedItems || !totalItems || totalItems === 0) return 0;
+  return Math.round((processedItems / totalItems) * 100);
+};
 
 export default function ExperimentsDashboard() {
   const [client] = useState(() => {
@@ -88,6 +70,7 @@ export default function ExperimentsDashboard() {
   const [scorecardNames, setScorecardNames] = useState<Record<string, string>>({})
 
   const getExperimentTaskProps = async (experiment: any) => {
+    const progress = calculateProgress(experiment.processedItems, experiment.totalItems);
     return {
       id: experiment.id,
       type: experiment.type,
@@ -103,9 +86,8 @@ export default function ExperimentsDashboard() {
         precision: experiment.precision || 0,
         processedItems: experiment.processedItems || 0,
         totalItems: experiment.totalItems || 0,
-        progress: experiment.progress || 0,
+        progress,
         inferences: experiment.inferences || 0,
-        results: experiment.results || 0,
         cost: experiment.cost || 0,
         status: experiment.status || 'Unknown',
         elapsedTime: '00:00:00',
@@ -117,12 +99,17 @@ export default function ExperimentsDashboard() {
 
   // Effect to update experimentTaskProps when selectedExperiment changes
   useEffect(() => {
-    if (selectedExperiment) {
-      getExperimentTaskProps(selectedExperiment).then(setExperimentTaskProps);
-    } else {
-      setExperimentTaskProps(null);
+    const updateExperimentTaskProps = async () => {
+      if (selectedExperiment) {
+        const props = await getExperimentTaskProps(selectedExperiment)
+        setExperimentTaskProps(props)
+      } else {
+        setExperimentTaskProps(null)
+      }
     }
-  }, [selectedExperiment]);
+
+    updateExperimentTaskProps()
+  }, [selectedExperiment]) // Only depend on selectedExperiment
 
   // Add effect to load scorecard names
   useEffect(() => {
@@ -178,11 +165,22 @@ export default function ExperimentsDashboard() {
             filter: { accountId: { eq: foundAccountId } }
           }).subscribe({
             next: ({ items }) => {
-              const sortedItems = items
-                .sort((a, b) => 
-                  new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                )
+              const sortedItems = items.sort((a, b) => 
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              )
               setExperiments(sortedItems)
+              
+              // Update selectedExperiment if it exists in the new items
+              if (selectedExperiment) {
+                const updatedExperiment = items.find(item => 
+                  item.id === selectedExperiment.id
+                )
+                if (updatedExperiment && 
+                    JSON.stringify(updatedExperiment) !== 
+                    JSON.stringify(selectedExperiment)) {
+                  setSelectedExperiment(updatedExperiment)
+                }
+              }
             },
             error: (error: Error) => {
               console.error('Subscription error:', error)
@@ -216,7 +214,7 @@ export default function ExperimentsDashboard() {
         subscription.unsubscribe()
       }
     }
-  }, [client]) // Add client to dependencies
+  }, [client, selectedExperiment?.id]) // Add selectedExperiment.id to dependencies
 
   // Add viewport check effect
   useEffect(() => {
@@ -302,10 +300,10 @@ export default function ExperimentsDashboard() {
                   <TableRow>
                     <TableHead className="w-[30%]">Experiment</TableHead>
                     <TableHead className="w-[10%] @[630px]:table-cell hidden">Type</TableHead>
+                    <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Samples</TableHead>
                     <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Inferences</TableHead>
-                    <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Results</TableHead>
                     <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Cost</TableHead>
-                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-left">Progress</TableHead>
+                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Progress</TableHead>
                     <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Accuracy</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -317,40 +315,72 @@ export default function ExperimentsDashboard() {
                       className="cursor-pointer transition-colors duration-200 hover:bg-muted"
                     >
                       <TableCell className="font-medium sm:pr-4">
-                        <div className="sm:hidden">
-                          <div className="font-semibold">
-                            {scorecardNames[experiment.scorecardId ?? '']}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
+                        <div className="block @[630px]:hidden">
+                          <div className="flex justify-between mb-4">
+                            {/* Left column */}
+                            <div className="space-y-1">
+                              <div className="font-semibold">{scorecardNames[experiment.scorecardId ?? '']}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
+                              </div>
+                              <div className="text-sm text-muted-foreground">{experiment.accuracyType ?? 'Accuracy'}</div>
+                            </div>
+
+                            {/* Center column */}
+                            <div className="space-y-1 ml-4">
+                              <div className="text-sm text-muted-foreground">
+                                {experiment.totalItems ?? 0} samples
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {experiment.inferences ?? 0} inferences
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                ${experiment.cost?.toFixed(3) ?? '0.000'}
+                              </div>
+                            </div>
+
+                            {/* Right column */}
+                            <div className="w-[140px] space-y-2">
+                              <ExperimentListProgressBar 
+                                progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
+                              />
+                              <ExperimentListAccuracyBar 
+                                progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
+                                accuracy={experiment.accuracy ?? 0}
+                              />
+                            </div>
                           </div>
                         </div>
-                        <div className="hidden sm:block">
+                        {/* Wide variant - visible at 630px and above */}
+                        <div className="hidden @[630px]:block">
                           {scorecardNames[experiment.scorecardId ?? '']}
                           <div className="text-sm text-muted-foreground">
                             {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="bg-neutral text-primary-foreground">
-                          {experiment.accuracyType ?? 'Accuracy'}
-                        </Badge>
+                      <TableCell className="hidden @[630px]:table-cell text-sm text-muted-foreground">
+                        {experiment.accuracyType ?? 'Accuracy'}
                       </TableCell>
-                      <TableCell className="text-right">{experiment.inferences ?? 0}</TableCell>
-                      <TableCell className="text-right">{experiment.results ?? 0}</TableCell>
-                      <TableCell className="text-right">${experiment.cost?.toFixed(3) ?? '0.000'}</TableCell>
-                      <TableCell className="w-[15%]">
-                        {renderProgressBar(experiment.progress ?? 0, 
-                          experiment.accuracy ?? 0, 
-                          100 - (experiment.accuracy ?? 0), 
-                          false)}
+                      <TableCell className="hidden @[630px]:table-cell text-right">
+                        {experiment.totalItems ?? 0}
                       </TableCell>
-                      <TableCell className="w-[15%]">
-                        {renderProgressBar(experiment.progress ?? 0, 
-                          experiment.accuracy ?? 0, 
-                          100 - (experiment.accuracy ?? 0), 
-                          true)}
+                      <TableCell className="hidden @[630px]:table-cell text-right">
+                        {experiment.inferences ?? 0}
+                      </TableCell>
+                      <TableCell className="hidden @[630px]:table-cell text-right">
+                        ${experiment.cost?.toFixed(3) ?? '0.000'}
+                      </TableCell>
+                      <TableCell className="hidden @[630px]:table-cell w-[15%] text-right">
+                        <ExperimentListProgressBar 
+                          progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
+                        />
+                      </TableCell>
+                      <TableCell className="hidden @[630px]:table-cell w-[15%]">
+                        <ExperimentListAccuracyBar 
+                          progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
+                          accuracy={experiment.accuracy ?? 0}
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
