@@ -526,10 +526,10 @@ export function ScorecardForm({
   }
 
   return (
-    <div className="border text-card-foreground shadow rounded-none 
-                    sm:rounded-lg h-full flex flex-col bg-card-light border-none">
+    <div className="border text-card-foreground shadow rounded-lg h-full 
+                    flex flex-col bg-card-light border-none">
       {/* Header */}
-      <div className="flex-shrink-0 bg-card">
+      <div className="flex-shrink-0 bg-card rounded-t-lg">
         <div className="px-6 py-4 flex items-center justify-between">
           <Input
             value={formData.name}
