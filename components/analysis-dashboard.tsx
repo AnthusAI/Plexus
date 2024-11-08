@@ -324,11 +324,7 @@ export default function AnalysisDashboard() {
           <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
         </div>
       </TableCell>
-      <TableCell>
-        <Badge variant="secondary" className="bg-neutral text-primary-foreground">
-          {item.type}
-        </Badge>
-      </TableCell>
+      <TableCell>{item.type}</TableCell>
       <TableCell className="text-right">{item.inferences}</TableCell>
       <TableCell className="text-right">{item.cost}</TableCell>
       <TableCell className="w-[15%]">
@@ -629,9 +625,7 @@ export default function AnalysisDashboard() {
                           <div className="block @[630px]:hidden">
                             <div className="flex justify-between items-start mb-2">
                               <div className="font-semibold">{item.scorecard}</div>
-                              <Badge variant="secondary" className="bg-neutral text-primary-foreground">
-                                {item.type}
-                              </Badge>
+                              <div className="text-muted-foreground">{item.type}</div>
                             </div>
                             <div className="text-sm text-muted-foreground mb-2">{getRelativeTime(item.date)}</div>
                             <div className="flex justify-between items-end mb-2">
@@ -654,9 +648,7 @@ export default function AnalysisDashboard() {
                         </div>
                       </TableCell>
                       <TableCell className="hidden @[630px]:table-cell">
-                        <Badge variant="secondary" className="bg-neutral text-primary-foreground">
-                          {item.type}
-                        </Badge>
+                        {item.type}
                       </TableCell>
                       <TableCell className="hidden @[630px]:table-cell text-right">{item.inferences}</TableCell>
                       <TableCell className="hidden @[630px]:table-cell text-right">{item.cost}</TableCell>
