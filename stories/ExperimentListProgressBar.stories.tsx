@@ -22,17 +22,20 @@ type Story = StoryObj<typeof ExperimentListProgressBar>
 export const NoProgress: Story = {
   args: {
     progress: 0,
+    totalSamples: 100,
   },
 }
 
 export const InProgress: Story = {
   args: {
     progress: 65,
+    totalSamples: 100,
   },
 }
 
 export const Complete: Story = {
   args: {
     progress: 100,
+    totalSamples: 100,
   },
 } 

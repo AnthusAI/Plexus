@@ -366,8 +366,6 @@ export default function ExperimentsDashboard() {
                   <TableRow>
                     <TableHead className="w-[30%]">Experiment</TableHead>
                     <TableHead className="w-[10%] @[630px]:table-cell hidden">Type</TableHead>
-                    <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Samples</TableHead>
-                    <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Inferences</TableHead>
                     <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Cost</TableHead>
                     <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Progress</TableHead>
                     <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Accuracy</TableHead>
@@ -411,6 +409,7 @@ export default function ExperimentsDashboard() {
                             <div className="w-[140px] space-y-2">
                               <ExperimentListProgressBar 
                                 progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
+                                totalSamples={experiment.totalItems ?? 0}
                               />
                               <ExperimentListAccuracyBar 
                                 progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
@@ -431,17 +430,12 @@ export default function ExperimentsDashboard() {
                         {experiment.accuracyType ?? 'Accuracy'}
                       </TableCell>
                       <TableCell className="hidden @[630px]:table-cell text-right">
-                        {experiment.totalItems ?? 0}
-                      </TableCell>
-                      <TableCell className="hidden @[630px]:table-cell text-right">
-                        {experiment.inferences ?? 0}
-                      </TableCell>
-                      <TableCell className="hidden @[630px]:table-cell text-right">
                         ${experiment.cost?.toFixed(3) ?? '0.000'}
                       </TableCell>
                       <TableCell className="hidden @[630px]:table-cell w-[15%] text-right">
                         <ExperimentListProgressBar 
                           progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
+                          totalSamples={experiment.totalItems ?? 0}
                         />
                       </TableCell>
                       <TableCell className="hidden @[630px]:table-cell w-[15%]">
