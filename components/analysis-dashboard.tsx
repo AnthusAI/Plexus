@@ -325,7 +325,6 @@ export default function AnalysisDashboard() {
         </div>
       </TableCell>
       <TableCell>{item.type}</TableCell>
-      <TableCell className="text-right">{item.inferences}</TableCell>
       <TableCell className="text-right">{item.cost}</TableCell>
       <TableCell className="w-[15%]">
         <Badge className={getBadgeVariant(item.status, item.progress)}>
@@ -378,12 +377,12 @@ export default function AnalysisDashboard() {
                 </Badge>
               </div>
               <div>
-                <p className="text-sm font-medium">Inferences</p>
-                <p>{selectedItemData.inferences}</p>
-              </div>
-              <div className="text-right">
                 <p className="text-sm font-medium">Cost</p>
                 <p>{selectedItemData.cost}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-medium">Progress</p>
+                <p>{selectedItemData.progress}%</p>
               </div>
             </div>
             
@@ -607,7 +606,6 @@ export default function AnalysisDashboard() {
                   <TableRow>
                     <TableHead className="w-[35%]">Analysis</TableHead>
                     <TableHead className="w-[15%] @[630px]:table-cell hidden">Type</TableHead>
-                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Inferences</TableHead>
                     <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Cost</TableHead>
                     <TableHead className="w-[20%] @[630px]:table-cell hidden text-left">Progress</TableHead>
                   </TableRow>
@@ -629,9 +627,6 @@ export default function AnalysisDashboard() {
                             </div>
                             <div className="text-sm text-muted-foreground mb-2">{getRelativeTime(item.date)}</div>
                             <div className="flex justify-between items-end mb-2">
-                              <div className="text-sm text-muted-foreground">
-                                {item.inferences} inferences
-                              </div>
                               <div className="font-semibold">{item.cost}</div>
                             </div>
                             <Badge 
@@ -650,7 +645,6 @@ export default function AnalysisDashboard() {
                       <TableCell className="hidden @[630px]:table-cell">
                         {item.type}
                       </TableCell>
-                      <TableCell className="hidden @[630px]:table-cell text-right">{item.inferences}</TableCell>
                       <TableCell className="hidden @[630px]:table-cell text-right">{item.cost}</TableCell>
                       <TableCell className="hidden @[630px]:table-cell">
                         <Badge 
