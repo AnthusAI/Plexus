@@ -34,6 +34,7 @@ const OptimizationTask: React.FC<OptimizationTaskProps> = ({
   onClose
 }) => {
   const data = task.data as OptimizationTaskData
+  const gaugeVariant = variant === 'nested' ? 'detail' : variant
 
   const visualization = (
     <div className="flex flex-col items-center w-full">
@@ -41,7 +42,7 @@ const OptimizationTask: React.FC<OptimizationTaskProps> = ({
         title={task.description || 'Metric'}
         before={data.before?.innerRing[0]?.value ?? 0}
         after={data.after?.innerRing[0]?.value ?? 0}
-        variant={variant}
+        variant={gaugeVariant}
         backgroundColor="var(--gauge-background)"
       />
       {data && (
