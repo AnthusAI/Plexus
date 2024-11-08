@@ -1,9 +1,9 @@
 import React from 'react'
-import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { Package } from 'lucide-react'
-import { TaskProgress } from '@/components/TaskProgress'
+import { Task, TaskHeader, TaskContent } from '@/components/Task'
+import { Package, PackageCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { ProgressBar } from "@/components/ui/progress-bar"
 
 export interface BatchJobTaskData {
   provider: string
@@ -18,7 +18,7 @@ export interface BatchJobTaskData {
 }
 
 export type BatchJobTaskProps = {
-  variant?: 'grid' | 'detail'
+  variant?: 'grid' | 'detail' | 'nested'
   task: {
     id: number
     type: string
@@ -38,13 +38,10 @@ export type BatchJobTaskProps = {
 
 const getStatusDisplay = (status: string): { text: string; variant: string } => {
   const statusMap: Record<string, { text: string; variant: string }> = {
-    validating: { text: 'Validating', variant: 'secondary' },
+    pending: { text: 'Pending', variant: 'secondary' },
     in_progress: { text: 'In Progress', variant: 'default' },
-    finalizing: { text: 'Finalizing', variant: 'secondary' },
-    completed: { text: 'Completed', variant: 'success' },
+    done: { text: 'Done', variant: 'success' },
     failed: { text: 'Failed', variant: 'destructive' },
-    expired: { text: 'Expired', variant: 'destructive' },
-    canceling: { text: 'Canceling', variant: 'warning' },
     canceled: { text: 'Canceled', variant: 'warning' },
   }
   return statusMap[status.toLowerCase()] || { text: status, variant: 'default' }
@@ -72,16 +69,57 @@ export default function BatchJobTask({
   onToggleFullWidth,
   onClose
 }: BatchJobTaskProps) {
-  const transformedTask = transformBatchJobData(task)
   const statusDisplay = getStatusDisplay(task.data.status)
+  const transformedTask = transformBatchJobData(task)
+
+  if (variant === 'nested') {
+    return (
+      <div className="bg-background/50 py-3 rounded-md space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {task.data.status === 'done' ? (
+              <PackageCheck className="h-4 w-4" />
+            ) : (
+              <Package className="h-4 w-4" />
+            )}
+            <span className="text-sm font-medium">
+              {task.data.provider}
+            </span>
+          </div>
+          <Badge 
+            variant={statusDisplay.variant as any}
+            className={cn(
+              "capitalize text-xs w-24 flex justify-center",
+              statusDisplay.variant === 'success' && "bg-green-600",
+              statusDisplay.variant === 'warning' && "bg-yellow-600",
+              statusDisplay.variant === 'destructive' && "bg-red-600",
+            )}
+          >
+            {statusDisplay.text}
+          </Badge>
+        </div>
+        <ProgressBar 
+          progress={(task.data.completedRequests / task.data.totalRequests) * 100}
+          processedItems={task.data.completedRequests}
+          totalItems={task.data.totalRequests}
+          color="secondary"
+        />
+        {task.data.errorMessage && (
+          <div className="text-xs text-destructive">
+            Error: {task.data.errorMessage}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   const visualization = (
     <div className="flex flex-col h-full">
-      <div>
+      <div className="flex justify-end mb-4">
         <Badge 
           variant={statusDisplay.variant as any}
           className={cn(
-            "capitalize w-fit mb-4",
+            "capitalize w-24 flex justify-center",
             statusDisplay.variant === 'success' && "bg-green-600",
             statusDisplay.variant === 'warning' && "bg-yellow-600",
             statusDisplay.variant === 'destructive' && "bg-red-600",
@@ -89,17 +127,18 @@ export default function BatchJobTask({
         >
           {statusDisplay.text}
         </Badge>
-        {task.data.errorMessage && (
-          <div className="mt-2 text-sm text-destructive whitespace-pre-wrap">
-            Error: {task.data.errorMessage}
-          </div>
-        )}
       </div>
+      {task.data.errorMessage && (
+        <div className="mt-2 text-sm text-destructive whitespace-pre-wrap">
+          Error: {task.data.errorMessage}
+        </div>
+      )}
       <div className="flex-1" />
-      <TaskProgress 
+      <ProgressBar 
         progress={(task.data.completedRequests / task.data.totalRequests) * 100}
         processedItems={task.data.completedRequests}
         totalItems={task.data.totalRequests}
+        color="secondary"
       />
     </div>
   )
@@ -116,7 +155,11 @@ export default function BatchJobTask({
       renderHeader={(props) => (
         <TaskHeader {...props}>
           <div className="flex justify-end w-full">
-            <Package className="h-6 w-6" />
+            {task.data.status === 'done' ? (
+              <PackageCheck className="h-6 w-6" />
+            ) : (
+              <Package className="h-6 w-6" />
+            )}
           </div>
         </TaskHeader>
       )}
