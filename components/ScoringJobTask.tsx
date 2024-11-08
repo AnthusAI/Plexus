@@ -117,29 +117,29 @@ export default function ScoringJobTask({
       />
       
       {variant === 'detail' && task.data.batchJobs && (
-        <>
-          <Separator className="my-4" />
-          <div>
-            <div className="text-sm font-semibold mb-4">Batch Jobs</div>
-            <div className="space-y-2">
-              {task.data.batchJobs.map((batchJob) => (
-                <BatchJobTask
-                  key={batchJob.id}
-                  variant="nested"
-                  task={{
-                    id: parseInt(batchJob.id),
-                    type: 'Batch Job',
-                    scorecard: task.scorecard,
-                    score: task.score,
-                    time: task.time,
-                    summary: `${batchJob.provider} ${batchJob.type}`,
-                    data: batchJob,
-                  }}
-                />
-              ))}
-            </div>
+        <div className="mt-8">
+          <div className="text-sm text-muted-foreground tracking-wider mb-2">
+            Batch jobs
           </div>
-        </>
+          <hr className="mb-4 border-border" />
+          <div className="space-y-2">
+            {task.data.batchJobs.map((batchJob) => (
+              <BatchJobTask
+                key={batchJob.id}
+                variant="nested"
+                task={{
+                  id: parseInt(batchJob.id),
+                  type: 'Batch Job',
+                  scorecard: task.scorecard,
+                  score: task.score,
+                  time: task.time,
+                  summary: `${batchJob.provider} ${batchJob.type}`,
+                  data: batchJob,
+                }}
+              />
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )
