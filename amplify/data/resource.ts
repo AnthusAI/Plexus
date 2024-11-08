@@ -34,6 +34,8 @@ const schema = a.schema({
       batchJobs: a.hasMany('BatchJob', 'scorecardId'),
       itemId: a.string(),
       item: a.belongsTo('Item', 'itemId'),
+      scoringJobs: a.hasMany('ScoringJob', 'scorecardId'),
+      scoreResults: a.hasMany('ScoreResult', 'scorecardId'),
     })
     .authorization((allow) => [
       allow.publicApiKey(),
