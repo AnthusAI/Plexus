@@ -9,6 +9,9 @@ const schema = a.schema({
       scorecards: a.hasMany('Scorecard', 'accountId'),
       experiments: a.hasMany('Experiment', 'accountId'),
       batchJobs: a.hasMany('BatchJob', 'accountId'),
+      items: a.hasMany('Item', 'accountId'),
+      scoringJobs: a.hasMany('ScoringJob', 'accountId'),
+      scoreResults: a.hasMany('ScoreResult', 'accountId'),
     })
     .authorization((allow) => [
       allow.publicApiKey(),
@@ -29,6 +32,8 @@ const schema = a.schema({
       sections: a.hasMany('ScorecardSection', 'scorecardId'),
       experiments: a.hasMany('Experiment', 'scorecardId'),
       batchJobs: a.hasMany('BatchJob', 'scorecardId'),
+      itemId: a.string(),
+      item: a.belongsTo('Item', 'itemId'),
     })
     .authorization((allow) => [
       allow.publicApiKey(),
@@ -161,6 +166,8 @@ const schema = a.schema({
       scorecard: a.belongsTo('Scorecard', 'scorecardId'),
       scoreId: a.string(),
       score: a.belongsTo('Score', 'scoreId'),
+      scoringJobId: a.string(),
+      scoringJob: a.belongsTo('ScoringJob', 'scoringJobId'),
     })
     .authorization((allow) => [
       allow.publicApiKey(),
@@ -171,6 +178,75 @@ const schema = a.schema({
       idx("scorecardId"),
       idx("scoreId"),
       idx("batchId")
+    ]),
+
+  Item: a
+    .model({
+      name: a.string().required(),
+      description: a.string(),
+      accountId: a.string().required(),
+      account: a.belongsTo('Account', 'accountId'),
+      scoringJobs: a.hasMany('ScoringJob', 'itemId'),
+      scoreResults: a.hasMany('ScoreResult', 'itemId'),
+      scorecards: a.hasMany('Scorecard', 'itemId'),
+    })
+    .authorization((allow) => [
+      allow.publicApiKey(),
+      allow.authenticated()
+    ])
+    .secondaryIndexes((idx) => [
+      idx("accountId")
+    ]),
+
+  ScoringJob: a
+    .model({
+      status: a.string().required(),
+      startedAt: a.datetime(),
+      completedAt: a.datetime(),
+      errorMessage: a.string(),
+      errorDetails: a.json(),
+      itemId: a.string().required(),
+      item: a.belongsTo('Item', 'itemId'),
+      accountId: a.string().required(),
+      account: a.belongsTo('Account', 'accountId'),
+      scorecardId: a.string().required(),
+      scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+      batchJobs: a.hasMany('BatchJob', 'scoringJobId'),
+      scoreResults: a.hasMany('ScoreResult', 'scoringJobId'),
+    })
+    .authorization((allow) => [
+      allow.publicApiKey(),
+      allow.authenticated()
+    ])
+    .secondaryIndexes((idx) => [
+      idx("accountId"),
+      idx("itemId"),
+      idx("scorecardId")
+    ]),
+
+  ScoreResult: a
+    .model({
+      value: a.float().required(),
+      confidence: a.float(),
+      metadata: a.json(),
+      itemId: a.string().required(),
+      item: a.belongsTo('Item', 'itemId'),
+      accountId: a.string().required(),
+      account: a.belongsTo('Account', 'accountId'),
+      scoringJobId: a.string().required(),
+      scoringJob: a.belongsTo('ScoringJob', 'scoringJobId'),
+      scorecardId: a.string().required(),
+      scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+    })
+    .authorization((allow) => [
+      allow.publicApiKey(),
+      allow.authenticated()
+    ])
+    .secondaryIndexes((idx) => [
+      idx("accountId"),
+      idx("itemId"),
+      idx("scoringJobId"),
+      idx("scorecardId")
     ]),
 });
 
