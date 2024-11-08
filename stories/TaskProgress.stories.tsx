@@ -20,11 +20,11 @@ Default.args = {
 
 export const InProgress = Template.bind({});
 InProgress.args = {
-  progress: 50,
+  progress: 62.7,
   elapsedTime: '3 minutes',
-  processedItems: 20,
-  totalItems: 40,
-  estimatedTimeRemaining: '3 minutes',
+  processedItems: 37,
+  totalItems: 59,
+  estimatedTimeRemaining: '2 minutes',
 };
 
 export const Completed = Template.bind({});

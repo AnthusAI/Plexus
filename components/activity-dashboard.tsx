@@ -25,6 +25,7 @@ import ReportTask from '@/components/ReportTask'
 import OptimizationTask from '@/components/OptimizationTask'
 import FeedbackTask from '@/components/FeedbackTask'
 import ScoreUpdatedTask from '@/components/ScoreUpdatedTask'
+import BatchJobTask from '@/components/BatchJobTask'
 
 // Import the type from ExperimentTask
 import type { ExperimentTaskData } from '@/components/ExperimentTask'
@@ -119,6 +120,7 @@ type ActivityData =
   | AlertTask 
   | ReportTask 
   | ScoreUpdatedTask
+  | { id: number; type: 'Batch Job'; scorecard: string; score: string; time: string; summary: string; description?: string; data: BatchJobTaskData }
 
 const timeToMinutes = (timeString: string): number => {
   const [value, unit] = timeString.toLowerCase().split(' ');
@@ -250,7 +252,43 @@ const recentActivities: ActivityData[] = [
     },
   },
   {
+    id: 5,
+    type: "Batch Job",
+    scorecard: "Prime Edu",
+    score: "Agent Branding",
+    time: "2h ago",
+    summary: "Requests pending",
+    description: "OpenAI batch job",
+    data: {
+      provider: "OpenAI",
+      type: "chat",
+      status: "validating",
+      totalRequests: 250,
+      completedRequests: 0,
+      failedRequests: 0,
+      startedAt: new Date().toISOString(),
+    },
+  },
+  {
     id: 4,
+    type: "Batch Job",
+    scorecard: "CS3 Services v2",
+    score: "Good Call",
+    time: "3h ago",
+    summary: "Processing requests",
+    description: "OpenAI batch job",
+    data: {
+      provider: "OpenAI",
+      type: "chat",
+      status: "in_progress",
+      totalRequests: 437,
+      completedRequests: 89,
+      failedRequests: 0,
+      startedAt: new Date().toISOString(),
+    },
+  },
+  {
+    id: 6,
     type: "Experiment completed",
     scorecard: "SelectQuote TermLife v1",
     score: "Temperature Check",
@@ -282,7 +320,7 @@ const recentActivities: ActivityData[] = [
     },
   },
   {
-    id: 5,
+    id: 7,
     type: "Score updated",
     scorecard: "SelectQuote TermLife v1",
     score: "Assumptive Close",
@@ -313,7 +351,7 @@ const recentActivities: ActivityData[] = [
     },
   },
   {
-    id: 31,
+    id: 8,
     type: "Feedback queue started",
     scorecard: "CS3 Services v2",
     score: "",
@@ -329,7 +367,7 @@ const recentActivities: ActivityData[] = [
     },
   },
   {
-    id: 32,
+    id: 9,
     type: "Feedback queue completed",
     scorecard: "SelectQuote TermLife v1",
     score: "",
@@ -700,6 +738,14 @@ export default function ActivityDashboard() {
               <div key={activity.id} className="w-full">
                 {(() => {
                   switch (activity.type) {
+                    case 'Batch Job':
+                      return (
+                        <BatchJobTask
+                          variant="grid"
+                          task={activity}
+                          onClick={() => setSelectedActivity(activity)}
+                        />
+                      )
                     case 'Experiment completed':
                     case 'Experiment started':
                       return isExperimentActivity(activity) ? (
@@ -777,6 +823,19 @@ export default function ActivityDashboard() {
             <div className="" />
             {(() => {
               switch (selectedActivity.type) {
+                case 'Batch Job':
+                  return (
+                    <BatchJobTask 
+                      variant="detail" 
+                      task={selectedActivity}
+                      isFullWidth={isFullWidth}
+                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                      onClose={() => {
+                        setSelectedActivity(null)
+                        setIsFullWidth(false)
+                      }}
+                    />
+                  )
                 case 'Experiment completed':
                 case 'Experiment started':
                   return isExperimentActivity(selectedActivity) ? (
@@ -875,6 +934,19 @@ export default function ActivityDashboard() {
           <div className="container flex items-center justify-center h-full max-w-lg">
             {(() => {
               switch (selectedActivity.type) {
+                case 'Batch Job':
+                  return (
+                    <BatchJobTask 
+                      variant="detail" 
+                      task={selectedActivity}
+                      isFullWidth={isFullWidth}
+                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                      onClose={() => {
+                        setSelectedActivity(null)
+                        setIsFullWidth(false)
+                      }}
+                    />
+                  )
                 case 'Experiment completed':
                 case 'Experiment started':
                   return isExperimentActivity(selectedActivity) ? (

@@ -4,7 +4,7 @@ import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import { Activity } from 'lucide-react'
 
 const meta = {
-  title: 'Components/Task',
+  title: 'Tasks/Task',
   component: Task,
   parameters: {
     layout: 'centered',
