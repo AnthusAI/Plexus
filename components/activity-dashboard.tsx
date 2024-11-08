@@ -823,16 +823,40 @@ export default function ActivityDashboard() {
         <div className={`${isFullWidth ? 'w-full' : 'w-1/3 min-w-[300px]'} overflow-y-auto pl-4`}>
           <div className="">
             <div className="" />
-            <ExperimentTaskComponent 
-              variant="detail" 
-              task={selectedActivity} 
-              isFullWidth={isFullWidth}
-              onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-              onClose={() => {
-                setSelectedActivity(null)
-                setIsFullWidth(false)
-              }}
-            />
+            {(() => {
+              switch (selectedActivity.type) {
+                case 'Experiment completed':
+                case 'Experiment started':
+                  return isExperimentActivity(selectedActivity) ? (
+                    <ExperimentTaskComponent 
+                      variant="detail" 
+                      task={selectedActivity} 
+                      isFullWidth={isFullWidth}
+                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                      onClose={() => {
+                        setSelectedActivity(null)
+                        setIsFullWidth(false)
+                      }}
+                    />
+                  ) : null
+                case 'Optimization started':
+                  return (
+                    <OptimizationTask
+                      variant="detail"
+                      task={selectedActivity}
+                      isFullWidth={isFullWidth}
+                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                      onClose={() => {
+                        setSelectedActivity(null)
+                        setIsFullWidth(false)
+                      }}
+                    />
+                  )
+                // Add other cases as needed
+                default:
+                  return null
+              }
+            })()}
           </div>
         </div>
       )}
