@@ -8,6 +8,7 @@ const schema = a.schema({
       description: a.string(),
       scorecards: a.hasMany('Scorecard', 'accountId'),
       experiments: a.hasMany('Experiment', 'accountId'),
+      batchJobs: a.hasMany('BatchJob', 'accountId'),
     })
     .authorization((allow) => [
       allow.publicApiKey(),
