@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react"
 import { ConfusionMatrix } from "@/components/confusion-matrix"
 
 const meta: Meta<typeof ConfusionMatrix> = {
-  title: "Components/ConfusionMatrix",
+  title: "Visualization/ConfusionMatrix",
   component: ConfusionMatrix,
   parameters: {
     layout: "padded",

@@ -3,7 +3,7 @@ import { StoryFn, Meta } from '@storybook/react'
 import StackedPieChart from '../components/StackedPieChart'
 
 export default {
-  title: 'Components/StackedPieChart',
+  title: 'Visualization/StackedPieChart',
   component: StackedPieChart,
 } as Meta<typeof StackedPieChart>
 
