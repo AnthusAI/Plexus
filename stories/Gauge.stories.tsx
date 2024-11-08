@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { Gauge } from '../components/gauge'
 
 export default {
-  title: 'Components/Gauge',
+  title: 'Visualization/Gauge',
   component: Gauge,
   tags: ['autodocs'],
 } satisfies Meta<typeof Gauge>

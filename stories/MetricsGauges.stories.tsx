@@ -4,7 +4,7 @@ import { expect, within } from '@storybook/test'
 import MetricsGauges from '@/components/MetricsGauges'
 
 const meta = {
-  title: 'Components/MetricsGauges',
+  title: 'Visualization/MetricsGauges',
   component: MetricsGauges,
   parameters: {
     layout: 'centered',
