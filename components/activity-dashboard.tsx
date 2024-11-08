@@ -839,11 +839,12 @@ export default function ActivityDashboard() {
                       }}
                     />
                   ) : null
-                case 'Optimization started':
+                case 'Alert':
                   return (
-                    <OptimizationTask
-                      variant="detail"
+                    <AlertTask 
+                      variant="detail" 
                       task={selectedActivity}
+                      iconType="warning"
                       isFullWidth={isFullWidth}
                       onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
                       onClose={() => {
@@ -852,21 +853,6 @@ export default function ActivityDashboard() {
                       }}
                     />
                   )
-                // Add other cases as needed
-                default:
-                  return null
-              }
-            })()}
-          </div>
-        </div>
-      )}
-
-      {/* Mobile view stays the same */}
-      {selectedActivity && isNarrowViewport && (
-        <div className="fixed inset-0 bg-background/80 z-50">
-          <div className="container flex items-center justify-center h-full max-w-lg">
-            {(() => {
-              switch (selectedActivity.type) {
                 case 'Batch Job':
                   return (
                     <BatchJobTask 
@@ -880,26 +866,11 @@ export default function ActivityDashboard() {
                       }}
                     />
                   )
-                case 'Experiment completed':
-                case 'Experiment started':
-                  return isExperimentActivity(selectedActivity) ? (
-                    <ExperimentTaskComponent 
-                      variant="detail" 
-                      task={selectedActivity} 
-                      isFullWidth={isFullWidth}
-                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-                      onClose={() => {
-                        setSelectedActivity(null)
-                        setIsFullWidth(false)
-                      }}
-                    />
-                  ) : null
-                case 'Alert':
+                case 'Optimization started':
                   return (
-                    <AlertTask 
-                      variant="detail" 
-                      task={selectedActivity} 
-                      iconType="warning"
+                    <OptimizationTask
+                      variant="detail"
+                      task={selectedActivity}
                       isFullWidth={isFullWidth}
                       onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
                       onClose={() => {
@@ -921,15 +892,112 @@ export default function ActivityDashboard() {
                       }}
                     />
                   )
+                case 'Feedback queue started':
+                case 'Feedback queue completed':
+                  return (
+                    <FeedbackTask 
+                      variant="detail" 
+                      task={selectedActivity}
+                      isFullWidth={isFullWidth}
+                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                      onClose={() => {
+                        setSelectedActivity(null)
+                        setIsFullWidth(false)
+                      }}
+                    />
+                  )
+                case 'Score updated':
+                  return (
+                    <ScoreUpdatedTask 
+                      variant="detail" 
+                      task={selectedActivity}
+                      isFullWidth={isFullWidth}
+                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                      onClose={() => {
+                        setSelectedActivity(null)
+                        setIsFullWidth(false)
+                      }}
+                    />
+                  )
+                default:
+                  return null
+              }
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile view */}
+      {selectedActivity && isNarrowViewport && (
+        <div className="fixed inset-0 bg-background/80 z-50">
+          <div className="container flex items-center justify-center h-full max-w-lg">
+            {(() => {
+              switch (selectedActivity.type) {
+                case 'Experiment completed':
+                case 'Experiment started':
+                  return isExperimentActivity(selectedActivity) ? (
+                    <ExperimentTaskComponent 
+                      variant="detail" 
+                      task={selectedActivity} 
+                      isFullWidth={isFullWidth}
+                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                      onClose={() => {
+                        setSelectedActivity(null)
+                        setIsFullWidth(false)
+                      }}
+                    />
+                  ) : null
+                case 'Alert':
+                  return (
+                    <AlertTask 
+                      variant="detail" 
+                      task={selectedActivity}
+                      iconType="warning"
+                      isFullWidth={isFullWidth}
+                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                      onClose={() => {
+                        setSelectedActivity(null)
+                        setIsFullWidth(false)
+                      }}
+                    />
+                  )
+                case 'Batch Job':
+                  return (
+                    <BatchJobTask 
+                      variant="detail" 
+                      task={selectedActivity}
+                      isFullWidth={isFullWidth}
+                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                      onClose={() => {
+                        setSelectedActivity(null)
+                        setIsFullWidth(false)
+                      }}
+                    />
+                  )
                 case 'Optimization started':
                   return (
                     <OptimizationTask
                       variant="detail"
-                      task={{
-                        ...selectedActivity,
-                        scorecard: selectedActivity.description || 'Metric'
+                      task={selectedActivity}
+                      isFullWidth={isFullWidth}
+                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                      onClose={() => {
+                        setSelectedActivity(null)
+                        setIsFullWidth(false)
                       }}
-                      controlButtons={DetailViewControlButtons}
+                    />
+                  )
+                case 'Report':
+                  return (
+                    <ReportTask 
+                      variant="detail" 
+                      task={selectedActivity}
+                      isFullWidth={isFullWidth}
+                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                      onClose={() => {
+                        setSelectedActivity(null)
+                        setIsFullWidth(false)
+                      }}
                     />
                   )
                 case 'Feedback queue started':
