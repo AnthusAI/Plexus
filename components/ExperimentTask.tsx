@@ -16,7 +16,6 @@ export interface ExperimentTaskData {
   totalItems: number
   progress: number
   inferences: number
-  results: number
   cost: number
   status: string
   elapsedTime: string

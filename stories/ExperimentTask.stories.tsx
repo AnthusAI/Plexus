@@ -42,7 +42,6 @@ const createTask = (id: number, processedItems: number, totalItems: number): Exp
       },
       progress: 75,
       inferences: 150,
-      results: 100,
       cost: 5,
       status: 'In Progress'
     },
