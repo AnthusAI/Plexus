@@ -28,6 +28,7 @@ const schema = a.schema({
       account: a.belongsTo('Account', 'accountId'),
       sections: a.hasMany('ScorecardSection', 'scorecardId'),
       experiments: a.hasMany('Experiment', 'scorecardId'),
+      batchJobs: a.hasMany('BatchJob', 'scorecardId'),
     })
     .authorization((allow) => [
       allow.publicApiKey(),
@@ -71,6 +72,7 @@ const schema = a.schema({
       distribution: a.json(),
       versionHistory: a.json(),
       experiments: a.hasMany('Experiment', 'scoreId'),
+      batchJobs: a.hasMany('BatchJob', 'scoreId'),
     })
     .authorization((allow) => [
       allow.publicApiKey(),
