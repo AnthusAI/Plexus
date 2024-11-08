@@ -2,7 +2,7 @@ import React from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from './Task'
 import { Sparkles } from 'lucide-react'
 import BeforeAfterGauges from './BeforeAfterGauges'
-import TaskProgress from './TaskProgress'
+import { ProgressBar } from '@/components/ui/progress-bar'
 
 interface OptimizationTaskData {
   progress?: number
@@ -46,12 +46,13 @@ const OptimizationTask: React.FC<OptimizationTaskProps> = ({
       />
       {data && (
         <div className="mt-4 w-full">
-          <TaskProgress 
+          <ProgressBar 
             progress={data.progress ?? 0}
-            elapsedTime={data.elapsedTime ?? ''}
-            processedItems={data.numberComplete ?? 0}
-            totalItems={data.numberTotal ?? 0}
-            estimatedTimeRemaining={data.eta ?? ''}
+            elapsedTime={data.elapsedTime}
+            processedItems={data.numberComplete}
+            totalItems={data.numberTotal}
+            estimatedTimeRemaining={data.eta}
+            color="primary"
           />
         </div>
       )}
