@@ -69,11 +69,9 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
     }),
     scorecard: async () => ({
       data: rawExperiment.scorecard ? {
-        ...rawExperiment.scorecard,
-        account: async () => ({ data: null }),
-        sections: async () => ({ data: [], nextToken: null }),
-        experiments: async () => ({ data: [], nextToken: null }),
-        batchJobs: async () => ({ data: [], nextToken: null })
+        id: rawExperiment.scorecard.id,
+        name: rawExperiment.scorecard.name,
+        // ... other scorecard properties ...
       } : null
     }),
     score: async () => ({
@@ -182,19 +180,16 @@ export default function ExperimentsDashboard() {
 
   // Add effect to load scorecard names
   useEffect(() => {
-    const loadScorecardNames = async () => {
-      const names: Record<string, string> = {};
-      for (const experiment of experiments) {
-        if (experiment.scorecardId) {
-          const name = await experiment.scorecard?.().then(r => r.data?.name);
-          if (name) {
-            names[experiment.scorecardId] = name;
-          }
-        }
+    experiments.forEach(async (experiment) => {
+      const scorecardResult = await experiment.scorecard?.();
+      const scorecardName = scorecardResult?.data?.name;
+      if (scorecardName) {
+        setScorecardNames(prev => ({
+          ...prev,
+          [experiment.id]: scorecardName
+        }));
       }
-      setScorecardNames(names);
-    };
-    loadScorecardNames();
+    });
   }, [experiments]);
 
   // Move all client usage into useEffect to avoid server/client mismatch
@@ -221,7 +216,8 @@ export default function ExperimentsDashboard() {
               'cost', 'accuracy', 'accuracyType', 'sensitivity', 'specificity', 
               'precision', 'createdAt', 'updatedAt', 'status', 'startedAt', 
               'estimatedEndAt', 'totalItems', 'processedItems', 'errorMessage', 
-              'errorDetails', 'accountId', 'scorecardId', 'scoreId', 'confusionMatrix']
+              'errorDetails', 'accountId', 'scorecardId', 'scoreId', 'confusionMatrix',
+              'scorecard.id', 'scorecard.name']
           });
           
           const filteredExperiments = initialExperiments.data
@@ -240,7 +236,8 @@ export default function ExperimentsDashboard() {
               'cost', 'accuracy', 'accuracyType', 'sensitivity', 'specificity', 
               'precision', 'createdAt', 'updatedAt', 'status', 'startedAt', 
               'estimatedEndAt', 'totalItems', 'processedItems', 'errorMessage', 
-              'errorDetails', 'accountId', 'scorecardId', 'scoreId', 'confusionMatrix']
+              'errorDetails', 'accountId', 'scorecardId', 'scoreId', 'confusionMatrix',
+              'scorecard.id', 'scorecard.name']
           }).subscribe({
             next: ({ items }) => {
               const transformedItems = items.map(transformExperiment);
@@ -387,7 +384,9 @@ export default function ExperimentsDashboard() {
                           <div className="flex justify-between mb-4">
                             {/* Left column */}
                             <div className="space-y-1">
-                              <div className="font-semibold">{scorecardNames[experiment.scorecardId ?? '']}</div>
+                              <div className="font-semibold">
+                                {scorecardNames[experiment.id] ?? 'Unknown Scorecard'}
+                              </div>
                               <div className="text-sm text-muted-foreground">
                                 {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
                               </div>
@@ -421,7 +420,7 @@ export default function ExperimentsDashboard() {
                         </div>
                         {/* Wide variant - visible at 630px and above */}
                         <div className="hidden @[630px]:block">
-                          {scorecardNames[experiment.scorecardId ?? '']}
+                          {scorecardNames[experiment.id] ?? 'Unknown Scorecard'}
                           <div className="text-sm text-muted-foreground">
                             {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
                           </div>
