@@ -26,13 +26,13 @@ import ReportTask from '@/components/ReportTask'
 import OptimizationTask from '@/components/OptimizationTask'
 import FeedbackTask from '@/components/FeedbackTask'
 import ScoreUpdatedTask from '@/components/ScoreUpdatedTask'
-import BatchJobTask from '@/components/BatchJobTask'
+import ScoringJobTask from '@/components/ScoringJobTask'
 
 // Import the type from ExperimentTask
 import type { ExperimentTaskData } from '@/components/ExperimentTask'
 
 // Add this import at the top
-import { BatchJobTaskData } from '@/components/BatchJobTask'
+import { ScoringJobTaskData } from '@/components/ScoringJobTask'
 
 interface OptimizationTask {
   id: number
@@ -124,7 +124,7 @@ type ActivityData =
   | AlertTask 
   | ReportTask 
   | ScoreUpdatedTask
-  | { id: number; type: 'Batch Job'; scorecard: string; score: string; time: string; summary: string; description?: string; data: BatchJobTaskData }
+  | { id: number; type: 'Scoring Job'; scorecard: string; score: string; time: string; summary: string; description?: string; data: ScoringJobTaskData }
 
 const timeToMinutes = (timeString: string): number => {
   const [value, unit] = timeString.toLowerCase().split(' ');
@@ -255,39 +255,48 @@ const recentActivities: ActivityData[] = [
     },
   },
   {
-    id: 5,
-    type: "Batch Job",
-    scorecard: "Prime Edu",
-    score: "Agent Branding",
-    time: formatTimeAgo(new Date(Date.now() - 120 * 60 * 1000)),
-    summary: "Requests pending",
-    description: "OpenAI batch job",
-    data: {
-      provider: "OpenAI",
-      type: "chat",
-      status: "validating",
-      totalRequests: 250,
-      completedRequests: 0,
-      failedRequests: 0,
-      startedAt: new Date().toISOString(),
-    },
-  },
-  {
     id: 4,
-    type: "Batch Job",
-    scorecard: "CS3 Services v2",
-    score: "Good Call",
-    time: formatTimeAgo(new Date(Date.now() - 180 * 60 * 1000)),
-    summary: "Processing requests",
-    description: "OpenAI batch job",
+    type: 'Scoring Job',
+    scorecard: 'Customer Satisfaction',
+    score: 'Overall Score',
+    time: formatTimeAgo(new Date(Date.now() - 120 * 60 * 1000)),
+    summary: 'Scoring customer feedback',
+    description: 'Processing batch of customer reviews',
     data: {
-      provider: "OpenAI",
-      type: "chat",
-      status: "in_progress",
-      totalRequests: 437,
-      completedRequests: 89,
-      failedRequests: 0,
-      startedAt: new Date().toISOString(),
+      status: 'in_progress',
+      itemName: 'Q4 Reviews',
+      scorecardName: 'Customer Satisfaction',
+      totalItems: 300,
+      completedItems: 145,
+      batchJobs: [
+        {
+          id: '1',
+          provider: 'OpenAI',
+          type: 'sentiment-analysis',
+          status: 'done',
+          totalRequests: 100,
+          completedRequests: 100,
+          failedRequests: 0,
+        },
+        {
+          id: '2',
+          provider: 'Anthropic',
+          type: 'categorization',
+          status: 'in_progress',
+          totalRequests: 100,
+          completedRequests: 45,
+          failedRequests: 0,
+        },
+        {
+          id: '3',
+          provider: 'Cohere',
+          type: 'topic-extraction',
+          status: 'pending',
+          totalRequests: 100,
+          completedRequests: 0,
+          failedRequests: 0,
+        },
+      ],
     },
   },
   {
@@ -515,6 +524,10 @@ export default function ActivityDashboard() {
       case "Experiment completed":
       case "Experiment started":
         if (isExperimentActivity(activity)) {
+          const accuracy = activity.data.accuracy ?? 0
+          const processedItems = activity.data.processedItems ?? 0
+          const totalItems = activity.data.totalItems ?? 0
+          
           return (
             <ChartContainer config={chartConfig} className="h-[120px] w-[120px] mx-auto mb-4">
               <ResponsiveContainer width="100%" height="100%">
@@ -524,12 +537,12 @@ export default function ActivityDashboard() {
                     data={[
                       { 
                         category: 'Correct', 
-                        value: Math.round(activity.data.processedItems * activity.data.accuracy / 100),
+                        value: Math.round(processedItems * accuracy / 100),
                         fill: "var(--true)"
                       },
                       { 
                         category: 'Incorrect', 
-                        value: activity.data.processedItems - Math.round(activity.data.processedItems * activity.data.accuracy / 100),
+                        value: processedItems - Math.round(processedItems * accuracy / 100),
                         fill: "var(--false)"
                       }
                     ]}
@@ -539,8 +552,8 @@ export default function ActivityDashboard() {
                   />
                   <Pie
                     data={[
-                      { category: 'Processed', value: activity.data.processedItems, fill: "var(--true)" },
-                      { category: 'Remaining', value: activity.data.totalItems - activity.data.processedItems, fill: "var(--neutral)" }
+                      { category: 'Processed', value: processedItems, fill: "var(--true)" },
+                      { category: 'Remaining', value: totalItems - processedItems, fill: "var(--neutral)" }
                     ]}
                     dataKey="value"
                     nameKey="category"
@@ -740,9 +753,9 @@ export default function ActivityDashboard() {
               <div key={activity.id} className="w-full">
                 {(() => {
                   switch (activity.type) {
-                    case 'Batch Job':
+                    case 'Scoring Job':
                       return (
-                        <BatchJobTask
+                        <ScoringJobTask
                           variant="grid"
                           task={activity}
                           onClick={() => setSelectedActivity(activity)}
@@ -853,9 +866,9 @@ export default function ActivityDashboard() {
                       }}
                     />
                   )
-                case 'Batch Job':
+                case 'Scoring Job':
                   return (
-                    <BatchJobTask 
+                    <ScoringJobTask 
                       variant="detail" 
                       task={selectedActivity}
                       isFullWidth={isFullWidth}
@@ -961,9 +974,9 @@ export default function ActivityDashboard() {
                       }}
                     />
                   )
-                case 'Batch Job':
+                case 'Scoring Job':
                   return (
-                    <BatchJobTask 
+                    <ScoringJobTask 
                       variant="detail" 
                       task={selectedActivity}
                       isFullWidth={isFullWidth}

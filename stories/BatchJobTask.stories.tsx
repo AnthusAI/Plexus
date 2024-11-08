@@ -20,8 +20,8 @@ const baseTask = {
   scorecard: 'Test Scorecard',
   score: 'Test Score',
   time: '2 hours ago',
-  summary: 'Batch Job Summary',
-  description: 'Batch Job Description',
+  summary: 'Processing items',
+  description: 'Processing a batch of items',
   data: {
     provider: 'OpenAI',
     type: 'inference',
@@ -57,7 +57,28 @@ export const Complete: Story = {
       ...baseTask,
       data: {
         ...baseTask.data,
-        status: 'completed',
+        status: 'done',
+        completedRequests: 100,
+      },
+    },
+  },
+}
+
+export const Nested: Story = {
+  args: {
+    variant: 'nested',
+    task: baseTask,
+  },
+}
+
+export const NestedComplete: Story = {
+  args: {
+    variant: 'nested',
+    task: {
+      ...baseTask,
+      data: {
+        ...baseTask.data,
+        status: 'done',
         completedRequests: 100,
       },
     },

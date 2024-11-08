@@ -5,7 +5,7 @@ import { Square, Columns2, X } from 'lucide-react'
 import { formatTimeAgo } from '@/utils/format-time'
 
 export interface BaseTaskProps {
-  variant: 'grid' | 'detail'
+  variant: 'grid' | 'detail' | 'nested'
   task: {
     id: number
     type: string
@@ -15,18 +15,18 @@ export interface BaseTaskProps {
     summary: string
     description?: string
     data?: {
-      eta?: string
-      numberComplete?: number
-      numberTrue?: number
-      numberFalse?: number
-      numberTotal?: number
-      accuracy?: number
-      f1Score?: number
-      progress?: number
-      elapsedTime?: string
-      processedItems?: number
-      totalItems?: number
-      estimatedTimeRemaining?: string
+      eta?: string | null
+      numberComplete?: number | null
+      numberTrue?: number | null
+      numberFalse?: number | null
+      numberTotal?: number | null
+      accuracy?: number | null
+      f1Score?: number | null
+      progress?: number | null
+      elapsedTime?: string | null
+      processedItems?: number | null
+      totalItems?: number | null
+      estimatedTimeRemaining?: string | null
       before?: {
         innerRing: Array<{ value: number }>
       }
@@ -70,6 +70,15 @@ const Task: React.FC<TaskComponentProps> = ({
     isFullWidth,
     onToggleFullWidth,
     onClose
+  }
+
+  if (variant === 'nested') {
+    return (
+      <div className="bg-background/50 p-3 rounded-md">
+        {renderHeader(childProps)}
+        {renderContent(childProps)}
+      </div>
+    )
   }
 
   return (
