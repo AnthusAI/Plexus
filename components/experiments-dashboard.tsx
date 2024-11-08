@@ -45,7 +45,7 @@ const getBadgeVariant = (status: string) => {
   return 'bg-neutral text-primary-foreground';
 };
 
-const calculateProgress = (processedItems?: number, totalItems?: number): number => {
+const calculateProgress = (processedItems?: number | null, totalItems?: number | null): number => {
   if (!processedItems || !totalItems || totalItems === 0) return 0;
   return Math.round((processedItems / totalItems) * 100);
 };
@@ -88,6 +88,7 @@ export default function ExperimentsDashboard() {
         totalItems: experiment.totalItems || 0,
         progress,
         inferences: experiment.inferences || 0,
+        results: experiment.processedItems || 0,
         cost: experiment.cost || 0,
         status: experiment.status || 'Unknown',
         elapsedTime: '00:00:00',

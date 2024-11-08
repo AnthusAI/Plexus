@@ -30,6 +30,9 @@ import BatchJobTask from '@/components/BatchJobTask'
 // Import the type from ExperimentTask
 import type { ExperimentTaskData } from '@/components/ExperimentTask'
 
+// Add this import at the top
+import { BatchJobTaskData } from '@/components/BatchJobTask'
+
 interface OptimizationTask {
   id: number
   type: 'Optimization started'
