@@ -398,9 +398,6 @@ export default function ExperimentsDashboard() {
                                 {experiment.totalItems ?? 0} samples
                               </div>
                               <div className="text-sm text-muted-foreground">
-                                {experiment.inferences ?? 0} inferences
-                              </div>
-                              <div className="text-sm text-muted-foreground">
                                 ${experiment.cost?.toFixed(3) ?? '0.000'}
                               </div>
                             </div>
