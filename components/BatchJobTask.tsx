@@ -50,6 +50,19 @@ const getStatusDisplay = (status: string): { text: string; variant: string } => 
   return statusMap[status.toLowerCase()] || { text: status, variant: 'default' }
 }
 
+const transformBatchJobData = (task: BatchJobTaskProps['task']) => ({
+  ...task,
+  data: {
+    progress: (task.data.completedRequests / task.data.totalRequests) * 100,
+    processedItems: task.data.completedRequests,
+    totalItems: task.data.totalRequests,
+    numberComplete: task.data.completedRequests,
+    numberTotal: task.data.totalRequests,
+    eta: task.data.startedAt,
+    elapsedTime: task.data.completedAt
+  }
+})
+
 export default function BatchJobTask({ 
   variant = "grid",
   task,
@@ -59,8 +72,8 @@ export default function BatchJobTask({
   onToggleFullWidth,
   onClose
 }: BatchJobTaskProps) {
-  const data = task.data
-  const statusDisplay = getStatusDisplay(data.status)
+  const transformedTask = transformBatchJobData(task)
+  const statusDisplay = getStatusDisplay(task.data.status)
 
   const visualization = (
     <div className="flex flex-col h-full">
@@ -76,17 +89,17 @@ export default function BatchJobTask({
         >
           {statusDisplay.text}
         </Badge>
-        {data.errorMessage && (
+        {task.data.errorMessage && (
           <div className="mt-2 text-sm text-destructive whitespace-pre-wrap">
-            Error: {data.errorMessage}
+            Error: {task.data.errorMessage}
           </div>
         )}
       </div>
       <div className="flex-1" />
       <TaskProgress 
-        progress={(data.completedRequests / data.totalRequests) * 100}
-        processedItems={data.completedRequests}
-        totalItems={data.totalRequests}
+        progress={(task.data.completedRequests / task.data.totalRequests) * 100}
+        processedItems={task.data.completedRequests}
+        totalItems={task.data.totalRequests}
       />
     </div>
   )
@@ -94,7 +107,7 @@ export default function BatchJobTask({
   return (
     <Task
       variant={variant}
-      task={task}
+      task={transformedTask}
       onClick={onClick}
       controlButtons={controlButtons}
       isFullWidth={isFullWidth}
