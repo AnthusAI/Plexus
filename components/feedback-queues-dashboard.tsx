@@ -4,7 +4,7 @@ import React from "react"
 import { useState, useMemo } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
+import { ProgressBar } from "@/components/ui/progress-bar"
 import { formatDistanceToNow, parseISO } from "date-fns"
 import { useRouter } from 'next/navigation'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -51,19 +51,6 @@ export default function FeedbackQueuesDashboard() {
     return formatDistanceToNow(date, { addSuffix: true })
   }
 
-  const renderProgressBar = (progress: number) => {
-    return (
-      <div className="relative w-full h-6 bg-neutral rounded-full">
-        <div
-          className="absolute top-0 left-0 h-full bg-primary flex items-center pl-2 text-xs text-primary-foreground font-medium rounded-full"
-          style={{ width: `${progress}%` }}
-        >
-          {progress}%
-        </div>
-      </div>
-    )
-  }
-
   const handleRowClick = (queueId: number) => {
     router.push(`/feedback?queue=${queueId}`);
   }
@@ -101,8 +88,7 @@ export default function FeedbackQueuesDashboard() {
                 <TableHead className="w-[15%] @[630px]:table-cell hidden">Started</TableHead>
                 <TableHead className="w-[15%] @[630px]:table-cell hidden">Last Updated</TableHead>
                 <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Scores</TableHead>
-                <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Items</TableHead>
-                <TableHead className="w-[25%] @[630px]:table-cell hidden">Progress</TableHead>
+                <TableHead className="w-[35%] @[630px]:table-cell hidden">Progress</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -119,14 +105,18 @@ export default function FeedbackQueuesDashboard() {
                         <div className="flex justify-between items-start mb-2">
                           <div className="font-semibold">{queue.name}</div>
                           <div className="text-sm text-muted-foreground text-right">
-                            {queue.scores} scores<br />
-                            {queue.items} items
+                            {queue.scores} scores
                           </div>
                         </div>
                         <div className="text-sm text-muted-foreground mb-2">
                           Started {getRelativeTime(queue.started)}
                         </div>
-                        {renderProgressBar(queue.progress)}
+                        <ProgressBar
+                          progress={queue.progress}
+                          processedItems={Math.round(queue.items * queue.progress / 100)}
+                          totalItems={queue.items}
+                          color="primary"
+                        />
                       </div>
                       {/* Wide variant - visible at 630px and above */}
                       <div className="hidden @[630px]:block">
@@ -137,8 +127,14 @@ export default function FeedbackQueuesDashboard() {
                   <TableCell className="hidden @[630px]:table-cell">{getRelativeTime(queue.started)}</TableCell>
                   <TableCell className="hidden @[630px]:table-cell">{getRelativeTime(queue.date)}</TableCell>
                   <TableCell className="hidden @[630px]:table-cell text-right">{queue.scores}</TableCell>
-                  <TableCell className="hidden @[630px]:table-cell text-right">{queue.items}</TableCell>
-                  <TableCell className="hidden @[630px]:table-cell">{renderProgressBar(queue.progress)}</TableCell>
+                  <TableCell className="hidden @[630px]:table-cell">
+                    <ProgressBar
+                      progress={queue.progress}
+                      processedItems={Math.round(queue.items * queue.progress / 100)}
+                      totalItems={queue.items}
+                      color="primary"
+                    />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

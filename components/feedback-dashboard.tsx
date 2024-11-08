@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea"
 import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
 import ItemDetail from './ItemDetail'
+import { ProgressBar } from "@/components/ui/progress-bar"
 
 // Add this type definition
 type TimeRangeOption = {
@@ -612,24 +613,14 @@ export default function FeedbackDashboard() {
           <p>{formatDistanceToNow(parseISO(queueData.date), { addSuffix: true })}</p>
         </div>
         <div className="w-1/2">
-          <div className="space-y-2">
-            <div className="flex justify-between text-xs">
-              <div className="font-semibold">Progress: {queueData.progress}%</div>
-              <div>Elapsed Time: {queueData.elapsedTime}</div>
-            </div>
-            <div className="relative w-full h-6 bg-neutral rounded-full">
-              <div
-                className="absolute top-0 left-0 h-full bg-primary flex items-center pl-2 text-xs text-primary-foreground font-medium rounded-full"
-                style={{ width: `${queueData.progress}%` }}
-              >
-                {queueData.progress}%
-              </div>
-            </div>
-            <div className="flex justify-between text-xs">
-              <div>{queueData.processedItems}/{queueData.totalItems}</div>
-              <div>ETA: {queueData.estimatedTimeRemaining}</div>
-            </div>
-          </div>
+          <ProgressBar
+            progress={queueData.progress}
+            processedItems={queueData.processedItems}
+            totalItems={queueData.totalItems}
+            elapsedTime={queueData.elapsedTime}
+            estimatedTimeRemaining={queueData.estimatedTimeRemaining}
+            color="primary"
+          />
         </div>
       </div>
     </div>
