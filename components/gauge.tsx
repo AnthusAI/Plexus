@@ -262,8 +262,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
             className="absolute left-1/2 -translate-x-1/2 text-sm whitespace-nowrap"
             style={{
               bottom: showTicks 
-                ? 'max(-10px, calc(-12px + 12%))' 
-                : 'max(-10px, calc(-18px + 18%))'
+                ? 'max(-10px, calc(-12px + 18%))' 
+                : 'max(-10px, calc(-18px + 24%))'
             }}
           >
             {title}
