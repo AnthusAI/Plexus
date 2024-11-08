@@ -170,7 +170,13 @@ export default function ExperimentsDashboard() {
           
           console.log('Fetching experiments...');
           const initialExperiments = await client.models.Experiment.list({
-            filter: { accountId: { eq: foundAccountId } }
+            filter: { accountId: { eq: foundAccountId } },
+            selectionSet: ['id', 'type', 'parameters', 'metrics', 'inferences', 
+                          'cost', 'accuracy', 'accuracyType', 'sensitivity', 
+                          'specificity', 'precision', 'createdAt', 'updatedAt', 
+                          'status', 'startedAt', 'estimatedEndAt', 'totalItems', 
+                          'processedItems', 'errorMessage', 'errorDetails', 
+                          'accountId', 'scorecardId', 'scoreId', 'confusionMatrix']
           });
           console.log('Experiments result:', initialExperiments);
           
@@ -185,7 +191,13 @@ export default function ExperimentsDashboard() {
 
           // Set up real-time subscription
           subscription = client.models.Experiment.observeQuery({
-            filter: { accountId: { eq: foundAccountId } }
+            filter: { accountId: { eq: foundAccountId } },
+            selectionSet: ['id', 'type', 'parameters', 'metrics', 'inferences', 
+                          'cost', 'accuracy', 'accuracyType', 'sensitivity', 
+                          'specificity', 'precision', 'createdAt', 'updatedAt', 
+                          'status', 'startedAt', 'estimatedEndAt', 'totalItems', 
+                          'processedItems', 'errorMessage', 'errorDetails', 
+                          'accountId', 'scorecardId', 'scoreId', 'confusionMatrix']
           }).subscribe({
             next: ({ items }) => {
               const sortedItems = items.sort((a, b) => 
