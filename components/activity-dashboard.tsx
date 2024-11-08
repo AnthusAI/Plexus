@@ -196,7 +196,6 @@ const recentActivities: ActivityData[] = [
       },
       progress: 50,
       inferences: 100,
-      results: 50,
       cost: 10,
       status: "In Progress"
     },
@@ -318,7 +317,6 @@ const recentActivities: ActivityData[] = [
       },
       progress: 100,
       inferences: 200,
-      results: 100,
       cost: 20,
       status: "Completed"
     },

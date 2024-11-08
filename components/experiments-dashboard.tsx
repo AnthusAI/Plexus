@@ -30,7 +30,6 @@ import ScorecardContext from "@/components/ScorecardContext"
 import ExperimentTask, { type ExperimentTaskProps } from "@/components/ExperimentTask"
 import { ExperimentListProgressBar } from "@/components/ExperimentListProgressBar"
 import { ExperimentListAccuracyBar } from "@/components/ExperimentListAccuracyBar"
-import { formatTimeAgo } from '@/utils/format-time'
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -92,13 +91,20 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
   }
 }
 
-export default function ExperimentsDashboard() {
+// Move client initialization into a custom hook
+function useAmplifyClient() {
   const [client] = useState(() => {
+    if (typeof window === 'undefined') return null; // Return null during SSR
     console.log('Initializing client...');
     const c = generateClient<Schema>();
     console.log('Client initialized:', c);
     return c;
   });
+  return client;
+}
+
+export default function ExperimentsDashboard() {
+  const client = useAmplifyClient();
   const [experiments, setExperiments] = useState<Schema['Experiment']['type'][]>([])
   const [experimentTaskProps, setExperimentTaskProps] = useState<ExperimentTaskProps['task'] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -131,7 +137,7 @@ export default function ExperimentsDashboard() {
       id: parseInt(experiment.id),
       scorecard: scorecardName,
       score: scoreName,
-      time: formatTimeAgo(experiment.createdAt),
+      time: formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true }),
       summary: experiment.errorMessage || `${progress}% complete`,
       description: experiment.errorDetails ? 
         typeof experiment.errorDetails === 'string' ? 
@@ -147,7 +153,6 @@ export default function ExperimentsDashboard() {
         totalItems: experiment.totalItems || 0,
         progress,
         inferences: experiment.inferences || 0,
-        results: experiment.processedItems || 0,
         cost: experiment.cost || 0,
         status: experiment.status || 'Unknown',
         elapsedTime: '00:00:00',
@@ -194,12 +199,14 @@ export default function ExperimentsDashboard() {
 
   // Move all client usage into useEffect to avoid server/client mismatch
   useEffect(() => {
+    if (!client) return; // Skip if client isn't initialized yet
+
     let subscription: { unsubscribe: () => void } | null = null
 
     async function setupRealTimeSync() {
       try {
         console.log('Fetching account...');
-        const accountResult = await client.models.Account.list({
+        const accountResult = await client!.models.Account.list({
           filter: { key: { eq: ACCOUNT_KEY } }
         });
 
@@ -207,17 +214,14 @@ export default function ExperimentsDashboard() {
           const foundAccountId = accountResult.data[0].id;
           setAccountId(foundAccountId);
           
-          // Use the built-in field selectors
-          const initialExperiments = await client.models.Experiment.list({
+          // Explicitly specify the fields we want to query
+          const initialExperiments = await client!.models.Experiment.list({
             filter: { accountId: { eq: foundAccountId } },
-            selectionSet: [
-              'id', 'type', 'parameters', 'metrics', 'inferences', 
-              'cost', 'accuracy', 'accuracyType', 'sensitivity', 
-              'specificity', 'precision', 'createdAt', 'updatedAt', 
-              'status', 'startedAt', 'estimatedEndAt', 'totalItems', 
-              'processedItems', 'errorMessage', 'errorDetails', 
-              'accountId', 'scorecardId', 'scoreId', 'confusionMatrix'
-            ]
+            selectionSet: ['id', 'type', 'parameters', 'metrics', 'inferences', 
+              'cost', 'accuracy', 'accuracyType', 'sensitivity', 'specificity', 
+              'precision', 'createdAt', 'updatedAt', 'status', 'startedAt', 
+              'estimatedEndAt', 'totalItems', 'processedItems', 'errorMessage', 
+              'errorDetails', 'accountId', 'scorecardId', 'scoreId', 'confusionMatrix']
           });
           
           const filteredExperiments = initialExperiments.data
@@ -229,17 +233,14 @@ export default function ExperimentsDashboard() {
           setExperiments(filteredExperiments);
           setIsLoading(false);
 
-          // Set up real-time subscription without custom selection set
-          subscription = client.models.Experiment.observeQuery({
+          // Update subscription to use the same selection set
+          subscription = client!.models.Experiment.observeQuery({
             filter: { accountId: { eq: foundAccountId } },
-            selectionSet: [
-              'id', 'type', 'parameters', 'metrics', 'inferences', 
-              'cost', 'accuracy', 'accuracyType', 'sensitivity', 
-              'specificity', 'precision', 'createdAt', 'updatedAt', 
-              'status', 'startedAt', 'estimatedEndAt', 'totalItems', 
-              'processedItems', 'errorMessage', 'errorDetails', 
-              'accountId', 'scorecardId', 'scoreId', 'confusionMatrix'
-            ]
+            selectionSet: ['id', 'type', 'parameters', 'metrics', 'inferences', 
+              'cost', 'accuracy', 'accuracyType', 'sensitivity', 'specificity', 
+              'precision', 'createdAt', 'updatedAt', 'status', 'startedAt', 
+              'estimatedEndAt', 'totalItems', 'processedItems', 'errorMessage', 
+              'errorDetails', 'accountId', 'scorecardId', 'scoreId', 'confusionMatrix']
           }).subscribe({
             next: ({ items }) => {
               const transformedItems = items.map(transformExperiment);
@@ -285,7 +286,7 @@ export default function ExperimentsDashboard() {
         subscription.unsubscribe()
       }
     }
-  }, [client, selectedExperiment?.id]) // Add selectedExperiment.id to dependencies
+  }, [client])
 
   // Add viewport check effect
   useEffect(() => {
