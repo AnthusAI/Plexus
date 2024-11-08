@@ -51,6 +51,47 @@ const calculateProgress = (processedItems?: number | null, totalItems?: number |
   return Math.round((processedItems / totalItems) * 100);
 };
 
+// Add this function to transform the raw experiment data
+const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] => {
+  return {
+    ...rawExperiment,
+    account: async () => ({
+      data: {
+        id: rawExperiment.account?.id,
+        name: rawExperiment.account?.name,
+        key: rawExperiment.account?.key,
+        scorecards: async () => ({ data: [], nextToken: null }),
+        experiments: async () => ({ data: [], nextToken: null }),
+        batchJobs: async () => ({ data: [], nextToken: null }),
+        createdAt: rawExperiment.createdAt,
+        updatedAt: rawExperiment.updatedAt,
+        description: ''
+      }
+    }),
+    scorecard: async () => ({
+      data: rawExperiment.scorecard ? {
+        ...rawExperiment.scorecard,
+        account: async () => ({ data: null }),
+        sections: async () => ({ data: [], nextToken: null }),
+        experiments: async () => ({ data: [], nextToken: null }),
+        batchJobs: async () => ({ data: [], nextToken: null })
+      } : null
+    }),
+    score: async () => ({
+      data: rawExperiment.score ? {
+        ...rawExperiment.score,
+        section: async () => ({ data: null }),
+        experiments: async () => ({ data: [], nextToken: null }),
+        batchJobs: async () => ({ data: [], nextToken: null })
+      } : null
+    }),
+    samples: async () => ({
+      data: rawExperiment.samples || [],
+      nextToken: null
+    })
+  }
+}
+
 export default function ExperimentsDashboard() {
   const [client] = useState(() => {
     console.log('Initializing client...');
@@ -161,81 +202,76 @@ export default function ExperimentsDashboard() {
         const accountResult = await client.models.Account.list({
           filter: { key: { eq: ACCOUNT_KEY } }
         });
-        console.log('Account result:', accountResult);
 
         if (accountResult.data.length > 0) {
           const foundAccountId = accountResult.data[0].id;
-          console.log('Found account ID:', foundAccountId);
           setAccountId(foundAccountId);
           
-          console.log('Fetching experiments...');
+          // Use the built-in field selectors
           const initialExperiments = await client.models.Experiment.list({
             filter: { accountId: { eq: foundAccountId } },
-            selectionSet: ['id', 'type', 'parameters', 'metrics', 'inferences', 
-                          'cost', 'accuracy', 'accuracyType', 'sensitivity', 
-                          'specificity', 'precision', 'createdAt', 'updatedAt', 
-                          'status', 'startedAt', 'estimatedEndAt', 'totalItems', 
-                          'processedItems', 'errorMessage', 'errorDetails', 
-                          'accountId', 'scorecardId', 'scoreId', 'confusionMatrix']
+            selectionSet: [
+              'id', 'type', 'parameters', 'metrics', 'inferences', 
+              'cost', 'accuracy', 'accuracyType', 'sensitivity', 
+              'specificity', 'precision', 'createdAt', 'updatedAt', 
+              'status', 'startedAt', 'estimatedEndAt', 'totalItems', 
+              'processedItems', 'errorMessage', 'errorDetails', 
+              'accountId', 'scorecardId', 'scoreId', 'confusionMatrix'
+            ]
           });
-          console.log('Experiments result:', initialExperiments);
           
-          // Filter and sort experiments
           const filteredExperiments = initialExperiments.data
-            .sort((a, b) => 
+            .map(transformExperiment)
+            .sort((a: Schema['Experiment']['type'], b: Schema['Experiment']['type']) => 
               new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-            )
+            );
           
-          setExperiments(filteredExperiments)
-          setIsLoading(false)
+          setExperiments(filteredExperiments);
+          setIsLoading(false);
 
-          // Set up real-time subscription
+          // Set up real-time subscription without custom selection set
           subscription = client.models.Experiment.observeQuery({
             filter: { accountId: { eq: foundAccountId } },
-            selectionSet: ['id', 'type', 'parameters', 'metrics', 'inferences', 
-                          'cost', 'accuracy', 'accuracyType', 'sensitivity', 
-                          'specificity', 'precision', 'createdAt', 'updatedAt', 
-                          'status', 'startedAt', 'estimatedEndAt', 'totalItems', 
-                          'processedItems', 'errorMessage', 'errorDetails', 
-                          'accountId', 'scorecardId', 'scoreId', 'confusionMatrix']
+            selectionSet: [
+              'id', 'type', 'parameters', 'metrics', 'inferences', 
+              'cost', 'accuracy', 'accuracyType', 'sensitivity', 
+              'specificity', 'precision', 'createdAt', 'updatedAt', 
+              'status', 'startedAt', 'estimatedEndAt', 'totalItems', 
+              'processedItems', 'errorMessage', 'errorDetails', 
+              'accountId', 'scorecardId', 'scoreId', 'confusionMatrix'
+            ]
           }).subscribe({
             next: ({ items }) => {
-              const sortedItems = items.sort((a, b) => 
+              const transformedItems = items.map(transformExperiment);
+              const sortedItems = transformedItems.sort((a: Schema['Experiment']['type'], b: Schema['Experiment']['type']) => 
                 new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-              )
-              setExperiments(sortedItems)
+              );
+              setExperiments(sortedItems);
               
-              // Update selectedExperiment if it exists in the new items
               if (selectedExperiment) {
-                const updatedExperiment = items.find(item => 
+                const updatedExperiment = sortedItems.find(item => 
                   item.id === selectedExperiment.id
-                )
+                );
                 if (updatedExperiment && 
                     JSON.stringify(updatedExperiment) !== 
                     JSON.stringify(selectedExperiment)) {
-                  setSelectedExperiment(updatedExperiment)
+                  setSelectedExperiment(updatedExperiment);
                 }
               }
             },
             error: (error: Error) => {
-              console.error('Subscription error:', error)
-              setError(error)
+              console.error('Subscription error:', error);
+              setError(error);
             }
-          })
+          });
         } else {
-          console.log('No account found with key:', ACCOUNT_KEY);
-          setIsLoading(false)
+          setIsLoading(false);
         }
       } catch (error) {
         if (error instanceof Error) {
-          console.error('Error details:', {
-            name: error.name,
-            message: error.message,
-            stack: error.stack
-          });
+          console.error('Error details:', error);
           setError(error);
         } else {
-          console.error('Unexpected error:', error);
           setError(new Error('An unexpected error occurred'));
         }
         setIsLoading(false);
