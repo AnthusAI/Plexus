@@ -28,6 +28,7 @@ const ScoreUpdatedTask: React.FC<ScoreUpdatedTaskProps> = ({
   onClose
 }) => {
   const data = task.data as ScoreUpdatedTaskData
+  const gaugeVariant = variant === 'nested' ? 'detail' : variant
 
   const visualization = React.useMemo(() => (
     <div className="w-full max-w-full">
@@ -35,7 +36,7 @@ const ScoreUpdatedTask: React.FC<ScoreUpdatedTaskProps> = ({
         title={task.description || 'Metric'}
         before={data.before?.innerRing[0]?.value ?? 0}
         after={data.after?.innerRing[0]?.value ?? 0}
-        variant={variant}
+        variant={gaugeVariant}
         backgroundColor="var(--gauge-background)"
       />
     </div>
