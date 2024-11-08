@@ -17,6 +17,7 @@ import { useInView } from 'react-intersection-observer'
 import { useSidebar } from "@/app/contexts/SidebarContext"
 import React from "react"
 import ScorecardContext from "@/components/ScorecardContext"
+import { formatTimeAgo } from '@/utils/format-time'
 
 // Import new task components
 import ExperimentTaskComponent from '@/components/ExperimentTask'
@@ -173,7 +174,7 @@ const recentActivities: ActivityData[] = [
     type: "Experiment started",
     scorecard: "CS3 Services v2",
     score: "Good Call",
-    time: "2m ago",
+    time: formatTimeAgo(new Date()),
     description: "Note",
     summary: '\"Using fine-tuned model.\"',
     data: {
@@ -205,7 +206,7 @@ const recentActivities: ActivityData[] = [
     type: "Alert",
     scorecard: "Prime Edu",
     score: "Agent Branding",
-    time: "15m ago",
+    time: formatTimeAgo(new Date(Date.now() - 15 * 60 * 1000)),
     summary: "Inappropriate content detected",
     description: "Score above 1 in the previous 15 minutes",
   },
@@ -214,7 +215,7 @@ const recentActivities: ActivityData[] = [
     type: "Report",
     scorecard: "SelectQuote TermLife v1",
     score: "AI Coaching Report",
-    time: "30m ago",
+    time: formatTimeAgo(new Date(Date.now() - 30 * 60 * 1000)),
     summary: "Report generated",
   },
   {
@@ -222,7 +223,7 @@ const recentActivities: ActivityData[] = [
     type: "Optimization started",
     scorecard: "SelectQuote TermLife v1",
     score: "Good Call",
-    time: "1h ago",
+    time: formatTimeAgo(new Date(Date.now() - 60 * 60 * 1000)),
     description: "Accuracy",
     summary: "Progress: 92%",
     data: {
@@ -259,7 +260,7 @@ const recentActivities: ActivityData[] = [
     type: "Batch Job",
     scorecard: "Prime Edu",
     score: "Agent Branding",
-    time: "2h ago",
+    time: formatTimeAgo(new Date(Date.now() - 120 * 60 * 1000)),
     summary: "Requests pending",
     description: "OpenAI batch job",
     data: {
@@ -277,7 +278,7 @@ const recentActivities: ActivityData[] = [
     type: "Batch Job",
     scorecard: "CS3 Services v2",
     score: "Good Call",
-    time: "3h ago",
+    time: formatTimeAgo(new Date(Date.now() - 180 * 60 * 1000)),
     summary: "Processing requests",
     description: "OpenAI batch job",
     data: {
@@ -295,7 +296,7 @@ const recentActivities: ActivityData[] = [
     type: "Experiment completed",
     scorecard: "SelectQuote TermLife v1",
     score: "Temperature Check",
-    time: "3h ago",
+    time: formatTimeAgo(new Date(Date.now() - 180 * 60 * 1000)),
     summary: "94% / 100",
     description: "Accuracy",
     data: {
@@ -327,7 +328,7 @@ const recentActivities: ActivityData[] = [
     type: "Score updated",
     scorecard: "SelectQuote TermLife v1",
     score: "Assumptive Close",
-    time: "1d ago",
+    time: formatTimeAgo(new Date(Date.now() - 1440 * 60 * 1000)),
     description: "Accuracy",
     summary: "Improved from 75% to 82%",
     data: {
@@ -358,7 +359,7 @@ const recentActivities: ActivityData[] = [
     type: "Feedback queue started",
     scorecard: "CS3 Services v2",
     score: "",
-    time: "5m ago",
+    time: formatTimeAgo(new Date(Date.now() - 300 * 60 * 1000)),
     description: "Getting feedback",
     summary: "150 items",
     data: {
@@ -374,7 +375,7 @@ const recentActivities: ActivityData[] = [
     type: "Feedback queue completed",
     scorecard: "SelectQuote TermLife v1",
     score: "",
-    time: "2h ago",
+    time: formatTimeAgo(new Date(Date.now() - 120 * 60 * 1000)),
     description: "Got feedback",
     summary: "200 scores processed",
     data: {

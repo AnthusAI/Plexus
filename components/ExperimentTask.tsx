@@ -23,6 +23,8 @@ export interface ExperimentTaskData {
   estimatedTimeRemaining: string
   startedAt?: string
   estimatedEndAt?: string
+  errorMessage?: string | null
+  errorDetails?: any | null
   confusionMatrix?: {
     matrix: number[][]
     labels: string[]
@@ -33,7 +35,7 @@ export type ExperimentTaskProps = {
   variant?: 'grid' | 'detail'
   task: {
     id: number
-    type: string
+    type?: string
     scorecard: string
     score: string
     time: string
@@ -48,6 +50,30 @@ export type ExperimentTaskProps = {
   onClose?: () => void
 }
 
+function computeExperimentType(data: ExperimentTaskData): string {
+  if (data.errorMessage || data.errorDetails) {
+    return "Error in experiment"
+  }
+  
+  if (data.progress === 100) {
+    return "Experiment done"
+  }
+  
+  if (data.progress >= 90) {
+    return "Experiment finishing"
+  }
+  
+  if (data.progress >= 10) {
+    return "Experiment running"
+  }
+  
+  if (data.progress > 0) {
+    return "Experiment started"
+  }
+  
+  return "Experiment pending"
+}
+
 export default function ExperimentTask({ 
   variant = "grid",
   task,
@@ -58,6 +84,7 @@ export default function ExperimentTask({
   onClose
 }: ExperimentTaskProps) {
   const data = task.data
+  const computedType = computeExperimentType(data)
   const waffleContainerRef = useRef<HTMLDivElement>(null)
   const [waffleHeight, setWaffleHeight] = useState(20)
 
@@ -213,7 +240,10 @@ export default function ExperimentTask({
   return (
     <Task
       variant={variant}
-      task={task}
+      task={{
+        ...task,
+        type: computedType
+      }}
       onClick={onClick}
       controlButtons={controlButtons}
       isFullWidth={isFullWidth}
