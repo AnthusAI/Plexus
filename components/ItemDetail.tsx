@@ -31,6 +31,7 @@ interface ItemDetailProps {
   item: any
   controlButtons?: React.ReactNode
   getBadgeVariant: (status: string) => string
+  getRelativeTime: (dateString: string | undefined) => string
   isMetadataExpanded: boolean
   setIsMetadataExpanded: (expanded: boolean) => void
   isDataExpanded: boolean
@@ -59,6 +60,7 @@ const ItemDetail: React.FC<ItemDetailProps> = ({
   item,
   controlButtons,
   getBadgeVariant,
+  getRelativeTime,
   isMetadataExpanded,
   setIsMetadataExpanded,
   isDataExpanded,
