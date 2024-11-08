@@ -26,6 +26,7 @@ import { FilterControl, FilterConfig } from "@/components/filter-control"
 import ScorecardContext from "@/components/ScorecardContext"
 import ItemContext from "@/components/ItemContext"
 import ItemDetail from './ItemDetail'
+import { formatTimeAgo } from '@/utils/format-time'
 
 // Get the current date and time
 const now = new Date();
@@ -440,18 +441,6 @@ export default function ItemsDashboard() {
     })
   }, [selectedScorecard, filterConfig, items])
 
-  const getRelativeTime = (dateString: string) => {
-    const date = parseISO(dateString)
-    return formatDistanceToNow(date, { addSuffix: true })
-  }
-
-  const handleItemClick = (itemId: number) => {
-    setSelectedItem(itemId)
-    if (isNarrowViewport) {
-      setIsFullWidth(true)
-    }
-  }
-
   const getBadgeVariant = (status: string) => {
     switch (status) {
       case 'New':
@@ -577,7 +566,6 @@ export default function ItemsDashboard() {
         item={selectedItemData}
         controlButtons={DetailViewControlButtons}
         getBadgeVariant={getBadgeVariant}
-        getRelativeTime={getRelativeTime}
         isMetadataExpanded={isMetadataExpanded}
         setIsMetadataExpanded={setIsMetadataExpanded}
         isDataExpanded={isDataExpanded}
@@ -814,6 +802,13 @@ export default function ItemsDashboard() {
     );
   }
 
+  const handleItemClick = (itemId: number) => {
+    setSelectedItem(itemId)
+    if (isNarrowViewport) {
+      setIsFullWidth(true)
+    }
+  }
+
   return (
     <div className="space-y-4 h-full flex flex-col">
       <div className="flex flex-wrap justify-between items-start gap-4">
@@ -864,7 +859,7 @@ export default function ItemsDashboard() {
                       className="cursor-pointer transition-colors duration-200 hover:bg-muted"
                     >
                       <TableCell className="font-medium pr-4">
-                        <div> {/* Removed @container/cell */}
+                        <div>
                           {/* Narrow variant - visible below 630px */}
                           <div className="block @[630px]:hidden">
                             <div className="flex justify-between items-start mb-2">
@@ -875,7 +870,9 @@ export default function ItemsDashboard() {
                                 {item.status}
                               </Badge>
                             </div>
-                            <div className="text-sm text-muted-foreground mb-2">{getRelativeTime(item.date)}</div>
+                            <div className="text-sm text-muted-foreground mb-2">
+                              {formatTimeAgo(item.date, true)}
+                            </div>
                             <div className="flex justify-between items-end">
                               <div className="text-sm text-muted-foreground">
                                 {item.inferences} inferences<br />
@@ -887,7 +884,9 @@ export default function ItemsDashboard() {
                           {/* Wide variant - visible at 630px and above */}
                           <div className="hidden @[630px]:block">
                             {item.scorecard}
-                            <div className="text-sm text-muted-foreground">{getRelativeTime(item.date)}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {formatTimeAgo(item.date)}
+                            </div>
                           </div>
                         </div>
                       </TableCell>

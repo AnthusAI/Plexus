@@ -174,7 +174,7 @@ const recentActivities: ActivityData[] = [
     type: "Experiment started",
     scorecard: "CS3 Services v2",
     score: "Good Call",
-    time: formatTimeAgo(new Date()),
+    time: formatTimeAgo(new Date(), true),
     description: "Note",
     summary: '\"Using fine-tuned model.\"',
     data: {

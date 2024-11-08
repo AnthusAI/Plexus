@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Square, Columns2, X, Settings } from "lucide-react"
-import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
   Table,
@@ -15,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { formatTimeAgo } from '@/utils/format-time'
 
 // Get the current date and time
 const now = new Date();
@@ -93,11 +93,6 @@ export default function AlertsDashboard() {
     )
   }, [selectedSource])
 
-  const getRelativeTime = (dateString: string) => {
-    const date = parseISO(dateString)
-    return formatDistanceToNow(date, { addSuffix: true })
-  }
-
   const handleAlertClick = (alertId: number) => {
     setSelectedAlert(alertId)
     if (isNarrowViewport) {
@@ -168,7 +163,6 @@ export default function AlertsDashboard() {
               setSelectedAlert,
               setIsFullWidth,
               getBadgeVariant,
-              getRelativeTime,
               getSeverityColor
             })}
           </div>
@@ -199,7 +193,9 @@ export default function AlertsDashboard() {
                                 {alert.status}
                               </Badge>
                             </div>
-                            <div className="text-sm text-muted-foreground mb-2">{getRelativeTime(alert.date)}</div>
+                            <div className="text-sm text-muted-foreground mb-2">
+                              {formatTimeAgo(alert.date, true)}
+                            </div>
                             <div className="flex justify-between items-end">
                               <div className="text-sm text-muted-foreground">
                                 <span className={`inline-block w-3 h-3 rounded-full ${getSeverityColor(alert.severity)}`}></span> {alert.severity}
@@ -209,7 +205,9 @@ export default function AlertsDashboard() {
                           {/* Wide variant - visible at 630px and above */}
                           <div className="hidden @[630px]:block">
                             {alert.source}
-                            <div className="text-sm text-muted-foreground">{getRelativeTime(alert.date)}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {formatTimeAgo(alert.date)}
+                            </div>
                           </div>
                         </div>
                       </TableCell>
@@ -243,7 +241,6 @@ export default function AlertsDashboard() {
                   setSelectedAlert,
                   setIsFullWidth,
                   getBadgeVariant,
-                  getRelativeTime,
                   getSeverityColor
                 })}
               </div>
@@ -263,7 +260,6 @@ function renderSelectedAlert({
   setSelectedAlert,
   setIsFullWidth,
   getBadgeVariant,
-  getRelativeTime,
   getSeverityColor
 }: {
   alerts: { id: number; message: string; source: string; date: string; status: string; severity: string }[]; // Explicit type annotation
@@ -273,7 +269,6 @@ function renderSelectedAlert({
   setSelectedAlert: (id: number | null) => void;
   setIsFullWidth: (isFullWidth: boolean) => void;
   getBadgeVariant: (status: string) => string;
-  getRelativeTime: (date: string) => string;
   getSeverityColor: (severity: string) => string;
 }) {
   const selectedAlertData = alerts.find(alert => alert.id === selectedAlert);
@@ -286,7 +281,7 @@ function renderSelectedAlert({
         <div>
           <h3 className="text-xl font-semibold">{selectedAlertData.message}</h3>
           <p className="text-sm text-muted-foreground">
-            {selectedAlertData.source} • {getRelativeTime(selectedAlertData.date)}
+            {selectedAlertData.source} • {formatTimeAgo(selectedAlertData.date)}
           </p>
         </div>
         <div className="flex ml-2">
