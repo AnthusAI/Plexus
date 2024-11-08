@@ -6,7 +6,7 @@ import type { Segment } from './gauge'
 import { cn } from '@/lib/utils'
 
 interface GaugeConfig {
-  value: number
+  value?: number
   label: string
   segments?: Segment[]
   min?: number

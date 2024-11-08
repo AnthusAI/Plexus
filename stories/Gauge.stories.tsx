@@ -44,6 +44,12 @@ export const CustomBackground: Story = {
   ]
 }
 
+export const NoValue: Story = {
+  args: {
+    title: 'Accuracy'
+  }
+}
+
 export const LowValue: Story = {
   args: {
     value: 30,

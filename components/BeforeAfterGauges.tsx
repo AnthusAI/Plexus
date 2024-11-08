@@ -3,8 +3,8 @@ import { Gauge, type Segment } from './gauge'
 
 interface BeforeAfterGaugesProps {
   title: string
-  before: number
-  after: number
+  before?: number
+  after?: number
   segments?: Segment[]
   min?: number
   max?: number
@@ -12,7 +12,9 @@ interface BeforeAfterGaugesProps {
   backgroundColor?: string
 }
 
-const getChangeArrow = (before: number, after: number) => {
+const getChangeArrow = (before?: number, after?: number) => {
+  if (before === undefined || after === undefined) return ''
+  
   const difference = after - before
   const percentChange = (difference / before) * 100
   
@@ -55,10 +57,12 @@ const BeforeAfterGauges: React.FC<BeforeAfterGaugesProps> = ({
         <div 
           className="absolute left-1/2 -translate-x-1/2 text-xs text-muted-foreground whitespace-nowrap"
           style={{
-            bottom: variant === 'detail' ? '24px' : '36px'
+            bottom: variant === 'detail' ? '20px' : '32px'
           }}
         >
-          {before}% {arrowCharacter} {after}%
+          {before !== undefined ? `${before}%` : ''} 
+          {arrowCharacter} 
+          {after !== undefined ? `${after}%` : ''}
         </div>
       </div>
     </div>
