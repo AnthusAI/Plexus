@@ -607,7 +607,7 @@ export default function AnalysisDashboard() {
                     <TableHead className="w-[35%]">Analysis</TableHead>
                     <TableHead className="w-[15%] @[630px]:table-cell hidden">Type</TableHead>
                     <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Cost</TableHead>
-                    <TableHead className="w-[20%] @[630px]:table-cell hidden text-left">Progress</TableHead>
+                    <TableHead className="w-[20%] @[630px]:table-cell hidden text-right">Progress</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -646,7 +646,7 @@ export default function AnalysisDashboard() {
                         {item.type}
                       </TableCell>
                       <TableCell className="hidden @[630px]:table-cell text-right">{item.cost}</TableCell>
-                      <TableCell className="hidden @[630px]:table-cell">
+                      <TableCell className="hidden @[630px]:table-cell text-right">
                         <Badge 
                           className={getBadgeVariant(item.status, item.progress)}
                         >
