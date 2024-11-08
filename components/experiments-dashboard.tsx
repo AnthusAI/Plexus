@@ -342,11 +342,7 @@ export default function ExperimentsDashboard() {
             setSelectedScorecard={setSelectedScorecard}
             selectedScore={selectedScore}
             setSelectedScore={setSelectedScore}
-            availableFields={[]} // We'll need to populate this from real data
-            timeRangeOptions={[
-              { value: 'Accuracy', label: 'Accuracy' },
-              { value: 'Consistency', label: 'Consistency' },
-            ]}
+            availableFields={[]}
           />
         </div>
       </div>
@@ -461,17 +457,20 @@ export default function ExperimentsDashboard() {
             </div>
 
             {selectedExperiment && experimentTaskProps && !isNarrowViewport && !isFullWidth && (
-              <div className="flex-1 overflow-y-auto">
-                <ExperimentTask
-                  variant="detail"
-                  task={experimentTaskProps}
-                  isFullWidth={isFullWidth}
-                  onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-                  onClose={() => {
-                    setSelectedExperiment(null);
-                    setIsFullWidth(false);
-                  }}
-                />
+              <div className={`${isFullWidth ? 'w-full' : 'w-1/2 min-w-[300px]'} overflow-y-auto`}>
+                <div className="">
+                  <div className="" />
+                  <ExperimentTask
+                    variant="detail"
+                    task={experimentTaskProps}
+                    isFullWidth={isFullWidth}
+                    onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                    onClose={() => {
+                      setSelectedExperiment(null);
+                      setIsFullWidth(false);
+                    }}
+                  />
+                </div>
               </div>
             )}
           </div>

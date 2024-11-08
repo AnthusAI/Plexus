@@ -671,7 +671,7 @@ export default function ActivityDashboard() {
   return (
     <div className="h-full flex">
       {/* Left side with chart and activities */}
-      <div className="@container flex-1 overflow-y-auto pr-4">
+      <div className="@container flex-1 overflow-y-auto">
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <ScorecardContext 
@@ -820,112 +820,19 @@ export default function ActivityDashboard() {
 
       {/* Right side detail view */}
       {selectedActivity && !isNarrowViewport && (
-        <div className={`${isFullWidth ? 'w-full' : 'w-1/3 min-w-[300px]'} overflow-y-auto`}>
+        <div className={`${isFullWidth ? 'w-full' : 'w-1/3 min-w-[300px]'} overflow-y-auto pl-4`}>
           <div className="">
             <div className="" />
-            {(() => {
-              switch (selectedActivity.type) {
-                case 'Batch Job':
-                  return (
-                    <BatchJobTask 
-                      variant="detail" 
-                      task={selectedActivity}
-                      isFullWidth={isFullWidth}
-                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-                      onClose={() => {
-                        setSelectedActivity(null)
-                        setIsFullWidth(false)
-                      }}
-                    />
-                  )
-                case 'Experiment completed':
-                case 'Experiment started':
-                  return isExperimentActivity(selectedActivity) ? (
-                    <ExperimentTaskComponent 
-                      variant="detail" 
-                      task={selectedActivity} 
-                      isFullWidth={isFullWidth}
-                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-                      onClose={() => {
-                        setSelectedActivity(null)
-                        setIsFullWidth(false)
-                      }}
-                    />
-                  ) : null
-                case 'Alert':
-                  return (
-                    <AlertTask 
-                      variant="detail" 
-                      task={selectedActivity} 
-                      iconType="warning"
-                      isFullWidth={isFullWidth}
-                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-                      onClose={() => {
-                        setSelectedActivity(null)
-                        setIsFullWidth(false)
-                      }}
-                    />
-                  )
-                case 'Report':
-                  return (
-                    <ReportTask 
-                      variant="detail" 
-                      task={selectedActivity}
-                      isFullWidth={isFullWidth}
-                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-                      onClose={() => {
-                        setSelectedActivity(null)
-                        setIsFullWidth(false)
-                      }}
-                    />
-                  )
-                case 'Optimization started':
-                  return (
-                    <OptimizationTask
-                      variant="detail"
-                      task={{
-                        ...selectedActivity,
-                        scorecard: selectedActivity.description || 'Metric'
-                      }}
-                      isFullWidth={isFullWidth}
-                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-                      onClose={() => {
-                        setSelectedActivity(null)
-                        setIsFullWidth(false)
-                      }}
-                    />
-                  )
-                case 'Feedback queue started':
-                case 'Feedback queue completed':
-                  return (
-                    <FeedbackTask 
-                      variant="detail" 
-                      task={selectedActivity}
-                      isFullWidth={isFullWidth}
-                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-                      onClose={() => {
-                        setSelectedActivity(null)
-                        setIsFullWidth(false)
-                      }}
-                    />
-                  )
-                case 'Score updated':
-                  return (
-                    <ScoreUpdatedTask 
-                      variant="detail" 
-                      task={selectedActivity}
-                      isFullWidth={isFullWidth}
-                      onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-                      onClose={() => {
-                        setSelectedActivity(null)
-                        setIsFullWidth(false)
-                      }}
-                    />
-                  )
-                default:
-                  return null
-              }
-            })()}
+            <ExperimentTaskComponent 
+              variant="detail" 
+              task={selectedActivity} 
+              isFullWidth={isFullWidth}
+              onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+              onClose={() => {
+                setSelectedActivity(null)
+                setIsFullWidth(false)
+              }}
+            />
           </div>
         </div>
       )}
