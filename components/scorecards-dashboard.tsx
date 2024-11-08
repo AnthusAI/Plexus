@@ -174,10 +174,33 @@ export default function ScorecardsComponent() {
           batchJobs: async () => ({
             data: [],
             nextToken: null
+          }),
+          items: async () => ({
+            data: [],
+            nextToken: null
+          }),
+          scoringJobs: async () => ({
+            data: [],
+            nextToken: null
+          }),
+          scoreResults: async () => ({
+            data: [],
+            nextToken: null
           })
         }
       }),
       sections: async () => ({
+        data: [],
+        nextToken: null
+      }),
+      item: async () => ({
+        data: null
+      }),
+      scoringJobs: async () => ({
+        data: [],
+        nextToken: null
+      }),
+      scoreResults: async () => ({
         data: [],
         nextToken: null
       })
@@ -263,6 +286,18 @@ export default function ScorecardsComponent() {
               nextToken: null
             }),
             batchJobs: async () => ({
+              data: [],
+              nextToken: null
+            }),
+            items: async () => ({
+              data: [],
+              nextToken: null
+            }),
+            scoringJobs: async () => ({
+              data: [],
+              nextToken: null
+            }),
+            scoreResults: async () => ({
               data: [],
               nextToken: null
             }),

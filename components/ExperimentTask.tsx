@@ -2,26 +2,26 @@ import React, { useRef, useState, useEffect } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { FlaskConical } from 'lucide-react'
 import MetricsGauges from '@/components/MetricsGauges'
-import { TaskProgress } from '@/components/TaskProgress'
+import { ProgressBar } from "@/components/ui/progress-bar"
 import { ResponsiveWaffle } from '@nivo/waffle'
 import { ConfusionMatrix } from '@/components/confusion-matrix'
 import { formatDuration, intervalToDuration, formatDistanceToNow } from 'date-fns'
 
 export interface ExperimentTaskData {
-  accuracy: number
-  sensitivity: number
-  specificity: number
-  precision: number
+  accuracy: number | null
+  sensitivity: number | null
+  specificity: number | null
+  precision: number | null
   processedItems: number
   totalItems: number
   progress: number
   inferences: number
-  cost: number
+  cost: number | null
   status: string
   elapsedTime: string
   estimatedTimeRemaining: string
-  startedAt?: string
-  estimatedEndAt?: string
+  startedAt?: string | null
+  estimatedEndAt?: string | null
   errorMessage?: string | null
   errorDetails?: any | null
   confusionMatrix?: {
@@ -119,28 +119,28 @@ export default function ExperimentTask({
 
   const metrics = variant === 'detail' ? [
     {
-      value: data.accuracy,
+      value: data.accuracy ?? undefined,
       label: 'Accuracy',
       backgroundColor: 'var(--gauge-background)',
     },
     {
-      value: data.sensitivity,
+      value: data.sensitivity ?? undefined,
       label: 'Sensitivity',
       backgroundColor: 'var(--gauge-background)',
     },
     {
-      value: data.specificity,
+      value: data.specificity ?? undefined,
       label: 'Specificity',
       backgroundColor: 'var(--gauge-background)',
     },
     {
-      value: data.precision,
+      value: data.precision ?? undefined,
       label: 'Precision',
       backgroundColor: 'var(--gauge-background)',
     }
   ] : [
     {
-      value: data.accuracy,
+      value: data.accuracy ?? undefined,
       label: 'Accuracy',
       backgroundColor: 'var(--gauge-background)',
     }
@@ -150,12 +150,12 @@ export default function ExperimentTask({
     <div className="w-full">
       <MetricsGauges gauges={metrics} variant={variant} />
       <div className="mt-4">
-        <TaskProgress 
-          progress={data.progress ?? 0}
-          elapsedTime={data.elapsedTime ?? ''}
-          processedItems={data.processedItems ?? 0}
-          totalItems={data.totalItems ?? 0}
-          estimatedTimeRemaining={data.estimatedTimeRemaining ?? ''}
+        <ProgressBar 
+          progress={data.progress}
+          elapsedTime={data.elapsedTime}
+          processedItems={data.processedItems}
+          totalItems={data.totalItems}
+          estimatedTimeRemaining={data.estimatedTimeRemaining}
           color="secondary"
         />
       </div>
@@ -169,12 +169,12 @@ export default function ExperimentTask({
             { 
               id: 'correct', 
               label: 'Correct', 
-              value: Math.round(data.processedItems * data.accuracy / 100) 
+              value: Math.round(data.processedItems * (data.accuracy ?? 0) / 100) 
             },
             { 
               id: 'incorrect', 
               label: 'Incorrect', 
-              value: data.processedItems - Math.round(data.processedItems * data.accuracy / 100) 
+              value: data.processedItems - Math.round(data.processedItems * (data.accuracy ?? 0) / 100) 
             },
             { 
               id: 'unprocessed', 
@@ -224,12 +224,12 @@ export default function ExperimentTask({
     <div className="w-full">
       <MetricsGauges gauges={metrics} variant={variant} />
       <div className="mt-4">
-        <TaskProgress 
-          progress={data.progress ?? 0}
-          elapsedTime={data.elapsedTime ?? ''}
-          processedItems={data.processedItems ?? 0}
-          totalItems={data.totalItems ?? 0}
-          estimatedTimeRemaining={data.estimatedTimeRemaining ?? ''}
+        <ProgressBar 
+          progress={data.progress}
+          elapsedTime={data.elapsedTime}
+          processedItems={data.processedItems}
+          totalItems={data.totalItems}
+          estimatedTimeRemaining={data.estimatedTimeRemaining}
           color="secondary"
         />
       </div>
