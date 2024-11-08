@@ -125,11 +125,12 @@ export default function ExperimentTask({
       <MetricsGauges gauges={metrics} variant={variant} />
       <div className="mt-4">
         <TaskProgress 
-          progress={(data.processedItems / data.totalItems) * 100}
-          elapsedTime={getElapsedTime()}
-          processedItems={data.processedItems}
-          totalItems={data.totalItems}
-          estimatedTimeRemaining={getEstimatedTimeRemaining()}
+          progress={data.progress ?? 0}
+          elapsedTime={data.elapsedTime ?? ''}
+          processedItems={data.processedItems ?? 0}
+          totalItems={data.totalItems ?? 0}
+          estimatedTimeRemaining={data.estimatedTimeRemaining ?? ''}
+          color="secondary"
         />
       </div>
       <div 
@@ -198,11 +199,12 @@ export default function ExperimentTask({
       <MetricsGauges gauges={metrics} variant={variant} />
       <div className="mt-4">
         <TaskProgress 
-          progress={(data.processedItems / data.totalItems) * 100}
-          elapsedTime={getElapsedTime()}
-          processedItems={data.processedItems}
-          totalItems={data.totalItems}
-          estimatedTimeRemaining={getEstimatedTimeRemaining()}
+          progress={data.progress ?? 0}
+          elapsedTime={data.elapsedTime ?? ''}
+          processedItems={data.processedItems ?? 0}
+          totalItems={data.totalItems ?? 0}
+          estimatedTimeRemaining={data.estimatedTimeRemaining ?? ''}
+          color="secondary"
         />
       </div>
     </div>

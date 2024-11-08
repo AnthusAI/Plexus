@@ -52,15 +52,23 @@ const FeedbackTask: React.FC<FeedbackTaskProps> = ({
       )}
       renderContent={(props) => (
         <TaskContent {...props} visualization={visualization}>
-          {data && (
-            <TaskProgress 
-              progress={data.progress ?? 0}
-              elapsedTime={data.elapsedTime ?? ''}
-              processedItems={data.processedItems ?? 0}
-              totalItems={data.totalItems ?? 0}
-              estimatedTimeRemaining={data.estimatedTimeRemaining ?? ''}
-            />
-          )}
+          <div className="flex flex-col h-full">
+            <div className="flex-grow">
+              {/* Main content goes here */}
+            </div>
+            {data && (
+              <div className="mt-4">
+                <TaskProgress 
+                  progress={data.progress ?? 0}
+                  elapsedTime={data.elapsedTime ?? ''}
+                  processedItems={data.processedItems ?? 0}
+                  totalItems={data.totalItems ?? 0}
+                  estimatedTimeRemaining={data.estimatedTimeRemaining ?? ''}
+                  color="primary"
+                />
+              </div>
+            )}
+          </div>
         </TaskContent>
       )}
     />

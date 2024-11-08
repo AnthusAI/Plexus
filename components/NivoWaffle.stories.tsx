@@ -3,7 +3,7 @@ import { StoryFn, Meta } from '@storybook/react';
 import NivoWaffle, { NivoWaffleProps } from './NivoWaffle';
 
 export default {
-  title: 'Components/NivoWaffle',
+  title: 'VisualizationNivoWaffle',
   component: NivoWaffle,
 } as Meta<typeof NivoWaffle>;
 

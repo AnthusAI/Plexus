@@ -49,6 +49,7 @@ export interface TaskProgressProps {
   processedItems?: number
   totalItems?: number
   estimatedTimeRemaining?: string
+  color?: 'primary' | 'secondary' | 'true' | 'false'
 }
 
 export function TaskProgress({ 
@@ -57,29 +58,42 @@ export function TaskProgress({
   elapsedTime,
   processedItems,
   totalItems,
-  estimatedTimeRemaining 
+  estimatedTimeRemaining,
+  color = 'secondary'
 }: TaskProgressProps) {
-  const showTopRow = processedItems !== undefined && totalItems !== undefined
-  const showBottomRow = elapsedTime || estimatedTimeRemaining
+  const displayProgress = Math.round(progress)
+  const clampedProgress = Math.min(Math.max(displayProgress, 0), 100)
 
   return (
     <div className="flex flex-col gap-1">
-      {showTopRow && (
-        <div className="flex justify-between text-sm text-muted-foreground">
-          <span>{progress}%</span>
-          <span>{processedItems} / {totalItems}</span>
-        </div>
-      )}
-      <Progress
-        value={progress}
-        className={cn("h-4", className)}
-      />
-      {showBottomRow && (
-        <div className="flex justify-between text-sm text-muted-foreground">
-          {elapsedTime && <span>Elapsed: {elapsedTime}</span>}
-          {estimatedTimeRemaining && <span>ETA: {estimatedTimeRemaining}</span>}
-        </div>
-      )}
+      <div className="flex justify-between text-sm text-muted-foreground h-5">
+        {processedItems !== undefined && totalItems !== undefined ? (
+          <>
+            <span>{displayProgress}%</span>
+            <span>{processedItems} / {totalItems}</span>
+          </>
+        ) : (
+          <span>&nbsp;</span>
+        )}
+      </div>
+      <div className="relative w-full h-6 bg-neutral rounded-md">
+        <div
+          className={`absolute top-0 left-0 h-full bg-${color} rounded-md ${
+            clampedProgress > 0 ? `bg-${color}` : ''
+          }`}
+          style={{ width: clampedProgress > 0 ? `${clampedProgress}%` : 'auto' }}
+        />
+      </div>
+      <div className="flex justify-between text-sm text-muted-foreground h-5">
+        {elapsedTime || estimatedTimeRemaining ? (
+          <>
+            {elapsedTime && <span>Elapsed: {elapsedTime}</span>}
+            {estimatedTimeRemaining && <span>ETA: {estimatedTimeRemaining}</span>}
+          </>
+        ) : (
+          <span>&nbsp;</span>
+        )}
+      </div>
     </div>
   )
 }
