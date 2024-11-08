@@ -1,10 +1,11 @@
 import React from 'react'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import ItemDetailScoreResult from './ItemDetailScoreResult'
+import { formatTimeAgo } from '@/utils/format-time'
 
 interface Score {
   name: string
@@ -27,39 +28,37 @@ interface Score {
 }
 
 interface ItemDetailProps {
-  item: any // Replace 'any' with a more specific type for your item
-  controlButtons: React.ReactNode
+  item: any
+  controlButtons?: React.ReactNode
   getBadgeVariant: (status: string) => string
-  getRelativeTime: (date: string) => string
   isMetadataExpanded: boolean
-  setIsMetadataExpanded: (isExpanded: boolean) => void
+  setIsMetadataExpanded: (expanded: boolean) => void
   isDataExpanded: boolean
-  setIsDataExpanded: (isExpanded: boolean) => void
+  setIsDataExpanded: (expanded: boolean) => void
   isErrorExpanded: boolean
-  setIsErrorExpanded: (isExpanded: boolean) => void
-  sampleMetadata: Array<{ key: string; value: string }>
-  sampleTranscript: Array<{ speaker: string; text: string }>
+  setIsErrorExpanded: (expanded: boolean) => void
+  sampleMetadata: any[]
+  sampleTranscript: any[]
   sampleScoreResults: any[]
-  handleThumbsUp?: (scoreName: string) => void
-  handleThumbsDown?: (scoreName: string) => void
-  handleNewAnnotationSubmit?: (scoreName: string) => void
-  toggleAnnotations?: (scoreName: string) => void
-  showNewAnnotationForm?: { scoreName: string | null; isThumbsUp: boolean }
-  newAnnotation?: { value: string; explanation: string; annotation: string }
-  setNewAnnotation?: (annotation: { value: string; explanation: string; annotation: string }) => void
-  expandedAnnotations?: string[]
-  thumbedUpScores?: Set<string>
-  setShowNewAnnotationForm?: (form: { scoreName: string | null; isThumbsUp: boolean }) => void
-  setThumbedUpScores?: (scores: Set<string>) => void;
-  isFullWidth: boolean;
-  isFeedbackMode: boolean;
+  handleThumbsUp: (scoreName: string) => void
+  handleThumbsDown: (scoreName: string) => void
+  handleNewAnnotationSubmit: (scoreName: string) => void
+  toggleAnnotations: (scoreName: string) => void
+  showNewAnnotationForm: { scoreName: string | null; isThumbsUp: boolean }
+  setShowNewAnnotationForm: (form: { scoreName: string | null; isThumbsUp: boolean }) => void
+  newAnnotation: any
+  setNewAnnotation: (annotation: any) => void
+  expandedAnnotations: string[]
+  thumbedUpScores: Set<string>
+  setThumbedUpScores: (scores: Set<string>) => void
+  isFullWidth: boolean
+  isFeedbackMode: boolean
 }
 
 const ItemDetail: React.FC<ItemDetailProps> = ({
   item,
   controlButtons,
   getBadgeVariant,
-  getRelativeTime,
   isMetadataExpanded,
   setIsMetadataExpanded,
   isDataExpanded,
@@ -93,7 +92,7 @@ const ItemDetail: React.FC<ItemDetailProps> = ({
         <div>
           <h2 className="text-xl font-semibold">{item.scorecard}</h2>
           <p className="text-sm text-muted-foreground">
-            {getRelativeTime(item.date)}
+            {formatTimeAgo(item.date)}
           </p>
         </div>
         <div className="flex ml-2">
