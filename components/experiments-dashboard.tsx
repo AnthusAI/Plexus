@@ -30,6 +30,7 @@ import ScorecardContext from "@/components/ScorecardContext"
 import ExperimentTask, { type ExperimentTaskProps } from "@/components/ExperimentTask"
 import { ExperimentListProgressBar } from "@/components/ExperimentListProgressBar"
 import { ExperimentListAccuracyBar } from "@/components/ExperimentListAccuracyBar"
+import { formatTimeAgo } from '@/utils/format-time'
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -69,16 +70,33 @@ export default function ExperimentsDashboard() {
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
   const [scorecardNames, setScorecardNames] = useState<Record<string, string>>({})
 
-  const getExperimentTaskProps = async (experiment: any) => {
+  const getExperimentTaskProps = async (experiment: Schema['Experiment']['type']) => {
     const progress = calculateProgress(experiment.processedItems, experiment.totalItems);
+    
+    const scorecardResult = await experiment.scorecard?.();
+    const scoreResult = await experiment.score?.();
+    
+    const scorecardName = scorecardResult?.data?.name || '';
+    const scoreName = scoreResult?.data?.name || '';
+    
+    const confusionMatrix = experiment.confusionMatrix && 
+      typeof experiment.confusionMatrix === 'object' &&
+      'matrix' in experiment.confusionMatrix &&
+      'labels' in experiment.confusionMatrix
+        ? experiment.confusionMatrix as { matrix: number[][]; labels: string[] }
+        : { matrix: [], labels: [] };
+    
     return {
-      id: experiment.id,
-      type: experiment.type,
-      scorecard: experiment.scorecardId,
-      score: experiment.scoreId,
-      time: experiment.createdAt,
-      summary: 'Experiment Summary',
-      description: 'Experiment Description',
+      id: parseInt(experiment.id),
+      scorecard: scorecardName,
+      score: scoreName,
+      time: formatTimeAgo(experiment.createdAt),
+      summary: experiment.errorMessage || `${progress}% complete`,
+      description: experiment.errorDetails ? 
+        typeof experiment.errorDetails === 'string' ? 
+          experiment.errorDetails : 
+          JSON.stringify(experiment.errorDetails) : 
+        undefined,
       data: {
         accuracy: experiment.accuracy || 0,
         sensitivity: experiment.sensitivity || 0,
@@ -93,7 +111,11 @@ export default function ExperimentsDashboard() {
         status: experiment.status || 'Unknown',
         elapsedTime: '00:00:00',
         estimatedTimeRemaining: '00:00:00',
-        confusionMatrix: experiment.confusionMatrix || { matrix: [], labels: [] },
+        startedAt: experiment.startedAt || undefined,
+        estimatedEndAt: experiment.estimatedEndAt || undefined,
+        errorMessage: experiment.errorMessage,
+        errorDetails: experiment.errorDetails,
+        confusionMatrix,
       },
     }
   }
