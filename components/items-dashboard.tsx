@@ -314,6 +314,12 @@ interface Annotation {
   isThumbsUp: boolean;
 }
 
+// Add this function before the ItemsDashboard component
+const getRelativeTime = (dateString: string | undefined): string => {
+  if (!dateString) return 'Unknown date';
+  return formatTimeAgo(dateString);
+};
+
 export default function ItemsDashboard() {
   const [selectedItem, setSelectedItem] = useState<number | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
@@ -566,6 +572,7 @@ export default function ItemsDashboard() {
         item={selectedItemData}
         controlButtons={DetailViewControlButtons}
         getBadgeVariant={getBadgeVariant}
+        getRelativeTime={getRelativeTime}
         isMetadataExpanded={isMetadataExpanded}
         setIsMetadataExpanded={setIsMetadataExpanded}
         isDataExpanded={isDataExpanded}

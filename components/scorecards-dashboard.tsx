@@ -151,6 +151,10 @@ export default function ScorecardsComponent() {
         data: [],
         nextToken: null
       }),
+      batchJobs: async () => ({
+        data: [],
+        nextToken: null
+      }),
       account: async () => ({
         data: {
           id: accountId,
@@ -164,6 +168,10 @@ export default function ScorecardsComponent() {
             nextToken: null
           }),
           scorecards: async () => ({
+            data: [],
+            nextToken: null
+          }),
+          batchJobs: async () => ({
             data: [],
             nextToken: null
           })
@@ -234,6 +242,10 @@ export default function ScorecardsComponent() {
           data: [],
           nextToken: null
         }),
+        batchJobs: async () => ({
+          data: [],
+          nextToken: null
+        }),
         account: async () => ({
           data: {
             id: accountData.id,
@@ -248,6 +260,10 @@ export default function ScorecardsComponent() {
               data: await client.models.Scorecard.list({
                 filter: { accountId: { eq: accountData.id } }
               }).then(result => result.data),
+              nextToken: null
+            }),
+            batchJobs: async () => ({
+              data: [],
               nextToken: null
             }),
             createdAt: accountData.createdAt!,
