@@ -118,6 +118,8 @@ const schema = a.schema({
       score: a.belongsTo('Score', 'scoreId'),
       samples: a.hasMany('Sample', 'experimentId'),
       confusionMatrix: a.json(),
+      items: a.hasMany('Item', 'experimentId'),
+      scoreResults: a.hasMany('ScoreResult', 'experimentId'),
     })
     .authorization((allow) => [
       allow.publicApiKey(),
@@ -168,8 +170,7 @@ const schema = a.schema({
       scorecard: a.belongsTo('Scorecard', 'scorecardId'),
       scoreId: a.string(),
       score: a.belongsTo('Score', 'scoreId'),
-      scoringJobId: a.string(),
-      scoringJob: a.belongsTo('ScoringJob', 'scoringJobId'),
+      scoringJobs: a.hasMany('ScoringJob', 'batchJobId'),
     })
     .authorization((allow) => [
       allow.publicApiKey(),
@@ -191,6 +192,8 @@ const schema = a.schema({
       scoringJobs: a.hasMany('ScoringJob', 'itemId'),
       scoreResults: a.hasMany('ScoreResult', 'itemId'),
       scorecards: a.hasMany('Scorecard', 'itemId'),
+      experimentId: a.string(),
+      experiment: a.belongsTo('Experiment', 'experimentId'),
     })
     .authorization((allow) => [
       allow.publicApiKey(),
@@ -213,7 +216,8 @@ const schema = a.schema({
       account: a.belongsTo('Account', 'accountId'),
       scorecardId: a.string().required(),
       scorecard: a.belongsTo('Scorecard', 'scorecardId'),
-      batchJobs: a.hasMany('BatchJob', 'scoringJobId'),
+      batchJobId: a.string(),
+      batchJob: a.belongsTo('BatchJob', 'batchJobId'),
       scoreResults: a.hasMany('ScoreResult', 'scoringJobId'),
     })
     .authorization((allow) => [
@@ -235,8 +239,10 @@ const schema = a.schema({
       item: a.belongsTo('Item', 'itemId'),
       accountId: a.string().required(),
       account: a.belongsTo('Account', 'accountId'),
-      scoringJobId: a.string().required(),
+      scoringJobId: a.string(),
       scoringJob: a.belongsTo('ScoringJob', 'scoringJobId'),
+      experimentId: a.string(),
+      experiment: a.belongsTo('Experiment', 'experimentId'),
       scorecardId: a.string().required(),
       scorecard: a.belongsTo('Scorecard', 'scorecardId'),
     })
@@ -248,6 +254,7 @@ const schema = a.schema({
       idx("accountId"),
       idx("itemId"),
       idx("scoringJobId"),
+      idx("experimentId"),
       idx("scorecardId")
     ]),
 });
