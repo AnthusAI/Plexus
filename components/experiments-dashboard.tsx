@@ -67,13 +67,14 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
         description: ''
       }
     }),
-    scorecard: async () => ({
+    scorecard: {
       data: rawExperiment.scorecard ? {
         id: rawExperiment.scorecard.id,
         name: rawExperiment.scorecard.name,
-        // ... other scorecard properties ...
+        key: rawExperiment.scorecard.key,
+        description: rawExperiment.scorecard.description,
       } : null
-    }),
+    },
     score: async () => ({
       data: rawExperiment.score ? {
         ...rawExperiment.score,
@@ -114,7 +115,6 @@ export default function ExperimentsDashboard() {
   const [selectedScore, setSelectedScore] = useState<string | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
-  const [scorecardNames, setScorecardNames] = useState<Record<string, string>>({})
 
   // Update ref when selectedExperiment changes
   useEffect(() => {
@@ -124,10 +124,8 @@ export default function ExperimentsDashboard() {
   const getExperimentTaskProps = async (experiment: Schema['Experiment']['type']) => {
     const progress = calculateProgress(experiment.processedItems, experiment.totalItems);
     
-    const scorecardResult = await experiment.scorecard?.();
+    const scorecardName = experiment.scorecard?.data?.name || '';
     const scoreResult = await experiment.score?.();
-    
-    const scorecardName = scorecardResult?.data?.name || '';
     const scoreName = scoreResult?.data?.name || '';
     
     const confusionMatrix = experiment.confusionMatrix && 
@@ -185,20 +183,6 @@ export default function ExperimentsDashboard() {
     updateExperimentTaskProps()
   }, [selectedExperiment]) // Only depend on selectedExperiment
 
-  // Add effect to load scorecard names
-  useEffect(() => {
-    experiments.forEach(async (experiment) => {
-      const scorecardResult = await experiment.scorecard?.();
-      const scorecardName = scorecardResult?.data?.name;
-      if (scorecardName) {
-        setScorecardNames(prev => ({
-          ...prev,
-          [experiment.id]: scorecardName
-        }));
-      }
-    });
-  }, [experiments]);
-
   // Move all client usage into useEffect to avoid server/client mismatch
   useEffect(() => {
     if (!client) return; // Skip if client isn't initialized yet
@@ -216,64 +200,80 @@ export default function ExperimentsDashboard() {
           const foundAccountId = accountResult.data[0].id;
           setAccountId(foundAccountId);
           
-          // Explicitly specify the fields we want to query
+          // Update the selection set to include scorecard fields
           const initialExperiments = await client!.models.Experiment.list({
             filter: { accountId: { eq: foundAccountId } },
-            selectionSet: ['id', 'type', 'parameters', 'metrics', 'inferences', 
+            selectionSet: [
+              'id', 'type', 'parameters', 'metrics', 'inferences', 
               'cost', 'accuracy', 'accuracyType', 'sensitivity', 'specificity', 
               'precision', 'createdAt', 'updatedAt', 'status', 'startedAt', 
               'estimatedEndAt', 'totalItems', 'processedItems', 'errorMessage', 
               'errorDetails', 'accountId', 'scorecardId', 'scoreId', 'confusionMatrix',
-              'scorecard.id', 'scorecard.name']
+              // Include these fields for the scorecard relationship
+              'scorecard.id',
+              'scorecard.name',
+              'scorecard.key',
+              'scorecard.description'
+            ]
           });
           
           const filteredExperiments = initialExperiments.data
             .map(transformExperiment)
-            .sort((a: Schema['Experiment']['type'], b: Schema['Experiment']['type']) => 
+            .sort((a, b) => 
               new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             );
           
           setExperiments(filteredExperiments);
           setIsLoading(false);
 
-          // Update subscription to use the same selection set
+          // Use the same selection set for the subscription
           subscription = client!.models.Experiment.observeQuery({
             filter: { accountId: { eq: foundAccountId } },
-            selectionSet: ['id', 'type', 'parameters', 'metrics', 'inferences', 
+            selectionSet: [
+              'id', 'type', 'parameters', 'metrics', 'inferences', 
               'cost', 'accuracy', 'accuracyType', 'sensitivity', 'specificity', 
               'precision', 'createdAt', 'updatedAt', 'status', 'startedAt', 
               'estimatedEndAt', 'totalItems', 'processedItems', 'errorMessage', 
               'errorDetails', 'accountId', 'scorecardId', 'scoreId', 'confusionMatrix',
-              'scorecard.id', 'scorecard.name']
+              // Include these fields for the scorecard relationship
+              'scorecard.id',
+              'scorecard.name',
+              'scorecard.key',
+              'scorecard.description'
+            ]
           }).subscribe({
             next: async ({ items }) => {
               console.log('Raw subscription update:', items);
               
-              // First update experiments list
-              const transformedItems = items.map(transformExperiment);
+              // Fetch scorecards for experiments that need them
+              const itemsWithScorecard = await Promise.all(items.map(async (item) => {
+                if (item.scorecardId && !item.scorecard) {
+                  const scorecardResult = await client!.models.Scorecard.get({
+                    id: item.scorecardId,
+                    selectionSet: ['id', 'name', 'key', 'description']
+                  });
+                  return {
+                    ...item,
+                    scorecard: scorecardResult.data
+                  };
+                }
+                return item;
+              }));
+              
+              const transformedItems = itemsWithScorecard.map(transformExperiment);
               console.log('Transformed items:', transformedItems);
               
-              const sortedItems = transformedItems.sort((a: Schema['Experiment']['type'], b: Schema['Experiment']['type']) => 
+              const sortedItems = transformedItems.sort((a, b) => 
                 new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
               );
               setExperiments(sortedItems);
               
-              // Use the ref instead of the state
               const currentSelectedExperiment = selectedExperimentRef.current;
               if (currentSelectedExperiment) {
-                console.log('Looking for updates to:', currentSelectedExperiment.id);
                 const updatedExperiment = sortedItems.find(exp => exp.id === currentSelectedExperiment.id);
-                
                 if (updatedExperiment) {
-                  console.log('Found updated experiment data:', {
-                    processedItems: updatedExperiment.processedItems,
-                    totalItems: updatedExperiment.totalItems,
-                    accuracy: updatedExperiment.accuracy
-                  });
-                  
                   setSelectedExperiment(updatedExperiment);
                   const updatedProps = await getExperimentTaskProps(updatedExperiment);
-                  console.log('Generated new task props:', updatedProps);
                   setExperimentTaskProps(updatedProps);
                 }
               }
@@ -297,11 +297,11 @@ export default function ExperimentsDashboard() {
       }
     }
 
-    setupRealTimeSync()
+    setupRealTimeSync();
 
     return () => {
       if (subscription) {
-        subscription.unsubscribe()
+        subscription.unsubscribe();
       }
     }
   }, [client])
@@ -323,15 +323,13 @@ export default function ExperimentsDashboard() {
     console.log('Client-side experiments:', experiments)
     console.log('Client-side selectedExperiment:', selectedExperiment)
     console.log('Client-side experimentTaskProps:', experimentTaskProps)
-    console.log('Client-side scorecardNames:', scorecardNames)
-  }, [experiments, selectedExperiment, experimentTaskProps, scorecardNames])
+  }, [experiments, selectedExperiment, experimentTaskProps])
 
   // Add server-side logging
   console.log('Server-side render state:', {
     experiments,
     selectedExperiment,
-    experimentTaskProps,
-    scorecardNames
+    experimentTaskProps
   })
 
   if (isLoading) {
@@ -404,7 +402,7 @@ export default function ExperimentsDashboard() {
                             {/* Left column */}
                             <div className="space-y-1">
                               <div className="font-semibold">
-                                {scorecardNames[experiment.id] ?? 'Unknown Scorecard'}
+                                {experiment.scorecard?.data?.name ?? 'Unknown Scorecard'}
                               </div>
                               <div className="text-sm text-muted-foreground">
                                 {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
@@ -437,7 +435,7 @@ export default function ExperimentsDashboard() {
                         </div>
                         {/* Wide variant - visible at 630px and above */}
                         <div className="hidden @[630px]:block">
-                          {scorecardNames[experiment.id] ?? 'Unknown Scorecard'}
+                          {experiment.scorecard?.data?.name ?? 'Unknown Scorecard'}
                           <div className="text-sm text-muted-foreground">
                             {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
                           </div>
