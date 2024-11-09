@@ -25,7 +25,6 @@ from .api.models.account import Account
 from .api.models.experiment import Experiment
 from .api.models.scorecard import Scorecard
 from .api.models.score import Score
-from .api.models.sample import Sample
 from .api.models.score_result import ScoreResult
 import json
 
@@ -319,111 +318,6 @@ def update(
         
     except Exception as e:
         logger.error(f"Error updating experiment: {str(e)}")
-        click.echo(f"Error: {str(e)}", err=True)
-
-@cli.group()
-def sample():
-    """Manage experiment samples"""
-    pass
-
-@sample.command()
-@click.argument('experiment-id', required=True)
-@click.option('--data', required=True, type=str, 
-              help='JSON string of sample data')
-@click.option('--prediction', help='Model prediction')
-@click.option('--ground-truth', help='Ground truth label')
-@click.option('--is-correct', type=bool, help='Whether prediction matches truth')
-def create(
-    experiment_id: str,
-    data: str,
-    prediction: Optional[str] = None,
-    ground_truth: Optional[str] = None,
-    is_correct: Optional[bool] = None,
-):
-    """Create a new sample for an experiment.
-    
-    Examples:
-        plexus-dashboard sample create abc123 --data '{"text": "example"}'
-        plexus-dashboard sample create def456 --data '{"text": "test"}' \
-            --prediction "positive" --ground-truth "negative"
-    """
-    client = PlexusAPIClient()
-    
-    try:
-        # Validate experiment exists
-        logger.info(f"Looking up experiment: {experiment_id}")
-        experiment = Experiment.get_by_id(experiment_id, client)
-        logger.info(f"Found experiment: {experiment.id}")
-        
-        # Parse data JSON
-        try:
-            data_dict = json.loads(data)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON in data: {str(e)}")
-        
-        # Create sample
-        logger.info("Creating sample...")
-        sample = Sample.create(
-            client=client,
-            experimentId=experiment_id,
-            data=data_dict,
-            prediction=prediction,
-            groundTruth=ground_truth,
-            isCorrect=is_correct
-        )
-        logger.info(f"Created sample: {sample.id}")
-        
-        # Output results
-        click.echo(f"Created sample: {sample.id}")
-        click.echo(f"Experiment: {sample.experimentId}")
-        click.echo(f"Created at: {sample.createdAt}")
-        
-    except Exception as e:
-        logger.error(f"Error creating sample: {str(e)}")
-        click.echo(f"Error: {str(e)}", err=True)
-
-@sample.command()
-@click.argument('id', required=True)
-@click.option('--prediction', help='Model prediction')
-@click.option('--ground-truth', help='Ground truth label')
-@click.option('--is-correct', type=bool, help='Whether prediction matches truth')
-def update(
-    id: str,
-    prediction: Optional[str] = None,
-    ground_truth: Optional[str] = None,
-    is_correct: Optional[bool] = None,
-):
-    """Update an existing sample.
-    
-    Examples:
-        plexus-dashboard sample update abc123 --prediction "positive"
-        plexus-dashboard sample update def456 --is-correct true
-    """
-    client = PlexusAPIClient()
-    
-    try:
-        # Get existing sample
-        logger.info(f"Looking up sample: {id}")
-        sample = Sample.get_by_id(id, client)
-        logger.info(f"Found sample: {sample.id}")
-        
-        # Build update data
-        update_data = {}
-        if prediction is not None: update_data['prediction'] = prediction
-        if ground_truth is not None: update_data['groundTruth'] = ground_truth
-        if is_correct is not None: update_data['isCorrect'] = is_correct
-        
-        # Update sample
-        logger.info("Updating sample...")
-        updated = sample.update(**update_data)
-        logger.info(f"Updated sample: {updated.id}")
-        
-        # Output results
-        click.echo(f"Updated sample: {updated.id}")
-        click.echo(f"Updated at: {updated.updatedAt}")
-        
-    except Exception as e:
-        logger.error(f"Error updating sample: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
 @cli.group()

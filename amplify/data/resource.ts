@@ -116,7 +116,6 @@ const schema = a.schema({
       scorecard: a.belongsTo('Scorecard', 'scorecardId'),
       scoreId: a.string(),
       score: a.belongsTo('Score', 'scoreId'),
-      samples: a.hasMany('Sample', 'experimentId'),
       confusionMatrix: a.json(),
       items: a.hasMany('Item', 'experimentId'),
       scoreResults: a.hasMany('ScoreResult', 'experimentId'),
@@ -129,25 +128,6 @@ const schema = a.schema({
       idx("accountId"),
       idx("scorecardId"),
       idx("scoreId")
-    ]),
-
-  Sample: a
-    .model({
-      experimentId: a.string().required(),
-      experiment: a.belongsTo('Experiment', 'experimentId'),
-      data: a.json(),
-      prediction: a.string(),
-      groundTruth: a.string(),
-      isCorrect: a.boolean(),
-      createdAt: a.datetime().required(),
-      updatedAt: a.datetime().required(),
-    })
-    .authorization((allow) => [
-      allow.publicApiKey(),
-      allow.authenticated()
-    ])
-    .secondaryIndexes((idx) => [
-      idx("experimentId")
     ]),
 
   BatchJob: a
