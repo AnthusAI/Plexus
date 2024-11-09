@@ -165,6 +165,50 @@ experiment.update(
 )
 ```
 
+### Simulating Experiments
+
+The CLI provides a simulation command for testing and demonstration purposes:
+
+```bash
+# Simulate an evaluation experiment
+plexus-dashboard experiment simulate \
+  --account-key call-criteria \
+  --scorecard-key agent-scorecard \
+  --num-items 100 \
+  --accuracy 0.85
+```
+
+The simulate command:
+- Creates an Experiment record
+- Generates synthetic binary classification results
+- Computes standard ML metrics in real-time
+- Updates the experiment with metrics as results are generated
+
+This is useful for:
+- Testing the experiment tracking system
+- Demonstrating the metrics calculation pipeline
+- Generating sample data for UI development
+- Validating metric calculations
+
+The simulation parameters:
+- `num_items`: Number of synthetic results to generate (default: 100)
+- `accuracy`: Target accuracy for synthetic data (default: 0.85)
+- Random delays between results (0.1-1.0 seconds)
+- Random confidence scores (0.7-0.99)
+
+The simulation computes and tracks:
+- Overall accuracy
+- Precision
+- Sensitivity (Recall)
+- Specificity
+- Confusion matrix
+
+Each result includes:
+- Binary prediction (Yes/No)
+- Confidence score
+- Correctness flag
+- Metadata with true/predicted values
+
 ## Implementation Details
 
 ### Background Processing

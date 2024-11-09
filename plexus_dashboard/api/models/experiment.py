@@ -31,9 +31,7 @@ class Experiment(BaseModel):
     parameters: Optional[Dict] = None
     metrics: Optional[Dict] = None
     inferences: Optional[int] = None
-    results: Optional[int] = None
     cost: Optional[float] = None
-    progress: Optional[float] = None
     accuracy: Optional[float] = None
     accuracyType: Optional[str] = None
     sensitivity: Optional[float] = None
@@ -61,9 +59,7 @@ class Experiment(BaseModel):
         parameters: Optional[Dict] = None,
         metrics: Optional[Dict] = None,
         inferences: Optional[int] = None,
-        results: Optional[int] = None,
         cost: Optional[float] = None,
-        progress: Optional[float] = None,
         accuracy: Optional[float] = None,
         accuracyType: Optional[str] = None,
         sensitivity: Optional[float] = None,
@@ -88,9 +84,7 @@ class Experiment(BaseModel):
         self.parameters = parameters
         self.metrics = metrics
         self.inferences = inferences
-        self.results = results
         self.cost = cost
-        self.progress = progress
         self.accuracy = accuracy
         self.accuracyType = accuracyType
         self.sensitivity = sensitivity
@@ -118,9 +112,7 @@ class Experiment(BaseModel):
             parameters
             metrics
             inferences
-            results
             cost
-            progress
             accuracy
             accuracyType
             sensitivity
@@ -148,11 +140,8 @@ class Experiment(BaseModel):
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
         **kwargs
-    ) -> None:
-        """Create a new experiment in a background thread.
-        
-        This is a non-blocking operation - the mutation is performed
-        in a background thread.
+    ) -> 'Experiment':
+        """Create a new experiment.
         
         Args:
             client: The API client
@@ -162,41 +151,41 @@ class Experiment(BaseModel):
             scorecardId: Optional scorecard association
             scoreId: Optional score association
             **kwargs: Additional experiment fields
+            
+        Returns:
+            The created Experiment instance
         """
-        def _create_experiment():
-            try:
-                now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-                
-                input_data = {
-                    'type': type,
-                    'accountId': accountId,
-                    'status': status,
-                    'createdAt': now,
-                    'updatedAt': now,
-                    **kwargs
-                }
-                
-                if scorecardId:
-                    input_data['scorecardId'] = scorecardId
-                if scoreId:
-                    input_data['scoreId'] = scoreId
-                
-                mutation = """
-                mutation CreateExperiment($input: CreateExperimentInput!) {
-                    createExperiment(input: $input) {
-                        %s
-                    }
-                }
-                """ % cls.fields()
-                
-                client.execute(mutation, {'input': input_data})
-                
-            except Exception as e:
-                logger.error(f"Error creating experiment: {e}")
+        now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
         
-        # Spawn background thread
-        thread = Thread(target=_create_experiment, daemon=True)
-        thread.start()
+        input_data = {
+            'type': type,
+            'accountId': accountId,
+            'status': status,
+            'createdAt': now,
+            'updatedAt': now,
+            **kwargs
+        }
+        
+        if scorecardId:
+            input_data['scorecardId'] = scorecardId
+        if scoreId:
+            input_data['scoreId'] = scoreId
+        
+        mutation = """
+        mutation CreateExperiment($input: CreateExperimentInput!) {
+            createExperiment(input: $input) {
+                %s
+            }
+        }
+        """ % cls.fields()
+        
+        result = client.execute(mutation, {'input': input_data})
+        logger.info(f"Create experiment response: {result}")
+        
+        if not result or 'createExperiment' not in result:
+            raise Exception(f"Failed to create experiment. Response: {result}")
+        
+        return cls.from_dict(result['createExperiment'], client)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Experiment':
@@ -215,9 +204,7 @@ class Experiment(BaseModel):
             parameters=data.get('parameters'),
             metrics=data.get('metrics'),
             inferences=data.get('inferences'),
-            results=data.get('results'),
             cost=data.get('cost'),
-            progress=data.get('progress'),
             accuracy=data.get('accuracy'),
             accuracyType=data.get('accuracyType'),
             sensitivity=data.get('sensitivity'),

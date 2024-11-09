@@ -6,7 +6,9 @@ interface ExperimentListAccuracyBarProps {
 }
 
 export function ExperimentListAccuracyBar({ progress, accuracy }: ExperimentListAccuracyBarProps) {
-  const clampedAccuracy = Math.min(Math.max(accuracy, 0), 100)
+  // Round accuracy to nearest whole number first, then clamp
+  const roundedAccuracy = Math.round(accuracy)
+  const clampedAccuracy = Math.min(Math.max(roundedAccuracy, 0), 100)
   const clampedProgress = Math.min(Math.max(progress, 0), 100)
   const opacity = clampedProgress / 100
   const trueWidth = clampedAccuracy
