@@ -26,6 +26,7 @@ from .api.models.experiment import Experiment
 from .api.models.scorecard import Scorecard
 from .api.models.score import Score
 from .api.models.sample import Sample
+from .api.models.score_result import ScoreResult
 import json
 
 # Configure logging with a more concise format
@@ -423,6 +424,90 @@ def update(
         
     except Exception as e:
         logger.error(f"Error updating sample: {str(e)}")
+        click.echo(f"Error: {str(e)}", err=True)
+
+@cli.group()
+def score_result():
+    """Manage score results"""
+    pass
+
+@score_result.command()
+@click.option('--value', type=float, required=True, help='Score value')
+@click.option('--item-id', required=True, help='ID of the item being scored')
+@click.option('--account-id', required=True, help='ID of the account')
+@click.option('--scoring-job-id', required=True, help='ID of the scoring job')
+@click.option('--scorecard-id', required=True, help='ID of the scorecard')
+@click.option('--confidence', type=float, help='Confidence score (optional)')
+@click.option('--metadata', type=str, help='JSON metadata (optional)')
+def create(value, item_id, account_id, scoring_job_id, scorecard_id, confidence, metadata):
+    """Create a new score result"""
+    client = PlexusAPIClient()
+    
+    kwargs = {}
+    if confidence is not None:
+        kwargs['confidence'] = confidence
+    if metadata is not None:
+        kwargs['metadata'] = json.loads(metadata)
+        
+    result = ScoreResult.create(
+        client=client,
+        value=value,
+        itemId=item_id,
+        accountId=account_id,
+        scoringJobId=scoring_job_id,
+        scorecardId=scorecard_id,
+        **kwargs
+    )
+    
+    click.echo(json.dumps({
+        'id': result.id,
+        'value': result.value,
+        'confidence': result.confidence,
+        'metadata': result.metadata
+    }, indent=2))
+
+@score_result.command()
+@click.argument('id', required=True)
+@click.option('--value', type=float, help='Score value')
+@click.option('--confidence', type=float, help='Confidence score')
+@click.option('--metadata', type=str, help='JSON metadata')
+def update(id: str, value: Optional[float], confidence: Optional[float], metadata: Optional[str]):
+    """Update an existing score result
+    
+    Examples:
+        plexus-dashboard score-result update abc123 --value 0.98
+        plexus-dashboard score-result update def456 --confidence 0.95
+        plexus-dashboard score-result update ghi789 --metadata '{"source": "updated"}'
+    """
+    client = PlexusAPIClient()
+    
+    try:
+        # Get existing score result
+        logger.info(f"Looking up score result: {id}")
+        result = ScoreResult.get_by_id(id, client)
+        logger.info(f"Found score result: {result.id}")
+        
+        # Build update data
+        update_data = {}
+        if value is not None: update_data['value'] = value
+        if confidence is not None: update_data['confidence'] = confidence
+        if metadata is not None: update_data['metadata'] = json.loads(metadata)
+        
+        # Update score result
+        logger.info("Updating score result...")
+        updated = result.update(**update_data)
+        logger.info(f"Updated score result: {updated.id}")
+        
+        # Output results
+        click.echo(json.dumps({
+            'id': updated.id,
+            'value': updated.value,
+            'confidence': updated.confidence,
+            'metadata': updated.metadata
+        }, indent=2))
+        
+    except Exception as e:
+        logger.error(f"Error updating score result: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
 if __name__ == '__main__':

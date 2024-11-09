@@ -2,10 +2,45 @@ from typing import Optional, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from .base import BaseModel
-from ..client import PlexusAPIClient
+from ..client import _BaseAPIClient
 
 @dataclass
 class Sample(BaseModel):
+    """
+    Sample Model - Python representation of the GraphQL Sample type.
+
+    Represents individual samples within an experiment, tracking:
+    - Raw data being evaluated
+    - Predictions and ground truth
+    - Correctness of predictions
+    - Creation and update timestamps
+
+    This model is typically used in conjunction with Experiment for:
+    - Recording individual test cases
+    - Tracking prediction accuracy
+    - Building confusion matrices
+    - Training data management
+
+    Unlike Experiment, Sample uses synchronous mutations as it's
+    typically used in high-volume batch operations where immediate
+    feedback is needed.
+
+    Example Usage:
+        # Create a new sample
+        sample = Sample.create(
+            client=client,
+            experimentId="exp-123",
+            data={"text": "example content"},
+            prediction="positive",
+            groundTruth="positive"
+        )
+        
+        # Update prediction
+        updated = sample.update(
+            prediction="negative",
+            isCorrect=False
+        )
+    """
     experimentId: str
     data: Dict
     createdAt: datetime
@@ -24,7 +59,7 @@ class Sample(BaseModel):
         prediction: Optional[str] = None,
         groundTruth: Optional[str] = None,
         isCorrect: Optional[bool] = None,
-        client: Optional[PlexusAPIClient] = None
+        client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
         self.experimentId = experimentId
@@ -49,7 +84,7 @@ class Sample(BaseModel):
         """
 
     @classmethod
-    def create(cls, client: PlexusAPIClient, experimentId: str, data: Dict, 
+    def create(cls, client: _BaseAPIClient, experimentId: str, data: Dict, 
                **kwargs) -> 'Sample':
         now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
         
@@ -73,7 +108,7 @@ class Sample(BaseModel):
         return cls.from_dict(result['createSample'], client)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: PlexusAPIClient) -> 'Sample':
+    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Sample':
         for date_field in ['createdAt', 'updatedAt']:
             if data.get(date_field):
                 data[date_field] = datetime.fromisoformat(
