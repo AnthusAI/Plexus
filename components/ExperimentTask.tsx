@@ -33,7 +33,7 @@ export interface ExperimentTaskData {
 export type ExperimentTaskProps = {
   variant?: 'grid' | 'detail'
   task: {
-    id: number
+    id: string
     type?: string
     scorecard: string
     score: string
@@ -82,10 +82,17 @@ export default function ExperimentTask({
   onToggleFullWidth,
   onClose
 }: ExperimentTaskProps) {
+  console.log('ExperimentTask render with task:', task);
   const data = task.data
   const computedType = computeExperimentType(data)
   const waffleContainerRef = useRef<HTMLDivElement>(null)
   const [waffleHeight, setWaffleHeight] = useState(20)
+
+  // Force re-render when task data changes
+  const [, forceUpdate] = useState({})
+  useEffect(() => {
+    forceUpdate({})
+  }, [task, task.data])
 
   useEffect(() => {
     const updateWaffleHeight = () => {

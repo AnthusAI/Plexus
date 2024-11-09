@@ -1,6 +1,6 @@
 "use client"
 import React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -107,6 +107,7 @@ export default function ExperimentsDashboard() {
   const [experimentTaskProps, setExperimentTaskProps] = useState<ExperimentTaskProps['task'] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [selectedExperiment, setSelectedExperiment] = useState<Schema['Experiment']['type'] | null>(null)
+  const selectedExperimentRef = useRef<Schema['Experiment']['type'] | null>(null)
   const [accountId, setAccountId] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
@@ -114,6 +115,11 @@ export default function ExperimentsDashboard() {
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
   const [scorecardNames, setScorecardNames] = useState<Record<string, string>>({})
+
+  // Update ref when selectedExperiment changes
+  useEffect(() => {
+    selectedExperimentRef.current = selectedExperiment;
+  }, [selectedExperiment]);
 
   const getExperimentTaskProps = async (experiment: Schema['Experiment']['type']) => {
     const progress = calculateProgress(experiment.processedItems, experiment.totalItems);
@@ -132,7 +138,7 @@ export default function ExperimentsDashboard() {
         : { matrix: [], labels: [] };
     
     return {
-      id: parseInt(experiment.id),
+      id: experiment.id,
       type: experiment.type,
       scorecard: scorecardName,
       score: scoreName,
@@ -241,18 +247,33 @@ export default function ExperimentsDashboard() {
               'scorecard.id', 'scorecard.name']
           }).subscribe({
             next: async ({ items }) => {
+              console.log('Raw subscription update:', items);
+              
+              // First update experiments list
               const transformedItems = items.map(transformExperiment);
+              console.log('Transformed items:', transformedItems);
+              
               const sortedItems = transformedItems.sort((a: Schema['Experiment']['type'], b: Schema['Experiment']['type']) => 
                 new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
               );
               setExperiments(sortedItems);
               
-              if (selectedExperiment) {
-                const updatedExperiment = sortedItems.find(exp => exp.id === selectedExperiment.id);
-                if (updatedExperiment && 
-                    JSON.stringify(updatedExperiment) !== JSON.stringify(selectedExperiment)) {
+              // Use the ref instead of the state
+              const currentSelectedExperiment = selectedExperimentRef.current;
+              if (currentSelectedExperiment) {
+                console.log('Looking for updates to:', currentSelectedExperiment.id);
+                const updatedExperiment = sortedItems.find(exp => exp.id === currentSelectedExperiment.id);
+                
+                if (updatedExperiment) {
+                  console.log('Found updated experiment data:', {
+                    processedItems: updatedExperiment.processedItems,
+                    totalItems: updatedExperiment.totalItems,
+                    accuracy: updatedExperiment.accuracy
+                  });
+                  
                   setSelectedExperiment(updatedExperiment);
                   const updatedProps = await getExperimentTaskProps(updatedExperiment);
+                  console.log('Generated new task props:', updatedProps);
                   setExperimentTaskProps(updatedProps);
                 }
               }
