@@ -10,21 +10,41 @@ establishing a consistent pattern for:
 
 Each model class (Account, Experiment, etc.) inherits from this base,
 ensuring consistent behavior across the API interface.
+
+Implementation Notes:
+    - Uses _BaseAPIClient for GraphQL operations
+    - All models support get_by_id lookups
+    - Models may implement additional lookup methods (get_by_key, etc.)
+    - Models may implement background processing for mutations
+    - Some models support batched operations
+
+Example Usage:
+    # Direct lookup
+    item = SomeModel.get_by_id("123", client)
+    
+    # Custom lookups (if implemented)
+    account = Account.get_by_key("my-account", client)
+    
+    # Background mutations (if implemented)
+    experiment.update(status="RUNNING")  # Returns immediately
+    
+    # Batch operations (if implemented)
+    ScoreResult.batch_create(client, items)
 """
 
 from typing import Optional, Dict, Any, ClassVar, Type, TypeVar
 from dataclasses import dataclass
-from ..client import PlexusAPIClient
+from ..client import PlexusDashboardClient
 
 T = TypeVar('T', bound='BaseModel')
 
 class BaseModel:
-    def __init__(self, id: str, client: Optional[PlexusAPIClient] = None):
+    def __init__(self, id: str, client: Optional[PlexusDashboardClient] = None):
         self.id = id
         self._client = client
     
     @classmethod
-    def get_by_id(cls: Type[T], id: str, client: PlexusAPIClient) -> T:
+    def get_by_id(cls: Type[T], id: str, client: PlexusDashboardClient) -> T:
         query = f"""
         query Get{cls.__name__}($id: ID!) {{
             get{cls.__name__}(id: $id) {{
@@ -41,6 +61,6 @@ class BaseModel:
         raise NotImplementedError
     
     @classmethod
-    def from_dict(cls: Type[T], data: Dict[str, Any], client: PlexusAPIClient) -> T:
+    def from_dict(cls: Type[T], data: Dict[str, Any], client: PlexusDashboardClient) -> T:
         """Create an instance from a dictionary of data"""
         raise NotImplementedError

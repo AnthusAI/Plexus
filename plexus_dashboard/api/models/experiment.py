@@ -1,28 +1,25 @@
 """
 Experiment Model - Python representation of the GraphQL Experiment type.
 
-This model class provides a Pythonic interface to the GraphQL Experiment type,
-with all fields matching the schema definition. It handles:
-- Data type conversion (e.g., ISO8601 strings to datetime objects)
-- GraphQL mutation/query generation
-- Object instantiation from API responses
+This model represents individual experiments in the system, tracking:
+- Accuracy and performance metrics
+- Processing status and progress
+- Error states and details
+- Relationships to accounts, scorecards, and scores
 
-The class structure mirrors the GraphQL schema, with fields like:
-- type: The experiment type (e.g., 'accuracy', 'consistency')
-- status: Current state ('PENDING', 'RUNNING', etc.)
-- metrics: Performance metrics as JSON
-- etc.
-
-All fields in this class correspond directly to CLI options in the
-plexus-dashboard experiment create/update commands.
+All mutations (create/update) are performed in background threads for 
+non-blocking operation.
 """
 
-from typing import Optional, Dict, Any, List
+import logging
+from typing import Optional, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from threading import Thread
 from .base import BaseModel
-from ..client import PlexusAPIClient
-from .sample import Sample
+from ..client import _BaseAPIClient
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Experiment(BaseModel):
@@ -60,6 +57,7 @@ class Experiment(BaseModel):
         status: str,
         createdAt: datetime,
         updatedAt: datetime,
+        client: Optional[_BaseAPIClient] = None,
         parameters: Optional[Dict] = None,
         metrics: Optional[Dict] = None,
         inferences: Optional[int] = None,
@@ -80,7 +78,6 @@ class Experiment(BaseModel):
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
         confusionMatrix: Optional[Dict] = None,
-        client: Optional[PlexusAPIClient] = None
     ):
         super().__init__(id, client)
         self.type = type
@@ -141,36 +138,68 @@ class Experiment(BaseModel):
         """
 
     @classmethod
-    def create(cls, client: PlexusAPIClient, accountId: str, **kwargs) -> 'Experiment':
-        # Format datetime in ISO 8601 format with Z suffix for UTC
-        now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+    def create(
+        cls,
+        client: _BaseAPIClient,
+        type: str,
+        accountId: str,
+        *,  # Force keyword arguments
+        status: str = 'PENDING',
+        scorecardId: Optional[str] = None,
+        scoreId: Optional[str] = None,
+        **kwargs
+    ) -> None:
+        """Create a new experiment in a background thread.
         
-        # Build input dictionary
-        input_data = {
-            'accountId': accountId,
-            'status': kwargs.get('status', 'PENDING'),
-            'createdAt': now,
-            'updatedAt': now,
-            **kwargs  # Include any additional fields provided
-        }
+        This is a non-blocking operation - the mutation is performed
+        in a background thread.
         
-        mutation = """
-        mutation CreateExperiment($input: CreateExperimentInput!) {
-            createExperiment(input: $input) {
-                %s
-            }
-        }
-        """ % cls.fields()  # Use all fields in response
+        Args:
+            client: The API client
+            type: Type of experiment (e.g., 'accuracy', 'consistency')
+            accountId: Account context
+            status: Initial status (default: 'PENDING')
+            scorecardId: Optional scorecard association
+            scoreId: Optional score association
+            **kwargs: Additional experiment fields
+        """
+        def _create_experiment():
+            try:
+                now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+                
+                input_data = {
+                    'type': type,
+                    'accountId': accountId,
+                    'status': status,
+                    'createdAt': now,
+                    'updatedAt': now,
+                    **kwargs
+                }
+                
+                if scorecardId:
+                    input_data['scorecardId'] = scorecardId
+                if scoreId:
+                    input_data['scoreId'] = scoreId
+                
+                mutation = """
+                mutation CreateExperiment($input: CreateExperimentInput!) {
+                    createExperiment(input: $input) {
+                        %s
+                    }
+                }
+                """ % cls.fields()
+                
+                client.execute(mutation, {'input': input_data})
+                
+            except Exception as e:
+                logger.error(f"Error creating experiment: {e}")
         
-        variables = {
-            'input': input_data
-        }
-        
-        result = client.execute(mutation, variables)
-        return cls.from_dict(result['createExperiment'], client)
+        # Spawn background thread
+        thread = Thread(target=_create_experiment, daemon=True)
+        thread.start()
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: PlexusAPIClient) -> 'Experiment':
+    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Experiment':
         # Convert string dates to datetime objects
         for date_field in ['createdAt', 'updatedAt', 'startedAt', 'estimatedEndAt']:
             if data.get(date_field):
@@ -206,67 +235,42 @@ class Experiment(BaseModel):
             client=client
         )
 
-    def update(self, **kwargs) -> 'Experiment':
-        """Update this experiment with new values.
+    def update(self, **kwargs) -> None:
+        """Update experiment fields in a background thread.
         
-        Required fields are automatically handled:
-        - type: Uses existing value if not provided
-        - status: Uses existing value if not provided
-        - updatedAt: Always set to current time
-        - createdAt: Cannot be modified
+        This is a non-blocking operation - the mutation is performed
+        in a background thread.
         
         Args:
-            **kwargs: Fields to update. Any field not provided keeps its current value.
-            
-        Returns:
-            Experiment: Updated experiment instance
-            
-        Raises:
-            ValueError: If attempting to modify createdAt
+            **kwargs: Fields to update
         """
-        if 'createdAt' in kwargs:
-            raise ValueError("createdAt cannot be modified after creation")
-            
-        # Build update data starting with required fields
-        update_data = {
-            'type': kwargs.pop('type', self.type),
-            'status': kwargs.pop('status', self.status),
-            'updatedAt': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
-        }
-        
-        # Add any other provided fields
-        update_data.update(kwargs)
-        
-        mutation = """
-        mutation UpdateExperiment($input: UpdateExperimentInput!) {
-            updateExperiment(input: $input) {
-                %s
-            }
-        }
-        """ % self.fields()
-        
-        variables = {
-            'input': {
-                'id': self.id,
-                **update_data
-            }
-        }
-        
-        result = self._client.execute(mutation, variables)
-        return self.from_dict(result['updateExperiment'], self._client)
-
-    def get_samples(self) -> List['Sample']:
-        """Get all samples associated with this experiment."""
-        query = """
-        query GetExperimentSamples($experimentId: ID!) {
-            listSamples(filter: { experimentId: { eq: $experimentId } }) {
-                items {
-                    %s
+        def _update_experiment():
+            try:
+                # Always update the updatedAt timestamp
+                kwargs['updatedAt'] = datetime.now(timezone.utc).isoformat().replace(
+                    '+00:00', 'Z'
+                )
+                
+                mutation = """
+                mutation UpdateExperiment($input: UpdateExperimentInput!) {
+                    updateExperiment(input: $input) {
+                        %s
+                    }
                 }
-            }
-        }
-        """ % Sample.fields()
+                """ % self.fields()
+                
+                variables = {
+                    'input': {
+                        'id': self.id,
+                        **kwargs
+                    }
+                }
+                
+                self._client.execute(mutation, variables)
+                
+            except Exception as e:
+                logger.error(f"Error updating experiment: {e}")
         
-        result = self._client.execute(query, {'experimentId': self.id})
-        return [Sample.from_dict(item, self._client) 
-                for item in result['listSamples']['items']]
+        # Spawn background thread
+        thread = Thread(target=_update_experiment, daemon=True)
+        thread.start()

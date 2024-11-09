@@ -1,27 +1,36 @@
-from typing import Optional, Dict, Any, List
+"""
+Account Model - Python representation of the GraphQL Account type.
+
+Provides lookup methods to find accounts by:
+- ID (direct lookup)
+- Key (using secondary index)
+- Name (using filter)
+"""
+
+from typing import Optional, Dict, Any
 from dataclasses import dataclass
 from .base import BaseModel
-from ..client import PlexusAPIClient
+from ..client import _BaseAPIClient
 
 @dataclass
 class Account(BaseModel):
     name: str
     key: str
     description: Optional[str] = None
-    
+
     def __init__(
-        self, 
+        self,
         id: str,
         name: str,
         key: str,
         description: Optional[str] = None,
-        client: Optional[PlexusAPIClient] = None
+        client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
         self.name = name
         self.key = key
         self.description = description
-    
+
     @classmethod
     def fields(cls) -> str:
         return """
@@ -30,9 +39,9 @@ class Account(BaseModel):
             key
             description
         """
-    
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: PlexusAPIClient) -> 'Account':
+    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Account':
         return cls(
             id=data['id'],
             name=data['name'],
@@ -40,21 +49,19 @@ class Account(BaseModel):
             description=data.get('description'),
             client=client
         )
-    
+
     @classmethod
-    def get_by_key(cls, key: str, client: PlexusAPIClient) -> 'Account':
+    def get_by_key(cls, key: str, client: _BaseAPIClient) -> 'Account':
         query = """
         query GetAccountByKey($key: String!) {
             listAccounts(filter: {key: {eq: $key}}) {
                 items {
-                    id
-                    name
-                    key
-                    description
+                    %s
                 }
             }
         }
-        """
+        """ % cls.fields()
+
         result = client.execute(query, {'key': key})
         items = result['listAccounts']['items']
         if not items:

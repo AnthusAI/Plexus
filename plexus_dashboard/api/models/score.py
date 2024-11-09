@@ -1,19 +1,18 @@
 """
 Score Model - Python representation of the GraphQL Score type.
 
-Provides lookup methods to find scores by:
-- ID (direct lookup)
-- Name (using filter)
-- Key (constructed from name and version)
-
-Each score belongs to a scorecard section and can be associated with experiments.
+Represents a scoring method within a scorecard section, tracking:
+- Configuration and metadata
+- AI model details
+- Performance metrics
+- Version history
 """
 
 import logging
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 from .base import BaseModel
-from ..client import PlexusAPIClient
+from ..client import _BaseAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +46,7 @@ class Score(BaseModel):
         configuration: Optional[Dict] = None,
         distribution: Optional[Dict] = None,
         versionHistory: Optional[Dict] = None,
-        client: Optional[PlexusAPIClient] = None
+        client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
         self.name = name
@@ -82,7 +81,7 @@ class Score(BaseModel):
         """
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: PlexusAPIClient) -> 'Score':
+    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Score':
         return cls(
             id=data['id'],
             name=data['name'],
@@ -99,23 +98,3 @@ class Score(BaseModel):
             versionHistory=data.get('versionHistory'),
             client=client
         )
-
-    @classmethod
-    def get_by_name(cls, name: str, client: PlexusAPIClient) -> 'Score':
-        logger.debug(f"Looking up score by name: {name}")
-        query = """
-        query GetScoreByName($name: String!) {
-            listScores(filter: {name: {eq: $name}}) {
-                items {
-                    %s
-                }
-            }
-        }
-        """ % cls.fields()
-
-        result = client.execute(query, {'name': name})
-        items = result['listScores']['items']
-        if not items:
-            raise ValueError(f"No score found with name: {name}")
-        logger.debug(f"Found score: {items[0]['name']} ({items[0]['id']})")
-        return cls.from_dict(items[0], client) 

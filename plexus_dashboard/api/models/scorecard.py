@@ -13,7 +13,7 @@ import logging
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 from .base import BaseModel
-from ..client import PlexusAPIClient
+from ..client import _BaseAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class Scorecard(BaseModel):
         externalId: str,
         accountId: str,
         description: Optional[str] = None,
-        client: Optional[PlexusAPIClient] = None
+        client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
         self.name = name
@@ -54,7 +54,7 @@ class Scorecard(BaseModel):
         """
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: PlexusAPIClient) -> 'Scorecard':
+    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Scorecard':
         return cls(
             id=data['id'],
             name=data['name'],
@@ -66,7 +66,7 @@ class Scorecard(BaseModel):
         )
 
     @classmethod
-    def get_by_key(cls, key: str, client: PlexusAPIClient) -> 'Scorecard':
+    def get_by_key(cls, key: str, client: _BaseAPIClient) -> 'Scorecard':
         logger.debug(f"Looking up scorecard by key: {key}")
         query = """
         query GetScorecardByKey($key: String!) {
@@ -86,7 +86,7 @@ class Scorecard(BaseModel):
         return cls.from_dict(items[0], client)
 
     @classmethod
-    def get_by_name(cls, name: str, client: PlexusAPIClient) -> 'Scorecard':
+    def get_by_name(cls, name: str, client: _BaseAPIClient) -> 'Scorecard':
         logger.debug(f"Looking up scorecard by name: {name}")
         query = """
         query GetScorecardByName($name: String!) {
