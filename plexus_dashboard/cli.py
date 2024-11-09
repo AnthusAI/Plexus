@@ -20,13 +20,23 @@ import click
 import logging
 from dotenv import load_dotenv
 from typing import Optional
-from .api.client import PlexusAPIClient
+from .api.client import PlexusDashboardClient
 from .api.models.account import Account
 from .api.models.experiment import Experiment
 from .api.models.scorecard import Scorecard
 from .api.models.score import Score
 from .api.models.score_result import ScoreResult
 import json
+import random
+import time
+import threading
+from sklearn.metrics import (
+    accuracy_score, 
+    precision_score,
+    recall_score,  # sensitivity
+    confusion_matrix
+)
+import numpy as np
 
 # Configure logging with a more concise format
 logging.basicConfig(
@@ -108,7 +118,7 @@ def create(
         plexus-dashboard experiment create --type accuracy --accuracy 95.5 --status COMPLETED
         plexus-dashboard experiment create --type consistency --scorecard-id abc123
     """
-    client = PlexusAPIClient()
+    client = PlexusDashboardClient()
     
     try:
         # First get the account
@@ -272,7 +282,7 @@ def update(
         plexus-dashboard experiment update def456 --status COMPLETED
         plexus-dashboard experiment update ghi789 --type consistency --status FAILED
     """
-    client = PlexusAPIClient()
+    client = PlexusDashboardClient()
     
     try:
         # First get the existing experiment
@@ -335,7 +345,7 @@ def score_result():
 @click.option('--metadata', type=str, help='JSON metadata (optional)')
 def create(value, item_id, account_id, scoring_job_id, scorecard_id, confidence, metadata):
     """Create a new score result"""
-    client = PlexusAPIClient()
+    client = PlexusDashboardClient()
     
     kwargs = {}
     if confidence is not None:
@@ -373,7 +383,7 @@ def update(id: str, value: Optional[float], confidence: Optional[float], metadat
         plexus-dashboard score-result update def456 --confidence 0.95
         plexus-dashboard score-result update ghi789 --metadata '{"source": "updated"}'
     """
-    client = PlexusAPIClient()
+    client = PlexusDashboardClient()
     
     try:
         # Get existing score result
@@ -402,6 +412,238 @@ def update(id: str, value: Optional[float], confidence: Optional[float], metadat
         
     except Exception as e:
         logger.error(f"Error updating score result: {str(e)}")
+        click.echo(f"Error: {str(e)}", err=True)
+
+@experiment.command()
+@click.option('--account-key', help='Account key')
+@click.option('--account-name', help='Account name')
+@click.option('--account-id', help='Account ID')
+@click.option('--scorecard-key', help='Scorecard key')
+@click.option('--scorecard-name', help='Scorecard name')
+@click.option('--scorecard-id', help='Scorecard ID')
+@click.option('--score-key', help='Score key')
+@click.option('--score-name', help='Score name')
+@click.option('--score-id', help='Score ID')
+@click.option('--num-items', type=int, default=100, help='Number of items to simulate')
+@click.option('--accuracy', type=float, default=0.85, help='Target accuracy')
+def simulate(
+    account_key: Optional[str],
+    account_name: Optional[str],
+    account_id: Optional[str],
+    scorecard_key: Optional[str],
+    scorecard_name: Optional[str],
+    scorecard_id: Optional[str],
+    score_key: Optional[str],
+    score_name: Optional[str],
+    score_id: Optional[str],
+    num_items: int,
+    accuracy: float,
+):
+    """Simulate a machine learning evaluation experiment with synthetic data.
+    
+    This command creates a realistic simulation of an ML model evaluation run by:
+    1. Creating an Experiment record to track the evaluation
+    2. Generating synthetic binary classification results (Yes/No predictions)
+    3. Creating ScoreResult records for each prediction
+    4. Computing standard ML metrics (accuracy, precision, sensitivity, specificity)
+    5. Updating the Experiment with real-time metric calculations
+    
+    The simulation uses a target accuracy parameter to generate synthetic predictions
+    that will approximately achieve that accuracy level. It introduces random
+    variations and delays to simulate real-world conditions.
+    
+    Metrics are computed using scikit-learn and include:
+    - Accuracy: Overall correct predictions
+    - Precision: True positives / (True positives + False positives)
+    - Sensitivity (Recall): True positives / (True positives + False negatives)
+    - Specificity: True negatives / (True negatives + False positives)
+    
+    The command handles background metric updates using threads, ensuring the
+    experiment record stays current as new results are generated.
+    
+    Args:
+        account_key/name/id: Account context (one required)
+        scorecard_key/name/id: Scorecard to evaluate (one required)
+        score_key/name/id: Optional specific score to evaluate
+        num_items: Number of synthetic results to generate (default: 100)
+        accuracy: Target accuracy for synthetic data (default: 0.85)
+    
+    Examples:
+        # Basic simulation with 100 items
+        plexus-dashboard experiment simulate \
+            --account-key call-criteria \
+            --scorecard-key agent-scorecard \
+            --num-items 100 \
+            --accuracy 0.85
+            
+        # Larger simulation for specific score
+        plexus-dashboard experiment simulate \
+            --account-key call-criteria \
+            --scorecard-key agent-scorecard \
+            --score-key compliance \
+            --num-items 1000 \
+            --accuracy 0.92
+    """
+    client = PlexusDashboardClient()
+    
+    try:
+        # Look up or validate account
+        if account_id:
+            logger.info(f"Using provided account ID: {account_id}")
+            account = Account.get_by_id(account_id, client)
+        elif account_key:
+            logger.info(f"Looking up account by key: {account_key}")
+            account = Account.get_by_key(account_key, client)
+        elif account_name:
+            logger.info(f"Looking up account by name: {account_name}")
+            account = Account.get_by_name(account_name, client)
+        else:
+            raise click.UsageError("Must provide account-id, account-key, or account-name")
+        
+        logger.info(f"Using account: {account.name} ({account.id})")
+        
+        # Look up or validate scorecard
+        if scorecard_id:
+            logger.info(f"Using provided scorecard ID: {scorecard_id}")
+            scorecard = Scorecard.get_by_id(scorecard_id, client)
+        elif scorecard_key:
+            logger.info(f"Looking up scorecard by key: {scorecard_key}")
+            scorecard = Scorecard.get_by_key(scorecard_key, client)
+        elif scorecard_name:
+            logger.info(f"Looking up scorecard by name: {scorecard_name}")
+            scorecard = Scorecard.get_by_name(scorecard_name, client)
+        else:
+            raise click.UsageError("Must provide scorecard-id, scorecard-key, or scorecard-name")
+            
+        logger.info(f"Using scorecard: {scorecard.name} ({scorecard.id})")
+        
+        # Optionally look up score
+        score = None
+        if any([score_id, score_key, score_name]):
+            if score_id:
+                logger.info(f"Using provided score ID: {score_id}")
+                score = Score.get_by_id(score_id, client)
+            elif score_key:
+                logger.info(f"Looking up score by key: {score_key}")
+                score = Score.get_by_key(score_key, client)
+            else:
+                logger.info(f"Looking up score by name: {score_name}")
+                score = Score.get_by_name(score_name, client)
+            logger.info(f"Using score: {score.name} ({score.id})")
+
+        # Create initial experiment record
+        logger.info("Creating experiment record...")
+        experiment = Experiment.create(
+            client=client,
+            type="evaluation",
+            accountId=account.id,
+            status="RUNNING",
+            totalItems=num_items,
+            processedItems=0,
+            scorecardId=scorecard.id,
+            scoreId=score.id if score else None,
+            parameters=json.dumps({
+                "target_accuracy": accuracy,
+                "num_items": num_items
+            })
+        )
+        
+        # Lists to store true and predicted values for metrics calculation
+        true_values = []
+        predicted_values = []
+        
+        def update_metrics():
+            """Calculate and update experiment metrics"""
+            try:
+                # Create a new client instance for this thread
+                thread_client = PlexusDashboardClient()
+                
+                y_true = np.array(true_values)
+                y_pred = np.array(predicted_values)
+                
+                # Calculate metrics (convert to percentages)
+                acc = accuracy_score(y_true, y_pred) * 100
+                prec = precision_score(y_true, y_pred, pos_label="Yes") * 100
+                sens = recall_score(y_true, y_pred, pos_label="Yes") * 100  # sensitivity
+                conf_matrix = confusion_matrix(y_true, y_pred, labels=["Yes", "No"])
+                
+                # Calculate specificity safely (as percentage)
+                tn = conf_matrix[1,1]  # true negatives
+                fn = conf_matrix[1,0]  # false negatives
+                spec = float(tn / (tn + fn) * 100) if (tn + fn) > 0 else None
+                
+                # Update experiment with new metrics
+                update_data = {
+                    "accuracy": float(acc),
+                    "precision": float(prec),
+                    "sensitivity": float(sens),
+                    "processedItems": len(true_values),
+                    "confusionMatrix": json.dumps({
+                        "matrix": conf_matrix.tolist(),
+                        "labels": ["Yes", "No"]
+                    })
+                }
+                
+                # Only include specificity if we can calculate it
+                if spec is not None:
+                    update_data["specificity"] = spec
+                    
+                # Get a fresh experiment instance with the new client
+                thread_experiment = Experiment.get_by_id(experiment.id, thread_client)
+                thread_experiment.update(**update_data)
+                
+            except Exception as e:
+                logger.error(f"Error updating metrics: {str(e)}")
+        
+        # Simulate results
+        for i in range(num_items):
+            # Generate random result
+            true_value = "Yes" if random.random() < accuracy else "No"
+            predicted_value = true_value if random.random() < accuracy else \
+                            ("No" if true_value == "Yes" else "Yes")
+            
+            true_values.append(true_value)
+            predicted_values.append(predicted_value)
+            
+            # Create score result
+            ScoreResult.create(
+                client=client,
+                value=1.0 if predicted_value == "Yes" else 0.0,
+                confidence=random.uniform(0.7, 0.99),
+                correct=(true_value == predicted_value),
+                itemId=f"item_{i}",
+                accountId=account.id,
+                experimentId=experiment.id,
+                scorecardId=scorecard.id,
+                scoringJobId=None,  # Explicitly set to None since we're using experimentId
+                metadata={
+                    "true_value": true_value,
+                    "predicted_value": predicted_value
+                }
+            )
+            
+            # Update metrics in background thread
+            thread = threading.Thread(target=update_metrics)
+            thread.start()
+            
+            # Random delay between results
+            time.sleep(random.uniform(0.1, 1.0))
+            
+            # Progress update
+            if (i + 1) % 10 == 0:
+                logger.info(f"Generated {i + 1} of {num_items} results")
+        
+        # Final update
+        experiment.update(status="COMPLETED")
+        logger.info("Simulation completed")
+        
+    except Exception as e:
+        logger.error(f"Error in simulation: {str(e)}")
+        if 'experiment' in locals():
+            experiment.update(
+                status="FAILED",
+                errorMessage=str(e)
+            )
         click.echo(f"Error: {str(e)}", err=True)
 
 if __name__ == '__main__':

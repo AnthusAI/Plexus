@@ -240,7 +240,7 @@ export default function ExperimentsDashboard() {
               'errorDetails', 'accountId', 'scorecardId', 'scoreId', 'confusionMatrix',
               'scorecard.id', 'scorecard.name']
           }).subscribe({
-            next: ({ items }) => {
+            next: async ({ items }) => {
               const transformedItems = items.map(transformExperiment);
               const sortedItems = transformedItems.sort((a: Schema['Experiment']['type'], b: Schema['Experiment']['type']) => 
                 new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -248,13 +248,12 @@ export default function ExperimentsDashboard() {
               setExperiments(sortedItems);
               
               if (selectedExperiment) {
-                const updatedExperiment = sortedItems.find(item => 
-                  item.id === selectedExperiment.id
-                );
+                const updatedExperiment = sortedItems.find(exp => exp.id === selectedExperiment.id);
                 if (updatedExperiment && 
-                    JSON.stringify(updatedExperiment) !== 
-                    JSON.stringify(selectedExperiment)) {
+                    JSON.stringify(updatedExperiment) !== JSON.stringify(selectedExperiment)) {
                   setSelectedExperiment(updatedExperiment);
+                  const updatedProps = await getExperimentTaskProps(updatedExperiment);
+                  setExperimentTaskProps(updatedProps);
                 }
               }
             },
