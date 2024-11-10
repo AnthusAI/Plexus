@@ -27,6 +27,7 @@ import ScorecardContext from "@/components/ScorecardContext"
 import ItemContext from "@/components/ItemContext"
 import ItemDetail from './ItemDetail'
 import { formatTimeAgo } from '@/utils/format-time'
+import type { FeedbackItem } from '@/components/feedback-dashboard'
 
 // Get the current date and time
 const now = new Date();
