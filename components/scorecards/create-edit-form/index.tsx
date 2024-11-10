@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, X, Square, Columns2, ChevronUp, ChevronDown } from "lucide-react"
+import { Plus, X, Square, Columns2, ChevronUp, ChevronDown, Pencil } from "lucide-react"
 import { generateClient } from "aws-amplify/data"
 import { generateClient as generateGraphQLClient } from '@aws-amplify/api'
 import type { Schema } from "@/amplify/data/resource"
@@ -18,6 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { CardButton } from '@/components/CardButton'
 
 const client = generateClient<Schema>()
 const graphqlClient = generateGraphQLClient()
@@ -526,8 +527,7 @@ export function ScorecardForm({
   }
 
   return (
-    <div className="border text-card-foreground shadow rounded-lg h-full 
-                    flex flex-col bg-card-light border-none">
+    <div className="border text-card-foreground shadow rounded-lg h-full flex flex-col bg-card-light border-none">
       {/* Header */}
       <div className="flex-shrink-0 bg-card rounded-t-lg">
         <div className="px-6 py-4 flex items-center justify-between">
@@ -539,25 +539,17 @@ export function ScorecardForm({
                        placeholder:text-muted-foreground rounded-md flex-1 mr-4"
             placeholder="Scorecard Name"
           />
-          <div className="flex items-center flex-shrink-0">
+          <div className="flex items-center space-x-2">
             {!isNarrowViewport && onToggleWidth && (
-              <Button 
-                variant="ghost" 
-                size="icon" 
+              <CardButton
+                icon={isFullWidth ? Columns2 : Square}
                 onClick={onToggleWidth}
-                className="bg-background hover:bg-background/90"
-              >
-                {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-              </Button>
+              />
             )}
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={onCancel} 
-              className="ml-2 bg-background hover:bg-background/90"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <CardButton
+              icon={X}
+              onClick={onCancel}
+            />
           </div>
         </div>
         <div className="px-6 pb-6">
@@ -600,38 +592,23 @@ export function ScorecardForm({
                     className="text-2xl font-semibold"
                   />
                   <div className="flex items-center gap-2">
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
+                    <CardButton
+                      icon={X}
                       onClick={() => setSectionToDelete(sectionIndex)}
-                      disabled={section.scores.length > 0}
-                      className={section.scores.length > 0 ? 'opacity-30' : ''}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
+                    />
+                    <CardButton
+                      icon={ChevronUp}
                       onClick={() => handleMoveSection(sectionIndex, 'up')}
-                      disabled={sectionIndex === 0}
-                    >
-                      <ChevronUp className="h-4 w-4" />
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
+                    />
+                    <CardButton
+                      icon={ChevronDown}
                       onClick={() => handleMoveSection(sectionIndex, 'down')}
-                      disabled={sectionIndex === formData.sections.length - 1}
-                    >
-                      <ChevronDown className="h-4 w-4" />
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
+                    />
+                    <CardButton
+                      icon={Plus}
+                      label="Create Score"
                       onClick={() => handleAddScore(sectionIndex)}
-                    >
-                      <Plus className="mr-2 h-4 w-4" /> Create Score
-                    </Button>
+                    />
                   </div>
                 </div>
                 <hr className="mb-4" />
@@ -658,9 +635,11 @@ export function ScorecardForm({
 
           {/* Create Section button at bottom */}
           <div className="flex justify-end">
-            <Button variant="outline" onClick={handleAddSection}>
-              <Plus className="mr-2 h-4 w-4" /> Create Section
-            </Button>
+            <CardButton
+              icon={Plus}
+              label="Create Section"
+              onClick={handleAddSection}
+            />
           </div>
         </div>
       </div>

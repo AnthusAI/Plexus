@@ -551,26 +551,9 @@ export default function ItemsDashboard() {
     const selectedItemData = items.find(item => item.id === selectedItem)
     if (!selectedItemData) return null
 
-    const DetailViewControlButtons = (
-      <>
-        {!isNarrowViewport && (
-          <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
-            {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-          </Button>
-        )}
-        <Button variant="outline" size="icon" onClick={() => {
-          setSelectedItem(null)
-          setIsFullWidth(false)
-        }} className="ml-2">
-          <X className="h-4 w-4" />
-        </Button>
-      </>
-    )
-
     return (
       <ItemDetail
         item={selectedItemData}
-        controlButtons={DetailViewControlButtons}
         getBadgeVariant={getBadgeVariant}
         getRelativeTime={getRelativeTime}
         isMetadataExpanded={isMetadataExpanded}
@@ -595,6 +578,11 @@ export default function ItemsDashboard() {
         setThumbedUpScores={setThumbedUpScores}
         isFullWidth={isFullWidth}
         isFeedbackMode={false}
+        onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+        onClose={() => {
+          setSelectedItem(null);
+          setIsFullWidth(false);
+        }}
       />
     )
   }

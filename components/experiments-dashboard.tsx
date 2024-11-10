@@ -30,6 +30,7 @@ import ScorecardContext from "@/components/ScorecardContext"
 import ExperimentTask, { type ExperimentTaskProps } from "@/components/ExperimentTask"
 import { ExperimentListProgressBar } from "@/components/ExperimentListProgressBar"
 import { ExperimentListAccuracyBar } from "@/components/ExperimentListAccuracyBar"
+import { CardButton } from '@/components/CardButton'
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -498,19 +499,20 @@ export default function ExperimentsDashboard() {
 
             {selectedExperiment && experimentTaskProps && !isNarrowViewport && !isFullWidth && (
               <div className={`${isFullWidth ? 'w-full' : 'w-1/2 min-w-[300px]'} overflow-y-auto`}>
-                <div className="">
-                  <div className="" />
-                  <ExperimentTask
-                    variant="detail"
-                    task={experimentTaskProps}
-                    isFullWidth={isFullWidth}
-                    onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-                    onClose={() => {
-                      setSelectedExperiment(null);
-                      setIsFullWidth(false);
-                    }}
-                  />
-                </div>
+                <ExperimentTask
+                  variant="detail"
+                  task={experimentTaskProps}
+                  isFullWidth={isFullWidth}
+                  onToggleFullWidth={() => {
+                    console.log('Toggle fullwidth clicked');
+                    setIsFullWidth(!isFullWidth);
+                  }}
+                  onClose={() => {
+                    console.log('Close clicked');
+                    setSelectedExperiment(null);
+                    setIsFullWidth(false);
+                  }}
+                />
               </div>
             )}
           </div>

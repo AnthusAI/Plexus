@@ -1,11 +1,12 @@
 import React, { useRef, useState, useEffect } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical } from 'lucide-react'
+import { FlaskConical, Square, X } from 'lucide-react'
 import MetricsGauges from '@/components/MetricsGauges'
 import { ProgressBar } from "@/components/ui/progress-bar"
 import { ResponsiveWaffle } from '@nivo/waffle'
 import { ConfusionMatrix } from '@/components/confusion-matrix'
 import { formatDuration, intervalToDuration } from 'date-fns'
+import { CardButton } from '@/components/CardButton'
 
 export interface ExperimentTaskData {
   accuracy: number | null
@@ -30,7 +31,11 @@ export interface ExperimentTaskData {
   }
 }
 
-export interface ExperimentTaskProps extends BaseTaskProps<ExperimentTaskData> {}
+export interface ExperimentTaskProps extends BaseTaskProps<ExperimentTaskData> {
+  variant?: 'grid' | 'detail'
+  onToggleFullWidth: () => void
+  onClose: () => void
+}
 
 function computeExperimentType(data: ExperimentTaskData): string {
   if (data.errorMessage || data.errorDetails) {
@@ -220,7 +225,20 @@ export default function ExperimentTask({
       renderHeader={(props) => (
         <TaskHeader {...props}>
           <div className="flex justify-end w-full">
-            <FlaskConical className="h-6 w-6" />
+            {variant === 'detail' && onToggleFullWidth && onClose ? (
+              <div className="flex items-center space-x-2">
+                <CardButton
+                  icon={Square}
+                  onClick={onToggleFullWidth}
+                />
+                <CardButton
+                  icon={X}
+                  onClick={onClose}
+                />
+              </div>
+            ) : (
+              <FlaskConical className="h-6 w-6" />
+            )}
           </div>
         </TaskHeader>
       )}

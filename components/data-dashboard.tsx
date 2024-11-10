@@ -33,6 +33,7 @@ import {
 import { useRouter } from 'next/navigation'
 import ScorecardContext from "@/components/ScorecardContext"
 import ItemContext from "@/components/ItemContext"
+import { CardButton } from '@/components/CardButton'
 
 // Function to create a date relative to now
 const relativeDate = (days: number, hours: number, minutes: number) => {
@@ -480,18 +481,20 @@ export default function DataDashboard() {
               {getRelativeTime(selectedItemData.date)}
             </p>
           </div>
-          <div className="flex ml-2">
+          <div className="flex items-center space-x-2">
             {!isNarrowViewport && (
-              <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
-                {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-              </Button>
+              <CardButton
+                icon={isFullWidth ? Columns2 : Square}
+                onClick={() => setIsFullWidth(!isFullWidth)}
+              />
             )}
-            <Button variant="outline" size="icon" onClick={() => {
-              setSelectedItem(null)
-              setIsFullWidth(false)
-            }} className="ml-2">
-              <X className="h-4 w-4" />
-            </Button>
+            <CardButton
+              icon={X}
+              onClick={() => {
+                setSelectedItem(null);
+                setIsFullWidth(false);
+              }}
+            />
           </div>
         </CardHeader>
         <CardContent className="flex-grow overflow-auto px-4 sm:px-6 pb-4">

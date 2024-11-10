@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { formatTimeAgo } from '@/utils/format-time'
+import { CardButton } from '@/components/CardButton'
 
 // Get the current date and time
 const now = new Date();
@@ -262,7 +263,7 @@ function renderSelectedAlert({
   getBadgeVariant,
   getSeverityColor
 }: {
-  alerts: { id: number; message: string; source: string; date: string; status: string; severity: string }[]; // Explicit type annotation
+  alerts: { id: number; message: string; source: string; date: string; status: string; severity: string }[];
   selectedAlert: number | null;
   isFullWidth: boolean;
   isNarrowViewport: boolean;
@@ -284,18 +285,20 @@ function renderSelectedAlert({
             {selectedAlertData.source} • {formatTimeAgo(selectedAlertData.date)}
           </p>
         </div>
-        <div className="flex ml-2">
+        <div className="flex items-center space-x-2">
           {!isNarrowViewport && (
-            <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
-              {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-            </Button>
+            <CardButton
+              icon={isFullWidth ? Columns2 : Square}
+              onClick={() => setIsFullWidth(!isFullWidth)}
+            />
           )}
-          <Button variant="outline" size="icon" onClick={() => {
-            setSelectedAlert(null)
-            setIsFullWidth(false)
-          }} className="ml-2">
-            <X className="h-4 w-4" />
-          </Button>
+          <CardButton
+            icon={X}
+            onClick={() => {
+              setSelectedAlert(null);
+              setIsFullWidth(false);
+            }}
+          />
         </div>
       </CardHeader>
       <CardContent className="flex-grow overflow-auto px-4 sm:px-6">
@@ -349,5 +352,5 @@ function renderSelectedAlert({
         )}
       </CardContent>
     </Card>
-  )
+  );
 }
