@@ -89,7 +89,7 @@ const scorecardScoreCounts = {
 };
 
 // Update the FeedbackItem interface to match actual data structure
-interface FeedbackItem {
+export interface FeedbackItem {
   id: number
   scorecard: string
   score: number
