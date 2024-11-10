@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Square, Columns2, X } from 'lucide-react'
 import { formatTimeAgo } from '@/utils/format-time'
+import { CardButton } from '@/components/CardButton'
 
 export interface BaseTaskProps<TData = unknown> {
   variant: 'grid' | 'detail' | 'nested'
@@ -82,7 +83,6 @@ const TaskHeader = <TData = unknown>({
   onToggleFullWidth,
   onClose 
 }: TaskChildProps<TData>) => {
-  // Format time based on variant
   const formattedTime = formatTimeAgo(task.time, variant === 'grid')
 
   return (
@@ -102,24 +102,16 @@ const TaskHeader = <TData = unknown>({
           ) : (
             <div className="flex gap-2">
               {onToggleFullWidth && (
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
+                <CardButton
+                  icon={isFullWidth ? Columns2 : Square}
                   onClick={onToggleFullWidth}
-                  className="bg-background hover:bg-background/90"
-                >
-                  {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                </Button>
+                />
               )}
               {onClose && (
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
+                <CardButton
+                  icon={X}
                   onClick={onClose}
-                  className="bg-background hover:bg-background/90"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+                />
               )}
               {controlButtons}
             </div>

@@ -15,6 +15,7 @@ import SemanticClassifierComponent from './score-types/semantic-classifier'
 import SimpleLLMScoreComponent from './score-types/simple-llm-score'
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
+import { CardButton } from '@/components/CardButton'
 
 interface ScoreEditProps {
   scorecardId: string
@@ -98,34 +99,22 @@ function EditableField({ value, onChange, className = "" }: EditableFieldProps) 
             onKeyDown={handleKeyDown}
             className={`py-1 px-2 ${className}`}
           />
-          <Button 
-            variant="ghost" 
-            size="icon"
-            className="h-8 w-8 flex-shrink-0"
+          <CardButton
+            icon={Check}
             onClick={handleSave}
-          >
-            <Check className="h-4 w-4" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon"
-            className="h-8 w-8 flex-shrink-0"
+          />
+          <CardButton
+            icon={X}
             onClick={handleCancel}
-          >
-            <X className="h-4 w-4" />
-          </Button>
+          />
         </>
       ) : (
         <>
           <span className={`${className}`}>{value}</span>
-          <Button 
-            variant="ghost" 
-            size="icon"
-            className="h-8 w-8 flex-shrink-0"
+          <CardButton
+            icon={Pencil}
             onClick={handleEditToggle}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
+          />
         </>
       )}
     </div>
@@ -356,9 +345,10 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
             className="text-sm font-mono"
           />
         </div>
-        <Button variant="ghost" size="icon" onClick={handleCancel} className="self-start">
-          <X className="h-4 w-4" />
-        </Button>
+        <CardButton
+          icon={X}
+          onClick={handleCancel}
+        />
       </div>
       <div className="flex-grow flex flex-col overflow-hidden px-4 sm:px-6 pb-4">
         <div className="space-y-4 mb-6">
@@ -391,9 +381,10 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
         </div>
       </div>
       <div className="flex justify-end space-x-4 py-4 px-4 sm:px-6">
-        <Button variant="outline" onClick={handleCancel}>
-          Cancel
-        </Button>
+        <CardButton
+          icon={X}
+          onClick={handleCancel}
+        />
         <Button 
           onClick={handleSave} 
           disabled={isSaving}

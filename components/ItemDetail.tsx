@@ -1,9 +1,10 @@
-import React from 'react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import React, { useEffect, useState } from 'react'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table'
-import { ChevronUp, ChevronDown } from 'lucide-react'
+import { ChevronUp, ChevronDown, Square, Columns2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { CardButton } from '@/components/CardButton'
 import ItemDetailScoreResult from './ItemDetailScoreResult'
 import { formatTimeAgo } from '@/utils/format-time'
 
@@ -29,7 +30,6 @@ interface Score {
 
 interface ItemDetailProps {
   item: any
-  controlButtons?: React.ReactNode
   getBadgeVariant: (status: string) => string
   getRelativeTime: (dateString: string | undefined) => string
   isMetadataExpanded: boolean
@@ -54,11 +54,12 @@ interface ItemDetailProps {
   setThumbedUpScores: (scores: Set<string>) => void
   isFullWidth: boolean
   isFeedbackMode: boolean
+  onToggleFullWidth: () => void
+  onClose: () => void
 }
 
 const ItemDetail: React.FC<ItemDetailProps> = ({
   item,
-  controlButtons,
   getBadgeVariant,
   getRelativeTime,
   isMetadataExpanded,
@@ -82,9 +83,24 @@ const ItemDetail: React.FC<ItemDetailProps> = ({
   setShowNewAnnotationForm,
   setThumbedUpScores,
   isFullWidth,
-  isFeedbackMode
+  isFeedbackMode,
+  onToggleFullWidth,
+  onClose,
 }) => {
-  React.useEffect(() => {
+  const [isNarrowViewport, setIsNarrowViewport] = useState(false)
+
+  useEffect(() => {
+    const checkViewportWidth = () => {
+      setIsNarrowViewport(window.innerWidth < 640)
+    }
+
+    checkViewportWidth()
+    window.addEventListener('resize', checkViewportWidth)
+
+    return () => window.removeEventListener('resize', checkViewportWidth)
+  }, [])
+
+  useEffect(() => {
     setIsDataExpanded(isFullWidth);
   }, [isFullWidth, setIsDataExpanded]);
 
@@ -97,8 +113,17 @@ const ItemDetail: React.FC<ItemDetailProps> = ({
             {formatTimeAgo(item.date)}
           </p>
         </div>
-        <div className="flex ml-2">
-          {controlButtons}
+        <div className="flex items-center space-x-2">
+          {!isNarrowViewport && (
+            <CardButton
+              icon={isFullWidth ? Columns2 : Square}
+              onClick={onToggleFullWidth}
+            />
+          )}
+          <CardButton
+            icon={X}
+            onClick={onClose}
+          />
         </div>
       </CardHeader>
       <CardContent className="flex-grow overflow-auto px-4 sm:px-6 pb-4">

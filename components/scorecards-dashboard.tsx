@@ -26,6 +26,7 @@ import {
   Plus 
 } from "lucide-react"
 import { ScoreCount } from "./scorecards/score-count"
+import { CardButton } from "@/components/CardButton"
 
 // Initialize client
 const client = generateClient<Schema>()
@@ -386,30 +387,21 @@ export default function ScorecardsComponent() {
                               </div>
                             </div>
                             <div className="flex items-center">
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
+                              <CardButton 
+                                icon={Pencil}
                                 onClick={(e) => { e.stopPropagation(); handleEdit(scorecard); }}
-                                className="h-8 w-8"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
+                              />
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="icon"
+                                  <CardButton 
+                                    icon={MoreHorizontal}
                                     onClick={(e) => e.stopPropagation()}
-                                    className="h-8 w-8"
-                                  >
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
+                                  />
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuItem>
                                     <Activity className="h-4 w-4 mr-2" /> Activity
                                   </DropdownMenuItem>
-                                  {/* Add other DropdownMenuItems here */}
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
@@ -429,30 +421,21 @@ export default function ScorecardsComponent() {
                     </TableCell>
                     <TableCell className="w-[10%] hidden @[630px]:table-cell text-right">
                       <div className="flex items-center justify-end space-x-2">
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
+                        <CardButton 
+                          icon={Pencil}
                           onClick={(e) => { e.stopPropagation(); handleEdit(scorecard); }}
-                          className="h-8 w-8 p-0"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
+                        />
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="icon"
+                            <CardButton 
+                              icon={MoreHorizontal}
                               onClick={(e) => e.stopPropagation()}
-                              className="h-8 w-8 p-0"
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
+                            />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem>
                               <Activity className="h-4 w-4 mr-2" /> Activity
                             </DropdownMenuItem>
-                            {/* Add other DropdownMenuItems here */}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -462,9 +445,11 @@ export default function ScorecardsComponent() {
               </TableBody>
             </Table>
             <div className="mt-4">
-              <Button variant="outline" onClick={handleCreate}>
-                <Plus className="mr-2 h-4 w-4" /> Create Scorecard
-              </Button>
+              <CardButton
+                icon={Plus}
+                label="Create Scorecard"
+                onClick={handleCreate}
+              />
             </div>
           </div>
 

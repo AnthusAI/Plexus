@@ -13,6 +13,7 @@ import {
 import { Card, CardHeader, CardContent } from "@/components/ui/card"
 import { Eye, X, Columns2, Square, Pencil } from "lucide-react"
 import { format, formatDistanceToNow, subDays, subHours, subMinutes } from "date-fns"
+import { CardButton } from '@/components/CardButton'
 
 interface Report {
   id: string
@@ -172,16 +173,19 @@ export default function ReportsDashboard() {
             <h2 className="text-xl font-semibold">{selectedReport.name}</h2>
             <p className="text-sm text-muted-foreground">{selectedReport.scorecard}</p>
           </div>
-          <div className="flex ml-2">
-            <Button variant="outline" size="icon" onClick={() => console.log("Edit report", selectedReport.id)}>
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)} className="ml-2">
-              {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-            </Button>
-            <Button variant="outline" size="icon" onClick={() => setSelectedReport(null)} className="ml-2">
-              <X className="h-4 w-4" />
-            </Button>
+          <div className="flex items-center space-x-2">
+            <CardButton
+              icon={Pencil}
+              onClick={() => console.log("Edit report", selectedReport.id)}
+            />
+            <CardButton
+              icon={isFullWidth ? Columns2 : Square}
+              onClick={() => setIsFullWidth(!isFullWidth)}
+            />
+            <CardButton
+              icon={X}
+              onClick={() => setSelectedReport(null)}
+            />
           </div>
         </CardHeader>
         <CardContent className="flex-grow overflow-auto px-4 sm:px-6 pb-6">
@@ -202,9 +206,10 @@ export default function ReportsDashboard() {
                   <TableRow key={run.id}>
                     <TableCell>{format(run.timestamp, "PPpp")}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                      <CardButton
+                        icon={Eye}
+                        onClick={() => console.log('View run')}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}

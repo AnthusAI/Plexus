@@ -18,6 +18,7 @@ import {
 import { formatDistanceToNow } from "date-fns"
 import MetricsGauges from "@/components/MetricsGauges"
 import { EditableField } from "@/components/ui/editable-field"
+import { CardButton } from '@/components/CardButton'
 
 interface ScoreItemProps {
   score: {
@@ -133,15 +134,11 @@ export function ScoreItem({ score, scorecardId, onEdit }: ScoreItemProps) {
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="text-xs"
+          <CardButton
+            icon={Pencil}
+            label="Edit"
             onClick={() => router.push(`/scorecards/${scorecardId}/scores/${score.id}/edit`)}
-          >
-            <Pencil className="h-4 w-4 mr-1" />
-            Edit
-          </Button>
+          />
         </div>
       </div>
       <div className="mt-4">
