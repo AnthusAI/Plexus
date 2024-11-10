@@ -31,24 +31,7 @@ export interface ScoringJobTaskData {
   batchJobs?: RelatedBatchJob[]
 }
 
-export type ScoringJobTaskProps = {
-  variant?: 'grid' | 'detail'
-  task: {
-    id: number
-    type: string
-    scorecard: string
-    score: string
-    time: string
-    summary: string
-    description?: string
-    data: ScoringJobTaskData
-  }
-  onClick?: () => void
-  controlButtons?: React.ReactNode
-  isFullWidth?: boolean
-  onToggleFullWidth?: () => void
-  onClose?: () => void
-}
+export interface ScoringJobTaskProps extends BaseTaskProps<ScoringJobTaskData> {}
 
 const getStatusDisplay = (status: string): { text: string; variant: string } => {
   const statusMap: Record<string, { text: string; variant: string }> = {
@@ -61,18 +44,21 @@ const getStatusDisplay = (status: string): { text: string; variant: string } => 
   return statusMap[status.toLowerCase()] || { text: status, variant: 'default' }
 }
 
-const transformScoringJobData = (task: ScoringJobTaskProps['task']) => ({
-  ...task,
-  data: {
-    progress: (task.data.completedItems / task.data.totalItems) * 100,
-    processedItems: task.data.completedItems,
-    totalItems: task.data.totalItems,
-    numberComplete: task.data.completedItems,
-    numberTotal: task.data.totalItems,
-    eta: task.data.startedAt,
-    elapsedTime: task.data.completedAt
+const transformScoringJobData = (task: ScoringJobTaskProps['task']) => {
+  if (!task.data) return task
+  return {
+    ...task,
+    data: {
+      progress: (task.data.completedItems / task.data.totalItems) * 100,
+      processedItems: task.data.completedItems,
+      totalItems: task.data.totalItems,
+      numberComplete: task.data.completedItems,
+      numberTotal: task.data.totalItems,
+      eta: task.data.startedAt,
+      elapsedTime: task.data.completedAt
+    }
   }
-})
+}
 
 export default function ScoringJobTask({ 
   variant = "grid",
@@ -83,8 +69,8 @@ export default function ScoringJobTask({
   onToggleFullWidth,
   onClose
 }: ScoringJobTaskProps) {
-  const transformedTask = transformScoringJobData(task)
-  const statusDisplay = getStatusDisplay(task.data.status)
+  const data = task.data ?? {} as ScoringJobTaskData
+  const statusDisplay = getStatusDisplay(data.status)
 
   const visualization = (
     <div className="flex flex-col h-full">
@@ -102,33 +88,33 @@ export default function ScoringJobTask({
             {statusDisplay.text}
           </Badge>
         </div>
-        {task.data.errorMessage && (
+        {data.errorMessage && (
           <div className="mt-2 text-sm text-destructive whitespace-pre-wrap">
-            Error: {task.data.errorMessage}
+            Error: {data.errorMessage}
           </div>
         )}
       </div>
       <div className="flex-1" />
       <ProgressBar 
-        progress={(task.data.completedItems / task.data.totalItems) * 100}
-        processedItems={task.data.completedItems}
-        totalItems={task.data.totalItems}
+        progress={(data.completedItems / data.totalItems) * 100}
+        processedItems={data.completedItems}
+        totalItems={data.totalItems}
         color="secondary"
       />
       
-      {variant === 'detail' && task.data.batchJobs && (
+      {variant === 'detail' && data.batchJobs && (
         <div className="mt-8">
           <div className="text-sm text-muted-foreground tracking-wider mb-2">
             Batch jobs
           </div>
           <hr className="mb-4 border-border" />
           <div className="space-y-2">
-            {task.data.batchJobs.map((batchJob) => (
+            {data.batchJobs.map((batchJob) => (
               <BatchJobTask
                 key={batchJob.id}
                 variant="nested"
                 task={{
-                  id: parseInt(batchJob.id),
+                  id: batchJob.id,
                   type: 'Batch Job',
                   scorecard: task.scorecard,
                   score: task.score,
@@ -147,7 +133,13 @@ export default function ScoringJobTask({
   return (
     <Task
       variant={variant}
-      task={transformedTask}
+      task={{
+        ...task,
+        data: {
+          ...data,
+          progress: (data.completedItems / data.totalItems) * 100
+        }
+      }}
       onClick={onClick}
       controlButtons={controlButtons}
       isFullWidth={isFullWidth}

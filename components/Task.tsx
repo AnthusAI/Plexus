@@ -4,55 +4,35 @@ import { Button } from '@/components/ui/button'
 import { Square, Columns2, X } from 'lucide-react'
 import { formatTimeAgo } from '@/utils/format-time'
 
-export interface BaseTaskProps {
+export interface BaseTaskProps<TData = unknown> {
   variant: 'grid' | 'detail' | 'nested'
   task: {
-    id: number
+    id: string
     type: string
     scorecard: string
     score: string
     time: string
     summary: string
     description?: string
-    data?: {
-      eta?: string | null
-      numberComplete?: number | null
-      numberTrue?: number | null
-      numberFalse?: number | null
-      numberTotal?: number | null
-      accuracy?: number | null
-      f1Score?: number | null
-      progress?: number | null
-      elapsedTime?: string | null
-      processedItems?: number | null
-      totalItems?: number | null
-      estimatedTimeRemaining?: string | null
-      before?: {
-        innerRing: Array<{ value: number }>
-      }
-      after?: {
-        innerRing: Array<{ value: number }>
-      }
-    }
+    data?: TData
   }
   onClick?: () => void
-  customSummary?: React.ReactNode
   controlButtons?: React.ReactNode
   isFullWidth?: boolean
   onToggleFullWidth?: () => void
   onClose?: () => void
 }
 
-interface TaskChildProps extends BaseTaskProps {
+interface TaskChildProps<TData = unknown> extends BaseTaskProps<TData> {
   children?: React.ReactNode
 }
 
-export interface TaskComponentProps extends BaseTaskProps {
-  renderHeader: (props: TaskChildProps) => React.ReactNode
-  renderContent: (props: TaskChildProps) => React.ReactNode
+export interface TaskComponentProps<TData = unknown> extends BaseTaskProps<TData> {
+  renderHeader: (props: TaskChildProps<TData>) => React.ReactNode
+  renderContent: (props: TaskChildProps<TData>) => React.ReactNode
 }
 
-const Task: React.FC<TaskComponentProps> = ({ 
+const Task = <TData = unknown>({ 
   variant, 
   task, 
   onClick, 
@@ -62,8 +42,8 @@ const Task: React.FC<TaskComponentProps> = ({
   isFullWidth,
   onToggleFullWidth,
   onClose
-}) => {
-  const childProps: TaskChildProps = {
+}: TaskComponentProps<TData>) => {
+  const childProps: TaskChildProps<TData> = {
     variant,
     task,
     controlButtons,
@@ -93,7 +73,7 @@ const Task: React.FC<TaskComponentProps> = ({
   )
 }
 
-const TaskHeader: React.FC<TaskChildProps> = ({ 
+const TaskHeader = <TData = unknown>({ 
   task, 
   variant, 
   children, 
@@ -101,7 +81,7 @@ const TaskHeader: React.FC<TaskChildProps> = ({
   isFullWidth,
   onToggleFullWidth,
   onClose 
-}) => {
+}: TaskChildProps<TData>) => {
   // Format time based on variant
   const formattedTime = formatTimeAgo(task.time, variant === 'grid')
 
@@ -155,10 +135,16 @@ const TaskHeader: React.FC<TaskChildProps> = ({
   )
 }
 
-const TaskContent: React.FC<TaskChildProps & {
+const TaskContent = <TData = unknown>({ 
+  task, 
+  variant, 
+  children, 
+  visualization, 
+  customSummary 
+}: TaskChildProps<TData> & {
   visualization?: React.ReactNode,
   customSummary?: React.ReactNode
-}> = ({ task, variant, children, visualization, customSummary }) => (
+}) => (
   <CardContent className="p-4 pt-0 pb-4 flex flex-col flex-1">
     <div className="flex flex-col h-full">
       <div className="space-y-1 w-full">

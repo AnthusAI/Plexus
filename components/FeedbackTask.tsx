@@ -11,11 +11,7 @@ interface FeedbackTaskData {
   estimatedTimeRemaining?: string
 }
 
-interface FeedbackTaskProps extends Omit<BaseTaskProps, 'task'> {
-  task: BaseTaskProps['task'] & {
-    data?: FeedbackTaskData
-  }
-}
+interface FeedbackTaskProps extends BaseTaskProps<FeedbackTaskData> {}
 
 const FeedbackTask: React.FC<FeedbackTaskProps> = ({
   variant,

@@ -5,7 +5,7 @@ import MetricsGauges from '@/components/MetricsGauges'
 import { ProgressBar } from "@/components/ui/progress-bar"
 import { ResponsiveWaffle } from '@nivo/waffle'
 import { ConfusionMatrix } from '@/components/confusion-matrix'
-import { formatDuration, intervalToDuration, formatDistanceToNow } from 'date-fns'
+import { formatDuration, intervalToDuration } from 'date-fns'
 
 export interface ExperimentTaskData {
   accuracy: number | null
@@ -30,24 +30,7 @@ export interface ExperimentTaskData {
   }
 }
 
-export type ExperimentTaskProps = {
-  variant?: 'grid' | 'detail'
-  task: {
-    id: string
-    type?: string
-    scorecard: string
-    score: string
-    time: string
-    summary: string
-    description?: string
-    data: ExperimentTaskData
-  }
-  onClick?: () => void
-  controlButtons?: React.ReactNode
-  isFullWidth?: boolean
-  onToggleFullWidth?: () => void
-  onClose?: () => void
-}
+export interface ExperimentTaskProps extends BaseTaskProps<ExperimentTaskData> {}
 
 function computeExperimentType(data: ExperimentTaskData): string {
   if (data.errorMessage || data.errorDetails) {
@@ -82,17 +65,10 @@ export default function ExperimentTask({
   onToggleFullWidth,
   onClose
 }: ExperimentTaskProps) {
-  console.log('ExperimentTask render with task:', task);
-  const data = task.data
+  const data = task.data ?? {} as ExperimentTaskData
   const computedType = computeExperimentType(data)
   const waffleContainerRef = useRef<HTMLDivElement>(null)
   const [waffleHeight, setWaffleHeight] = useState(20)
-
-  // Force re-render when task data changes
-  const [, forceUpdate] = useState({})
-  useEffect(() => {
-    forceUpdate({})
-  }, [task, task.data])
 
   useEffect(() => {
     const updateWaffleHeight = () => {
@@ -106,23 +82,6 @@ export default function ExperimentTask({
     window.addEventListener('resize', updateWaffleHeight)
     return () => window.removeEventListener('resize', updateWaffleHeight)
   }, [])
-
-  const getElapsedTime = () => {
-    if (!data.startedAt) return "00:00:00"
-    const start = new Date(data.startedAt)
-    const now = new Date()
-    const duration = intervalToDuration({ start, end: now })
-    return formatDuration(duration, { format: ['hours', 'minutes', 'seconds'] })
-  }
-
-  const getEstimatedTimeRemaining = () => {
-    if (!data.estimatedEndAt) return "00:00:00"
-    const now = new Date()
-    const end = new Date(data.estimatedEndAt)
-    if (end < now) return "00:00:00"
-    const duration = intervalToDuration({ start: now, end })
-    return formatDuration(duration, { format: ['hours', 'minutes', 'seconds'] })
-  }
 
   const metrics = variant === 'detail' ? [
     {
@@ -153,9 +112,12 @@ export default function ExperimentTask({
     }
   ]
 
+  // Convert variant to MetricsGauges variant
+  const metricsVariant = variant === 'nested' ? 'detail' : variant
+
   const visualization = variant === 'detail' ? (
     <div className="w-full">
-      <MetricsGauges gauges={metrics} variant={variant} />
+      <MetricsGauges gauges={metrics} variant={metricsVariant} />
       <div className="mt-4">
         <ProgressBar 
           progress={data.progress}
@@ -229,7 +191,7 @@ export default function ExperimentTask({
     </div>
   ) : (
     <div className="w-full">
-      <MetricsGauges gauges={metrics} variant={variant} />
+      <MetricsGauges gauges={metrics} variant={metricsVariant} />
       <div className="mt-4">
         <ProgressBar 
           progress={data.progress}
@@ -263,8 +225,7 @@ export default function ExperimentTask({
         </TaskHeader>
       )}
       renderContent={(props) => (
-        <TaskContent {...props} visualization={visualization}>
-        </TaskContent>
+        <TaskContent {...props} visualization={visualization} />
       )}
     />
   )

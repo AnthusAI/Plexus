@@ -5,24 +5,26 @@ import BeforeAfterGauges from './BeforeAfterGauges'
 import { ProgressBar } from '@/components/ui/progress-bar'
 
 interface OptimizationTaskData {
-  progress?: number
-  elapsedTime?: string
-  numberComplete?: number
-  numberTotal?: number
-  eta?: string
-  before?: {
-    innerRing: Array<{ value: number }>
+  progress: number
+  accuracy: number
+  elapsedTime: string
+  estimatedTimeRemaining: string
+  processedItems: number
+  totalItems: number
+  numberComplete: number
+  numberTotal: number
+  eta: string
+  before: {
+    outerRing: Array<{ category: string; value: number; fill: string }>
+    innerRing: Array<{ category: string; value: number; fill: string }>
   }
-  after?: {
-    innerRing: Array<{ value: number }>
+  after: {
+    outerRing: Array<{ category: string; value: number; fill: string }>
+    innerRing: Array<{ category: string; value: number; fill: string }>
   }
 }
 
-interface OptimizationTaskProps extends Omit<BaseTaskProps, 'task'> {
-  task: BaseTaskProps['task'] & {
-    data?: OptimizationTaskData
-  }
-}
+interface OptimizationTaskProps extends BaseTaskProps<OptimizationTaskData> {}
 
 const OptimizationTask: React.FC<OptimizationTaskProps> = ({ 
   variant, 

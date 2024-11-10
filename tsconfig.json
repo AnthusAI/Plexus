@@ -1,9 +1,10 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "target": "esnext",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
+    "types": ["node", "react", "react-dom", "next"],
     "strict": true,
     "noEmit": true,
     "esModuleInterop": true,
@@ -12,7 +13,6 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
-    "incremental": true,
     "plugins": [
       {
         "name": "next"
@@ -20,8 +20,16 @@
     ],
     "paths": {
       "@/*": ["./*"]
-    }
+    },
+    "incremental": true,
+    "tsBuildInfoFile": ".tsbuildinfo",
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "amplify"]
+  "exclude": [
+    "node_modules",
+    "amplify",
+    ".next",
+    "**/*.stories.tsx",
+    "**/*.test.tsx"
+  ]
 }
