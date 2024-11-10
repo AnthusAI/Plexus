@@ -67,14 +67,14 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
         description: ''
       }
     }),
-    scorecard: {
+    scorecard: async () => ({
       data: rawExperiment.scorecard ? {
         id: rawExperiment.scorecard.id,
         name: rawExperiment.scorecard.name,
         key: rawExperiment.scorecard.key,
         description: rawExperiment.scorecard.description,
       } : null
-    },
+    }),
     score: async () => ({
       data: rawExperiment.score ? {
         ...rawExperiment.score,
@@ -339,8 +339,13 @@ export default function ExperimentsDashboard() {
   useEffect(() => {
     if (selectedExperiment?.scorecard) {
       const fetchScorecardName = async () => {
-        const result = await selectedExperiment.scorecard?.()
-        setScorecardName(result?.data?.name ?? 'Unknown Scorecard')
+        try {
+          const result = await selectedExperiment.scorecard()
+          setScorecardName(result?.data?.name ?? 'Unknown Scorecard')
+        } catch (error) {
+          console.error('Error fetching scorecard name:', error)
+          setScorecardName('Unknown Scorecard')
+        }
       }
       fetchScorecardName()
     }
