@@ -15,12 +15,6 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   onToggleFullWidth,
   onClose
 }) => {
-  const visualization = (
-    <div className="flex items-center justify-center h-[120px] w-[120px]">
-      <FileText className="h-6 w-6 text-primary" />
-    </div>
-  )
-
   return (
     <Task 
       variant={variant} 
@@ -38,10 +32,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         </TaskHeader>
       )}
       renderContent={(props) => (
-        <TaskContent 
-          {...props} 
-          visualization={visualization}
-        >
+        <TaskContent {...props}>
           {/* Additional content can be added here if needed */}
         </TaskContent>
       )}
