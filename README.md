@@ -256,11 +256,43 @@ This library is licensed under the MIT-0 License. See the LICENSE file.
 
 ## TypeScript Performance Troubleshooting
 
-If TypeScript type-checking suddenly becomes very slow (minutes instead of seconds), it's likely due to type complexity explosion. Here are the key metrics to check and how to fix them:
+If TypeScript type-checking suddenly becomes very slow (minutes instead of seconds), it's likely due to type complexity explosion. Here are the patterns that cause slowdowns:
 
-### Diagnosing the Problem
+### What Makes Type Checking Slow
 
-Run TypeScript with diagnostics to see detailed performance metrics:
-```bash
-npx tsc --noEm
-```
+1. Changing interface inheritance relationships
+   - Modifying which interfaces extend other interfaces
+   - Changing the inheritance chain
+   - Adding new type parameters to inherited interfaces
+
+2. Adding type assertions or complex type conversions
+   - Using `as` to convert between types
+   - Adding runtime type checks that affect type inference
+   - Complex conditional types
+
+3. Adding conditional type logic
+   - Making properties conditionally optional/required
+   - Using complex union or intersection types
+   - Nested conditional types
+
+### How to Keep Type Checking Fast
+
+1. Keep existing type relationships stable
+   - Don't modify interface inheritance
+   - Don't change how types extend each other
+   - Fix issues at the value level when possible
+
+2. Keep type definitions simple and flat
+   - Avoid deep nesting of types
+   - Avoid complex conditional types
+   - Use simple unions and intersections
+
+3. Make minimal changes to type definitions
+   - Fix runtime behavior instead of type behavior when possible
+   - Keep type assertions to a minimum
+   - Use explicit types instead of complex inference
+
+4. Monitor type-checking performance
+   - Run `npx tsc --noEmit --pretty --diagnostics` to check performance
+   - Watch for sudden increases in checking time
+   - Revert changes that cause significant slowdowns
