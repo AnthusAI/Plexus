@@ -116,6 +116,7 @@ export default function ExperimentsDashboard() {
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
   const [scorecardName, setScorecardName] = useState('Unknown Scorecard')
+  const [scorecardNames, setScorecardNames] = useState<Record<string, string>>({})
 
   // Update ref when selectedExperiment changes
   useEffect(() => {
@@ -337,19 +338,28 @@ export default function ExperimentsDashboard() {
   })
 
   useEffect(() => {
-    if (selectedExperiment?.scorecard) {
-      const fetchScorecardName = async () => {
-        try {
-          const result = await selectedExperiment.scorecard()
-          setScorecardName(result?.data?.name ?? 'Unknown Scorecard')
-        } catch (error) {
-          console.error('Error fetching scorecard name:', error)
-          setScorecardName('Unknown Scorecard')
+    const fetchScorecardNames = async () => {
+      const newScorecardNames: Record<string, string> = {}
+      
+      await Promise.all(experiments.map(async (experiment) => {
+        if (experiment.scorecard) {
+          try {
+            const result = await experiment.scorecard()
+            if (result?.data?.name) {
+              newScorecardNames[experiment.id] = result.data.name
+            }
+          } catch (error) {
+            console.error('Error fetching scorecard name:', error)
+            newScorecardNames[experiment.id] = 'Unknown Scorecard'
+          }
         }
-      }
-      fetchScorecardName()
+      }))
+      
+      setScorecardNames(newScorecardNames)
     }
-  }, [selectedExperiment?.scorecard])
+
+    fetchScorecardNames()
+  }, [experiments]) // Depend on experiments array
 
   if (isLoading) {
     return <div>Loading experiments...</div>
@@ -421,7 +431,7 @@ export default function ExperimentsDashboard() {
                             {/* Left column */}
                             <div className="space-y-1">
                               <div className="font-semibold">
-                                {scorecardName}
+                                {scorecardNames[experiment.id] || 'Unknown Scorecard'}
                               </div>
                               <div className="text-sm text-muted-foreground">
                                 {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
@@ -455,7 +465,7 @@ export default function ExperimentsDashboard() {
                         {/* Wide variant - visible at 630px and above */}
                         <div className="hidden @[630px]:block">
                           <div className="font-semibold">
-                            {scorecardName}
+                            {scorecardNames[experiment.id] || 'Unknown Scorecard'}
                           </div>
                           <div className="text-sm text-muted-foreground">
                             {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
