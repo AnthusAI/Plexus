@@ -1,21 +1,12 @@
 import { BaseTaskData, BaseActivity, ActivityType } from './base'
-import { RingData, TaskStatus, TaskProgress } from './shared'
+import { RingData, TaskStatus } from './shared'
 
 // Task Data Types
-export interface AlertTaskData extends BaseTaskData {
+export type AlertTaskData = BaseTaskData & {
   iconType: 'warning' | 'info' | 'siren'
 }
 
-export interface RelatedBatchJob extends BaseTaskData {
-  provider: string
-  type: string
-  status: string
-  totalRequests: number
-  completedRequests: number
-  failedRequests: number
-}
-
-export interface BatchJobTaskData extends BaseTaskData {
+export type BatchJobTaskData = BaseTaskData & {
   provider: string
   type: string
   status: string
@@ -25,10 +16,10 @@ export interface BatchJobTaskData extends BaseTaskData {
   startedAt?: string
   completedAt?: string
   errorMessage?: string
-  batchJobs?: RelatedBatchJob[]
+  batchJobs?: BatchJobTaskData[]
 }
 
-export interface ExperimentTaskData extends BaseTaskData {
+export type ExperimentTaskData = BaseTaskData & {
   accuracy: number | null
   sensitivity: number | null
   specificity: number | null
@@ -51,7 +42,7 @@ export interface ExperimentTaskData extends BaseTaskData {
   }
 }
 
-export interface FeedbackTaskData extends BaseTaskData {
+export type FeedbackTaskData = BaseTaskData & {
   progress: number
   processedItems: number
   totalItems: number
@@ -59,7 +50,7 @@ export interface FeedbackTaskData extends BaseTaskData {
   estimatedTimeRemaining: string
 }
 
-export interface OptimizationTaskData extends BaseTaskData {
+export type OptimizationTaskData = BaseTaskData & {
   progress: number
   accuracy: number
   numberComplete: number
@@ -73,16 +64,16 @@ export interface OptimizationTaskData extends BaseTaskData {
   after: RingData
 }
 
-export interface ReportTaskData extends BaseTaskData {
+export type ReportTaskData = BaseTaskData & {
   // Report-specific fields can be added here
 }
 
-export interface ScoreUpdatedTaskData extends BaseTaskData {
+export type ScoreUpdatedTaskData = BaseTaskData & {
   before: RingData
   after: RingData
 }
 
-export interface ScoringJobTaskData extends BaseTaskData {
+export type ScoringJobTaskData = BaseTaskData & {
   status: string
   startedAt?: string
   completedAt?: string
@@ -90,47 +81,47 @@ export interface ScoringJobTaskData extends BaseTaskData {
   scorecardName?: string
   totalItems: number
   completedItems: number
-  batchJobs?: RelatedBatchJob[]
+  batchJobs?: BatchJobTaskData[]
 }
 
-// Activity Types - each includes the common fields from BaseActivity
-export interface AlertActivity extends BaseActivity {
-  type: Extract<ActivityType, 'Alert'>
+// Activity Types
+export type AlertActivity = BaseActivity & {
+  type: 'Alert'
   data: AlertTaskData
 }
 
-export interface BatchJobActivity extends BaseActivity {
-  type: Extract<ActivityType, 'Batch Job'>
+export type BatchJobActivity = BaseActivity & {
+  type: 'Batch Job'
   data: BatchJobTaskData
 }
 
-export interface ExperimentActivity extends BaseActivity {
-  type: Extract<ActivityType, 'Experiment started' | 'Experiment completed'>
+export type ExperimentActivity = BaseActivity & {
+  type: 'Experiment started' | 'Experiment completed'
   data: ExperimentTaskData
 }
 
-export interface FeedbackActivity extends BaseActivity {
-  type: Extract<ActivityType, 'Feedback queue started' | 'Feedback queue completed'>
+export type FeedbackActivity = BaseActivity & {
+  type: 'Feedback queue started' | 'Feedback queue completed'
   data: FeedbackTaskData
 }
 
-export interface OptimizationActivity extends BaseActivity {
-  type: Extract<ActivityType, 'Optimization started'>
+export type OptimizationActivity = BaseActivity & {
+  type: 'Optimization started'
   data: OptimizationTaskData
 }
 
-export interface ReportActivity extends BaseActivity {
-  type: Extract<ActivityType, 'Report'>
+export type ReportActivity = BaseActivity & {
+  type: 'Report'
   data: ReportTaskData
 }
 
-export interface ScoreUpdatedActivity extends BaseActivity {
-  type: Extract<ActivityType, 'Score updated'>
+export type ScoreUpdatedActivity = BaseActivity & {
+  type: 'Score updated'
   data: ScoreUpdatedTaskData
 }
 
-export interface ScoringJobActivity extends BaseActivity {
-  type: Extract<ActivityType, 'Scoring Job'>
+export type ScoringJobActivity = BaseActivity & {
+  type: 'Scoring Job'
   data: ScoringJobTaskData
 }
 
@@ -151,4 +142,50 @@ export const isExperimentActivity = (
     activity.type === 'Experiment started' ||
     activity.type === 'Experiment completed'
   )
+}
+
+// Add this to the exports
+export type RelatedBatchJob = BaseTaskData & {
+  provider: string
+  type: string
+  status: string
+  totalRequests: number
+  completedRequests: number
+  failedRequests: number
+}
+
+// Add this to the existing types in tasks.ts
+export interface FeedbackItem {
+  id: number
+  scorecard: string
+  score: number
+  date: string
+  status: string
+  results: number
+  inferences: number
+  cost: string
+  sampleMetadata: Array<{ key: string; value: string }>
+  sampleTranscript: Array<{ speaker: string; text: string }>
+  sampleScoreResults: Array<{
+    section: string
+    scores: Array<{
+      name: string
+      value: string
+      explanation: string
+      isAnnotated: boolean
+      allowFeedback: boolean
+      annotations: Array<{
+        value: string
+        explanation: string
+        annotation?: string
+        timestamp: string
+        user?: {
+          name: string
+          initials: string
+        }
+        isSystem?: boolean
+        isThumbsUp?: boolean
+      }>
+    }>
+  }>
 }

@@ -716,6 +716,8 @@ export default function ActivityDashboard() {
                           variant="grid"
                           task={activity}
                           onClick={() => setSelectedActivity(activity)}
+                          onToggleFullWidth={() => {}}
+                          onClose={() => {}}
                         />
                       ) : null
                     case 'Alert':
@@ -730,6 +732,8 @@ export default function ActivityDashboard() {
                             }
                           }}
                           onClick={() => setSelectedActivity(activity)}
+                          onToggleFullWidth={() => {}}
+                          onClose={() => {}}
                         />
                       )
                     case 'Report':
@@ -738,6 +742,8 @@ export default function ActivityDashboard() {
                           variant="grid"
                           task={activity}
                           onClick={() => setSelectedActivity(activity)}
+                          onToggleFullWidth={() => {}}
+                          onClose={() => {}}
                         />
                       )
                     case 'Optimization started':
@@ -762,6 +768,8 @@ export default function ActivityDashboard() {
                             }
                           }}
                           onClick={() => setSelectedActivity(activity)}
+                          onToggleFullWidth={() => {}}
+                          onClose={() => {}}
                         />
                       )
                     case 'Feedback queue started':
@@ -771,6 +779,8 @@ export default function ActivityDashboard() {
                           variant="grid"
                           task={activity}
                           onClick={() => setSelectedActivity(activity)}
+                          onToggleFullWidth={() => {}}
+                          onClose={() => {}}
                         />
                       )
                     case 'Score updated':
@@ -779,6 +789,8 @@ export default function ActivityDashboard() {
                           variant="grid" 
                           task={activity}
                           onClick={() => setSelectedActivity(activity)}
+                          onToggleFullWidth={() => {}}
+                          onClose={() => {}}
                         />
                       )
                     default:

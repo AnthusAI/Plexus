@@ -28,8 +28,21 @@ interface Score {
   }>
 }
 
+interface FeedbackItem {
+  scorecard: string
+  inferences: string
+  results: string
+  cost: string
+  status: string
+  date: string
+  sampleMetadata: any[]
+  sampleTranscript: any[]
+  sampleScoreResults: any[]
+}
+
 interface ItemDetailProps {
-  item: any
+  item: FeedbackItem
+  controlButtons?: React.ReactNode
   getBadgeVariant: (status: string) => string
   getRelativeTime: (dateString: string | undefined) => string
   isMetadataExpanded: boolean
@@ -60,6 +73,7 @@ interface ItemDetailProps {
 
 const ItemDetail: React.FC<ItemDetailProps> = ({
   item,
+  controlButtons,
   getBadgeVariant,
   getRelativeTime,
   isMetadataExpanded,

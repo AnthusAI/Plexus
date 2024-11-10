@@ -118,7 +118,7 @@ export default function ExperimentTask({
   ]
 
   // Convert variant to MetricsGauges variant
-  const metricsVariant = variant === 'nested' ? 'detail' : variant
+  const metricsVariant = variant || 'detail'
 
   const visualization = variant === 'detail' ? (
     <div className="w-full">
@@ -229,11 +229,11 @@ export default function ExperimentTask({
               <div className="flex items-center space-x-2">
                 <CardButton
                   icon={Square}
-                  onClick={onToggleFullWidth}
+                  onClick={onToggleFullWidth as () => void}
                 />
                 <CardButton
                   icon={X}
-                  onClick={onClose}
+                  onClick={onClose as () => void}
                 />
               </div>
             ) : (

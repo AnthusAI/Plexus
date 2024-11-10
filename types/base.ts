@@ -18,14 +18,15 @@ export type ActivityType =
   | 'Score updated'
   | 'Scoring Job'
 
-export interface BaseActivity {
+// Simplified base activity type
+export type BaseActivity = {
   id: string
   timestamp: string
   type: ActivityType
-  data: BaseTaskData
   scorecard: string
   score: string
   time: string
   summary: string
   description?: string
+  data: BaseTaskData
 }

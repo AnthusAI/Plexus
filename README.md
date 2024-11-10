@@ -253,3 +253,14 @@ print("Continuing with other work...")
 ## License
 
 This library is licensed under the MIT-0 License. See the LICENSE file.
+
+## TypeScript Performance Troubleshooting
+
+If TypeScript type-checking suddenly becomes very slow (minutes instead of seconds), it's likely due to type complexity explosion. Here are the key metrics to check and how to fix them:
+
+### Diagnosing the Problem
+
+Run TypeScript with diagnostics to see detailed performance metrics:
+```bash
+npx tsc --noEm
+```
