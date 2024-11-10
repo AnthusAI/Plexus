@@ -63,13 +63,15 @@ const sampleScoreResults = [
             user: {
               name: "Ryan Porter",
               initials: "RP"
-            }
+            },
+            isThumbsUp: true
           },
           {
             value: "Yes",
             explanation: "Profanity was detected during the call...",
             timestamp: relativeDate(0, 0, 10),
-            isSystem: true
+            isSystem: true,
+            isThumbsUp: false
           }
         ]
       },
@@ -86,18 +88,44 @@ const scorecardScoreCounts = {
   "SelectQuote Term Life v1": 42,
 };
 
-// First, let's define an interface for the feedback item
+// Update the FeedbackItem interface to match actual data structure
 interface FeedbackItem {
-  id: number;
-  scorecard: string;
-  score: number;
-  date: string;
-  status: string;
-  hasFeedback: boolean;
-  scoreCount: number;
-  scoreResults?: typeof sampleScoreResults;  // Make this optional
-  metadata?: Array<{ key: string; value: string }>;  // Add this line
-  lastUpdated: string;
+  id: number
+  scorecard: string
+  score: number
+  date: string
+  status: string
+  hasFeedback: boolean
+  scoreCount: number
+  lastUpdated: string
+  inferences: string
+  results: string
+  cost: string
+  sampleMetadata: any[]
+  sampleTranscript: any[]
+  sampleScoreResults: any[]
+  scoreResults?: {
+    section: string
+    scores: Array<{
+      name: string
+      value: string
+      explanation: string
+      isAnnotated: boolean
+      allowFeedback: boolean
+      annotations: Array<{
+        value: string
+        explanation: string
+        annotation?: string
+        timestamp: string
+        user?: {
+          name: string
+          initials: string
+        }
+        isSystem?: boolean
+        isThumbsUp?: boolean
+      }>
+    }>
+  }[]
 }
 
 // First, let's create a function to generate score results based on the item's status
@@ -110,7 +138,7 @@ const getScoreResults = (status: string) => {
           { 
             name: "Profanity", 
             value: "No", 
-            explanation: "No profanity was detected during the call. Both the agent and the customer maintained professional and respectful language throughout the entire conversation.",
+            explanation: "No profanity was detected during the call...",
             isAnnotated: false,
             allowFeedback: true,
             annotations: []
@@ -125,36 +153,36 @@ const getScoreResults = (status: string) => {
 
 // Now, let's update the initialFeedbackItems declaration
 const initialFeedbackItems: FeedbackItem[] = [
-  { id: 30, scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "New", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: "", scoreResults: getScoreResults("New") },
-  { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "New", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: "", scoreResults: getScoreResults("New") },
-  { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "New", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: "", scoreResults: getScoreResults("New") },
-  { id: 27, scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), status: "In Review...", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(0, 0, 0), scoreResults: getScoreResults("In Review...") },
-  { id: 26, scorecard: "SelectQuote Term Life v1", score: 83, date: relativeDate(0, 1, 30), status: "In Review...", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(0, 1, 0), scoreResults: getScoreResults("In Review...") },
-  { id: 25, scorecard: "AW IB Sales", score: 94, date: relativeDate(0, 2, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: relativeDate(0, 1, 30), scoreResults: getScoreResults("Done") },
-  { id: 24, scorecard: "CS3 Audigy", score: 86, date: relativeDate(0, 3, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: relativeDate(0, 2, 30), scoreResults: getScoreResults("Done") },
-  { id: 23, scorecard: "CS3 Services v2", score: 79, date: relativeDate(0, 4, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: relativeDate(0, 3, 30), scoreResults: getScoreResults("Done") },
-  { id: 22, scorecard: "CS3 Nexstar v1", score: 91, date: relativeDate(0, 5, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(0, 4, 30), scoreResults: getScoreResults("Done") },
-  { id: 21, scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(0, 6, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(0, 5, 30), scoreResults: getScoreResults("Done") },
-  { id: 20, scorecard: "CS3 Services v2", score: 82, date: relativeDate(1, 0, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: relativeDate(0, 23, 30), scoreResults: getScoreResults("Done") },
-  { id: 19, scorecard: "AW IB Sales", score: 93, date: relativeDate(1, 2, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: relativeDate(1, 1, 30), scoreResults: getScoreResults("Done") },
-  { id: 18, scorecard: "CS3 Audigy", score: 87, date: relativeDate(1, 4, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: relativeDate(1, 3, 30), scoreResults: getScoreResults("Done") },
-  { id: 17, scorecard: "SelectQuote Term Life v1", score: 85, date: relativeDate(1, 6, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(1, 5, 30), scoreResults: getScoreResults("Done") },
-  { id: 16, scorecard: "CS3 Nexstar v1", score: 90, date: relativeDate(1, 8, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(1, 7, 30), scoreResults: getScoreResults("Done") },
-  { id: 15, scorecard: "CS3 Services v2", score: 81, date: relativeDate(1, 10, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: relativeDate(1, 9, 30), scoreResults: getScoreResults("Done") },
-  { id: 14, scorecard: "AW IB Sales", score: 95, date: relativeDate(1, 12, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: relativeDate(1, 11, 30), scoreResults: getScoreResults("Done") },
-  { id: 13, scorecard: "CS3 Audigy", score: 88, date: relativeDate(1, 14, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: relativeDate(1, 13, 30), scoreResults: getScoreResults("Done") },
-  { id: 12, scorecard: "SelectQuote Term Life v1", score: 84, date: relativeDate(1, 16, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(1, 15, 30), scoreResults: getScoreResults("Done") },
-  { id: 11, scorecard: "CS3 Nexstar v1", score: 92, date: relativeDate(1, 18, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(1, 17, 30), scoreResults: getScoreResults("Done") },
-  { id: 10, scorecard: "CS3 Services v2", score: 83, date: relativeDate(1, 20, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: relativeDate(1, 19, 30), scoreResults: getScoreResults("Done") },
-  { id: 9, scorecard: "AW IB Sales", score: 97, date: relativeDate(1, 22, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: relativeDate(1, 21, 30), scoreResults: getScoreResults("Done") },
-  { id: 8, scorecard: "CS3 Audigy", score: 89, date: relativeDate(2, 0, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: relativeDate(1, 23, 30), scoreResults: getScoreResults("Done") },
-  { id: 7, scorecard: "SelectQuote Term Life v1", score: 86, date: relativeDate(2, 2, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(2, 1, 30), scoreResults: getScoreResults("Done") },
-  { id: 6, scorecard: "CS3 Nexstar v1", score: 93, date: relativeDate(2, 4, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(2, 3, 30), scoreResults: getScoreResults("Done") },
-  { id: 5, scorecard: "CS3 Services v2", score: 84, date: relativeDate(2, 6, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: relativeDate(2, 5, 30), scoreResults: getScoreResults("Done") },
-  { id: 4, scorecard: "AW IB Sales", score: 98, date: relativeDate(2, 8, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: relativeDate(2, 7, 30), scoreResults: getScoreResults("Done") },
-  { id: 3, scorecard: "CS3 Audigy", score: 90, date: relativeDate(2, 10, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: relativeDate(2, 9, 30), scoreResults: getScoreResults("Done") },
-  { id: 2, scorecard: "SelectQuote Term Life v1", score: 87, date: relativeDate(2, 12, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(2, 11, 30), scoreResults: getScoreResults("Done") },
-  { id: 1, scorecard: "CS3 Nexstar v1", score: 94, date: relativeDate(2, 14, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(2, 13, 30), scoreResults: getScoreResults("Done") },
+  { id: 30, scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "New", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: "", inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("New") },
+  { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "New", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: "", inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("New") },
+  { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "New", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: "", inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("New") },
+  { id: 27, scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), status: "In Review...", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(0, 0, 0), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("In Review...") },
+  { id: 26, scorecard: "SelectQuote Term Life v1", score: 83, date: relativeDate(0, 1, 30), status: "In Review...", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(0, 1, 0), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("In Review...") },
+  { id: 25, scorecard: "AW IB Sales", score: 94, date: relativeDate(0, 2, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: relativeDate(0, 1, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 24, scorecard: "CS3 Audigy", score: 86, date: relativeDate(0, 3, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: relativeDate(0, 2, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 23, scorecard: "CS3 Services v2", score: 79, date: relativeDate(0, 4, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: relativeDate(0, 3, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 22, scorecard: "CS3 Nexstar v1", score: 91, date: relativeDate(0, 5, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(0, 4, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 21, scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(0, 6, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(0, 5, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 20, scorecard: "CS3 Services v2", score: 82, date: relativeDate(1, 0, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: relativeDate(0, 23, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 19, scorecard: "AW IB Sales", score: 93, date: relativeDate(1, 2, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: relativeDate(1, 1, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 18, scorecard: "CS3 Audigy", score: 87, date: relativeDate(1, 4, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: relativeDate(1, 3, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 17, scorecard: "SelectQuote Term Life v1", score: 85, date: relativeDate(1, 6, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(1, 5, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 16, scorecard: "CS3 Nexstar v1", score: 90, date: relativeDate(1, 8, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(1, 7, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 15, scorecard: "CS3 Services v2", score: 81, date: relativeDate(1, 10, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: relativeDate(1, 9, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 14, scorecard: "AW IB Sales", score: 95, date: relativeDate(1, 12, 0), status: "Done", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: relativeDate(1, 11, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 13, scorecard: "CS3 Audigy", score: 88, date: relativeDate(1, 14, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: relativeDate(1, 13, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 12, scorecard: "SelectQuote Term Life v1", score: 84, date: relativeDate(1, 16, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(1, 15, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 11, scorecard: "CS3 Nexstar v1", score: 92, date: relativeDate(1, 18, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(1, 17, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 10, scorecard: "CS3 Services v2", score: 83, date: relativeDate(1, 20, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: relativeDate(1, 19, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 9, scorecard: "AW IB Sales", score: 97, date: relativeDate(1, 22, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: relativeDate(1, 21, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 8, scorecard: "CS3 Audigy", score: 89, date: relativeDate(2, 0, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: relativeDate(1, 23, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 7, scorecard: "SelectQuote Term Life v1", score: 86, date: relativeDate(2, 2, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(2, 1, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 6, scorecard: "CS3 Nexstar v1", score: 93, date: relativeDate(2, 4, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(2, 3, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 5, scorecard: "CS3 Services v2", score: 84, date: relativeDate(2, 6, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: relativeDate(2, 5, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 4, scorecard: "AW IB Sales", score: 98, date: relativeDate(2, 8, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: relativeDate(2, 7, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 3, scorecard: "CS3 Audigy", score: 90, date: relativeDate(2, 10, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: relativeDate(2, 9, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 2, scorecard: "SelectQuote Term Life v1", score: 87, date: relativeDate(2, 12, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["SelectQuote Term Life v1"], lastUpdated: relativeDate(2, 11, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
+  { id: 1, scorecard: "CS3 Nexstar v1", score: 94, date: relativeDate(2, 14, 0), status: "Done", hasFeedback: true, scoreCount: scorecardScoreCounts["CS3 Nexstar v1"], lastUpdated: relativeDate(2, 13, 30), inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("Done") },
 ];
 
 // Sort items by date, newest first
@@ -581,6 +609,8 @@ export default function FeedbackDashboard() {
         setThumbedUpScores={setThumbedUpScores}
         isFullWidth={isFullWidth}
         isFeedbackMode={true}
+        onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+        onClose={() => setSelectedItem(null)}
       />
     );
   };
