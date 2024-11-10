@@ -553,7 +553,7 @@ export default function ItemsDashboard() {
 
     return (
       <ItemDetail
-        item={selectedItemData}
+        item={selectedItemData as unknown as FeedbackItem}
         getBadgeVariant={getBadgeVariant}
         getRelativeTime={getRelativeTime}
         isMetadataExpanded={isMetadataExpanded}

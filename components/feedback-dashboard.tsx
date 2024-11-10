@@ -555,7 +555,7 @@ export default function FeedbackDashboard() {
 
     return (
       <ItemDetail
-        item={selectedItemData}
+        item={selectedItemData as unknown as FeedbackItem}
         controlButtons={DetailViewControlButtons}
         getBadgeVariant={getBadgeVariant}
         getRelativeTime={getRelativeTime}
