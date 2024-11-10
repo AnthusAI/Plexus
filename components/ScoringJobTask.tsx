@@ -112,15 +112,24 @@ export default function ScoringJobTask({
             {data.batchJobs.map((batchJob) => (
               <BatchJobTask
                 key={batchJob.id}
-                variant="nested"
+                variant="grid"
                 task={{
                   id: batchJob.id,
                   type: 'Batch Job',
                   scorecard: task.scorecard,
                   score: task.score,
                   time: task.time,
-                  summary: `${batchJob.provider} ${batchJob.type}`,
-                  data: batchJob,
+                  summary: `${batchJob.type} job`,
+                  data: {
+                    id: batchJob.id,
+                    title: `${batchJob.type} Job`,
+                    provider: batchJob.provider,
+                    type: batchJob.type,
+                    status: batchJob.status,
+                    totalRequests: batchJob.totalRequests,
+                    completedRequests: batchJob.completedRequests,
+                    failedRequests: batchJob.failedRequests
+                  }
                 }}
               />
             ))}

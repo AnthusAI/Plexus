@@ -18,6 +18,7 @@ import { useSidebar } from "@/app/contexts/SidebarContext"
 import React from "react"
 import ScorecardContext from "@/components/ScorecardContext"
 import { formatTimeAgo } from '@/utils/format-time'
+import { TaskStatus } from '@/types/shared'
 
 // Import new task components
 import ExperimentTaskComponent from '@/components/ExperimentTask'
@@ -38,7 +39,8 @@ import {
   ExperimentTaskData,
   ScoringJobTaskData,
   ReportTaskData,
-  isExperimentActivity
+  isExperimentActivity,
+  ExperimentActivity
 } from '@/types/tasks'
 
 const timeToMinutes = (timeString: string): number => {
@@ -89,10 +91,12 @@ const recentActivities: ActivityData[] = [
     type: "Experiment started",
     scorecard: "CS3 Services v2",
     score: "Good Call",
+    timestamp: new Date().toISOString(),
     time: formatTimeAgo(new Date(), true),
-    description: "Note",
     summary: '\"Using fine-tuned model.\"',
     data: {
+      id: "exp-1",
+      title: "Model Evaluation",
       accuracy: 89,
       sensitivity: 87,
       specificity: 91,
@@ -102,29 +106,28 @@ const recentActivities: ActivityData[] = [
       elapsedTime: "00:02:15",
       estimatedTimeRemaining: "00:03:05",
       confusionMatrix: {
-        matrix: [
-          [21, 2, 1],
-          [1, 19, 1],
-          [0, 1, 18],
-        ],
-        labels: ["Yes", "No", "NA"],
+        matrix: [[21, 2, 1], [1, 19, 1], [0, 1, 18]],
+        labels: ["Yes", "No", "NA"]
       },
       progress: 50,
       inferences: 100,
       cost: 10,
-      status: "In Progress"
-    },
+      status: "running" as TaskStatus
+    }
   },
   {
     id: "1",
     type: "Alert",
     scorecard: "Prime Edu",
     score: "Agent Branding",
+    timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
     time: formatTimeAgo(new Date(Date.now() - 15 * 60 * 1000)),
     summary: "Inappropriate content detected",
-    description: "Score above 1 in the previous 15 minutes",
     data: {
-      iconType: 'warning'
+      id: "alert-1",
+      title: "Content Warning",
+      iconType: 'warning' as const,
+      description: "Score above 1 in the previous 15 minutes"
     }
   },
   {
@@ -132,19 +135,25 @@ const recentActivities: ActivityData[] = [
     type: "Report",
     scorecard: "SelectQuote TermLife v1",
     score: "AI Coaching Report",
+    timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
     time: formatTimeAgo(new Date(Date.now() - 30 * 60 * 1000)),
     summary: "Report generated",
-    data: {}
+    data: {
+      id: "report-1",
+      title: "AI Coaching Report"
+    }
   },
   {
     id: "3",
     type: "Optimization started",
     scorecard: "SelectQuote TermLife v1",
     score: "Good Call",
+    timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
     time: formatTimeAgo(new Date(Date.now() - 60 * 60 * 1000)),
-    description: "Accuracy",
     summary: "Progress: 92%",
     data: {
+      id: "opt-1",
+      title: "Model Optimization",
       progress: 92,
       accuracy: 75,
       elapsedTime: "00:45:30",
@@ -157,34 +166,37 @@ const recentActivities: ActivityData[] = [
       before: {
         outerRing: [
           { category: "Positive", value: 50, fill: "var(--true)" },
-          { category: "Negative", value: 50, fill: "var(--false)" },
+          { category: "Negative", value: 50, fill: "var(--false)" }
         ],
         innerRing: [
           { category: "Positive", value: 75, fill: "var(--true)" },
-          { category: "Negative", value: 25, fill: "var(--false)" },
-        ],
+          { category: "Negative", value: 25, fill: "var(--false)" }
+        ]
       },
       after: {
         outerRing: [
           { category: "Positive", value: 50, fill: "var(--true)" },
-          { category: "Negative", value: 50, fill: "var(--false)" },
+          { category: "Negative", value: 50, fill: "var(--false)" }
         ],
         innerRing: [
           { category: "Positive", value: 92, fill: "var(--true)" },
-          { category: "Negative", value: 8, fill: "var(--false)" },
-        ],
-      },
-    },
+          { category: "Negative", value: 8, fill: "var(--false)" }
+        ]
+      }
+    }
   },
   {
     id: "4",
     type: 'Scoring Job',
     scorecard: 'Customer Satisfaction',
     score: 'Overall Score',
+    timestamp: new Date(Date.now() - 120 * 60 * 1000).toISOString(),
     time: formatTimeAgo(new Date(Date.now() - 120 * 60 * 1000)),
     summary: 'Scoring customer feedback',
     description: 'Processing batch of customer reviews',
     data: {
+      id: 'scoring-1',
+      title: 'Customer Feedback Scoring',
       status: 'in_progress',
       itemName: 'Q4 Reviews',
       scorecardName: 'Customer Satisfaction',
@@ -193,6 +205,7 @@ const recentActivities: ActivityData[] = [
       batchJobs: [
         {
           id: '1',
+          title: 'Sentiment Analysis Job',
           provider: 'OpenAI',
           type: 'sentiment-analysis',
           status: 'done',
@@ -202,6 +215,7 @@ const recentActivities: ActivityData[] = [
         },
         {
           id: '2',
+          title: 'Categorization Job',
           provider: 'Anthropic',
           type: 'categorization',
           status: 'in_progress',
@@ -211,6 +225,7 @@ const recentActivities: ActivityData[] = [
         },
         {
           id: '3',
+          title: 'Topic Extraction Job',
           provider: 'Cohere',
           type: 'topic-extraction',
           status: 'pending',
@@ -226,10 +241,13 @@ const recentActivities: ActivityData[] = [
     type: "Experiment completed",
     scorecard: "SelectQuote TermLife v1",
     score: "Temperature Check",
+    timestamp: new Date(Date.now() - 180 * 60 * 1000).toISOString(),
     time: formatTimeAgo(new Date(Date.now() - 180 * 60 * 1000)),
     summary: "94% / 100",
     description: "Accuracy",
     data: {
+      id: "exp-2",
+      title: "Temperature Check Experiment",
       accuracy: 94,
       sensitivity: 93,
       specificity: 95,
@@ -242,25 +260,28 @@ const recentActivities: ActivityData[] = [
         matrix: [
           [45, 3, 2],
           [2, 43, 2],
-          [1, 2, 40],
-        ],
-        labels: ["Yes", "No", "NA"],
+          [1, 2, 40]
+        ] as number[][],
+        labels: ["Yes", "No", "NA"]
       },
       progress: 100,
       inferences: 200,
       cost: 20,
-      status: "Completed"
-    },
+      status: "completed" as TaskStatus
+    }
   },
   {
     id: "7",
     type: "Score updated",
     scorecard: "SelectQuote TermLife v1",
     score: "Assumptive Close",
+    timestamp: new Date(Date.now() - 1440 * 60 * 1000).toISOString(),
     time: formatTimeAgo(new Date(Date.now() - 1440 * 60 * 1000)),
     description: "Accuracy",
     summary: "Improved from 75% to 82%",
     data: {
+      id: "score-1",
+      title: "Score Update",
       before: {
         outerRing: [
           { category: "Positive", value: 50, fill: "var(--true)" },
@@ -288,10 +309,13 @@ const recentActivities: ActivityData[] = [
     type: "Feedback queue started",
     scorecard: "CS3 Services v2",
     score: "",
+    timestamp: new Date(Date.now() - 300 * 60 * 1000).toISOString(),
     time: formatTimeAgo(new Date(Date.now() - 300 * 60 * 1000)),
     description: "Getting feedback",
     summary: "150 items",
     data: {
+      id: "feedback-1",
+      title: "Feedback Queue Processing",
       progress: 25,
       processedItems: 37,
       totalItems: 150,
@@ -304,10 +328,13 @@ const recentActivities: ActivityData[] = [
     type: "Feedback queue completed",
     scorecard: "SelectQuote TermLife v1",
     score: "",
+    timestamp: new Date(Date.now() - 120 * 60 * 1000).toISOString(),
     time: formatTimeAgo(new Date(Date.now() - 120 * 60 * 1000)),
     description: "Got feedback",
     summary: "200 scores processed",
     data: {
+      id: "feedback-2",
+      title: "Completed Feedback Queue",
       progress: 100,
       processedItems: 200,
       totalItems: 200,
@@ -694,7 +721,7 @@ export default function ActivityDashboard() {
                     case 'Alert':
                       return (
                         <AlertTask 
-                          variant="grid"
+                          variant="grid" 
                           task={{
                             ...activity,
                             data: {
