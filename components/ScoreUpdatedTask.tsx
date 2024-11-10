@@ -4,19 +4,17 @@ import { ListTodo, MoveUpRight } from 'lucide-react'
 import BeforeAfterGauges from './BeforeAfterGauges'
 
 interface ScoreUpdatedTaskData {
-  before?: {
-    innerRing: Array<{ value: number }>
+  before: {
+    outerRing: Array<{ category: string; value: number; fill: string }>
+    innerRing: Array<{ category: string; value: number; fill: string }>
   }
-  after?: {
-    innerRing: Array<{ value: number }>
+  after: {
+    outerRing: Array<{ category: string; value: number; fill: string }>
+    innerRing: Array<{ category: string; value: number; fill: string }>
   }
 }
 
-interface ScoreUpdatedTaskProps extends Omit<BaseTaskProps, 'task'> {
-  task: BaseTaskProps['task'] & {
-    data?: ScoreUpdatedTaskData
-  }
-}
+interface ScoreUpdatedTaskProps extends BaseTaskProps<ScoreUpdatedTaskData> {}
 
 const ScoreUpdatedTask: React.FC<ScoreUpdatedTaskProps> = ({ 
   variant, 

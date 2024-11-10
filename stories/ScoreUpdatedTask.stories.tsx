@@ -17,8 +17,14 @@ type Story = StoryObj<typeof ScoreUpdatedTask>;
 interface ScoreUpdatedTaskStoryProps extends Omit<BaseTaskProps, 'task'> {
   task: BaseTaskProps['task'] & {
     data?: {
-      before: { innerRing: Array<{ value: number }> }
-      after: { innerRing: Array<{ value: number }> }
+      before: {
+        outerRing: Array<{ category: string; value: number; fill: string }>
+        innerRing: Array<{ category: string; value: number; fill: string }>
+      }
+      after: {
+        outerRing: Array<{ category: string; value: number; fill: string }>
+        innerRing: Array<{ category: string; value: number; fill: string }>
+      }
     }
   }
 }
@@ -35,11 +41,25 @@ const createTask = (id: number, beforeScore: number, afterScore: number): ScoreU
     description: 'Score update details',
     data: {
       before: {
-        innerRing: [{ value: beforeScore }],
+        outerRing: [
+          { category: "Positive", value: beforeScore, fill: "var(--true)" },
+          { category: "Negative", value: 100 - beforeScore, fill: "var(--false)" }
+        ],
+        innerRing: [
+          { category: "Positive", value: beforeScore, fill: "var(--true)" },
+          { category: "Negative", value: 100 - beforeScore, fill: "var(--false)" }
+        ]
       },
       after: {
-        innerRing: [{ value: afterScore }],
-      },
+        outerRing: [
+          { category: "Positive", value: afterScore, fill: "var(--true)" },
+          { category: "Negative", value: 100 - afterScore, fill: "var(--false)" }
+        ],
+        innerRing: [
+          { category: "Positive", value: afterScore, fill: "var(--true)" },
+          { category: "Negative", value: 100 - afterScore, fill: "var(--false)" }
+        ]
+      }
     }
   },
   onClick: () => console.log(`Clicked task ${id}`),

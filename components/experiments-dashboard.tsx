@@ -115,6 +115,7 @@ export default function ExperimentsDashboard() {
   const [selectedScore, setSelectedScore] = useState<string | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
+  const [scorecardName, setScorecardName] = useState('Unknown Scorecard')
 
   // Update ref when selectedExperiment changes
   useEffect(() => {
@@ -124,7 +125,11 @@ export default function ExperimentsDashboard() {
   const getExperimentTaskProps = async (experiment: Schema['Experiment']['type']) => {
     const progress = calculateProgress(experiment.processedItems, experiment.totalItems);
     
-    const scorecardName = experiment.scorecard?.data?.name || '';
+    // Get scorecard name
+    const scorecardResult = await experiment.scorecard?.();
+    const scorecardName = scorecardResult?.data?.name || '';
+    
+    // Get score name
     const scoreResult = await experiment.score?.();
     const scoreName = scoreResult?.data?.name || '';
     
@@ -249,8 +254,7 @@ export default function ExperimentsDashboard() {
               const itemsWithScorecard = await Promise.all(items.map(async (item) => {
                 if (item.scorecardId && !item.scorecard) {
                   const scorecardResult = await client!.models.Scorecard.get({
-                    id: item.scorecardId,
-                    selectionSet: ['id', 'name', 'key', 'description']
+                    id: item.scorecardId
                   });
                   return {
                     ...item,
@@ -332,6 +336,16 @@ export default function ExperimentsDashboard() {
     experimentTaskProps
   })
 
+  useEffect(() => {
+    if (selectedExperiment?.scorecard) {
+      const fetchScorecardName = async () => {
+        const result = await selectedExperiment.scorecard?.()
+        setScorecardName(result?.data?.name ?? 'Unknown Scorecard')
+      }
+      fetchScorecardName()
+    }
+  }, [selectedExperiment?.scorecard])
+
   if (isLoading) {
     return <div>Loading experiments...</div>
   }
@@ -402,7 +416,7 @@ export default function ExperimentsDashboard() {
                             {/* Left column */}
                             <div className="space-y-1">
                               <div className="font-semibold">
-                                {experiment.scorecard?.data?.name ?? 'Unknown Scorecard'}
+                                {scorecardName}
                               </div>
                               <div className="text-sm text-muted-foreground">
                                 {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
@@ -435,7 +449,9 @@ export default function ExperimentsDashboard() {
                         </div>
                         {/* Wide variant - visible at 630px and above */}
                         <div className="hidden @[630px]:block">
-                          {experiment.scorecard?.data?.name ?? 'Unknown Scorecard'}
+                          <div className="font-semibold">
+                            {scorecardName}
+                          </div>
                           <div className="text-sm text-muted-foreground">
                             {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
                           </div>

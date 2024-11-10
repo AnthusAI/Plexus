@@ -28,103 +28,18 @@ import FeedbackTask from '@/components/FeedbackTask'
 import ScoreUpdatedTask from '@/components/ScoreUpdatedTask'
 import ScoringJobTask from '@/components/ScoringJobTask'
 
-// Import the type from ExperimentTask
-import type { ExperimentTaskData } from '@/components/ExperimentTask'
-
-// Add this import at the top
-import { ScoringJobTaskData } from '@/components/ScoringJobTask'
-
-interface OptimizationTask {
-  id: number
-  type: 'Optimization started'
-  scorecard: string
-  score: string
-  time: string
-  summary: string
-  description?: string
-  data: {
-    progress: number
-    accuracy: number
-    elapsedTime: string
-    estimatedTimeRemaining: string
-    numberComplete: number
-    numberTotal: number
-    before: {
-      outerRing: Array<{ category: string; value: number; fill: string }>
-      innerRing: Array<{ category: string; value: number; fill: string }>
-    }
-    after: {
-      outerRing: Array<{ category: string; value: number; fill: string }>
-      innerRing: Array<{ category: string; value: number; fill: string }>
-    }
-  }
-}
-
-interface FeedbackTask {
-  id: number
-  type: 'Feedback queue started' | 'Feedback queue completed'
-  scorecard: string
-  score: string
-  time: string
-  summary: string
-  description?: string
-  data: {
-    progress: number
-    processedItems: number
-    totalItems: number
-    elapsedTime: string
-    estimatedTimeRemaining: string
-  }
-}
-
-interface AlertTask {
-  id: number
-  type: 'Alert'
-  scorecard: string
-  score: string
-  time: string
-  summary: string
-  description?: string
-}
-
-interface ReportTask {
-  id: number
-  type: 'Report'
-  scorecard: string
-  score: string
-  time: string
-  summary: string
-  description?: string
-}
-
-interface ScoreUpdatedTask {
-  id: number
-  type: 'Score updated'
-  scorecard: string
-  score: string
-  time: string
-  summary: string
-  description?: string
-  data: {
-    before: {
-      outerRing: Array<{ category: string; value: number; fill: string }>
-      innerRing: Array<{ category: string; value: number; fill: string }>
-    }
-    after: {
-      outerRing: Array<{ category: string; value: number; fill: string }>
-      innerRing: Array<{ category: string; value: number; fill: string }>
-    }
-  }
-}
-
-type ActivityData = 
-  | { id: number; type: 'Experiment started' | 'Experiment completed'; scorecard: string; score: string; time: string; summary: string; description?: string; data: ExperimentTaskData }
-  | OptimizationTask 
-  | FeedbackTask 
-  | AlertTask 
-  | ReportTask 
-  | ScoreUpdatedTask
-  | { id: number; type: 'Scoring Job'; scorecard: string; score: string; time: string; summary: string; description?: string; data: ScoringJobTaskData }
+// Import all types from types/tasks
+import { 
+  ActivityData,
+  AlertTaskData,
+  FeedbackTaskData,
+  OptimizationTaskData,
+  ScoreUpdatedTaskData,
+  ExperimentTaskData,
+  ScoringJobTaskData,
+  ReportTaskData,
+  isExperimentActivity
+} from '@/types/tasks'
 
 const timeToMinutes = (timeString: string): number => {
   const [value, unit] = timeString.toLowerCase().split(' ');
@@ -170,7 +85,7 @@ const barChartData = [
 // New data for recent activities
 const recentActivities: ActivityData[] = [
   {
-    id: 0,
+    id: "0",
     type: "Experiment started",
     scorecard: "CS3 Services v2",
     score: "Good Call",
@@ -201,24 +116,28 @@ const recentActivities: ActivityData[] = [
     },
   },
   {
-    id: 1,
+    id: "1",
     type: "Alert",
     scorecard: "Prime Edu",
     score: "Agent Branding",
     time: formatTimeAgo(new Date(Date.now() - 15 * 60 * 1000)),
     summary: "Inappropriate content detected",
     description: "Score above 1 in the previous 15 minutes",
+    data: {
+      iconType: 'warning'
+    }
   },
   {
-    id: 2,
+    id: "2",
     type: "Report",
     scorecard: "SelectQuote TermLife v1",
     score: "AI Coaching Report",
     time: formatTimeAgo(new Date(Date.now() - 30 * 60 * 1000)),
     summary: "Report generated",
+    data: {}
   },
   {
-    id: 3,
+    id: "3",
     type: "Optimization started",
     scorecard: "SelectQuote TermLife v1",
     score: "Good Call",
@@ -230,8 +149,11 @@ const recentActivities: ActivityData[] = [
       accuracy: 75,
       elapsedTime: "00:45:30",
       estimatedTimeRemaining: "00:05:00",
+      processedItems: 92,
+      totalItems: 100,
       numberComplete: 92,
       numberTotal: 100,
+      eta: "00:05:00",
       before: {
         outerRing: [
           { category: "Positive", value: 50, fill: "var(--true)" },
@@ -255,7 +177,7 @@ const recentActivities: ActivityData[] = [
     },
   },
   {
-    id: 4,
+    id: "4",
     type: 'Scoring Job',
     scorecard: 'Customer Satisfaction',
     score: 'Overall Score',
@@ -300,7 +222,7 @@ const recentActivities: ActivityData[] = [
     },
   },
   {
-    id: 6,
+    id: "6",
     type: "Experiment completed",
     scorecard: "SelectQuote TermLife v1",
     score: "Temperature Check",
@@ -331,7 +253,7 @@ const recentActivities: ActivityData[] = [
     },
   },
   {
-    id: 7,
+    id: "7",
     type: "Score updated",
     scorecard: "SelectQuote TermLife v1",
     score: "Assumptive Close",
@@ -362,7 +284,7 @@ const recentActivities: ActivityData[] = [
     },
   },
   {
-    id: 8,
+    id: "8",
     type: "Feedback queue started",
     scorecard: "CS3 Services v2",
     score: "",
@@ -378,7 +300,7 @@ const recentActivities: ActivityData[] = [
     },
   },
   {
-    id: 9,
+    id: "9",
     type: "Feedback queue completed",
     scorecard: "SelectQuote TermLife v1",
     score: "",
@@ -411,15 +333,6 @@ interface BarData {
   analysis: number;
   feedback: number;
   [key: string]: string | number;
-}
-
-function isExperimentActivity(activity: ActivityData): activity is { id: number; type: 'Experiment started' | 'Experiment completed'; scorecard: string; score: string; time: string; summary: string; description?: string; data: ExperimentTaskData } {
-  return (activity.type === "Experiment started" || activity.type === "Experiment completed") 
-    && activity.data !== undefined
-    && 'accuracy' in activity.data 
-    && 'sensitivity' in activity.data
-    && 'specificity' in activity.data
-    && 'precision' in activity.data
 }
 
 export default function ActivityDashboard() {
@@ -576,14 +489,14 @@ export default function ActivityDashboard() {
                   <PieChart>
                     <ChartTooltip content={<ChartTooltipContent />} />
                     <Pie
-                      data={activity.data.before.innerRing}
+                      data={activity.data?.before?.innerRing}
                       dataKey="value"
                       nameKey="category"
                       outerRadius={30}
                       fill="var(--chart-1)"
                     />
                     <Pie
-                      data={activity.data.before.outerRing}
+                      data={activity.data?.before?.outerRing}
                       dataKey="value"
                       nameKey="category"
                       innerRadius={35}
@@ -601,14 +514,14 @@ export default function ActivityDashboard() {
                   <PieChart>
                     <ChartTooltip content={<ChartTooltipContent />} />
                     <Pie
-                      data={activity.data.after.innerRing}
+                      data={activity.data?.after?.innerRing}
                       dataKey="value"
                       nameKey="category"
                       outerRadius={30}
                       fill="var(--chart-1)"
                     />
                     <Pie
-                      data={activity.data.after.outerRing}
+                      data={activity.data?.after?.outerRing}
                       dataKey="value"
                       nameKey="category"
                       innerRadius={35}
@@ -757,7 +670,15 @@ export default function ActivityDashboard() {
                       return (
                         <ScoringJobTask
                           variant="grid"
-                          task={activity}
+                          task={{
+                            ...activity,
+                            data: {
+                              ...activity.data,
+                              status: activity.data?.status || 'pending',
+                              completedItems: activity.data?.completedItems || 0,
+                              totalItems: activity.data?.totalItems || 0
+                            }
+                          }}
                           onClick={() => setSelectedActivity(activity)}
                         />
                       )
@@ -774,8 +695,13 @@ export default function ActivityDashboard() {
                       return (
                         <AlertTask 
                           variant="grid"
-                          task={activity}
-                          iconType="warning"
+                          task={{
+                            ...activity,
+                            data: {
+                              ...activity.data,
+                              iconType: 'warning' as const
+                            }
+                          }}
                           onClick={() => setSelectedActivity(activity)}
                         />
                       )
@@ -793,7 +719,20 @@ export default function ActivityDashboard() {
                           variant="grid"
                           task={{
                             ...activity,
-                            scorecard: activity.description || 'Metric' // Use description or fallback to 'Metric'
+                            data: {
+                              ...activity.data,
+                              progress: activity.data?.progress || 0,
+                              accuracy: activity.data?.accuracy || 0,
+                              numberComplete: activity.data?.numberComplete || 0,
+                              numberTotal: activity.data?.numberTotal || 0,
+                              eta: activity.data?.eta || '00:00:00',
+                              elapsedTime: activity.data?.elapsedTime || '00:00:00',
+                              estimatedTimeRemaining: activity.data?.estimatedTimeRemaining || '00:00:00',
+                              processedItems: activity.data?.processedItems || 0,
+                              totalItems: activity.data?.totalItems || 0,
+                              before: activity.data?.before || { outerRing: [], innerRing: [] },
+                              after: activity.data?.after || { outerRing: [], innerRing: [] }
+                            }
                           }}
                           onClick={() => setSelectedActivity(activity)}
                         />
@@ -856,8 +795,13 @@ export default function ActivityDashboard() {
                   return (
                     <AlertTask 
                       variant="detail" 
-                      task={selectedActivity}
-                      iconType="warning"
+                      task={{
+                        ...selectedActivity,
+                        data: {
+                          ...selectedActivity.data,
+                          iconType: 'warning' as const
+                        }
+                      }}
                       isFullWidth={isFullWidth}
                       onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
                       onClose={() => {
@@ -964,8 +908,13 @@ export default function ActivityDashboard() {
                   return (
                     <AlertTask 
                       variant="detail" 
-                      task={selectedActivity}
-                      iconType="warning"
+                      task={{
+                        ...selectedActivity,
+                        data: {
+                          ...selectedActivity.data,
+                          iconType: 'warning' as const
+                        }
+                      }}
                       isFullWidth={isFullWidth}
                       onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
                       onClose={() => {

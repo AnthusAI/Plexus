@@ -1,10 +1,10 @@
 import React from 'react'
-import { Task, TaskHeader, TaskContent, BaseTaskProps } from './Task'
+import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import { FileText } from 'lucide-react'
+import { ReportTaskData } from '@/types/tasks'
+import { BaseTaskProps } from '@/components/Task'
 
-interface ReportTaskProps extends Omit<BaseTaskProps, 'task'> {
-  task: BaseTaskProps['task']
-}
+interface ReportTaskProps extends BaseTaskProps<ReportTaskData> {}
 
 const ReportTask: React.FC<ReportTaskProps> = ({ 
   variant, 
@@ -17,7 +17,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
 }) => {
   const visualization = (
     <div className="flex items-center justify-center h-[120px] w-[120px]">
-      {/* Add any specific visualization for ReportTask here */}
+      <FileText className="h-6 w-6 text-primary" />
     </div>
   )
 

@@ -1,24 +1,24 @@
 import React from 'react'
-import { Task, TaskHeader, TaskContent, BaseTaskProps } from './Task'
+import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import { Siren, MessageCircleWarning, Info, LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { AlertTaskData } from '@/types/tasks'
+import { BaseTaskProps } from '@/components/Task'
 
-interface AlertTaskProps extends Omit<BaseTaskProps, 'task'> {
-  task: BaseTaskProps['task']
-  iconType: 'siren' | 'warning' | 'info'
-}
+interface AlertTaskProps extends BaseTaskProps<AlertTaskData> {}
 
 const AlertTask: React.FC<AlertTaskProps> = ({
   variant,
   task,
   onClick,
   controlButtons,
-  iconType,
   isFullWidth,
   onToggleFullWidth,
   onClose
 }) => {
+  const { iconType } = task.data || {}
   let IconComponent: LucideIcon;
+  
   switch (iconType) {
     case 'info':
       IconComponent = Info;
