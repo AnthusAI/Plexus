@@ -222,6 +222,8 @@ export default function ExperimentsDashboard() {
               'precision', 'createdAt', 'updatedAt', 'status', 'startedAt', 
               'totalItems', 'processedItems', 'errorMessage', 
               'errorDetails', 'accountId', 'scorecardId', 'scoreId', 'confusionMatrix',
+              'elapsedSeconds',
+              'estimatedRemainingSeconds',
               // Include these fields for the scorecard relationship
               'scorecard.id',
               'scorecard.name',
@@ -248,6 +250,8 @@ export default function ExperimentsDashboard() {
               'precision', 'createdAt', 'updatedAt', 'status', 'startedAt', 
               'totalItems', 'processedItems', 'errorMessage', 
               'errorDetails', 'accountId', 'scorecardId', 'scoreId', 'confusionMatrix',
+              'elapsedSeconds',
+              'estimatedRemainingSeconds',
               // Include these fields for the scorecard relationship
               'scorecard.id',
               'scorecard.name',

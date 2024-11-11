@@ -549,8 +549,7 @@ def simulate(
             }),
             startedAt=started_at.isoformat().replace('+00:00', 'Z'),
             # Initial estimate based on 1 second per item
-            estimatedEndAt=(started_at + timedelta(seconds=num_items))\
-                .isoformat().replace('+00:00', 'Z')
+            estimatedRemainingSeconds=num_items
         )
         
         # Lists to store true and predicted values for metrics calculation
