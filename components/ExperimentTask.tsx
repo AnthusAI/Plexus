@@ -32,7 +32,6 @@ export interface ExperimentTaskData {
 }
 
 export interface ExperimentTaskProps extends BaseTaskProps<ExperimentTaskData> {
-  variant?: 'grid' | 'detail'
   onToggleFullWidth: () => void
   onClose: () => void
 }
@@ -62,7 +61,7 @@ function computeExperimentType(data: ExperimentTaskData): string {
 }
 
 export default function ExperimentTask({ 
-  variant = "grid",
+  variant = 'grid',
   task,
   onClick,
   controlButtons,
@@ -117,12 +116,12 @@ export default function ExperimentTask({
     }
   ]
 
-  // Convert variant to MetricsGauges variant
-  const metricsVariant = variant || 'detail'
+  // Convert variant for MetricsGauges - if it's nested, treat as detail
+  const displayVariant = variant === 'nested' ? 'detail' : variant
 
   const visualization = variant === 'detail' ? (
     <div className="w-full">
-      <MetricsGauges gauges={metrics} variant={metricsVariant} />
+      <MetricsGauges gauges={metrics} variant={displayVariant} />
       <div className="mt-4">
         <ProgressBar 
           progress={data.progress}
@@ -196,7 +195,7 @@ export default function ExperimentTask({
     </div>
   ) : (
     <div className="w-full">
-      <MetricsGauges gauges={metrics} variant={metricsVariant} />
+      <MetricsGauges gauges={metrics} variant={displayVariant} />
       <div className="mt-4">
         <ProgressBar 
           progress={data.progress}
@@ -225,16 +224,20 @@ export default function ExperimentTask({
       renderHeader={(props) => (
         <TaskHeader {...props}>
           <div className="flex justify-end w-full">
-            {variant === 'detail' && onToggleFullWidth && onClose ? (
+            {variant === 'detail' ? (
               <div className="flex items-center space-x-2">
-                <CardButton
-                  icon={Square}
-                  onClick={onToggleFullWidth as () => void}
-                />
-                <CardButton
-                  icon={X}
-                  onClick={onClose as () => void}
-                />
+                {typeof onToggleFullWidth === 'function' && (
+                  <CardButton
+                    icon={Square}
+                    onClick={onToggleFullWidth}
+                  />
+                )}
+                {typeof onClose === 'function' && (
+                  <CardButton
+                    icon={X}
+                    onClick={onClose}
+                  />
+                )}
               </div>
             ) : (
               <FlaskConical className="h-6 w-6" />
@@ -243,7 +246,81 @@ export default function ExperimentTask({
         </TaskHeader>
       )}
       renderContent={(props) => (
-        <TaskContent {...props} visualization={visualization} />
+        <TaskContent {...props}>
+          <div className="w-full">
+            <MetricsGauges gauges={metrics} variant={displayVariant} />
+            <div className="mt-4">
+              <ProgressBar 
+                progress={data.progress}
+                elapsedTime={data.elapsedTime}
+                processedItems={data.processedItems}
+                totalItems={data.totalItems}
+                estimatedTimeRemaining={data.estimatedTimeRemaining}
+                color="secondary"
+              />
+            </div>
+            <div 
+              ref={waffleContainerRef}
+              className="mt-4 w-full" 
+              style={{ height: `${waffleHeight}px` }}
+            >
+              <ResponsiveWaffle
+                data={[
+                  { 
+                    id: 'correct', 
+                    label: 'Correct', 
+                    value: Math.round(data.processedItems * (data.accuracy ?? 0) / 100) 
+                  },
+                  { 
+                    id: 'incorrect', 
+                    label: 'Incorrect', 
+                    value: data.processedItems - Math.round(data.processedItems * (data.accuracy ?? 0) / 100) 
+                  },
+                  { 
+                    id: 'unprocessed', 
+                    label: 'Unprocessed', 
+                    value: data.totalItems - data.processedItems 
+                  }
+                ]}
+                total={data.totalItems}
+                rows={5}
+                columns={20}
+                padding={1}
+                valueFormat=".0f"
+                colors={({ id }) => {
+                  const colorMap: Record<string, string> = {
+                    correct: 'var(--true)',
+                    incorrect: 'var(--false)',
+                    unprocessed: 'var(--neutral)'
+                  }
+                  return colorMap[id] || 'var(--neutral)'
+                }}
+                borderRadius={2}
+                fillDirection="right"
+                margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+                legends={[{
+                  anchor: 'bottom',
+                  direction: 'row',
+                  justify: false,
+                  translateX: 0,
+                  translateY: 30,
+                  itemsSpacing: 4,
+                  itemWidth: 100,
+                  itemHeight: 20,
+                  itemDirection: 'left-to-right',
+                  itemOpacity: 1,
+                  itemTextColor: 'var(--text-muted)',
+                  symbolSize: 20
+                }]}
+              />
+            </div>
+            {data.confusionMatrix && (
+              <div className="mt-8">
+                <ConfusionMatrix data={data.confusionMatrix} />
+              </div>
+            )}
+          </div>
+        </TaskContent>
       )}
     />
   )
