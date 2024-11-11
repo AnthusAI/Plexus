@@ -57,7 +57,9 @@ const BeforeAfterGauges: React.FC<BeforeAfterGaugesProps> = ({
         <div 
           className="absolute left-1/2 -translate-x-1/2 text-xs text-muted-foreground whitespace-nowrap"
           style={{
-            bottom: variant === 'detail' ? '20px' : '32px'
+            bottom: variant === 'detail'
+              ? 'max(-30px, calc(-32px + 18%))'
+              : 'max(-30px, calc(-38px + 24%))'
           }}
         >
           {before !== undefined ? `${before}%` : ''} 
