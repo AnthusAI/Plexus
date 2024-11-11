@@ -264,11 +264,11 @@ const GaugeComponent: React.FC<GaugeProps> = ({
         </svg>
         {title && (
           <div 
-            className="absolute left-1/2 -translate-x-1/2 text-sm whitespace-nowrap"
+            className="absolute left-1/2 -translate-x-1/2 text-base whitespace-nowrap"
             style={{
               bottom: showTicks 
-                ? 'max(-10px, calc(-12px + 18%))' 
-                : 'max(-10px, calc(-18px + 24%))'
+                ? 'max(-10px, calc(-22px + 20%))' 
+                : 'max(-10px, calc(-28px + 26%))'
             }}
           >
             {title}
