@@ -23,7 +23,7 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
 
   const getBackgroundColor = (value: number) => {
     const intensity = Math.round((value / maxValue) * 10)
-    return `hsl(var(--blue-${Math.max(1, intensity)}))` 
+    return `hsl(var(--violet-${Math.max(1, intensity)}))` 
   }
 
   return (
