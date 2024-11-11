@@ -31,7 +31,7 @@ export function ProgressBar({
           {estimatedTimeRemaining && <span>ETA: {estimatedTimeRemaining}</span>}
         </div>
       )}
-      <div className="relative w-full h-6 bg-neutral rounded-md">
+      <div className="relative w-full h-8 bg-neutral rounded-md">
         <div
           className={cn(
             "absolute top-0 left-0 h-full rounded-md transition-all",
@@ -41,11 +41,11 @@ export function ProgressBar({
           style={{ width: clampedProgress > 0 ? `${clampedProgress}%` : 'auto' }}
         />
         <div className="absolute top-0 left-0 right-0 h-full flex justify-between items-center px-2">
-          <span className="text-xs text-primary-foreground font-medium">
+          <span className="text-sm text-primary-foreground font-medium">
             {displayProgress}%
           </span>
           {processedItems !== undefined && totalItems !== undefined && (
-            <span className="text-xs text-primary-foreground font-medium">
+            <span className="text-sm text-primary-foreground font-medium">
               {processedItems} / {totalItems}
             </span>
           )}
