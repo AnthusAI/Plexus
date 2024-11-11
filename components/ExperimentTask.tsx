@@ -116,12 +116,12 @@ export default function ExperimentTask({
     }
   ]
 
-  // Convert variant for MetricsGauges - if it's nested, treat as detail
-  const displayVariant = variant === 'nested' ? 'detail' : variant
+  // Convert to MetricsGauges variant type
+  const metricsVariant = variant === 'grid' ? 'grid' : 'detail'
 
   const visualization = variant === 'detail' ? (
     <div className="w-full">
-      <MetricsGauges gauges={metrics} variant={displayVariant} />
+      <MetricsGauges gauges={metrics} variant={metricsVariant} />
       <div className="mt-4">
         <ProgressBar 
           progress={data.progress}
@@ -195,7 +195,7 @@ export default function ExperimentTask({
     </div>
   ) : (
     <div className="w-full">
-      <MetricsGauges gauges={metrics} variant={displayVariant} />
+      <MetricsGauges gauges={metrics} variant={metricsVariant} />
       <div className="mt-4">
         <ProgressBar 
           progress={data.progress}
@@ -248,7 +248,7 @@ export default function ExperimentTask({
       renderContent={(props) => (
         <TaskContent {...props}>
           <div className="w-full">
-            <MetricsGauges gauges={metrics} variant={displayVariant} />
+            <MetricsGauges gauges={metrics} variant={metricsVariant} />
             <div className="mt-4">
               <ProgressBar 
                 progress={data.progress}
