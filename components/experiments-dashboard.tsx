@@ -440,7 +440,7 @@ export default function ExperimentsDashboard() {
                         <div className="block @[630px]:hidden">
                           <div className="flex justify-between mb-4">
                             {/* Left column */}
-                            <div className="space-y-1">
+                            <div className="space-y-0.5">
                               <div className="font-semibold">
                                 {scorecardNames[experiment.id] || 'Unknown Scorecard'}
                               </div>
@@ -448,20 +448,13 @@ export default function ExperimentsDashboard() {
                                 {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
                               </div>
                               <div className="text-sm text-muted-foreground">{experiment.accuracyType ?? 'Accuracy'}</div>
-                            </div>
-
-                            {/* Center column */}
-                            <div className="space-y-1 ml-4">
-                              <div className="text-sm text-muted-foreground">
-                                {experiment.totalItems ?? 0} samples
-                              </div>
                               <div className="text-sm text-muted-foreground">
                                 ${experiment.cost?.toFixed(3) ?? '0.000'}
                               </div>
                             </div>
 
-                            {/* Right column */}
-                            <div className="w-[140px] space-y-2">
+                            {/* Right column - with wider progress bars */}
+                            <div className="w-[180px] space-y-2">
                               <ExperimentListProgressBar 
                                 progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
                                 totalSamples={experiment.totalItems ?? 0}
