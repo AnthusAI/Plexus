@@ -37,6 +37,7 @@ from sklearn.metrics import (
     confusion_matrix
 )
 import numpy as np
+from datetime import datetime, timezone
 
 # Configure logging with a more concise format
 logging.basicConfig(
@@ -645,6 +646,81 @@ def simulate(
                 errorMessage=str(e)
             )
         click.echo(f"Error: {str(e)}", err=True)
+
+def simulate_experiment_progress(experiment_id: str, client: PlexusDashboardClient):
+    """Simulate experiment progress by updating metrics over time."""
+    experiment = client.get_experiment(experiment_id)
+    
+    # Initial values
+    total_items = 100
+    processed = 0
+    start_time = datetime.now(timezone.utc)
+    
+    # Initialize confusion matrix with zeros
+    labels = ["Yes", "No", "NA"]
+    matrix_size = len(labels)
+    confusion_matrix = {
+        "matrix": [[0] * matrix_size for _ in range(matrix_size)],
+        "labels": labels
+    }
+    
+    while processed < total_items:
+        processed += random.randint(5, 15)
+        processed = min(processed, total_items)
+        elapsed = datetime.now(timezone.utc) - start_time
+        
+        # Calculate metrics based on processed items
+        accuracy = random.uniform(85, 95)
+        sensitivity = random.uniform(85, 95)
+        specificity = random.uniform(85, 95)
+        precision = random.uniform(85, 95)
+        
+        # Update confusion matrix based on current processed items
+        # Scale the matrix values proportionally to processed items
+        base_correct = int((processed / total_items) * 40)
+        base_error = int((processed / total_items) * 3)
+        
+        confusion_matrix["matrix"] = [
+            [base_correct + random.randint(-2, 2), 
+             base_error + random.randint(-1, 1),
+             base_error + random.randint(-1, 1)],
+            [base_error + random.randint(-1, 1),
+             base_correct + random.randint(-2, 2),
+             base_error + random.randint(-1, 1)],
+            [base_error + random.randint(-1, 1),
+             base_error + random.randint(-1, 1),
+             base_correct + random.randint(-2, 2)]
+        ]
+        
+        # Convert confusion matrix to JSON string
+        confusion_matrix_json = json.dumps(confusion_matrix)
+        
+        # Update experiment
+        experiment.update(
+            status="RUNNING",
+            processedItems=processed,
+            totalItems=total_items,
+            accuracy=accuracy,
+            sensitivity=sensitivity,
+            specificity=specificity,
+            precision=precision,
+            elapsedTime=str(elapsed).split('.')[0],
+            estimatedTimeRemaining=str(elapsed * ((total_items - processed) / processed)).split('.')[0],
+            confusionMatrix=confusion_matrix_json,  # Now passing as JSON string
+            inferences=processed * 2,
+            cost=processed * 0.2
+        )
+        
+        if processed < total_items:
+            time.sleep(random.uniform(0.5, 2.0))
+    
+    # Final update
+    experiment.update(
+        status="COMPLETED",
+        processedItems=total_items,
+        totalItems=total_items,
+        estimatedTimeRemaining="00:00:00"
+    )
 
 if __name__ == '__main__':
     cli() 
