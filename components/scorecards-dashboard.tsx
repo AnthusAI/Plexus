@@ -389,13 +389,13 @@ export default function ScorecardsComponent() {
                             <div className="flex items-center">
                               <CardButton 
                                 icon={Pencil}
-                                onClick={(e) => { e.stopPropagation(); handleEdit(scorecard); }}
+                                onClick={() => handleEdit(scorecard)}
                               />
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <CardButton 
                                     icon={MoreHorizontal}
-                                    onClick={(e) => e.stopPropagation()}
+                                    onClick={() => {}}
                                   />
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
@@ -423,13 +423,13 @@ export default function ScorecardsComponent() {
                       <div className="flex items-center justify-end space-x-2">
                         <CardButton 
                           icon={Pencil}
-                          onClick={(e) => { e.stopPropagation(); handleEdit(scorecard); }}
+                          onClick={() => handleEdit(scorecard)}
                         />
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <CardButton 
                               icon={MoreHorizontal}
-                              onClick={(e) => e.stopPropagation()}
+                              onClick={() => {}}
                             />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
