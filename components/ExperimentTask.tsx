@@ -5,7 +5,7 @@ import MetricsGauges from '@/components/MetricsGauges'
 import { ProgressBar } from "@/components/ui/progress-bar"
 import { ResponsiveWaffle } from '@nivo/waffle'
 import { ConfusionMatrix } from '@/components/confusion-matrix'
-import { formatDuration, intervalToDuration } from 'date-fns'
+import { intervalToDuration } from 'date-fns'
 import { CardButton } from '@/components/CardButton'
 
 export interface ExperimentTaskData {
@@ -19,10 +19,9 @@ export interface ExperimentTaskData {
   inferences: number
   cost: number | null
   status: string
-  elapsedTime: string
-  estimatedTimeRemaining: string
+  elapsedSeconds: number | null
+  estimatedRemainingSeconds: number | null
   startedAt?: string | null
-  estimatedEndAt?: string | null
   errorMessage?: string | null
   errorDetails?: any | null
   confusionMatrix?: {
@@ -58,6 +57,20 @@ function computeExperimentType(data: ExperimentTaskData): string {
   }
   
   return "Experiment pending"
+}
+
+function formatDuration(seconds: number): string {
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const remainingSeconds = seconds % 60
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${remainingSeconds}s`
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${remainingSeconds}s`
+  }
+  return `${remainingSeconds}s`
 }
 
 export default function ExperimentTask({ 
@@ -124,10 +137,12 @@ export default function ExperimentTask({
       <div className="mt-4">
         <ProgressBar 
           progress={data.progress}
-          elapsedTime={data.elapsedTime}
+          elapsedTime={data.elapsedSeconds ? 
+            formatDuration(data.elapsedSeconds) : undefined}
           processedItems={data.processedItems}
           totalItems={data.totalItems}
-          estimatedTimeRemaining={data.estimatedTimeRemaining}
+          estimatedTimeRemaining={data.estimatedRemainingSeconds ? 
+            formatDuration(data.estimatedRemainingSeconds) : undefined}
           color="secondary"
         />
       </div>

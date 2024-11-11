@@ -38,7 +38,8 @@ class Experiment(BaseModel):
     specificity: Optional[float] = None
     precision: Optional[float] = None
     startedAt: Optional[datetime] = None
-    estimatedEndAt: Optional[datetime] = None
+    elapsedSeconds: Optional[int] = None
+    estimatedRemainingSeconds: Optional[int] = None
     totalItems: Optional[int] = None
     processedItems: Optional[int] = None
     errorMessage: Optional[str] = None
@@ -66,7 +67,8 @@ class Experiment(BaseModel):
         specificity: Optional[float] = None,
         precision: Optional[float] = None,
         startedAt: Optional[datetime] = None,
-        estimatedEndAt: Optional[datetime] = None,
+        elapsedSeconds: Optional[int] = None,
+        estimatedRemainingSeconds: Optional[int] = None,
         totalItems: Optional[int] = None,
         processedItems: Optional[int] = None,
         errorMessage: Optional[str] = None,
@@ -91,7 +93,8 @@ class Experiment(BaseModel):
         self.specificity = specificity
         self.precision = precision
         self.startedAt = startedAt
-        self.estimatedEndAt = estimatedEndAt
+        self.elapsedSeconds = elapsedSeconds
+        self.estimatedRemainingSeconds = estimatedRemainingSeconds
         self.totalItems = totalItems
         self.processedItems = processedItems
         self.errorMessage = errorMessage
@@ -119,7 +122,8 @@ class Experiment(BaseModel):
             specificity
             precision
             startedAt
-            estimatedEndAt
+            elapsedSeconds
+            estimatedRemainingSeconds
             totalItems
             processedItems
             errorMessage
@@ -190,7 +194,7 @@ class Experiment(BaseModel):
     @classmethod
     def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Experiment':
         # Convert string dates to datetime objects
-        for date_field in ['createdAt', 'updatedAt', 'startedAt', 'estimatedEndAt']:
+        for date_field in ['createdAt', 'updatedAt', 'startedAt']:
             if data.get(date_field):
                 data[date_field] = datetime.fromisoformat(data[date_field].replace('Z', '+00:00'))
 
@@ -211,7 +215,8 @@ class Experiment(BaseModel):
             specificity=data.get('specificity'),
             precision=data.get('precision'),
             startedAt=data.get('startedAt'),
-            estimatedEndAt=data.get('estimatedEndAt'),
+            elapsedSeconds=data.get('elapsedSeconds'),
+            estimatedRemainingSeconds=data.get('estimatedRemainingSeconds'),
             totalItems=data.get('totalItems'),
             processedItems=data.get('processedItems'),
             errorMessage=data.get('errorMessage'),

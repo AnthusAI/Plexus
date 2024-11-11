@@ -31,6 +31,7 @@ import ExperimentTask, { type ExperimentTaskProps } from "@/components/Experimen
 import { ExperimentListProgressBar } from "@/components/ExperimentListProgressBar"
 import { ExperimentListAccuracyBar } from "@/components/ExperimentListAccuracyBar"
 import { CardButton } from '@/components/CardButton'
+import { formatDuration } from '@/utils/format-duration'
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -171,10 +172,9 @@ export default function ExperimentsDashboard() {
             inferences: experiment.inferences || 0,
             cost: experiment.cost ?? null,
             status: experiment.status || 'Unknown',
-            elapsedTime: '00:00:00',
-            estimatedTimeRemaining: '00:00:00',
+            elapsedSeconds: experiment.elapsedSeconds ?? 0,
+            estimatedRemainingSeconds: experiment.estimatedRemainingSeconds ?? 0,
             startedAt: experiment.startedAt || null,
-            estimatedEndAt: experiment.estimatedEndAt || null,
             errorMessage: experiment.errorMessage ?? null,
             errorDetails: experiment.errorDetails ?? null,
             confusionMatrix, // Use the parsed confusion matrix
@@ -220,7 +220,7 @@ export default function ExperimentsDashboard() {
               'id', 'type', 'parameters', 'metrics', 'inferences', 
               'cost', 'accuracy', 'accuracyType', 'sensitivity', 'specificity', 
               'precision', 'createdAt', 'updatedAt', 'status', 'startedAt', 
-              'estimatedEndAt', 'totalItems', 'processedItems', 'errorMessage', 
+              'totalItems', 'processedItems', 'errorMessage', 
               'errorDetails', 'accountId', 'scorecardId', 'scoreId', 'confusionMatrix',
               // Include these fields for the scorecard relationship
               'scorecard.id',
@@ -232,7 +232,7 @@ export default function ExperimentsDashboard() {
           
           const filteredExperiments = initialExperiments.data
             .map(transformExperiment)
-            .sort((a, b) => 
+            .sort((a: Schema['Experiment']['type'], b: Schema['Experiment']['type']) => 
               new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             );
           
@@ -246,7 +246,7 @@ export default function ExperimentsDashboard() {
               'id', 'type', 'parameters', 'metrics', 'inferences', 
               'cost', 'accuracy', 'accuracyType', 'sensitivity', 'specificity', 
               'precision', 'createdAt', 'updatedAt', 'status', 'startedAt', 
-              'estimatedEndAt', 'totalItems', 'processedItems', 'errorMessage', 
+              'totalItems', 'processedItems', 'errorMessage', 
               'errorDetails', 'accountId', 'scorecardId', 'scoreId', 'confusionMatrix',
               // Include these fields for the scorecard relationship
               'scorecard.id',

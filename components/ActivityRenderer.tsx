@@ -1,5 +1,5 @@
 import React from 'react'
-import { ActivityData, isExperimentActivity, ScoringJobTaskData, ExperimentTaskData } from '@/types/tasks'
+import { ActivityData, isExperimentActivity, ScoringJobTaskData, ExperimentTaskData, OptimizationActivity } from '@/types/tasks'
 import { BaseTaskProps } from '@/components/Task'
 import ExperimentTaskComponent from '@/components/ExperimentTask'
 import AlertTask from '@/components/AlertTask'
@@ -88,31 +88,7 @@ const ActivityRenderer: React.FC<ActivityRendererProps> = ({
         />
       )
     case 'Optimization started':
-      return (
-        <OptimizationTask
-          variant="detail"
-          task={{
-            ...activity,
-            data: {
-              ...activity.data,
-              progress: activity.data?.progress || 0,
-              accuracy: activity.data?.accuracy || 0,
-              numberComplete: activity.data?.numberComplete || 0,
-              numberTotal: activity.data?.numberTotal || 0,
-              eta: activity.data?.eta || '00:00:00',
-              elapsedTime: activity.data?.elapsedTime || '00:00:00',
-              estimatedTimeRemaining: activity.data?.estimatedTimeRemaining || '00:00:00',
-              processedItems: activity.data?.processedItems || 0,
-              totalItems: activity.data?.totalItems || 0,
-              before: activity.data?.before || { outerRing: [], innerRing: [] },
-              after: activity.data?.after || { outerRing: [], innerRing: [] }
-            }
-          }}
-          isFullWidth={isFullWidth}
-          onToggleFullWidth={onToggleFullWidth}
-          onClose={onClose}
-        />
-      )
+      return renderOptimizationTask(activity)
     case 'Feedback queue started':
     case 'Feedback queue completed':
       return (
@@ -137,6 +113,18 @@ const ActivityRenderer: React.FC<ActivityRendererProps> = ({
     default:
       return null
   }
+}
+
+const renderOptimizationTask = (activity: OptimizationActivity) => {
+  return (
+    <OptimizationTask
+      variant="detail"
+      task={activity}
+      isFullWidth={false}
+      onToggleFullWidth={() => {}}
+      onClose={() => {}}
+    />
+  )
 }
 
 export default ActivityRenderer 
