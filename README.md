@@ -264,35 +264,26 @@ If TypeScript type-checking suddenly becomes very slow (minutes instead of secon
    - Modifying which interfaces extend other interfaces
    - Changing the inheritance chain
    - Adding new type parameters to inherited interfaces
+   - Importing types from other components and using them in interfaces
 
 2. Adding type assertions or complex type conversions
    - Using `as` to convert between types
    - Adding runtime type checks that affect type inference
    - Complex conditional types
+   - Creating new type relationships through imports
 
 3. Adding conditional type logic
    - Making properties conditionally optional/required
    - Using complex union or intersection types
    - Nested conditional types
+   - Cross-component type dependencies
 
-### How to Keep Type Checking Fast
+### Key Metrics to Watch
 
-1. Keep existing type relationships stable
-   - Don't modify interface inheritance
-   - Don't change how types extend each other
-   - Fix issues at the value level when possible
+When running `tsc --noEmit --pretty --diagnostics`, watch these metrics:
+- Types: Should stay under 100
+- Instantiations: Should stay at 0 if possible
+- Check time: Should stay under 1 second
 
-2. Keep type definitions simple and flat
-   - Avoid deep nesting of types
-   - Avoid complex conditional types
-   - Use simple unions and intersections
-
-3. Make minimal changes to type definitions
-   - Fix runtime behavior instead of type behavior when possible
-   - Keep type assertions to a minimum
-   - Use explicit types instead of complex inference
-
-4. Monitor type-checking performance
-   - Run `npx tsc --noEmit --pretty --diagnostics` to check performance
-   - Watch for sudden increases in checking time
-   - Revert changes that cause significant slowdowns
+If these metrics explode (Types > 1000, Instantiations > 0, Check time > 10s), 
+you've likely introduced a type relationship that's causing combinatorial explosion.
