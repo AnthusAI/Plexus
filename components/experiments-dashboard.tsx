@@ -1,6 +1,6 @@
 "use client"
 import React from "react"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -135,46 +135,52 @@ export default function ExperimentsDashboard() {
     const scoreResult = await experiment.score?.();
     const scoreName = scoreResult?.data?.name || '';
     
-    const confusionMatrix = experiment.confusionMatrix && 
-      typeof experiment.confusionMatrix === 'object' &&
-      'matrix' in experiment.confusionMatrix &&
-      'labels' in experiment.confusionMatrix
-        ? experiment.confusionMatrix as { matrix: number[][]; labels: string[] }
-        : { matrix: [], labels: [] };
+    // Parse confusion matrix from JSON string
+    let confusionMatrix;
+    if (experiment.confusionMatrix && typeof experiment.confusionMatrix === 'string') {
+        try {
+            confusionMatrix = JSON.parse(experiment.confusionMatrix);
+        } catch (e) {
+            console.error('Error parsing confusion matrix:', e);
+            confusionMatrix = { matrix: [], labels: [] };
+        }
+    } else {
+        confusionMatrix = { matrix: [], labels: [] };
+    }
     
     return {
-      id: experiment.id,
-      type: experiment.type,
-      scorecard: scorecardName,
-      score: scoreName,
-      time: formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true }),
-      summary: experiment.errorMessage || `${progress}% complete`,
-      description: experiment.errorDetails ? 
-        typeof experiment.errorDetails === 'string' ? 
-          experiment.errorDetails : 
-          JSON.stringify(experiment.errorDetails) : 
-        undefined,
-      data: {
-        accuracy: experiment.accuracy ?? null,
-        sensitivity: experiment.sensitivity ?? null,
-        specificity: experiment.specificity ?? null,
-        precision: experiment.precision ?? null,
-        processedItems: experiment.processedItems || 0,
-        totalItems: experiment.totalItems || 0,
-        progress,
-        inferences: experiment.inferences || 0,
-        cost: experiment.cost ?? null,
-        status: experiment.status || 'Unknown',
-        elapsedTime: '00:00:00',
-        estimatedTimeRemaining: '00:00:00',
-        startedAt: experiment.startedAt || null,
-        estimatedEndAt: experiment.estimatedEndAt || null,
-        errorMessage: experiment.errorMessage ?? null,
-        errorDetails: experiment.errorDetails ?? null,
-        confusionMatrix,
-      },
+        id: experiment.id,
+        type: experiment.type,
+        scorecard: scorecardName,
+        score: scoreName,
+        time: formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true }),
+        summary: experiment.errorMessage || `${progress}% complete`,
+        description: experiment.errorDetails ? 
+            typeof experiment.errorDetails === 'string' ? 
+                experiment.errorDetails : 
+                JSON.stringify(experiment.errorDetails) : 
+            undefined,
+        data: {
+            accuracy: experiment.accuracy ?? null,
+            sensitivity: experiment.sensitivity ?? null,
+            specificity: experiment.specificity ?? null,
+            precision: experiment.precision ?? null,
+            processedItems: experiment.processedItems || 0,
+            totalItems: experiment.totalItems || 0,
+            progress,
+            inferences: experiment.inferences || 0,
+            cost: experiment.cost ?? null,
+            status: experiment.status || 'Unknown',
+            elapsedTime: '00:00:00',
+            estimatedTimeRemaining: '00:00:00',
+            startedAt: experiment.startedAt || null,
+            estimatedEndAt: experiment.estimatedEndAt || null,
+            errorMessage: experiment.errorMessage ?? null,
+            errorDetails: experiment.errorDetails ?? null,
+            confusionMatrix, // Use the parsed confusion matrix
+        },
     }
-  }
+}
 
   // Effect to update experimentTaskProps when selectedExperiment changes
   useEffect(() => {
