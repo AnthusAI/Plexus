@@ -413,7 +413,7 @@ export default function ExperimentsDashboard() {
             />
           </div>
         ) : (
-          <div className={`flex ${isNarrowViewport ? 'flex-col' : 'space-x-6'} h-full`}>
+          <div className={`flex ${isNarrowViewport ? 'flex-col' : 'space-x-6'} flex-1 h-full`}>
             <div className={`${isFullWidth ? 'hidden' : 'flex-1'} @container overflow-auto`}>
               <Table>
                 <TableHeader>
@@ -504,21 +504,23 @@ export default function ExperimentsDashboard() {
             </div>
 
             {selectedExperiment && experimentTaskProps && !isNarrowViewport && !isFullWidth && (
-              <div className={`${isFullWidth ? 'w-full' : 'w-1/2 min-w-[300px]'} overflow-y-auto`}>
-                <ExperimentTask
-                  variant="detail"
-                  task={experimentTaskProps}
-                  isFullWidth={isFullWidth}
-                  onToggleFullWidth={() => {
-                    console.log('Toggle fullwidth clicked');
-                    setIsFullWidth(!isFullWidth);
-                  }}
-                  onClose={() => {
-                    console.log('Close clicked');
-                    setSelectedExperiment(null);
-                    setIsFullWidth(false);
-                  }}
-                />
+              <div className={`${isFullWidth ? 'w-full' : 'w-1/2 min-w-[300px]'} flex flex-col flex-1 overflow-y-auto`}>
+                <div className="flex-1 flex flex-col">
+                  <ExperimentTask
+                    variant="detail"
+                    task={experimentTaskProps}
+                    isFullWidth={isFullWidth}
+                    onToggleFullWidth={() => {
+                      console.log('Toggle fullwidth clicked');
+                      setIsFullWidth(!isFullWidth);
+                    }}
+                    onClose={() => {
+                      console.log('Close clicked');
+                      setSelectedExperiment(null);
+                      setIsFullWidth(false);
+                    }}
+                  />
+                </div>
               </div>
             )}
           </div>
