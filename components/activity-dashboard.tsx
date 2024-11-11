@@ -19,6 +19,7 @@ import React from "react"
 import ScorecardContext from "@/components/ScorecardContext"
 import { formatTimeAgo } from '@/utils/format-time'
 import { TaskStatus } from '@/types/shared'
+import { formatDuration } from '@/utils/format-duration'
 
 // Import new task components
 import ExperimentTaskComponent from '@/components/ExperimentTask'
@@ -103,8 +104,8 @@ const recentActivities: ActivityData[] = [
       precision: 88,
       processedItems: 47,
       totalItems: 100,
-      elapsedTime: "00:02:15",
-      estimatedTimeRemaining: "00:03:05",
+      elapsedSeconds: 135,
+      estimatedRemainingSeconds: 260,
       confusionMatrix: {
         matrix: [[21, 2, 1], [1, 19, 1], [0, 1, 18]],
         labels: ["Yes", "No", "NA"]
@@ -156,13 +157,11 @@ const recentActivities: ActivityData[] = [
       title: "Model Optimization",
       progress: 92,
       accuracy: 75,
-      elapsedTime: "00:45:30",
-      estimatedTimeRemaining: "00:05:00",
-      processedItems: 92,
-      totalItems: 100,
       numberComplete: 92,
       numberTotal: 100,
       eta: "00:05:00",
+      processedItems: 92,
+      totalItems: 100,
       before: {
         outerRing: [
           { category: "Positive", value: 50, fill: "var(--true)" },
@@ -182,7 +181,11 @@ const recentActivities: ActivityData[] = [
           { category: "Positive", value: 92, fill: "var(--true)" },
           { category: "Negative", value: 8, fill: "var(--false)" }
         ]
-      }
+      },
+      elapsedTime: "45m 30s",
+      estimatedTimeRemaining: "5m 0s",
+      elapsedSeconds: 2730,
+      estimatedRemainingSeconds: 300
     }
   },
   {
@@ -254,8 +257,8 @@ const recentActivities: ActivityData[] = [
       precision: 92,
       processedItems: 100,
       totalItems: 100,
-      elapsedTime: "00:04:20",
-      estimatedTimeRemaining: "00:00:00",
+      elapsedSeconds: 2420,
+      estimatedRemainingSeconds: 0,
       confusionMatrix: {
         matrix: [
           [45, 3, 2],
@@ -319,8 +322,8 @@ const recentActivities: ActivityData[] = [
       progress: 25,
       processedItems: 37,
       totalItems: 150,
-      elapsedTime: "00:10:15",
-      estimatedTimeRemaining: "00:30:45",
+      elapsedSeconds: 615,
+      estimatedRemainingSeconds: 345,
     },
   },
   {
@@ -338,8 +341,8 @@ const recentActivities: ActivityData[] = [
       progress: 100,
       processedItems: 200,
       totalItems: 200,
-      elapsedTime: "00:45:30",
-      estimatedTimeRemaining: "00:00:00",
+      elapsedSeconds: 1245,
+      estimatedRemainingSeconds: 0,
     },
   },
 ]
@@ -747,29 +750,43 @@ export default function ActivityDashboard() {
                         />
                       )
                     case 'Optimization started':
+                      if (!selectedActivity) return null;
+                      const optimizationData = selectedActivity.data as OptimizationTaskData;
                       return (
                         <OptimizationTask
-                          variant="grid"
+                          variant="detail"
                           task={{
-                            ...activity,
+                            id: selectedActivity.id,
+                            type: selectedActivity.type,
+                            scorecard: selectedActivity.scorecard,
+                            score: selectedActivity.score,
+                            time: selectedActivity.time,
+                            summary: selectedActivity.summary,
+                            description: selectedActivity.description,
                             data: {
-                              ...activity.data,
-                              progress: activity.data?.progress || 0,
-                              accuracy: activity.data?.accuracy || 0,
-                              numberComplete: activity.data?.numberComplete || 0,
-                              numberTotal: activity.data?.numberTotal || 0,
-                              eta: activity.data?.eta || '00:00:00',
-                              elapsedTime: activity.data?.elapsedTime || '00:00:00',
-                              estimatedTimeRemaining: activity.data?.estimatedTimeRemaining || '00:00:00',
-                              processedItems: activity.data?.processedItems || 0,
-                              totalItems: activity.data?.totalItems || 0,
-                              before: activity.data?.before || { outerRing: [], innerRing: [] },
-                              after: activity.data?.after || { outerRing: [], innerRing: [] }
+                              progress: optimizationData.progress,
+                              accuracy: optimizationData.accuracy,
+                              numberComplete: optimizationData.numberComplete,
+                              numberTotal: optimizationData.numberTotal,
+                              eta: optimizationData.eta,
+                              processedItems: optimizationData.processedItems,
+                              totalItems: optimizationData.totalItems,
+                              before: optimizationData.before,
+                              after: optimizationData.after,
+                              elapsedTime: formatDuration(optimizationData.elapsedSeconds ?? 0),
+                              estimatedTimeRemaining: formatDuration(optimizationData.estimatedRemainingSeconds ?? 0),
+                              id: optimizationData.id,
+                              title: optimizationData.title,
+                              elapsedSeconds: optimizationData.elapsedSeconds,
+                              estimatedRemainingSeconds: optimizationData.estimatedRemainingSeconds
                             }
                           }}
-                          onClick={() => setSelectedActivity(activity)}
-                          onToggleFullWidth={() => {}}
-                          onClose={() => {}}
+                          isFullWidth={isFullWidth}
+                          onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                          onClose={() => {
+                            setSelectedActivity(null)
+                            setIsFullWidth(false)
+                          }}
                         />
                       )
                     case 'Feedback queue started':
@@ -866,7 +883,16 @@ export default function ActivityDashboard() {
                   return (
                     <OptimizationTask
                       variant="detail"
-                      task={selectedActivity}
+                      task={{
+                        ...selectedActivity,
+                        data: {
+                          ...selectedActivity.data,
+                          elapsedTime: formatDuration(selectedActivity.data?.elapsedSeconds || 0),
+                          estimatedTimeRemaining: formatDuration(selectedActivity.data?.estimatedRemainingSeconds || 0),
+                          elapsedSeconds: selectedActivity.data?.elapsedSeconds || 0,
+                          estimatedRemainingSeconds: selectedActivity.data?.estimatedRemainingSeconds || 0
+                        }
+                      }}
                       isFullWidth={isFullWidth}
                       onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
                       onClose={() => {
@@ -979,7 +1005,16 @@ export default function ActivityDashboard() {
                   return (
                     <OptimizationTask
                       variant="detail"
-                      task={selectedActivity}
+                      task={{
+                        ...selectedActivity,
+                        data: {
+                          ...selectedActivity.data,
+                          elapsedTime: formatDuration(selectedActivity.data?.elapsedSeconds || 0),
+                          estimatedTimeRemaining: formatDuration(selectedActivity.data?.estimatedRemainingSeconds || 0),
+                          elapsedSeconds: selectedActivity.data?.elapsedSeconds || 0,
+                          estimatedRemainingSeconds: selectedActivity.data?.estimatedRemainingSeconds || 0
+                        }
+                      }}
                       isFullWidth={isFullWidth}
                       onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
                       onClose={() => {

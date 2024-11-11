@@ -37,7 +37,7 @@ from sklearn.metrics import (
     confusion_matrix
 )
 import numpy as np
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # Configure logging with a more concise format
 logging.basicConfig(
@@ -533,7 +533,7 @@ def simulate(
             logger.info(f"Using score: {score.name} ({score.id})")
 
         # Create initial experiment record
-        logger.info("Creating experiment record...")
+        started_at = datetime.now(timezone.utc)
         experiment = Experiment.create(
             client=client,
             type="evaluation",
@@ -546,7 +546,11 @@ def simulate(
             parameters=json.dumps({
                 "target_accuracy": accuracy,
                 "num_items": num_items
-            })
+            }),
+            startedAt=started_at.isoformat().replace('+00:00', 'Z'),
+            # Initial estimate based on 1 second per item
+            estimatedEndAt=(started_at + timedelta(seconds=num_items))\
+                .isoformat().replace('+00:00', 'Z')
         )
         
         # Lists to store true and predicted values for metrics calculation
@@ -556,7 +560,6 @@ def simulate(
         def update_metrics():
             """Calculate and update experiment metrics"""
             try:
-                # Create a new client instance for this thread
                 thread_client = PlexusDashboardClient()
                 
                 y_true = np.array(true_values)
@@ -573,19 +576,29 @@ def simulate(
                 fp = conf_matrix[0,1]  # false positives
                 spec = float(tn / (tn + fp) * 100) if (tn + fp) > 0 else None
                 
-                # Get a fresh experiment instance with the new client
-                thread_experiment = Experiment.get_by_id(experiment.id, thread_client)
-                thread_experiment.update(
-                    accuracy=float(acc),
-                    precision=float(prec),
-                    sensitivity=float(sens),
-                    specificity=spec if spec is not None else None,
-                    processedItems=len(true_values),
-                    confusionMatrix=json.dumps({
-                        "matrix": conf_matrix.tolist(),
-                        "labels": ["Yes", "No"]
-                    })
-                )
+                # Calculate time estimates
+                items_processed = len(true_values)
+                if items_processed > 0:
+                    elapsed_seconds = int((datetime.now(timezone.utc) - started_at)\
+                        .total_seconds())
+                    avg_time_per_item = elapsed_seconds / items_processed
+                    remaining_items = num_items - items_processed
+                    estimated_remaining_seconds = int(avg_time_per_item * remaining_items)
+                    
+                    thread_experiment = Experiment.get_by_id(experiment.id, thread_client)
+                    thread_experiment.update(
+                        accuracy=float(acc),
+                        precision=float(prec),
+                        sensitivity=float(sens),
+                        specificity=spec if spec is not None else None,
+                        processedItems=items_processed,
+                        confusionMatrix=json.dumps({
+                            "matrix": conf_matrix.tolist(),
+                            "labels": ["Yes", "No"]
+                        }),
+                        elapsedSeconds=elapsed_seconds,
+                        estimatedRemainingSeconds=estimated_remaining_seconds
+                    )
                 
             except Exception as e:
                 logger.error(f"Error updating metrics: {str(e)}")
@@ -635,7 +648,11 @@ def simulate(
                 logger.info(f"Generated {i + 1} of {num_items} results")
         
         # Final update
-        experiment.update(status="COMPLETED")
+        experiment.update(
+            status="COMPLETED",
+            elapsedSeconds=int((datetime.now(timezone.utc) - started_at).total_seconds()),
+            estimatedRemainingSeconds=0  # No remaining time on completion
+        )
         logger.info("Simulation completed")
         
     except Exception as e:
@@ -643,7 +660,9 @@ def simulate(
         if 'experiment' in locals():
             experiment.update(
                 status="FAILED",
-                errorMessage=str(e)
+                errorMessage=str(e),
+                elapsedSeconds=int((datetime.now(timezone.utc) - started_at).total_seconds()),
+                estimatedRemainingSeconds=None  # Clear estimate on failure
             )
         click.echo(f"Error: {str(e)}", err=True)
 

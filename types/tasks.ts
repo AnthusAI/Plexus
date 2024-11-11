@@ -30,11 +30,10 @@ export type ExperimentTaskData = BaseTaskData & {
   inferences: number
   cost: number | null
   status: TaskStatus
-  elapsedTime: string
-  estimatedTimeRemaining: string
-  startedAt?: string
-  estimatedEndAt?: string
-  errorMessage?: string
+  elapsedSeconds: number | null
+  estimatedRemainingSeconds: number | null
+  startedAt?: string | null
+  errorMessage?: string | null
   errorDetails?: any
   confusionMatrix?: {
     matrix: number[][]
@@ -46,22 +45,26 @@ export type FeedbackTaskData = BaseTaskData & {
   progress: number
   processedItems: number
   totalItems: number
-  elapsedTime: string
-  estimatedTimeRemaining: string
+  elapsedSeconds: number | null
+  estimatedRemainingSeconds: number | null
 }
 
 export type OptimizationTaskData = BaseTaskData & {
+  id: string
+  title: string
   progress: number
   accuracy: number
   numberComplete: number
   numberTotal: number
   eta: string
-  elapsedTime: string
-  estimatedTimeRemaining: string
   processedItems: number
   totalItems: number
   before: RingData
   after: RingData
+  elapsedTime: string
+  estimatedTimeRemaining: string
+  elapsedSeconds: number | null
+  estimatedRemainingSeconds: number | null
 }
 
 export type ReportTaskData = BaseTaskData & {
