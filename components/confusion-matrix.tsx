@@ -26,6 +26,11 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
     return `hsl(var(--violet-${Math.max(1, intensity)}))` 
   }
 
+  const getTextColor = (value: number) => {
+    const intensity = Math.round((value / maxValue) * 10)
+    return intensity > 5 ? 'text-white dark:text-foreground' : 'text-primary'
+  }
+
   return (
     <div className="w-full flex flex-col">
       <div className="relative w-full" style={{ paddingTop: 'calc(100% - 2.5rem)' }}>
@@ -62,7 +67,8 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
             {data.matrix.flat().map((value, index) => (
               <div
                 key={`cell-${index}`}
-                className="flex items-center justify-center text-xl font-medium text-foreground"
+                className={`flex items-center justify-center text-3xl font-medium 
+                  ${getTextColor(value)}`}
                 style={{
                   backgroundColor: getBackgroundColor(value),
                 }}
