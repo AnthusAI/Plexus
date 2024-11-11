@@ -116,10 +116,9 @@ export default function ExperimentTask({
     }
   ]
 
-  // Convert to MetricsGauges variant type
   const metricsVariant = variant === 'grid' ? 'grid' : 'detail'
 
-  const visualization = variant === 'detail' ? (
+  const visualization = (
     <div className="w-full">
       <MetricsGauges gauges={metrics} variant={metricsVariant} />
       <div className="mt-4">
@@ -132,80 +131,70 @@ export default function ExperimentTask({
           color="secondary"
         />
       </div>
-      <div 
-        ref={waffleContainerRef}
-        className="mt-4 w-full" 
-        style={{ height: `${waffleHeight}px` }}
-      >
-        <ResponsiveWaffle
-          data={[
-            { 
-              id: 'correct', 
-              label: 'Correct', 
-              value: Math.round(data.processedItems * (data.accuracy ?? 0) / 100) 
-            },
-            { 
-              id: 'incorrect', 
-              label: 'Incorrect', 
-              value: data.processedItems - Math.round(data.processedItems * (data.accuracy ?? 0) / 100) 
-            },
-            { 
-              id: 'unprocessed', 
-              label: 'Unprocessed', 
-              value: data.totalItems - data.processedItems 
-            }
-          ]}
-          total={data.totalItems}
-          rows={5}
-          columns={20}
-          padding={1}
-          valueFormat=".0f"
-          colors={({ id }) => {
-            const colorMap: Record<string, string> = {
-              correct: 'var(--true)',
-              incorrect: 'var(--false)',
-              unprocessed: 'var(--neutral)'
-            }
-            return colorMap[id] || 'var(--neutral)'
-          }}
-          borderRadius={2}
-          fillDirection="right"
-          margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
-          legends={[{
-            anchor: 'bottom',
-            direction: 'row',
-            justify: false,
-            translateX: 0,
-            translateY: 30,
-            itemsSpacing: 4,
-            itemWidth: 100,
-            itemHeight: 20,
-            itemDirection: 'left-to-right',
-            itemOpacity: 1,
-            itemTextColor: 'var(--text-muted)',
-            symbolSize: 20
-          }]}
-        />
-      </div>
-      {data.confusionMatrix && (
-        <div className="mt-8">
-          <ConfusionMatrix data={data.confusionMatrix} />
-        </div>
+      {variant === 'detail' && (
+        <>
+          <div 
+            ref={waffleContainerRef}
+            className="mt-4 w-full" 
+            style={{ height: `${waffleHeight}px` }}
+          >
+            <ResponsiveWaffle
+              data={[
+                { 
+                  id: 'correct', 
+                  label: 'Correct', 
+                  value: Math.round(data.processedItems * (data.accuracy ?? 0) / 100) 
+                },
+                { 
+                  id: 'incorrect', 
+                  label: 'Incorrect', 
+                  value: data.processedItems - Math.round(data.processedItems * (data.accuracy ?? 0) / 100) 
+                },
+                { 
+                  id: 'unprocessed', 
+                  label: 'Unprocessed', 
+                  value: data.totalItems - data.processedItems 
+                }
+              ]}
+              total={data.totalItems}
+              rows={5}
+              columns={20}
+              padding={1}
+              valueFormat=".0f"
+              colors={({ id }) => {
+                const colorMap: Record<string, string> = {
+                  correct: 'var(--true)',
+                  incorrect: 'var(--false)',
+                  unprocessed: 'var(--neutral)'
+                }
+                return colorMap[id] || 'var(--neutral)'
+              }}
+              borderRadius={2}
+              fillDirection="right"
+              margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+              legends={[{
+                anchor: 'bottom',
+                direction: 'row',
+                justify: false,
+                translateX: 0,
+                translateY: 30,
+                itemsSpacing: 4,
+                itemWidth: 100,
+                itemHeight: 20,
+                itemDirection: 'left-to-right',
+                itemOpacity: 1,
+                itemTextColor: 'var(--text-muted)',
+                symbolSize: 20
+              }]}
+            />
+          </div>
+          {data.confusionMatrix && (
+            <div className="mt-8">
+              <ConfusionMatrix data={data.confusionMatrix} />
+            </div>
+          )}
+        </>
       )}
-    </div>
-  ) : (
-    <div className="w-full">
-      <MetricsGauges gauges={metrics} variant={metricsVariant} />
-      <div className="mt-4">
-        <ProgressBar 
-          progress={data.progress}
-          elapsedTime={data.elapsedTime}
-          processedItems={data.processedItems}
-          totalItems={data.totalItems}
-          estimatedTimeRemaining={data.estimatedTimeRemaining}
-          color="secondary"
-        />
-      </div>
     </div>
   )
 
@@ -247,79 +236,7 @@ export default function ExperimentTask({
       )}
       renderContent={(props) => (
         <TaskContent {...props}>
-          <div className="w-full">
-            <MetricsGauges gauges={metrics} variant={metricsVariant} />
-            <div className="mt-4">
-              <ProgressBar 
-                progress={data.progress}
-                elapsedTime={data.elapsedTime}
-                processedItems={data.processedItems}
-                totalItems={data.totalItems}
-                estimatedTimeRemaining={data.estimatedTimeRemaining}
-                color="secondary"
-              />
-            </div>
-            <div 
-              ref={waffleContainerRef}
-              className="mt-4 w-full" 
-              style={{ height: `${waffleHeight}px` }}
-            >
-              <ResponsiveWaffle
-                data={[
-                  { 
-                    id: 'correct', 
-                    label: 'Correct', 
-                    value: Math.round(data.processedItems * (data.accuracy ?? 0) / 100) 
-                  },
-                  { 
-                    id: 'incorrect', 
-                    label: 'Incorrect', 
-                    value: data.processedItems - Math.round(data.processedItems * (data.accuracy ?? 0) / 100) 
-                  },
-                  { 
-                    id: 'unprocessed', 
-                    label: 'Unprocessed', 
-                    value: data.totalItems - data.processedItems 
-                  }
-                ]}
-                total={data.totalItems}
-                rows={5}
-                columns={20}
-                padding={1}
-                valueFormat=".0f"
-                colors={({ id }) => {
-                  const colorMap: Record<string, string> = {
-                    correct: 'var(--true)',
-                    incorrect: 'var(--false)',
-                    unprocessed: 'var(--neutral)'
-                  }
-                  return colorMap[id] || 'var(--neutral)'
-                }}
-                borderRadius={2}
-                fillDirection="right"
-                margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
-                legends={[{
-                  anchor: 'bottom',
-                  direction: 'row',
-                  justify: false,
-                  translateX: 0,
-                  translateY: 30,
-                  itemsSpacing: 4,
-                  itemWidth: 100,
-                  itemHeight: 20,
-                  itemDirection: 'left-to-right',
-                  itemOpacity: 1,
-                  itemTextColor: 'var(--text-muted)',
-                  symbolSize: 20
-                }]}
-              />
-            </div>
-            {data.confusionMatrix && (
-              <div className="mt-8">
-                <ConfusionMatrix data={data.confusionMatrix} />
-              </div>
-            )}
-          </div>
+          {visualization}
         </TaskContent>
       )}
     />
