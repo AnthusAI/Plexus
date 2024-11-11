@@ -565,41 +565,41 @@ def simulate(
                 # Calculate metrics (convert to percentages)
                 acc = accuracy_score(y_true, y_pred) * 100
                 prec = precision_score(y_true, y_pred, pos_label="Yes") * 100
-                sens = recall_score(y_true, y_pred, pos_label="Yes") * 100  # sensitivity
+                sens = recall_score(y_true, y_pred, pos_label="Yes") * 100
                 conf_matrix = confusion_matrix(y_true, y_pred, labels=["Yes", "No"])
                 
                 # Calculate specificity safely (as percentage)
                 tn = conf_matrix[1,1]  # true negatives
-                fn = conf_matrix[1,0]  # false negatives
-                spec = float(tn / (tn + fn) * 100) if (tn + fn) > 0 else None
+                fp = conf_matrix[0,1]  # false positives
+                spec = float(tn / (tn + fp) * 100) if (tn + fp) > 0 else None
                 
-                # Update experiment with new metrics
-                update_data = {
-                    "accuracy": float(acc),
-                    "precision": float(prec),
-                    "sensitivity": float(sens),
-                    "processedItems": len(true_values),
-                    "confusionMatrix": json.dumps({
+                # Get a fresh experiment instance with the new client
+                thread_experiment = Experiment.get_by_id(experiment.id, thread_client)
+                thread_experiment.update(
+                    accuracy=float(acc),
+                    precision=float(prec),
+                    sensitivity=float(sens),
+                    specificity=spec if spec is not None else None,
+                    processedItems=len(true_values),
+                    confusionMatrix=json.dumps({
                         "matrix": conf_matrix.tolist(),
                         "labels": ["Yes", "No"]
                     })
-                }
-                
-                # Only include specificity if we can calculate it
-                if spec is not None:
-                    update_data["specificity"] = spec
-                    
-                # Get a fresh experiment instance with the new client
-                thread_experiment = Experiment.get_by_id(experiment.id, thread_client)
-                thread_experiment.update(**update_data)
+                )
                 
             except Exception as e:
                 logger.error(f"Error updating metrics: {str(e)}")
         
+        # Pre-generate balanced true values
+        yes_count = num_items // 2
+        no_count = num_items - yes_count
+        true_values_pool = ["Yes"] * yes_count + ["No"] * no_count
+        random.shuffle(true_values_pool)
+        
         # Simulate results
         for i in range(num_items):
-            # Generate random result
-            true_value = "Yes" if random.random() < accuracy else "No"
+            # Get next true value from balanced pool
+            true_value = true_values_pool[i]
             predicted_value = true_value if random.random() < accuracy else \
                             ("No" if true_value == "Yes" else "Yes")
             
