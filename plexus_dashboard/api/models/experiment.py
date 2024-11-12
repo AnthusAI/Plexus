@@ -266,3 +266,19 @@ class Experiment(BaseModel):
         # Spawn background thread
         thread = Thread(target=_update_experiment, daemon=True)
         thread.start()
+
+    @classmethod
+    def get_by_id(cls, id: str, client: _BaseAPIClient, include_score_results: bool = False) -> 'Experiment':
+        query = """
+        query GetExperiment($id: ID!) {
+            getExperiment(id: $id) {
+                %s
+            }
+        }
+        """ % (cls.fields() + (' scoreResults { items { value confidence metadata correct } }' if include_score_results else ''))
+        
+        result = client.execute(query, {'id': id})
+        if not result or 'getExperiment' not in result:
+            raise Exception(f"Failed to get experiment {id}. Response: {result}")
+        
+        return cls.from_dict(result['getExperiment'], client)
