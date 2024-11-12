@@ -18,6 +18,8 @@ interface GaugeProps {
   title?: React.ReactNode
   backgroundColor?: string
   showTicks?: boolean
+  information?: string
+  informationUrl?: string
 }
 
 const calculateAngle = (percent: number) => {
@@ -33,7 +35,9 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   max = 100,
   title,
   backgroundColor = 'var(--card)',
-  showTicks = true
+  showTicks = true,
+  information,
+  informationUrl
 }) => {
   const [animatedValue, setAnimatedValue] = useState(0)
   const [animatedBeforeValue, setAnimatedBeforeValue] = useState(0)
@@ -42,6 +46,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   const normalizedValue = value !== undefined 
     ? ((value - min) / (max - min)) * 100
     : 0
+
+  const [showInfo, setShowInfo] = useState(false)
 
   useEffect(() => {
     const startTime = performance.now()
@@ -202,76 +208,117 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   const clipHeight = showTicks ? 168 : 144
 
   return (
-    <div className="flex flex-col items-center relative w-full h-full max-w-[20em]">
-      <div className="relative w-full aspect-square overflow-visible">
-        <svg 
-          width="100%" 
-          height="100%" 
-          viewBox={`-120 -${topPadding} 240 ${viewBoxHeight}`}
-          preserveAspectRatio="xMidYMid meet"
-        >
-          <defs>
-            <clipPath id="gaugeClip">
-              <rect 
-                x="-120" 
-                y={-topPadding} 
-                width="240" 
-                height={clipHeight} 
+    <div className="flex flex-col items-center w-full">
+      <div className="relative w-full max-w-[20em]">
+        <div className="relative w-full aspect-square overflow-visible">
+          <svg 
+            width="100%" 
+            height="100%" 
+            viewBox={`-120 -${topPadding} 240 ${viewBoxHeight}`}
+            preserveAspectRatio="xMidYMid meet"
+          >
+            <defs>
+              <clipPath id="gaugeClip">
+                <rect 
+                  x="-120" 
+                  y={-topPadding} 
+                  width="240" 
+                  height={clipHeight} 
+                />
+              </clipPath>
+            </defs>
+            <g clipPath="url(#gaugeClip)">
+              <circle 
+                cx="0" 
+                cy="0" 
+                r={radius} 
+                fill={backgroundColor}
               />
-            </clipPath>
-          </defs>
-          <g clipPath="url(#gaugeClip)">
-            <circle 
-              cx="0" 
-              cy="0" 
-              r={radius} 
-              fill={backgroundColor}
-            />
-            <g transform="rotate(-105)">
-              {renderSegments()}
-              {showTicks && renderTicks()}
-              <g>
-                {beforeValue !== undefined && (
+              <g transform="rotate(-105)">
+                {renderSegments()}
+                {showTicks && renderTicks()}
+                <g>
+                  {beforeValue !== undefined && (
+                    <path
+                      d={`M 0,-${radius} L -6,0 L 6,0 Z`}
+                      className="fill-muted-foreground opacity-40"
+                      transform={`rotate(${(animatedBeforeValue * 210) / 100})`}
+                    />
+                  )}
                   <path
                     d={`M 0,-${radius} L -6,0 L 6,0 Z`}
-                    className="fill-muted-foreground opacity-40"
-                    transform={`rotate(${(animatedBeforeValue * 210) / 100})`}
+                    className={cn(
+                      "fill-foreground",
+                      value === undefined && "fill-card"
+                    )}
+                    transform={`rotate(${(animatedValue * 210) / 100})`}
                   />
-                )}
-                <path
-                  d={`M 0,-${radius} L -6,0 L 6,0 Z`}
-                  className={cn(
-                    "fill-foreground",
-                    value === undefined && "fill-card"
-                  )}
-                  transform={`rotate(${(animatedValue * 210) / 100})`}
-                />
-                <circle cx="0" cy="0" r="10" className="fill-foreground" />
+                  <circle cx="0" cy="0" r="10" className="fill-foreground" />
+                </g>
               </g>
+              <text 
+                x="0" 
+                y={textY}
+                textAnchor="middle" 
+                className="text-[2.25rem] font-bold fill-foreground"
+                dominantBaseline="middle"
+              >
+                {value !== undefined 
+                  ? (value % 1 === 0 ? `${value}%` : `${value.toFixed(1)}%`)
+                  : ''}
+              </text>
             </g>
-            <text 
-              x="0" 
-              y={textY}
-              textAnchor="middle" 
-              className="text-[2.25rem] font-bold fill-foreground"
-              dominantBaseline="middle"
+          </svg>
+          {title && (
+            <div 
+              className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 
+                         text-base whitespace-nowrap"
+              style={{
+                bottom: showTicks 
+                  ? 'max(-10px, calc(-22px + 20%))' 
+                  : 'max(-10px, calc(-28px + 26%))'
+              }}
             >
-              {value !== undefined 
-                ? (value % 1 === 0 ? `${value}%` : `${value.toFixed(1)}%`)
-                : ''}
-            </text>
-          </g>
-        </svg>
-        {title && (
-          <div 
-            className="absolute left-1/2 -translate-x-1/2 text-base whitespace-nowrap"
-            style={{
-              bottom: showTicks 
-                ? 'max(-10px, calc(-22px + 20%))' 
-                : 'max(-10px, calc(-28px + 26%))'
-            }}
-          >
-            {title}
+              {title}
+              {information && (
+                <button 
+                  onClick={() => setShowInfo(!showInfo)} 
+                  className="text-muted-foreground hover:text-foreground"
+                  aria-label="Toggle information"
+                >
+                  <svg 
+                    width="16" 
+                    height="16" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    strokeWidth="2"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4M12 8h.01" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        {showInfo && information && (
+          <div className="w-full text-sm text-left -mt-6 mb-8 pl-4 text-muted-foreground">
+            {information.split('\n\n').map((paragraph, index) => (
+              <p key={index} className={index > 0 ? 'mt-4' : ''}>
+                {paragraph}
+              </p>
+            ))}
+            {informationUrl && (
+              <a 
+                href={informationUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline mt-1 block"
+              >
+                more...
+              </a>
+            )}
           </div>
         )}
       </div>
