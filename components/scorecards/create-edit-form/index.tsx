@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, X, Square, Columns2, ChevronUp, ChevronDown, Pencil } from "lucide-react"
+import { Plus, X, Square, RectangleVertical, ChevronUp, ChevronDown, Pencil } from "lucide-react"
 import { generateClient } from "aws-amplify/data"
 import { generateClient as generateGraphQLClient } from '@aws-amplify/api'
 import type { Schema } from "@/amplify/data/resource"
@@ -542,7 +542,7 @@ export function ScorecardForm({
           <div className="flex items-center space-x-2">
             {!isNarrowViewport && onToggleWidth && (
               <CardButton
-                icon={isFullWidth ? Columns2 : Square}
+                icon={isFullWidth ? RectangleVertical : Square}
                 onClick={onToggleWidth}
               />
             )}
