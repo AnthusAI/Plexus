@@ -71,3 +71,49 @@ export const NoTicks: Story = {
     showTicks: false
   }
 }
+
+export const MetricsGrid: Story = {
+  render: () => (
+    <div className="grid grid-cols-2 gap-8 max-w-4xl">
+      <Gauge
+        value={92.5}
+        title="Accuracy"
+        information={
+          "Accuracy measures the overall correctness of predictions, showing the " +
+          "percentage of all cases (both positive and negative) that were " +
+          "correctly classified."
+        }
+        informationUrl="https://example.com/ml-metrics/accuracy"
+      />
+      <Gauge
+        value={88.3}
+        title="Sensitivity"
+        information={
+          "Sensitivity (also called Recall) measures the ability to correctly " +
+          "identify positive cases, showing the percentage of actual positive " +
+          "cases that were correctly identified."
+        }
+        informationUrl="https://example.com/ml-metrics/sensitivity"
+      />
+      <Gauge
+        value={95.7}
+        title="Specificity"
+        information={
+          "Specificity measures the ability to correctly identify negative " +
+          "cases, showing the percentage of actual negative cases that were " +
+          "correctly identified."
+        }
+        informationUrl="https://example.com/ml-metrics/specificity"
+      />
+      <Gauge
+        value={90.1}
+        title="Precision"
+        information={
+          "Precision measures the accuracy of positive predictions, showing " +
+          "the percentage of predicted positive cases that were actually positive."
+        }
+        informationUrl="https://example.com/ml-metrics/precision"
+      />
+    </div>
+  )
+}

@@ -13,6 +13,7 @@ interface GaugeConfig {
   max?: number
   backgroundColor?: string
   showTicks?: boolean
+  information?: string
 }
 
 interface MetricsGaugesProps {
@@ -46,6 +47,7 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
               max={gauge.max}
               backgroundColor={gauge.backgroundColor}
               showTicks={variant === 'detail'}
+              information={gauge.information}
             />
           </div>
         ))}
