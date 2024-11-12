@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Card, CardHeader, CardContent } from "@/components/ui/card"
-import { Eye, X, Columns2, Square, Pencil } from "lucide-react"
+import { Eye, X, RectangleVertical, Square, Pencil } from "lucide-react"
 import { format, formatDistanceToNow, subDays, subHours, subMinutes } from "date-fns"
 import { CardButton } from '@/components/CardButton'
 
@@ -179,7 +179,7 @@ export default function ReportsDashboard() {
               onClick={() => console.log("Edit report", selectedReport.id)}
             />
             <CardButton
-              icon={isFullWidth ? Columns2 : Square}
+              icon={isFullWidth ? RectangleVertical : Square}
               onClick={() => setIsFullWidth(!isFullWidth)}
             />
             <CardButton

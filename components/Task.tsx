@@ -1,7 +1,7 @@
 import React from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Square, Columns2, X } from 'lucide-react'
+import { Square, RectangleVertical, X } from 'lucide-react'
 import { formatTimeAgo } from '@/utils/format-time'
 import { CardButton } from '@/components/CardButton'
 
@@ -103,7 +103,7 @@ const TaskHeader = <TData = unknown>({
             <div className="flex gap-2">
               {onToggleFullWidth && (
                 <CardButton
-                  icon={isFullWidth ? Columns2 : Square}
+                  icon={isFullWidth ? RectangleVertical : Square}
                   onClick={onToggleFullWidth}
                 />
               )}

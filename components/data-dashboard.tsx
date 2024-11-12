@@ -5,7 +5,7 @@ import { useState, useMemo, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Sparkles, MessageCircleMore, X, Square, Columns2, ChevronDown, ChevronUp, Info, SmileIcon, FrownIcon, FlaskConical } from "lucide-react"
+import { MoreHorizontal, Sparkles, MessageCircleMore, X, Square, RectangleVertical, ChevronDown, ChevronUp, Info, SmileIcon, FrownIcon, FlaskConical } from "lucide-react"
 import { format, formatDistanceToNow, parseISO, subMinutes, subHours, subDays } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -484,7 +484,7 @@ export default function DataDashboard() {
           <div className="flex items-center space-x-2">
             {!isNarrowViewport && (
               <CardButton
-                icon={isFullWidth ? Columns2 : Square}
+                icon={isFullWidth ? RectangleVertical : Square}
                 onClick={() => setIsFullWidth(!isFullWidth)}
               />
             )}
