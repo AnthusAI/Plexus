@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table'
-import { ChevronUp, ChevronDown, Square, Columns2, X } from 'lucide-react'
+import { ChevronUp, ChevronDown, Square, RectangleVertical, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardButton } from '@/components/CardButton'
 import ItemDetailScoreResult from './ItemDetailScoreResult'
@@ -130,7 +130,7 @@ const ItemDetail: React.FC<ItemDetailProps> = ({
         <div className="flex items-center space-x-2">
           {!isNarrowViewport && (
             <CardButton
-              icon={isFullWidth ? Columns2 : Square}
+              icon={isFullWidth ? RectangleVertical : Square}
               onClick={onToggleFullWidth}
             />
           )}

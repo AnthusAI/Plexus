@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown } from "lucide-react"
+import { Square, RectangleVertical, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -351,7 +351,7 @@ export default function AnalysisDashboard() {
           <div className="flex items-center space-x-2">
             {!isNarrowViewport && (
               <CardButton
-                icon={isFullWidth ? Columns2 : Square}
+                icon={isFullWidth ? RectangleVertical : Square}
                 onClick={() => setIsFullWidth(!isFullWidth)}
               />
             )}
