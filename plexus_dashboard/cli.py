@@ -564,39 +564,49 @@ def simulate(
                 y_true = np.array(true_values)
                 y_pred = np.array(predicted_values)
                 
-                # Calculate metrics (convert to percentages)
-                acc = accuracy_score(y_true, y_pred) * 100
-                prec = precision_score(y_true, y_pred, pos_label="Yes") * 100
-                sens = recall_score(y_true, y_pred, pos_label="Yes") * 100
-                conf_matrix = confusion_matrix(y_true, y_pred, labels=["Yes", "No"])
+                # Get the experiment with scoreResults included
+                thread_experiment = Experiment.get_by_id(
+                    experiment.id, 
+                    thread_client,
+                    include_score_results=True
+                )
                 
-                # Calculate specificity safely (as percentage)
-                tn = conf_matrix[1,1]  # true negatives
-                fp = conf_matrix[0,1]  # false positives
-                spec = float(tn / (tn + fp) * 100) if (tn + fp) > 0 else None
-                
-                # Calculate time estimates
-                items_processed = len(true_values)
-                if items_processed > 0:
-                    elapsed_seconds = int((datetime.now(timezone.utc) - started_at)\
-                        .total_seconds())
-                    avg_time_per_item = elapsed_seconds / items_processed
-                    remaining_items = num_items - items_processed
-                    estimated_remaining_seconds = int(avg_time_per_item * remaining_items)
+                if thread_experiment is None:
+                    logger.error("Could not fetch experiment for metrics update")
+                    return
                     
-                    thread_experiment = Experiment.get_by_id(experiment.id, thread_client)
+                # Only calculate metrics if we have enough samples
+                if len(y_true) > 0:
+                    # Calculate metrics (convert to percentages)
+                    acc = accuracy_score(y_true, y_pred) * 100
+                    
+                    # Handle cases where we don't have both classes yet
+                    try:
+                        prec = precision_score(y_true, y_pred, pos_label="Yes", zero_division=0) * 100
+                        sens = recall_score(y_true, y_pred, pos_label="Yes", zero_division=0) * 100
+                    except Exception as e:
+                        logger.warning(f"Could not calculate precision/recall: {e}")
+                        prec = None
+                        sens = None
+                        
+                    conf_matrix = confusion_matrix(y_true, y_pred, labels=["Yes", "No"])
+                    
+                    # Calculate specificity safely
+                    tn = conf_matrix[1,1]  # true negatives
+                    fp = conf_matrix[0,1]  # false positives
+                    spec = float(tn / (tn + fp) * 100) if (tn + fp) > 0 else None
+                    
+                    # Update the experiment
                     thread_experiment.update(
                         accuracy=float(acc),
-                        precision=float(prec),
-                        sensitivity=float(sens),
-                        specificity=spec if spec is not None else None,
-                        processedItems=items_processed,
+                        precision=float(prec) if prec is not None else None,
+                        sensitivity=float(sens) if sens is not None else None,
+                        specificity=spec,
+                        processedItems=len(y_true),
                         confusionMatrix=json.dumps({
                             "matrix": conf_matrix.tolist(),
                             "labels": ["Yes", "No"]
-                        }),
-                        elapsedSeconds=elapsed_seconds,
-                        estimatedRemainingSeconds=estimated_remaining_seconds
+                        })
                     )
                 
             except Exception as e:
@@ -619,21 +629,29 @@ def simulate(
             predicted_values.append(predicted_value)
             
             # Create score result
-            ScoreResult.create(
-                client=client,
-                value=1.0 if predicted_value == "Yes" else 0.0,
-                confidence=random.uniform(0.7, 0.99),
-                correct=(true_value == predicted_value),
-                itemId=f"item_{i}",
-                accountId=account.id,
-                experimentId=experiment.id,
-                scorecardId=scorecard.id,
-                scoringJobId=None,  # Explicitly set to None since we're using experimentId
-                metadata={
-                    "true_value": true_value,
-                    "predicted_value": predicted_value
-                }
-            )
+            logger.info(f"Creating score result: value={1.0 if predicted_value == 'Yes' else 0.0}, "
+                        f"correct={true_value == predicted_value}, metadata={{'label': predicted_value}}")
+            try:
+                result = ScoreResult.create(
+                    client=client,
+                    value=1.0 if predicted_value == "Yes" else 0.0,
+                    confidence=random.uniform(0.7, 0.99),
+                    correct=(true_value == predicted_value),
+                    itemId=f"item_{i}",
+                    accountId=account.id,
+                    experimentId=experiment.id,
+                    scorecardId=scorecard.id,
+                    scoringJobId=None,
+                    metadata={
+                        "true_value": true_value,
+                        "predicted_value": predicted_value,
+                        "label": predicted_value
+                    }
+                )
+                logger.info(f"Created score result: {result.id}")
+            except Exception as e:
+                logger.error(f"Error creating score result: {str(e)}")
+                raise
             
             # Update metrics in background thread
             thread = threading.Thread(target=update_metrics)
