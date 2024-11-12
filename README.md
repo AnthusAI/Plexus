@@ -287,3 +287,9 @@ When running `tsc --noEmit --pretty --diagnostics`, watch these metrics:
 
 If these metrics explode (Types > 1000, Instantiations > 0, Check time > 10s), 
 you've likely introduced a type relationship that's causing combinatorial explosion.
+
+## Updating the schema
+
+When you make changes to the Amplify schema, you will usually need to update the JSON outputs:
+
+    npx ampx generate outputs --app-id depfj4eia0tcf --branch main
