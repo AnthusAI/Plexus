@@ -10,7 +10,8 @@ from langchain_core.language_models import BaseLanguageModel
 load_dotenv("../../../Call-Criteria-Python/.env")
 
 # Set up LangSmith API key
-os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
+if os.getenv("LANGCHAIN_API_KEY"):
+    os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
 
 # Add the sample transcript and metadata here
 SAMPLE_TRANSCRIPT = """
@@ -62,10 +63,24 @@ def validator():
         "max_tokens": 500,
         "label": "test_label",
         "prompt": "Test prompt {label_value}",
-        "agent_type": "react"
+        "agent_type": "react",
+        "graph": [
+            {
+                "name": "chatbot",
+                "class": "plexus.scores.AgenticValidator.AgenticValidator",
+                "model_provider": "BedrockChat",
+                "model_name": "anthropic.claude-3-haiku-20240307-v1:0"
+            },
+            {
+                "name": "tools",
+                "class": "plexus.scores.AgenticValidator.AgenticValidator",
+                "model_provider": "BedrockChat",
+                "model_name": "anthropic.claude-3-haiku-20240307-v1:0"
+            }
+        ]
     }
     
-    with patch('plexus.scores.LangGraphScore.ChatBedrock', MagicMock()):
+    with patch('langchain_community.chat_models.bedrock.BedrockChat', MagicMock()):
         return AgenticValidator(**parameters)
 
 def test_initialization(validator):
@@ -74,9 +89,9 @@ def test_initialization(validator):
     assert validator.agent_executor is not None  # Changed from react_agent to agent_executor
 
 @pytest.mark.parametrize("provider,mock_class", [
-    ("AzureChatOpenAI", "plexus.scores.LangGraphScore.AzureChatOpenAI"),
-    ("BedrockChat", "plexus.scores.LangGraphScore.ChatBedrock"),
-    ("ChatVertexAI", "plexus.scores.LangGraphScore.ChatVertexAI"),
+    ("AzureChatOpenAI", "langchain_community.chat_models.azure_openai.AzureChatOpenAI"),
+    ("BedrockChat", "langchain_community.chat_models.bedrock.BedrockChat"),
+    ("ChatVertexAI", "langchain_community.chat_models.vertexai.ChatVertexAI"),
 ])
 def test_initialize_model(validator, provider, mock_class):
     with patch(mock_class) as mock_model:
@@ -94,7 +109,7 @@ def test_create_workflow(validator):
 
 def test_validate_step(validator):
     state = ValidationState(
-        transcript=SAMPLE_TRANSCRIPT,
+        text=SAMPLE_TRANSCRIPT,
         metadata=SAMPLE_METADATA,
         current_step=""
     )
@@ -119,7 +134,7 @@ def test_parse_validation_result(validator):
     (
         "react",
         ValidationState(
-            transcript=SAMPLE_TRANSCRIPT,
+            text=SAMPLE_TRANSCRIPT,
             metadata=SAMPLE_METADATA,
             validation_result='Yes',
             explanation='The transcript confirms the degree.',
@@ -162,21 +177,21 @@ def test_predict(validator, agent_type, final_state, expected_result):
         }
         mock_calculate_cost.return_value = {'total_cost': 0.001}
 
-        model_input = validator.Input(transcript=SAMPLE_TRANSCRIPT, metadata=SAMPLE_METADATA)
+        model_input = validator.Input(text=SAMPLE_TRANSCRIPT, metadata=SAMPLE_METADATA)
         context = {}
         result = validator.predict(context, model_input)
 
     assert isinstance(result, list)
     assert len(result) == 1
     assert isinstance(result[0], validator.Result)
-    assert result[0].score == expected_result[0]
+    assert result[0].value == expected_result[0]
     assert expected_result[1] in result[0].explanation
 
 # Integration Tests
 @pytest.mark.integration
 def test_validation_with_real_model(validator):
     input_data = validator.Input(
-        transcript=SAMPLE_TRANSCRIPT,
+        text=SAMPLE_TRANSCRIPT,
         metadata=SAMPLE_METADATA
     )
     
@@ -193,7 +208,7 @@ def test_validation_with_real_model(validator):
 @pytest.mark.integration
 def test_validation_with_mismatched_data(validator):
     input_data = validator.Input(
-        transcript="I graduated from Harvard with a Master's in Biology.",
+        text="I graduated from Harvard with a Master's in Biology.",
         metadata=SAMPLE_METADATA
     )
     

@@ -23,7 +23,7 @@ def test_compute_score_result():
     )
     result = score.predict(
         Score.Input(
-            transcript="Test transcript"
+            text="Test transcript"
         )
     )
     assert result == "computed score"
