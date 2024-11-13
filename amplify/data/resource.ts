@@ -154,7 +154,7 @@ const schema = a.schema({
       scorecard: a.belongsTo('Scorecard', 'scorecardId'),
       scoreId: a.string(),
       score: a.belongsTo('Score', 'scoreId'),
-      scoringJobs: a.hasMany('ScoringJob', 'batchJobId'),
+      scoringJobs: a.hasMany('BatchJobScoringJob', 'batchJobId'),
     })
     .authorization((allow) => [
       allow.publicApiKey(),
@@ -200,8 +200,7 @@ const schema = a.schema({
       account: a.belongsTo('Account', 'accountId'),
       scorecardId: a.string().required(),
       scorecard: a.belongsTo('Scorecard', 'scorecardId'),
-      batchJobId: a.string(),
-      batchJob: a.belongsTo('BatchJob', 'batchJobId'),
+      batchJobLinks: a.hasMany('BatchJobScoringJob', 'scoringJobId'),
       scoreResults: a.hasMany('ScoreResult', 'scoringJobId'),
     })
     .authorization((allow) => [
@@ -241,6 +240,18 @@ const schema = a.schema({
       idx("scoringJobId"),
       idx("experimentId"),
       idx("scorecardId")
+    ]),
+
+  BatchJobScoringJob: a
+    .model({
+      batchJobId: a.string().required(),
+      scoringJobId: a.string().required(),
+      batchJob: a.belongsTo('BatchJob', 'batchJobId'),
+      scoringJob: a.belongsTo('ScoringJob', 'scoringJobId'),
+    })
+    .authorization((allow) => [
+      allow.publicApiKey(),
+      allow.authenticated()
     ]),
 });
 
