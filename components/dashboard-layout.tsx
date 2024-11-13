@@ -318,92 +318,104 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   )
 
   const RightSidebar = () => {
-    console.log('RightSidebar rendering:', {
-      rightSidebarState,
-      isMobile,
-      isVisible: rightSidebarState !== 'collapsed'
-    });
-    
-    // Don't render anything if collapsed on mobile
-    if (isMobile && rightSidebarState === 'collapsed') {
-      return null;
-    }
-    
     return (
       <div className="flex flex-col h-full py-2 bg-muted">
+        {rightSidebarState === 'collapsed' && (
+          <div className="px-3 py-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DashboardButton
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 p-0 group"
+                    onClick={toggleRightSidebar}
+                  >
+                    <MessageSquare className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                  </DashboardButton>
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  Expand chat
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        )}
         <div className="flex-grow overflow-hidden">
           <div className="h-full flex flex-col">
             <div className="flex-grow overflow-y-auto flex flex-col-reverse px-4">
-              <div className="space-y-4 mb-4">
-                {[
-                  <ChatExperimentCard
-                    key="exp1"
-                    experimentId="Experiment started"
-                    status="running"
-                    progress={42}
-                    accuracy={86.7}
-                    elapsedTime="00:02:15"
-                    estimatedTimeRemaining="00:03:05"
-                    scorecard="CS3 Services v2"
-                    score="Good Call"
-                  />,
-                  <div key="msg1" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
-                    Okay, I started a new run:
-                  </div>,
-                  <div key="user1" className="flex items-start space-x-2 justify-end">
-                    <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
-                      Run that again with fresh data.
-                    </div>
-                    <Avatar className="h-8 w-8 mt-1">
-                      <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
-                    </Avatar>
-                  </div>,
-                  <ChatExperimentCard
-                    key="exp2"
-                    experimentId="Experiment completed"
-                    status="completed"
-                    progress={100}
-                    accuracy={92}
-                    elapsedTime="00:05:12"
-                    estimatedTimeRemaining="00:00:00"
-                    scorecard="AW IB Sales"
-                    score="Pain Points"
-                  />,
-                  <div key="msg2" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
-                    The best accuracy was from this version, two days ago, at 92%. That was using a fine-tuned model.
-                  </div>,
-                  <div key="user2" className="flex items-start space-x-2 justify-end">
-                    <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
-                      What's the best accuracy on Pain Points on AW IB Sales?
-                    </div>
-                    <Avatar className="h-8 w-8 mt-1">
-                      <AvatarFallback className="bg-background dark:bg-border">DN</AvatarFallback>
-                    </Avatar>
-                  </div>,
-                  <ChatExperimentCard
-                    key="exp3"
-                    experimentId="New experiment"
-                    status="running"
-                    progress={87}
-                    accuracy={88.2}
-                    elapsedTime="00:04:35"
-                    estimatedTimeRemaining="00:00:40"
-                    scorecard="CS3 Services v2"
-                    score="Good Call"
-                  />,
-                  <div key="msg3" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
-                    Certainly! I'm starting a new experiment run for the "CS3 Services v2" scorecard on the "Good Call" score.
-                  </div>,
-                  <div key="user3" className="flex items-start space-x-2 justify-end">
-                    <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
-                      Start a new experiment run on the "CS3 Services v2" scorecard for the "Good Call" score.
-                    </div>
-                    <Avatar className="h-8 w-8 mt-1">
-                      <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
-                    </Avatar>
-                  </div>,
-                ].reverse()}
-              </div>
+              {rightSidebarState !== 'collapsed' && (
+                <div className="space-y-4 mb-4">
+                  {[
+                    <ChatExperimentCard
+                      key="exp1"
+                      experimentId="Experiment started"
+                      status="running"
+                      progress={42}
+                      accuracy={86.7}
+                      elapsedTime="00:02:15"
+                      estimatedTimeRemaining="00:03:05"
+                      scorecard="CS3 Services v2"
+                      score="Good Call"
+                    />,
+                    <div key="msg1" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
+                      Okay, I started a new run:
+                    </div>,
+                    <div key="user1" className="flex items-start space-x-2 justify-end">
+                      <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
+                        Run that again with fresh data.
+                      </div>
+                      <Avatar className="h-8 w-8 mt-1">
+                        <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
+                      </Avatar>
+                    </div>,
+                    <ChatExperimentCard
+                      key="exp2"
+                      experimentId="Experiment completed"
+                      status="completed"
+                      progress={100}
+                      accuracy={92}
+                      elapsedTime="00:05:12"
+                      estimatedTimeRemaining="00:00:00"
+                      scorecard="AW IB Sales"
+                      score="Pain Points"
+                    />,
+                    <div key="msg2" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
+                      The best accuracy was from this version, two days ago, at 92%. That was using a fine-tuned model.
+                    </div>,
+                    <div key="user2" className="flex items-start space-x-2 justify-end">
+                      <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
+                        What's the best accuracy on Pain Points on AW IB Sales?
+                      </div>
+                      <Avatar className="h-8 w-8 mt-1">
+                        <AvatarFallback className="bg-background dark:bg-border">DN</AvatarFallback>
+                      </Avatar>
+                    </div>,
+                    <ChatExperimentCard
+                      key="exp3"
+                      experimentId="New experiment"
+                      status="running"
+                      progress={87}
+                      accuracy={88.2}
+                      elapsedTime="00:04:35"
+                      estimatedTimeRemaining="00:00:40"
+                      scorecard="CS3 Services v2"
+                      score="Good Call"
+                    />,
+                    <div key="msg3" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
+                      Certainly! I'm starting a new experiment run for the "CS3 Services v2" scorecard on the "Good Call" score.
+                    </div>,
+                    <div key="user3" className="flex items-start space-x-2 justify-end">
+                      <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
+                        Start a new experiment run on the "CS3 Services v2" scorecard for the "Good Call" score.
+                      </div>
+                      <Avatar className="h-8 w-8 mt-1">
+                        <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
+                      </Avatar>
+                    </div>,
+                  ].reverse()}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -502,12 +514,21 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
       <div className="flex flex-1 overflow-hidden bg-muted">
         <aside
           className={`
-            ${isMobile ? 'fixed top-[48px] bottom-0 left-0 z-50 bg-background/80 backdrop-blur-sm' : 
+            ${isMobile ? 'fixed top-[40px] bottom-0 left-0 z-50 bg-background/80 backdrop-blur-sm' : 
               'fixed top-0 bottom-0 left-0 h-full'}
             ${isLeftSidebarOpen ? 'w-40' : 'w-14'}
             transition-all duration-300 ease-in-out overflow-hidden
             ${isMobile && !isLeftSidebarOpen ? 'hidden' : ''}
           `}
+          onClick={() => {
+            console.log('Right sidebar clicked:', {
+              rightSidebarState,
+              isMobile,
+              width: rightSidebarState === 'collapsed' ? 
+                (isMobile ? '0' : '14') : 
+                (rightSidebarState === 'normal' ? '80' : 'full')
+            });
+          }}
         >
           <div className={`
             ${isMobile ? 'h-full w-40 bg-muted' : 'h-full'}
@@ -525,12 +546,12 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               (isMobile ? 'mr-0' : 'mr-14')}
             ${isLeftSidebarOpen ? 'pl-2' : 'pl-0'}
             ${rightSidebarState !== 'collapsed' ? 'pr-2' : 'pr-0'}
-            ${isMobile ? 'pt-0' : 'pt-2'} pb-2
+            pb-2
           `}
         >
           <div className="flex-1 flex flex-col bg-background rounded-lg overflow-hidden">
             <div className="flex-1 overflow-y-auto">
-              <div className="h-full pt-2 pr-4 pb-0 pl-4">
+              <div className={`h-full pr-4 pb-0 pl-4 ${isMobile ? '' : 'pt-2'}`}>
                 {children}
               </div>
             </div>
@@ -539,23 +560,13 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
         <aside
           className={`
-            ${isMobile ? 'fixed top-[48px] bottom-0 right-0 z-50 bg-background/80 backdrop-blur-sm' : 
+            ${isMobile ? 'fixed top-[40px] bottom-0 right-0 z-50 bg-background/80 backdrop-blur-sm' : 
               'fixed top-0 bottom-0 right-0 h-full'}
             ${rightSidebarState === 'collapsed' ? (isMobile ? 'w-0' : 'w-14') :
               rightSidebarState === 'normal' ? 'w-80' :
               (isMobile ? 'w-full' : 'w-[40%]')}
             transition-all duration-300 ease-in-out overflow-hidden
-            ${rightSidebarState === 'collapsed' ? 'invisible' : 'visible'}
           `}
-          onClick={() => {
-            console.log('Right sidebar clicked:', {
-              rightSidebarState,
-              isMobile,
-              width: rightSidebarState === 'collapsed' ? 
-                (isMobile ? '0' : '14') : 
-                (rightSidebarState === 'normal' ? '80' : 'full')
-            });
-          }}
         >
           <div className={`
             ${isMobile ? 'h-full w-full bg-muted' : 'h-full'}
