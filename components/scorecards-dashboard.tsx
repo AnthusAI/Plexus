@@ -23,10 +23,12 @@ import {
   Activity, 
   Pencil, 
   MoreHorizontal,
-  Plus 
+  Plus,
+  Database
 } from "lucide-react"
 import { ScoreCount } from "./scorecards/score-count"
 import { CardButton } from "@/components/CardButton"
+import { DatasetConfigFormComponent } from "@/components/dataset-config-form"
 
 // Initialize client
 const client = generateClient<Schema>()
@@ -47,6 +49,8 @@ export default function ScorecardsComponent() {
   // Add missing state variables
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
+  const [showDatasetConfig, setShowDatasetConfig] = useState(false)
+  const [selectedScorecardForDataset, setSelectedScorecardForDataset] = useState<string>("")
 
   useEffect(() => {
     let subscription: { unsubscribe: () => void } | null = null
@@ -335,126 +339,9 @@ export default function ScorecardsComponent() {
   return (
     <div className="space-y-4 h-full flex flex-col">
       <div className={`flex flex-col flex-grow overflow-hidden pb-2`}>
-        {selectedScorecard && (
+        {(selectedScorecard || showDatasetConfig) ? (
           <div className="flex-shrink-0 h-full overflow-hidden">
-            <ScorecardForm
-              scorecard={selectedScorecard}
-              accountId={accountId!}
-              onSave={async () => {
-                setIsEditing(false)
-                setSelectedScorecard(null)
-              }}
-              onCancel={() => {
-                setIsEditing(false)
-                setSelectedScorecard(null)
-              }}
-              isFullWidth={isFullWidth}
-              onToggleWidth={() => setIsFullWidth(!isFullWidth)}
-              isNarrowViewport={isNarrowViewport}
-            />
-          </div>
-        )}
-        
-        <div className={`flex ${isNarrowViewport || isFullWidth ? 'flex-col' : 'space-x-6'} h-full overflow-hidden`}>
-          <div className={`${isFullWidth && selectedScorecard ? 'hidden' : 'flex-1'} @container overflow-auto`}>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[70%]">Scorecard</TableHead>
-                  <TableHead className="w-[20%] @[630px]:table-cell hidden text-right">Scores</TableHead>
-                  <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {scorecards.map((scorecard) => (
-                  <TableRow 
-                    key={scorecard.id} 
-                    onClick={() => handleEdit(scorecard)} 
-                    className="cursor-pointer transition-colors duration-200 hover:bg-muted"
-                  >
-                    <TableCell className="w-[70%]">
-                      <div>
-                        {/* Narrow variant - visible below 630px */}
-                        <div className="block @[630px]:hidden">
-                          <div className="flex justify-between items-start mb-2">
-                            <div>
-                              <div className="font-medium">{scorecard.name}</div>
-                              <div className="text-sm text-muted-foreground font-mono">
-                                {scorecard.externalId || 'No ID'} - {scorecard.key}
-                              </div>
-                              <div className="text-sm text-muted-foreground mt-1">
-                                <ScoreCount scorecard={scorecard} />
-                              </div>
-                            </div>
-                            <div className="flex items-center">
-                              <CardButton 
-                                icon={Pencil}
-                                onClick={() => handleEdit(scorecard)}
-                              />
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <CardButton 
-                                    icon={MoreHorizontal}
-                                    onClick={() => {}}
-                                  />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem>
-                                    <Activity className="h-4 w-4 mr-2" /> Activity
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </div>
-                        </div>
-                        {/* Wide variant - visible at 630px and above */}
-                        <div className="hidden @[630px]:block">
-                          <div className="font-medium">{scorecard.name}</div>
-                          <div className="text-sm text-muted-foreground font-mono">
-                            {scorecard.externalId || 'No ID'} - {scorecard.key}
-                          </div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="w-[20%] hidden @[630px]:table-cell text-right">
-                      <ScoreCount scorecard={scorecard} />
-                    </TableCell>
-                    <TableCell className="w-[10%] hidden @[630px]:table-cell text-right">
-                      <div className="flex items-center justify-end space-x-2">
-                        <CardButton 
-                          icon={Pencil}
-                          onClick={() => handleEdit(scorecard)}
-                        />
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <CardButton 
-                              icon={MoreHorizontal}
-                              onClick={() => {}}
-                            />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
-                              <Activity className="h-4 w-4 mr-2" /> Activity
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <div className="mt-4">
-              <CardButton
-                icon={Plus}
-                label="Create Scorecard"
-                onClick={handleCreate}
-              />
-            </div>
-          </div>
-
-          {selectedScorecard && !isNarrowViewport && !isFullWidth && (
-            <div className="flex-1 overflow-hidden">
+            {selectedScorecard && (
               <ScorecardForm
                 scorecard={selectedScorecard}
                 accountId={accountId!}
@@ -470,9 +357,136 @@ export default function ScorecardsComponent() {
                 onToggleWidth={() => setIsFullWidth(!isFullWidth)}
                 isNarrowViewport={isNarrowViewport}
               />
+            )}
+            {showDatasetConfig && (
+              <DatasetConfigFormComponent 
+                scorecardId={selectedScorecardForDataset}
+                onClose={() => setShowDatasetConfig(false)}
+                isFullWidth={isFullWidth}
+                onToggleWidth={() => setIsFullWidth(!isFullWidth)}
+                isNarrowViewport={isNarrowViewport}
+              />
+            )}
+          </div>
+        ) : (
+          <div className={`flex ${isNarrowViewport || isFullWidth ? 'flex-col' : 'space-x-6'} h-full overflow-hidden`}>
+            <div className={`flex-1 @container overflow-auto`}>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[70%]">Scorecard</TableHead>
+                    <TableHead className="w-[20%] @[630px]:table-cell hidden text-right">Scores</TableHead>
+                    <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {scorecards.map((scorecard) => (
+                    <TableRow 
+                      key={scorecard.id} 
+                      onClick={() => handleEdit(scorecard)} 
+                      className="cursor-pointer transition-colors duration-200 hover:bg-muted"
+                    >
+                      <TableCell className="w-[70%]">
+                        <div>
+                          {/* Narrow variant - visible below 630px */}
+                          <div className="block @[630px]:hidden">
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <div className="font-medium">{scorecard.name}</div>
+                                <div className="text-sm text-muted-foreground font-mono">
+                                  {scorecard.externalId || 'No ID'} - {scorecard.key}
+                                </div>
+                                <div className="text-sm text-muted-foreground mt-1">
+                                  <ScoreCount scorecard={scorecard} />
+                                </div>
+                              </div>
+                              <div className="flex items-center">
+                                <CardButton 
+                                  icon={Pencil}
+                                  onClick={() => handleEdit(scorecard)}
+                                />
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <CardButton 
+                                      icon={MoreHorizontal}
+                                      onClick={() => {}}
+                                    />
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={(e) => {
+                                      e.stopPropagation()
+                                      setSelectedScorecardForDataset(scorecard.id)
+                                      setShowDatasetConfig(true)
+                                    }}>
+                                      <Database className="h-4 w-4 mr-2" /> Datasets
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem>
+                                      <Activity className="h-4 w-4 mr-2" /> Activity
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </div>
+                          </div>
+                          {/* Wide variant - visible at 630px and above */}
+                          <div className="hidden @[630px]:block">
+                            <div className="font-medium">{scorecard.name}</div>
+                            <div className="text-sm text-muted-foreground font-mono">
+                              {scorecard.externalId || 'No ID'} - {scorecard.key}
+                            </div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="w-[20%] hidden @[630px]:table-cell text-right">
+                        <ScoreCount scorecard={scorecard} />
+                      </TableCell>
+                      <TableCell className="w-[10%] hidden @[630px]:table-cell text-right">
+                        <div className="flex items-center justify-end space-x-2">
+                          <CardButton 
+                            icon={Pencil}
+                            onClick={() => {
+                              handleEdit(scorecard)
+                            }}
+                          />
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                className="h-8 w-8 p-0"
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedScorecardForDataset(scorecard.id)
+                                setShowDatasetConfig(true)
+                              }}>
+                                <Database className="h-4 w-4 mr-2" /> Datasets
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={(e) => e.stopPropagation()}>
+                                <Activity className="h-4 w-4 mr-2" /> Activity
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div className="mt-4">
+                <CardButton
+                  icon={Plus}
+                  label="Create Scorecard"
+                  onClick={handleCreate}
+                />
+              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )
