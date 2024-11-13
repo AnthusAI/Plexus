@@ -120,6 +120,9 @@ const schema = a.schema({
       confusionMatrix: a.json(),
       items: a.hasMany('Item', 'experimentId'),
       scoreResults: a.hasMany('ScoreResult', 'experimentId'),
+      scoreType: a.string(),
+      dataBalance: a.string(),
+      scoreGoal: a.string(),
     })
     .authorization((allow) => [
       allow.publicApiKey(),
