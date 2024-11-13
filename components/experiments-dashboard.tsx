@@ -155,17 +155,6 @@ function useViewportWidth() {
   return typeof window === 'undefined' ? false : isNarrowViewport;
 }
 
-// Update the debug function to use console.log instead of console.error
-function debugLog(phase: string, data: any) {
-  console.log(`[Debug ${phase}]`, {
-    type: typeof data,
-    isArray: Array.isArray(data),
-    length: Array.isArray(data) ? data.length : null,
-    keys: typeof data === 'object' ? Object.keys(data) : null,
-    data
-  });
-}
-
 // Update the confusionMatrix interface
 interface ConfusionMatrix {
     matrix: number[][];
@@ -343,7 +332,6 @@ export default function ExperimentsDashboard() {
           }).subscribe({
             next: async ({ items }) => {
               try {
-                debugLog('Raw Items', items);
 
                 // Fetch scorecards for experiments that need them
                 const itemsWithScorecard = await Promise.all(items.map(async (item) => {
@@ -352,7 +340,6 @@ export default function ExperimentsDashboard() {
                       const scorecardResult = await client!.models.Scorecard.get({
                         id: item.scorecardId
                       });
-                      debugLog('Scorecard Result', scorecardResult);
                       return {
                         ...item,
                         scorecard: scorecardResult.data
@@ -364,9 +351,7 @@ export default function ExperimentsDashboard() {
                     return item;
                   }
                 }));
-                
-                debugLog('Items With Scorecard', itemsWithScorecard);
-                
+                                
                 const transformedItems = itemsWithScorecard.map(item => {
                   try {
                     return transformExperiment(item);
@@ -375,17 +360,13 @@ export default function ExperimentsDashboard() {
                     return null;
                   }
                 }).filter(Boolean);
-                
-                debugLog('Transformed Items', transformedItems);
-                
+                                
                 const sortedItems = transformedItems
                     .filter((item): item is NonNullable<typeof item> => item !== null)
                     .sort((a, b) => 
                         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
                     );
-                
-                debugLog('Sorted Items', sortedItems);
-                
+                                
                 const validSortedItems = sortedItems.filter((item): 
                     item is NonNullable<Schema['Experiment']['type']> => item !== null);
                 setExperiments(validSortedItems);
@@ -396,10 +377,8 @@ export default function ExperimentsDashboard() {
                     exp && exp.id === currentSelectedExperiment.id
                   );
                   if (updatedExperiment) {
-                    debugLog('Updated Experiment', updatedExperiment);
                     setSelectedExperiment(updatedExperiment);
                     const updatedProps = await getExperimentTaskProps(updatedExperiment);
-                    debugLog('Updated Props', updatedProps);
                     setExperimentTaskProps(updatedProps);
                   }
                 }

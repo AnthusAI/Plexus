@@ -596,13 +596,23 @@ def simulate(
                     fp = conf_matrix[0,1]  # false positives
                     spec = float(tn / (tn + fp) * 100) if (tn + fp) > 0 else None
                     
+                    # Define `total_items` using `thread_experiment.totalItems`
+                    total_items = thread_experiment.totalItems
+                    
+                    # Calculate elapsed and estimated remaining seconds
+                    elapsed_seconds = int((datetime.now(timezone.utc) - started_at).total_seconds())
+                    processed_items = len(y_true)
+                    estimated_remaining_seconds = int(elapsed_seconds * (total_items - processed_items) / processed_items) if processed_items > 0 else 0
+                    
                     # Update the experiment
                     thread_experiment.update(
                         accuracy=float(acc),
                         precision=float(prec) if prec is not None else None,
                         sensitivity=float(sens) if sens is not None else None,
                         specificity=spec,
-                        processedItems=len(y_true),
+                        processedItems=processed_items,
+                        elapsedSeconds=elapsed_seconds,
+                        estimatedRemainingSeconds=estimated_remaining_seconds,
                         confusionMatrix=json.dumps({
                             "matrix": conf_matrix.tolist(),
                             "labels": ["Yes", "No"]

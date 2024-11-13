@@ -607,8 +607,6 @@ export default function ActivityDashboard() {
     return () => window.removeEventListener('resize', updateDimensions)
   }, [])
 
-  console.log('rightSidebarState:', rightSidebarState);
-
   const availableFields = [
     { value: 'SelectQuote Term Life v1', label: 'SelectQuote Term Life v1' },
     { value: 'CS3 Nexstar v1', label: 'CS3 Nexstar v1' },
