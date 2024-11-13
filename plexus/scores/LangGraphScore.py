@@ -37,11 +37,12 @@ class LangGraphScore(Score, LangChainUser):
         model_provider: Literal["ChatOpenAI", "AzureChatOpenAI", "BedrockChat", "ChatVertexAI"] = "AzureChatOpenAI"
         model_name: Optional[str] = None
         model_region: Optional[str] = None
-        temperature: Optional[float] = 0.03
+        temperature: Optional[float] = 0
         max_tokens: Optional[int] = 500
         graph: Optional[list[dict]] = None
         input: Optional[dict] = None
         output: Optional[dict] = None
+        single_line_messages: bool = False
 
     class Result(Score.Result):
         """
@@ -417,7 +418,7 @@ class LangGraphScore(Score, LangChainUser):
         if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
             for node_configuration_entry in self.parameters.graph:
 
-                for attribute in ['model_provider', 'model_name', 'model_region', 'temperature', 'max_tokens']:
+                for attribute in ['model_provider', 'model_name', 'model_region', 'temperature', 'max_tokens', 'single_line_messages']:
                     if attribute not in node_configuration_entry:
                         node_configuration_entry[attribute] = getattr(self.parameters, attribute)
 

@@ -29,6 +29,7 @@ class BaseNode(ABC, LangChainUser):
         system_message: Optional[str] = None
         user_message: Optional[str] = None
         example_refinement_message: Optional[str] = None
+        single_line_messages: bool = False
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
@@ -45,6 +46,9 @@ class BaseNode(ABC, LangChainUser):
         for message_type in message_types:
             if hasattr(self.parameters, message_type) and getattr(self.parameters, message_type):
                 content = getattr(self.parameters, message_type)
+                # Convert any message to single line if configured
+                if self.parameters.single_line_messages:
+                    content = ' '.join(content.split())
                 role = message_type.split('_')[0]
                 messages.append((role, content))
         

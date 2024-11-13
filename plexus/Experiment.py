@@ -50,7 +50,7 @@ class Experiment:
         session_ids_to_sample = None,
         subset_of_score_names = None,
         experiment_label = None,
-        max_mismatches_to_report=20
+        max_mismatches_to_report=5
     ):
         self.scorecard_name = scorecard_name
         self.scorecard = scorecard
@@ -552,13 +552,8 @@ Total cost:       ${expenses['total_cost']:.6f}
             label_score_name = score_instance.get_label_score_name()
             score_name = score_instance.parameters.name  # Get the score name
             label_column = label_score_name + '_label'
-            logging.info(f"Label column: {label_column}")
-            logging.info(f"Available columns: {row.index.tolist()}")
             if label_column in row.index:
-                logging.info(f"Using label column: {label_column}")
                 human_labels[score_name] = row[label_column]  # Use score_name instead of score_identifier
-                logging.info(f"Human label: {human_labels[score_name]}")
-                logging.info(f"Row: {row[label_column]}")
             elif label_score_name in row.index:
                 human_labels[score_name] = row[label_score_name]  # Use score_name instead of score_identifier
             else:

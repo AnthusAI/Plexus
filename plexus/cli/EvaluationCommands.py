@@ -110,7 +110,8 @@ def accuracy(
     if score_name is not None and score_name != '':
         score_names = [score_name]
     else:
-        score_names = list(scorecard_instance.scores.keys())
+        # Fix: Get score names from the list of score dictionaries
+        score_names = [score['name'] for score in scorecard_instance.scores]
     
     if not score_names:
         logging.error("No score names specified")
