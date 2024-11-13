@@ -96,10 +96,12 @@ WHERE
                 onClick={onToggleWidth}
               />
             )}
-            <CardButton
-              icon={X}
-              onClick={onClose}
-            />
+            {onClose && (
+              <CardButton
+                icon={X}
+                onClick={() => onClose?.()}
+              />
+            )}
           </div>
         </div>
       </div>
