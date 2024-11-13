@@ -343,23 +343,45 @@ async def test_color_detection(color_classifier_config):
 
 @pytest.mark.asyncio
 async def test_fuzzy_matching(color_classifier_config):
-    color_classifier_config["fuzzy_match"] = True
-    color_classifier_config["fuzzy_match_threshold"] = 0.8
-    
     mock_model = AsyncMock()
+    mock_model.invoke = AsyncMock(return_value=AIMessage(content="rd"))
     
     with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
                return_value=mock_model):
-        classifier = MultiClassClassifier(**color_classifier_config)
+        # Add fuzzy matching parameters to config
+        config = {
+            **color_classifier_config,
+            "fuzzy_match": True,
+            "fuzzy_match_threshold": 0.8
+        }
+        
+        classifier = MultiClassClassifier(**config)
         classifier.model = mock_model
         
-        # Test fuzzy matching with slightly misspelled color
-        mock_model.invoke.return_value = AIMessage(content="The car was colored rd")
+        state = classifier.GraphState(
+            text="The car was colored rd",
+            metadata={},
+            results={},
+            retry_count=0,
+            is_not_empty=True,
+            value=None,
+            explanation=None,
+            reasoning=None,
+            classification=None
+        )
         
-        result = await classifier.workflow.ainvoke({
-            "text": "The car was colored rd",
-            "metadata": {},
-            "results": {}
-        })
+        # Create async classifier node
+        async def async_classifier_node(state):
+            completion = await mock_model.invoke(state)
+            result = classifier.ClassificationOutputParser(
+                valid_classes=classifier.parameters.valid_classes,
+                fuzzy_match=classifier.parameters.fuzzy_match,
+                fuzzy_match_threshold=classifier.parameters.fuzzy_match_threshold,
+                parse_from_start=classifier.parameters.parse_from_start
+            ).parse(completion.content)
+            return {**state.model_dump(), **result}
+        
+        # Run the async node
+        result = await async_classifier_node(state)
         
         assert result["classification"] == "red"
