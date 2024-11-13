@@ -552,10 +552,10 @@ class LangGraphScore(Score, LangChainUser):
         results = {
             result['name']: {
                 "id": result['id'],
-                "value": result['result'].value,
-                "explanation": result['result'].explanation
+                "value": result['result'].value if result['result'] else None,
+                "explanation": result['result'].explanation if result['result'] else None
             }
-            for result in model_input.results
+            for result in model_input.results or []
         }
 
         try:
