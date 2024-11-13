@@ -26,7 +26,7 @@ class LangChainUser:
         model_name: Optional[str] = None
         base_model_name: Optional[str] = None
         model_region: Optional[str] = None
-        temperature: Optional[float] = 0.1
+        temperature: Optional[float] = 0
         top_p: Optional[float] = 0.03
         max_tokens: Optional[int] = 500
 
@@ -117,11 +117,12 @@ class LangChainUser:
                     model=self.parameters.model_name,
                     api_key=os.environ.get("OPENAI_API_KEY"),
                     max_tokens=max_tokens,
-                    model_kwargs={"top_p": self.parameters.top_p}
+                    model_kwargs={"top_p": self.parameters.top_p},
+                    temperature=self.parameters.temperature
                 )
         elif self.parameters.model_provider == "BedrockChat":
             base_model = ChatBedrock(
-                model_id=self.parameters.model_name or "anthropic.claude-3-5-sonnet-20240620-v1:0",
+                model_id=self.parameters.model_name or "anthropic.claude-3-haiku-20240307-v1:0",
                 model_kwargs={
                     "temperature": self.parameters.temperature,
                     "max_tokens": max_tokens
