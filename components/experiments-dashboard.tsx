@@ -55,6 +55,10 @@ const calculateProgress = (processedItems?: number | null, totalItems?: number |
 
 // Update the transformExperiment function to ensure consistent output
 const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] => {
+  if (!rawExperiment) {
+    throw new Error('Cannot transform null experiment');
+  }
+  
   // Ensure all required fields exist with default values
   const safeExperiment = {
     id: rawExperiment.id || '',
@@ -162,9 +166,15 @@ function debugLog(phase: string, data: any) {
   });
 }
 
+// Update the confusionMatrix interface
+interface ConfusionMatrix {
+    matrix: number[][];
+    labels: string[];
+}
+
 export default function ExperimentsDashboard() {
   const client = useAmplifyClient();
-  const [experiments, setExperiments] = useState<Schema['Experiment']['type'][]>([])
+  const [experiments, setExperiments] = useState<NonNullable<Schema['Experiment']['type']>[]>([])
   const [experimentTaskProps, setExperimentTaskProps] = useState<ExperimentTaskProps['task'] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [selectedExperiment, setSelectedExperiment] = useState<Schema['Experiment']['type'] | null>(null)
@@ -203,7 +213,7 @@ export default function ExperimentsDashboard() {
     const scoreName = scoreResult?.data?.name || '';
     
     // Parse confusion matrix safely
-    let confusionMatrix = { matrix: [], labels: [] };
+    let confusionMatrix: ConfusionMatrix = { matrix: [], labels: [] };
     if (experiment.confusionMatrix) {
         if (typeof experiment.confusionMatrix === 'string') {
             try {
@@ -211,8 +221,10 @@ export default function ExperimentsDashboard() {
             } catch (e) {
                 console.error('Error parsing confusion matrix:', e);
             }
-        } else if (typeof experiment.confusionMatrix === 'object') {
-            confusionMatrix = experiment.confusionMatrix;
+        } else if (typeof experiment.confusionMatrix === 'object' && 
+                   'matrix' in experiment.confusionMatrix && 
+                   'labels' in experiment.confusionMatrix) {
+            confusionMatrix = experiment.confusionMatrix as ConfusionMatrix;
         }
     }
     
@@ -366,17 +378,23 @@ export default function ExperimentsDashboard() {
                 
                 debugLog('Transformed Items', transformedItems);
                 
-                const sortedItems = transformedItems.sort((a, b) => 
-                  new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                );
+                const sortedItems = transformedItems
+                    .filter((item): item is NonNullable<typeof item> => item !== null)
+                    .sort((a, b) => 
+                        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                    );
                 
                 debugLog('Sorted Items', sortedItems);
                 
-                setExperiments(sortedItems);
+                const validSortedItems = sortedItems.filter((item): 
+                    item is NonNullable<Schema['Experiment']['type']> => item !== null);
+                setExperiments(validSortedItems);
                 
                 const currentSelectedExperiment = selectedExperimentRef.current;
                 if (currentSelectedExperiment) {
-                  const updatedExperiment = sortedItems.find(exp => exp.id === currentSelectedExperiment.id);
+                  const updatedExperiment = sortedItems.find(exp => 
+                    exp && exp.id === currentSelectedExperiment.id
+                  );
                   if (updatedExperiment) {
                     debugLog('Updated Experiment', updatedExperiment);
                     setSelectedExperiment(updatedExperiment);
