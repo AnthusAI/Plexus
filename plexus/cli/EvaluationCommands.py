@@ -235,7 +235,9 @@ def distribution(
         logging.error(f"Scorecard with name '{scorecard_name}' not found.")
         return
 
-    scores_to_evaluate = subset_of_scores.split(',') if subset_of_scores else list(scorecard_class.scores.keys())[:10]
+    # We're removing support for a list of scores.
+    # scores_to_evaluate = subset_of_scores.split(',') if subset_of_scores else list(scorecard_class.scores.keys())[:10]
+    scores_to_evaluate = subset_of_scores
     total_scores = len(scores_to_evaluate)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
