@@ -120,6 +120,7 @@ const schema = a.schema({
       confusionMatrix: a.json(),
       items: a.hasMany('Item', 'experimentId'),
       scoreResults: a.hasMany('ScoreResult', 'experimentId'),
+      scoringJobs: a.hasMany('ScoringJob', 'experimentId'),
       scoreType: a.string(),
       dataBalance: a.string(),
       scoreGoal: a.string(),
@@ -200,6 +201,8 @@ const schema = a.schema({
       account: a.belongsTo('Account', 'accountId'),
       scorecardId: a.string().required(),
       scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+      experimentId: a.string(),
+      experiment: a.belongsTo('Experiment', 'experimentId'),
       batchJobLinks: a.hasMany('BatchJobScoringJob', 'scoringJobId'),
       scoreResults: a.hasMany('ScoreResult', 'scoringJobId'),
     })
@@ -210,7 +213,8 @@ const schema = a.schema({
     .secondaryIndexes((idx) => [
       idx("accountId"),
       idx("itemId"),
-      idx("scorecardId")
+      idx("scorecardId"),
+      idx("experimentId")
     ]),
 
   ScoreResult: a
