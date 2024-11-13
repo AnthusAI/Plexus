@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Activity, Logs, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox } from "lucide-react"
+import { Activity, Logs, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -44,42 +44,95 @@ const DashboardButton: React.FC<ButtonProps> = ({ className, ...props }) => (
   <BaseButton className={`!rounded-[6px] ${className}`} {...props} />
 )
 
+const MobileHeader = ({ 
+  toggleLeftSidebar, 
+  toggleRightSidebar, 
+  rightSidebarState 
+}: { 
+  toggleLeftSidebar: () => void;
+  toggleRightSidebar: () => void;
+  rightSidebarState: 'collapsed' | 'normal' | 'expanded';
+}) => (
+  <div className="hidden max-lg:flex items-center justify-between p-1 bg-background">
+    <DashboardButton
+      variant="ghost"
+      size="icon"
+      onClick={toggleLeftSidebar}
+      className="lg:hidden"
+    >
+      <Menu className="h-5 w-5" />
+    </DashboardButton>
+    
+    <Link href="/" className="flex items-center">
+      <SquareLogo variant={LogoVariant.Narrow} />
+    </Link>
+
+    <DashboardButton
+      variant="ghost"
+      size="icon"
+      onClick={toggleRightSidebar}
+      className="lg:hidden"
+    >
+      <MessageSquare className="h-5 w-5" />
+    </DashboardButton>
+  </div>
+)
+
 const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; signOut: () => Promise<void> }) => {
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true)
   const { rightSidebarState, setRightSidebarState } = useSidebar()
   const { theme, setTheme } = useTheme()
   const isDesktop = useMediaQuery("(min-width: 1024px)")
-  const isMobile = useMediaQuery("(max-width: 767px)")
+  const isMobile = useMediaQuery("(max-width: 1023px)")
 
   useEffect(() => {
+    console.log('Layout effect running:', { isDesktop, isMobile });
+    
     if (isDesktop) {
       setIsLeftSidebarOpen(true)
-      if (rightSidebarState === 'collapsed') {
-        setRightSidebarState('collapsed')
-      }
     } else if (isMobile) {
       setIsLeftSidebarOpen(false)
-      setRightSidebarState('collapsed')
     }
-  }, [isDesktop, isMobile, rightSidebarState, setRightSidebarState])
+  }, [isDesktop, isMobile])
 
   const toggleLeftSidebar = () => {
     setIsLeftSidebarOpen(!isLeftSidebarOpen)
   }
 
   const toggleRightSidebar = () => {
-    setRightSidebarState((prevState) => {
-      switch (prevState) {
-        case 'collapsed':
-          return 'normal'
-        case 'normal':
-          return 'expanded'
-        case 'expanded':
-          return 'collapsed'
+    console.log('Toggle Right Sidebar:', {
+      isMobile,
+      currentState: rightSidebarState,
+      willSetTo: rightSidebarState === 'collapsed' ? 'normal' : 'collapsed'
+    });
+
+    if (isMobile) {
+      // On mobile, just toggle between collapsed and normal
+      setRightSidebarState(prevState => {
+        const newState = prevState === 'collapsed' ? 'normal' : 'collapsed';
+        console.log('Setting right sidebar state:', {
+          from: prevState,
+          to: newState
+        });
+        return newState;
+      });
+      
+      // Close left sidebar when opening chat on mobile
+      if (rightSidebarState === 'collapsed') {
+        console.log('Closing left sidebar');
+        setIsLeftSidebarOpen(false);
       }
-    })
-    if (rightSidebarState === 'collapsed') {
-      setIsLeftSidebarOpen(false)
+    } else {
+      // Desktop behavior remains the same
+      setRightSidebarState((prevState) => {
+        const newState = prevState === 'collapsed' ? 'normal' : 
+                        prevState === 'normal' ? 'expanded' : 'collapsed';
+        console.log('Setting desktop right sidebar state:', {
+          from: prevState,
+          to: newState
+        });
+        return newState;
+      });
     }
   }
 
@@ -107,8 +160,8 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   ]
 
   const LeftSidebar = () => (
-    <div className="flex flex-col h-full py-2 bg-muted">
-      <div className={`mb-4 ${isLeftSidebarOpen ? 'pl-2' : 'pl-3 pr-3'}`}>
+    <div className={`flex flex-col h-full py-2 bg-muted ${isMobile ? 'pr-3' : ''}`}>
+      <div className={`mb-4 ${isLeftSidebarOpen ? 'pl-2' : ''}`}>
         <Link href="/" className={`block ${isLeftSidebarOpen ? 'w-full max-w-md' : 'w-8'}`}>
           {isLeftSidebarOpen ? (
             <SquareLogo variant={LogoVariant.Wide} />
@@ -265,104 +318,92 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   )
 
   const RightSidebar = () => {
+    console.log('RightSidebar rendering:', {
+      rightSidebarState,
+      isMobile,
+      isVisible: rightSidebarState !== 'collapsed'
+    });
+    
+    // Don't render anything if collapsed on mobile
+    if (isMobile && rightSidebarState === 'collapsed') {
+      return null;
+    }
+    
     return (
       <div className="flex flex-col h-full py-2 bg-muted">
-        {rightSidebarState === 'collapsed' && (
-          <div className="px-3 py-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DashboardButton
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 p-0 group"
-                    onClick={toggleRightSidebar}
-                  >
-                    <MessageSquare className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
-                  </DashboardButton>
-                </TooltipTrigger>
-                <TooltipContent side="left">
-                  Expand chat
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        )}
         <div className="flex-grow overflow-hidden">
           <div className="h-full flex flex-col">
             <div className="flex-grow overflow-y-auto flex flex-col-reverse px-4">
-              {rightSidebarState !== 'collapsed' && (
-                <div className="space-y-4 mb-4">
-                  {[
-                    <ChatExperimentCard
-                      key="exp1"
-                      experimentId="Experiment started"
-                      status="running"
-                      progress={42}
-                      accuracy={86.7}
-                      elapsedTime="00:02:15"
-                      estimatedTimeRemaining="00:03:05"
-                      scorecard="CS3 Services v2"
-                      score="Good Call"
-                    />,
-                    <div key="msg1" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
-                      Okay, I started a new run:
-                    </div>,
-                    <div key="user1" className="flex items-start space-x-2 justify-end">
-                      <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
-                        Run that again with fresh data.
-                      </div>
-                      <Avatar className="h-8 w-8 mt-1">
-                        <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
-                      </Avatar>
-                    </div>,
-                    <ChatExperimentCard
-                      key="exp2"
-                      experimentId="Experiment completed"
-                      status="completed"
-                      progress={100}
-                      accuracy={92}
-                      elapsedTime="00:05:12"
-                      estimatedTimeRemaining="00:00:00"
-                      scorecard="AW IB Sales"
-                      score="Pain Points"
-                    />,
-                    <div key="msg2" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
-                      The best accuracy was from this version, two days ago, at 92%. That was using a fine-tuned model.
-                    </div>,
-                    <div key="user2" className="flex items-start space-x-2 justify-end">
-                      <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
-                        What's the best accuracy on Pain Points on AW IB Sales?
-                      </div>
-                      <Avatar className="h-8 w-8 mt-1">
-                        <AvatarFallback className="bg-background dark:bg-border">DN</AvatarFallback>
-                      </Avatar>
-                    </div>,
-                    <ChatExperimentCard
-                      key="exp3"
-                      experimentId="New experiment"
-                      status="running"
-                      progress={87}
-                      accuracy={88.2}
-                      elapsedTime="00:04:35"
-                      estimatedTimeRemaining="00:00:40"
-                      scorecard="CS3 Services v2"
-                      score="Good Call"
-                    />,
-                    <div key="msg3" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
-                      Certainly! I'm starting a new experiment run for the "CS3 Services v2" scorecard on the "Good Call" score.
-                    </div>,
-                    <div key="user3" className="flex items-start space-x-2 justify-end">
-                      <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
-                        Start a new experiment run on the "CS3 Services v2" scorecard for the "Good Call" score.
-                      </div>
-                      <Avatar className="h-8 w-8 mt-1">
-                        <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
-                      </Avatar>
-                    </div>,
-                  ].reverse()}
-                </div>
-              )}
+              <div className="space-y-4 mb-4">
+                {[
+                  <ChatExperimentCard
+                    key="exp1"
+                    experimentId="Experiment started"
+                    status="running"
+                    progress={42}
+                    accuracy={86.7}
+                    elapsedTime="00:02:15"
+                    estimatedTimeRemaining="00:03:05"
+                    scorecard="CS3 Services v2"
+                    score="Good Call"
+                  />,
+                  <div key="msg1" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
+                    Okay, I started a new run:
+                  </div>,
+                  <div key="user1" className="flex items-start space-x-2 justify-end">
+                    <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
+                      Run that again with fresh data.
+                    </div>
+                    <Avatar className="h-8 w-8 mt-1">
+                      <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
+                    </Avatar>
+                  </div>,
+                  <ChatExperimentCard
+                    key="exp2"
+                    experimentId="Experiment completed"
+                    status="completed"
+                    progress={100}
+                    accuracy={92}
+                    elapsedTime="00:05:12"
+                    estimatedTimeRemaining="00:00:00"
+                    scorecard="AW IB Sales"
+                    score="Pain Points"
+                  />,
+                  <div key="msg2" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
+                    The best accuracy was from this version, two days ago, at 92%. That was using a fine-tuned model.
+                  </div>,
+                  <div key="user2" className="flex items-start space-x-2 justify-end">
+                    <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
+                      What's the best accuracy on Pain Points on AW IB Sales?
+                    </div>
+                    <Avatar className="h-8 w-8 mt-1">
+                      <AvatarFallback className="bg-background dark:bg-border">DN</AvatarFallback>
+                    </Avatar>
+                  </div>,
+                  <ChatExperimentCard
+                    key="exp3"
+                    experimentId="New experiment"
+                    status="running"
+                    progress={87}
+                    accuracy={88.2}
+                    elapsedTime="00:04:35"
+                    estimatedTimeRemaining="00:00:40"
+                    scorecard="CS3 Services v2"
+                    score="Good Call"
+                  />,
+                  <div key="msg3" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
+                    Certainly! I'm starting a new experiment run for the "CS3 Services v2" scorecard on the "Good Call" score.
+                  </div>,
+                  <div key="user3" className="flex items-start space-x-2 justify-end">
+                    <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
+                      Start a new experiment run on the "CS3 Services v2" scorecard for the "Good Call" score.
+                    </div>
+                    <Avatar className="h-8 w-8 mt-1">
+                      <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
+                    </Avatar>
+                  </div>,
+                ].reverse()}
+              </div>
             </div>
           </div>
         </div>
@@ -452,26 +493,39 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   return (
     <div className="flex flex-col h-screen bg-muted">
+      <MobileHeader 
+        toggleLeftSidebar={toggleLeftSidebar}
+        toggleRightSidebar={toggleRightSidebar}
+        rightSidebarState={rightSidebarState}
+      />
+      
       <div className="flex flex-1 overflow-hidden bg-muted">
         <aside
           className={`
-            fixed top-0 bottom-0 left-0 h-full
-            ${isLeftSidebarOpen ? (isMobile ? 'w-14' : 'w-40') : (isMobile ? 'w-0' : 'w-14')}
+            ${isMobile ? 'fixed top-[48px] bottom-0 left-0 z-50 bg-background/80 backdrop-blur-sm' : 
+              'fixed top-0 bottom-0 left-0 h-full'}
+            ${isLeftSidebarOpen ? 'w-40' : 'w-14'}
             transition-all duration-300 ease-in-out overflow-hidden
             ${isMobile && !isLeftSidebarOpen ? 'hidden' : ''}
           `}
         >
-          <LeftSidebar />
+          <div className={`
+            ${isMobile ? 'h-full w-40 bg-muted' : 'h-full'}
+          `}>
+            <LeftSidebar />
+          </div>
         </aside>
+
         <main 
           className={`flex-1 flex flex-col transition-all duration-300 ease-in-out
-            ${isMobile && !isLeftSidebarOpen ? 'ml-0' : (isLeftSidebarOpen ? 'ml-40' : 'ml-14')}
+            ${isMobile ? 'ml-0' : (isLeftSidebarOpen ? 'ml-40' : 'ml-14')}
             ${isMobile && rightSidebarState === 'collapsed' ? 'mr-0' : 
-              rightSidebarState === 'normal' ? 'mr-80' : 
-              rightSidebarState === 'expanded' ? 'mr-[40%]' : 'mr-14'}
+              rightSidebarState === 'normal' ? (isMobile ? 'mr-0' : 'mr-80') : 
+              rightSidebarState === 'expanded' ? (isMobile ? 'mr-0' : 'mr-[40%]') : 
+              (isMobile ? 'mr-0' : 'mr-14')}
             ${isLeftSidebarOpen ? 'pl-2' : 'pl-0'}
             ${rightSidebarState !== 'collapsed' ? 'pr-2' : 'pr-0'}
-            pt-2 pb-2
+            ${isMobile ? 'pt-0' : 'pt-2'} pb-2
           `}
         >
           <div className="flex-1 flex flex-col bg-background rounded-lg overflow-hidden">
@@ -482,17 +536,45 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             </div>
           </div>
         </main>
+
         <aside
           className={`
-            fixed top-0 bottom-0 right-0 h-full
+            ${isMobile ? 'fixed top-[48px] bottom-0 right-0 z-50 bg-background/80 backdrop-blur-sm' : 
+              'fixed top-0 bottom-0 right-0 h-full'}
             ${rightSidebarState === 'collapsed' ? (isMobile ? 'w-0' : 'w-14') :
-              rightSidebarState === 'normal' ? (isMobile ? 'w-14' : 'w-80') :
-              'w-[40%]'}
+              rightSidebarState === 'normal' ? 'w-80' :
+              (isMobile ? 'w-full' : 'w-[40%]')}
             transition-all duration-300 ease-in-out overflow-hidden
-            ${isMobile && rightSidebarState === 'collapsed' ? 'hidden' : ''}
+            ${rightSidebarState === 'collapsed' ? 'invisible' : 'visible'}
           `}
+          onClick={() => {
+            console.log('Right sidebar clicked:', {
+              rightSidebarState,
+              isMobile,
+              width: rightSidebarState === 'collapsed' ? 
+                (isMobile ? '0' : '14') : 
+                (rightSidebarState === 'normal' ? '80' : 'full')
+            });
+          }}
         >
-          <RightSidebar />
+          <div className={`
+            ${isMobile ? 'h-full w-full bg-muted' : 'h-full'}
+            ${isMobile && rightSidebarState !== 'collapsed' ? 'flex flex-col' : ''}
+          `}>
+            {isMobile && rightSidebarState !== 'collapsed' && (
+              <div className="flex items-center justify-between p-2 border-b">
+                <span className="font-semibold">Chat</span>
+                <DashboardButton
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleRightSidebar}
+                >
+                  <X className="h-5 w-5" />
+                </DashboardButton>
+              </div>
+            )}
+            <RightSidebar />
+          </div>
         </aside>
       </div>
     </div>
