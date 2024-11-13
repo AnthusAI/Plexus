@@ -293,3 +293,7 @@ you've likely introduced a type relationship that's causing combinatorial explos
 When you make changes to the Amplify schema, you will usually need to update the JSON outputs:
 
     npx ampx generate outputs --app-id depfj4eia0tcf --branch main
+
+## TypeScript Type Checking
+
+    npx tsc --noEmit --pretty --diagnostics
