@@ -33,10 +33,6 @@ class TestTopicModelClusterer(unittest.TestCase):
     def test_determine_optimal_topics(self, mock_coherence_model, mock_lda):
         # Configure the mock LdaMulticore instance
         mock_lda_instance = mock_lda.return_value
-        mock_lda_instance.get_topics.return_value = np.array([
-            [0.1, 0.2, 0.3, 0.4],
-            [0.2, 0.3, 0.4, 0.1]
-        ])
         mock_lda_instance.show_topics.return_value = [
             (0, [('word1', 0.1), ('word2', 0.2), ('word3', 0.3), ('word4', 0.4)]),
             (1, [('word2', 0.2), ('word3', 0.3), ('word4', 0.4), ('word1', 0.1)])
@@ -52,17 +48,14 @@ class TestTopicModelClusterer(unittest.TestCase):
         # Assertions
         self.assertIsNotNone(coherence_values)
         self.assertGreater(len(coherence_values), 0)
-        self.assertEqual(len(coherence_values), 4)  # (10-2)/2 = 4 iterations
+        self.assertEqual(len(coherence_values), 5)  # (10-2)/2 + 1 = 5 iterations
 
         # Check if LdaMulticore and CoherenceModel were called
         mock_lda.assert_called()
         mock_coherence_model.assert_called()
 
-        # Verify that get_topics was called
-        self.assertEqual(mock_lda_instance.get_topics.call_count, 4)  # Called once for each iteration
-
-        # Verify that show_topics was not called (we're not using it in this implementation)
-        mock_lda_instance.show_topics.assert_not_called()
+        # Verify that show_topics was called instead of get_topics
+        self.assertEqual(mock_lda_instance.show_topics.call_count, 5)
 
     def test_analyze_topic_distributions_without_model(self):
         with self.assertRaises(ValueError):
@@ -72,12 +65,12 @@ class TestTopicModelClusterer(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.clusterer.get_lda_topics()
 
-    @patch('plexus.nlp.cluster.TopicModelClusterer.openai')
+    @patch('plexus.nlp.cluster.TopicModelClusterer.OpenAI')
     def test_generate_llm_explanations_without_prominent_topics(self, mock_openai):
         with self.assertRaises(ValueError):
             self.clusterer.generate_llm_explanations()
 
-    @patch('plexus.nlp.cluster.TopicModelClusterer.openai')
+    @patch('plexus.nlp.cluster.TopicModelClusterer.OpenAI')
     def test_generate_summary_without_topics(self, mock_openai):
         with self.assertRaises(ValueError):
             self.clusterer.generate_summary()

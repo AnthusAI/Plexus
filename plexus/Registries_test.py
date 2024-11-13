@@ -1,6 +1,6 @@
 import unittest
 
-from plexus.Registries import BaseRegistry, ScoreRegistry, ScorecardRegistry
+from plexus.Registries import Registry, ScoreRegistry, ScorecardRegistry
 
 class MockScore:
     pass
@@ -8,24 +8,25 @@ class MockScore:
 class MockScorecard:
     pass
 
-class TestBaseRegistry(unittest.TestCase):
+class TestRegistry(unittest.TestCase):
 
     def setUp(self):
-        self.registry = BaseRegistry()
+        self.registry = Registry()
 
     def test_register_and_get(self):
-        self.registry.register('MockScore')(MockScore)
+        self.registry.register(MockScore, {}, name='MockScore')
         result = self.registry.get('MockScore')
-        self.assertIs(result, MockScore)
-
-    def test_register_family_and_resolve(self):
-        self.registry.register('MockScore', family='MockFamily')(MockScore)
-        result = self.registry.resolve_family('MockFamily')
         self.assertIs(result, MockScore)
 
     def test_get_nonexistent(self):
         result = self.registry.get('Nonexistent')
         self.assertIsNone(result)
+
+    def test_get_properties(self):
+        properties = {'key': 'value'}
+        self.registry.register(MockScore, properties, name='MockScore')
+        result = self.registry.get_properties('MockScore')
+        self.assertEqual(result, properties)
 
 class TestScoreRegistry(unittest.TestCase):
 
@@ -33,7 +34,7 @@ class TestScoreRegistry(unittest.TestCase):
         self.score_registry = ScoreRegistry()
 
     def test_register_and_get_score(self):
-        self.score_registry.register('MockScore')(MockScore)
+        self.score_registry.register(MockScore, {}, name='MockScore')
         result = self.score_registry.get('MockScore')
         self.assertIs(result, MockScore)
 
@@ -43,7 +44,7 @@ class TestScorecardRegistry(unittest.TestCase):
         self.scorecard_registry = ScorecardRegistry()
 
     def test_register_and_get_scorecard(self):
-        self.scorecard_registry.register('MockScorecard')(MockScorecard)
+        self.scorecard_registry.register(MockScorecard, {}, name='MockScorecard')
         result = self.scorecard_registry.get('MockScorecard')
         self.assertIs(result, MockScorecard)
 
