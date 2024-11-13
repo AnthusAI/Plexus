@@ -27,7 +27,6 @@ class Classifier(BaseNode):
         chat_history: Annotated[List, Field(default_factory=list)]
         completion: Optional[str] = None
         classification: Optional[str] = None
-        explanation: Optional[str] = None
         retry_count: int = Field(default=0)
 
     def __init__(self, **parameters):
