@@ -475,126 +475,113 @@ export default function ExperimentsDashboard(): JSX.Element {
   return (
     <ClientOnly>
       <div className="space-y-4 h-full flex flex-col">
-        <div className="flex flex-wrap justify-between items-start gap-4">
-          <div className="flex-shrink-0">
-            <ScorecardContext 
-              selectedScorecard={selectedScorecard}
-              setSelectedScorecard={setSelectedScorecard}
-              selectedScore={selectedScore}
-              setSelectedScore={setSelectedScore}
-              availableFields={[]}
-            />
-          </div>
-        </div>
-        <div className="flex-grow flex flex-col overflow-hidden pb-2">
-          {selectedExperiment && experimentTaskProps && (isNarrowViewport || isFullWidth) ? (
-            <div className="flex-grow overflow-y-auto">
-              <ExperimentTask
-                variant="detail"
-                task={experimentTaskProps}
-                isFullWidth={isFullWidth}
-                onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-                onClose={() => {
-                  setSelectedExperiment(null);
-                  setIsFullWidth(false);
-                }}
+        <div className={`flex ${isNarrowViewport ? 'flex-col' : isFullWidth ? '' : 'space-x-6'} flex-1 h-full`}>
+          <div className={`
+            flex flex-col
+            ${isFullWidth ? 'hidden' : ''} 
+            ${(!selectedExperiment || isNarrowViewport) ? 'w-full' : 'w-1/2'}
+          `}>
+            <div className="mb-4">
+              <ScorecardContext 
+                selectedScorecard={selectedScorecard}
+                setSelectedScorecard={setSelectedScorecard}
+                selectedScore={selectedScore}
+                setSelectedScore={setSelectedScore}
+                availableFields={[]}
               />
             </div>
-          ) : (
-            <div className={`flex ${isNarrowViewport ? 'flex-col' : 'space-x-6'} flex-1 h-full`}>
-              <div className={`${isFullWidth ? 'hidden' : 'flex-1'} @container overflow-auto`}>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[30%]">Experiment</TableHead>
-                      <TableHead className="w-[10%] @[630px]:table-cell hidden">Type</TableHead>
-                      <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Progress</TableHead>
-                      <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Accuracy</TableHead>
+            <div className="flex-1 overflow-auto @container">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[30%]">Experiment</TableHead>
+                    <TableHead className="w-[10%] @[630px]:table-cell hidden">Type</TableHead>
+                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Progress</TableHead>
+                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Accuracy</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredExperiments.map((experiment) => (
+                    <TableRow 
+                      key={experiment.id} 
+                      onClick={() => setSelectedExperiment(experiment)} 
+                      className="cursor-pointer transition-colors duration-200 hover:bg-muted"
+                    >
+                      <TableCell className="font-medium sm:pr-4">
+                        <div className="block @[630px]:hidden">
+                          <div className="flex justify-between mb-4">
+                            {/* Left column - reduce width to ~40% */}
+                            <div className="w-[40%] space-y-0.5">
+                              <div className="font-semibold truncate">
+                                {scorecardNames[experiment.id] || 'Unknown Scorecard'}
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
+                              </div>
+                              <div className="text-sm text-muted-foreground">{experiment.accuracyType ?? 'Accuracy'}</div>
+                            </div>
+
+                            {/* Right column - increase width to ~55% for progress bars */}
+                            <div className="w-[55%] space-y-2">
+                              <ExperimentListProgressBar 
+                                progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
+                                totalSamples={experiment.totalItems ?? 0}
+                              />
+                              <ExperimentListAccuracyBar 
+                                progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
+                                accuracy={experiment.accuracy ?? 0}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        {/* Wide variant - visible at 630px and above */}
+                        <div className="hidden @[630px]:block">
+                          <div className="font-semibold">
+                            {scorecardNames[experiment.id] || 'Unknown Scorecard'}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden @[630px]:table-cell text-sm text-muted-foreground">
+                        {experiment.accuracyType ?? 'Accuracy'}
+                      </TableCell>
+                      <TableCell className="hidden @[630px]:table-cell w-[15%] text-right">
+                        <ExperimentListProgressBar 
+                          progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
+                          totalSamples={experiment.totalItems ?? 0}
+                        />
+                      </TableCell>
+                      <TableCell className="hidden @[630px]:table-cell w-[15%]">
+                        <ExperimentListAccuracyBar 
+                          progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
+                          accuracy={experiment.accuracy ?? 0}
+                        />
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredExperiments.map((experiment) => (
-                      <TableRow 
-                        key={experiment.id} 
-                        onClick={() => setSelectedExperiment(experiment)} 
-                        className="cursor-pointer transition-colors duration-200 hover:bg-muted"
-                      >
-                        <TableCell className="font-medium sm:pr-4">
-                          <div className="block @[630px]:hidden">
-                            <div className="flex justify-between mb-4">
-                              {/* Left column - reduce width to ~40% */}
-                              <div className="w-[40%] space-y-0.5">
-                                <div className="font-semibold truncate">
-                                  {scorecardNames[experiment.id] || 'Unknown Scorecard'}
-                                </div>
-                                <div className="text-sm text-muted-foreground">
-                                  {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
-                                </div>
-                                <div className="text-sm text-muted-foreground">{experiment.accuracyType ?? 'Accuracy'}</div>
-                              </div>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
 
-                              {/* Right column - increase width to ~55% for progress bars */}
-                              <div className="w-[55%] space-y-2">
-                                <ExperimentListProgressBar 
-                                  progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
-                                  totalSamples={experiment.totalItems ?? 0}
-                                />
-                                <ExperimentListAccuracyBar 
-                                  progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
-                                  accuracy={experiment.accuracy ?? 0}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                          {/* Wide variant - visible at 630px and above */}
-                          <div className="hidden @[630px]:block">
-                            <div className="font-semibold">
-                              {scorecardNames[experiment.id] || 'Unknown Scorecard'}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden @[630px]:table-cell text-sm text-muted-foreground">
-                          {experiment.accuracyType ?? 'Accuracy'}
-                        </TableCell>
-                        <TableCell className="hidden @[630px]:table-cell w-[15%] text-right">
-                          <ExperimentListProgressBar 
-                            progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
-                            totalSamples={experiment.totalItems ?? 0}
-                          />
-                        </TableCell>
-                        <TableCell className="hidden @[630px]:table-cell w-[15%]">
-                          <ExperimentListAccuracyBar 
-                            progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
-                            accuracy={experiment.accuracy ?? 0}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+          {selectedExperiment && experimentTaskProps && !isNarrowViewport && (
+            <div className={`${isFullWidth ? 'w-full' : 'w-1/2 min-w-[300px]'} flex flex-col flex-1`}>
+              <div className="flex-1 flex flex-col">
+                <ExperimentTask
+                  variant="detail"
+                  task={experimentTaskProps}
+                  isFullWidth={isFullWidth}
+                  onToggleFullWidth={() => {
+                    setIsFullWidth(!isFullWidth);
+                  }}
+                  onClose={() => {
+                    setSelectedExperiment(null);
+                    setIsFullWidth(false);
+                  }}
+                />
               </div>
-
-              {selectedExperiment && experimentTaskProps && !isNarrowViewport && !isFullWidth && (
-                <div className={`${isFullWidth ? 'w-full' : 'w-1/2 min-w-[300px]'} flex flex-col flex-1 overflow-y-auto`}>
-                  <div className="flex-1 flex flex-col">
-                    <ExperimentTask
-                      variant="detail"
-                      task={experimentTaskProps}
-                      isFullWidth={isFullWidth}
-                      onToggleFullWidth={() => {
-                        setIsFullWidth(!isFullWidth);
-                      }}
-                      onClose={() => {
-                        setSelectedExperiment(null);
-                        setIsFullWidth(false);
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
