@@ -121,9 +121,15 @@ const schema = a.schema({
       items: a.hasMany('Item', 'experimentId'),
       scoreResults: a.hasMany('ScoreResult', 'experimentId'),
       scoringJobs: a.hasMany('ScoringJob', 'experimentId'),
-      scoreType: a.string(),
-      dataBalance: a.string(),
       scoreGoal: a.string(),
+      classDistribution: a
+        .list(
+          a.map()
+            .items({
+              label: a.string().required(),
+              count: a.integer().required()
+            })
+        ),
     })
     .authorization((allow) => [
       allow.publicApiKey(),

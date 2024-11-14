@@ -243,8 +243,6 @@ export default function ExperimentsDashboard(): JSX.Element {
     const scoreName = scoreResult?.data?.name || '';
     
     // Get type information directly from experiment
-    const scoreType = experiment.scoreType;
-    const dataBalance = experiment.dataBalance;
     const scoreGoal = experiment.scoreGoal;
 
     // Parse confusion matrix safely
@@ -294,8 +292,6 @@ export default function ExperimentsDashboard(): JSX.Element {
             errorMessage: experiment.errorMessage ?? null,
             errorDetails: experiment.errorDetails ?? null,
             confusionMatrix,
-            scoreType,
-            dataBalance,
             scoreGoal,
         },
     };
@@ -358,8 +354,6 @@ export default function ExperimentsDashboard(): JSX.Element {
                     // Create merged item preserving the existing values
                     const mergedItem = {
                       ...item,
-                      scoreType: existingExperiment?.scoreType || item.scoreType,
-                      dataBalance: existingExperiment?.dataBalance || item.dataBalance,
                       scoreGoal: existingExperiment?.scoreGoal || item.scoreGoal
                     };
                     
