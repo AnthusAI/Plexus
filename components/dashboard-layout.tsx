@@ -539,7 +539,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               (isMobile ? 'mr-0' : 'mr-14')}
             ${isLeftSidebarOpen ? 'pl-2' : 'pl-0'}
             ${rightSidebarState !== 'collapsed' ? 'pr-2' : 'pr-0'}
-            pb-2
+            ${isMobile ? 'pb-2' : 'py-2'}
           `}
         >
           <div className="flex-1 flex flex-col bg-background rounded-lg overflow-hidden">
