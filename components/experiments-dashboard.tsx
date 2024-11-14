@@ -55,7 +55,7 @@ const calculateProgress = (processedItems?: number | null, totalItems?: number |
   return Math.round((processedItems / totalItems) * 100);
 };
 
-// Update the transformExperiment function with logging
+// Update the transformExperiment function
 const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] => {
   if (!rawExperiment) {
     throw new Error('Cannot transform null experiment')
@@ -88,9 +88,11 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
     confusionMatrix: rawExperiment.confusionMatrix || null,
     elapsedSeconds: rawExperiment.elapsedSeconds || 0,
     estimatedRemainingSeconds: rawExperiment.estimatedRemainingSeconds || 0,
-    scoreType: rawExperiment.scoreType,
-    dataBalance: rawExperiment.dataBalance,
-    scoreGoal: rawExperiment.scoreGoal,
+    scoreGoal: rawExperiment.scoreGoal || null,
+    datasetClassDistribution: rawExperiment.datasetClassDistribution || null,
+    isDatasetClassDistributionBalanced: rawExperiment.isDatasetClassDistributionBalanced || null,
+    predictedClassDistribution: rawExperiment.predictedClassDistribution || null,
+    isPredictedClassDistributionBalanced: rawExperiment.isPredictedClassDistributionBalanced || null,
     items: async (options?: any) => ({ data: [], nextToken: null }),
     scoreResults: async (options?: any) => ({ data: [], nextToken: null }),
     scoringJobs: async (options?: any) => ({ data: [], nextToken: null })
@@ -231,7 +233,6 @@ export default function ExperimentsDashboard(): JSX.Element {
   }, [selectedExperiment]);
 
   const getExperimentTaskProps = async (experiment: Schema['Experiment']['type']) => {
-
     const progress = calculateProgress(experiment.processedItems, experiment.totalItems);
     
     // Get scorecard name
@@ -241,28 +242,42 @@ export default function ExperimentsDashboard(): JSX.Element {
     // Get score name
     const scoreResult = await experiment.score?.();
     const scoreName = scoreResult?.data?.name || '';
-    
-    // Get type information directly from experiment
-    const scoreGoal = experiment.scoreGoal;
 
-    // Parse confusion matrix safely
+    // Parse class distributions
+    let datasetClassDistribution = null;
+    if (experiment.datasetClassDistribution) {
+        try {
+            datasetClassDistribution = typeof experiment.datasetClassDistribution === 'string' 
+                ? JSON.parse(experiment.datasetClassDistribution)
+                : experiment.datasetClassDistribution;
+        } catch (e) {
+            console.error('Error parsing dataset class distribution:', e);
+        }
+    }
+
+    let predictedClassDistribution = null;
+    if (experiment.predictedClassDistribution) {
+        try {
+            predictedClassDistribution = typeof experiment.predictedClassDistribution === 'string' 
+                ? JSON.parse(experiment.predictedClassDistribution)
+                : experiment.predictedClassDistribution;
+        } catch (e) {
+            console.error('Error parsing predicted class distribution:', e);
+        }
+    }
+
     let confusionMatrix: ConfusionMatrix = { matrix: [], labels: [] };
     if (experiment.confusionMatrix) {
-        if (typeof experiment.confusionMatrix === 'string') {
-            try {
-                confusionMatrix = JSON.parse(experiment.confusionMatrix);
-            } catch (e) {
-                console.error('Error parsing confusion matrix:', e);
-            }
-        } else if (typeof experiment.confusionMatrix === 'object' && 
-                   'matrix' in experiment.confusionMatrix && 
-                   'labels' in experiment.confusionMatrix) {
-            confusionMatrix = experiment.confusionMatrix as ConfusionMatrix;
+        try {
+            confusionMatrix = typeof experiment.confusionMatrix === 'string'
+                ? JSON.parse(experiment.confusionMatrix)
+                : experiment.confusionMatrix;
+        } catch (e) {
+            console.error('Error parsing confusion matrix:', e);
         }
     }
     
-    // Add logging before return
-    const props = {
+    return {
         id: experiment.id,
         type: experiment.type,
         scorecard: scorecardName,
@@ -292,12 +307,14 @@ export default function ExperimentsDashboard(): JSX.Element {
             errorMessage: experiment.errorMessage ?? null,
             errorDetails: experiment.errorDetails ?? null,
             confusionMatrix,
-            scoreGoal,
+            scoreGoal: experiment.scoreGoal ?? null,
+            datasetClassDistribution,
+            isDatasetClassDistributionBalanced: experiment.isDatasetClassDistributionBalanced ?? null,
+            predictedClassDistribution,
+            isPredictedClassDistributionBalanced: experiment.isPredictedClassDistributionBalanced ?? null,
         },
     };
-    
-    return props;
-}
+  }
 
   // Effect to update experimentTaskProps when selectedExperiment changes
   useEffect(() => {
