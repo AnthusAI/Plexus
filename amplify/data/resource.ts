@@ -123,6 +123,7 @@ const schema = a.schema({
       scoringJobs: a.hasMany('ScoringJob', 'experimentId'),
       scoreGoal: a.string(),
       classDistribution: a.json(),
+      isBalanced: a.boolean(),
     })
     .authorization((allow) => [
       allow.publicApiKey(),
