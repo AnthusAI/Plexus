@@ -356,10 +356,10 @@ export default function ExperimentsDashboard(): JSX.Element {
 
                 setExperiments(validItems)
                 
-                // Update selected experiment if needed
-                if (selectedExperiment) {
+                // Update selected experiment if it exists in the new items
+                if (selectedExperimentRef.current) {
                   const updatedExperiment = validItems.find(exp => 
-                    exp && exp.id === selectedExperiment.id
+                    exp.id === selectedExperimentRef.current?.id
                   )
                   if (updatedExperiment) {
                     setSelectedExperiment(updatedExperiment)
