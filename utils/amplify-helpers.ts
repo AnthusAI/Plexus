@@ -14,7 +14,37 @@ export function observeQueryFromModel<T>(
   filter?: Record<string, any>
 ) {
   return (model.observeQuery({
-    filter: filter ? filter : undefined
+    filter: filter ? filter : undefined,
+    selectionSet: [
+      'id',
+      'type',
+      'parameters',
+      'metrics',
+      'inferences',
+      'cost',
+      'accuracy',
+      'accuracyType',
+      'sensitivity',
+      'specificity',
+      'precision',
+      'createdAt',
+      'updatedAt',
+      'status',
+      'startedAt',
+      'totalItems',
+      'processedItems',
+      'errorMessage',
+      'errorDetails',
+      'accountId',
+      'scorecardId',
+      'scoreId',
+      'confusionMatrix',
+      'elapsedSeconds',
+      'estimatedRemainingSeconds',
+      'scoreType',
+      'dataBalance',
+      'scoreGoal'
+    ]
   }) as any) as { subscribe: (handlers: { 
     next: (data: { items: T[] }) => void
     error: (error: Error) => void 

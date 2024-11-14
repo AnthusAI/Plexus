@@ -47,6 +47,9 @@ class Experiment(BaseModel):
     scorecardId: Optional[str] = None
     scoreId: Optional[str] = None
     confusionMatrix: Optional[Dict] = None
+    scoreType: Optional[str] = None
+    dataBalance: Optional[str] = None
+    scoreGoal: Optional[str] = None
 
     def __init__(
         self,
@@ -76,6 +79,9 @@ class Experiment(BaseModel):
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
         confusionMatrix: Optional[Dict] = None,
+        scoreType: Optional[str] = None,
+        dataBalance: Optional[str] = None,
+        scoreGoal: Optional[str] = None,
     ):
         super().__init__(id, client)
         self.type = type
@@ -102,6 +108,9 @@ class Experiment(BaseModel):
         self.scorecardId = scorecardId
         self.scoreId = scoreId
         self.confusionMatrix = confusionMatrix
+        self.scoreType = scoreType
+        self.dataBalance = dataBalance
+        self.scoreGoal = scoreGoal
 
     @classmethod
     def fields(cls) -> str:
@@ -131,6 +140,9 @@ class Experiment(BaseModel):
             scorecardId
             scoreId
             confusionMatrix
+            scoreType
+            dataBalance
+            scoreGoal
         """
 
     @classmethod
@@ -224,6 +236,9 @@ class Experiment(BaseModel):
             scorecardId=data.get('scorecardId'),
             scoreId=data.get('scoreId'),
             confusionMatrix=data.get('confusionMatrix'),
+            scoreType=data.get('scoreType'),
+            dataBalance=data.get('dataBalance'),
+            scoreGoal=data.get('scoreGoal'),
             client=client
         )
 

@@ -628,7 +628,10 @@ def simulate(
                         confusionMatrix=json.dumps({
                             "matrix": conf_matrix.tolist(),
                             "labels": ["Yes", "No"]
-                        })
+                        }),
+                        scoreType=thread_experiment.scoreType,
+                        dataBalance=thread_experiment.dataBalance,
+                        scoreGoal=thread_experiment.scoreGoal
                     )
                 
             except Exception as e:
