@@ -29,9 +29,9 @@ export interface ExperimentTaskData {
     matrix: number[][]
     labels: string[]
   }
-  scoreType?: string | undefined
-  dataBalance?: string | undefined
-  scoreGoal?: string | undefined
+  scoreType?: string | null
+  dataBalance?: string | null
+  scoreGoal?: string | null
 }
 
 export interface ExperimentTaskProps {
@@ -101,6 +101,15 @@ export default function ExperimentTask({
   onClose
 }: ExperimentTaskProps) {
   const data = task.data ?? {} as ExperimentTaskData
+  
+  console.log('ExperimentTask render:', {
+    taskId: task.id,
+    scoreType: data.scoreType,
+    dataBalance: data.dataBalance,
+    scoreGoal: data.scoreGoal,
+    fullData: data
+  });
+
   const computedType = computeExperimentType(data)
   const waffleContainerRef = useRef<HTMLDivElement>(null)
   const [waffleHeight, setWaffleHeight] = useState(20)
@@ -179,9 +188,9 @@ export default function ExperimentTask({
           {(data.scoreType || data.dataBalance || data.scoreGoal) && (
             <div className="mb-6">
               <ScoreTypesHeader 
-                scoreType={data.scoreType}
-                dataBalance={data.dataBalance}
-                scoreGoal={data.scoreGoal}
+                scoreType={data.scoreType ?? undefined}
+                dataBalance={data.dataBalance ?? undefined}
+                scoreGoal={data.scoreGoal ?? undefined}
               />
             </div>
           )}

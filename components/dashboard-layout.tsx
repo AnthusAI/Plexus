@@ -108,16 +108,11 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
       // On mobile, just toggle between collapsed and normal
       setRightSidebarState(prevState => {
         const newState = prevState === 'collapsed' ? 'normal' : 'collapsed';
-        console.log('Setting right sidebar state:', {
-          from: prevState,
-          to: newState
-        });
         return newState;
       });
       
       // Close left sidebar when opening chat on mobile
       if (rightSidebarState === 'collapsed') {
-        console.log('Closing left sidebar');
         setIsLeftSidebarOpen(false);
       }
     } else {
