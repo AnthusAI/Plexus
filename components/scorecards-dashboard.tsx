@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ScorecardForm } from "@/components/scorecards/create-edit-form"
-import { generateClient } from "aws-amplify/data"
+import { amplifyClient } from "@/utils/amplify-client"
 import type { Schema } from "@/amplify/data/resource"
 import type { AuthModeStrategyType } from "aws-amplify/datastore"
 import {
@@ -30,9 +30,6 @@ import { ScoreCount } from "./scorecards/score-count"
 import { CardButton } from "@/components/CardButton"
 import { DatasetConfigFormComponent } from "@/components/dataset-config-form"
 
-// Initialize client
-const client = generateClient<Schema>()
-
 const ACCOUNT_KEY = 'call-criteria'
 
 export default function ScorecardsComponent() {
@@ -57,31 +54,28 @@ export default function ScorecardsComponent() {
 
     async function setupRealTimeSync() {
       try {
-        // Get the account ID and initial scorecards in parallel
         const [accountResult, initialScorecards] = await Promise.all([
-          client.models.Account.list({
+          amplifyClient.Account.list({
             filter: { key: { eq: ACCOUNT_KEY } }
           }),
-          client.models.Scorecard.list()
+          amplifyClient.Scorecard.list()
         ])
 
         if (accountResult.data.length > 0) {
           const foundAccountId = accountResult.data[0].id
           setAccountId(foundAccountId)
           
-          // Show initial data immediately
           setScorecards(initialScorecards.data.filter(s => 
             s.accountId === foundAccountId
           ))
           setIsLoading(false)
 
-          // Set up real-time subscription for future updates
-          subscription = client.models.Scorecard.observeQuery({
+          subscription = amplifyClient.Scorecard.observeQuery({
             filter: { accountId: { eq: foundAccountId } }
           }).subscribe({
-            next: ({ items }) => {
+            next: ({ items }: { items: Schema['Scorecard']['type'][] }) => {
               console.log('Subscription event:', JSON.stringify(items, null, 2))
-              setScorecards(items.filter(item => 
+              setScorecards(items.filter((item: Schema['Scorecard']['type']) => 
                 item && item.accountId === foundAccountId
               ))
             },
@@ -111,7 +105,7 @@ export default function ScorecardsComponent() {
 
   // Helper function to fetch sections with scores
   const fetchSectionsWithScores = async (scorecardId: string) => {
-    const sectionsResult = await client.models.ScorecardSection.list({
+    const sectionsResult = await amplifyClient.ScorecardSection.list({
       filter: { scorecardId: { eq: scorecardId } }
     })
     
@@ -125,10 +119,10 @@ export default function ScorecardsComponent() {
       createdAt: section.createdAt,
       updatedAt: section.updatedAt,
       scorecard: async () => ({
-        data: await client.models.Scorecard.get({ id: scorecardId }).then(result => result.data)
+        data: await amplifyClient.Scorecard.get({ id: scorecardId }).then(result => result.data)
       }),
       scores: async () => {
-        const scoresResult = await client.models.Score.list({
+        const scoresResult = await amplifyClient.Score.list({
           filter: { sectionId: { eq: section.id } }
         })
         return {
@@ -223,7 +217,7 @@ export default function ScorecardsComponent() {
     try {
       console.log('Editing scorecard:', scorecard.id)
       
-      const fullScorecard = await client.models.Scorecard.get({ id: scorecard.id })
+      const fullScorecard = await amplifyClient.Scorecard.get({ id: scorecard.id })
       console.log('Full scorecard data:', fullScorecard.data)
 
       const scorecardData = fullScorecard.data
@@ -232,7 +226,7 @@ export default function ScorecardsComponent() {
       }
 
       // Get all sections for this scorecard
-      const sectionsResult = await client.models.ScorecardSection.list({
+      const sectionsResult = await amplifyClient.ScorecardSection.list({
         filter: { scorecardId: { eq: scorecard.id } }
       })
       console.log('Sections result:', sectionsResult)
@@ -242,7 +236,7 @@ export default function ScorecardsComponent() {
 
       // Get scores for each section
       const sectionsWithScores = await Promise.all(sortedSections.map(async section => {
-        const scoresResult = await client.models.Score.list({
+        const scoresResult = await amplifyClient.Score.list({
           filter: { sectionId: { eq: section.id } }
         })
         console.log(`Scores for section ${section.id}:`, scoresResult.data)
@@ -256,7 +250,7 @@ export default function ScorecardsComponent() {
       }))
       console.log('Sections with scores:', sectionsWithScores)
 
-      const accountResult = await client.models.Account.get({ 
+      const accountResult = await amplifyClient.Account.get({ 
         id: scorecardData.accountId 
       })
       if (!accountResult.data) {
@@ -285,7 +279,7 @@ export default function ScorecardsComponent() {
               nextToken: null
             }),
             scorecards: async () => ({
-              data: await client.models.Scorecard.list({
+              data: await amplifyClient.Scorecard.list({
                 filter: { accountId: { eq: accountData.id } }
               }).then(result => result.data),
               nextToken: null

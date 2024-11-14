@@ -3,7 +3,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Plus, X, Square, RectangleVertical, ChevronUp, ChevronDown, Pencil } from "lucide-react"
-import { generateClient } from "aws-amplify/data"
+import { amplifyClient } from "@/utils/amplify-client"
 import { generateClient as generateGraphQLClient } from '@aws-amplify/api'
 import type { Schema } from "@/amplify/data/resource"
 import { EditableField } from "@/components/ui/editable-field"
@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { CardButton } from '@/components/CardButton'
 
-const client = generateClient<Schema>()
 const graphqlClient = generateGraphQLClient()
 
 interface ScorecardFormProps {
@@ -205,8 +204,7 @@ export function ScorecardForm({
       
       if (!formData.id) {
         console.log('Creating new scorecard...')
-        // Create new scorecard
-        const scorecardResult = await client.models.Scorecard.create({
+        const scorecardResult = await amplifyClient.Scorecard.create({
           name: formData.name,
           key: formData.key,
           externalId: formData.externalId,
@@ -221,7 +219,7 @@ export function ScorecardForm({
         
         // Create sections and their scores
         for (const section of formData.sections) {
-          const sectionResult = await client.models.ScorecardSection.create({
+          const sectionResult = await amplifyClient.ScorecardSection.create({
             name: section.name,
             order: section.order,
             scorecardId: scorecardId
@@ -233,7 +231,7 @@ export function ScorecardForm({
           
           // Create scores for this section
           for (const score of section.scores) {
-            await client.models.Score.create({
+            await amplifyClient.Score.create({
               name: score.name,
               type: score.type,
               order: score.order,
@@ -253,7 +251,7 @@ export function ScorecardForm({
         console.log('Updating existing scorecard:', formData.id)
         scorecardId = formData.id
         
-        const updateResult = await client.models.Scorecard.update({
+        const updateResult = await amplifyClient.Scorecard.update({
           id: scorecardId,
           name: formData.name,
           key: formData.key,
@@ -263,7 +261,7 @@ export function ScorecardForm({
         console.log('Scorecard update result:', updateResult)
         
         // Get existing sections and their scores to handle deletions
-        const existingSections = await client.models.ScorecardSection.list({
+        const existingSections = await amplifyClient.ScorecardSection.list({
           filter: { scorecardId: { eq: scorecardId } }
         })
         
@@ -275,21 +273,21 @@ export function ScorecardForm({
           if (!currentSectionIds.has(section.id)) {
             console.log('Deleting section:', section.id)
             // First delete all scores in this section
-            const sectionScores = await client.models.Score.list({
+            const sectionScores = await amplifyClient.Score.list({
               filter: { sectionId: { eq: section.id } }
             })
             for (const score of sectionScores.data) {
-              await client.models.Score.delete({
+              await amplifyClient.Score.delete({
                 id: score.id
               })
             }
             // Then delete the section
-            await client.models.ScorecardSection.delete({
+            await amplifyClient.ScorecardSection.delete({
               id: section.id
             })
           } else {
             // For sections we're keeping, check for deleted scores
-            const existingScores = await client.models.Score.list({
+            const existingScores = await amplifyClient.Score.list({
               filter: { sectionId: { eq: section.id } }
             })
             
@@ -300,7 +298,7 @@ export function ScorecardForm({
             for (const score of existingScores.data) {
               if (!currentScoreIds.has(score.id)) {
                 console.log('Deleting score:', score.id)
-                await client.models.Score.delete({
+                await amplifyClient.Score.delete({
                   id: score.id
                 })
               }
@@ -315,7 +313,7 @@ export function ScorecardForm({
           
           if (section.id) {
             // Update existing section
-            const updateResult = await client.models.ScorecardSection.update({
+            const updateResult = await amplifyClient.ScorecardSection.update({
               id: section.id,
               name: section.name,
               order: section.order
@@ -323,7 +321,7 @@ export function ScorecardForm({
             sectionId = section.id
           } else {
             // Create new section
-            const sectionResult = await client.models.ScorecardSection.create({
+            const sectionResult = await amplifyClient.ScorecardSection.create({
               name: section.name,
               order: section.order,
               scorecardId: scorecardId
@@ -339,7 +337,7 @@ export function ScorecardForm({
           for (const score of section.scores) {
             if (score.id && !score.id.startsWith('temp_')) {
               console.log('Updating existing score:', score.id)
-              const updateResult = await client.models.Score.update({
+              const updateResult = await amplifyClient.Score.update({
                 id: score.id,
                 name: score.name,
                 type: score.type,
@@ -350,14 +348,14 @@ export function ScorecardForm({
                 aiProvider: score.aiProvider,
                 aiModel: score.aiModel,
                 isFineTuned: score.isFineTuned,
-                configuration: score.configuration ? JSON.stringify(score.configuration) : null,
-                distribution: score.distribution ? JSON.stringify(score.distribution) : null,
-                versionHistory: score.versionHistory ? JSON.stringify(score.versionHistory) : null
+                configuration: score.configuration ? JSON.parse(JSON.stringify(score.configuration)) : {},
+                distribution: score.distribution ? JSON.parse(JSON.stringify(score.distribution)) : [],
+                versionHistory: score.versionHistory ? JSON.parse(JSON.stringify(score.versionHistory)) : []
               })
               console.log('Score update result:', updateResult)
             } else {
               console.log('Creating new score for section:', sectionId)
-              const createResult = await client.models.Score.create({
+              const createResult = await amplifyClient.Score.create({
                 name: score.name,
                 type: score.type || 'Boolean',
                 order: score.order,
@@ -367,14 +365,13 @@ export function ScorecardForm({
                 aiProvider: score.aiProvider || undefined,
                 aiModel: score.aiModel || undefined,
                 isFineTuned: score.isFineTuned || false,
-                configuration: score.configuration ? JSON.stringify(score.configuration) : null,
-                distribution: score.distribution ? JSON.stringify(score.distribution) : null,
-                versionHistory: score.versionHistory ? JSON.stringify(score.versionHistory) : null
+                configuration: score.configuration ? JSON.parse(JSON.stringify(score.configuration)) : {},
+                distribution: score.distribution ? JSON.parse(JSON.stringify(score.distribution)) : [],
+                versionHistory: score.versionHistory ? JSON.parse(JSON.stringify(score.versionHistory)) : []
               })
               console.log('New score result:', createResult)
               if (!createResult.data) {
-                console.error('Score creation failed:', createResult.errors)
-                throw new Error(`Failed to create score: ${JSON.stringify(createResult.errors)}`)
+                throw new Error('Failed to create score')
               }
 
               // Update formData with the real ID
