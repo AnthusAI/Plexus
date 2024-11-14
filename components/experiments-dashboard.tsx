@@ -88,10 +88,12 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
     confusionMatrix: rawExperiment.confusionMatrix || null,
     elapsedSeconds: rawExperiment.elapsedSeconds || 0,
     estimatedRemainingSeconds: rawExperiment.estimatedRemainingSeconds || 0,
-    // Always use the root-level fields
     scoreType: rawExperiment.scoreType,
     dataBalance: rawExperiment.dataBalance,
     scoreGoal: rawExperiment.scoreGoal,
+    items: async (options?: any) => ({ data: [], nextToken: null }),
+    scoreResults: async (options?: any) => ({ data: [], nextToken: null }),
+    scoringJobs: async (options?: any) => ({ data: [], nextToken: null })
   };
 
   return {
@@ -101,12 +103,33 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
         id: rawExperiment.account?.id || '',
         name: rawExperiment.account?.name || '',
         key: rawExperiment.account?.key || '',
-        scorecards: async () => ({ data: [], nextToken: null }),
-        experiments: async () => ({ data: [], nextToken: null }),
-        batchJobs: async () => ({ data: [], nextToken: null }),
-        createdAt: rawExperiment.createdAt || new Date().toISOString(),
-        updatedAt: rawExperiment.updatedAt || new Date().toISOString(),
-        description: ''
+        scorecards: async (options?: any) => ({ 
+          data: [], 
+          nextToken: null 
+        }),
+        experiments: async (options?: any) => ({ 
+          data: [], 
+          nextToken: null 
+        }),
+        batchJobs: async (options?: any) => ({ 
+          data: [], 
+          nextToken: null 
+        }),
+        items: async (options?: any) => ({ 
+          data: [], 
+          nextToken: null 
+        }),
+        scoringJobs: async (options?: any) => ({ 
+          data: [], 
+          nextToken: null 
+        }),
+        scoreResults: async (options?: any) => ({ 
+          data: [], 
+          nextToken: null 
+        }),
+        createdAt: rawExperiment.account?.createdAt || new Date().toISOString(),
+        updatedAt: rawExperiment.account?.updatedAt || new Date().toISOString(),
+        description: rawExperiment.account?.description || ''
       }
     }),
     scorecard: async () => {
@@ -129,10 +152,6 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
         experiments: async () => ({ data: [], nextToken: null }),
         batchJobs: async () => ({ data: [], nextToken: null })
       } : null
-    }),
-    samples: async () => ({
-      data: rawExperiment.samples || [],
-      nextToken: null
     })
   };
 };
