@@ -55,13 +55,20 @@ const calculateProgress = (processedItems?: number | null, totalItems?: number |
   return Math.round((processedItems / totalItems) * 100);
 };
 
-// Update the transformExperiment function to ensure consistent output
+// Update the transformExperiment function with logging
 const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] => {
   if (!rawExperiment) {
-    throw new Error('Cannot transform null experiment');
+    throw new Error('Cannot transform null experiment')
   }
-  
-  // Ensure all required fields exist with default values
+
+  console.log('Transforming experiment:', {
+    id: rawExperiment.id,
+    scorecardId: rawExperiment.scorecardId,
+    scorecard: rawExperiment.scorecard,
+    rawData: rawExperiment
+  })
+
+  // Create a strongly typed base object
   const safeExperiment = {
     id: rawExperiment.id || '',
     type: rawExperiment.type || '',
@@ -106,14 +113,29 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
         description: ''
       }
     }),
-    scorecard: async () => ({
-      data: rawExperiment.scorecard ? {
-        id: rawExperiment.scorecard.id || '',
-        name: rawExperiment.scorecard.name || '',
-        key: rawExperiment.scorecard.key || '',
-        description: rawExperiment.scorecard.description || '',
-      } : null
-    }),
+    scorecard: async () => {
+      console.log('Calling scorecard() for experiment:', rawExperiment.id, {
+        scorecardId: rawExperiment.scorecardId,
+        scorecard: rawExperiment.scorecard,
+        rawScorecard: rawExperiment.scorecard?.data
+      })
+
+      // If we already have the scorecard data, use it
+      if (rawExperiment.scorecard?.data) {
+        return { data: rawExperiment.scorecard.data }
+      }
+
+      // Otherwise, fetch it
+      if (rawExperiment.scorecardId) {
+        const { data: scorecard } = await getFromModel<Schema['Scorecard']['type']>(
+          client.models.Scorecard,
+          rawExperiment.scorecardId
+        )
+        return { data: scorecard }
+      }
+
+      return { data: null }
+    },
     score: async () => ({
       data: rawExperiment.score ? {
         ...rawExperiment.score,
@@ -302,13 +324,21 @@ export default function ExperimentsDashboard(): JSX.Element {
           ).subscribe({
             next: async ({ items }) => {
               try {
+                console.log('Subscription received items:', items)
                 const transformedItems = await Promise.all(
                   items.map(async (item: Schema['Experiment']['type']) => {
+                    console.log('Processing subscription item:', {
+                      id: item.id,
+                      scorecardId: item.scorecardId,
+                      scorecard: item.scorecard
+                    })
                     if (item.scorecardId && !item.scorecard) {
+                      console.log('Fetching scorecard for item:', item.id)
                       const { data: scorecard } = await getFromModel<Schema['Scorecard']['type']>(
                         client.models.Scorecard,
                         item.scorecardId
                       )
+                      console.log('Fetched scorecard:', scorecard)
                       return {
                         ...item,
                         scorecard
@@ -372,9 +402,13 @@ export default function ExperimentsDashboard(): JSX.Element {
   // Update the fetchScorecardNames function
   useEffect(() => {
     const fetchScorecardNames = async () => {
+      console.log('Starting fetchScorecardNames')
+      console.log('Experiments:', experiments)
+      
       const newScorecardNames: Record<string, string> = {};
       
       if (!experiments || experiments.length === 0) {
+        console.log('No experiments found')
         setScorecardNames({});
         return;
       }
@@ -382,13 +416,17 @@ export default function ExperimentsDashboard(): JSX.Element {
       try {
         // Process experiments sequentially instead of in parallel
         for (const experiment of experiments) {
+          console.log('Processing experiment:', experiment.id)
           if (!experiment?.id) continue;
           
           try {
             if (experiment.scorecard) {
+              console.log('Experiment has scorecard function:', experiment.id)
               const result = await experiment.scorecard();
+              console.log('Scorecard result:', result)
               newScorecardNames[experiment.id] = result?.data?.name || 'Unknown Scorecard';
             } else {
+              console.log('No scorecard function for experiment:', experiment.id)
               newScorecardNames[experiment.id] = 'Unknown Scorecard';
             }
           } catch (error) {
@@ -397,6 +435,7 @@ export default function ExperimentsDashboard(): JSX.Element {
           }
         }
         
+        console.log('Final scorecard names:', newScorecardNames)
         setScorecardNames(newScorecardNames);
       } catch (error) {
         console.error('Error in fetchScorecardNames:', error);
