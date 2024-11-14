@@ -7,6 +7,7 @@ import { ResponsiveWaffle } from '@nivo/waffle'
 import { ConfusionMatrix } from '@/components/confusion-matrix'
 import { intervalToDuration } from 'date-fns'
 import { CardButton } from '@/components/CardButton'
+import ScoreTypesHeader from '@/components/ScoreTypesHeader'
 
 export interface ExperimentTaskData {
   accuracy: number | null
@@ -28,11 +29,28 @@ export interface ExperimentTaskData {
     matrix: number[][]
     labels: string[]
   }
+  scoreType?: string | undefined
+  dataBalance?: string | undefined
+  scoreGoal?: string | undefined
 }
 
-export interface ExperimentTaskProps extends BaseTaskProps<ExperimentTaskData> {
-  onToggleFullWidth: () => void
-  onClose: () => void
+export interface ExperimentTaskProps {
+  variant?: 'grid' | 'detail'
+  task: {
+    id: string
+    type: string
+    scorecard: string
+    score: string
+    time: string
+    summary?: string
+    description?: string
+    data?: ExperimentTaskData
+  }
+  onClick?: () => void
+  controlButtons?: React.ReactNode
+  isFullWidth?: boolean
+  onToggleFullWidth?: () => void
+  onClose?: () => void
 }
 
 function computeExperimentType(data: ExperimentTaskData): string {
@@ -156,19 +174,49 @@ export default function ExperimentTask({
 
   const visualization = (
     <div className="w-full">
+      {variant === 'detail' && (
+        <>
+          {(data.scoreType || data.dataBalance || data.scoreGoal) && (
+            <div className="mb-6">
+              <ScoreTypesHeader 
+                scoreType={data.scoreType}
+                dataBalance={data.dataBalance}
+                scoreGoal={data.scoreGoal}
+              />
+            </div>
+          )}
+          <div className="mb-4">
+            <ProgressBar 
+              progress={data.progress}
+              elapsedTime={data.elapsedSeconds ? 
+                formatDuration(data.elapsedSeconds) : undefined}
+              processedItems={data.processedItems}
+              totalItems={data.totalItems}
+              estimatedTimeRemaining={data.estimatedRemainingSeconds ? 
+                formatDuration(data.estimatedRemainingSeconds) : undefined}
+              color="secondary"
+            />
+          </div>
+        </>
+      )}
+      
       <MetricsGauges gauges={metrics} variant={metricsVariant} />
-      <div className="mt-4">
-        <ProgressBar 
-          progress={data.progress}
-          elapsedTime={data.elapsedSeconds ? 
-            formatDuration(data.elapsedSeconds) : undefined}
-          processedItems={data.processedItems}
-          totalItems={data.totalItems}
-          estimatedTimeRemaining={data.estimatedRemainingSeconds ? 
-            formatDuration(data.estimatedRemainingSeconds) : undefined}
-          color="secondary"
-        />
-      </div>
+      
+      {variant !== 'detail' && (
+        <div className="mt-4">
+          <ProgressBar 
+            progress={data.progress}
+            elapsedTime={data.elapsedSeconds ? 
+              formatDuration(data.elapsedSeconds) : undefined}
+            processedItems={data.processedItems}
+            totalItems={data.totalItems}
+            estimatedTimeRemaining={data.estimatedRemainingSeconds ? 
+              formatDuration(data.estimatedRemainingSeconds) : undefined}
+            color="secondary"
+          />
+        </div>
+      )}
+
       {variant === 'detail' && (
         <>
           <div 
@@ -241,7 +289,8 @@ export default function ExperimentTask({
       variant={variant}
       task={{
         ...task,
-        type: computedType
+        type: computedType,
+        summary: variant === 'detail' ? undefined : task.summary
       }}
       onClick={onClick}
       controlButtons={controlButtons}

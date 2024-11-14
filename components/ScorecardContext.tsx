@@ -2,8 +2,10 @@ import React, { useEffect, useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
+import { ModelListResult, AmplifyListResult } from '@/types/shared'
+import { listFromModel } from "@/utils/amplify-helpers"
 
-const client = generateClient<Schema>()
+export const client = generateClient<Schema>()
 
 export interface ScorecardContextProps {
   selectedScorecard: string | null;
@@ -13,6 +15,24 @@ export interface ScorecardContextProps {
   availableFields?: Array<{ value: string; label: string }>;
   timeRangeOptions?: Array<{ value: string; label: string }>;
   useMockData?: boolean;
+}
+
+async function listScorecards(): ModelListResult<Schema['Scorecard']['type']> {
+  return listFromModel<Schema['Scorecard']['type']>(client.models.Scorecard)
+}
+
+async function listSections(scorecardId: string): ModelListResult<Schema['ScorecardSection']['type']> {
+  return listFromModel<Schema['ScorecardSection']['type']>(
+    client.models.ScorecardSection,
+    { scorecardId: { eq: scorecardId } }
+  )
+}
+
+async function listScores(sectionId: string): ModelListResult<Schema['Score']['type']> {
+  return listFromModel<Schema['Score']['type']>(
+    client.models.Score,
+    { sectionId: { eq: sectionId } }
+  )
 }
 
 const ScorecardContext: React.FC<ScorecardContextProps> = ({ 
@@ -33,8 +53,9 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
 
     async function fetchScorecards() {
       try {
-        const result = await client.models.Scorecard.list()
-        const formattedScorecards = result.data.map(scorecard => ({
+        const { data: scorecardModels } = await listScorecards()
+        
+        const formattedScorecards = scorecardModels.map(scorecard => ({
           value: scorecard.id,
           label: scorecard.name
         }))
@@ -54,26 +75,23 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
 
     async function fetchScores() {
       try {
-        const scorecardId = selectedScorecard || undefined
+        if (!selectedScorecard) return
 
-        const sections = await client.models.ScorecardSection.list({
-          filter: { scorecardId: { eq: scorecardId } }
-        })
+        const { data: sections } = await listSections(selectedScorecard)
         
-        const allScores = await Promise.all(
-          sections.data.map(section => 
-            client.models.Score.list({
-              filter: { sectionId: { eq: section.id } }
-            })
-          )
-        )
+        const scorePromises = sections.map(async section => {
+          const { data: scores } = await listScores(section.id)
+          return scores
+        })
 
+        const scoreResults = await Promise.all(scorePromises)
         const uniqueScores = new Set<string>()
-        allScores.flat().forEach(scoreList => 
-          scoreList.data.forEach(score => 
+        
+        scoreResults.flat().forEach(score => {
+          if (score?.name) {
             uniqueScores.add(score.name)
-          )
-        )
+          }
+        })
 
         setScores(Array.from(uniqueScores).map(name => ({
           value: name,
@@ -87,9 +105,6 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
     fetchScores()
   }, [selectedScorecard, useMockData])
 
-  const availableFields = useMockData ? mockFields : scorecards
-  const timeRangeOptions = useMockData ? mockScores : scores
-
   if (isLoading) {
     return <div>Loading scorecards...</div>
   }
@@ -102,7 +117,7 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Scorecards</SelectItem>
-          {availableFields?.map(field => (
+          {scorecards?.map(field => (
             <SelectItem key={field.value} value={field.value}>
               {field.label}
             </SelectItem>
@@ -119,7 +134,7 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Scores</SelectItem>
-          {selectedScorecard && timeRangeOptions?.map(option => (
+          {selectedScorecard && scores?.map(option => (
             <SelectItem key={option.value} value={option.value}>
               {option.label}
             </SelectItem>

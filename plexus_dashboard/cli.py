@@ -47,6 +47,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Add after other constants
+SCORE_TYPES = ['binary', 'multiclass']
+DATA_BALANCES = ['balanced', 'unbalanced']
+SCORE_GOALS = ['recall', 'precision', 'balanced']
+
 @click.group()
 def cli():
     """Plexus Dashboard CLI"""
@@ -532,6 +537,11 @@ def simulate(
                 score = Score.get_by_name(score_name, client)
             logger.info(f"Using score: {score.name} ({score.id})")
 
+        # Randomly select score characteristics
+        score_type = random.choice(SCORE_TYPES)
+        data_balance = random.choice(DATA_BALANCES)
+        score_goal = random.choice(SCORE_GOALS)
+
         # Create initial experiment record
         started_at = datetime.now(timezone.utc)
         experiment = Experiment.create(
@@ -548,8 +558,10 @@ def simulate(
                 "num_items": num_items
             }),
             startedAt=started_at.isoformat().replace('+00:00', 'Z'),
-            # Initial estimate based on 1 second per item
-            estimatedRemainingSeconds=num_items
+            estimatedRemainingSeconds=num_items,
+            scoreType=score_type,
+            dataBalance=data_balance,
+            scoreGoal=score_goal
         )
         
         # Lists to store true and predicted values for metrics calculation

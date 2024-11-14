@@ -1,6 +1,6 @@
 "use client"
 import React from "react"
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useRef } from "react"
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -33,6 +33,8 @@ import { ExperimentListAccuracyBar } from "@/components/ExperimentListAccuracyBa
 import { CardButton } from '@/components/CardButton'
 import { formatDuration } from '@/utils/format-duration'
 import { ExperimentDashboardSkeleton } from "@/components/loading-skeleton"
+import { ModelListResult, AmplifyListResult, AmplifyGetResult } from '@/types/shared'
+import { listFromModel, observeQueryFromModel, getFromModel } from "@/utils/amplify-helpers"
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -127,42 +129,47 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
   };
 };
 
-// Move client initialization into a custom hook
-function useAmplifyClient() {
-  const [client] = useState(() => {
-    if (typeof window === 'undefined') return null; // Return null during SSR
-    const c = generateClient<Schema>();
-    return c;
-  });
-  return client;
+// Add missing interfaces
+interface ConfusionMatrix {
+  matrix: number[][]
+  labels: string[]
 }
 
-// 1. Move viewport state to a custom hook with proper SSR handling
+// Add viewport hook
 function useViewportWidth() {
-  const [isNarrowViewport, setIsNarrowViewport] = useState(false);
+  const [isNarrowViewport, setIsNarrowViewport] = useState(false)
 
   useEffect(() => {
-    const checkViewportWidth = () => {
-      setIsNarrowViewport(window.innerWidth < 640);
-    };
+    const checkWidth = () => {
+      setIsNarrowViewport(window.innerWidth < 640)
+    }
+    
+    checkWidth()
+    window.addEventListener('resize', checkWidth)
+    return () => window.removeEventListener('resize', checkWidth)
+  }, [])
 
-    checkViewportWidth();
-    window.addEventListener('resize', checkViewportWidth);
-    return () => window.removeEventListener('resize', checkViewportWidth);
-  }, []);
-
-  // Return a default value during SSR
-  return typeof window === 'undefined' ? false : isNarrowViewport;
+  return isNarrowViewport
 }
 
-// Update the confusionMatrix interface
-interface ConfusionMatrix {
-    matrix: number[][];
-    labels: string[];
+export const client = generateClient<Schema>()
+
+// Add these helper functions at the top
+async function listAccounts(): ModelListResult<Schema['Account']['type']> {
+  return listFromModel<Schema['Account']['type']>(
+    client.models.Account,
+    { key: { eq: ACCOUNT_KEY } }
+  )
 }
 
-export default function ExperimentsDashboard() {
-  const client = useAmplifyClient();
+async function listExperiments(accountId: string): ModelListResult<Schema['Experiment']['type']> {
+  return listFromModel<Schema['Experiment']['type']>(
+    client.models.Experiment,
+    { accountId: { eq: accountId } }
+  )
+}
+
+export default function ExperimentsDashboard(): JSX.Element {
   const [experiments, setExperiments] = useState<NonNullable<Schema['Experiment']['type']>[]>([])
   const [experimentTaskProps, setExperimentTaskProps] = useState<ExperimentTaskProps['task'] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -176,9 +183,7 @@ export default function ExperimentsDashboard() {
   const [scorecardName, setScorecardName] = useState('Unknown Scorecard')
   const [scorecardNames, setScorecardNames] = useState<Record<string, string>>({})
   const [hasMounted, setHasMounted] = useState(false)
-
-  // Replace isNarrowViewport state with the hook
-  const isNarrowViewport = useViewportWidth();
+  const isNarrowViewport = useViewportWidth()
 
   // Add mounted state check
   useEffect(() => {
@@ -267,160 +272,99 @@ export default function ExperimentsDashboard() {
 
   // Move all client usage into useEffect to avoid server/client mismatch
   useEffect(() => {
-    if (!client) {
-      return;
-    }
+    if (!client) return
 
     let subscription: { unsubscribe: () => void } | null = null
 
     async function setupRealTimeSync() {
       try {
+        const { data: accounts } = await listAccounts()
 
-        const accountResult = await client!.models.Account.list({
-          filter: { key: { eq: ACCOUNT_KEY } }
-        });
-
-        if (accountResult.data.length > 0) {
-          const foundAccountId = accountResult.data[0].id;
-          setAccountId(foundAccountId);
+        if (accounts.length > 0) {
+          const foundAccountId = accounts[0].id
+          setAccountId(foundAccountId)
           
-          // Update the selection set to include scorecard fields
-          const initialExperiments = await client!.models.Experiment.list({
-            filter: { accountId: { eq: foundAccountId } },
-            selectionSet: [
-              'id', 'type', 'parameters', 'metrics', 'inferences', 
-              'cost', 'accuracy', 'accuracyType', 'sensitivity', 'specificity', 
-              'precision', 'createdAt', 'updatedAt', 'status', 'startedAt', 
-              'totalItems', 'processedItems', 'errorMessage', 
-              'errorDetails', 'accountId', 'scorecardId', 'scoreId', 'confusionMatrix',
-              'elapsedSeconds',
-              'estimatedRemainingSeconds',
-              // Include these fields for the scorecard relationship
-              'scorecard.id',
-              'scorecard.name',
-              'scorecard.key',
-              'scorecard.description'
-            ]
-          });
+          const { data: experimentModels } = await listExperiments(foundAccountId)
           
-          const filteredExperiments = initialExperiments.data
+          const filteredExperiments = experimentModels
             .map(transformExperiment)
-            .sort((a, b) => 
+            .sort((a: Schema['Experiment']['type'], b: Schema['Experiment']['type']) => 
               new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-            );
+            )
           
-          setExperiments(filteredExperiments);
-          setIsLoading(false);
+          setExperiments(filteredExperiments)
+          setIsLoading(false)
 
-          // Use the same selection set for the subscription
-          subscription = client!.models.Experiment.observeQuery({
-            filter: { accountId: { eq: foundAccountId } },
-            selectionSet: [
-              'id', 'type', 'parameters', 'metrics', 'inferences', 
-              'cost', 'accuracy', 'accuracyType', 'sensitivity', 'specificity', 
-              'precision', 'createdAt', 'updatedAt', 'status', 'startedAt', 
-              'totalItems', 'processedItems', 'errorMessage', 
-              'errorDetails', 'accountId', 'scorecardId', 'scoreId', 'confusionMatrix',
-              'elapsedSeconds',
-              'estimatedRemainingSeconds',
-              // Include these fields for the scorecard relationship
-              'scorecard.id',
-              'scorecard.name',
-              'scorecard.key',
-              'scorecard.description'
-            ]
-          }).subscribe({
+          // Set up subscription
+          subscription = observeQueryFromModel<Schema['Experiment']['type']>(
+            client.models.Experiment,
+            { accountId: { eq: foundAccountId } }
+          ).subscribe({
             next: async ({ items }) => {
               try {
-
-                // Fetch scorecards for experiments that need them
-                const itemsWithScorecard = await Promise.all(items.map(async (item) => {
-                  try {
+                const transformedItems = await Promise.all(
+                  items.map(async (item: Schema['Experiment']['type']) => {
                     if (item.scorecardId && !item.scorecard) {
-                      const scorecardResult = await client!.models.Scorecard.get({
-                        id: item.scorecardId
-                      });
+                      const { data: scorecard } = await getFromModel<Schema['Scorecard']['type']>(
+                        client.models.Scorecard,
+                        item.scorecardId
+                      )
                       return {
                         ...item,
-                        scorecard: scorecardResult.data
-                      };
+                        scorecard
+                      }
                     }
-                    return item;
-                  } catch (error) {
-                    console.error('Error fetching scorecard for item:', item.id, error);
-                    return item;
-                  }
-                }));
-                                
-                const transformedItems = itemsWithScorecard.map(item => {
-                  try {
-                    return transformExperiment(item);
-                  } catch (error) {
-                    console.error('Error transforming item:', item.id, error);
-                    return null;
-                  }
-                }).filter(Boolean);
-                                
-                const sortedItems = transformedItems
-                    .filter((item): item is NonNullable<typeof item> => item !== null)
-                    .sort((a, b) => 
-                        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                    );
-                                
-                const validSortedItems = sortedItems.filter((item): 
-                    item is NonNullable<Schema['Experiment']['type']> => item !== null);
-                setExperiments(validSortedItems);
+                    return item
+                  })
+                )
+
+                const validItems = transformedItems
+                  .map(transformExperiment)
+                  .sort((a, b) => 
+                    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                  )
+
+                setExperiments(validItems)
                 
-                const currentSelectedExperiment = selectedExperimentRef.current;
-                if (currentSelectedExperiment) {
-                  const updatedExperiment = sortedItems.find(exp => 
-                    exp && exp.id === currentSelectedExperiment.id
-                  );
+                // Update selected experiment if needed
+                if (selectedExperiment) {
+                  const updatedExperiment = validItems.find(exp => 
+                    exp && exp.id === selectedExperiment.id
+                  )
                   if (updatedExperiment) {
-                    setSelectedExperiment(updatedExperiment);
-                    const updatedProps = await getExperimentTaskProps(updatedExperiment);
-                    setExperimentTaskProps(updatedProps);
+                    setSelectedExperiment(updatedExperiment)
+                    const updatedProps = await getExperimentTaskProps(updatedExperiment)
+                    setExperimentTaskProps(updatedProps)
                   }
                 }
               } catch (error) {
-                // Keep console.error for actual errors
-                console.error('Error in subscription handler:', error);
-                if (error instanceof Error) {
-                  console.error('Error details:', {
-                    message: error.message,
-                    stack: error.stack
-                  });
-                }
+                console.error('Error in subscription handler:', error)
               }
             },
             error: (error: Error) => {
-              // Keep console.error for actual errors
-              console.error('Subscription error:', {
-                message: error.message,
-                stack: error.stack
-              });
-              setError(error);
+              console.error('Subscription error:', error)
+              setError(error)
             }
-          });
+          })
         } else {
-          setIsLoading(false);
+          setIsLoading(false)
         }
       } catch (error) {
         if (error instanceof Error) {
-          console.error('Error details:', error);
-          setError(error);
+          console.error('Error details:', error)
+          setError(error)
         } else {
-          setError(new Error('An unexpected error occurred'));
+          setError(new Error('An unexpected error occurred'))
         }
-        setIsLoading(false);
+        setIsLoading(false)
       }
     }
 
-    setupRealTimeSync();
+    setupRealTimeSync()
 
     return () => {
       if (subscription) {
-        subscription.unsubscribe();
+        subscription.unsubscribe()
       }
     }
   }, [client])
