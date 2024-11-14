@@ -13,7 +13,7 @@ export interface BaseTaskProps<TData = unknown> {
     scorecard: string
     score: string
     time: string
-    summary: string
+    summary?: string
     description?: string
     data?: TData
   }
