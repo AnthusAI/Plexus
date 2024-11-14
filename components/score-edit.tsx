@@ -47,7 +47,68 @@ interface ScoreState {
   updatedAt?: string
 }
 
+type ScorecardSectionRecord = Schema['ScorecardSection']['type']
+type ScoreRecord = Schema['Score']['type']
+
 const client = generateClient<Schema>()
+
+const listSections = async (scorecardId: string) => {
+  const response = await (client.models.ScorecardSection as any).list({
+    filter: { scorecardId: { eq: scorecardId } }
+  })
+  return response.data as Schema['ScorecardSection']['type'][]
+}
+
+const listScores = async (sectionId: string) => {
+  const response = await (client.models.Score as any).list({
+    filter: { sectionId: { eq: sectionId } }
+  })
+  return response.data as Schema['Score']['type'][]
+}
+
+const getScore = async (id: string) => {
+  const response = await (client.models.Score as any).get({ id })
+  return response.data as Schema['Score']['type'] | null
+}
+
+const getSection = async (id: string) => {
+  const response = await (client.models.ScorecardSection as any).get({ id })
+  return response.data as Schema['ScorecardSection']['type'] | null
+}
+
+const createScore = async (scoreData: {
+  name: string
+  type: string
+  order: number
+  sectionId: string
+  accuracy: number
+  aiProvider: string
+  aiModel: string
+  isFineTuned: boolean
+  configuration: any
+  distribution: any[]
+  versionHistory: any[]
+}) => {
+  const response = await (client.models.Score as any).create(scoreData)
+  return response.data as Schema['Score']['type']
+}
+
+const updateScore = async (scoreData: {
+  id: string
+  name: string
+  type: string
+  order: number
+  accuracy: number
+  aiProvider: string
+  aiModel: string
+  isFineTuned: boolean
+  configuration: any
+  distribution: any[]
+  versionHistory: any[]
+}) => {
+  const response = await (client.models.Score as any).update(scoreData)
+  return response.data as Schema['Score']['type']
+}
 
 function EditableField({ value, onChange, className = "" }: EditableFieldProps) {
   const [isEditing, setIsEditing] = useState(false)
@@ -136,34 +197,17 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
     try {
       setIsLoading(true)
       if (scoreId === 'new') {
-        // For new scores, we need to fetch the section first
-        const sections = await client.models.ScorecardSection.list({
-          filter: {
-            scorecardId: {
-              eq: scorecardId
-            }
-          }
-        })
+        const sections = await listSections(scorecardId)
         
-        if (!sections.data.length) {
+        if (!sections.length) {
           throw new Error('No sections found in scorecard')
         }
         
-        const defaultSection = sections.data[0]
+        const defaultSection = sections[0]
         setSection(defaultSection)
         
-        // Get max order in section
-        const existingScores = await client.models.Score.list({
-          filter: {
-            sectionId: {
-              eq: defaultSection.id
-            }
-          }
-        })
-        const maxOrder = Math.max(
-          0, 
-          ...existingScores.data.map(s => s.order)
-        )
+        const scores = await listScores(defaultSection.id)
+        const maxOrder = Math.max(0, ...scores.map(s => s.order))
         
         setScore({
           id: '',
@@ -181,48 +225,39 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
           versionHistory: []
         })
       } else {
-        // Fetch existing score
-        const result = await client.models.Score.get({
-          id: scoreId
-        })
+        const scoreData = await getScore(scoreId)
         
-        if (!result.data) {
+        if (!scoreData) {
           throw new Error('Score not found')
         }
         
-        // Convert API response to ScoreState, handling nullable values
-        const scoreData: ScoreState = {
-          id: result.data.id,
-          name: result.data.name,
-          type: result.data.type,
-          order: result.data.order,
-          sectionId: result.data.sectionId,
-          accuracy: result.data.accuracy ?? 0,
-          version: result.data.version ?? Date.now().toString(),
-          aiProvider: result.data.aiProvider ?? 'OpenAI',
-          aiModel: result.data.aiModel ?? 'gpt-4',
-          isFineTuned: result.data.isFineTuned ?? false,
-          configuration: result.data.configuration ?? {},
-          distribution: (result.data.distribution as any[] | null) ?? [],
-          versionHistory: (result.data.versionHistory as any[] | null) ?? [],
-          createdAt: result.data.createdAt,
-          updatedAt: result.data.updatedAt
-        }
-        
-        setScore(scoreData)
-        
-        // Fetch associated section
-        const sectionResult = await client.models.ScorecardSection.get({
-          id: result.data.sectionId
+        setScore({
+          id: scoreData.id,
+          name: scoreData.name,
+          type: scoreData.type,
+          order: scoreData.order,
+          sectionId: scoreData.sectionId,
+          accuracy: scoreData.accuracy ?? 0,
+          version: scoreData.version ?? Date.now().toString(),
+          aiProvider: scoreData.aiProvider ?? 'OpenAI',
+          aiModel: scoreData.aiModel ?? 'gpt-4',
+          isFineTuned: scoreData.isFineTuned ?? false,
+          configuration: scoreData.configuration ?? {},
+          distribution: Array.isArray(scoreData.distribution) ? 
+            scoreData.distribution : [],
+          versionHistory: Array.isArray(scoreData.versionHistory) ? 
+            scoreData.versionHistory : [],
+          createdAt: scoreData.createdAt,
+          updatedAt: scoreData.updatedAt
         })
         
-        if (sectionResult.data) {
-          setSection(sectionResult.data)
+        const sectionData = await getSection(scoreData.sectionId)
+        if (sectionData) {
+          setSection(sectionData)
         }
       }
     } catch (error) {
       console.error('Error fetching score:', error)
-      // Handle error appropriately
     } finally {
       setIsLoading(false)
     }
@@ -235,8 +270,7 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
       setIsSaving(true)
       
       if (!score.id) {
-        // Create new score
-        const result = await client.models.Score.create({
+        const result = await createScore({
           name: score.name,
           type: score.type,
           order: score.order,
@@ -251,8 +285,7 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
         })
         console.log('Created score:', result)
       } else {
-        // Update existing score
-        const result = await client.models.Score.update({
+        const result = await updateScore({
           id: score.id,
           name: score.name,
           type: score.type,
@@ -271,7 +304,6 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
       router.back()
     } catch (error) {
       console.error('Error saving score:', error)
-      // Handle error appropriately
     } finally {
       setIsSaving(false)
     }
