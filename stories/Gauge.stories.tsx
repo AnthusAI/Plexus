@@ -17,6 +17,14 @@ export const Default: Story = {
   }
 }
 
+export const Priority: Story = {
+  args: {
+    value: 75,
+    title: 'Accuracy',
+    priority: true
+  }
+}
+
 export const CustomSegments: Story = {
   args: {
     value: 75,
@@ -78,6 +86,7 @@ export const MetricsGrid: Story = {
       <Gauge
         value={92.5}
         title="Accuracy"
+        priority={true}
         information={
           "Accuracy measures the overall correctness of predictions, showing the " +
           "percentage of all cases (both positive and negative) that were " +

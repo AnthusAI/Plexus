@@ -536,9 +536,10 @@ def simulate(
             --num-items 1000 \
             --accuracy 0.92
     """
-    client = PlexusDashboardClient()
-    
     try:
+        # Initial client for setup
+        client = PlexusDashboardClient()
+        
         # Look up or validate account
         if account_id:
             logger.info(f"Using provided account ID: {account_id}")
@@ -633,124 +634,107 @@ def simulate(
         true_values = []
         predicted_values = []
         
-        def update_metrics():
+        # Move update_metrics out of thread
+        def calculate_metrics():
             """Calculate and update experiment metrics"""
             try:
-                thread_client = PlexusDashboardClient()
-                
                 y_true = np.array(true_values)
                 y_pred = np.array(predicted_values)
                 
-                # Get the experiment with scoreResults included
-                thread_experiment = Experiment.get_by_id(
-                    experiment.id, 
-                    thread_client,
-                    include_score_results=True
-                )
+                # Calculate base accuracy - this will always work
+                acc = float(accuracy_score(y_true, y_pred) * 100)
                 
-                if thread_experiment is None:
-                    logger.error("Could not fetch experiment for metrics update")
-                    return
+                # Initialize metrics with accuracy
+                metrics = [{
+                    "name": "Accuracy",
+                    "value": acc,
+                    "unit": "%",
+                    "maximum": 100,
+                    "priority": True
+                }]
+                
+                # Initialize other variables
+                conf_matrix = []
+                all_labels = []
+                
+                # Try to calculate additional metrics
+                try:
+                    # Calculate precision and sensitivity (recall)
+                    prec = float(precision_score(y_true, y_pred, average='macro', zero_division=0) * 100)
+                    sens = float(recall_score(y_true, y_pred, average='macro', zero_division=0) * 100)
                     
-                # Only calculate metrics if we have enough samples
-                if len(y_true) > 0:
-                    # Calculate timing values first
-                    processed_items = len(y_true)
-                    elapsed_seconds = int((datetime.now(timezone.utc) - started_at).total_seconds())
-                    estimated_remaining_seconds = int(elapsed_seconds * (thread_experiment.totalItems - processed_items) / processed_items) if processed_items > 0 else 0
-
-                    # Calculate predicted class distribution
-                    unique_classes, class_counts = np.unique(y_pred, return_counts=True)
-                    predicted_distribution = [
-                        {"label": str(label), "count": int(count)} 
-                        for label, count in zip(unique_classes, class_counts)
-                    ]
+                    metrics.extend([
+                        {
+                            "name": "Precision",
+                            "value": prec,
+                            "unit": "%",
+                            "maximum": 100,
+                            "priority": False
+                        },
+                        {
+                            "name": "Sensitivity",
+                            "value": sens,
+                            "unit": "%",
+                            "maximum": 100,
+                            "priority": False
+                        }
+                    ])
                     
-                    # Calculate if predictions are balanced
-                    total = sum(class_counts)
-                    expected_count = total / len(class_counts)
-                    tolerance = 0.2  # 20% tolerance
-                    is_predicted_balanced = all(
-                        abs(count - expected_count) <= expected_count * tolerance
-                        for count in class_counts
-                    )
+                    # Get all possible labels and create confusion matrix
+                    all_labels = sorted(set(valid_labels))
+                    conf_matrix = confusion_matrix(
+                        y_true, 
+                        y_pred, 
+                        labels=all_labels
+                    ).tolist()
                     
-                    # Calculate metrics (convert to percentages)
-                    acc = accuracy_score(y_true, y_pred) * 100
+                    # Calculate specificity
+                    specificities = []
+                    for i in range(len(all_labels)):
+                        y_true_binary = (y_true == all_labels[i])
+                        y_pred_binary = (y_pred == all_labels[i])
+                        tn = np.sum(~y_true_binary & ~y_pred_binary)
+                        fp = np.sum(~y_true_binary & y_pred_binary)
+                        spec = (tn / (tn + fp)) * 100 if (tn + fp) > 0 else 0
+                        specificities.append(spec)
                     
-                    # For multiclass, use macro-averaged metrics
-                    try:
-                        prec = precision_score(y_true, y_pred, average='macro', zero_division=0) * 100
-                        sens = recall_score(y_true, y_pred, average='macro', zero_division=0) * 100
-                        
-                        # Get all possible labels from both dataset and predictions
-                        all_labels = sorted(set(valid_labels))  # Use the global valid_labels
-                        
-                        # Create confusion matrix with all known labels
-                        conf_matrix = confusion_matrix(
-                            y_true, 
-                            y_pred, 
-                            labels=all_labels
-                        ).tolist()  # Convert to list here
-                        
-                        # Calculate specificity for multiclass (one-vs-rest approach)
-                        specificities = []
-                        n_classes = len(all_labels)
-                        for i in range(n_classes):
-                            # Convert to binary problem for each class
-                            y_true_binary = (y_true == all_labels[i])
-                            y_pred_binary = (y_pred == all_labels[i])
-                            tn = np.sum(~y_true_binary & ~y_pred_binary)
-                            fp = np.sum(~y_true_binary & y_pred_binary)
-                            spec = (tn / (tn + fp)) * 100 if (tn + fp) > 0 else 0
-                            specificities.append(spec)
-                        
-                        # Use macro-averaged specificity
-                        spec = np.mean(specificities)
-                        
-                    except Exception as e:
-                        logger.warning(f"Could not calculate metrics: {e}")
-                        prec = None
-                        sens = None
-                        spec = None
-                        conf_matrix = []
-                        all_labels = []
+                    spec = float(np.mean(specificities))
+                    metrics.append({
+                        "name": "Specificity",
+                        "value": spec,
+                        "unit": "%",
+                        "maximum": 100,
+                        "priority": False
+                    })
                     
-                    # Update the experiment
-                    thread_experiment.update(
-                        accuracy=float(acc),
-                        precision=float(prec) if prec is not None else None,
-                        sensitivity=float(sens) if sens is not None else None,
-                        specificity=float(spec) if spec is not None else None,
-                        processedItems=processed_items,
-                        elapsedSeconds=elapsed_seconds,
-                        estimatedRemainingSeconds=estimated_remaining_seconds,
-                        confusionMatrix=json.dumps({
-                            "matrix": conf_matrix,
-                            "labels": all_labels
-                        }),
-                        predictedClassDistribution=json.dumps(predicted_distribution),
-                        isPredictedClassDistributionBalanced=is_predicted_balanced,
-                    )
+                except Exception as e:
+                    logger.warning(f"Could not calculate additional metrics: {e}")
+                
+                return metrics, conf_matrix, all_labels, acc
                 
             except Exception as e:
-                logger.error(f"Error updating metrics: {str(e)}")
-        
+                logger.error(f"Error calculating metrics: {str(e)}")
+                return None, None, None, None
+
         # Simulate results
         for i in range(num_items):
-            # Get next true value from pool
-            true_value = true_values_pool[i]
-            predicted_value = simulate_prediction(true_value, accuracy, valid_labels)
-            
-            true_values.append(true_value)
-            predicted_values.append(predicted_value)
-            
-            # Create score result
-            logger.info(f"Creating score result: value={1.0 if predicted_value == 'Yes' else 0.0}, "
-                        f"correct={true_value == predicted_value}, metadata={{'label': predicted_value}}")
             try:
+                # Create new client for each iteration
+                iteration_client = PlexusDashboardClient()
+                
+                # Get next true value from pool
+                true_value = true_values_pool[i]
+                predicted_value = simulate_prediction(true_value, accuracy, valid_labels)
+                
+                true_values.append(true_value)
+                predicted_values.append(predicted_value)
+                
+                # Create score result
+                logger.info(f"Creating score result: value={1.0 if predicted_value == 'Yes' else 0.0}, "
+                            f"correct={true_value == predicted_value}, metadata={{'label': predicted_value}}")
+                
                 result = ScoreResult.create(
-                    client=client,
+                    client=iteration_client,  # Use iteration client
                     value=1.0 if predicted_value == "Yes" else 0.0,
                     confidence=random.uniform(0.7, 0.99),
                     correct=(true_value == predicted_value),
@@ -766,13 +750,59 @@ def simulate(
                     }
                 )
                 logger.info(f"Created score result: {result.id}")
+
+                # Calculate metrics immediately after each result
+                metrics, conf_matrix, all_labels, acc = calculate_metrics()
+                
+                # Calculate timing values
+                processed_items = len(true_values)
+                elapsed_seconds = int((datetime.now(timezone.utc) - started_at).total_seconds())
+                estimated_remaining_seconds = int(elapsed_seconds * (num_items - processed_items) / processed_items) if processed_items > 0 else 0
+
+                # Calculate predicted class distribution
+                unique_classes, class_counts = np.unique(predicted_values, return_counts=True)
+                predicted_distribution = [
+                    {"label": str(label), "count": int(count)} 
+                    for label, count in zip(unique_classes, class_counts)
+                ]
+                
+                # Calculate if predictions are balanced
+                total = sum(class_counts)
+                expected_count = total / len(class_counts)
+                tolerance = 0.2  # 20% tolerance
+                is_predicted_balanced = all(
+                    abs(count - expected_count) <= expected_count * tolerance
+                    for count in class_counts
+                )
+
+                # Update experiment with current metrics
+                update_data = {
+                    "accuracy": acc,
+                    "metrics": json.dumps(metrics) if metrics else None,
+                    "processedItems": processed_items,
+                    "elapsedSeconds": elapsed_seconds,
+                    "estimatedRemainingSeconds": estimated_remaining_seconds,
+                    "predictedClassDistribution": json.dumps(predicted_distribution),
+                    "isPredictedClassDistributionBalanced": is_predicted_balanced,
+                }
+                
+                if conf_matrix and all_labels:
+                    update_data["confusionMatrix"] = json.dumps({
+                        "matrix": conf_matrix,
+                        "labels": all_labels
+                    })
+                
+                # Create new client for update
+                update_client = PlexusDashboardClient()
+                # Use the client's updateExperiment method directly
+                update_client.updateExperiment(
+                    id=experiment.id,
+                    **update_data
+                )
+                
             except Exception as e:
-                logger.error(f"Error creating score result: {str(e)}")
-                raise
-            
-            # Update metrics in background thread
-            thread = threading.Thread(target=update_metrics)
-            thread.start()
+                logger.error(f"Error in iteration {i}: {str(e)}")
+                continue  # Continue to next iteration instead of failing completely
             
             # Random delay between results
             time.sleep(random.uniform(0.1, 1.0))
@@ -782,22 +812,30 @@ def simulate(
                 logger.info(f"Generated {i + 1} of {num_items} results")
         
         # Final update
-        experiment.update(
+        final_client = PlexusDashboardClient()
+        final_client.updateExperiment(
+            id=experiment.id,
             status="COMPLETED",
             elapsedSeconds=int((datetime.now(timezone.utc) - started_at).total_seconds()),
-            estimatedRemainingSeconds=0  # No remaining time on completion
+            estimatedRemainingSeconds=0
         )
         logger.info("Simulation completed")
         
     except Exception as e:
         logger.error(f"Error in simulation: {str(e)}")
         if 'experiment' in locals():
-            experiment.update(
-                status="FAILED",
-                errorMessage=str(e),
-                elapsedSeconds=int((datetime.now(timezone.utc) - started_at).total_seconds()),
-                estimatedRemainingSeconds=None  # Clear estimate on failure
-            )
+            try:
+                # Error update
+                error_client = PlexusDashboardClient()
+                error_client.updateExperiment(
+                    id=experiment.id,
+                    status="FAILED",
+                    errorMessage=str(e),
+                    elapsedSeconds=int((datetime.now(timezone.utc) - started_at).total_seconds()),
+                    estimatedRemainingSeconds=None
+                )
+            except Exception as update_error:
+                logger.error(f"Error updating experiment status: {str(update_error)}")
         click.echo(f"Error: {str(e)}", err=True)
 
 def simulate_experiment_progress(experiment_id: str, client: PlexusDashboardClient):

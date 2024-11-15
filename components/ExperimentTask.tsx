@@ -11,11 +11,17 @@ import ScoreTypesHeader from '@/components/ScoreTypesHeader'
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
 
+export interface ExperimentMetric {
+  name: string
+  value: number
+  unit?: string
+  maximum?: number
+  priority: boolean
+}
+
 export interface ExperimentTaskData {
   accuracy: number | null
-  sensitivity: number | null
-  specificity: number | null
-  precision: number | null
+  metrics: ExperimentMetric[]
   processedItems: number
   totalItems: number
   progress: number
@@ -135,57 +141,23 @@ export default function ExperimentTask({
     return () => window.removeEventListener('resize', updateWaffleHeight)
   }, [])
 
-  const metrics = variant === 'detail' ? [
-    {
-      value: data.accuracy ?? undefined,
-      label: 'Accuracy',
-      information: "Accuracy measures the overall correctness of predictions, showing the " +
-        "percentage of all cases (both positive and negative) that were " +
-        "correctly classified.\n\n" +
-        "While accuracy is a good general metric, it can be misleading when classes " +
-        "are imbalanced. For example, if only 1% of cases are positive, a model " +
-        "that always predicts negative would have 99% accuracy but be useless for " +
-        "detecting positive cases."
-    },
-    {
-      value: data.precision ?? undefined,
-      label: 'Precision',
-      information: "Precision measures the accuracy of positive predictions, showing " +
-        "the percentage of predicted positive cases that were actually positive.\n\n" +
-        "High precision is crucial when false positives are costly - for example, " +
-        "when flagging content that will be removed or when identifying cases that " +
-        "will trigger penalties. In these cases, we want to be very confident in " +
-        "our positive predictions."
-    },
-    {
-      value: data.sensitivity ?? undefined,
-      label: 'Sensitivity',
-      information: "Sensitivity (also called Recall) measures the ability to correctly " +
-        "identify positive cases, showing the percentage of actual positive " +
-        "cases that were correctly identified.\n\n" +
-        "High sensitivity is essential when missing positive cases is costly - for " +
-        "example, when detecting regulated content that must be caught, or when " +
-        "screening for high-risk conditions. In these cases, we prefer false " +
-        "positives over missing actual positives."
-    },
-    {
-      value: data.specificity ?? undefined,
-      label: 'Specificity', 
-      information: "Specificity measures the ability to correctly identify negative " +
-        "cases, showing the percentage of actual negative cases that were " +
-        "correctly identified.\n\n" +
-        "High specificity indicates the model is good at ruling out false " +
-        "positives. This is important in scenarios where we want to avoid " +
-        "overwhelming review systems with false alarms, or when we need to " +
-        "confidently clear cases as negative."
-    }
-  ] : [
-    {
-      value: data.accuracy ?? undefined,
-      label: 'Accuracy',
-      backgroundColor: 'var(--gauge-background)',
-    }
-  ]
+  const metrics = variant === 'detail' ? 
+    (data.metrics ?? []).map(metric => ({
+      value: metric.value,
+      label: metric.name,
+      information: getMetricInformation(metric.name),
+      maximum: metric.maximum ?? 100,
+      unit: metric.unit ?? '%',
+      priority: metric.priority
+    }))
+    : [
+      {
+        value: data.accuracy ?? undefined,
+        label: 'Accuracy',
+        backgroundColor: 'var(--gauge-background)',
+        priority: true
+      }
+    ]
 
   const metricsVariant = variant === 'grid' ? 'grid' : 'detail'
 
@@ -351,4 +323,37 @@ export default function ExperimentTask({
       )}
     />
   )
+}
+
+function getMetricInformation(metricName: string): string {
+  const descriptions: Record<string, string> = {
+    "Accuracy": "Accuracy measures the overall correctness of predictions, showing the " +
+      "percentage of all cases (both positive and negative) that were " +
+      "correctly classified.\n\n" +
+      "While accuracy is a good general metric, it can be misleading when classes " +
+      "are imbalanced. For example, if only 1% of cases are positive, a model " +
+      "that always predicts negative would have 99% accuracy but be useless for " +
+      "detecting positive cases.",
+    "Precision": "Precision measures the accuracy of positive predictions, showing " +
+      "the percentage of predicted positive cases that were actually positive.\n\n" +
+      "High precision is crucial when false positives are costly - for example, " +
+      "when flagging content that will be removed or when identifying cases that " +
+      "will trigger penalties. In these cases, we want to be very confident in " +
+      "our positive predictions.",
+    "Sensitivity": "Sensitivity (also called Recall) measures the ability to correctly " +
+      "identify positive cases, showing the percentage of actual positive " +
+      "cases that were correctly identified.\n\n" +
+      "High sensitivity is essential when missing positive cases is costly - for " +
+      "example, when detecting regulated content that must be caught, or when " +
+      "screening for high-risk conditions. In these cases, we prefer false " +
+      "positives over missing actual positives.",
+    "Specificity": "Specificity measures the ability to correctly identify negative " +
+      "cases, showing the percentage of actual negative cases that were " +
+      "correctly identified.\n\n" +
+      "High specificity indicates the model is good at ruling out false " +
+      "positives. This is important in scenarios where we want to avoid " +
+      "overwhelming review systems with false alarms, or when we need to " +
+      "confidently clear cases as negative."
+  }
+  return descriptions[metricName] || ""
 }

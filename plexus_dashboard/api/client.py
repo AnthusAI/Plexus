@@ -62,6 +62,7 @@ from gql.transport.exceptions import TransportQueryError
 from queue import Queue, Empty
 from threading import Thread, Event
 import time
+from datetime import datetime, timezone
 
 class _BaseAPIClient:
     """Base API client with GraphQL functionality"""
@@ -335,3 +336,63 @@ class PlexusDashboardClient(_BaseAPIClient):
         self.ScoreResult = ScoreResultNamespace(self)
         self.Scorecard = ScorecardNamespace(self)
         self.Account = AccountNamespace(self)
+
+    def updateExperiment(self, id: str, **kwargs) -> None:
+        """Update experiment fields.
+        
+        Args:
+            id: Experiment ID
+            **kwargs: Fields to update
+        """
+        try:
+            # Always update the updatedAt timestamp
+            kwargs['updatedAt'] = datetime.now(timezone.utc).isoformat().replace(
+                '+00:00', 'Z'
+            )
+            
+            mutation = """
+            mutation UpdateExperiment($input: UpdateExperimentInput!) {
+                updateExperiment(input: $input) {
+                    id
+                    type
+                    accountId
+                    status
+                    createdAt
+                    updatedAt
+                    parameters
+                    metrics
+                    inferences
+                    cost
+                    accuracy
+                    accuracyType
+                    startedAt
+                    elapsedSeconds
+                    estimatedRemainingSeconds
+                    totalItems
+                    processedItems
+                    errorMessage
+                    errorDetails
+                    scorecardId
+                    scoreId
+                    confusionMatrix
+                    scoreGoal
+                    datasetClassDistribution
+                    isDatasetClassDistributionBalanced
+                    predictedClassDistribution
+                    isPredictedClassDistributionBalanced
+                }
+            }
+            """
+            
+            variables = {
+                'input': {
+                    'id': id,
+                    **kwargs
+                }
+            }
+            
+            self.execute(mutation, variables)
+            
+        except Exception as e:
+            logger.error(f"Error updating experiment: {e}")
+            raise

@@ -243,6 +243,18 @@ export default function ExperimentsDashboard(): JSX.Element {
     const scoreResult = await experiment.score?.();
     const scoreName = scoreResult?.data?.name || '';
 
+    // Parse metrics JSON if it exists
+    let metrics = [];
+    if (experiment.metrics) {
+        try {
+            metrics = typeof experiment.metrics === 'string' 
+                ? JSON.parse(experiment.metrics)
+                : experiment.metrics;
+        } catch (e) {
+            console.error('Error parsing metrics:', e);
+        }
+    }
+
     // Parse class distributions
     let datasetClassDistribution = null;
     if (experiment.datasetClassDistribution) {
@@ -266,7 +278,7 @@ export default function ExperimentsDashboard(): JSX.Element {
         }
     }
 
-    let confusionMatrix: ConfusionMatrix = { matrix: [], labels: [] };
+    let confusionMatrix = { matrix: [], labels: [] };
     if (experiment.confusionMatrix) {
         try {
             confusionMatrix = typeof experiment.confusionMatrix === 'string'
@@ -291,9 +303,7 @@ export default function ExperimentsDashboard(): JSX.Element {
             undefined,
         data: {
             accuracy: experiment.accuracy ?? null,
-            sensitivity: experiment.sensitivity ?? null,
-            specificity: experiment.specificity ?? null,
-            precision: experiment.precision ?? null,
+            metrics: metrics,  // Use the parsed metrics array
             processedItems: experiment.processedItems || 0,
             totalItems: experiment.totalItems || 0,
             progress,

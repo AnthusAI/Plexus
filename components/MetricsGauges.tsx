@@ -14,6 +14,7 @@ interface GaugeConfig {
   backgroundColor?: string
   showTicks?: boolean
   information?: string
+  priority?: boolean
 }
 
 interface MetricsGaugesProps {
@@ -48,6 +49,7 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
               backgroundColor={gauge.backgroundColor}
               showTicks={variant === 'detail'}
               information={gauge.information}
+              priority={gauge.priority}
             />
           </div>
         ))}
