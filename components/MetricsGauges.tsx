@@ -40,7 +40,13 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
           : 'flex justify-center'
       )}>
         {gauges.map((gauge, index) => (
-          <div key={index} className="flex justify-center">
+          <div 
+            key={index} 
+            className={cn(
+              "flex justify-center rounded-lg p-2",
+              gauge.priority && variant === 'detail' && "bg-muted"
+            )}
+          >
             <Gauge
               value={gauge.value}
               title={gauge.label}

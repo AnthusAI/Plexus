@@ -69,11 +69,6 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
     metrics: rawExperiment.metrics || {},
     inferences: rawExperiment.inferences || 0,
     cost: rawExperiment.cost || 0,
-    accuracy: rawExperiment.accuracy || null,
-    accuracyType: rawExperiment.accuracyType || null,
-    sensitivity: rawExperiment.sensitivity || null,
-    specificity: rawExperiment.specificity || null,
-    precision: rawExperiment.precision || null,
     createdAt: rawExperiment.createdAt || new Date().toISOString(),
     updatedAt: rawExperiment.updatedAt || new Date().toISOString(),
     status: rawExperiment.status || '',
@@ -105,30 +100,12 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
         id: rawExperiment.account?.id || '',
         name: rawExperiment.account?.name || '',
         key: rawExperiment.account?.key || '',
-        scorecards: async (options?: any) => ({ 
-          data: [], 
-          nextToken: null 
-        }),
-        experiments: async (options?: any) => ({ 
-          data: [], 
-          nextToken: null 
-        }),
-        batchJobs: async (options?: any) => ({ 
-          data: [], 
-          nextToken: null 
-        }),
-        items: async (options?: any) => ({ 
-          data: [], 
-          nextToken: null 
-        }),
-        scoringJobs: async (options?: any) => ({ 
-          data: [], 
-          nextToken: null 
-        }),
-        scoreResults: async (options?: any) => ({ 
-          data: [], 
-          nextToken: null 
-        }),
+        scorecards: async (options?: any) => ({ data: [], nextToken: null }),
+        experiments: async (options?: any) => ({ data: [], nextToken: null }),
+        batchJobs: async (options?: any) => ({ data: [], nextToken: null }),
+        items: async (options?: any) => ({ data: [], nextToken: null }),
+        scoringJobs: async (options?: any) => ({ data: [], nextToken: null }),
+        scoreResults: async (options?: any) => ({ data: [], nextToken: null }),
         createdAt: rawExperiment.account?.createdAt || new Date().toISOString(),
         updatedAt: rawExperiment.account?.updatedAt || new Date().toISOString(),
         description: rawExperiment.account?.description || ''
@@ -205,6 +182,25 @@ interface ExperimentParameters {
   scoreGoal?: string
   [key: string]: any  // Allow other parameters
 }
+
+// Update the helper function to handle any type
+const getAccuracyFromMetrics = (metrics: any): number => {
+  if (!metrics) return 0;
+  try {
+    const metricsArray = typeof metrics === 'string' 
+      ? JSON.parse(metrics) 
+      : Array.isArray(metrics) 
+        ? metrics 
+        : typeof metrics === 'object' 
+          ? [metrics] 
+          : [];
+    const accuracyMetric = metricsArray.find((m: any) => m.name === 'Accuracy');
+    return accuracyMetric?.value ?? 0;
+  } catch (e) {
+    console.error('Error parsing metrics:', e);
+    return 0;
+  }
+};
 
 export default function ExperimentsDashboard(): JSX.Element {
   const [experiments, setExperiments] = useState<NonNullable<Schema['Experiment']['type']>[]>([])
@@ -302,7 +298,7 @@ export default function ExperimentsDashboard(): JSX.Element {
                 JSON.stringify(experiment.errorDetails) : 
             undefined,
         data: {
-            accuracy: experiment.accuracy ?? null,
+            accuracy: getAccuracyFromMetrics(experiment.metrics),
             metrics: metrics,  // Use the parsed metrics array
             processedItems: experiment.processedItems || 0,
             totalItems: experiment.totalItems || 0,
@@ -561,7 +557,9 @@ export default function ExperimentsDashboard(): JSX.Element {
                               <div className="text-sm text-muted-foreground">
                                 {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
                               </div>
-                              <div className="text-sm text-muted-foreground">{experiment.accuracyType ?? 'Accuracy'}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {getAccuracyFromMetrics(experiment.metrics) > 0 ? 'Accuracy' : ''}
+                              </div>
                             </div>
 
                             {/* Right column - increase width to ~55% for progress bars */}
@@ -573,7 +571,7 @@ export default function ExperimentsDashboard(): JSX.Element {
                               />
                               <ExperimentListAccuracyBar 
                                 progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
-                                accuracy={experiment.accuracy ?? 0}
+                                accuracy={getAccuracyFromMetrics(experiment.metrics)}
                                 isFocused={experiment.id === selectedExperiment?.id}
                               />
                             </div>
@@ -592,7 +590,7 @@ export default function ExperimentsDashboard(): JSX.Element {
                         </div>
                       </TableCell>
                       <TableCell className="hidden @[630px]:table-cell text-sm text-muted-foreground">
-                        {experiment.accuracyType ?? 'Accuracy'}
+                        {getAccuracyFromMetrics(experiment.metrics) > 0 ? 'Accuracy' : ''}
                       </TableCell>
                       <TableCell className="hidden @[630px]:table-cell w-[15%] text-right">
                         <ExperimentListProgressBar 
@@ -604,7 +602,7 @@ export default function ExperimentsDashboard(): JSX.Element {
                       <TableCell className="hidden @[630px]:table-cell w-[15%]">
                         <ExperimentListAccuracyBar 
                           progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
-                          accuracy={experiment.accuracy ?? 0}
+                          accuracy={getAccuracyFromMetrics(experiment.metrics)}
                           isFocused={experiment.id === selectedExperiment?.id}
                         />
                       </TableCell>
