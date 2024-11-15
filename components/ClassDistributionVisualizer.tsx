@@ -50,6 +50,8 @@ export default function ClassDistributionVisualizer({
     [...data].sort((a, b) => b.count - a.count) : 
     []
   const classCount = safeData.length
+  console.log('isBalanced:', isBalanced, 'classCount:', classCount)
+  
   const hasHeader = !hideHeader && (isBalanced !== null || classCount > 0)
 
   if (!safeData || classCount === 0) {
@@ -81,7 +83,7 @@ export default function ClassDistributionVisualizer({
     <TooltipProvider>
       <div className="w-full">
         {hasHeader && (
-          <div className="flex justify-between items-start gap-4 mb-2">
+          <div className="flex justify-between items-start mb-1">
             <div className="flex items-start">
               {classCount === 1 ? (
                 <>
@@ -109,7 +111,7 @@ export default function ClassDistributionVisualizer({
                           cursor-pointer opacity-70 hover:opacity-100" />
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent className="max-w-sm">
+                    <PopoverContent className="max-w-sm bg-background border-0">
                       <div className="space-y-1">
                         <p className="font-medium">Classes:</p>
                         <ul className="text-sm space-y-1">
@@ -222,6 +224,7 @@ export default function ClassDistributionVisualizer({
                   side="top" 
                   align="center"
                   sideOffset={5}
+                  className="bg-background border-border"
                 >
                   <div className="text-center">
                     <p className="font-medium text-foreground">{item.label}</p>

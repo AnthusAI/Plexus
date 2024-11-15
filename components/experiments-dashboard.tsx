@@ -90,7 +90,7 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
     estimatedRemainingSeconds: rawExperiment.estimatedRemainingSeconds || 0,
     scoreGoal: rawExperiment.scoreGoal || null,
     datasetClassDistribution: rawExperiment.datasetClassDistribution || null,
-    isDatasetClassDistributionBalanced: rawExperiment.isDatasetClassDistributionBalanced || null,
+    isDatasetClassDistributionBalanced: rawExperiment.isDatasetClassDistributionBalanced ?? null,
     predictedClassDistribution: rawExperiment.predictedClassDistribution || null,
     isPredictedClassDistributionBalanced: rawExperiment.isPredictedClassDistributionBalanced || null,
     items: async (options?: any) => ({ data: [], nextToken: null }),

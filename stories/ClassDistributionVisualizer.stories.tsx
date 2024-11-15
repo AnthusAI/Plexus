@@ -130,32 +130,32 @@ export const All: Story = {
       <div>
         <h3 className="text-lg font-medium">Binary Balanced</h3>
         <ClassDistributionVisualizer 
-          data={BinaryBalanced.args?.data} 
-          isBalanced={BinaryBalanced.args?.isBalanced} 
+          data={BinaryBalanced.args!.data}
+          isBalanced={BinaryBalanced.args!.isBalanced}
         />
       </div>
       
       <div>
         <h3 className="text-lg font-medium">Binary Imbalanced</h3>
         <ClassDistributionVisualizer 
-          data={BinaryImbalanced.args?.data} 
-          isBalanced={BinaryImbalanced.args?.isBalanced} 
+          data={BinaryImbalanced.args!.data}
+          isBalanced={BinaryImbalanced.args!.isBalanced}
         />
       </div>
       
       <div>
         <h3 className="text-lg font-medium">Multi-Class Balanced</h3>
         <ClassDistributionVisualizer 
-          data={MultiClassBalanced.args?.data} 
-          isBalanced={MultiClassBalanced.args?.isBalanced} 
+          data={MultiClassBalanced.args!.data}
+          isBalanced={MultiClassBalanced.args!.isBalanced}
         />
       </div>
       
       <div>
         <h3 className="text-lg font-medium">Multi-Class Imbalanced</h3>
         <ClassDistributionVisualizer 
-          data={MultiClassImbalanced.args?.data} 
-          isBalanced={MultiClassImbalanced.args?.isBalanced} 
+          data={MultiClassImbalanced.args!.data}
+          isBalanced={MultiClassImbalanced.args!.isBalanced}
         />
       </div>
       
