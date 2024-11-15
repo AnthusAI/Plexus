@@ -99,9 +99,36 @@ const recentActivities: ActivityData[] = [
       id: "exp-1",
       title: "Model Evaluation",
       accuracy: 89,
-      sensitivity: 87,
-      specificity: 91,
-      precision: 88,
+      metrics: [
+        {
+          name: "Accuracy",
+          value: 89,
+          unit: "%",
+          maximum: 100,
+          priority: true
+        },
+        {
+          name: "Precision",
+          value: 88,
+          unit: "%",
+          maximum: 100,
+          priority: false
+        },
+        {
+          name: "Sensitivity",
+          value: 87,
+          unit: "%",
+          maximum: 100,
+          priority: false
+        },
+        {
+          name: "Specificity",
+          value: 91,
+          unit: "%",
+          maximum: 100,
+          priority: false
+        }
+      ],
       processedItems: 47,
       totalItems: 100,
       elapsedSeconds: 135,
@@ -252,9 +279,36 @@ const recentActivities: ActivityData[] = [
       id: "exp-2",
       title: "Temperature Check Experiment",
       accuracy: 94,
-      sensitivity: 93,
-      specificity: 95,
-      precision: 92,
+      metrics: [
+        {
+          name: "Accuracy",
+          value: 94,
+          unit: "%",
+          maximum: 100,
+          priority: true
+        },
+        {
+          name: "Precision",
+          value: 92,
+          unit: "%",
+          maximum: 100,
+          priority: false
+        },
+        {
+          name: "Sensitivity",
+          value: 93,
+          unit: "%",
+          maximum: 100,
+          priority: false
+        },
+        {
+          name: "Specificity",
+          value: 95,
+          unit: "%",
+          maximum: 100,
+          priority: false
+        }
+      ],
       processedItems: 100,
       totalItems: 100,
       elapsedSeconds: 2420,
@@ -264,7 +318,7 @@ const recentActivities: ActivityData[] = [
           [45, 3, 2],
           [2, 43, 2],
           [1, 2, 40]
-        ] as number[][],
+        ],
         labels: ["Yes", "No", "NA"]
       },
       progress: 100,
@@ -715,7 +769,21 @@ export default function ActivityDashboard() {
                       return isExperimentActivity(activity) ? (
                         <ExperimentTaskComponent
                           variant="grid"
-                          task={activity}
+                          task={{
+                            ...activity,
+                            data: {
+                              ...activity.data,
+                              metrics: [
+                                {
+                                  name: "Accuracy",
+                                  value: activity.data.accuracy ?? 0,
+                                  unit: "%",
+                                  maximum: 100,
+                                  priority: true
+                                }
+                              ]
+                            }
+                          }}
                           onClick={() => setSelectedActivity(activity)}
                           onToggleFullWidth={() => {}}
                           onClose={() => {}}

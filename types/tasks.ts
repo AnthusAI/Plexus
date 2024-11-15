@@ -99,8 +99,31 @@ export type BatchJobActivity = BaseActivity & {
 }
 
 export type ExperimentActivity = BaseActivity & {
-  type: 'Experiment started' | 'Experiment completed'
-  data: ExperimentTaskData
+  type: 'Experiment completed' | 'Experiment started'
+  data: {
+    id: string
+    title: string
+    accuracy: number | null
+    metrics: {
+      name: string
+      value: number
+      unit?: string
+      maximum?: number
+      priority: boolean
+    }[]
+    processedItems: number
+    totalItems: number
+    elapsedSeconds: number | null
+    estimatedRemainingSeconds: number | null
+    confusionMatrix?: {
+      matrix: number[][]
+      labels: string[]
+    }
+    progress: number
+    inferences: number
+    cost: number | null
+    status: TaskStatus
+  }
 }
 
 export type FeedbackActivity = BaseActivity & {

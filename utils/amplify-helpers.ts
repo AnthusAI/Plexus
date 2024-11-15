@@ -3,8 +3,46 @@ import type { AmplifyListResult, AmplifyGetResult } from "@/types/shared"
 
 export async function listFromModel<T>(
   model: any,
-  filter?: Record<string, any>
+  filter?: any,
+  nextToken?: string,
+  limit?: number
 ): Promise<AmplifyListResult<T>> {
+  const query = `
+    query List${model.name}($filter: Model${model.name}FilterInput, $nextToken: String, $limit: Int) {
+      list${model.name}s(filter: $filter, nextToken: $nextToken, limit: $limit) {
+        items {
+          id
+          type
+          parameters
+          metrics
+          inferences
+          cost
+          accuracy
+          accuracyType
+          createdAt
+          updatedAt
+          status
+          startedAt
+          elapsedSeconds
+          estimatedRemainingSeconds
+          totalItems
+          processedItems
+          errorMessage
+          errorDetails
+          accountId
+          scorecardId
+          scoreId
+          confusionMatrix
+          scoreGoal
+          datasetClassDistribution
+          isDatasetClassDistributionBalanced
+          predictedClassDistribution
+          isPredictedClassDistributionBalanced
+        }
+        nextToken
+      }
+    }
+  `
   const response = await model.list(filter ? { filter } : undefined)
   return response as AmplifyListResult<T>
 }
@@ -24,9 +62,6 @@ export function observeQueryFromModel<T>(
       'cost',
       'accuracy',
       'accuracyType',
-      'sensitivity',
-      'specificity',
-      'precision',
       'createdAt',
       'updatedAt',
       'status',
