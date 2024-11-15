@@ -21,6 +21,8 @@ module.exports = {
             colors: {
                 background: 'var(--background)',
                 foreground: 'var(--foreground)',
+                focus: 'var(--focus)',
+                attention: 'var(--attention)',
                 card: {
                     DEFAULT: 'var(--card)',
                     foreground: 'var(--card-foreground)'

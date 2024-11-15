@@ -1,11 +1,17 @@
 import React from "react"
+import { cn } from "@/lib/utils"
 
 interface ExperimentListAccuracyBarProps {
   progress: number
   accuracy: number
+  isFocused?: boolean
 }
 
-export function ExperimentListAccuracyBar({ progress, accuracy }: ExperimentListAccuracyBarProps) {
+export function ExperimentListAccuracyBar({ 
+  progress, 
+  accuracy,
+  isFocused = false 
+}: ExperimentListAccuracyBarProps) {
   const roundedAccuracy = Math.round(accuracy)
   const clampedAccuracy = Math.min(Math.max(roundedAccuracy, 0), 100)
   const clampedProgress = Math.min(Math.max(progress, 0), 100)
@@ -18,14 +24,20 @@ export function ExperimentListAccuracyBar({ progress, accuracy }: ExperimentList
       {clampedProgress > 0 && (
         <>
           <div
-            className={`absolute top-0 left-0 h-full flex items-center pl-2 text-sm text-primary-foreground font-medium rounded-md`}
+            className={cn(
+              "absolute top-0 left-0 h-full flex items-center pl-2 text-sm font-medium rounded-md",
+              isFocused ? "text-focus" : "text-primary-foreground"
+            )}
             style={{ width: 'auto' }}
           >
             {clampedAccuracy}%
           </div>
           {trueWidth > 0 && (
             <div
-              className="absolute top-0 left-0 h-full bg-true flex items-center pl-2 text-sm text-primary-foreground font-medium"
+              className={cn(
+                "absolute top-0 left-0 h-full bg-true flex items-center pl-2 text-sm font-medium",
+                isFocused ? "text-focus" : "text-primary-foreground"
+              )}
               style={{ 
                 width: `${trueWidth}%`, 
                 borderTopLeftRadius: 'inherit', 

@@ -203,6 +203,7 @@ export default function ExperimentTask({
               estimatedTimeRemaining={data.estimatedRemainingSeconds ? 
                 formatDuration(data.estimatedRemainingSeconds) : undefined}
               color="secondary"
+              isFocused={variant === 'detail'}
             />
           </div>
 
@@ -234,6 +235,7 @@ export default function ExperimentTask({
             estimatedTimeRemaining={data.estimatedRemainingSeconds ? 
               formatDuration(data.estimatedRemainingSeconds) : undefined}
             color="secondary"
+            isFocused={false}
           />
         </div>
       )}

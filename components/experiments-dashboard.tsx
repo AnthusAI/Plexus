@@ -535,7 +535,8 @@ export default function ExperimentsDashboard(): JSX.Element {
                     <TableRow 
                       key={experiment.id} 
                       onClick={() => setSelectedExperiment(experiment)} 
-                      className="cursor-pointer transition-colors duration-200 hover:bg-muted"
+                      className={`cursor-pointer transition-colors duration-200 
+                        ${experiment.id === selectedExperiment?.id ? 'bg-muted' : 'hover:bg-muted'}`}
                     >
                       <TableCell className="font-medium sm:pr-4">
                         <div className="block @[630px]:hidden">
@@ -543,7 +544,9 @@ export default function ExperimentsDashboard(): JSX.Element {
                             {/* Left column - reduce width to ~40% */}
                             <div className="w-[40%] space-y-0.5">
                               <div className="font-semibold truncate">
-                                {scorecardNames[experiment.id] || 'Unknown Scorecard'}
+                                <span className={experiment.id === selectedExperiment?.id ? 'text-focus' : ''}>
+                                  {scorecardNames[experiment.id] || 'Unknown Scorecard'}
+                                </span>
                               </div>
                               <div className="text-sm text-muted-foreground">
                                 {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
@@ -556,10 +559,12 @@ export default function ExperimentsDashboard(): JSX.Element {
                               <ExperimentListProgressBar 
                                 progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
                                 totalSamples={experiment.totalItems ?? 0}
+                                isFocused={experiment.id === selectedExperiment?.id}
                               />
                               <ExperimentListAccuracyBar 
                                 progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
                                 accuracy={experiment.accuracy ?? 0}
+                                isFocused={experiment.id === selectedExperiment?.id}
                               />
                             </div>
                           </div>
@@ -567,7 +572,9 @@ export default function ExperimentsDashboard(): JSX.Element {
                         {/* Wide variant - visible at 630px and above */}
                         <div className="hidden @[630px]:block">
                           <div className="font-semibold">
-                            {scorecardNames[experiment.id] || 'Unknown Scorecard'}
+                            <span className={experiment.id === selectedExperiment?.id ? 'text-focus' : ''}>
+                              {scorecardNames[experiment.id] || 'Unknown Scorecard'}
+                            </span>
                           </div>
                           <div className="text-sm text-muted-foreground">
                             {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
@@ -581,12 +588,14 @@ export default function ExperimentsDashboard(): JSX.Element {
                         <ExperimentListProgressBar 
                           progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
                           totalSamples={experiment.totalItems ?? 0}
+                          isFocused={experiment.id === selectedExperiment?.id}
                         />
                       </TableCell>
                       <TableCell className="hidden @[630px]:table-cell w-[15%]">
                         <ExperimentListAccuracyBar 
                           progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
                           accuracy={experiment.accuracy ?? 0}
+                          isFocused={experiment.id === selectedExperiment?.id}
                         />
                       </TableCell>
                     </TableRow>
