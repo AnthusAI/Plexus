@@ -8,6 +8,8 @@ import { ConfusionMatrix } from '@/components/confusion-matrix'
 import { intervalToDuration } from 'date-fns'
 import { CardButton } from '@/components/CardButton'
 import ScoreTypesHeader from '@/components/ScoreTypesHeader'
+import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
+import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
 
 export interface ExperimentTaskData {
   accuracy: number | null
@@ -29,9 +31,11 @@ export interface ExperimentTaskData {
     matrix: number[][]
     labels: string[]
   }
-  scoreType?: string | null
-  dataBalance?: string | null
   scoreGoal?: string | null
+  datasetClassDistribution?: { label: string, count: number }[]
+  isDatasetClassDistributionBalanced?: boolean | null
+  predictedClassDistribution?: { label: string, count: number }[]
+  isPredictedClassDistributionBalanced?: boolean | null
 }
 
 export interface ExperimentTaskProps {
@@ -91,6 +95,18 @@ function formatDuration(seconds: number): string {
   return `${remainingSeconds}s`
 }
 
+function computeIsBalanced(distribution: { label: string, count: number }[] | null | undefined): boolean | null {
+  if (!distribution || distribution.length <= 1) return null
+  
+  const total = distribution.reduce((sum, item) => sum + item.count, 0)
+  const expectedCount = total / distribution.length
+  const tolerance = 0.2 // 20% tolerance
+  
+  return distribution.every(item => 
+    Math.abs(item.count - expectedCount) <= expectedCount * tolerance
+  )
+}
+
 export default function ExperimentTask({ 
   variant = 'grid',
   task,
@@ -102,14 +118,6 @@ export default function ExperimentTask({
 }: ExperimentTaskProps) {
   const data = task.data ?? {} as ExperimentTaskData
   
-  console.log('ExperimentTask render:', {
-    taskId: task.id,
-    scoreType: data.scoreType,
-    dataBalance: data.dataBalance,
-    scoreGoal: data.scoreGoal,
-    fullData: data
-  });
-
   const computedType = computeExperimentType(data)
   const waffleContainerRef = useRef<HTMLDivElement>(null)
   const [waffleHeight, setWaffleHeight] = useState(20)
@@ -185,15 +193,6 @@ export default function ExperimentTask({
     <div className="w-full">
       {variant === 'detail' && (
         <>
-          {(data.scoreType || data.dataBalance || data.scoreGoal) && (
-            <div className="mb-6">
-              <ScoreTypesHeader 
-                scoreType={data.scoreType ?? undefined}
-                dataBalance={data.dataBalance ?? undefined}
-                scoreGoal={data.scoreGoal ?? undefined}
-              />
-            </div>
-          )}
           <div className="mb-4">
             <ProgressBar 
               progress={data.progress}
@@ -204,6 +203,19 @@ export default function ExperimentTask({
               estimatedTimeRemaining={data.estimatedRemainingSeconds ? 
                 formatDuration(data.estimatedRemainingSeconds) : undefined}
               color="secondary"
+            />
+          </div>
+
+          <div className="mb-4">
+            <ClassDistributionVisualizer
+              data={data.datasetClassDistribution}
+              isBalanced={data.isDatasetClassDistributionBalanced}
+            />
+          </div>
+
+          <div className="mb-4">
+            <PredictedClassDistributionVisualizer
+              data={data.predictedClassDistribution}
             />
           </div>
         </>

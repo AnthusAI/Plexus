@@ -26,7 +26,7 @@ export function ProgressBar({
   return (
     <div className={cn("flex flex-col gap-1", className)}>
       {(elapsedTime || estimatedTimeRemaining) && (
-        <div className="flex justify-between text-sm text-muted-foreground h-5">
+        <div className="flex justify-between text-sm text-foreground h-5">
           {elapsedTime && <span>Elapsed: {elapsedTime}</span>}
           {estimatedTimeRemaining && <span>ETA: {estimatedTimeRemaining}</span>}
         </div>
