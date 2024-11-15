@@ -338,12 +338,7 @@ class PlexusDashboardClient(_BaseAPIClient):
         self.Account = AccountNamespace(self)
 
     def updateExperiment(self, id: str, **kwargs) -> None:
-        """Update experiment fields.
-        
-        Args:
-            id: Experiment ID
-            **kwargs: Fields to update
-        """
+        """Update experiment fields."""
         try:
             # Always update the updatedAt timestamp
             kwargs['updatedAt'] = datetime.now(timezone.utc).isoformat().replace(
@@ -363,8 +358,6 @@ class PlexusDashboardClient(_BaseAPIClient):
                     metrics
                     inferences
                     cost
-                    accuracy
-                    accuracyType
                     startedAt
                     elapsedSeconds
                     estimatedRemainingSeconds

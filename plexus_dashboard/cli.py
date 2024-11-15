@@ -20,12 +20,12 @@ import click
 import logging
 from dotenv import load_dotenv
 from typing import Optional
-from .api.client import PlexusDashboardClient
-from .api.models.account import Account
-from .api.models.experiment import Experiment
-from .api.models.scorecard import Scorecard
-from .api.models.score import Score
-from .api.models.score_result import ScoreResult
+from plexus_dashboard.api.client import PlexusDashboardClient
+from plexus_dashboard.api.models.account import Account
+from plexus_dashboard.api.models.experiment import Experiment
+from plexus_dashboard.api.models.scorecard import Scorecard
+from plexus_dashboard.api.models.score import Score
+from plexus_dashboard.api.models.score_result import ScoreResult
 import json
 import random
 import time
@@ -238,11 +238,6 @@ def create(
             type=type,
             accountId=account.id,
             status=status,
-            accuracy=accuracy,
-            accuracyType=accuracy_type,
-            sensitivity=sensitivity,
-            specificity=specificity,
-            precision=precision,
             parameters=parameters,
             metrics=metrics,
             inferences=inferences,
@@ -307,11 +302,6 @@ def update(
     results: Optional[int] = None,
     cost: Optional[float] = None,
     progress: Optional[float] = None,
-    accuracy: Optional[float] = None,
-    accuracy_type: Optional[str] = None,
-    sensitivity: Optional[float] = None,
-    specificity: Optional[float] = None,
-    precision: Optional[float] = None,
     total_items: Optional[int] = None,
     processed_items: Optional[int] = None,
     error_message: Optional[str] = None,
@@ -439,9 +429,9 @@ def update(id: str, value: Optional[float], confidence: Optional[float], metadat
     
     try:
         # Get existing score result
-        logger.info(f"Looking up score result: {id}")
+        logging.getLogger(__name__).info(f"Looking up score result: {id}")
         result = ScoreResult.get_by_id(id, client)
-        logger.info(f"Found score result: {result.id}")
+        logging.getLogger(__name__).info(f"Found score result: {result.id}")
         
         # Build update data
         update_data = {}
@@ -449,10 +439,9 @@ def update(id: str, value: Optional[float], confidence: Optional[float], metadat
         if confidence is not None: update_data['confidence'] = confidence
         if metadata is not None: update_data['metadata'] = json.loads(metadata)
         
-        # Update score result
-        logger.info("Updating score result...")
+        logging.getLogger(__name__).info("Updating score result...")
         updated = result.update(**update_data)
-        logger.info(f"Updated score result: {updated.id}")
+        logging.getLogger(__name__).info(f"Updated score result: {updated.id}")
         
         # Output results
         click.echo(json.dumps({
@@ -463,7 +452,7 @@ def update(id: str, value: Optional[float], confidence: Optional[float], metadat
         }, indent=2))
         
     except Exception as e:
-        logger.error(f"Error updating score result: {str(e)}")
+        logging.getLogger(__name__).error(f"Error updating score result: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
 @experiment.command()
@@ -777,7 +766,6 @@ def simulate(
 
                 # Update experiment with current metrics
                 update_data = {
-                    "accuracy": acc,
                     "metrics": json.dumps(metrics) if metrics else None,
                     "processedItems": processed_items,
                     "elapsedSeconds": elapsed_seconds,

@@ -17,8 +17,6 @@ export async function listFromModel<T>(
           metrics
           inferences
           cost
-          accuracy
-          accuracyType
           createdAt
           updatedAt
           status
@@ -60,8 +58,6 @@ export function observeQueryFromModel<T>(
       'metrics',
       'inferences',
       'cost',
-      'accuracy',
-      'accuracyType',
       'createdAt',
       'updatedAt',
       'status',
