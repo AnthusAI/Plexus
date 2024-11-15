@@ -96,8 +96,6 @@ const schema = a.schema({
       metrics: a.json(),
       inferences: a.integer(),
       cost: a.float(),
-      accuracy: a.float(),
-      accuracyType: a.string(),
       createdAt: a.datetime().required(),
       updatedAt: a.datetime().required(),
       status: a.string().required(),
