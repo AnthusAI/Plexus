@@ -42,6 +42,13 @@ const createDetailGaugeConfig = (
       backgroundColor: 'var(--gauge-background)',
     },
     {
+      value: precision,
+      label: 'Precision',
+      segments: otherMetricsSegments,
+      backgroundColor: 'var(--gauge-background)',
+      priority: true
+    },
+    {
       value: sensitivity,
       label: 'Sensitivity',
       segments: otherMetricsSegments,
@@ -53,12 +60,6 @@ const createDetailGaugeConfig = (
       segments: otherMetricsSegments,
       backgroundColor: 'var(--gauge-background)',
     },
-    {
-      value: precision,
-      label: 'Precision',
-      segments: otherMetricsSegments,
-      backgroundColor: 'var(--gauge-background)',
-    }
   ]
 })
 

@@ -20,6 +20,7 @@ interface GaugeProps {
   showTicks?: boolean
   information?: string
   informationUrl?: string
+  priority?: boolean
 }
 
 const calculateAngle = (percent: number) => {
@@ -37,7 +38,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   backgroundColor = 'var(--card)',
   showTicks = true,
   information,
-  informationUrl
+  informationUrl,
+  priority = false
 }) => {
   const [animatedValue, setAnimatedValue] = useState(0)
   const [animatedBeforeValue, setAnimatedBeforeValue] = useState(0)
@@ -248,19 +250,27 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                   <path
                     d={`M 0,-${radius} L -6,0 L 6,0 Z`}
                     className={cn(
-                      "fill-foreground",
+                      priority ? "fill-focus" : "fill-foreground",
                       value === undefined && "fill-card"
                     )}
                     transform={`rotate(${(animatedValue * 210) / 100})`}
                   />
-                  <circle cx="0" cy="0" r="10" className="fill-foreground" />
+                  <circle 
+                    cx="0" 
+                    cy="0" 
+                    r="10" 
+                    className={priority ? "fill-focus" : "fill-foreground"} 
+                  />
                 </g>
               </g>
               <text 
                 x="0" 
                 y={textY}
                 textAnchor="middle" 
-                className="text-[2.25rem] font-bold fill-foreground"
+                className={cn(
+                  "text-[2.25rem] font-bold",
+                  priority ? "fill-focus" : "fill-foreground"
+                )}
                 dominantBaseline="middle"
               >
                 {value !== undefined 
@@ -271,8 +281,10 @@ const GaugeComponent: React.FC<GaugeProps> = ({
           </svg>
           {title && (
             <div 
-              className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 
-                         text-base whitespace-nowrap"
+              className={cn(
+                "absolute left-1/2 -translate-x-1/2 flex items-center gap-2 text-base whitespace-nowrap",
+                priority ? "text-focus" : "text-foreground"
+              )}
               style={{
                 bottom: showTicks 
                   ? 'max(-10px, calc(-22px + 20%))' 

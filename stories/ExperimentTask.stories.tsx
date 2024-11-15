@@ -16,7 +16,7 @@ type Story = StoryObj<typeof ExperimentTask>;
 
 const createTask = (id: number, processedItems: number, totalItems: number): ExperimentTaskProps => ({
   task: {
-    id,
+    id: id.toString(),
     type: 'Experiment started',
     scorecard: 'Test Scorecard',
     score: 'Test Score',
@@ -25,13 +25,44 @@ const createTask = (id: number, processedItems: number, totalItems: number): Exp
     description: 'Experiment Description',
     data: {
       accuracy: 90,
-      sensitivity: 92,
-      specificity: 89,
-      precision: 91,
-      elapsedTime: '01:30:00',
+      metrics: [
+        {
+          name: "Accuracy",
+          value: 90,
+          unit: "%",
+          maximum: 100,
+          priority: true
+        },
+        {
+          name: "Precision",
+          value: 91,
+          unit: "%",
+          maximum: 100,
+          priority: true
+        },
+        {
+          name: "Sensitivity",
+          value: 92,
+          unit: "%",
+          maximum: 100,
+          priority: true
+        },
+        {
+          name: "Specificity",
+          value: 89,
+          unit: "%",
+          maximum: 100,
+          priority: true
+        }
+      ],
       processedItems,
       totalItems,
-      estimatedTimeRemaining: '00:30:00',
+      progress: Math.round((processedItems / totalItems) * 100),
+      inferences: 150,
+      cost: 5,
+      status: 'In Progress',
+      elapsedSeconds: 5400,
+      estimatedRemainingSeconds: 1800,
       confusionMatrix: {
         matrix: [
           [45, 3, 2],
@@ -39,11 +70,7 @@ const createTask = (id: number, processedItems: number, totalItems: number): Exp
           [1, 2, 40],
         ],
         labels: ["Positive", "Negative", "Neutral"],
-      },
-      progress: 75,
-      inferences: 150,
-      cost: 5,
-      status: 'In Progress'
+      }
     },
   },
 });
