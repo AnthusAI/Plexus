@@ -4,13 +4,14 @@ import { ProgressBar } from "@/components/ui/progress-bar"
 interface ExperimentListProgressBarProps {
   progress: number
   totalSamples?: number
+  isFocused?: boolean
 }
 
 export function ExperimentListProgressBar({ 
   progress, 
-  totalSamples 
+  totalSamples,
+  isFocused = false
 }: ExperimentListProgressBarProps) {
-  // Round progress to nearest whole number
   const roundedProgress = Math.round(progress)
   
   return (
@@ -19,6 +20,7 @@ export function ExperimentListProgressBar({
       processedItems={totalSamples ? Math.round(progress * totalSamples / 100) : undefined}
       totalItems={totalSamples}
       color="secondary"
+      isFocused={isFocused}
     />
   )
 } 

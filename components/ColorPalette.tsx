@@ -10,7 +10,7 @@ const ColorPaletteContent = () => {
 
   const colorColumns = [
     [
-      'background', 'foreground', 'muted', 'muted-foreground', 'popover',
+      'background', 'foreground', 'focus', 'attention', 'muted', 'muted-foreground', 'popover',
       'popover-foreground', 'card', 'card-foreground', 'border', 'input'
     ],
     [

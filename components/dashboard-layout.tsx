@@ -193,7 +193,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                         (pathname === item.path || 
                         (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
                         (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
-                          ? 'text-secondary-foreground'
+                          ? 'text-focus'
                           : 'text-secondary'
                       }`} />
                       {isLeftSidebarOpen && (
@@ -201,7 +201,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                           (pathname === item.path || 
                           (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
                           (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
-                            ? 'font-semibold'
+                            ? 'font-semibold text-focus'
                             : ''
                         }>
                           {item.name}

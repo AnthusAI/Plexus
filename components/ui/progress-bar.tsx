@@ -9,6 +9,7 @@ export interface ProgressBarProps {
   totalItems?: number
   estimatedTimeRemaining?: string
   color?: 'primary' | 'secondary' | 'true' | 'false' | 'neutral'
+  isFocused?: boolean
 }
 
 export function ProgressBar({ 
@@ -18,7 +19,8 @@ export function ProgressBar({
   processedItems,
   totalItems,
   estimatedTimeRemaining,
-  color = 'secondary'
+  color = 'secondary',
+  isFocused = false
 }: ProgressBarProps) {
   const displayProgress = Math.round(progress)
   const clampedProgress = Math.min(Math.max(displayProgress, 0), 100)
@@ -41,11 +43,17 @@ export function ProgressBar({
           style={{ width: clampedProgress > 0 ? `${clampedProgress}%` : 'auto' }}
         />
         <div className="absolute top-0 left-0 right-0 h-full flex justify-between items-center px-2">
-          <span className="text-sm text-primary-foreground font-medium">
+          <span className={cn(
+            "text-sm font-medium",
+            isFocused ? "text-focus" : "text-primary-foreground"
+          )}>
             {displayProgress}%
           </span>
           {processedItems !== undefined && totalItems !== undefined && (
-            <span className="text-sm text-primary-foreground font-medium">
+            <span className={cn(
+              "text-sm font-medium",
+              isFocused ? "text-focus" : "text-primary-foreground"
+            )}>
               {processedItems} / {totalItems}
             </span>
           )}
