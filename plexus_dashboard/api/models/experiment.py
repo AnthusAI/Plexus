@@ -32,11 +32,6 @@ class Experiment(BaseModel):
     metrics: Optional[Dict] = None
     inferences: Optional[int] = None
     cost: Optional[float] = None
-    accuracy: Optional[float] = None
-    accuracyType: Optional[str] = None
-    sensitivity: Optional[float] = None
-    specificity: Optional[float] = None
-    precision: Optional[float] = None
     startedAt: Optional[datetime] = None
     elapsedSeconds: Optional[int] = None
     estimatedRemainingSeconds: Optional[int] = None
@@ -66,11 +61,6 @@ class Experiment(BaseModel):
         metrics: Optional[Dict] = None,
         inferences: Optional[int] = None,
         cost: Optional[float] = None,
-        accuracy: Optional[float] = None,
-        accuracyType: Optional[str] = None,
-        sensitivity: Optional[float] = None,
-        specificity: Optional[float] = None,
-        precision: Optional[float] = None,
         startedAt: Optional[datetime] = None,
         elapsedSeconds: Optional[int] = None,
         estimatedRemainingSeconds: Optional[int] = None,
@@ -97,11 +87,6 @@ class Experiment(BaseModel):
         self.metrics = metrics
         self.inferences = inferences
         self.cost = cost
-        self.accuracy = accuracy
-        self.accuracyType = accuracyType
-        self.sensitivity = sensitivity
-        self.specificity = specificity
-        self.precision = precision
         self.startedAt = startedAt
         self.elapsedSeconds = elapsedSeconds
         self.estimatedRemainingSeconds = estimatedRemainingSeconds
@@ -120,6 +105,7 @@ class Experiment(BaseModel):
 
     @classmethod
     def fields(cls) -> str:
+        """Fields to request in queries and mutations"""
         return """
             id
             type
@@ -131,11 +117,6 @@ class Experiment(BaseModel):
             metrics
             inferences
             cost
-            accuracy
-            accuracyType
-            sensitivity
-            specificity
-            precision
             startedAt
             elapsedSeconds
             estimatedRemainingSeconds
@@ -165,20 +146,7 @@ class Experiment(BaseModel):
         scoreId: Optional[str] = None,
         **kwargs
     ) -> 'Experiment':
-        """Create a new experiment.
-        
-        Args:
-            client: The API client
-            type: Type of experiment (e.g., 'accuracy', 'consistency')
-            accountId: Account context
-            status: Initial status (default: 'PENDING')
-            scorecardId: Optional scorecard association
-            scoreId: Optional score association
-            **kwargs: Additional experiment fields
-            
-        Returns:
-            The created Experiment instance
-        """
+        """Create a new experiment."""
         now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
         
         input_data = {
@@ -229,11 +197,6 @@ class Experiment(BaseModel):
             metrics=data.get('metrics'),
             inferences=data.get('inferences'),
             cost=data.get('cost'),
-            accuracy=data.get('accuracy'),
-            accuracyType=data.get('accuracyType'),
-            sensitivity=data.get('sensitivity'),
-            specificity=data.get('specificity'),
-            precision=data.get('precision'),
             startedAt=data.get('startedAt'),
             elapsedSeconds=data.get('elapsedSeconds'),
             estimatedRemainingSeconds=data.get('estimatedRemainingSeconds'),
