@@ -41,9 +41,11 @@ export function observeQueryFromModel<T>(
       'confusionMatrix',
       'elapsedSeconds',
       'estimatedRemainingSeconds',
-      'scoreType',
-      'dataBalance',
-      'scoreGoal'
+      'scoreGoal',
+      'datasetClassDistribution',
+      'isDatasetClassDistributionBalanced',
+      'predictedClassDistribution',
+      'isPredictedClassDistributionBalanced'
     ]
   }) as any) as { subscribe: (handlers: { 
     next: (data: { items: T[] }) => void

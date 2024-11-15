@@ -51,6 +51,52 @@ logger = logging.getLogger(__name__)
 SCORE_TYPES = ['binary', 'multiclass']
 DATA_BALANCES = ['balanced', 'unbalanced']
 SCORE_GOALS = ['recall', 'precision', 'balanced']
+POSSIBLE_CLASSES = [
+    "3rd Party Clinic", "Agent calling for a Patient", "Follow-up Appointment",
+    "New Patient Registration", "Insurance Verification", "Patient Referral",
+    "Lab Results Inquiry", "Medication Refill Request", "Appointment Cancellation",
+    "Telehealth Consultation", "Patient Feedback", "Emergency Contact",
+    "Billing Inquiry", "Health Record Request"
+]
+
+def generate_class_distribution(num_classes: int, total_items: int, balanced: bool) -> list:
+    """Generate a distribution of classes with counts."""
+    if balanced:
+        # Even distribution
+        base_count = total_items // num_classes
+        remainder = total_items % num_classes
+        counts = [base_count for _ in range(num_classes)]
+        # Distribute remainder
+        for i in range(remainder):
+            counts[i] += 1
+    else:
+        # Generate imbalanced distribution using exponential decay
+        remaining_items = total_items
+        counts = []
+        for i in range(num_classes - 1):
+            # Take a random portion of remaining items, more for earlier classes
+            portion = random.uniform(0.3, 0.7) if i == 0 else random.uniform(0.1, 0.4)
+            count = int(remaining_items * portion)
+            counts.append(count)
+            remaining_items -= count
+        counts.append(remaining_items)  # Last class gets the remainder
+    
+    # Shuffle the classes
+    selected_classes = random.sample(POSSIBLE_CLASSES, num_classes)
+    
+    return [
+        {"label": label, "count": count}
+        for label, count in zip(selected_classes, counts)
+    ]
+
+def simulate_prediction(true_label: str, accuracy: float, valid_labels: list) -> str:
+    """Generate a prediction that's correct with probability accuracy."""
+    if random.random() < accuracy:
+        return true_label
+    else:
+        # Pick a random incorrect label
+        other_labels = [l for l in valid_labels if l != true_label]
+        return random.choice(other_labels)
 
 @click.group()
 def cli():
@@ -537,10 +583,27 @@ def simulate(
                 score = Score.get_by_name(score_name, client)
             logger.info(f"Using score: {score.name} ({score.id})")
 
-        # Randomly select score characteristics
-        score_type = random.choice(SCORE_TYPES)
-        data_balance = random.choice(DATA_BALANCES)
+        # Randomly decide experiment characteristics
+        is_binary = random.random() < 0.3  # 30% chance of binary classification
+        num_classes = 2 if is_binary else random.randint(3, 14)
+        is_balanced = random.random() < 0.5  # 50% chance of balanced distribution
         score_goal = random.choice(SCORE_GOALS)
+        
+        # Generate class distribution
+        dataset_distribution = generate_class_distribution(
+            num_classes=num_classes,
+            total_items=num_items,
+            balanced=is_balanced
+        )
+        
+        # Create pools of true values based on the distribution
+        true_values_pool = []
+        for class_info in dataset_distribution:
+            true_values_pool.extend([class_info["label"]] * class_info["count"])
+        random.shuffle(true_values_pool)
+        
+        # Get list of valid labels for prediction
+        valid_labels = [item["label"] for item in dataset_distribution]
 
         # Create initial experiment record
         started_at = datetime.now(timezone.utc)
@@ -555,13 +618,15 @@ def simulate(
             scoreId=score.id if score else None,
             parameters=json.dumps({
                 "target_accuracy": accuracy,
-                "num_items": num_items
+                "num_items": num_items,
+                "num_classes": num_classes,
+                "is_balanced": is_balanced
             }),
             startedAt=started_at.isoformat().replace('+00:00', 'Z'),
             estimatedRemainingSeconds=num_items,
-            scoreType=score_type,
-            dataBalance=data_balance,
-            scoreGoal=score_goal
+            scoreGoal=score_goal,
+            datasetClassDistribution=json.dumps(dataset_distribution),
+            isDatasetClassDistributionBalanced=is_balanced
         )
         
         # Lists to store true and predicted values for metrics calculation
@@ -589,66 +654,93 @@ def simulate(
                     
                 # Only calculate metrics if we have enough samples
                 if len(y_true) > 0:
+                    # Calculate timing values first
+                    processed_items = len(y_true)
+                    elapsed_seconds = int((datetime.now(timezone.utc) - started_at).total_seconds())
+                    estimated_remaining_seconds = int(elapsed_seconds * (thread_experiment.totalItems - processed_items) / processed_items) if processed_items > 0 else 0
+
+                    # Calculate predicted class distribution
+                    unique_classes, class_counts = np.unique(y_pred, return_counts=True)
+                    predicted_distribution = [
+                        {"label": str(label), "count": int(count)} 
+                        for label, count in zip(unique_classes, class_counts)
+                    ]
+                    
+                    # Calculate if predictions are balanced
+                    total = sum(class_counts)
+                    expected_count = total / len(class_counts)
+                    tolerance = 0.2  # 20% tolerance
+                    is_predicted_balanced = all(
+                        abs(count - expected_count) <= expected_count * tolerance
+                        for count in class_counts
+                    )
+                    
                     # Calculate metrics (convert to percentages)
                     acc = accuracy_score(y_true, y_pred) * 100
                     
-                    # Handle cases where we don't have both classes yet
+                    # For multiclass, use macro-averaged metrics
                     try:
-                        prec = precision_score(y_true, y_pred, pos_label="Yes", zero_division=0) * 100
-                        sens = recall_score(y_true, y_pred, pos_label="Yes", zero_division=0) * 100
+                        prec = precision_score(y_true, y_pred, average='macro', zero_division=0) * 100
+                        sens = recall_score(y_true, y_pred, average='macro', zero_division=0) * 100
+                        
+                        # Get all possible labels from both dataset and predictions
+                        all_labels = sorted(set(valid_labels))  # Use the global valid_labels
+                        
+                        # Create confusion matrix with all known labels
+                        conf_matrix = confusion_matrix(
+                            y_true, 
+                            y_pred, 
+                            labels=all_labels
+                        ).tolist()  # Convert to list here
+                        
+                        # Calculate specificity for multiclass (one-vs-rest approach)
+                        specificities = []
+                        n_classes = len(all_labels)
+                        for i in range(n_classes):
+                            # Convert to binary problem for each class
+                            y_true_binary = (y_true == all_labels[i])
+                            y_pred_binary = (y_pred == all_labels[i])
+                            tn = np.sum(~y_true_binary & ~y_pred_binary)
+                            fp = np.sum(~y_true_binary & y_pred_binary)
+                            spec = (tn / (tn + fp)) * 100 if (tn + fp) > 0 else 0
+                            specificities.append(spec)
+                        
+                        # Use macro-averaged specificity
+                        spec = np.mean(specificities)
+                        
                     except Exception as e:
-                        logger.warning(f"Could not calculate precision/recall: {e}")
+                        logger.warning(f"Could not calculate metrics: {e}")
                         prec = None
                         sens = None
-                        
-                    conf_matrix = confusion_matrix(y_true, y_pred, labels=["Yes", "No"])
-                    
-                    # Calculate specificity safely
-                    tn = conf_matrix[1,1]  # true negatives
-                    fp = conf_matrix[0,1]  # false positives
-                    spec = float(tn / (tn + fp) * 100) if (tn + fp) > 0 else None
-                    
-                    # Define `total_items` using `thread_experiment.totalItems`
-                    total_items = thread_experiment.totalItems
-                    
-                    # Calculate elapsed and estimated remaining seconds
-                    elapsed_seconds = int((datetime.now(timezone.utc) - started_at).total_seconds())
-                    processed_items = len(y_true)
-                    estimated_remaining_seconds = int(elapsed_seconds * (total_items - processed_items) / processed_items) if processed_items > 0 else 0
+                        spec = None
+                        conf_matrix = []
+                        all_labels = []
                     
                     # Update the experiment
                     thread_experiment.update(
                         accuracy=float(acc),
                         precision=float(prec) if prec is not None else None,
                         sensitivity=float(sens) if sens is not None else None,
-                        specificity=spec,
+                        specificity=float(spec) if spec is not None else None,
                         processedItems=processed_items,
                         elapsedSeconds=elapsed_seconds,
                         estimatedRemainingSeconds=estimated_remaining_seconds,
                         confusionMatrix=json.dumps({
-                            "matrix": conf_matrix.tolist(),
-                            "labels": ["Yes", "No"]
+                            "matrix": conf_matrix,
+                            "labels": all_labels
                         }),
-                        scoreType=thread_experiment.scoreType,
-                        dataBalance=thread_experiment.dataBalance,
-                        scoreGoal=thread_experiment.scoreGoal
+                        predictedClassDistribution=json.dumps(predicted_distribution),
+                        isPredictedClassDistributionBalanced=is_predicted_balanced,
                     )
                 
             except Exception as e:
                 logger.error(f"Error updating metrics: {str(e)}")
         
-        # Pre-generate balanced true values
-        yes_count = num_items // 2
-        no_count = num_items - yes_count
-        true_values_pool = ["Yes"] * yes_count + ["No"] * no_count
-        random.shuffle(true_values_pool)
-        
         # Simulate results
         for i in range(num_items):
-            # Get next true value from balanced pool
+            # Get next true value from pool
             true_value = true_values_pool[i]
-            predicted_value = true_value if random.random() < accuracy else \
-                            ("No" if true_value == "Yes" else "Yes")
+            predicted_value = simulate_prediction(true_value, accuracy, valid_labels)
             
             true_values.append(true_value)
             predicted_values.append(predicted_value)
