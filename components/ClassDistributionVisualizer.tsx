@@ -50,7 +50,6 @@ export default function ClassDistributionVisualizer({
     [...data].sort((a, b) => b.count - a.count) : 
     []
   const classCount = safeData.length
-  console.log('isBalanced:', isBalanced, 'classCount:', classCount)
   
   const hasHeader = !hideHeader && (isBalanced !== null || classCount > 0)
 

@@ -35,6 +35,7 @@ import { formatDuration } from '@/utils/format-duration'
 import { ExperimentDashboardSkeleton } from "@/components/loading-skeleton"
 import { ModelListResult, AmplifyListResult, AmplifyGetResult } from '@/types/shared'
 import { listFromModel, observeQueryFromModel, getFromModel } from "@/utils/amplify-helpers"
+import type { ExperimentTaskData } from "@/components/ExperimentTask"
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -158,8 +159,6 @@ function useViewportWidth() {
   return isNarrowViewport
 }
 
-export const client = generateClient<Schema>()
-
 // Add these helper functions at the top
 async function listAccounts(): ModelListResult<Schema['Account']['type']> {
   return listFromModel<Schema['Account']['type']>(
@@ -202,6 +201,9 @@ const getAccuracyFromMetrics = (metrics: any): number => {
   }
 };
 
+// Keep the client definition
+const client = generateClient<Schema>()
+
 export default function ExperimentsDashboard(): JSX.Element {
   const [experiments, setExperiments] = useState<NonNullable<Schema['Experiment']['type']>[]>([])
   const [experimentTaskProps, setExperimentTaskProps] = useState<ExperimentTaskProps['task'] | null>(null)
@@ -217,6 +219,7 @@ export default function ExperimentsDashboard(): JSX.Element {
   const [scorecardNames, setScorecardNames] = useState<Record<string, string>>({})
   const [hasMounted, setHasMounted] = useState(false)
   const isNarrowViewport = useViewportWidth()
+  const [scoreResults, setScoreResults] = useState<Schema['ScoreResult']['type'][]>([])
 
   // Add mounted state check
   useEffect(() => {
@@ -327,14 +330,24 @@ export default function ExperimentsDashboard(): JSX.Element {
     const updateExperimentTaskProps = async () => {
       if (selectedExperiment) {
         const props = await getExperimentTaskProps(selectedExperiment)
-        setExperimentTaskProps(props)
+        
+        // Ensure type safety when creating updatedData
+        const updatedData: ExperimentTaskData = {
+          ...props.data,
+          scoreResults: scoreResults as Schema['ScoreResult']['type'][]
+        }
+        
+        setExperimentTaskProps({
+          ...props,
+          data: updatedData
+        })
       } else {
         setExperimentTaskProps(null)
       }
     }
 
     updateExperimentTaskProps()
-  }, [selectedExperiment]) // Only depend on selectedExperiment
+  }, [selectedExperiment, scoreResults])
 
   // Move all client usage into useEffect to avoid server/client mismatch
   useEffect(() => {
@@ -483,6 +496,36 @@ export default function ExperimentsDashboard(): JSX.Element {
 
     fetchScorecardNames();
   }, [experiments]);
+
+  // Add subscription effect
+  useEffect(() => {
+    if (!selectedExperiment?.id) {
+      setScoreResults([])
+      return
+    }
+
+    console.log('Starting subscription for experiment:', selectedExperiment.id)
+    
+    const subscription = observeQueryFromModel<Schema['ScoreResult']['type']>(
+      client.models.ScoreResult,
+      {
+        experimentId: { eq: selectedExperiment.id }
+      }
+    ).subscribe({
+      next: ({ items }) => {
+        console.log('Received score results:', items.length)
+        setScoreResults(items)
+      },
+      error: (error) => {
+        console.error('Subscription error:', error)
+      }
+    })
+
+    return () => {
+      console.log('Cleaning up subscription')
+      subscription.unsubscribe()
+    }
+  }, [selectedExperiment?.id])
 
   // Ensure consistent initial state
   if (!hasMounted) {

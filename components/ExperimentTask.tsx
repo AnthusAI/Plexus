@@ -10,6 +10,8 @@ import { CardButton } from '@/components/CardButton'
 import ScoreTypesHeader from '@/components/ScoreTypesHeader'
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
+import { ExperimentTaskScoreResult } from '@/components/ExperimentTaskScoreResult'
+import type { Schema } from "@/amplify/data/resource"
 
 export interface ExperimentMetric {
   name: string
@@ -22,6 +24,7 @@ export interface ExperimentMetric {
 export interface ExperimentTaskData {
   accuracy: number | null
   metrics: ExperimentMetric[]
+  metricsExplanation?: string | null
   processedItems: number
   totalItems: number
   progress: number
@@ -42,6 +45,7 @@ export interface ExperimentTaskData {
   isDatasetClassDistributionBalanced?: boolean | null
   predictedClassDistribution?: { label: string, count: number }[]
   isPredictedClassDistributionBalanced?: boolean | null
+  scoreResults?: Schema['ScoreResult']['type'][]
 }
 
 export interface ExperimentTaskProps {
@@ -126,12 +130,10 @@ export default function ExperimentTask({
   
   useEffect(() => {
     if (variant === 'detail') {
-      console.log('Progress bar timing data:', {
-        elapsedSeconds: data.elapsedSeconds,
-        estimatedRemainingSeconds: data.estimatedRemainingSeconds,
-        progress: data.progress,
-        processedItems: data.processedItems,
-        totalItems: data.totalItems
+      console.log('ExperimentTask data:', {
+        metricsExplanation: data.metricsExplanation,
+        metrics: data.metrics,
+        variant
       })
     }
   }, [variant, data])
@@ -206,7 +208,11 @@ export default function ExperimentTask({
         </>
       )}
       
-      <MetricsGauges gauges={metrics} variant={metricsVariant} />
+      <MetricsGauges 
+        gauges={metrics} 
+        variant={metricsVariant} 
+        metricsExplanation={data.metricsExplanation}
+      />
       
       {variant !== 'detail' && (
         <div className="mt-4">
@@ -287,6 +293,26 @@ export default function ExperimentTask({
             </div>
           )}
         </>
+      )}
+
+      {data.scoreResults && data.scoreResults.length > 0 && (
+        <div className="mt-8">
+          <h3 className="text-lg font-semibold mb-4">
+            {data.scoreResults.length} Predictions
+          </h3>
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            {data.scoreResults.map((result) => (
+              <ExperimentTaskScoreResult
+                key={result.id}
+                id={result.id}
+                value={result.value}
+                confidence={result.confidence}
+                metadata={result.metadata}
+                correct={result.correct}
+              />
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )
