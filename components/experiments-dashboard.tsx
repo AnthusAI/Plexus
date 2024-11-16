@@ -89,6 +89,7 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
     isDatasetClassDistributionBalanced: rawExperiment.isDatasetClassDistributionBalanced ?? null,
     predictedClassDistribution: rawExperiment.predictedClassDistribution || null,
     isPredictedClassDistributionBalanced: rawExperiment.isPredictedClassDistributionBalanced || null,
+    metricsExplanation: rawExperiment.metricsExplanation || null,
     items: async (options?: any) => ({ data: [], nextToken: null }),
     scoreResults: async (options?: any) => ({ data: [], nextToken: null }),
     scoringJobs: async (options?: any) => ({ data: [], nextToken: null })
@@ -348,6 +349,7 @@ export default function ExperimentsDashboard(): JSX.Element {
             isDatasetClassDistributionBalanced: experiment.isDatasetClassDistributionBalanced ?? null,
             predictedClassDistribution,
             isPredictedClassDistributionBalanced: experiment.isPredictedClassDistributionBalanced ?? null,
+            metricsExplanation: experiment.metricsExplanation,
         },
     };
   }
@@ -382,25 +384,62 @@ export default function ExperimentsDashboard(): JSX.Element {
             client.models.Experiment,
             { accountId: { eq: foundAccountId } }
           ).subscribe({
-            next: async ({ items }) => {
+            next: async ({ items }: { items: Schema['Experiment']['type'][] }) => {
               try {
-
+                console.log('Subscription update received, raw items:', items);
+                
                 const transformedItems = await Promise.all(
                   items.map(async (item: Schema['Experiment']['type']) => {
-                    // Find existing experiment BEFORE transformation
+                    console.log('Processing item:', {
+                      id: item.id,
+                      metricsExplanation: item.metricsExplanation,
+                      metrics: item.metrics
+                    });
+
+                    // Find existing experiment
                     const existingExperiment = experiments.find(exp => exp.id === item.id);
                     
-                    // Create merged item preserving the existing values
+                    if (existingExperiment) {
+                      console.log('Found existing experiment:', {
+                        id: existingExperiment.id,
+                        metricsExplanation: existingExperiment.metricsExplanation,
+                        metrics: existingExperiment.metrics
+                      });
+                    }
+
+                    // Create merged item preserving values
                     const mergedItem = {
                       ...item,
-                      scoreGoal: existingExperiment?.scoreGoal || item.scoreGoal
+                      metricsExplanation: item.metricsExplanation || existingExperiment?.metricsExplanation,
+                      metrics: item.metrics || existingExperiment?.metrics,
+                      scoreGoal: item.scoreGoal || existingExperiment?.scoreGoal,
                     };
-                    
-                    // Transform and log the result
+
+                    console.log('Merged item before transform:', {
+                      id: mergedItem.id,
+                      metricsExplanation: mergedItem.metricsExplanation,
+                      metrics: mergedItem.metrics
+                    });
+
                     const transformed = transformExperiment(mergedItem);
 
+                    console.log('Item after transform:', {
+                      id: transformed.id,
+                      metricsExplanation: transformed.metricsExplanation,
+                      metrics: transformed.metrics
+                    });
+                    
                     return transformed;
                   })
+                );
+
+                // Log the final array
+                console.log('Final transformed items:', 
+                  transformedItems.map(item => ({
+                    id: item.id,
+                    metricsExplanation: item.metricsExplanation,
+                    metrics: item.metrics
+                  }))
                 );
 
                 // Create a new array with all properties preserved
