@@ -21,35 +21,37 @@ export function ExperimentTaskScoreResult({
     JSON.parse(metadata) : metadata
 
   return (
-    <div className="p-4 bg-card rounded-lg">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          {correct !== null && (
-            <div className="mr-2">
-              {correct ? (
-                <ThumbsUp className="h-4 w-4 text-true" />
-              ) : (
-                <ThumbsDown className="h-4 w-4 text-false" />
-              )}
-            </div>
-          )}
-          <div>
-            <div className="font-medium">
-              {parsedMetadata?.predicted_value || 'Unknown Prediction'}
-            </div>
-            {parsedMetadata?.true_value && (
-              <div className="text-sm text-muted-foreground">
-                Actual: {parsedMetadata.true_value}
+    <Card className="p-4 bg-card rounded-lg border-0">
+      <CardContent className="flex flex-col">
+        <div className="flex items-start justify-between">
+          <div className="flex items-start space-x-4">
+            {correct !== null && (
+              <div className="mt-1">
+                {correct ? (
+                  <ThumbsUp className="h-4 w-4 text-true" />
+                ) : (
+                  <ThumbsDown className="h-4 w-4 text-false" />
+                )}
               </div>
             )}
+            <div>
+              <div className="font-medium">
+                {parsedMetadata?.predicted_value || 'Unknown Prediction'}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {parsedMetadata?.true_value && !correct && (
+                  <span>Actual: {parsedMetadata.true_value}</span>
+                )}
+              </div>
+            </div>
           </div>
+          {confidence !== undefined && confidence !== null && (
+            <Badge className="bg-card-light self-start">
+              {Math.round(confidence * 100)}% confident
+            </Badge>
+          )}
         </div>
-        {confidence !== undefined && confidence !== null && (
-          <Badge variant="outline">
-            {Math.round(confidence * 100)}% confident
-          </Badge>
-        )}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   )
-} 
+}

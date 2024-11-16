@@ -384,13 +384,13 @@ export default function ExperimentsDashboard(): JSX.Element {
             client.models.Experiment,
             { accountId: { eq: foundAccountId } }
           ).subscribe({
-            next: async ({ items }) => {
+            next: async ({ items }: { items: Schema['Experiment']['type'][] }) => {
               try {
                 setExperiments(prevExperiments => {
                   const updatedExperiments = [...prevExperiments]
                   let hasChanges = false
 
-                  items.forEach(newItem => {
+                  items.forEach((newItem: Schema['Experiment']['type']) => {
                     const index = updatedExperiments.findIndex(exp => exp.id === newItem.id)
                     if (index === -1) {
                       // New experiment
@@ -431,7 +431,7 @@ export default function ExperimentsDashboard(): JSX.Element {
 
                 // Update selected experiment if needed
                 if (selectedExperimentRef.current) {
-                  const updatedItem = items.find(item => 
+                  const updatedItem = items.find((item: Schema['Experiment']['type']) => 
                     item.id === selectedExperimentRef.current?.id
                   )
                   if (updatedItem) {
@@ -558,13 +558,13 @@ export default function ExperimentsDashboard(): JSX.Element {
     
     // Then set up subscription for updates
     const sub = observeScoreResults(client, selectedExperiment.id).subscribe({
-      next: ({ items }) => {
+      next: ({ items }: { items: Schema['ScoreResult']['type'][] }) => {
         console.log('Subscription update - score results:', items.length)
         setScoreResults(prevResults => {
           const allResults = [...prevResults]
           let hasChanges = false
           
-          items.forEach(newItem => {
+          items.forEach((newItem: Schema['ScoreResult']['type']) => {
             const existingIndex = allResults.findIndex(r => r.id === newItem.id)
             if (existingIndex === -1) {
               hasChanges = true
