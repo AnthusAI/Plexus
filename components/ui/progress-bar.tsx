@@ -1,5 +1,6 @@
 import React from "react"
 import { cn } from "@/lib/utils"
+import { Loader2, AlarmClock, AlarmClockCheck, CircleCheck } from "lucide-react"
 
 export interface ProgressBarProps {
   progress: number
@@ -24,13 +25,41 @@ export function ProgressBar({
 }: ProgressBarProps) {
   const displayProgress = Math.round(progress)
   const clampedProgress = Math.min(Math.max(displayProgress, 0), 100)
+  const isInProgress = clampedProgress < 100
 
   return (
     <div className={cn("flex flex-col gap-1", className)}>
       {(elapsedTime || estimatedTimeRemaining) && (
         <div className="flex justify-between text-sm text-foreground h-5">
-          {elapsedTime && <span>Elapsed: {elapsedTime}</span>}
-          {estimatedTimeRemaining && <span>ETA: {estimatedTimeRemaining}</span>}
+          {elapsedTime && (
+            <div className="flex items-center gap-1">
+              {isInProgress ? (
+                <Loader2 className="w-4 h-4 text-foreground animate-spin shrink-0" />
+              ) : (
+                <CircleCheck className="w-4 h-4 text-foreground shrink-0" />
+              )}
+              <span>Elapsed: {elapsedTime}</span>
+            </div>
+          )}
+          {estimatedTimeRemaining && (
+            <div className="flex items-center gap-1">
+              {isInProgress ? (
+                <span>
+                  ETA:{' '}
+                  <span className={cn(isFocused && "text-focus")}>
+                    {estimatedTimeRemaining}
+                  </span>
+                </span>
+              ) : (
+                <span>Done</span>
+              )}
+              {isInProgress ? (
+                <AlarmClock className="w-4 h-4 text-foreground shrink-0" />
+              ) : (
+                <AlarmClockCheck className="w-4 h-4 text-foreground shrink-0" />
+              )}
+            </div>
+          )}
         </div>
       )}
       <div className="relative w-full h-8 bg-neutral rounded-md">

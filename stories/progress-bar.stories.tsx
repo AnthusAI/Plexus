@@ -1,6 +1,6 @@
 import React from "react"
 import type { Meta, StoryObj } from '@storybook/react'
-import { ProgressBar } from '@/components/ui/progress-bar'
+import { ProgressBar } from '../components/ui/progress-bar'
 
 const meta = {
   title: 'UI/ProgressBar',
@@ -130,6 +130,44 @@ export const Demo: Story = {
             </div>
           </div>
         </div>
+      </div>
+    ),
+  ],
+}
+
+export const InProgress: Story = {
+  args: {
+    progress: 45,
+    processedItems: 45,
+    totalItems: 100,
+    elapsedTime: "2m 15s",
+    estimatedTimeRemaining: "2m 45s",
+    color: "secondary",
+    isFocused: false,
+  },
+  decorators: [
+    (Story) => (
+      <div className="w-1/2 min-w-[300px]">
+        <Story />
+      </div>
+    ),
+  ],
+}
+
+export const Complete: Story = {
+  args: {
+    progress: 100,
+    processedItems: 100,
+    totalItems: 100,
+    elapsedTime: "5m 0s",
+    estimatedTimeRemaining: "0s",
+    color: "secondary",
+    isFocused: false,
+  },
+  decorators: [
+    (Story) => (
+      <div className="w-1/2 min-w-[300px]">
+        <Story />
       </div>
     ),
   ],
