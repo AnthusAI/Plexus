@@ -91,13 +91,37 @@ export function observeQueryFromModel<T>(
     'isPredictedClassDistributionBalanced'
   ]
 
-  return (model.observeQuery({
+  console.log('Setting up subscription for model:', model.name);
+  console.log('Selection set:', selectionSet);
+  console.log('Filter:', filter);
+
+  const subscription = model.observeQuery({
     filter: filter ? filter : undefined,
     selectionSet
-  }) as any) as { subscribe: (handlers: { 
-    next: (data: { items: T[] }) => void
-    error: (error: Error) => void 
-  }) => { unsubscribe: () => void } }
+  });
+
+  return {
+    subscribe: (handlers: { 
+      next: (data: { items: T[] }) => void
+      error: (error: Error) => void 
+    }) => {
+      const wrappedHandlers = {
+        next: (data: { items: T[] }) => {
+          console.log('Raw subscription data received:', 
+            data.items.map(item => ({
+              id: (item as any).id,
+              metricsExplanation: (item as any).metricsExplanation,
+              metrics: (item as any).metrics
+            }))
+          );
+          handlers.next(data);
+        },
+        error: handlers.error
+      };
+      
+      return subscription.subscribe(wrappedHandlers);
+    }
+  } as any;
 }
 
 export async function getFromModel<T>(

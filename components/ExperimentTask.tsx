@@ -12,6 +12,7 @@ import ClassDistributionVisualizer from '@/components/ClassDistributionVisualize
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
 import { ExperimentTaskScoreResult } from '@/components/ExperimentTaskScoreResult'
 import type { Schema } from "@/amplify/data/resource"
+import MetricsGaugesExplanation from '@/components/MetricsGaugesExplanation'
 
 export interface ExperimentMetric {
   name: string
@@ -197,10 +198,14 @@ export default function ExperimentTask({
               />
             </div>
 
+            <MetricsGaugesExplanation
+              explanation={data.metricsExplanation}
+              goal={data.scoreGoal}
+            />
+
             <MetricsGauges 
               gauges={metrics} 
-              variant={metricsVariant} 
-              metricsExplanation={data.metricsExplanation}
+              variant={metricsVariant}
             />
 
             <div 
