@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react'
+import React, { useRef, useState, useEffect, useMemo } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { FlaskConical, Square, X } from 'lucide-react'
 import MetricsGauges from '@/components/MetricsGauges'
@@ -118,6 +118,186 @@ function computeIsBalanced(distribution: { label: string, count: number }[] | nu
   )
 }
 
+const ScoreResultsList = React.memo(({ results }: { 
+  results: Schema['ScoreResult']['type'][] 
+}) => (
+  <div className="space-y-2 max-h-[800px] overflow-y-auto">
+    {results.map((result) => (
+      <ExperimentTaskScoreResult
+        key={result.id}
+        id={result.id}
+        value={result.value}
+        confidence={result.confidence}
+        metadata={result.metadata}
+        correct={result.value === 1}
+      />
+    ))}
+  </div>
+))
+
+const WaffleChart = React.memo(({ 
+  height, 
+  processedItems, 
+  accuracy, 
+  totalItems 
+}: { 
+  height: number
+  processedItems: number
+  accuracy: number
+  totalItems: number
+}) => (
+  <ResponsiveWaffle
+    data={[
+      { 
+        id: 'correct', 
+        label: 'Correct', 
+        value: Math.round(processedItems * (accuracy ?? 0) / 100) 
+      },
+      { 
+        id: 'incorrect', 
+        label: 'Incorrect', 
+        value: processedItems - Math.round(processedItems * (accuracy ?? 0) / 100) 
+      },
+      { 
+        id: 'unprocessed', 
+        label: 'Unprocessed', 
+        value: totalItems - processedItems 
+      }
+    ]}
+    total={totalItems}
+    rows={5}
+    columns={20}
+    padding={1}
+    valueFormat=".0f"
+    colors={({ id }) => {
+      const colorMap: Record<string, string> = {
+        correct: 'var(--true)',
+        incorrect: 'var(--false)',
+        unprocessed: 'var(--neutral)'
+      }
+      return colorMap[id] || 'var(--neutral)'
+    }}
+    borderRadius={2}
+    fillDirection="right"
+    margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+    legends={[{
+      anchor: 'bottom',
+      direction: 'row',
+      justify: false,
+      translateX: 0,
+      translateY: 30,
+      itemsSpacing: 4,
+      itemWidth: 100,
+      itemHeight: 20,
+      itemDirection: 'left-to-right',
+      itemOpacity: 1,
+      itemTextColor: 'var(--text-muted)',
+      symbolSize: 20
+    }]}
+  />
+))
+
+const GridContent = React.memo(({ data }: { data: ExperimentTaskData }) => (
+  <div className="mt-4">
+    <ProgressBar 
+      progress={data.progress}
+      elapsedTime={data.elapsedSeconds !== null ? 
+        formatDuration(data.elapsedSeconds) : undefined}
+      processedItems={data.processedItems}
+      totalItems={data.totalItems}
+      estimatedTimeRemaining={data.estimatedRemainingSeconds !== null ? 
+        formatDuration(data.estimatedRemainingSeconds) : undefined}
+      color="secondary"
+      isFocused={false}
+    />
+  </div>
+))
+
+const DetailContent = React.memo(({ 
+  data, 
+  isFullWidth,
+  metrics,
+  metricsVariant,
+  waffleContainerRef,
+  waffleHeight
+}: { 
+  data: ExperimentTaskData
+  isFullWidth: boolean
+  metrics: any[]
+  metricsVariant: string
+  waffleContainerRef: React.RefObject<HTMLDivElement>
+  waffleHeight: number
+}) => (
+  <div className={`w-full ${isFullWidth ? 'grid grid-cols-2 gap-8' : ''}`}>
+    <div className="w-full">
+      <div className="mb-4">
+        <ProgressBar 
+          progress={data.progress}
+          elapsedTime={data.elapsedSeconds !== null ? 
+            formatDuration(data.elapsedSeconds) : undefined}
+          processedItems={data.processedItems}
+          totalItems={data.totalItems}
+          estimatedTimeRemaining={data.estimatedRemainingSeconds !== null ? 
+            formatDuration(data.estimatedRemainingSeconds) : undefined}
+          color="secondary"
+          isFocused={true}
+        />
+      </div>
+
+      <div className="mb-4">
+        <ClassDistributionVisualizer
+          data={data.datasetClassDistribution}
+          isBalanced={data.isDatasetClassDistributionBalanced}
+        />
+      </div>
+
+      <div className="mb-4">
+        <PredictedClassDistributionVisualizer
+          data={data.predictedClassDistribution}
+        />
+      </div>
+
+      <MetricsGaugesExplanation
+        explanation={data.metricsExplanation}
+        goal={data.scoreGoal}
+      />
+
+      <MetricsGauges 
+        gauges={metrics} 
+        variant={metricsVariant}
+      />
+
+      <div 
+        ref={waffleContainerRef}
+        className="mt-4 w-full" 
+        style={{ height: `${waffleHeight}px` }}
+      >
+        <WaffleChart 
+          height={waffleHeight}
+          processedItems={data.processedItems}
+          accuracy={data.accuracy ?? 0}
+          totalItems={data.totalItems}
+        />
+      </div>
+
+      {data.confusionMatrix && (
+        <div className="mt-8">
+          <ConfusionMatrix data={data.confusionMatrix} />
+        </div>
+      )}
+    </div>
+
+    {data.scoreResults && data.scoreResults.length > 0 && (
+      <div className={isFullWidth ? 'w-full' : 'mt-8'}>
+        <h3 className="text-lg font-semibold mb-4">
+          {data.scoreResults.length} Predictions
+        </h3>
+        <ScoreResultsList results={data.scoreResults} />
+      </div>
+    )}
+  </div>
+))
+
 export default function ExperimentTask({ 
   variant = 'grid',
   task,
@@ -128,7 +308,6 @@ export default function ExperimentTask({
   onClose
 }: ExperimentTaskProps) {
   const data = task.data ?? {} as ExperimentTaskData
-
   const computedType = computeExperimentType(data)
   const waffleContainerRef = useRef<HTMLDivElement>(null)
   const [waffleHeight, setWaffleHeight] = useState(20)
@@ -146,170 +325,50 @@ export default function ExperimentTask({
     return () => window.removeEventListener('resize', updateWaffleHeight)
   }, [])
 
-  const metrics = variant === 'detail' ? 
-    (data.metrics ?? []).map(metric => ({
-      value: metric.value,
-      label: metric.name,
-      information: getMetricInformation(metric.name),
-      maximum: metric.maximum ?? 100,
-      unit: metric.unit ?? '%',
-      priority: metric.priority
-    }))
-    : [
-      {
-        value: data.accuracy ?? undefined,
-        label: 'Accuracy',
-        backgroundColor: 'var(--gauge-background)',
-        priority: true
-      }
-    ]
+  const metrics = useMemo(() => 
+    variant === 'detail' ? 
+      (data.metrics ?? []).map(metric => ({
+        value: metric.value,
+        label: metric.name,
+        information: getMetricInformation(metric.name),
+        maximum: metric.maximum ?? 100,
+        unit: metric.unit ?? '%',
+        priority: metric.priority
+      }))
+      : [
+        {
+          value: data.accuracy ?? undefined,
+          label: 'Accuracy',
+          backgroundColor: 'var(--gauge-background)',
+          priority: true
+        }
+      ]
+  , [variant, data.metrics, data.accuracy])
 
   const metricsVariant = variant === 'grid' ? 'grid' : 'detail'
 
-  const visualization = (
-    <div className={`w-full ${isFullWidth ? 'grid grid-cols-2 gap-8' : ''}`}>
-      {variant === 'detail' && (
-        <>
-          <div className="w-full">
-            <div className="mb-4">
-              <ProgressBar 
-                progress={data.progress}
-                elapsedTime={data.elapsedSeconds !== null ? 
-                  formatDuration(data.elapsedSeconds) : undefined}
-                processedItems={data.processedItems}
-                totalItems={data.totalItems}
-                estimatedTimeRemaining={data.estimatedRemainingSeconds !== null ? 
-                  formatDuration(data.estimatedRemainingSeconds) : undefined}
-                color="secondary"
-                isFocused={variant === 'detail'}
-              />
-            </div>
-
-            <div className="mb-4">
-              <ClassDistributionVisualizer
-                data={data.datasetClassDistribution}
-                isBalanced={data.isDatasetClassDistributionBalanced}
-              />
-            </div>
-
-            <div className="mb-4">
-              <PredictedClassDistributionVisualizer
-                data={data.predictedClassDistribution}
-              />
-            </div>
-
-            <MetricsGaugesExplanation
-              explanation={data.metricsExplanation}
-              goal={data.scoreGoal}
+  const headerContent = useMemo(() => (
+    <div className="flex justify-end w-full">
+      {variant === 'detail' ? (
+        <div className="flex items-center space-x-2">
+          {typeof onToggleFullWidth === 'function' && (
+            <CardButton
+              icon={Square}
+              onClick={onToggleFullWidth}
             />
-
-            <MetricsGauges 
-              gauges={metrics} 
-              variant={metricsVariant}
-            />
-
-            <div 
-              ref={waffleContainerRef}
-              className="mt-4 w-full" 
-              style={{ height: `${waffleHeight}px` }}
-            >
-              <ResponsiveWaffle
-                data={[
-                  { 
-                    id: 'correct', 
-                    label: 'Correct', 
-                    value: Math.round(data.processedItems * (data.accuracy ?? 0) / 100) 
-                  },
-                  { 
-                    id: 'incorrect', 
-                    label: 'Incorrect', 
-                    value: data.processedItems - Math.round(data.processedItems * (data.accuracy ?? 0) / 100) 
-                  },
-                  { 
-                    id: 'unprocessed', 
-                    label: 'Unprocessed', 
-                    value: data.totalItems - data.processedItems 
-                  }
-                ]}
-                total={data.totalItems}
-                rows={5}
-                columns={20}
-                padding={1}
-                valueFormat=".0f"
-                colors={({ id }) => {
-                  const colorMap: Record<string, string> = {
-                    correct: 'var(--true)',
-                    incorrect: 'var(--false)',
-                    unprocessed: 'var(--neutral)'
-                  }
-                  return colorMap[id] || 'var(--neutral)'
-                }}
-                borderRadius={2}
-                fillDirection="right"
-                margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
-                legends={[{
-                  anchor: 'bottom',
-                  direction: 'row',
-                  justify: false,
-                  translateX: 0,
-                  translateY: 30,
-                  itemsSpacing: 4,
-                  itemWidth: 100,
-                  itemHeight: 20,
-                  itemDirection: 'left-to-right',
-                  itemOpacity: 1,
-                  itemTextColor: 'var(--text-muted)',
-                  symbolSize: 20
-                }]}
-              />
-            </div>
-
-            {data.confusionMatrix && (
-              <div className="mt-8">
-                <ConfusionMatrix data={data.confusionMatrix} />
-              </div>
-            )}
-          </div>
-
-          {data.scoreResults && data.scoreResults.length > 0 && (
-            <div className={isFullWidth ? 'w-full' : 'mt-8'}>
-              <h3 className="text-lg font-semibold mb-4">
-                {data.scoreResults.length} Predictions
-              </h3>
-              <div className="space-y-2 max-h-[800px] overflow-y-auto">
-                {data.scoreResults.map((result) => (
-                  <ExperimentTaskScoreResult
-                    key={result.id}
-                    id={result.id}
-                    value={result.value}
-                    confidence={result.confidence}
-                    metadata={result.metadata}
-                    correct={result.value === 1}
-                  />
-                ))}
-              </div>
-            </div>
           )}
-        </>
-      )}
-      
-      {variant !== 'detail' && (
-        <div className="mt-4">
-          <ProgressBar 
-            progress={data.progress}
-            elapsedTime={data.elapsedSeconds !== null ? 
-              formatDuration(data.elapsedSeconds) : undefined}
-            processedItems={data.processedItems}
-            totalItems={data.totalItems}
-            estimatedTimeRemaining={data.estimatedRemainingSeconds !== null ? 
-              formatDuration(data.estimatedRemainingSeconds) : undefined}
-            color="secondary"
-            isFocused={false}
-          />
+          {typeof onClose === 'function' && (
+            <CardButton
+              icon={X}
+              onClick={onClose}
+            />
+          )}
         </div>
+      ) : (
+        <FlaskConical className="h-6 w-6" />
       )}
     </div>
-  )
+  ), [variant, onToggleFullWidth, onClose])
 
   return (
     <Task
@@ -326,31 +385,23 @@ export default function ExperimentTask({
       onClose={onClose}
       renderHeader={(props) => (
         <TaskHeader {...props}>
-          <div className="flex justify-end w-full">
-            {variant === 'detail' ? (
-              <div className="flex items-center space-x-2">
-                {typeof onToggleFullWidth === 'function' && (
-                  <CardButton
-                    icon={Square}
-                    onClick={onToggleFullWidth}
-                  />
-                )}
-                {typeof onClose === 'function' && (
-                  <CardButton
-                    icon={X}
-                    onClick={onClose}
-                  />
-                )}
-              </div>
-            ) : (
-              <FlaskConical className="h-6 w-6" />
-            )}
-          </div>
+          {headerContent}
         </TaskHeader>
       )}
       renderContent={(props) => (
         <TaskContent {...props}>
-          {visualization}
+          {variant === 'grid' ? (
+            <GridContent data={data} />
+          ) : (
+            <DetailContent 
+              data={data}
+              isFullWidth={isFullWidth ?? false}
+              metrics={metrics}
+              metricsVariant={metricsVariant}
+              waffleContainerRef={waffleContainerRef}
+              waffleHeight={waffleHeight}
+            />
+          )}
         </TaskContent>
       )}
     />

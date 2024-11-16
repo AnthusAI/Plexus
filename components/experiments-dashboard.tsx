@@ -1,5 +1,5 @@
 "use client"
-import React from "react"
+import React, { useMemo } from "react"
 import { useState, useEffect, useRef } from "react"
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
@@ -354,7 +354,7 @@ export default function ExperimentsDashboard(): JSX.Element {
     };
   }
 
-  // Move all client usage into useEffect to avoid server/client mismatch
+  // Modify the main subscription handler to be more selective about updates
   useEffect(() => {
     if (!client) return
 
@@ -372,97 +372,92 @@ export default function ExperimentsDashboard(): JSX.Element {
           
           const filteredExperiments = experimentModels
             .map(transformExperiment)
-            .sort((a: Schema['Experiment']['type'], b: Schema['Experiment']['type']) => 
+            .sort((a, b) => 
               new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             )
           
           setExperiments(filteredExperiments)
           setIsLoading(false)
 
-          // Set up subscription
+          // Set up subscription with more selective updates
           subscription = observeQueryFromModel<Schema['Experiment']['type']>(
             client.models.Experiment,
             { accountId: { eq: foundAccountId } }
           ).subscribe({
-            next: async ({ items }: { items: Schema['Experiment']['type'][] }) => {
+            next: async ({ items }) => {
               try {
-                console.log('Subscription update received, raw items:', items);
-                
-                const transformedItems = await Promise.all(
-                  items.map(async (item: Schema['Experiment']['type']) => {
-                    console.log('Processing item:', {
-                      id: item.id,
-                      metricsExplanation: item.metricsExplanation,
-                      metrics: item.metrics
-                    });
+                setExperiments(prevExperiments => {
+                  const updatedExperiments = [...prevExperiments]
+                  let hasChanges = false
 
-                    // Find existing experiment
-                    const existingExperiment = experiments.find(exp => exp.id === item.id);
-                    
-                    if (existingExperiment) {
-                      console.log('Found existing experiment:', {
-                        id: existingExperiment.id,
-                        metricsExplanation: existingExperiment.metricsExplanation,
-                        metrics: existingExperiment.metrics
-                      });
+                  items.forEach(newItem => {
+                    const index = updatedExperiments.findIndex(exp => exp.id === newItem.id)
+                    if (index === -1) {
+                      // New experiment
+                      hasChanges = true
+                      updatedExperiments.push(transformExperiment(newItem))
+                    } else {
+                      const existingExp = updatedExperiments[index]
+                      // Only update if relevant fields have changed
+                      const relevantFieldsChanged = 
+                        existingExp.status !== newItem.status ||
+                        existingExp.processedItems !== newItem.processedItems ||
+                        existingExp.totalItems !== newItem.totalItems ||
+                        existingExp.metrics !== newItem.metrics ||
+                        existingExp.errorMessage !== newItem.errorMessage ||
+                        existingExp.errorDetails !== newItem.errorDetails
+
+                      if (relevantFieldsChanged) {
+                        hasChanges = true
+                        updatedExperiments[index] = transformExperiment({
+                          ...existingExp,
+                          ...newItem,
+                          // Preserve fields that might be missing in the update
+                          metricsExplanation: newItem.metricsExplanation || existingExp.metricsExplanation,
+                          metrics: newItem.metrics || existingExp.metrics,
+                          scoreGoal: newItem.scoreGoal || existingExp.scoreGoal,
+                        })
+                      }
                     }
-
-                    // Create merged item preserving values
-                    const mergedItem = {
-                      ...item,
-                      metricsExplanation: item.metricsExplanation || existingExperiment?.metricsExplanation,
-                      metrics: item.metrics || existingExperiment?.metrics,
-                      scoreGoal: item.scoreGoal || existingExperiment?.scoreGoal,
-                    };
-
-                    console.log('Merged item before transform:', {
-                      id: mergedItem.id,
-                      metricsExplanation: mergedItem.metricsExplanation,
-                      metrics: mergedItem.metrics
-                    });
-
-                    const transformed = transformExperiment(mergedItem);
-
-                    console.log('Item after transform:', {
-                      id: transformed.id,
-                      metricsExplanation: transformed.metricsExplanation,
-                      metrics: transformed.metrics
-                    });
-                    
-                    return transformed;
                   })
-                );
 
-                // Log the final array
-                console.log('Final transformed items:', 
-                  transformedItems.map(item => ({
-                    id: item.id,
-                    metricsExplanation: item.metricsExplanation,
-                    metrics: item.metrics
-                  }))
-                );
+                  // Only trigger re-render if we actually made changes
+                  return hasChanges ? 
+                    updatedExperiments.sort((a, b) => 
+                      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                    ) : 
+                    prevExperiments
+                })
 
-                // Create a new array with all properties preserved
-                const validItems = [...transformedItems]
-                  .sort((a, b) => 
-                    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                  );
-
-                setExperiments(validItems);
-                
                 // Update selected experiment if needed
                 if (selectedExperimentRef.current) {
-                  const updatedExperiment = validItems.find(exp => 
-                    exp.id === selectedExperimentRef.current?.id
-                  );
-                  if (updatedExperiment) {
-                    setSelectedExperiment(updatedExperiment);
-                    const updatedProps = await getExperimentTaskProps(updatedExperiment);
-                    setExperimentTaskProps(updatedProps);
+                  const updatedItem = items.find(item => 
+                    item.id === selectedExperimentRef.current?.id
+                  )
+                  if (updatedItem) {
+                    const relevantFieldsChanged = 
+                      selectedExperimentRef.current.status !== updatedItem.status ||
+                      selectedExperimentRef.current.processedItems !== updatedItem.processedItems ||
+                      selectedExperimentRef.current.totalItems !== updatedItem.totalItems ||
+                      selectedExperimentRef.current.metrics !== updatedItem.metrics ||
+                      selectedExperimentRef.current.errorMessage !== updatedItem.errorMessage ||
+                      selectedExperimentRef.current.errorDetails !== updatedItem.errorDetails
+
+                    if (relevantFieldsChanged) {
+                      const transformed = transformExperiment({
+                        ...selectedExperimentRef.current,
+                        ...updatedItem,
+                        metricsExplanation: updatedItem.metricsExplanation || 
+                          selectedExperimentRef.current.metricsExplanation,
+                        metrics: updatedItem.metrics || selectedExperimentRef.current.metrics,
+                        scoreGoal: updatedItem.scoreGoal || selectedExperimentRef.current.scoreGoal,
+                      })
+                      setSelectedExperiment(transformed)
+                    }
                   }
                 }
               } catch (error) {
-                console.error('Error in subscription handler:', error);
+                console.error('Error in subscription handler:', error)
               }
             },
             error: (error: Error) => {
@@ -474,12 +469,7 @@ export default function ExperimentsDashboard(): JSX.Element {
           setIsLoading(false)
         }
       } catch (error) {
-        if (error instanceof Error) {
-          console.error('Error details:', error)
-          setError(error)
-        } else {
-          setError(new Error('An unexpected error occurred'))
-        }
+        console.error('Error in setupRealTimeSync:', error)
         setIsLoading(false)
       }
     }
@@ -539,7 +529,7 @@ export default function ExperimentsDashboard(): JSX.Element {
     fetchScorecardNames();
   }, [experiments]);
 
-  // Add subscription effect
+  // Update the score results subscription effect
   useEffect(() => {
     if (!selectedExperiment?.id) {
       setScoreResults([])
@@ -548,23 +538,49 @@ export default function ExperimentsDashboard(): JSX.Element {
 
     console.log('Starting subscription for experiment:', selectedExperiment.id)
     
+    // First, get initial results
+    const fetchInitialResults = async () => {
+      try {
+        const response = await client.models.ScoreResult.list({
+          filter: { experimentId: { eq: selectedExperiment.id } },
+          limit: 1000
+        })
+        console.log('Initial score results:', response.data.length)
+        setScoreResults(response.data.sort((a, b) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        ))
+      } catch (error) {
+        console.error('Error fetching initial results:', error)
+      }
+    }
+    
+    fetchInitialResults()
+    
+    // Then set up subscription for updates
     const sub = observeScoreResults(client, selectedExperiment.id).subscribe({
-      next: ({ items }: SubscriptionResponse) => {
-        console.log('Received score results:', items.length)
-        setScoreResults([...items])
-        
-        if (experimentTaskProps) {
-          setExperimentTaskProps(prev => {
-            if (!prev) return null
-            return {
-              ...prev,
-              data: {
-                ...prev.data,
-                scoreResults: items
-              }
+      next: ({ items }) => {
+        console.log('Subscription update - score results:', items.length)
+        setScoreResults(prevResults => {
+          const allResults = [...prevResults]
+          let hasChanges = false
+          
+          items.forEach(newItem => {
+            const existingIndex = allResults.findIndex(r => r.id === newItem.id)
+            if (existingIndex === -1) {
+              hasChanges = true
+              allResults.push(newItem)
+            } else if (JSON.stringify(allResults[existingIndex]) !== JSON.stringify(newItem)) {
+              hasChanges = true
+              allResults[existingIndex] = newItem
             }
           })
-        }
+          
+          if (!hasChanges) return prevResults
+          
+          return allResults.sort((a, b) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          )
+        })
       },
       error: (error: Error) => {
         console.error('Subscription error:', error)
@@ -577,20 +593,29 @@ export default function ExperimentsDashboard(): JSX.Element {
     }
   }, [selectedExperiment?.id])
 
+  // Next, let's optimize the experimentTaskProps update to avoid unnecessary re-renders
   useEffect(() => {
     const updateExperimentTaskProps = async () => {
       if (selectedExperiment) {
         const props = await getExperimentTaskProps(selectedExperiment)
-
-        // Create a new data object with score results
-        const updatedData = {
-          ...props.data,
-          scoreResults: scoreResults
-        }
-                
-        setExperimentTaskProps({
-          ...props,
-          data: updatedData
+        
+        setExperimentTaskProps(prevProps => {
+          // Only update if there are actual changes
+          if (!prevProps) return { ...props, data: { ...props.data, scoreResults } }
+          
+          const hasChanges = 
+            prevProps.data.accuracy !== props.data.accuracy ||
+            prevProps.data.progress !== props.data.progress ||
+            prevProps.data.processedItems !== props.data.processedItems ||
+            prevProps.data.totalItems !== props.data.totalItems ||
+            scoreResults !== prevProps.data.scoreResults
+          
+          if (!hasChanges) return prevProps
+          
+          return {
+            ...props,
+            data: { ...props.data, scoreResults }
+          }
         })
       } else {
         setExperimentTaskProps(null)
@@ -600,12 +625,122 @@ export default function ExperimentsDashboard(): JSX.Element {
     updateExperimentTaskProps()
   }, [selectedExperiment, scoreResults])
 
-  // Ensure consistent initial state
+  // Move these to the top, before any early returns
+  const filteredExperiments = useMemo(() => {
+    return experiments.filter(experiment => {
+      if (!selectedScorecard) return true
+      return experiment.scorecardId === selectedScorecard
+    })
+  }, [experiments, selectedScorecard])
+
+  const ExperimentList = useMemo(() => (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="w-[30%]">Experiment</TableHead>
+          <TableHead className="w-[10%] @[630px]:table-cell hidden">Type</TableHead>
+          <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Progress</TableHead>
+          <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Accuracy</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {filteredExperiments.map((experiment) => (
+          <TableRow 
+            key={experiment.id} 
+            onClick={() => setSelectedExperiment(experiment)} 
+            className={`cursor-pointer transition-colors duration-200 
+              ${experiment.id === selectedExperiment?.id ? 'bg-muted' : 'hover:bg-muted'}`}
+          >
+            <TableCell className="font-medium sm:pr-4">
+              <div className="block @[630px]:hidden">
+                <div className="flex justify-between mb-4">
+                  {/* Left column - reduce width to ~40% */}
+                  <div className="w-[40%] space-y-0.5">
+                    <div className="font-semibold truncate">
+                      <span className={experiment.id === selectedExperiment?.id ? 'text-focus' : ''}>
+                        {scorecardNames[experiment.id] || 'Unknown Scorecard'}
+                      </span>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {getAccuracyFromMetrics(experiment.metrics) > 0 ? 'Accuracy' : ''}
+                    </div>
+                  </div>
+
+                  {/* Right column - increase width to ~55% for progress bars */}
+                  <div className="w-[55%] space-y-2">
+                    <ExperimentListProgressBar 
+                      progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
+                      totalSamples={experiment.totalItems ?? 0}
+                      isFocused={experiment.id === selectedExperiment?.id}
+                    />
+                    <ExperimentListAccuracyBar 
+                      progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
+                      accuracy={getAccuracyFromMetrics(experiment.metrics)}
+                      isFocused={experiment.id === selectedExperiment?.id}
+                    />
+                  </div>
+                </div>
+              </div>
+              {/* Wide variant - visible at 630px and above */}
+              <div className="hidden @[630px]:block">
+                <div className="font-semibold">
+                  <span className={experiment.id === selectedExperiment?.id ? 'text-focus' : ''}>
+                    {scorecardNames[experiment.id] || 'Unknown Scorecard'}
+                  </span>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
+                </div>
+              </div>
+            </TableCell>
+            <TableCell className="hidden @[630px]:table-cell text-sm text-muted-foreground">
+              {getAccuracyFromMetrics(experiment.metrics) > 0 ? 'Accuracy' : ''}
+            </TableCell>
+            <TableCell className="hidden @[630px]:table-cell w-[15%] text-right">
+              <ExperimentListProgressBar 
+                progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
+                totalSamples={experiment.totalItems ?? 0}
+                isFocused={experiment.id === selectedExperiment?.id}
+              />
+            </TableCell>
+            <TableCell className="hidden @[630px]:table-cell w-[15%]">
+              <ExperimentListAccuracyBar 
+                progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
+                accuracy={getAccuracyFromMetrics(experiment.metrics)}
+                isFocused={experiment.id === selectedExperiment?.id}
+              />
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  ), [filteredExperiments, selectedExperiment?.id, scorecardNames])
+
+  const experimentTaskComponent = useMemo(() => {
+    if (!selectedExperiment || !experimentTaskProps) return null
+    
+    return (
+      <ExperimentTask
+        variant="detail"
+        task={experimentTaskProps}
+        isFullWidth={isFullWidth}
+        onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+        onClose={() => {
+          setSelectedExperiment(null)
+          setIsFullWidth(false)
+        }}
+      />
+    )
+  }, [selectedExperiment?.id, experimentTaskProps, isFullWidth])
+
+  // Now do the early returns
   if (!hasMounted) {
     return <ExperimentDashboardSkeleton />;
   }
 
-  // Early return for loading state
   if (isLoading || !hasMounted) {
     return <ExperimentDashboardSkeleton />;
   }
@@ -618,12 +753,7 @@ export default function ExperimentsDashboard(): JSX.Element {
     )
   }
 
-  const filteredExperiments = experiments.filter(experiment => {
-    if (!selectedScorecard) return true
-    return experiment.scorecardId === selectedScorecard
-  })
-
-  // Wrap the main content in ClientOnly
+  // Rest of the component remains the same...
   return (
     <ClientOnly>
       <div className="space-y-4 h-full flex flex-col">
@@ -643,107 +773,14 @@ export default function ExperimentsDashboard(): JSX.Element {
               />
             </div>
             <div className="flex-1 overflow-auto @container">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[30%]">Experiment</TableHead>
-                    <TableHead className="w-[10%] @[630px]:table-cell hidden">Type</TableHead>
-                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Progress</TableHead>
-                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Accuracy</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredExperiments.map((experiment) => (
-                    <TableRow 
-                      key={experiment.id} 
-                      onClick={() => setSelectedExperiment(experiment)} 
-                      className={`cursor-pointer transition-colors duration-200 
-                        ${experiment.id === selectedExperiment?.id ? 'bg-muted' : 'hover:bg-muted'}`}
-                    >
-                      <TableCell className="font-medium sm:pr-4">
-                        <div className="block @[630px]:hidden">
-                          <div className="flex justify-between mb-4">
-                            {/* Left column - reduce width to ~40% */}
-                            <div className="w-[40%] space-y-0.5">
-                              <div className="font-semibold truncate">
-                                <span className={experiment.id === selectedExperiment?.id ? 'text-focus' : ''}>
-                                  {scorecardNames[experiment.id] || 'Unknown Scorecard'}
-                                </span>
-                              </div>
-                              <div className="text-sm text-muted-foreground">
-                                {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
-                              </div>
-                              <div className="text-sm text-muted-foreground">
-                                {getAccuracyFromMetrics(experiment.metrics) > 0 ? 'Accuracy' : ''}
-                              </div>
-                            </div>
-
-                            {/* Right column - increase width to ~55% for progress bars */}
-                            <div className="w-[55%] space-y-2">
-                              <ExperimentListProgressBar 
-                                progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
-                                totalSamples={experiment.totalItems ?? 0}
-                                isFocused={experiment.id === selectedExperiment?.id}
-                              />
-                              <ExperimentListAccuracyBar 
-                                progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
-                                accuracy={getAccuracyFromMetrics(experiment.metrics)}
-                                isFocused={experiment.id === selectedExperiment?.id}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                        {/* Wide variant - visible at 630px and above */}
-                        <div className="hidden @[630px]:block">
-                          <div className="font-semibold">
-                            <span className={experiment.id === selectedExperiment?.id ? 'text-focus' : ''}>
-                              {scorecardNames[experiment.id] || 'Unknown Scorecard'}
-                            </span>
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden @[630px]:table-cell text-sm text-muted-foreground">
-                        {getAccuracyFromMetrics(experiment.metrics) > 0 ? 'Accuracy' : ''}
-                      </TableCell>
-                      <TableCell className="hidden @[630px]:table-cell w-[15%] text-right">
-                        <ExperimentListProgressBar 
-                          progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
-                          totalSamples={experiment.totalItems ?? 0}
-                          isFocused={experiment.id === selectedExperiment?.id}
-                        />
-                      </TableCell>
-                      <TableCell className="hidden @[630px]:table-cell w-[15%]">
-                        <ExperimentListAccuracyBar 
-                          progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
-                          accuracy={getAccuracyFromMetrics(experiment.metrics)}
-                          isFocused={experiment.id === selectedExperiment?.id}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              {ExperimentList}
             </div>
           </div>
 
           {selectedExperiment && experimentTaskProps && !isNarrowViewport && (
             <div className={`${isFullWidth ? 'w-full' : 'w-1/2 min-w-[300px]'} flex flex-col flex-1`}>
               <div className="flex-1 flex flex-col">
-                <ExperimentTask
-                  variant="detail"
-                  task={experimentTaskProps}
-                  isFullWidth={isFullWidth}
-                  onToggleFullWidth={() => {
-                    setIsFullWidth(!isFullWidth);
-                  }}
-                  onClose={() => {
-                    setSelectedExperiment(null);
-                    setIsFullWidth(false);
-                  }}
-                />
+                {experimentTaskComponent}
               </div>
             </div>
           )}
