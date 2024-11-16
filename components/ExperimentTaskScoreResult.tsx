@@ -21,7 +21,7 @@ export function ExperimentTaskScoreResult({
     JSON.parse(metadata) : metadata
 
   return (
-    <div className="p-4 bg-background rounded-lg">
+    <div className="p-4 bg-card rounded-lg">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
           {correct !== null && (
