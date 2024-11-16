@@ -21,7 +21,7 @@ export function ExperimentTaskScoreResult({
     JSON.parse(metadata) : metadata
 
   return (
-    <Card className="p-4 bg-card rounded-lg border-0">
+    <Card className="px-0 pt-4 pb-0 bg-card rounded-lg border-0">
       <CardContent className="flex flex-col">
         <div className="flex items-start justify-between">
           <div className="flex items-start space-x-4">
