@@ -10,6 +10,8 @@ import { CardButton } from '@/components/CardButton'
 import ScoreTypesHeader from '@/components/ScoreTypesHeader'
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
+import { ExperimentTaskScoreResult } from '@/components/ExperimentTaskScoreResult'
+import type { Schema } from "@/amplify/data/resource"
 
 export interface ExperimentMetric {
   name: string
@@ -56,7 +58,7 @@ export interface ExperimentTaskProps {
     time: string
     summary?: string
     description?: string
-    data?: ExperimentTaskData
+    data: ExperimentTaskData
   }
   onClick?: () => void
   controlButtons?: React.ReactNode
@@ -125,16 +127,6 @@ export default function ExperimentTask({
   onClose
 }: ExperimentTaskProps) {
   const data = task.data ?? {} as ExperimentTaskData
-  
-  useEffect(() => {
-    if (variant === 'detail') {
-      console.log('ExperimentTask data:', {
-        metricsExplanation: data.metricsExplanation,
-        metrics: data.metrics,
-        variant
-      })
-    }
-  }, [variant, data])
 
   const computedType = computeExperimentType(data)
   const waffleContainerRef = useRef<HTMLDivElement>(null)
@@ -174,43 +166,127 @@ export default function ExperimentTask({
   const metricsVariant = variant === 'grid' ? 'grid' : 'detail'
 
   const visualization = (
-    <div className="w-full">
+    <div className={`w-full ${isFullWidth ? 'grid grid-cols-2 gap-8' : ''}`}>
       {variant === 'detail' && (
         <>
-          <div className="mb-4">
-            <ProgressBar 
-              progress={data.progress}
-              elapsedTime={data.elapsedSeconds !== null ? 
-                formatDuration(data.elapsedSeconds) : undefined}
-              processedItems={data.processedItems}
-              totalItems={data.totalItems}
-              estimatedTimeRemaining={data.estimatedRemainingSeconds !== null ? 
-                formatDuration(data.estimatedRemainingSeconds) : undefined}
-              color="secondary"
-              isFocused={variant === 'detail'}
+          <div className="w-full">
+            <div className="mb-4">
+              <ProgressBar 
+                progress={data.progress}
+                elapsedTime={data.elapsedSeconds !== null ? 
+                  formatDuration(data.elapsedSeconds) : undefined}
+                processedItems={data.processedItems}
+                totalItems={data.totalItems}
+                estimatedTimeRemaining={data.estimatedRemainingSeconds !== null ? 
+                  formatDuration(data.estimatedRemainingSeconds) : undefined}
+                color="secondary"
+                isFocused={variant === 'detail'}
+              />
+            </div>
+
+            <div className="mb-4">
+              <ClassDistributionVisualizer
+                data={data.datasetClassDistribution}
+                isBalanced={data.isDatasetClassDistributionBalanced}
+              />
+            </div>
+
+            <div className="mb-4">
+              <PredictedClassDistributionVisualizer
+                data={data.predictedClassDistribution}
+              />
+            </div>
+
+            <MetricsGauges 
+              gauges={metrics} 
+              variant={metricsVariant} 
+              metricsExplanation={data.metricsExplanation}
             />
+
+            <div 
+              ref={waffleContainerRef}
+              className="mt-4 w-full" 
+              style={{ height: `${waffleHeight}px` }}
+            >
+              <ResponsiveWaffle
+                data={[
+                  { 
+                    id: 'correct', 
+                    label: 'Correct', 
+                    value: Math.round(data.processedItems * (data.accuracy ?? 0) / 100) 
+                  },
+                  { 
+                    id: 'incorrect', 
+                    label: 'Incorrect', 
+                    value: data.processedItems - Math.round(data.processedItems * (data.accuracy ?? 0) / 100) 
+                  },
+                  { 
+                    id: 'unprocessed', 
+                    label: 'Unprocessed', 
+                    value: data.totalItems - data.processedItems 
+                  }
+                ]}
+                total={data.totalItems}
+                rows={5}
+                columns={20}
+                padding={1}
+                valueFormat=".0f"
+                colors={({ id }) => {
+                  const colorMap: Record<string, string> = {
+                    correct: 'var(--true)',
+                    incorrect: 'var(--false)',
+                    unprocessed: 'var(--neutral)'
+                  }
+                  return colorMap[id] || 'var(--neutral)'
+                }}
+                borderRadius={2}
+                fillDirection="right"
+                margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+                legends={[{
+                  anchor: 'bottom',
+                  direction: 'row',
+                  justify: false,
+                  translateX: 0,
+                  translateY: 30,
+                  itemsSpacing: 4,
+                  itemWidth: 100,
+                  itemHeight: 20,
+                  itemDirection: 'left-to-right',
+                  itemOpacity: 1,
+                  itemTextColor: 'var(--text-muted)',
+                  symbolSize: 20
+                }]}
+              />
+            </div>
+
+            {data.confusionMatrix && (
+              <div className="mt-8">
+                <ConfusionMatrix data={data.confusionMatrix} />
+              </div>
+            )}
           </div>
 
-          <div className="mb-4">
-            <ClassDistributionVisualizer
-              data={data.datasetClassDistribution}
-              isBalanced={data.isDatasetClassDistributionBalanced}
-            />
-          </div>
-
-          <div className="mb-4">
-            <PredictedClassDistributionVisualizer
-              data={data.predictedClassDistribution}
-            />
-          </div>
+          {data.scoreResults && data.scoreResults.length > 0 && (
+            <div className={isFullWidth ? 'w-full' : 'mt-8'}>
+              <h3 className="text-lg font-semibold mb-4">
+                {data.scoreResults.length} Predictions
+              </h3>
+              <div className="space-y-2 max-h-[800px] overflow-y-auto">
+                {data.scoreResults.map((result) => (
+                  <ExperimentTaskScoreResult
+                    key={result.id}
+                    id={result.id}
+                    value={result.value}
+                    confidence={result.confidence}
+                    metadata={result.metadata}
+                    correct={result.value === 1}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
-      
-      <MetricsGauges 
-        gauges={metrics} 
-        variant={metricsVariant} 
-        metricsExplanation={data.metricsExplanation}
-      />
       
       {variant !== 'detail' && (
         <div className="mt-4">
@@ -225,91 +301,6 @@ export default function ExperimentTask({
             color="secondary"
             isFocused={false}
           />
-        </div>
-      )}
-
-      {variant === 'detail' && (
-        <>
-          <div 
-            ref={waffleContainerRef}
-            className="mt-4 w-full" 
-            style={{ height: `${waffleHeight}px` }}
-          >
-            <ResponsiveWaffle
-              data={[
-                { 
-                  id: 'correct', 
-                  label: 'Correct', 
-                  value: Math.round(data.processedItems * (data.accuracy ?? 0) / 100) 
-                },
-                { 
-                  id: 'incorrect', 
-                  label: 'Incorrect', 
-                  value: data.processedItems - Math.round(data.processedItems * (data.accuracy ?? 0) / 100) 
-                },
-                { 
-                  id: 'unprocessed', 
-                  label: 'Unprocessed', 
-                  value: data.totalItems - data.processedItems 
-                }
-              ]}
-              total={data.totalItems}
-              rows={5}
-              columns={20}
-              padding={1}
-              valueFormat=".0f"
-              colors={({ id }) => {
-                const colorMap: Record<string, string> = {
-                  correct: 'var(--true)',
-                  incorrect: 'var(--false)',
-                  unprocessed: 'var(--neutral)'
-                }
-                return colorMap[id] || 'var(--neutral)'
-              }}
-              borderRadius={2}
-              fillDirection="right"
-              margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
-              legends={[{
-                anchor: 'bottom',
-                direction: 'row',
-                justify: false,
-                translateX: 0,
-                translateY: 30,
-                itemsSpacing: 4,
-                itemWidth: 100,
-                itemHeight: 20,
-                itemDirection: 'left-to-right',
-                itemOpacity: 1,
-                itemTextColor: 'var(--text-muted)',
-                symbolSize: 20
-              }]}
-            />
-          </div>
-          {data.confusionMatrix && (
-            <div className="mt-8">
-              <ConfusionMatrix data={data.confusionMatrix} />
-            </div>
-          )}
-        </>
-      )}
-
-      {data.scoreResults && data.scoreResults.length > 0 && (
-        <div className="mt-8">
-          <h3 className="text-lg font-semibold mb-4">
-            {data.scoreResults.length} Predictions
-          </h3>
-          <div className="space-y-2 max-h-[400px] overflow-y-auto">
-            {data.scoreResults.map((result) => (
-              <ExperimentTaskScoreResult
-                key={result.id}
-                id={result.id}
-                value={result.value}
-                confidence={result.confidence}
-                metadata={result.metadata}
-                correct={result.correct}
-              />
-            ))}
-          </div>
         </div>
       )}
     </div>

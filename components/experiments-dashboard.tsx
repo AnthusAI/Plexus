@@ -35,6 +35,7 @@ import { formatDuration } from '@/utils/format-duration'
 import { ExperimentDashboardSkeleton } from "@/components/loading-skeleton"
 import { ModelListResult, AmplifyListResult, AmplifyGetResult } from '@/types/shared'
 import { listFromModel, observeQueryFromModel, getFromModel } from "@/utils/amplify-helpers"
+import type { ExperimentTaskData } from '@/components/ExperimentTask'
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -61,15 +62,12 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
     throw new Error('Cannot transform null experiment')
   }
 
-  console.log('Raw experiment metricsExplanation:', rawExperiment.metricsExplanation);
-
   // Create a strongly typed base object with ALL fields
   const safeExperiment = {
     id: rawExperiment.id || '',
     type: rawExperiment.type || '',
     parameters: rawExperiment.parameters || {},
     metrics: rawExperiment.metrics || {},
-    metricsExplanation: rawExperiment.metricsExplanation || null,
     inferences: rawExperiment.inferences || 0,
     cost: rawExperiment.cost || 0,
     createdAt: rawExperiment.createdAt || new Date().toISOString(),
@@ -96,7 +94,6 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
     scoringJobs: async (options?: any) => ({ data: [], nextToken: null })
   };
 
-  console.log('Transformed experiment metricsExplanation:', safeExperiment.metricsExplanation);
   return {
     ...safeExperiment,
     account: async () => ({
@@ -171,10 +168,6 @@ async function listAccounts(): ModelListResult<Schema['Account']['type']> {
 }
 
 async function listExperiments(accountId: string): ModelListResult<Schema['Experiment']['type']> {
-  console.log('Listing experiments with query:', {
-    filter: { accountId: { eq: accountId } },
-    selectionSet: client.models.Experiment.selectionSet
-  });
   return listFromModel<Schema['Experiment']['type']>(
     client.models.Experiment,
     { accountId: { eq: accountId } }
@@ -211,6 +204,33 @@ const getAccuracyFromMetrics = (metrics: any): number => {
 // Keep the client definition
 const client = generateClient<Schema>()
 
+// Add this helper function at the top of the file
+function observeScoreResults(client: any, experimentId: string) {
+  return client.models.ScoreResult.observeQuery({
+    filter: { experimentId: { eq: experimentId } },
+    selectionSet: [
+      'id',
+      'value',
+      'confidence',
+      'metadata',
+      'correct',
+      'itemId',
+      'accountId',
+      'scoringJobId',
+      'experimentId',
+      'scorecardId'
+    ]
+  })
+}
+
+// Add this type at the top with other interfaces
+interface SubscriptionResponse {
+  items: Schema['ScoreResult']['type'][]
+}
+
+// Add this type to help with the state update
+type ExperimentTaskPropsType = ExperimentTaskProps['task']
+
 export default function ExperimentsDashboard(): JSX.Element {
   const [experiments, setExperiments] = useState<NonNullable<Schema['Experiment']['type']>[]>([])
   const [experimentTaskProps, setExperimentTaskProps] = useState<ExperimentTaskProps['task'] | null>(null)
@@ -226,6 +246,7 @@ export default function ExperimentsDashboard(): JSX.Element {
   const [scorecardNames, setScorecardNames] = useState<Record<string, string>>({})
   const [hasMounted, setHasMounted] = useState(false)
   const isNarrowViewport = useViewportWidth()
+  const [scoreResults, setScoreResults] = useState<Schema['ScoreResult']['type'][]>([])
 
   // Add mounted state check
   useEffect(() => {
@@ -238,11 +259,6 @@ export default function ExperimentsDashboard(): JSX.Element {
   }, [selectedExperiment]);
 
   const getExperimentTaskProps = async (experiment: Schema['Experiment']['type']) => {
-    console.log('getExperimentTaskProps received experiment:', {
-      id: experiment.id,
-      metricsExplanation: experiment.metricsExplanation
-    });
-    
     const progress = calculateProgress(experiment.processedItems, experiment.totalItems);
     
     // Get scorecard name
@@ -264,10 +280,6 @@ export default function ExperimentsDashboard(): JSX.Element {
             console.error('Error parsing metrics:', e);
         }
     }
-
-    // metricsExplanation is just a string, no need to parse
-    const metricsExplanation = experiment.metricsExplanation;
-    console.log('getExperimentTaskProps using metricsExplanation:', metricsExplanation);
 
     // Parse class distributions
     let datasetClassDistribution = null;
@@ -303,7 +315,7 @@ export default function ExperimentsDashboard(): JSX.Element {
         }
     }
     
-    const taskProps = {
+    return {
         id: experiment.id,
         type: experiment.type,
         scorecard: scorecardName,
@@ -317,8 +329,7 @@ export default function ExperimentsDashboard(): JSX.Element {
             undefined,
         data: {
             accuracy: getAccuracyFromMetrics(experiment.metrics),
-            metrics: metrics,
-            metricsExplanation: metricsExplanation,
+            metrics: metrics,  // Use the parsed metrics array
             processedItems: experiment.processedItems || 0,
             totalItems: experiment.totalItems || 0,
             progress,
@@ -339,28 +350,7 @@ export default function ExperimentsDashboard(): JSX.Element {
             isPredictedClassDistributionBalanced: experiment.isPredictedClassDistributionBalanced ?? null,
         },
     };
-
-    console.log('getExperimentTaskProps returning taskProps:', {
-      id: taskProps.id,
-      metricsExplanation: taskProps.data.metricsExplanation
-    });
-
-    return taskProps;
   }
-
-  // Effect to update experimentTaskProps when selectedExperiment changes
-  useEffect(() => {
-    const updateExperimentTaskProps = async () => {
-      if (selectedExperiment) {
-        const props = await getExperimentTaskProps(selectedExperiment)
-        setExperimentTaskProps(props)
-      } else {
-        setExperimentTaskProps(null)
-      }
-    }
-
-    updateExperimentTaskProps()
-  }, [selectedExperiment]) // Only depend on selectedExperiment
 
   // Move all client usage into useEffect to avoid server/client mismatch
   useEffect(() => {
@@ -378,21 +368,11 @@ export default function ExperimentsDashboard(): JSX.Element {
           
           const { data: experimentModels } = await listExperiments(foundAccountId)
           
-          console.log('Initial experiment models:', experimentModels.map(exp => ({
-            id: exp.id,
-            metricsExplanation: exp.metricsExplanation
-          })));
-          
           const filteredExperiments = experimentModels
             .map(transformExperiment)
             .sort((a: Schema['Experiment']['type'], b: Schema['Experiment']['type']) => 
               new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             )
-          
-          console.log('Filtered experiments after transform:', filteredExperiments.map(exp => ({
-            id: exp.id,
-            metricsExplanation: exp.metricsExplanation
-          })));
           
           setExperiments(filteredExperiments)
           setIsLoading(false)
@@ -404,40 +384,20 @@ export default function ExperimentsDashboard(): JSX.Element {
           ).subscribe({
             next: async ({ items }) => {
               try {
-                console.log('Subscription received items:', items.map(item => ({
-                  id: item.id,
-                  metricsExplanation: item.metricsExplanation
-                })));
 
                 const transformedItems = await Promise.all(
                   items.map(async (item: Schema['Experiment']['type']) => {
                     // Find existing experiment BEFORE transformation
                     const existingExperiment = experiments.find(exp => exp.id === item.id);
                     
-                    console.log('Found existing experiment:', existingExperiment ? {
-                      id: existingExperiment.id,
-                      metricsExplanation: existingExperiment.metricsExplanation
-                    } : 'none');
-                    
                     // Create merged item preserving the existing values
                     const mergedItem = {
-                      ...existingExperiment, // Keep existing values
-                      ...item, // Override with new values
-                      metricsExplanation: item.metricsExplanation ?? existingExperiment?.metricsExplanation,
+                      ...item,
+                      scoreGoal: existingExperiment?.scoreGoal || item.scoreGoal
                     };
-                    
-                    console.log('Merged item before transform:', {
-                      id: mergedItem.id,
-                      metricsExplanation: mergedItem.metricsExplanation
-                    });
                     
                     // Transform and log the result
                     const transformed = transformExperiment(mergedItem);
-                    
-                    console.log('After transform:', {
-                      id: transformed.id,
-                      metricsExplanation: transformed.metricsExplanation
-                    });
 
                     return transformed;
                   })
@@ -449,11 +409,6 @@ export default function ExperimentsDashboard(): JSX.Element {
                     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
                   );
 
-                console.log('Setting experiments with items:', validItems.map(item => ({
-                  id: item.id,
-                  metricsExplanation: item.metricsExplanation
-                })));
-
                 setExperiments(validItems);
                 
                 // Update selected experiment if needed
@@ -462,10 +417,6 @@ export default function ExperimentsDashboard(): JSX.Element {
                     exp.id === selectedExperimentRef.current?.id
                   );
                   if (updatedExperiment) {
-                    console.log('Updating selected experiment:', {
-                      id: updatedExperiment.id,
-                      metricsExplanation: updatedExperiment.metricsExplanation
-                    });
                     setSelectedExperiment(updatedExperiment);
                     const updatedProps = await getExperimentTaskProps(updatedExperiment);
                     setExperimentTaskProps(updatedProps);
@@ -549,6 +500,67 @@ export default function ExperimentsDashboard(): JSX.Element {
     fetchScorecardNames();
   }, [experiments]);
 
+  // Add subscription effect
+  useEffect(() => {
+    if (!selectedExperiment?.id) {
+      setScoreResults([])
+      return
+    }
+
+    console.log('Starting subscription for experiment:', selectedExperiment.id)
+    
+    const sub = observeScoreResults(client, selectedExperiment.id).subscribe({
+      next: ({ items }: SubscriptionResponse) => {
+        console.log('Received score results:', items.length)
+        setScoreResults([...items])
+        
+        if (experimentTaskProps) {
+          setExperimentTaskProps(prev => {
+            if (!prev) return null
+            return {
+              ...prev,
+              data: {
+                ...prev.data,
+                scoreResults: items
+              }
+            }
+          })
+        }
+      },
+      error: (error: Error) => {
+        console.error('Subscription error:', error)
+      }
+    })
+
+    return () => {
+      console.log('Cleaning up subscription')
+      sub.unsubscribe()
+    }
+  }, [selectedExperiment?.id])
+
+  useEffect(() => {
+    const updateExperimentTaskProps = async () => {
+      if (selectedExperiment) {
+        const props = await getExperimentTaskProps(selectedExperiment)
+
+        // Create a new data object with score results
+        const updatedData = {
+          ...props.data,
+          scoreResults: scoreResults
+        }
+                
+        setExperimentTaskProps({
+          ...props,
+          data: updatedData
+        })
+      } else {
+        setExperimentTaskProps(null)
+      }
+    }
+
+    updateExperimentTaskProps()
+  }, [selectedExperiment, scoreResults])
+
   // Ensure consistent initial state
   if (!hasMounted) {
     return <ExperimentDashboardSkeleton />;
@@ -605,53 +617,7 @@ export default function ExperimentsDashboard(): JSX.Element {
                   {filteredExperiments.map((experiment) => (
                     <TableRow 
                       key={experiment.id} 
-                      onClick={async () => {
-                        console.log('Selected experiment data:', {
-                          id: experiment.id,
-                          metricsExplanation: experiment.metricsExplanation,
-                          rawExperiment: experiment
-                        });
-                        setSelectedExperiment(experiment);
-                        try {
-                          console.log('Fetching score results for experiment:', experiment.id)
-                          
-                          let allResults: Schema['ScoreResult']['type'][] = []
-                          let nextToken: string | undefined = undefined
-                          
-                          do {
-                            const { data: scoreResults, nextToken: newNextToken } = await client.models.ScoreResult.list({
-                              filter: {
-                                experimentId: { eq: experiment.id }
-                              },
-                              limit: 100,
-                              nextToken
-                            })
-                            
-                            allResults = [...allResults, ...scoreResults]
-                            nextToken = newNextToken
-                            
-                            console.log('Batch size:', scoreResults.length, 'Total so far:', allResults.length)
-                          } while (nextToken)
-
-                          console.log('Final total score results:', allResults.length)
-                          if (allResults.length > 0) {
-                            console.log('First result:', {
-                              id: allResults[0].id,
-                              value: allResults[0].value,
-                              experimentId: allResults[0].experimentId,
-                              metadata: allResults[0].metadata
-                            })
-                            console.log('Last result:', {
-                              id: allResults[allResults.length - 1].id,
-                              value: allResults[allResults.length - 1].value,
-                              experimentId: allResults[allResults.length - 1].experimentId,
-                              metadata: allResults[allResults.length - 1].metadata
-                            })
-                          }
-                        } catch (error) {
-                          console.error('Error fetching score results:', error)
-                        }
-                      }} 
+                      onClick={() => setSelectedExperiment(experiment)} 
                       className={`cursor-pointer transition-colors duration-200 
                         ${experiment.id === selectedExperiment?.id ? 'bg-muted' : 'hover:bg-muted'}`}
                     >
