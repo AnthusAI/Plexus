@@ -10,8 +10,6 @@ import { CardButton } from '@/components/CardButton'
 import ScoreTypesHeader from '@/components/ScoreTypesHeader'
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
-import { ExperimentTaskScoreResult } from '@/components/ExperimentTaskScoreResult'
-import type { Schema } from "@/amplify/data/resource"
 
 export interface ExperimentMetric {
   name: string
