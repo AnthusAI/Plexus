@@ -124,6 +124,18 @@ export default function ExperimentTask({
 }: ExperimentTaskProps) {
   const data = task.data ?? {} as ExperimentTaskData
   
+  useEffect(() => {
+    if (variant === 'detail') {
+      console.log('Progress bar timing data:', {
+        elapsedSeconds: data.elapsedSeconds,
+        estimatedRemainingSeconds: data.estimatedRemainingSeconds,
+        progress: data.progress,
+        processedItems: data.processedItems,
+        totalItems: data.totalItems
+      })
+    }
+  }, [variant, data])
+
   const computedType = computeExperimentType(data)
   const waffleContainerRef = useRef<HTMLDivElement>(null)
   const [waffleHeight, setWaffleHeight] = useState(20)
@@ -168,11 +180,11 @@ export default function ExperimentTask({
           <div className="mb-4">
             <ProgressBar 
               progress={data.progress}
-              elapsedTime={data.elapsedSeconds ? 
+              elapsedTime={data.elapsedSeconds !== null ? 
                 formatDuration(data.elapsedSeconds) : undefined}
               processedItems={data.processedItems}
               totalItems={data.totalItems}
-              estimatedTimeRemaining={data.estimatedRemainingSeconds ? 
+              estimatedTimeRemaining={data.estimatedRemainingSeconds !== null ? 
                 formatDuration(data.estimatedRemainingSeconds) : undefined}
               color="secondary"
               isFocused={variant === 'detail'}
@@ -200,11 +212,11 @@ export default function ExperimentTask({
         <div className="mt-4">
           <ProgressBar 
             progress={data.progress}
-            elapsedTime={data.elapsedSeconds ? 
+            elapsedTime={data.elapsedSeconds !== null ? 
               formatDuration(data.elapsedSeconds) : undefined}
             processedItems={data.processedItems}
             totalItems={data.totalItems}
-            estimatedTimeRemaining={data.estimatedRemainingSeconds ? 
+            estimatedTimeRemaining={data.estimatedRemainingSeconds !== null ? 
               formatDuration(data.estimatedRemainingSeconds) : undefined}
             color="secondary"
             isFocused={false}
