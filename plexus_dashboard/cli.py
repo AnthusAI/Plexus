@@ -110,11 +110,11 @@ def select_metrics_and_explanation(
         "binary": {
             "balanced": {
                 "sensitivity": (
-                    ["Accuracy", "Sensitivity", "Precision", "F1"],
+                    ["Sensitivity", "Accuracy", "Precision", "F1"],
                     "Sensitivity is prioritized to maximize true positive detection rate"
                 ),
                 "precision": (
-                    ["Accuracy", "Precision", "Sensitivity", "F1"],
+                    ["Precision", "Accuracy", "Sensitivity", "F1"],
                     "Precision is prioritized to minimize false positive predictions"
                 ),
                 "balanced": (
@@ -124,11 +124,11 @@ def select_metrics_and_explanation(
             },
             "unbalanced": {
                 "sensitivity": (
-                    ["Balanced Accuracy", "Sensitivity", "Precision", "F1"],
+                    ["Sensitivity", "Balanced Accuracy", "Precision", "F1"],
                     "Sensitivity focus with balanced accuracy for imbalanced data"
                 ),
                 "precision": (
-                    ["Balanced Accuracy", "Precision", "Sensitivity", "NPV"],
+                    ["Precision", "Balanced Accuracy", "Sensitivity", "NPV"],
                     "Precision focus with balanced metrics for imbalanced data"
                 ),
                 "balanced": (
@@ -140,11 +140,11 @@ def select_metrics_and_explanation(
         "multiclass": {
             "balanced": {
                 "sensitivity": (
-                    ["Accuracy", "Macro Sensitivity", "Macro Precision", "Macro F1"],
+                    ["Macro Sensitivity", "Accuracy", "Macro Precision", "Macro F1"],
                     "Macro sensitivity prioritized across all classes"
                 ),
                 "precision": (
-                    ["Accuracy", "Macro Precision", "Macro Sensitivity", "Macro F1"],
+                    ["Macro Precision", "Accuracy", "Macro Sensitivity", "Macro F1"],
                     "Macro precision prioritized for reliable predictions"
                 ),
                 "balanced": (
@@ -154,12 +154,12 @@ def select_metrics_and_explanation(
             },
             "unbalanced": {
                 "sensitivity": (
-                    ["Balanced Accuracy", "Macro Sensitivity", "Macro Precision", 
+                    ["Macro Sensitivity", "Balanced Accuracy", "Macro Precision", 
                      "Macro F1"],
                     "Macro sensitivity with balanced accuracy for fairness"
                 ),
                 "precision": (
-                    ["Balanced Accuracy", "Macro Precision", "Macro Sensitivity", 
+                    ["Macro Precision", "Balanced Accuracy", "Macro Sensitivity", 
                      "Macro F1"],
                     "Macro precision with balanced handling of classes"
                 ),
