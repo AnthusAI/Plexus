@@ -616,7 +616,8 @@ def simulate(
             estimatedRemainingSeconds=num_items,
             scoreGoal=score_goal,
             datasetClassDistribution=json.dumps(dataset_distribution),
-            isDatasetClassDistributionBalanced=is_balanced
+            isDatasetClassDistributionBalanced=is_balanced,
+            metricsExplanation="This experiment uses accuracy as the primary metric, along with precision and sensitivity to provide a complete picture of model performance across all classes."
         )
         
         # Lists to store true and predicted values for metrics calculation

@@ -21,18 +21,25 @@ interface MetricsGaugesProps {
   gauges: GaugeConfig[]
   className?: string
   variant?: 'grid' | 'detail'
+  metricsExplanation?: string | null
 }
 
 const MetricsGauges: React.FC<MetricsGaugesProps> = ({ 
   gauges, 
   className = '',
-  variant = 'detail'
+  variant = 'detail',
+  metricsExplanation
 }) => {
   return (
     <div 
       data-testid="metrics-gauges" 
       className="flex flex-col items-center w-full"
     >
+      {metricsExplanation && variant === 'detail' && (
+        <p className="text-sm text-muted-foreground mb-4 text-left w-full">
+          {metricsExplanation}
+        </p>
+      )}
       <div className={cn(
         "w-full",
         variant === 'detail' 
