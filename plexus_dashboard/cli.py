@@ -901,5 +901,38 @@ def simulate_experiment_progress(experiment_id: str, client: PlexusDashboardClie
         estimatedTimeRemaining="00:00:00"
     )
 
+@experiment.command()
+@click.argument('id', required=True)
+def count_results(id: str):
+    """Count score results for an experiment"""
+    client = PlexusDashboardClient()
+    
+    try:
+        # Get experiment with score results included
+        response = client.execute("""
+            query GetExperiment($id: ID!) {
+                getExperiment(id: $id) {
+                    scoreResults {
+                        items {
+                            value
+                            confidence
+                            metadata
+                            correct
+                        }
+                    }
+                }
+            }
+        """, {'id': id})
+        
+        # Get the items array directly from the nested response
+        items = response.get('getExperiment', {}).get('scoreResults', {}).get('items', [])
+        result_count = len(items)
+            
+        click.echo(f"Score results for experiment {id}: {result_count}")
+        
+    except Exception as e:
+        logger.error(f"Error counting results: {e}")
+        click.echo(f"Error: {e}", err=True)
+
 if __name__ == '__main__':
     cli() 
