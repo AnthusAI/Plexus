@@ -130,4 +130,28 @@ export async function getFromModel<T>(
 ): Promise<AmplifyGetResult<T>> {
   const response = await model.get({ id })
   return response as AmplifyGetResult<T>
+}
+
+export function observeScoreResults(client: any, experimentId: string) {
+  return client.models.ScoreResult.observeQuery({
+    filter: { experimentId: { eq: experimentId } },
+    limit: 1000,
+    sort: {
+      field: 'createdAt',
+      direction: 'desc'
+    },
+    selectionSet: [
+      'id',
+      'value',
+      'confidence',
+      'metadata',
+      'correct',
+      'itemId',
+      'accountId',
+      'scoringJobId',
+      'experimentId',
+      'scorecardId',
+      'createdAt'
+    ]
+  })
 } 
