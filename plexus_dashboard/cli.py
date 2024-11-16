@@ -34,7 +34,9 @@ from sklearn.metrics import (
     accuracy_score, 
     precision_score,
     recall_score,  # sensitivity
-    confusion_matrix
+    confusion_matrix,
+    balanced_accuracy_score,
+    f1_score
 )
 import numpy as np
 from datetime import datetime, timezone, timedelta
@@ -50,7 +52,7 @@ logger = logging.getLogger(__name__)
 # Add after other constants
 SCORE_TYPES = ['binary', 'multiclass']
 DATA_BALANCES = ['balanced', 'unbalanced']
-SCORE_GOALS = ['recall', 'precision', 'balanced']
+SCORE_GOALS = ['sensitivity', 'precision', 'balanced']
 POSSIBLE_CLASSES = [
     "3rd Party Clinic", "Agent calling for a Patient", "Follow-up Appointment",
     "New Patient Registration", "Insurance Verification", "Patient Referral",
@@ -97,6 +99,123 @@ def simulate_prediction(true_label: str, accuracy: float, valid_labels: list) ->
         # Pick a random incorrect label
         other_labels = [l for l in valid_labels if l != true_label]
         return random.choice(other_labels)
+
+def select_metrics_and_explanation(
+    is_binary: bool,
+    is_balanced: bool,
+    score_goal: str
+) -> tuple[list[str], str]:
+    """Select appropriate metrics and explanation based on experiment characteristics"""
+    metrics_config = {
+        "binary": {
+            "balanced": {
+                "sensitivity": (
+                    ["Accuracy", "Sensitivity", "Precision", "F1"],
+                    "Sensitivity is prioritized to maximize true positive detection rate"
+                ),
+                "precision": (
+                    ["Accuracy", "Precision", "Sensitivity", "F1"],
+                    "Precision is prioritized to minimize false positive predictions"
+                ),
+                "balanced": (
+                    ["Balanced Accuracy", "Precision", "Sensitivity", "F1"],
+                    "Balanced accuracy ensures equal treatment of all classes"
+                )
+            },
+            "unbalanced": {
+                "sensitivity": (
+                    ["Balanced Accuracy", "Sensitivity", "Precision", "F1"],
+                    "Sensitivity focus with balanced accuracy for imbalanced data"
+                ),
+                "precision": (
+                    ["Balanced Accuracy", "Precision", "Sensitivity", "NPV"],
+                    "Precision focus with balanced metrics for imbalanced data"
+                ),
+                "balanced": (
+                    ["Balanced Accuracy", "Precision", "Sensitivity", "F1"],
+                    "Balanced metrics chosen for imbalanced dataset"
+                )
+            }
+        },
+        "multiclass": {
+            "balanced": {
+                "sensitivity": (
+                    ["Accuracy", "Macro Sensitivity", "Macro Precision", "Macro F1"],
+                    "Macro sensitivity prioritized across all classes"
+                ),
+                "precision": (
+                    ["Accuracy", "Macro Precision", "Macro Sensitivity", "Macro F1"],
+                    "Macro precision prioritized for reliable predictions"
+                ),
+                "balanced": (
+                    ["Accuracy", "Macro Precision", "Macro Sensitivity", "Macro F1"],
+                    "Balanced evaluation across all classes"
+                )
+            },
+            "unbalanced": {
+                "sensitivity": (
+                    ["Balanced Accuracy", "Macro Sensitivity", "Macro Precision", 
+                     "Macro F1"],
+                    "Macro sensitivity with balanced accuracy for fairness"
+                ),
+                "precision": (
+                    ["Balanced Accuracy", "Macro Precision", "Macro Sensitivity", 
+                     "Macro F1"],
+                    "Macro precision with balanced handling of classes"
+                ),
+                "balanced": (
+                    ["Balanced Accuracy", "Macro Precision", "Macro Sensitivity", 
+                     "Macro F1"],
+                    "Balanced metrics for fair multiclass evaluation"
+                )
+            }
+        }
+    }
+    
+    classification_type = "binary" if is_binary else "multiclass"
+    balance_type = "balanced" if is_balanced else "unbalanced"
+    
+    return metrics_config[classification_type][balance_type][score_goal]
+
+def calculate_metrics(true_values, predicted_values, is_binary, is_balanced, score_goal):
+    """Calculate metrics based on experiment characteristics"""
+    metric_names, explanation = select_metrics_and_explanation(
+        is_binary, is_balanced, score_goal
+    )
+    
+    # Convert lists to numpy arrays
+    y_true = np.array(true_values)
+    y_pred = np.array(predicted_values)
+    
+    metrics = []
+    for metric_name in metric_names:
+        if metric_name == "Accuracy":
+            value = accuracy_score(y_true, y_pred) * 100
+        elif metric_name == "Balanced Accuracy":
+            value = balanced_accuracy_score(y_true, y_pred) * 100
+        elif metric_name in ["Precision", "Macro Precision"]:
+            value = precision_score(y_true, y_pred, average='macro', 
+                                  zero_division=0) * 100
+        elif metric_name in ["Sensitivity", "Macro Sensitivity"]:
+            value = recall_score(y_true, y_pred, average='macro', 
+                               zero_division=0) * 100
+        elif metric_name in ["F1", "Macro F1"]:
+            value = f1_score(y_true, y_pred, average='macro', 
+                           zero_division=0) * 100
+        else:  # NPV - custom calculation
+            tn = np.sum((y_true != 1) & (y_pred != 1))
+            fn = np.sum((y_true == 1) & (y_pred != 1))
+            value = (tn / (tn + fn) if (tn + fn) > 0 else 0) * 100
+        
+        metrics.append({
+            "name": metric_name,
+            "value": float(value),
+            "unit": "%",
+            "maximum": 100,
+            "priority": metric_names.index(metric_name) == 0
+        })
+    
+    return metrics, explanation
 
 @click.group()
 def cli():
@@ -595,6 +714,13 @@ def simulate(
         # Get list of valid labels for prediction
         valid_labels = [item["label"] for item in dataset_distribution]
 
+        # First get the initial metrics and explanation
+        initial_metrics, initial_explanation = select_metrics_and_explanation(
+            is_binary=(num_classes == 2),
+            is_balanced=is_balanced,
+            score_goal=score_goal
+        )
+
         # Create initial experiment record
         started_at = datetime.now(timezone.utc)
         experiment = Experiment.create(
@@ -617,95 +743,13 @@ def simulate(
             scoreGoal=score_goal,
             datasetClassDistribution=json.dumps(dataset_distribution),
             isDatasetClassDistributionBalanced=is_balanced,
-            metricsExplanation="This experiment uses accuracy as the primary metric, along with precision and sensitivity to provide a complete picture of model performance across all classes."
+            metricsExplanation=initial_explanation  # Use the explanation from our function
         )
         
         # Lists to store true and predicted values for metrics calculation
         true_values = []
         predicted_values = []
         
-        # Move update_metrics out of thread
-        def calculate_metrics():
-            """Calculate and update experiment metrics"""
-            try:
-                y_true = np.array(true_values)
-                y_pred = np.array(predicted_values)
-                
-                # Calculate base accuracy - this will always work
-                acc = float(accuracy_score(y_true, y_pred) * 100)
-                
-                # Initialize metrics with accuracy
-                metrics = [{
-                    "name": "Accuracy",
-                    "value": acc,
-                    "unit": "%",
-                    "maximum": 100,
-                    "priority": True
-                }]
-                
-                # Initialize other variables
-                conf_matrix = []
-                all_labels = []
-                
-                # Try to calculate additional metrics
-                try:
-                    # Calculate precision and sensitivity (recall)
-                    prec = float(precision_score(y_true, y_pred, average='macro', zero_division=0) * 100)
-                    sens = float(recall_score(y_true, y_pred, average='macro', zero_division=0) * 100)
-                    
-                    metrics.extend([
-                        {
-                            "name": "Precision",
-                            "value": prec,
-                            "unit": "%",
-                            "maximum": 100,
-                            "priority": False
-                        },
-                        {
-                            "name": "Sensitivity",
-                            "value": sens,
-                            "unit": "%",
-                            "maximum": 100,
-                            "priority": False
-                        }
-                    ])
-                    
-                    # Get all possible labels and create confusion matrix
-                    all_labels = sorted(set(valid_labels))
-                    conf_matrix = confusion_matrix(
-                        y_true, 
-                        y_pred, 
-                        labels=all_labels
-                    ).tolist()
-                    
-                    # Calculate specificity
-                    specificities = []
-                    for i in range(len(all_labels)):
-                        y_true_binary = (y_true == all_labels[i])
-                        y_pred_binary = (y_pred == all_labels[i])
-                        tn = np.sum(~y_true_binary & ~y_pred_binary)
-                        fp = np.sum(~y_true_binary & y_pred_binary)
-                        spec = (tn / (tn + fp)) * 100 if (tn + fp) > 0 else 0
-                        specificities.append(spec)
-                    
-                    spec = float(np.mean(specificities))
-                    metrics.append({
-                        "name": "Specificity",
-                        "value": spec,
-                        "unit": "%",
-                        "maximum": 100,
-                        "priority": False
-                    })
-                    
-                except Exception as e:
-                    logger.warning(f"Could not calculate additional metrics: {e}")
-                
-                return metrics, conf_matrix, all_labels, acc
-                
-            except Exception as e:
-                logger.error(f"Error calculating metrics: {str(e)}")
-                return None, None, None, None
-
         # Simulate results
         for i in range(num_items):
             try:
@@ -742,7 +786,13 @@ def simulate(
                 logger.info(f"Created score result: {result.id}")
 
                 # Calculate metrics immediately after each result
-                metrics, conf_matrix, all_labels, acc = calculate_metrics()
+                metrics, metrics_explanation = calculate_metrics(
+                    true_values,
+                    predicted_values,
+                    num_classes == 2,
+                    is_balanced,
+                    score_goal
+                )
                 
                 # Calculate timing values
                 processed_items = len(true_values)
@@ -773,13 +823,19 @@ def simulate(
                     "estimatedRemainingSeconds": estimated_remaining_seconds,
                     "predictedClassDistribution": json.dumps(predicted_distribution),
                     "isPredictedClassDistributionBalanced": is_predicted_balanced,
+                    "metricsExplanation": metrics_explanation,
+                    "confusionMatrix": json.dumps({
+                        "matrix": confusion_matrix(
+                            true_values, 
+                            predicted_values,
+                            labels=valid_labels
+                        ).tolist(),
+                        "labels": valid_labels
+                    })
                 }
                 
-                if conf_matrix and all_labels:
-                    update_data["confusionMatrix"] = json.dumps({
-                        "matrix": conf_matrix,
-                        "labels": all_labels
-                    })
+                # Log the update data to verify metricsExplanation is included
+                logger.info(f"Updating experiment with data: {json.dumps(update_data, indent=2)}")
                 
                 # Create new client for update
                 update_client = PlexusDashboardClient()

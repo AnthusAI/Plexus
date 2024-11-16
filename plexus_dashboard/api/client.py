@@ -356,6 +356,7 @@ class PlexusDashboardClient(_BaseAPIClient):
                     updatedAt
                     parameters
                     metrics
+                    metricsExplanation
                     inferences
                     cost
                     startedAt
