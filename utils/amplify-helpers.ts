@@ -50,70 +50,54 @@ export function observeQueryFromModel<T>(
   model: any,
   filter?: Record<string, any>
 ) {
-  // Define different selection sets based on model name
-  const getSelectionSet = (modelName: string) => {
-    switch (modelName) {
-      case 'ScoreResult':
-        return [
-          'id',
-          'value',
-          'confidence',
-          'metadata',
-          'correct',
-          'itemId',
-          'accountId',
-          'scoringJobId',
-          'experimentId',
-          'scorecardId'
-        ]
-      default:
-        return [
-          'id',
-          'type',
-          'parameters',
-          'metrics',
-          'metricsExplanation',
-          'inferences',
-          'cost',
-          'createdAt',
-          'updatedAt',
-          'status',
-          'startedAt',
-          'elapsedSeconds',
-          'estimatedRemainingSeconds',
-          'totalItems',
-          'processedItems',
-          'errorMessage',
-          'errorDetails',
-          'accountId',
-          'scorecardId',
-          'scoreId',
-          'confusionMatrix',
-          'scoreGoal',
-          'datasetClassDistribution',
-          'isDatasetClassDistributionBalanced',
-          'predictedClassDistribution',
-          'isPredictedClassDistributionBalanced'
-        ]
-    }
-  }
+  const isScoreResult = model.name === 'ScoreResult'
+  const selectionSet = isScoreResult ? [
+    'id',
+    'value',
+    'confidence',
+    'metadata',
+    'correct',
+    'itemId',
+    'accountId',
+    'scoringJobId',
+    'experimentId',
+    'scorecardId'
+  ] : [
+    'id',
+    'type',
+    'parameters',
+    'metrics',
+    'metricsExplanation',
+    'inferences',
+    'cost',
+    'createdAt',
+    'updatedAt',
+    'status',
+    'startedAt',
+    'totalItems',
+    'processedItems',
+    'errorMessage',
+    'errorDetails',
+    'accountId',
+    'scorecardId',
+    'scoreId',
+    'confusionMatrix',
+    'elapsedSeconds',
+    'estimatedRemainingSeconds',
+    'scoreGoal',
+    'datasetClassDistribution',
+    'isDatasetClassDistributionBalanced',
+    'predictedClassDistribution',
+    'isPredictedClassDistributionBalanced'
+  ]
 
-  const query = model.observeQuery({
-    filter: filter || undefined,
-    selectionSet: getSelectionSet(model.name)
-  })
-
-  return {
-    subscribe: (handlers: { 
-      next: (data: { items: T[] }) => void
-      error: (error: Error) => void 
-    }) => {
-      const subscription = query.subscribe(handlers)
-      return {
-        unsubscribe: () => subscription.unsubscribe()
-      }
-    }
-  }
+  return (model.observeQuery({
+    filter: filter ? filter : undefined,
+    selectionSet
+  }) as any) as { subscribe: (handlers: { 
+    next: (data: { items: T[] }) => void
+    error: (error: Error) => void 
+  }) => { unsubscribe: () => void } }
 }
 
 export async function getFromModel<T>(
