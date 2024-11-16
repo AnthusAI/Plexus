@@ -48,7 +48,7 @@ export default function MetricsGaugesExplanation({
           <div className="flex items-start">
             <Badge 
               variant="secondary" 
-              className="flex items-center bg-background border-0"
+              className="flex items-center bg-card-light border-0"
             >
               {getGoalIcon(goal)}
               <span className="capitalize">{goal.toLowerCase()}</span>

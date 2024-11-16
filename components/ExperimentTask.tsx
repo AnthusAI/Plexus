@@ -224,7 +224,7 @@ const DetailContent = React.memo(({
   data: ExperimentTaskData
   isFullWidth: boolean
   metrics: any[]
-  metricsVariant: string
+  metricsVariant: 'grid' | 'detail'
   waffleContainerRef: React.RefObject<HTMLDivElement>
   waffleHeight: number
 }) => (
@@ -264,7 +264,7 @@ const DetailContent = React.memo(({
 
       <MetricsGauges 
         gauges={metrics} 
-        variant={metricsVariant}
+        variant="detail"
       />
 
       <div 
@@ -345,8 +345,6 @@ export default function ExperimentTask({
       ]
   , [variant, data.metrics, data.accuracy])
 
-  const metricsVariant = variant === 'grid' ? 'grid' : 'detail'
-
   const headerContent = useMemo(() => (
     <div className="flex justify-end w-full">
       {variant === 'detail' ? (
@@ -397,7 +395,7 @@ export default function ExperimentTask({
               data={data}
               isFullWidth={isFullWidth ?? false}
               metrics={metrics}
-              metricsVariant={metricsVariant}
+              metricsVariant="detail"
               waffleContainerRef={waffleContainerRef}
               waffleHeight={waffleHeight}
             />

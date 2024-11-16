@@ -541,12 +541,14 @@ export default function ExperimentsDashboard(): JSX.Element {
     // First, get initial results
     const fetchInitialResults = async () => {
       try {
-        const response = await client.models.ScoreResult.list({
-          filter: { experimentId: { eq: selectedExperiment.id } },
-          limit: 1000
-        })
-        console.log('Initial score results:', response.data.length)
-        setScoreResults(response.data.sort((a, b) => 
+        const { data } = await listFromModel<Schema['ScoreResult']['type']>(
+          client.models.ScoreResult,
+          { experimentId: { eq: selectedExperiment.id } },
+          '1000'
+        )
+        
+        console.log('Initial score results:', data.length)
+        setScoreResults(data.sort((a, b) => 
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         ))
       } catch (error) {
