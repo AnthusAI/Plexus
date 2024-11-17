@@ -88,18 +88,18 @@ export default function ClassDistributionVisualizer({
                 <>
                   <SquareMinusIcon className="w-4 h-4 mr-1 mt-0.5 text-foreground 
                     shrink-0" />
-                  <span className="text-sm text-foreground">One class</span>
+                  <span className="text-sm text-foreground">Labels: One class</span>
                 </>
               ) : classCount === 2 ? (
                 <>
                   <SquareSplit className="w-4 h-4 mr-1 mt-0.5 text-foreground 
                     shrink-0" />
-                  <span className="text-sm text-foreground">Binary</span>
+                  <span className="text-sm text-foreground">Labels: Binary</span>
                 </>
               ) : (
                 <>
                   <Layers className="w-4 h-4 mr-1 mt-0.5 text-foreground shrink-0" />
-                  <span className="text-sm text-foreground">{classCount} classes</span>
+                  <span className="text-sm text-foreground">Labels: {classCount} classes</span>
                   <Popover>
                     <PopoverTrigger asChild>
                       <button 
