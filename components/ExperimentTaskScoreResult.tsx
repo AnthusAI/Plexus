@@ -21,8 +21,8 @@ export function ExperimentTaskScoreResult({
     JSON.parse(metadata) : metadata
 
   return (
-    <Card className="px-0 pt-4 pb-0 bg-card rounded-lg border-0">
-      <CardContent className="flex flex-col">
+    <Card className="px-0 pb-0 bg-card rounded-lg border-0">
+      <CardContent className="flex flex-col p-2">
         <div className="flex items-start justify-between">
           <div className="flex items-start space-x-4">
             {correct !== null && (
@@ -40,7 +40,7 @@ export function ExperimentTaskScoreResult({
               </div>
               <div className="text-sm text-muted-foreground">
                 {parsedMetadata?.true_value && !correct && (
-                  <span>Actual: {parsedMetadata.true_value}</span>
+                  <span>Correct: {parsedMetadata.true_value}</span>
                 )}
               </div>
             </div>
