@@ -62,6 +62,14 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
     throw new Error('Cannot transform null experiment')
   }
 
+  console.log('Raw experiment data:', {
+    id: rawExperiment.id,
+    type: rawExperiment.type,
+    accuracy: rawExperiment.accuracy,
+    metrics: rawExperiment.metrics,
+    allFields: Object.keys(rawExperiment)
+  });
+
   // Create a strongly typed base object with ALL fields
   const safeExperiment = {
     id: rawExperiment.id || '',
@@ -90,6 +98,7 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
     predictedClassDistribution: rawExperiment.predictedClassDistribution || null,
     isPredictedClassDistributionBalanced: rawExperiment.isPredictedClassDistributionBalanced || null,
     metricsExplanation: rawExperiment.metricsExplanation || null,
+    accuracy: typeof rawExperiment.accuracy === 'number' ? rawExperiment.accuracy : null,
     items: async (options?: any) => ({ data: [], nextToken: null }),
     scoreResults: async (options?: any) => ({ data: [], nextToken: null }),
     scoringJobs: async (options?: any) => ({ data: [], nextToken: null })
@@ -182,25 +191,6 @@ interface ExperimentParameters {
   scoreGoal?: string
   [key: string]: any  // Allow other parameters
 }
-
-// Update the helper function to handle any type
-const getAccuracyFromMetrics = (metrics: any): number => {
-  if (!metrics) return 0;
-  try {
-    const metricsArray = typeof metrics === 'string' 
-      ? JSON.parse(metrics) 
-      : Array.isArray(metrics) 
-        ? metrics 
-        : typeof metrics === 'object' 
-          ? [metrics] 
-          : [];
-    const accuracyMetric = metricsArray.find((m: any) => m.name === 'Accuracy');
-    return accuracyMetric?.value ?? 0;
-  } catch (e) {
-    console.error('Error parsing metrics:', e);
-    return 0;
-  }
-};
 
 // Keep the client definition
 const client = generateClient<Schema>()
@@ -329,7 +319,7 @@ export default function ExperimentsDashboard(): JSX.Element {
                 JSON.stringify(experiment.errorDetails) : 
             undefined,
         data: {
-            accuracy: getAccuracyFromMetrics(experiment.metrics),
+            accuracy: experiment.accuracy ?? 0,
             metrics: metrics,  // Use the parsed metrics array
             processedItems: experiment.processedItems || 0,
             totalItems: experiment.totalItems || 0,
@@ -386,6 +376,14 @@ export default function ExperimentsDashboard(): JSX.Element {
           ).subscribe({
             next: async ({ items }: { items: Schema['Experiment']['type'][] }) => {
               try {
+                console.log('Subscription update - experiments:', items.map(item => ({
+                  id: item.id,
+                  type: item.type,
+                  accuracy: item.accuracy,
+                  processedItems: item.processedItems,
+                  totalItems: item.totalItems
+                })))
+
                 setExperiments(prevExperiments => {
                   const updatedExperiments = [...prevExperiments]
                   let hasChanges = false
@@ -393,7 +391,7 @@ export default function ExperimentsDashboard(): JSX.Element {
                   items.forEach((newItem: Schema['Experiment']['type']) => {
                     const index = updatedExperiments.findIndex(exp => exp.id === newItem.id)
                     if (index === -1) {
-                      // New experiment
+                      // New experiment - use transform to get full object
                       hasChanges = true
                       updatedExperiments.push(transformExperiment(newItem))
                     } else {
@@ -405,23 +403,32 @@ export default function ExperimentsDashboard(): JSX.Element {
                         existingExp.totalItems !== newItem.totalItems ||
                         existingExp.metrics !== newItem.metrics ||
                         existingExp.errorMessage !== newItem.errorMessage ||
-                        existingExp.errorDetails !== newItem.errorDetails
+                        existingExp.errorDetails !== newItem.errorDetails ||
+                        existingExp.metricsExplanation !== newItem.metricsExplanation ||
+                        existingExp.accuracy !== newItem.accuracy ||  // Include accuracy changes
+                        existingExp.type !== newItem.type  // Include type changes
 
                       if (relevantFieldsChanged) {
                         hasChanges = true
-                        updatedExperiments[index] = transformExperiment({
-                          ...existingExp,
-                          ...newItem,
-                          // Preserve fields that might be missing in the update
-                          metricsExplanation: newItem.metricsExplanation || existingExp.metricsExplanation,
-                          metrics: newItem.metrics || existingExp.metrics,
-                          scoreGoal: newItem.scoreGoal || existingExp.scoreGoal,
-                        })
+                        // Create updated experiment preserving existing fields
+                        const updatedExp = {
+                          ...existingExp,  // Keep all existing fields
+                          // Update all fields that can change
+                          status: newItem.status ?? existingExp.status,
+                          processedItems: newItem.processedItems ?? existingExp.processedItems,
+                          totalItems: newItem.totalItems ?? existingExp.totalItems,
+                          metrics: newItem.metrics ?? existingExp.metrics,
+                          errorMessage: newItem.errorMessage ?? existingExp.errorMessage,
+                          errorDetails: newItem.errorDetails ?? existingExp.errorDetails,
+                          metricsExplanation: newItem.metricsExplanation ?? existingExp.metricsExplanation,
+                          accuracy: newItem.accuracy ?? existingExp.accuracy,  // Update accuracy
+                          type: newItem.type ?? existingExp.type  // Update type
+                        }
+                        updatedExperiments[index] = transformExperiment(updatedExp)
                       }
                     }
                   })
 
-                  // Only trigger re-render if we actually made changes
                   return hasChanges ? 
                     updatedExperiments.sort((a, b) => 
                       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -431,9 +438,7 @@ export default function ExperimentsDashboard(): JSX.Element {
 
                 // Update selected experiment if needed
                 if (selectedExperimentRef.current) {
-                  const updatedItem = items.find((item: Schema['Experiment']['type']) => 
-                    item.id === selectedExperimentRef.current?.id
-                  )
+                  const updatedItem = items.find(item => item.id === selectedExperimentRef.current?.id)
                   if (updatedItem) {
                     const relevantFieldsChanged = 
                       selectedExperimentRef.current.status !== updatedItem.status ||
@@ -441,16 +446,25 @@ export default function ExperimentsDashboard(): JSX.Element {
                       selectedExperimentRef.current.totalItems !== updatedItem.totalItems ||
                       selectedExperimentRef.current.metrics !== updatedItem.metrics ||
                       selectedExperimentRef.current.errorMessage !== updatedItem.errorMessage ||
-                      selectedExperimentRef.current.errorDetails !== updatedItem.errorDetails
+                      selectedExperimentRef.current.errorDetails !== updatedItem.errorDetails ||
+                      selectedExperimentRef.current.metricsExplanation !== updatedItem.metricsExplanation ||
+                      selectedExperimentRef.current.accuracy !== updatedItem.accuracy ||  // Include accuracy changes
+                      selectedExperimentRef.current.type !== updatedItem.type  // Include type changes
 
                     if (relevantFieldsChanged) {
                       const transformed = transformExperiment({
                         ...selectedExperimentRef.current,
                         ...updatedItem,
-                        metricsExplanation: updatedItem.metricsExplanation || 
-                          selectedExperimentRef.current.metricsExplanation,
-                        metrics: updatedItem.metrics || selectedExperimentRef.current.metrics,
-                        scoreGoal: updatedItem.scoreGoal || selectedExperimentRef.current.scoreGoal,
+                        // Explicitly update all fields that can change
+                        status: updatedItem.status ?? selectedExperimentRef.current.status,
+                        processedItems: updatedItem.processedItems ?? selectedExperimentRef.current.processedItems,
+                        totalItems: updatedItem.totalItems ?? selectedExperimentRef.current.totalItems,
+                        metrics: updatedItem.metrics ?? selectedExperimentRef.current.metrics,
+                        errorMessage: updatedItem.errorMessage ?? selectedExperimentRef.current.errorMessage,
+                        errorDetails: updatedItem.errorDetails ?? selectedExperimentRef.current.errorDetails,
+                        metricsExplanation: updatedItem.metricsExplanation ?? selectedExperimentRef.current.metricsExplanation,
+                        accuracy: updatedItem.accuracy ?? selectedExperimentRef.current.accuracy,
+                        type: updatedItem.type ?? selectedExperimentRef.current.type
                       })
                       setSelectedExperiment(transformed)
                     }
@@ -667,7 +681,7 @@ export default function ExperimentsDashboard(): JSX.Element {
                       {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {getAccuracyFromMetrics(experiment.metrics) > 0 ? 'Accuracy' : ''}
+                      {experiment.type || ''}
                     </div>
                   </div>
 
@@ -680,7 +694,7 @@ export default function ExperimentsDashboard(): JSX.Element {
                     />
                     <ExperimentListAccuracyBar 
                       progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
-                      accuracy={getAccuracyFromMetrics(experiment.metrics)}
+                      accuracy={experiment.accuracy ?? 0}
                       isFocused={experiment.id === selectedExperiment?.id}
                     />
                   </div>
@@ -699,7 +713,7 @@ export default function ExperimentsDashboard(): JSX.Element {
               </div>
             </TableCell>
             <TableCell className="hidden @[630px]:table-cell text-sm text-muted-foreground">
-              {getAccuracyFromMetrics(experiment.metrics) > 0 ? 'Accuracy' : ''}
+              {experiment.type || ''}
             </TableCell>
             <TableCell className="hidden @[630px]:table-cell w-[15%] text-right">
               <ExperimentListProgressBar 
@@ -711,7 +725,7 @@ export default function ExperimentsDashboard(): JSX.Element {
             <TableCell className="hidden @[630px]:table-cell w-[15%]">
               <ExperimentListAccuracyBar 
                 progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
-                accuracy={getAccuracyFromMetrics(experiment.metrics)}
+                accuracy={experiment.accuracy ?? 0}
                 isFocused={experiment.id === selectedExperiment?.id}
               />
             </TableCell>

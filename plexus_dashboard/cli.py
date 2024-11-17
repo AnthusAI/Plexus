@@ -29,24 +29,21 @@ from plexus_dashboard.api.models.score_result import ScoreResult
 import json
 import random
 import time
-import threading
-from sklearn.metrics import (
-    accuracy_score, 
-    precision_score,
-    recall_score,  # sensitivity
-    confusion_matrix,
-    balanced_accuracy_score,
-    f1_score
-)
 import numpy as np
+import threading
 from datetime import datetime, timezone, timedelta
+from sklearn.metrics import (
+    confusion_matrix,
+    accuracy_score
+)
 from plexus_dashboard.commands.simulate import (
     generate_class_distribution,
     simulate_prediction,
     select_metrics_and_explanation,
     calculate_metrics,
+    select_num_classes,
     SCORE_GOALS,
-    POSSIBLE_CLASSES
+    CLASS_SETS
 )
 
 # Configure logging with a more concise format
@@ -60,170 +57,6 @@ logger = logging.getLogger(__name__)
 # Add after other constants
 SCORE_TYPES = ['binary', 'multiclass']
 DATA_BALANCES = ['balanced', 'unbalanced']
-SCORE_GOALS = ['sensitivity', 'precision', 'balanced']
-POSSIBLE_CLASSES = [
-    "3rd Party Clinic", "Agent calling for a Patient", "Follow-up Appointment",
-    "New Patient Registration", "Insurance Verification", "Patient Referral",
-    "Lab Results Inquiry", "Medication Refill Request", "Appointment Cancellation",
-    "Telehealth Consultation", "Patient Feedback", "Emergency Contact",
-    "Billing Inquiry", "Health Record Request"
-]
-
-def generate_class_distribution(num_classes: int, total_items: int, balanced: bool) -> list:
-    """Generate a distribution of classes with counts."""
-    if balanced:
-        # Even distribution
-        base_count = total_items // num_classes
-        remainder = total_items % num_classes
-        counts = [base_count for _ in range(num_classes)]
-        # Distribute remainder
-        for i in range(remainder):
-            counts[i] += 1
-    else:
-        # Generate imbalanced distribution using exponential decay
-        remaining_items = total_items
-        counts = []
-        for i in range(num_classes - 1):
-            # Take a random portion of remaining items, more for earlier classes
-            portion = random.uniform(0.3, 0.7) if i == 0 else random.uniform(0.1, 0.4)
-            count = int(remaining_items * portion)
-            counts.append(count)
-            remaining_items -= count
-        counts.append(remaining_items)  # Last class gets the remainder
-    
-    # Shuffle the classes
-    selected_classes = random.sample(POSSIBLE_CLASSES, num_classes)
-    
-    return [
-        {"label": label, "count": count}
-        for label, count in zip(selected_classes, counts)
-    ]
-
-def simulate_prediction(true_label: str, accuracy: float, valid_labels: list) -> str:
-    """Generate a prediction that's correct with probability accuracy."""
-    if random.random() < accuracy:
-        return true_label
-    else:
-        # Pick a random incorrect label
-        other_labels = [l for l in valid_labels if l != true_label]
-        return random.choice(other_labels)
-
-def select_metrics_and_explanation(
-    is_binary: bool,
-    is_balanced: bool,
-    score_goal: str
-) -> tuple[list[str], str]:
-    """Select appropriate metrics and explanation based on experiment characteristics"""
-    metrics_config = {
-        "binary": {
-            "balanced": {
-                "sensitivity": (
-                    ["Sensitivity", "Accuracy", "Precision", "F1"],
-                    "Sensitivity is prioritized to maximize true positive detection rate"
-                ),
-                "precision": (
-                    ["Precision", "Accuracy", "Sensitivity", "F1"],
-                    "Precision is prioritized to minimize false positive predictions"
-                ),
-                "balanced": (
-                    ["Balanced Accuracy", "Precision", "Sensitivity", "F1"],
-                    "Balanced accuracy ensures equal treatment of all classes"
-                )
-            },
-            "unbalanced": {
-                "sensitivity": (
-                    ["Sensitivity", "Balanced Accuracy", "Precision", "F1"],
-                    "Sensitivity focus with balanced accuracy for imbalanced data"
-                ),
-                "precision": (
-                    ["Precision", "Balanced Accuracy", "Sensitivity", "NPV"],
-                    "Precision focus with balanced metrics for imbalanced data"
-                ),
-                "balanced": (
-                    ["Balanced Accuracy", "Precision", "Sensitivity", "F1"],
-                    "Balanced metrics chosen for imbalanced dataset"
-                )
-            }
-        },
-        "multiclass": {
-            "balanced": {
-                "sensitivity": (
-                    ["Macro Sensitivity", "Accuracy", "Macro Precision", "Macro F1"],
-                    "Macro sensitivity prioritized across all classes"
-                ),
-                "precision": (
-                    ["Macro Precision", "Accuracy", "Macro Sensitivity", "Macro F1"],
-                    "Macro precision prioritized for reliable predictions"
-                ),
-                "balanced": (
-                    ["Accuracy", "Macro Precision", "Macro Sensitivity", "Macro F1"],
-                    "Balanced evaluation across all classes"
-                )
-            },
-            "unbalanced": {
-                "sensitivity": (
-                    ["Macro Sensitivity", "Balanced Accuracy", "Macro Precision", 
-                     "Macro F1"],
-                    "Macro sensitivity with balanced accuracy for fairness"
-                ),
-                "precision": (
-                    ["Macro Precision", "Balanced Accuracy", "Macro Sensitivity", 
-                     "Macro F1"],
-                    "Macro precision with balanced handling of classes"
-                ),
-                "balanced": (
-                    ["Balanced Accuracy", "Macro Precision", "Macro Sensitivity", 
-                     "Macro F1"],
-                    "Balanced metrics for fair multiclass evaluation"
-                )
-            }
-        }
-    }
-    
-    classification_type = "binary" if is_binary else "multiclass"
-    balance_type = "balanced" if is_balanced else "unbalanced"
-    
-    return metrics_config[classification_type][balance_type][score_goal]
-
-def calculate_metrics(true_values, predicted_values, is_binary, is_balanced, score_goal):
-    """Calculate metrics based on experiment characteristics"""
-    metric_names, explanation = select_metrics_and_explanation(
-        is_binary, is_balanced, score_goal
-    )
-    
-    # Convert lists to numpy arrays
-    y_true = np.array(true_values)
-    y_pred = np.array(predicted_values)
-    
-    metrics = []
-    for metric_name in metric_names:
-        if metric_name == "Accuracy":
-            value = accuracy_score(y_true, y_pred) * 100
-        elif metric_name == "Balanced Accuracy":
-            value = balanced_accuracy_score(y_true, y_pred) * 100
-        elif metric_name in ["Precision", "Macro Precision"]:
-            value = precision_score(y_true, y_pred, average='macro', 
-                                  zero_division=0) * 100
-        elif metric_name in ["Sensitivity", "Macro Sensitivity"]:
-            value = recall_score(y_true, y_pred, average='macro', 
-                               zero_division=0) * 100
-        elif metric_name in ["F1", "Macro F1"]:
-            value = f1_score(y_true, y_pred, average='macro', 
-                           zero_division=0) * 100
-        else:  # NPV - custom calculation
-            tn = np.sum((y_true != 1) & (y_pred != 1))
-            fn = np.sum((y_true == 1) & (y_pred != 1))
-            value = (tn / (tn + fn) if (tn + fn) > 0 else 0) * 100
-        
-        metrics.append({
-            "name": metric_name,
-            "value": float(value),
-            "unit": "%",
-            "maximum": 100,
-            "priority": metric_names.index(metric_name) == 0
-        })
-    
-    return metrics, explanation
 
 @click.group()
 def cli():
@@ -662,7 +495,7 @@ def simulate(
 
         # Randomly decide experiment characteristics
         is_binary = random.random() < 0.3  # 30% chance of binary classification
-        num_classes = 2 if is_binary else random.randint(3, 14)
+        num_classes = select_num_classes()
         is_balanced = random.random() < 0.5  # 50% chance of balanced distribution
         score_goal = random.choice(SCORE_GOALS)
         
@@ -693,7 +526,7 @@ def simulate(
         started_at = datetime.now(timezone.utc)
         experiment = Experiment.create(
             client=client,
-            type="evaluation",
+            type="accuracy",
             accountId=account.id,
             status="RUNNING",
             totalItems=num_items,
@@ -711,7 +544,7 @@ def simulate(
             scoreGoal=score_goal,
             datasetClassDistribution=json.dumps(dataset_distribution),
             isDatasetClassDistributionBalanced=is_balanced,
-            metricsExplanation=initial_explanation  # Use the explanation from our function
+            metricsExplanation=initial_explanation
         )
         
         # Lists to store true and predicted values for metrics calculation
@@ -768,6 +601,12 @@ def simulate(
                     score_goal
                 )
                 
+                # Find accuracy in metrics or calculate it directly
+                accuracy_metric = next(
+                    (m for m in metrics if m["name"] == "Accuracy"), 
+                    {"value": accuracy_score(true_values, predicted_values) * 100}
+                )
+                
                 # Calculate timing values
                 processed_items = len(true_values)
                 elapsed_seconds = int((datetime.now(timezone.utc) - started_at).total_seconds())
@@ -789,8 +628,9 @@ def simulate(
                     for count in class_counts
                 )
 
-                # Update experiment with current metrics
+                # Update experiment with current metrics and accuracy
                 update_data = {
+                    "type": "accuracy",
                     "metrics": json.dumps(metrics) if metrics else None,
                     "processedItems": processed_items,
                     "elapsedSeconds": elapsed_seconds,
@@ -798,6 +638,7 @@ def simulate(
                     "predictedClassDistribution": json.dumps(predicted_distribution),
                     "isPredictedClassDistributionBalanced": is_predicted_balanced,
                     "metricsExplanation": metrics_explanation,
+                    "accuracy": accuracy_metric["value"],
                     "confusionMatrix": json.dumps({
                         "matrix": confusion_matrix(
                             true_values, 
@@ -836,7 +677,8 @@ def simulate(
             id=experiment.id,
             status="COMPLETED",
             elapsedSeconds=int((datetime.now(timezone.utc) - started_at).total_seconds()),
-            estimatedRemainingSeconds=0
+            estimatedRemainingSeconds=0,
+            accuracy=accuracy_metric["value"]
         )
         logger.info("Simulation completed")
         

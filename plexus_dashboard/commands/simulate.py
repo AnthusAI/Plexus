@@ -5,18 +5,27 @@ import numpy as np
 import random
 import time
 from datetime import datetime, timezone
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    confusion_matrix,
+    balanced_accuracy_score,
+    f1_score
+)
 from plexus_dashboard.api.client import PlexusDashboardClient
 from plexus_dashboard.api.models.account import Account
 from plexus_dashboard.api.models.experiment import Experiment
 from plexus_dashboard.api.models.score import Score
 from plexus_dashboard.api.models.scorecard import Scorecard
 from plexus_dashboard.api.models.score_result import ScoreResult
+import math
 
 logger = logging.getLogger(__name__)
 
 SCORE_GOALS = ['sensitivity', 'precision', 'balanced']
-POSSIBLE_CLASSES = [
+
+MEDICAL_CALL_CLASSES = [
     "3rd Party Clinic", "Agent calling for a Patient", "Follow-up Appointment",
     "New Patient Registration", "Insurance Verification", "Patient Referral",
     "Lab Results Inquiry", "Medication Refill Request", "Appointment Cancellation",
@@ -24,7 +33,57 @@ POSSIBLE_CLASSES = [
     "Billing Inquiry", "Health Record Request"
 ]
 
+ICE_CREAM_CLASSES = [
+    "Vanilla", "Chocolate", "Strawberry", "Mint Chocolate Chip", 
+    "Cookie Dough", "Rocky Road", "Butter Pecan", "Coffee",
+    "Pistachio", "Cookies and Cream", "Salted Caramel", "Neapolitan",
+    "Cherry Garcia", "French Vanilla", "Dark Chocolate", "Chocolate Chip"
+]
+
+DOG_BREED_CLASSES = [
+    "Labrador Retriever", "German Shepherd", "Golden Retriever", 
+    "French Bulldog", "Bulldog", "Poodle", "Beagle", "Rottweiler",
+    "Dachshund", "Yorkshire Terrier", "Boxer", "Great Dane",
+    "Siberian Husky", "Doberman", "Corgi", "Shih Tzu"
+]
+
+SOCIAL_SENTIMENT_CLASSES = [
+    "Positive Promotion", "Negative Review", "Customer Support Request",
+    "Product Question", "Feature Request", "Bug Report", "Spam",
+    "Harassment", "Community Discussion", "News Share", "Meme/Humor",
+    "Political Content", "Event Announcement", "Job Posting",
+    "Partnership Inquiry", "Market Research"
+]
+
+CLASS_SETS = [
+    ("Medical Call Types", MEDICAL_CALL_CLASSES),
+    ("Ice Cream Flavors", ICE_CREAM_CLASSES),
+    ("Dog Breeds", DOG_BREED_CLASSES),
+    ("Social Media Content", SOCIAL_SENTIMENT_CLASSES)
+]
+
+def select_num_classes() -> int:
+    """Select number of classes with logarithmic bias towards smaller numbers."""
+    # Generate random number between 0 and 1
+    r = random.random()
+    # Use log scale to bias towards smaller numbers
+    # This will give roughly:
+    # 50% chance of 2 classes
+    # 25% chance of 3 classes
+    # Remaining 25% spread across 4-20 classes
+    if r < 0.5:  # 50% chance
+        return 2
+    elif r < 0.75:  # 25% chance
+        return 3
+    else:  # 25% chance spread across 4-20
+        # Use log scale for remaining range
+        log_range = math.log(20 - 3)  # log of range from 4 to 20
+        scaled_r = (r - 0.75) * 4  # Scale remaining range to 0-1
+        num_classes = math.floor(math.exp(scaled_r * log_range)) + 4
+        return min(num_classes, 20)
+
 def generate_class_distribution(num_classes: int, total_items: int, balanced: bool) -> list:
+    """Generate a distribution of classes with counts."""
     if balanced:
         base_count = total_items // num_classes
         remainder = total_items % num_classes
@@ -41,11 +100,20 @@ def generate_class_distribution(num_classes: int, total_items: int, balanced: bo
             remaining_items -= count
         counts.append(remaining_items)
     
-    selected_classes = random.sample(POSSIBLE_CLASSES, num_classes)
+    # Determine labels based on number of classes
+    if num_classes == 2 and random.random() < 0.5:
+        labels = ["Yes", "No"]
+    elif num_classes == 3 and random.random() < 0.5:
+        labels = ["Yes", "No", "NA"]
+    else:
+        # Select a random class set
+        class_set_name, class_set = random.choice(CLASS_SETS)
+        labels = random.sample(class_set, num_classes)
+        logger.info(f"Using {class_set_name} for classification labels")
     
     return [
         {"label": label, "count": count}
-        for label, count in zip(selected_classes, counts)
+        for label, count in zip(labels, counts)
     ]
 
 def simulate_prediction(true_label: str, accuracy: float, valid_labels: list) -> str:

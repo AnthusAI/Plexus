@@ -358,6 +358,7 @@ class PlexusDashboardClient(_BaseAPIClient):
                     metrics
                     metricsExplanation
                     inferences
+                    accuracy
                     cost
                     startedAt
                     elapsedSeconds

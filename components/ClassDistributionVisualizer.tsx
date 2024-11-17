@@ -80,7 +80,7 @@ export default function ClassDistributionVisualizer({
 
   return (
     <TooltipProvider>
-      <div className="w-full">
+      <div className="w-full flex flex-col gap-1">
         {hasHeader && (
           <div className="flex justify-between items-start">
             <div className="flex items-start">
