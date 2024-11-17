@@ -9,6 +9,12 @@ const meta: Meta<typeof ConfusionMatrix> = {
   parameters: {
     layout: "padded",
   },
+  argTypes: {
+    onSelectionChange: { 
+      action: 'selection changed',
+      description: 'Fired when any selection is made, with predicted and actual values'
+    },
+  },
   decorators: [
     (Story) => (
       <div className="w-full">
