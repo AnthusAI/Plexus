@@ -2,6 +2,7 @@
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { ExclamationTriangleIcon } from "@radix-ui/react-icons"
+import { Grid2X2 } from "lucide-react"
 
 export type ConfusionMatrixData = {
   matrix: number[][]
@@ -32,66 +33,89 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
   }
 
   return (
-    <div className="w-full flex flex-col">
-      <div className="relative w-full" style={{ paddingTop: 'calc(100% - 2.5rem)' }}>
-        <div className="absolute inset-0 grid" style={{ 
-          gridTemplateColumns: `1rem 1.25rem 1fr`,
-        }}>
-          {/* Actual label */}
-          <div className="relative w-full h-full">
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 transform -rotate-90 whitespace-nowrap text-sm font-medium text-muted-foreground">
-              Actual
+    <div className="flex flex-col w-full gap-1">
+      <div className="flex items-center gap-1 text-sm text-foreground h-5">
+        <Grid2X2 className="w-4 h-4 text-foreground shrink-0" />
+        <span>Confusion matrix</span>
+      </div>
+
+      <div className="flex">
+        <div className="flex">
+          {/* Actual label column - height matches only the matrix */}
+          <div className="w-6">
+            <div className="flex flex-col items-center justify-center w-6 border" 
+              style={{ height: `${data.labels.length * 32}px` }}>
+              <span className="-rotate-90 whitespace-nowrap text-sm 
+                text-muted-foreground truncate">
+                Actual
+              </span>
             </div>
           </div>
 
-          {/* Row labels */}
-          <div className="relative w-full h-full">
-            <div className="absolute inset-0 grid" style={{ 
-              gridTemplateRows: `repeat(${data.labels.length}, 1fr)`
-            }}>
-              {data.labels.map((label, index) => (
-                <div key={`row-label-${index}`} className="relative w-full h-full">
-                  <div className="absolute right-1 top-[calc(50%_-_0.5em)] -translate-y-1/2 transform -rotate-90 origin-right whitespace-nowrap text-xs font-medium text-muted-foreground">
-                    {label}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Matrix cells */}
-          <div className="grid ml-1" style={{ 
-            gridTemplateColumns: `repeat(${data.labels.length}, 1fr)`,
-            gridTemplateRows: `repeat(${data.labels.length}, 1fr)`,
-          }}>
-            {data.matrix.flat().map((value, index) => (
-              <div
-                key={`cell-${index}`}
-                className={`flex items-center justify-center text-3xl font-medium 
-                  ${getTextColor(value)}`}
-                style={{
-                  backgroundColor: getBackgroundColor(value),
-                }}
-              >
-                {value}
+          {/* Row labels column */}
+          <div className="flex flex-col w-6 shrink-0">
+            {data.labels.map((label, index) => (
+              <div key={`row-${index}`} 
+                className="flex items-center justify-center h-8 border relative min-w-0">
+                <span className="-rotate-90 whitespace-nowrap text-sm 
+                  text-muted-foreground truncate">
+                  {label}
+                </span>
               </div>
             ))}
           </div>
         </div>
-      </div>
 
-      {/* Bottom labels */}
-      <div className="h-5 flex items-center justify-center" 
-        style={{ paddingLeft: "calc(1rem + 1.25rem)" }}>
-        {data.labels.map((label, index) => (
-          <div key={`header-${index}`} className="flex-1 text-center text-xs font-medium text-muted-foreground">
-            {label}
+        {/* Matrix columns - enforce equal width distribution */}
+        <div className="flex flex-col min-w-0 flex-1">
+          {/* Matrix cells */}
+          <div className="flex flex-col">
+            {/* Bottom labels */}
+            <div className="flex">
+              {data.matrix[0].map((_, colIndex) => (
+                <div key={`col-${colIndex}`} 
+                  className="flex flex-col flex-1 basis-0 min-w-0">
+                  {data.matrix.map((row, rowIndex) => (
+                    <div
+                      key={`cell-${rowIndex}-${colIndex}`}
+                      className={`flex items-center justify-center h-8 border
+                        text-sm font-medium truncate ${getTextColor(row[colIndex])}`}
+                      style={{
+                        backgroundColor: getBackgroundColor(row[colIndex]),
+                      }}
+                    >
+                      {row[colIndex]}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            {/* Bottom labels */}
+            <div className="flex">
+              {data.labels.map((label, index) => (
+                <div key={`bottom-${index}`} 
+                  className="flex-1 basis-0 flex items-center justify-center h-8 
+                    border border-t-0 min-w-0 w-8 overflow-hidden">
+                  <span className="text-sm text-muted-foreground truncate w-full 
+                    text-center">
+                    {label}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Predicted label */}
+            <div className="flex">
+              <div className="flex-1 basis-0 flex items-center justify-center h-8 
+                border border-t-0 min-w-0 overflow-hidden">
+                <span className="text-sm text-muted-foreground truncate">
+                  Predicted
+                </span>
+              </div>
+            </div>
           </div>
-        ))}
-      </div>
-      <div className="h-5 flex items-center justify-center"
-        style={{ paddingLeft: "calc(1rem + 1.25rem)" }}>
-        <div className="text-sm font-medium text-muted-foreground">Predicted</div>
+        </div>
       </div>
     </div>
   )
