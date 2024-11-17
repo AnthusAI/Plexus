@@ -40,6 +40,14 @@ from sklearn.metrics import (
 )
 import numpy as np
 from datetime import datetime, timezone, timedelta
+from plexus_dashboard.commands.simulate import (
+    generate_class_distribution,
+    simulate_prediction,
+    select_metrics_and_explanation,
+    calculate_metrics,
+    SCORE_GOALS,
+    POSSIBLE_CLASSES
+)
 
 # Configure logging with a more concise format
 logging.basicConfig(
@@ -607,42 +615,6 @@ def simulate(
     3. Creating ScoreResult records for each prediction
     4. Computing standard ML metrics (accuracy, precision, sensitivity, specificity)
     5. Updating the Experiment with real-time metric calculations
-    
-    The simulation uses a target accuracy parameter to generate synthetic predictions
-    that will approximately achieve that accuracy level. It introduces random
-    variations and delays to simulate real-world conditions.
-    
-    Metrics are computed using scikit-learn and include:
-    - Accuracy: Overall correct predictions
-    - Precision: True positives / (True positives + False positives)
-    - Sensitivity (Recall): True positives / (True positives + False negatives)
-    - Specificity: True negatives / (True negatives + False positives)
-    
-    The command handles background metric updates using threads, ensuring the
-    experiment record stays current as new results are generated.
-    
-    Args:
-        account_key/name/id: Account context (one required)
-        scorecard_key/name/id: Scorecard to evaluate (one required)
-        score_key/name/id: Optional specific score to evaluate
-        num_items: Number of synthetic results to generate (default: 100)
-        accuracy: Target accuracy for synthetic data (default: 0.85)
-    
-    Examples:
-        # Basic simulation with 100 items
-        plexus-dashboard experiment simulate \
-            --account-key call-criteria \
-            --scorecard-key agent-scorecard \
-            --num-items 100 \
-            --accuracy 0.85
-            
-        # Larger simulation for specific score
-        plexus-dashboard experiment simulate \
-            --account-key call-criteria \
-            --scorecard-key agent-scorecard \
-            --score-key compliance \
-            --num-items 1000 \
-            --accuracy 0.92
     """
     try:
         # Initial client for setup
@@ -661,8 +633,6 @@ def simulate(
         else:
             raise click.UsageError("Must provide account-id, account-key, or account-name")
         
-        logger.info(f"Using account: {account.name} ({account.id})")
-        
         # Look up or validate scorecard
         if scorecard_id:
             logger.info(f"Using provided scorecard ID: {scorecard_id}")
@@ -676,8 +646,6 @@ def simulate(
         else:
             raise click.UsageError("Must provide scorecard-id, scorecard-key, or scorecard-name")
             
-        logger.info(f"Using scorecard: {scorecard.name} ({scorecard.id})")
-        
         # Optionally look up score
         score = None
         if any([score_id, score_key, score_name]):
