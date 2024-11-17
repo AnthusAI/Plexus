@@ -15,7 +15,37 @@ export type ConfusionMatrixData = {
   labels: string[]
 }
 
-export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
+/**
+ * Props for the ConfusionMatrix component
+ * @param data The confusion matrix data containing the matrix and class labels
+ * @param onSelectionChange Callback when any selection is made, providing both predicted 
+ *                         and actual class values. Either may be null if not selected.
+ */
+type ConfusionMatrixProps = {
+  data: ConfusionMatrixData
+  onSelectionChange?: (selection: {
+    predicted: string | null
+    actual: string | null
+  }) => void
+}
+
+/**
+ * ConfusionMatrix Component
+ * 
+ * Displays a confusion matrix with interactive elements:
+ * - Clickable cells showing the count of predictions
+ * - Tooltips with detailed information
+ * - Row labels showing actual classes
+ * - Column labels showing predicted classes
+ * 
+ * All interactions (cell clicks, row labels, column labels) emit a standardized
+ * selection event with both predicted and actual values, using null for the 
+ * unselected dimension:
+ * - Cell click: { predicted: "class1", actual: "class2" }
+ * - Row label: { predicted: null, actual: "class2" }
+ * - Column label: { predicted: "class1", actual: null }
+ */
+export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProps) {
   if (!data || data.matrix.length !== data.labels.length) {
     return (
       <Alert variant="destructive">
@@ -36,6 +66,18 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
   const getTextColor = (value: number) => {
     const intensity = Math.round((value / maxValue) * 10)
     return intensity > 5 ? 'text-white dark:text-foreground' : 'text-primary'
+  }
+
+  const handleCellClick = (predicted: string, actual: string) => {
+    onSelectionChange?.({ predicted, actual })
+  }
+
+  const handlePredictedLabelClick = (label: string) => {
+    onSelectionChange?.({ predicted: label, actual: null })
+  }
+
+  const handleActualLabelClick = (label: string) => {
+    onSelectionChange?.({ predicted: null, actual: label })
   }
 
   return (
@@ -64,7 +106,11 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
               <TooltipProvider key={`row-${index}`}>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="flex items-center justify-center h-8 border relative min-w-0">
+                    <div 
+                      onClick={() => handleActualLabelClick(label)}
+                      className="flex items-center justify-center h-8 border relative min-w-0
+                        cursor-pointer hover:bg-muted/50"
+                    >
                       <span className="-rotate-90 whitespace-nowrap text-sm 
                         text-muted-foreground truncate">
                         {label}
@@ -74,8 +120,13 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
                   <TooltipContent>
                     <div className="flex flex-col gap-1">
                       <p>{label}</p>
-                      <div className="flex items-center gap-1 text-xs bg-muted 
-                        px-2 py-0.5 rounded-full mt-1 text-muted-foreground">
+                      <div 
+                        role="button"
+                        onClick={() => handleActualLabelClick(label)}
+                        className="flex items-center gap-1 text-xs bg-muted 
+                          px-2 py-0.5 rounded-full mt-1 text-muted-foreground 
+                          cursor-pointer hover:bg-muted/80"
+                      >
                         <span>View</span>
                         <ArrowRight className="h-3 w-3" />
                       </div>
@@ -101,8 +152,13 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <div
+                            onClick={() => handleCellClick(
+                              data.labels[colIndex], 
+                              data.labels[rowIndex]
+                            )}
                             className={`flex items-center justify-center h-8 border
-                              text-sm font-medium truncate ${getTextColor(row[colIndex])}`}
+                              text-sm font-medium truncate ${getTextColor(row[colIndex])}
+                              cursor-pointer hover:opacity-80`}
                             style={{
                               backgroundColor: getBackgroundColor(row[colIndex]),
                             }}
@@ -115,8 +171,16 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
                             <p>Predicted: {data.labels[colIndex]}</p>
                             <p>Actual: {data.labels[rowIndex]}</p>
                             <p>Count: {row[colIndex]}</p>
-                            <div className="flex items-center gap-1 text-xs bg-muted 
-                              px-2 py-0.5 rounded-full mt-1 text-muted-foreground">
+                            <div 
+                              role="button"
+                              onClick={() => handleCellClick(
+                                data.labels[colIndex], 
+                                data.labels[rowIndex]
+                              )}
+                              className="flex items-center gap-1 text-xs bg-muted 
+                                px-2 py-0.5 rounded-full mt-1 text-muted-foreground 
+                                cursor-pointer hover:bg-muted/80"
+                            >
                               <span>View</span>
                               <ArrowRight className="h-3 w-3" />
                             </div>
@@ -135,8 +199,12 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
                 <TooltipProvider key={`bottom-${index}`}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="flex-1 basis-0 flex items-center justify-center h-8 
-                        border border-t-0 min-w-0 w-8 overflow-hidden">
+                      <div 
+                        onClick={() => handlePredictedLabelClick(label)}
+                        className="flex-1 basis-0 flex items-center justify-center h-8 
+                          border border-t-0 min-w-0 w-8 overflow-hidden
+                          cursor-pointer hover:bg-muted/50"
+                      >
                         <span className="text-sm text-muted-foreground truncate w-full 
                           text-center">
                           {label}
@@ -146,8 +214,13 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
                     <TooltipContent>
                       <div className="flex flex-col gap-1">
                         <p>{label}</p>
-                        <div className="flex items-center gap-1 text-xs bg-muted 
-                          px-2 py-0.5 rounded-full mt-1 text-muted-foreground">
+                        <div 
+                          role="button"
+                          onClick={() => handlePredictedLabelClick(label)}
+                          className="flex items-center gap-1 text-xs bg-muted 
+                            px-2 py-0.5 rounded-full mt-1 text-muted-foreground 
+                            cursor-pointer hover:bg-muted/80"
+                        >
                           <span>View</span>
                           <ArrowRight className="h-3 w-3" />
                         </div>
