@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X } from 'lucide-react'
+import { FlaskConical, Square, X, Split } from 'lucide-react'
 import MetricsGauges from '@/components/MetricsGauges'
 import { ProgressBar } from "@/components/ui/progress-bar"
 import { ResponsiveWaffle } from '@nivo/waffle'
@@ -289,9 +289,12 @@ const DetailContent = React.memo(({
 
     {data.scoreResults && data.scoreResults.length > 0 && (
       <div className={isFullWidth ? 'w-full' : 'mt-8'}>
-        <h3 className="text-lg font-semibold mb-4">
-          {data.scoreResults.length} Predictions
-        </h3>
+        <div className="flex items-start mb-1">
+          <Split className="w-4 h-4 mr-1 mt-0.5 text-foreground shrink-0" />
+          <span className="text-sm text-foreground">
+            {data.scoreResults.length} Predictions
+          </span>
+        </div>
         <ScoreResultsList results={data.scoreResults} />
       </div>
     )}
