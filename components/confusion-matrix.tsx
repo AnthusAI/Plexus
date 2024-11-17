@@ -10,7 +10,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-export type ConfusionMatrixData = {
+export interface ConfusionMatrixData {
   matrix: number[][]
   labels: string[]
 }
@@ -21,7 +21,7 @@ export type ConfusionMatrixData = {
  * @param onSelectionChange Callback when any selection is made, providing both predicted 
  *                         and actual class values. Either may be null if not selected.
  */
-type ConfusionMatrixProps = {
+export interface ConfusionMatrixProps {
   data: ConfusionMatrixData
   onSelectionChange?: (selection: {
     predicted: string | null

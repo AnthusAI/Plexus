@@ -198,10 +198,16 @@ const DetailContent = React.memo(({
         variant="detail"
       />
 
-      {data.confusionMatrix && data.confusionMatrix.matrix && 
-       data.confusionMatrix.matrix.length > 0 && data.confusionMatrix.labels && (
+      {data.confusionMatrix?.matrix && 
+       data.confusionMatrix.matrix.length > 0 && 
+       data.confusionMatrix.labels && (
         <div className="">
-          <ConfusionMatrix data={data.confusionMatrix} />
+          <ConfusionMatrix 
+            data={{
+              matrix: data.confusionMatrix.matrix,
+              labels: data.confusionMatrix.labels
+            }} 
+          />
         </div>
       )}
     </div>
