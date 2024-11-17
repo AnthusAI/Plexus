@@ -758,7 +758,7 @@ export default function ExperimentsDashboard(): JSX.Element {
   // Rest of the component remains the same...
   return (
     <ClientOnly>
-      <div className="space-y-4 h-full flex flex-col">
+      <div className="h-full flex flex-col">
         <div className={`flex ${isNarrowViewport ? 'flex-col' : isFullWidth ? '' : 'space-x-6'} flex-1 h-full`}>
           <div className={`
             flex flex-col

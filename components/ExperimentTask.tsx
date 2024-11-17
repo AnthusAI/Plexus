@@ -289,7 +289,7 @@ const DetailContent = React.memo(({
 
     {data.scoreResults && data.scoreResults.length > 0 && (
       <div className={isFullWidth ? 'w-full' : 'mt-8'}>
-        <div className="flex items-start mb-1">
+        <div className="flex items-start">
           <Split className="w-4 h-4 mr-1 mt-0.5 text-foreground shrink-0" />
           <span className="text-sm text-foreground">
             {data.scoreResults.length} Predictions

@@ -15,7 +15,7 @@ export default function PredictedClassDistributionVisualizer({
 }: PredictedClassDistributionVisualizerProps) {
   return (
     <div className="w-full">
-      <div className="flex items-start mb-1">
+      <div className="flex items-start">
         <ChartPie className="w-4 h-4 mr-1 mt-0.5 text-foreground shrink-0" />
         <span className="text-sm text-foreground">Predicted classes</span>
       </div>
