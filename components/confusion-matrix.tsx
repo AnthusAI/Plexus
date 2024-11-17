@@ -2,7 +2,13 @@
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { ExclamationTriangleIcon } from "@radix-ui/react-icons"
-import { Grid2X2 } from "lucide-react"
+import { Grid2X2, ArrowRight } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 export type ConfusionMatrixData = {
   matrix: number[][]
@@ -55,13 +61,28 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
           {/* Row labels column */}
           <div className="flex flex-col w-6 shrink-0">
             {data.labels.map((label, index) => (
-              <div key={`row-${index}`} 
-                className="flex items-center justify-center h-8 border relative min-w-0">
-                <span className="-rotate-90 whitespace-nowrap text-sm 
-                  text-muted-foreground truncate">
-                  {label}
-                </span>
-              </div>
+              <TooltipProvider key={`row-${index}`}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center justify-center h-8 border relative min-w-0">
+                      <span className="-rotate-90 whitespace-nowrap text-sm 
+                        text-muted-foreground truncate">
+                        {label}
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="flex flex-col gap-1">
+                      <p>{label}</p>
+                      <div className="flex items-center gap-1 text-xs bg-muted 
+                        px-2 py-0.5 rounded-full mt-1 text-muted-foreground">
+                        <span>View</span>
+                        <ArrowRight className="h-3 w-3" />
+                      </div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             ))}
           </div>
         </div>
@@ -76,16 +97,33 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
                 <div key={`col-${colIndex}`} 
                   className="flex flex-col flex-1 basis-0 min-w-0">
                   {data.matrix.map((row, rowIndex) => (
-                    <div
-                      key={`cell-${rowIndex}-${colIndex}`}
-                      className={`flex items-center justify-center h-8 border
-                        text-sm font-medium truncate ${getTextColor(row[colIndex])}`}
-                      style={{
-                        backgroundColor: getBackgroundColor(row[colIndex]),
-                      }}
-                    >
-                      {row[colIndex]}
-                    </div>
+                    <TooltipProvider key={`cell-${rowIndex}-${colIndex}`}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div
+                            className={`flex items-center justify-center h-8 border
+                              text-sm font-medium truncate ${getTextColor(row[colIndex])}`}
+                            style={{
+                              backgroundColor: getBackgroundColor(row[colIndex]),
+                            }}
+                          >
+                            {row[colIndex]}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="flex flex-col gap-1">
+                            <p>Predicted: {data.labels[colIndex]}</p>
+                            <p>Actual: {data.labels[rowIndex]}</p>
+                            <p>Count: {row[colIndex]}</p>
+                            <div className="flex items-center gap-1 text-xs bg-muted 
+                              px-2 py-0.5 rounded-full mt-1 text-muted-foreground">
+                              <span>View</span>
+                              <ArrowRight className="h-3 w-3" />
+                            </div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   ))}
                 </div>
               ))}
@@ -94,14 +132,29 @@ export function ConfusionMatrix({ data }: { data: ConfusionMatrixData }) {
             {/* Bottom labels */}
             <div className="flex">
               {data.labels.map((label, index) => (
-                <div key={`bottom-${index}`} 
-                  className="flex-1 basis-0 flex items-center justify-center h-8 
-                    border border-t-0 min-w-0 w-8 overflow-hidden">
-                  <span className="text-sm text-muted-foreground truncate w-full 
-                    text-center">
-                    {label}
-                  </span>
-                </div>
+                <TooltipProvider key={`bottom-${index}`}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex-1 basis-0 flex items-center justify-center h-8 
+                        border border-t-0 min-w-0 w-8 overflow-hidden">
+                        <span className="text-sm text-muted-foreground truncate w-full 
+                          text-center">
+                          {label}
+                        </span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="flex flex-col gap-1">
+                        <p>{label}</p>
+                        <div className="flex items-center gap-1 text-xs bg-muted 
+                          px-2 py-0.5 rounded-full mt-1 text-muted-foreground">
+                          <span>View</span>
+                          <ArrowRight className="h-3 w-3" />
+                        </div>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               ))}
             </div>
 
