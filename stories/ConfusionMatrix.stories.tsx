@@ -1,6 +1,7 @@
 import React from "react"
 import type { Meta, StoryObj } from "@storybook/react"
-import { ConfusionMatrix } from "@/components/confusion-matrix"
+import { ConfusionMatrix } from "../components/confusion-matrix"
+import { Card } from "@/components/ui/card"
 
 const meta: Meta<typeof ConfusionMatrix> = {
   title: "Visualization/ConfusionMatrix",
@@ -11,7 +12,9 @@ const meta: Meta<typeof ConfusionMatrix> = {
   decorators: [
     (Story) => (
       <div className="w-full">
-        <Story />
+        <Card className="p-4">
+          <Story />
+        </Card>
       </div>
     ),
   ],
