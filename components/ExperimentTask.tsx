@@ -3,11 +3,8 @@ import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { FlaskConical, Square, X, Split } from 'lucide-react'
 import MetricsGauges from '@/components/MetricsGauges'
 import { ProgressBar } from "@/components/ui/progress-bar"
-import { ResponsiveWaffle } from '@nivo/waffle'
 import { ConfusionMatrix } from '@/components/confusion-matrix'
-import { intervalToDuration } from 'date-fns'
 import { CardButton } from '@/components/CardButton'
-import ScoreTypesHeader from '@/components/ScoreTypesHeader'
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
 import { ExperimentTaskScoreResult } from '@/components/ExperimentTaskScoreResult'
@@ -135,68 +132,6 @@ const ScoreResultsList = React.memo(({ results }: {
   </div>
 ))
 
-const WaffleChart = React.memo(({ 
-  height, 
-  processedItems, 
-  accuracy, 
-  totalItems 
-}: { 
-  height: number
-  processedItems: number
-  accuracy: number
-  totalItems: number
-}) => (
-  <ResponsiveWaffle
-    data={[
-      { 
-        id: 'correct', 
-        label: 'Correct', 
-        value: Math.round(processedItems * (accuracy ?? 0) / 100) 
-      },
-      { 
-        id: 'incorrect', 
-        label: 'Incorrect', 
-        value: processedItems - Math.round(processedItems * (accuracy ?? 0) / 100) 
-      },
-      { 
-        id: 'unprocessed', 
-        label: 'Unprocessed', 
-        value: totalItems - processedItems 
-      }
-    ]}
-    total={totalItems}
-    rows={5}
-    columns={20}
-    padding={1}
-    valueFormat=".0f"
-    colors={({ id }) => {
-      const colorMap: Record<string, string> = {
-        correct: 'var(--true)',
-        incorrect: 'var(--false)',
-        unprocessed: 'var(--neutral)'
-      }
-      return colorMap[id] || 'var(--neutral)'
-    }}
-    borderRadius={2}
-    fillDirection="right"
-    margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
-    legends={[{
-      anchor: 'bottom',
-      direction: 'row',
-      justify: false,
-      translateX: 0,
-      translateY: 30,
-      itemsSpacing: 4,
-      itemWidth: 100,
-      itemHeight: 20,
-      itemDirection: 'left-to-right',
-      itemOpacity: 1,
-      itemTextColor: 'var(--text-muted)',
-      symbolSize: 20
-    }]}
-  />
-))
-
 const GridContent = React.memo(({ data }: { data: ExperimentTaskData }) => (
   <div className="mt-4">
     <ProgressBar 
@@ -218,15 +153,11 @@ const DetailContent = React.memo(({
   isFullWidth,
   metrics,
   metricsVariant,
-  waffleContainerRef,
-  waffleHeight
 }: { 
   data: ExperimentTaskData
   isFullWidth: boolean
   metrics: any[]
   metricsVariant: 'grid' | 'detail'
-  waffleContainerRef: React.RefObject<HTMLDivElement>
-  waffleHeight: number
 }) => (
   <div className={`w-full ${isFullWidth ? 'grid grid-cols-2 gap-8' : ''}`}>
     <div className="w-full">
@@ -267,22 +198,9 @@ const DetailContent = React.memo(({
         variant="detail"
       />
 
-      <div 
-        ref={waffleContainerRef}
-        className="mt-4 w-full" 
-        style={{ height: `${waffleHeight}px` }}
-      >
-        <WaffleChart 
-          height={waffleHeight}
-          processedItems={data.processedItems}
-          accuracy={data.accuracy ?? 0}
-          totalItems={data.totalItems}
-        />
-      </div>
-
       {data.confusionMatrix && data.confusionMatrix.matrix && 
        data.confusionMatrix.matrix.length > 0 && data.confusionMatrix.labels && (
-        <div className="mt-8">
+        <div className="">
           <ConfusionMatrix data={data.confusionMatrix} />
         </div>
       )}
@@ -313,21 +231,6 @@ export default function ExperimentTask({
 }: ExperimentTaskProps) {
   const data = task.data ?? {} as ExperimentTaskData
   const computedType = computeExperimentType(data)
-  const waffleContainerRef = useRef<HTMLDivElement>(null)
-  const [waffleHeight, setWaffleHeight] = useState(20)
-
-  useEffect(() => {
-    const updateWaffleHeight = () => {
-      if (waffleContainerRef.current) {
-        const width = waffleContainerRef.current.offsetWidth
-        setWaffleHeight(width / 4)
-      }
-    }
-
-    updateWaffleHeight()
-    window.addEventListener('resize', updateWaffleHeight)
-    return () => window.removeEventListener('resize', updateWaffleHeight)
-  }, [])
 
   const metrics = useMemo(() => 
     variant === 'detail' ? 
@@ -400,8 +303,6 @@ export default function ExperimentTask({
               isFullWidth={isFullWidth ?? false}
               metrics={metrics}
               metricsVariant="detail"
-              waffleContainerRef={waffleContainerRef}
-              waffleHeight={waffleHeight}
             />
           )}
         </TaskContent>
