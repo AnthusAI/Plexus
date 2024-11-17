@@ -27,7 +27,7 @@ export default function MetricsGaugesExplanation({
   if (!explanation) return null
 
   return (
-    <div className="w-full mb-4">
+    <div className="w-full">
       <div className="flex justify-between items-start mb-1">
         <div className="flex items-start">
           <Ruler className="w-4 h-4 mr-1 mt-0.5 text-foreground shrink-0" />
