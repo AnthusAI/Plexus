@@ -38,9 +38,9 @@ export interface ExperimentTaskData {
   errorMessage?: string | null
   errorDetails?: any | null
   confusionMatrix?: {
-    matrix: number[][]
-    labels: string[]
-  }
+    matrix: number[][] | null
+    labels: string[] | null
+  } | null
   scoreGoal?: string | null
   datasetClassDistribution?: { label: string, count: number }[]
   isDatasetClassDistributionBalanced?: boolean | null
@@ -280,7 +280,8 @@ const DetailContent = React.memo(({
         />
       </div>
 
-      {data.confusionMatrix && (
+      {data.confusionMatrix && data.confusionMatrix.matrix && 
+       data.confusionMatrix.matrix.length > 0 && data.confusionMatrix.labels && (
         <div className="mt-8">
           <ConfusionMatrix data={data.confusionMatrix} />
         </div>

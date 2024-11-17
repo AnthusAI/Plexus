@@ -7,41 +7,6 @@ export async function listFromModel<T>(
   nextToken?: string,
   limit?: number
 ): Promise<AmplifyListResult<T>> {
-  const query = `
-    query List${model.name}($filter: Model${model.name}FilterInput, $nextToken: String, $limit: Int) {
-      list${model.name}s(filter: $filter, nextToken: $nextToken, limit: $limit) {
-        items {
-          id
-          type
-          parameters
-          metrics
-          metricsExplanation
-          inferences
-          cost
-          createdAt
-          updatedAt
-          status
-          startedAt
-          elapsedSeconds
-          estimatedRemainingSeconds
-          totalItems
-          processedItems
-          errorMessage
-          errorDetails
-          accountId
-          scorecardId
-          scoreId
-          confusionMatrix
-          scoreGoal
-          datasetClassDistribution
-          isDatasetClassDistributionBalanced
-          predictedClassDistribution
-          isPredictedClassDistributionBalanced
-        }
-        nextToken
-      }
-    }
-  `
   const response = await model.list(filter ? { filter } : undefined)
   return response as AmplifyListResult<T>
 }
@@ -50,54 +15,41 @@ export function observeQueryFromModel<T>(
   model: any,
   filter?: Record<string, any>
 ) {
-  const isScoreResult = model.name === 'ScoreResult'
-  const selectionSet = isScoreResult ? [
-    'id',
-    'value',
-    'confidence',
-    'metadata',
-    'correct',
-    'itemId',
-    'accountId',
-    'scoringJobId',
-    'experimentId',
-    'scorecardId'
-  ] : [
-    'id',
-    'type',
-    'parameters',
-    'metrics',
-    'metricsExplanation',
-    'inferences',
-    'cost',
-    'createdAt',
-    'updatedAt',
-    'status',
-    'startedAt',
-    'totalItems',
-    'processedItems',
-    'errorMessage',
-    'errorDetails',
-    'accountId',
-    'scorecardId',
-    'scoreId',
-    'confusionMatrix',
-    'elapsedSeconds',
-    'estimatedRemainingSeconds',
-    'scoreGoal',
-    'datasetClassDistribution',
-    'isDatasetClassDistributionBalanced',
-    'predictedClassDistribution',
-    'isPredictedClassDistributionBalanced'
-  ]
-
-  console.log('Setting up subscription for model:', model.name);
-  console.log('Selection set:', selectionSet);
+  console.log('Setting up subscription for model:', model?.name);
   console.log('Filter:', filter);
 
   const subscription = model.observeQuery({
-    filter: filter ? filter : undefined,
-    selectionSet
+    filter: filter || undefined,
+    // Include all fields we want to observe
+    fields: [
+      'id',
+      'type',
+      'accuracy',
+      'parameters',
+      'metrics',
+      'metricsExplanation',
+      'inferences',
+      'cost',
+      'createdAt',
+      'updatedAt',
+      'status',
+      'startedAt',
+      'totalItems',
+      'processedItems',
+      'errorMessage',
+      'errorDetails',
+      'accountId',
+      'scorecardId',
+      'scoreId',
+      'confusionMatrix',
+      'elapsedSeconds',
+      'estimatedRemainingSeconds',
+      'scoreGoal',
+      'datasetClassDistribution',
+      'isDatasetClassDistributionBalanced',
+      'predictedClassDistribution',
+      'isPredictedClassDistributionBalanced'
+    ]
   });
 
   return {
@@ -106,17 +58,28 @@ export function observeQueryFromModel<T>(
       error: (error: Error) => void 
     }) => {
       const wrappedHandlers = {
-        next: (data: { items: T[] }) => {
-          console.log('Raw subscription data received:', 
-            data.items.map(item => ({
-              id: (item as any).id,
-              metricsExplanation: (item as any).metricsExplanation,
-              metrics: (item as any).metrics
-            }))
-          );
+        next: (data: any) => {
+          if (!data?.items) {
+            console.error('Missing items in subscription data:', data);
+            return;
+          }
+
+          // Log the full raw data for each item
+          console.log('Raw subscription items:', data.items.map((item: any) => ({
+            id: item.id,
+            type: item.type,
+            processedItems: item.processedItems,
+            totalItems: item.totalItems,
+            accuracy: item.accuracy,
+            allFields: Object.keys(item)
+          })));
+
           handlers.next(data);
         },
-        error: handlers.error
+        error: (error: Error) => {
+          console.error('Subscription error:', error);
+          handlers.error(error);
+        }
       };
       
       return subscription.subscribe(wrappedHandlers);
@@ -140,7 +103,7 @@ export function observeScoreResults(client: any, experimentId: string) {
       field: 'createdAt',
       direction: 'desc'
     },
-    selectionSet: [
+    fields: [
       'id',
       'value',
       'confidence',

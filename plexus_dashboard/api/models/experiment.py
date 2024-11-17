@@ -31,6 +31,7 @@ class Experiment(BaseModel):
     parameters: Optional[Dict] = None
     metrics: Optional[Dict] = None
     inferences: Optional[int] = None
+    accuracy: Optional[float] = None
     cost: Optional[float] = None
     startedAt: Optional[datetime] = None
     elapsedSeconds: Optional[int] = None
@@ -60,6 +61,7 @@ class Experiment(BaseModel):
         parameters: Optional[Dict] = None,
         metrics: Optional[Dict] = None,
         inferences: Optional[int] = None,
+        accuracy: Optional[float] = None,
         cost: Optional[float] = None,
         startedAt: Optional[datetime] = None,
         elapsedSeconds: Optional[int] = None,
@@ -86,6 +88,7 @@ class Experiment(BaseModel):
         self.parameters = parameters
         self.metrics = metrics
         self.inferences = inferences
+        self.accuracy = accuracy
         self.cost = cost
         self.startedAt = startedAt
         self.elapsedSeconds = elapsedSeconds
@@ -116,6 +119,7 @@ class Experiment(BaseModel):
             parameters
             metrics
             inferences
+            accuracy
             cost
             startedAt
             elapsedSeconds
@@ -196,6 +200,7 @@ class Experiment(BaseModel):
             parameters=data.get('parameters'),
             metrics=data.get('metrics'),
             inferences=data.get('inferences'),
+            accuracy=data.get('accuracy'),
             cost=data.get('cost'),
             startedAt=data.get('startedAt'),
             elapsedSeconds=data.get('elapsedSeconds'),

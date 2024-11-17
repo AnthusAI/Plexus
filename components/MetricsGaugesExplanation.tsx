@@ -41,7 +41,7 @@ export default function MetricsGaugesExplanation({
         )}
       </div>
       <div className="grid grid-cols-[1fr,auto] gap-4">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-foreground">
           {explanation}
         </p>
         {goal && (
