@@ -92,7 +92,7 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
           {/* Actual label column - height matches only the matrix */}
           <div className="w-6">
             <div className="flex flex-col items-center justify-center w-6 border" 
-              style={{ height: `${data.labels.length * 32}px` }}>
+              style={{ height: `${data.labels.length * 64}px` }}>
               <span className="-rotate-90 whitespace-nowrap text-sm 
                 text-muted-foreground truncate">
                 Actual
@@ -108,7 +108,7 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
                   <TooltipTrigger asChild>
                     <div 
                       onClick={() => handleActualLabelClick(label)}
-                      className="flex items-center justify-center h-8 border relative min-w-0
+                      className="flex items-center justify-center h-16 border relative min-w-0
                         cursor-pointer hover:bg-muted/50"
                     >
                       <span className="-rotate-90 whitespace-nowrap text-sm 
@@ -156,7 +156,7 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
                               data.labels[colIndex], 
                               data.labels[rowIndex]
                             )}
-                            className={`flex items-center justify-center h-8 border
+                            className={`flex items-center justify-center h-16 border
                               text-sm font-medium truncate ${getTextColor(row[colIndex])}
                               cursor-pointer hover:opacity-80`}
                             style={{
@@ -201,7 +201,7 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
                     <TooltipTrigger asChild>
                       <div 
                         onClick={() => handlePredictedLabelClick(label)}
-                        className="flex-1 basis-0 flex items-center justify-center h-8 
+                        className="flex-1 basis-0 flex items-center justify-center h-16 
                           border border-t-0 min-w-0 w-8 overflow-hidden
                           cursor-pointer hover:bg-muted/50"
                       >
@@ -233,7 +233,7 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
 
             {/* Predicted label */}
             <div className="flex">
-              <div className="flex-1 basis-0 flex items-center justify-center h-8 
+              <div className="flex-1 basis-0 flex items-center justify-center h-16 
                 border border-t-0 min-w-0 overflow-hidden">
                 <span className="text-sm text-muted-foreground truncate">
                   Predicted
