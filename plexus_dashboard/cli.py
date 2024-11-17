@@ -763,27 +763,33 @@ def simulate(
                 true_values.append(true_value)
                 predicted_values.append(predicted_value)
                 
-                # Create score result
-                logger.info(f"Creating score result: value={1.0 if predicted_value == 'Yes' else 0.0}, "
-                            f"correct={true_value == predicted_value}, metadata={{'label': predicted_value}}")
-                
-                result = ScoreResult.create(
-                    client=iteration_client,  # Use iteration client
-                    value=1.0 if predicted_value == "Yes" else 0.0,
-                    confidence=random.uniform(0.7, 0.99),
-                    correct=(true_value == predicted_value),
-                    itemId=f"item_{i}",
-                    accountId=account.id,
-                    experimentId=experiment.id,
-                    scorecardId=scorecard.id,
-                    scoringJobId=None,
-                    metadata={
+                # Add debug logging
+                is_correct = true_value == predicted_value
+                logger.info(f"Result {i}: true={true_value}, "
+                          f"predicted={predicted_value}, correct={is_correct}")
+
+                create_args = {
+                    "value": 1.0 if is_correct else 0.0,
+                    "confidence": random.uniform(0.7, 0.99),
+                    "correct": is_correct,
+                    "itemId": f"item_{i}",
+                    "accountId": account.id,
+                    "experimentId": experiment.id,
+                    "scorecardId": scorecard.id,
+                    "scoringJobId": None,
+                    "metadata": {
                         "true_value": true_value,
                         "predicted_value": predicted_value,
                         "label": predicted_value
                     }
+                }
+                
+                logger.info(f"Creating score result with args: {create_args}")
+                result = ScoreResult.create(
+                    client=iteration_client,
+                    **create_args
                 )
-                logger.info(f"Created score result: {result.id}")
+                logger.info(f"Created score result: {result.id}, correct={result.correct}")
 
                 # Calculate metrics immediately after each result
                 metrics, metrics_explanation = calculate_metrics(
