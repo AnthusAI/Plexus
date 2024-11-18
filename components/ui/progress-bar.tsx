@@ -74,14 +74,14 @@ export function ProgressBar({
         <div className="absolute top-0 left-0 right-0 h-full flex justify-between items-center px-2">
           <span className={cn(
             "text-sm font-medium",
-            isFocused ? "text-focus" : "text-primary-foreground"
+            isFocused && isInProgress ? "text-focus" : "text-primary-foreground"
           )}>
             {displayProgress}%
           </span>
           {processedItems !== undefined && totalItems !== undefined && (
             <span className={cn(
               "text-sm font-medium",
-              isFocused ? "text-focus" : "text-primary-foreground"
+              isFocused && isInProgress ? "text-focus" : "text-primary-foreground"
             )}>
               {processedItems} / {totalItems}
             </span>
