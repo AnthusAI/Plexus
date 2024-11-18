@@ -30,6 +30,7 @@ interface ClassDistributionVisualizerProps {
   hideThreshold?: number
   isBalanced?: boolean | null
   hideHeader?: boolean
+  onLabelSelect?: (label: string) => void
 }
 
 const getSegmentPosition = (index: number, total: number) => {
@@ -44,7 +45,8 @@ export default function ClassDistributionVisualizer({
   rotateThreshold = 8,
   hideThreshold = 4,
   isBalanced = null,
-  hideHeader = false
+  hideHeader = false,
+  onLabelSelect
 }: ClassDistributionVisualizerProps) {
   const safeData = Array.isArray(data) ? 
     [...data].sort((a, b) => b.count - a.count) : 
@@ -201,6 +203,7 @@ export default function ClassDistributionVisualizer({
               <Tooltip key={item.label} delayDuration={0}>
                 <TooltipTrigger asChild>
                   <div
+                    onClick={() => onLabelSelect?.(item.label)}
                     style={{
                       width: `${percentage}%`,
                       left: `${safeData.slice(0, index).reduce((sum, prev) => 

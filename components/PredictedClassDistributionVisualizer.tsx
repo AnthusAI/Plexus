@@ -6,12 +6,14 @@ interface PredictedClassDistributionVisualizerProps {
   data?: ClassDistribution[]
   rotateThreshold?: number
   hideThreshold?: number
+  onLabelSelect?: (label: string) => void
 }
 
 export default function PredictedClassDistributionVisualizer({ 
   data = [], 
   rotateThreshold = 8,
   hideThreshold = 4,
+  onLabelSelect
 }: PredictedClassDistributionVisualizerProps) {
   return (
     <div className="w-full flex flex-col gap-1">
@@ -26,6 +28,7 @@ export default function PredictedClassDistributionVisualizer({
           hideThreshold={hideThreshold}
           isBalanced={null}
           hideHeader={true}
+          onLabelSelect={onLabelSelect}
         />
       </div>
     </div>

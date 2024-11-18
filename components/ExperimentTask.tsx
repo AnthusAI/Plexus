@@ -142,70 +142,96 @@ const DetailContent = React.memo(({
   isFullWidth: boolean
   metrics: any[]
   metricsVariant: 'grid' | 'detail'
-}) => (
-  <div className={`w-full ${isFullWidth ? 'grid grid-cols-2 gap-8' : ''}`}>
-    <div className="w-full">
-      <div className="mb-4">
-        <ProgressBar 
-          progress={data.progress}
-          elapsedTime={data.elapsedSeconds !== null ? 
-            formatDuration(data.elapsedSeconds) : undefined}
-          processedItems={data.processedItems}
-          totalItems={data.totalItems}
-          estimatedTimeRemaining={data.estimatedRemainingSeconds !== null ? 
-            formatDuration(data.estimatedRemainingSeconds) : undefined}
-          color="secondary"
-          isFocused={true}
+}) => {
+  const [selectedPredictedActual, setSelectedPredictedActual] = useState<{
+    predicted: string | null
+    actual: string | null
+  }>({ predicted: null, actual: null })
+
+  const handleActualLabelSelect = (label: string) => {
+    setSelectedPredictedActual(prev => ({
+      predicted: null,
+      actual: prev.actual === label ? null : label
+    }))
+  }
+
+  const handlePredictedLabelSelect = (label: string) => {
+    setSelectedPredictedActual(prev => ({
+      predicted: prev.predicted === label ? null : label,
+      actual: null
+    }))
+  }
+
+  return (
+    <div className={`w-full ${isFullWidth ? 'grid grid-cols-2 gap-8' : ''}`}>
+      <div className="w-full">
+        <div className="mb-4">
+          <ProgressBar 
+            progress={data.progress}
+            elapsedTime={data.elapsedSeconds !== null ? 
+              formatDuration(data.elapsedSeconds) : undefined}
+            processedItems={data.processedItems}
+            totalItems={data.totalItems}
+            estimatedTimeRemaining={data.estimatedRemainingSeconds !== null ? 
+              formatDuration(data.estimatedRemainingSeconds) : undefined}
+            color="secondary"
+            isFocused={true}
+          />
+        </div>
+
+        <div className="mb-4">
+          <ClassDistributionVisualizer
+            data={data.datasetClassDistribution}
+            isBalanced={data.isDatasetClassDistributionBalanced}
+            onLabelSelect={handleActualLabelSelect}
+          />
+        </div>
+
+        <div className="mb-4">
+          <PredictedClassDistributionVisualizer
+            data={data.predictedClassDistribution}
+            onLabelSelect={handlePredictedLabelSelect}
+          />
+        </div>
+
+        <MetricsGaugesExplanation
+          explanation={data.metricsExplanation}
+          goal={data.scoreGoal}
         />
+
+        <MetricsGauges 
+          gauges={metrics} 
+          variant="detail"
+        />
+
+        {data.confusionMatrix?.matrix && 
+         data.confusionMatrix.matrix.length > 0 && 
+         data.confusionMatrix.labels && (
+          <div className="">
+            <ConfusionMatrix 
+              data={{
+                matrix: data.confusionMatrix.matrix,
+                labels: data.confusionMatrix.labels
+              }}
+              onSelectionChange={setSelectedPredictedActual}
+            />
+          </div>
+        )}
       </div>
 
-      <div className="mb-4">
-        <ClassDistributionVisualizer
-          data={data.datasetClassDistribution}
-          isBalanced={data.isDatasetClassDistributionBalanced}
-        />
-      </div>
-
-      <div className="mb-4">
-        <PredictedClassDistributionVisualizer
-          data={data.predictedClassDistribution}
-        />
-      </div>
-
-      <MetricsGaugesExplanation
-        explanation={data.metricsExplanation}
-        goal={data.scoreGoal}
-      />
-
-      <MetricsGauges 
-        gauges={metrics} 
-        variant="detail"
-      />
-
-      {data.confusionMatrix?.matrix && 
-       data.confusionMatrix.matrix.length > 0 && 
-       data.confusionMatrix.labels && (
-        <div className="">
-          <ConfusionMatrix 
-            data={{
-              matrix: data.confusionMatrix.matrix,
-              labels: data.confusionMatrix.labels
-            }} 
+      {data.scoreResults && data.scoreResults.length > 0 && (
+        <div className={isFullWidth ? 'w-full' : 'mt-8'}>
+          <ExperimentTaskScoreResults 
+            results={data.scoreResults} 
+            accuracy={data.accuracy ?? 0}
+            selectedPredictedValue={selectedPredictedActual.predicted}
+            selectedActualValue={selectedPredictedActual.actual}
           />
         </div>
       )}
     </div>
-
-    {data.scoreResults && data.scoreResults.length > 0 && (
-      <div className={isFullWidth ? 'w-full' : 'mt-8'}>
-        <ExperimentTaskScoreResults 
-          results={data.scoreResults} 
-          accuracy={data.accuracy ?? 0}
-        />
-      </div>
-    )}
-  </div>
-))
+  )
+})
 
 export default function ExperimentTask({ 
   variant = 'grid',
