@@ -38,9 +38,12 @@ export function ExperimentTaskScoreResults({
     const actual = new Set<string>()
     
     results.forEach(result => {
-      const metadata = JSON.parse(result.metadata)
-      if (metadata.predicted_value) predicted.add(metadata.predicted_value)
-      if (metadata.true_value) actual.add(metadata.true_value)
+      const metadata = typeof result.metadata === 'string' ? 
+        JSON.parse(result.metadata) : 
+        result.metadata
+      
+      if (metadata?.predicted_value) predicted.add(metadata.predicted_value)
+      if (metadata?.true_value) actual.add(metadata.true_value)
     })
     
     return {
@@ -51,7 +54,10 @@ export function ExperimentTaskScoreResults({
 
   const filteredResults = useMemo(() => {
     return results.filter(result => {
-      const metadata = JSON.parse(result.metadata)
+      const metadata = typeof result.metadata === 'string' ? 
+        JSON.parse(result.metadata) : 
+        result.metadata
+      
       const isCorrect = result.value === 1
       
       if (filters.showCorrect !== null && isCorrect !== filters.showCorrect) {

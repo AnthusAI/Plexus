@@ -56,6 +56,8 @@ export function ExperimentListAccuracyBar({
               style={{ 
                 left: `${trueWidth}%`, 
                 width: `${falseWidth}%`,
+                borderTopLeftRadius: trueWidth === 0 ? 'inherit' : 0,
+                borderBottomLeftRadius: trueWidth === 0 ? 'inherit' : 0,
                 borderTopRightRadius: 'inherit',
                 borderBottomRightRadius: 'inherit',
                 opacity
