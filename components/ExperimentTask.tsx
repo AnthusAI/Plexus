@@ -10,6 +10,7 @@ import PredictedClassDistributionVisualizer from '@/components/PredictedClassDis
 import { ExperimentTaskScoreResult } from '@/components/ExperimentTaskScoreResult'
 import type { Schema } from "@/amplify/data/resource"
 import MetricsGaugesExplanation from '@/components/MetricsGaugesExplanation'
+import { ExperimentTaskScoreResults } from '@/components/ExperimentTaskScoreResults'
 
 export interface ExperimentMetric {
   name: string
@@ -115,23 +116,6 @@ function computeIsBalanced(distribution: { label: string, count: number }[] | nu
   )
 }
 
-const ScoreResultsList = React.memo(({ results }: { 
-  results: Schema['ScoreResult']['type'][] 
-}) => (
-  <div className="space-y-2 max-h-[800px] overflow-y-auto">
-    {results.map((result) => (
-      <ExperimentTaskScoreResult
-        key={result.id}
-        id={result.id}
-        value={result.value}
-        confidence={result.confidence}
-        metadata={result.metadata}
-        correct={result.value === 1}
-      />
-    ))}
-  </div>
-))
-
 const GridContent = React.memo(({ data }: { data: ExperimentTaskData }) => (
   <div className="mt-4">
     <ProgressBar 
@@ -214,13 +198,10 @@ const DetailContent = React.memo(({
 
     {data.scoreResults && data.scoreResults.length > 0 && (
       <div className={isFullWidth ? 'w-full' : 'mt-8'}>
-        <div className="flex items-start">
-          <Split className="w-4 h-4 mr-1 mt-0.5 text-foreground shrink-0" />
-          <span className="text-sm text-foreground">
-            {data.scoreResults.length} Predictions
-          </span>
-        </div>
-        <ScoreResultsList results={data.scoreResults} />
+        <ExperimentTaskScoreResults 
+          results={data.scoreResults} 
+          accuracy={data.accuracy ?? 0}
+        />
       </div>
     )}
   </div>
