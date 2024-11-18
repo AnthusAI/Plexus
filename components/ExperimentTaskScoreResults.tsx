@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { Split, Filter, Download } from 'lucide-react'
-import { ExperimentTaskScoreResult } from '@/components/ExperimentTaskScoreResult'
+import { ExperimentTaskScoreResult } from './ExperimentTaskScoreResult'
 import { AccuracyBar } from '@/components/ui/accuracy-bar'
 import { CardButton } from '@/components/CardButton'
 import {
@@ -21,17 +21,29 @@ interface FilterState {
 export interface ExperimentTaskScoreResultsProps {
   results: Schema['ScoreResult']['type'][]
   accuracy: number
+  selectedPredictedValue?: string | null
+  selectedActualValue?: string | null
 }
 
 export function ExperimentTaskScoreResults({ 
   results, 
-  accuracy 
+  accuracy,
+  selectedPredictedValue,
+  selectedActualValue
 }: ExperimentTaskScoreResultsProps) {
   const [filters, setFilters] = useState<FilterState>({
     showCorrect: null,
     predictedValue: null,
     actualValue: null,
   })
+
+  useEffect(() => {
+    setFilters(prev => ({
+      ...prev,
+      predictedValue: selectedPredictedValue ?? null,
+      actualValue: selectedActualValue ?? null
+    }))
+  }, [selectedPredictedValue, selectedActualValue])
 
   const uniqueValues = useMemo(() => {
     const predicted = new Set<string>()
@@ -83,6 +95,16 @@ export function ExperimentTaskScoreResults({
     const correctCount = filteredResults.filter(r => r.value === 1).length
     return (correctCount / filteredResults.length) * 100
   }, [filteredResults])
+
+  const handleAccuracySegmentClick = (isCorrect: boolean) => {
+    setFilters(prev => ({
+      ...prev,
+      showCorrect: prev.showCorrect === isCorrect ? null : isCorrect,
+      // Clear other filters when selecting correct/incorrect
+      predictedValue: null,
+      actualValue: null
+    }))
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -163,7 +185,10 @@ export function ExperimentTaskScoreResults({
         </div>
       </div>
       <div className="flex flex-col flex-1 gap-4 mt-1">
-        <AccuracyBar accuracy={filteredAccuracy} />
+        <AccuracyBar 
+          accuracy={filteredAccuracy} 
+          onSegmentClick={handleAccuracySegmentClick}
+        />
         <div className="flex-1 overflow-y-auto">
           <div className="space-y-2">
             {filteredResults.map((result) => (
