@@ -64,7 +64,7 @@ const Task = <TData = unknown>({
 
   return (
     <Card 
-      className={`bg-card-light shadow-none border-none rounded-lg transition-colors duration-200 hover:bg-muted flex flex-col h-full
+      className={`bg-card shadow-none border-none rounded-lg transition-colors duration-200 flex flex-col h-full
         ${variant === 'grid' ? 'cursor-pointer' : ''}`}
       onClick={variant === 'grid' ? onClick : undefined}
     >
