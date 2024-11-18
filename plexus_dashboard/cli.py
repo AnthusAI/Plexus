@@ -529,6 +529,9 @@ def simulate(
             type="accuracy",
             accountId=account.id,
             status="RUNNING",
+            accuracy=0.0,
+            createdAt=started_at.isoformat().replace('+00:00', 'Z'),
+            updatedAt=started_at.isoformat().replace('+00:00', 'Z'),
             totalItems=num_items,
             processedItems=0,
             scorecardId=scorecard.id,
@@ -544,7 +547,8 @@ def simulate(
             scoreGoal=score_goal,
             datasetClassDistribution=json.dumps(dataset_distribution),
             isDatasetClassDistributionBalanced=is_balanced,
-            metricsExplanation=initial_explanation
+            metricsExplanation=initial_explanation,
+            cost=0.0
         )
         
         # Lists to store true and predicted values for metrics calculation
