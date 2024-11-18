@@ -72,6 +72,12 @@ export function ExperimentTaskScoreResults({
     })
   }, [results, filters])
 
+  const filteredAccuracy = useMemo(() => {
+    if (filteredResults.length === 0) return null
+    const correctCount = filteredResults.filter(r => r.value === 1).length
+    return (correctCount / filteredResults.length) * 100
+  }, [filteredResults])
+
   return (
     <div className="flex flex-col h-full">
       <div className="relative">
@@ -151,7 +157,7 @@ export function ExperimentTaskScoreResults({
         </div>
       </div>
       <div className="flex flex-col flex-1 gap-4 mt-1">
-        <AccuracyBar accuracy={accuracy} />
+        <AccuracyBar accuracy={filteredAccuracy} />
         <div className="flex-1 overflow-y-auto">
           <div className="space-y-2">
             {filteredResults.map((result) => (
