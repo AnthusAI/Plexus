@@ -62,14 +62,6 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
     throw new Error('Cannot transform null experiment')
   }
 
-  console.log('Raw experiment data:', {
-    id: rawExperiment.id,
-    type: rawExperiment.type,
-    accuracy: rawExperiment.accuracy,
-    metrics: rawExperiment.metrics,
-    allFields: Object.keys(rawExperiment)
-  });
-
   // Create a strongly typed base object with ALL fields
   const safeExperiment = {
     id: rawExperiment.id || '',
@@ -195,17 +187,20 @@ interface ExperimentParameters {
 // Keep the client definition
 const client = generateClient<Schema>()
 
-// Add this helper function at the top of the file
+// Update the observeScoreResults function to use GSI properly
 function observeScoreResults(client: any, experimentId: string) {
   return client.models.ScoreResult.observeQuery({
     filter: { experimentId: { eq: experimentId } },
+    // indexName: 'byExperimentId',  // Use the GSI
+    limit: 10000,
     selectionSet: [
       'id',
-      'scoreResults.id',
-      'scoreResults.value',
-      'scoreResults.confidence',
-      'scoreResults.metadata',
-      'scoreResults.correct'
+      'value',
+      'confidence',
+      'metadata',
+      'correct',
+      'createdAt',
+      'experimentId'  // Make sure we include the indexed field
     ]
   })
 }
@@ -277,34 +272,43 @@ async function getExperimentScoreResults(client: any, experimentId: string, next
     usingNextToken: !!nextToken
   })
 
-  // Increase limit to get more items per page
-  const response = await client.models.ScoreResult.list({
-    filter: { experimentId: { eq: experimentId } },
-    limit: 10000, // Increased from 1000 to 10000
-    nextToken,
-    sortDirection: 'DESC',
-    sortField: 'createdAt'
-  })
-
-  console.log('Score results response:', {
+  // Remove sortDirection from initial query
+  const params: any = {
     experimentId,
-    hasData: !!response?.data,
-    resultsCount: response?.data?.length,
-    nextToken: response?.nextToken,
-    hasNextToken: !!response?.nextToken,
-    sampleResult: response?.data?.[0] ? {
-      id: response.data[0].id,
-      value: response.data[0].value,
-      allFields: Object.keys(response.data[0])
-    } : null,
-    payloadSize: JSON.stringify(response.data).length
-  })
+    limit: 10000
+  }
+  
+  if (nextToken) {
+    params.nextToken = nextToken
+  }
+
+  const response = await client.models.ScoreResult.listScoreResultByExperimentId(params)
+
+  // Sort the results in memory instead
+  const sortedData = response.data ? 
+    [...response.data].sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    ) : []
 
   return {
-    data: response.data || [],
+    data: sortedData,
     nextToken: response.nextToken
   }
 }
+
+// Add this type near the top with other interfaces
+type ScoreResultField = 
+  | 'id'
+  | 'value'
+  | 'itemId'
+  | 'accountId'
+  | 'scorecardId'
+  | 'confidence'
+  | 'metadata'
+  | 'scoringJobId'
+  | 'experimentId'
+  | 'correct'
+  | 'createdAt'
 
 export default function ExperimentsDashboard(): JSX.Element {
   const [experiments, setExperiments] = useState<NonNullable<Schema['Experiment']['type']>[]>([])
@@ -428,299 +432,36 @@ export default function ExperimentsDashboard(): JSX.Element {
     };
   }
 
-  // Modify the main subscription handler to be more selective about updates
+  // Update the subscription effect
   useEffect(() => {
-    if (!client) return
-
-    let subscription: { unsubscribe: () => void } | null = null
-
-    async function setupRealTimeSync() {
+    setScoreResults([]) // Clear existing results
+    
+    if (!selectedExperiment?.id) return
+    
+    let isMounted = true
+    
+    console.log('Setting up score results for experiment:', selectedExperiment.id)
+    
+    // Do initial load using the GSI
+    const loadInitialResults = async () => {
       try {
-        const { data: accounts } = await listAccounts()
-
-        if (accounts.length > 0) {
-          const foundAccountId = accounts[0].id
-          setAccountId(foundAccountId)
-          
-          const { data: experimentModels } = await listExperiments(foundAccountId)
-          
-          const filteredExperiments = experimentModels
-            .map(transformExperiment)
-            .sort((a, b) => 
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-            )
-          
-          setExperiments(filteredExperiments)
-          setIsLoading(false)
-
-          // Set up subscription with more selective updates
-          subscription = observeQueryFromModel<Schema['Experiment']['type']>(
-            client.models.Experiment,
-            { accountId: { eq: foundAccountId } }
-          ).subscribe({
-            next: async ({ items }: { items: Schema['Experiment']['type'][] }) => {
-              try {
-                console.log('Subscription update - experiments:', items.map(item => ({
-                  id: item.id,
-                  type: item.type,
-                  accuracy: item.accuracy,
-                  processedItems: item.processedItems,
-                  totalItems: item.totalItems
-                })))
-
-                setExperiments(prevExperiments => {
-                  const updatedExperiments = [...prevExperiments]
-                  let hasChanges = false
-
-                  items.forEach((newItem: Schema['Experiment']['type']) => {
-                    const index = updatedExperiments.findIndex(exp => exp.id === newItem.id)
-                    if (index === -1) {
-                      // New experiment - use transform to get full object
-                      hasChanges = true
-                      updatedExperiments.push(transformExperiment(newItem))
-                    } else {
-                      const existingExp = updatedExperiments[index]
-                      // Only update if relevant fields have changed
-                      const relevantFieldsChanged = 
-                        existingExp.status !== newItem.status ||
-                        existingExp.processedItems !== newItem.processedItems ||
-                        existingExp.totalItems !== newItem.totalItems ||
-                        existingExp.metrics !== newItem.metrics ||
-                        existingExp.errorMessage !== newItem.errorMessage ||
-                        existingExp.errorDetails !== newItem.errorDetails ||
-                        existingExp.metricsExplanation !== newItem.metricsExplanation ||
-                        existingExp.accuracy !== newItem.accuracy ||  // Include accuracy changes
-                        existingExp.type !== newItem.type  // Include type changes
-
-                      if (relevantFieldsChanged) {
-                        hasChanges = true
-                        // Create updated experiment preserving existing fields
-                        const updatedExp = {
-                          ...existingExp,  // Keep all existing fields
-                          // Update all fields that can change
-                          status: newItem.status ?? existingExp.status,
-                          processedItems: newItem.processedItems ?? existingExp.processedItems,
-                          totalItems: newItem.totalItems ?? existingExp.totalItems,
-                          metrics: newItem.metrics ?? existingExp.metrics,
-                          errorMessage: newItem.errorMessage ?? existingExp.errorMessage,
-                          errorDetails: newItem.errorDetails ?? existingExp.errorDetails,
-                          metricsExplanation: newItem.metricsExplanation ?? existingExp.metricsExplanation,
-                          accuracy: newItem.accuracy ?? existingExp.accuracy,  // Update accuracy
-                          type: newItem.type ?? existingExp.type  // Update type
-                        }
-                        updatedExperiments[index] = transformExperiment(updatedExp)
-                      }
-                    }
-                  })
-
-                  return hasChanges ? 
-                    updatedExperiments.sort((a, b) => 
-                      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                    ) : 
-                    prevExperiments
-                })
-
-                // Update selected experiment if needed
-                if (selectedExperimentRef.current) {
-                  const updatedItem = items.find(item => item.id === selectedExperimentRef.current?.id)
-                  if (updatedItem) {
-                    const relevantFieldsChanged = 
-                      selectedExperimentRef.current.status !== updatedItem.status ||
-                      selectedExperimentRef.current.processedItems !== updatedItem.processedItems ||
-                      selectedExperimentRef.current.totalItems !== updatedItem.totalItems ||
-                      selectedExperimentRef.current.metrics !== updatedItem.metrics ||
-                      selectedExperimentRef.current.errorMessage !== updatedItem.errorMessage ||
-                      selectedExperimentRef.current.errorDetails !== updatedItem.errorDetails ||
-                      selectedExperimentRef.current.metricsExplanation !== updatedItem.metricsExplanation ||
-                      selectedExperimentRef.current.accuracy !== updatedItem.accuracy ||  // Include accuracy changes
-                      selectedExperimentRef.current.type !== updatedItem.type  // Include type changes
-
-                    if (relevantFieldsChanged) {
-                      const transformed = transformExperiment({
-                        ...selectedExperimentRef.current,
-                        ...updatedItem,
-                        // Explicitly update all fields that can change
-                        status: updatedItem.status ?? selectedExperimentRef.current.status,
-                        processedItems: updatedItem.processedItems ?? selectedExperimentRef.current.processedItems,
-                        totalItems: updatedItem.totalItems ?? selectedExperimentRef.current.totalItems,
-                        metrics: updatedItem.metrics ?? selectedExperimentRef.current.metrics,
-                        errorMessage: updatedItem.errorMessage ?? selectedExperimentRef.current.errorMessage,
-                        errorDetails: updatedItem.errorDetails ?? selectedExperimentRef.current.errorDetails,
-                        metricsExplanation: updatedItem.metricsExplanation ?? selectedExperimentRef.current.metricsExplanation,
-                        accuracy: updatedItem.accuracy ?? selectedExperimentRef.current.accuracy,
-                        type: updatedItem.type ?? selectedExperimentRef.current.type
-                      })
-                      setSelectedExperiment(transformed)
-                    }
-                  }
-                }
-              } catch (error) {
-                console.error('Error in subscription handler:', error)
-              }
-            },
-            error: (error: Error) => {
-              console.error('Subscription error:', error)
-              setError(error)
-            }
+        const response = await getExperimentScoreResults(client, selectedExperiment.id)
+        if (isMounted) {
+          console.log('Initial score results loaded:', {
+            count: response.data.length,
+            firstItem: response.data[0]
           })
-        } else {
-          setIsLoading(false)
+          setScoreResults(response.data)
         }
       } catch (error) {
-        console.error('Error in setupRealTimeSync:', error)
-        setIsLoading(false)
+        console.error('Error loading initial results:', error)
       }
     }
 
-    setupRealTimeSync()
+    loadInitialResults()
 
     return () => {
-      if (subscription) {
-        subscription.unsubscribe()
-      }
-    }
-  }, [client])
-
-  // Update the fetchScorecardNames function
-  useEffect(() => {
-    const fetchScorecardNames = async () => {
-      
-      const newScorecardNames: Record<string, string> = {};
-      
-      if (!experiments || experiments.length === 0) {
-        setScorecardNames({});
-        return;
-      }
-
-      try {
-        // Process experiments sequentially instead of in parallel
-        for (const experiment of experiments) {
-          if (!experiment?.id) continue;
-          
-          try {
-            if (experiment.scorecard) {
-              const result = await experiment.scorecard();
-              newScorecardNames[experiment.id] = result?.data?.name || 'Unknown Scorecard';
-            } else {
-              newScorecardNames[experiment.id] = 'Unknown Scorecard';
-            }
-          } catch (error) {
-            console.error(`Error fetching scorecard name for experiment ${experiment.id}:`, error);
-            newScorecardNames[experiment.id] = 'Unknown Scorecard';
-          }
-        }
-
-        setScorecardNames(newScorecardNames);
-      } catch (error) {
-        console.error('Error in fetchScorecardNames:', error);
-        // Set default names for all experiments on error
-        const defaultNames = experiments.reduce((acc, exp) => {
-          if (exp?.id) {
-            acc[exp.id] = 'Unknown Scorecard';
-          }
-          return acc;
-        }, {} as Record<string, string>);
-        setScorecardNames(defaultNames);
-      }
-    };
-
-    fetchScorecardNames();
-  }, [experiments]);
-
-  // Update the score results subscription effect
-  useEffect(() => {
-    if (!selectedExperiment?.id) {
-      setScoreResults([])
-      return
-    }
-
-    // Clear existing results immediately when switching experiments
-    setScoreResults([])
-
-    console.log('Starting score results handling for experiment:', selectedExperiment.id)
-    
-    let subscription: { unsubscribe: () => void } | null = null
-    
-    // First, get initial results with pagination
-    const fetchInitialResults = async () => {
-      console.log('Fetching initial score results...')
-      try {
-        let nextToken: string | undefined | null = undefined
-
-        do {
-          const response = await getExperimentScoreResults(client, selectedExperiment.id, nextToken)
-          nextToken = response.nextToken
-          
-          console.log('Fetched page of results:', {
-            newResults: response.data.length,
-            hasMorePages: !!nextToken,
-            nextToken
-          })
-
-          // Update state immediately with each page of results
-          setScoreResults(prevResults => {
-            const allResults = [...prevResults, ...response.data]
-            return allResults.sort((a, b) => 
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-            )
-          })
-
-        } while (nextToken)
-
-        console.log('Finished fetching all results')
-
-        // Only start subscription after initial fetch is complete
-        console.log('Setting up score results subscription...')
-        subscription = observeScoreResults(client, selectedExperiment.id).subscribe({
-          next: ({ items }: { items: Schema['ScoreResult']['type'][] }) => {
-            console.log('Score results subscription update:', {
-              count: items.length,
-              sampleResult: items[0] ? {
-                id: items[0].id,
-                value: items[0].value,
-                allFields: Object.keys(items[0])
-              } : null
-            })
-
-            setScoreResults(prevResults => {
-              const allResults = [...prevResults]
-              let hasChanges = false
-
-              items.forEach(newItem => {
-                const existingIndex = allResults.findIndex(r => r.id === newItem.id)
-                if (existingIndex === -1) {
-                  hasChanges = true
-                  allResults.push(newItem)
-                } else if (JSON.stringify(allResults[existingIndex]) !== JSON.stringify(newItem)) {
-                  hasChanges = true
-                  allResults[existingIndex] = newItem
-                }
-              })
-
-              if (!hasChanges) return prevResults
-
-              return allResults.sort((a, b) => 
-                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-              )
-            })
-          },
-          error: (error: Error) => {
-            console.error('Score results subscription error:', error)
-          }
-        })
-
-      } catch (error) {
-        console.error('Error fetching initial score results:', error)
-      }
-    }
-    
-    fetchInitialResults()
-
-    return () => {
-      if (subscription) {
-        console.log('Cleaning up score results subscription')
-        subscription.unsubscribe()
-      }
+      isMounted = false
     }
   }, [selectedExperiment?.id])
 
