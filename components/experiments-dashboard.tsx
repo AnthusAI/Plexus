@@ -550,32 +550,62 @@ export default function ExperimentsDashboard(): JSX.Element {
       return
     }
 
-    console.log('Starting subscription for experiment:', selectedExperiment.id)
+    console.log('Starting score results handling for experiment:', selectedExperiment.id)
     
     // First, get initial results
     const fetchInitialResults = async () => {
+      console.log('Fetching initial score results through experiment relationship...')
       try {
-        const { data } = await listFromModel<Schema['ScoreResult']['type']>(
-          client.models.ScoreResult,
-          { experimentId: { eq: selectedExperiment.id } },
-          '1000'
+        // Get the experiment with its score results
+        const { data: experimentWithResults } = await client.models.Experiment.get(
+          { id: selectedExperiment.id },
+          { 
+            selectionSet: [
+              'id',
+              'scoreResults.*'  // Request all fields of score results
+            ]
+          }
         )
-        
-        console.log('Initial score results:', data.length)
-        setScoreResults(data.sort((a, b) => 
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        ))
+
+        console.log('Query response:', {
+          experimentId: experimentWithResults?.id,
+          resultsCount: experimentWithResults?.scoreResults?.length,
+          sampleResult: experimentWithResults?.scoreResults?.[0] ? {
+            id: experimentWithResults.scoreResults[0].id,
+            value: experimentWithResults.scoreResults[0].value,
+            experimentId: experimentWithResults.scoreResults[0].experimentId,
+            allFields: Object.keys(experimentWithResults.scoreResults[0])
+          } : null
+        })
+
+        if (experimentWithResults?.scoreResults) {
+          const sortedResults = [...experimentWithResults.scoreResults].sort((a, b) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          )
+          setScoreResults(sortedResults)
+        }
       } catch (error) {
-        console.error('Error fetching initial results:', error)
+        console.error('Error fetching initial score results:', error)
       }
     }
     
     fetchInitialResults()
     
     // Then set up subscription for updates
+    console.log('Setting up score results subscription...')
     const sub = observeScoreResults(client, selectedExperiment.id).subscribe({
       next: ({ items }: { items: Schema['ScoreResult']['type'][] }) => {
-        console.log('Subscription update - score results:', items.length)
+        console.log('Score results subscription update:', {
+          count: items.length,
+          sampleResult: items[0] ? {
+            id: items[0].id,
+            value: items[0].value,
+            confidence: items[0].confidence,
+            correct: items[0].correct,
+            allFields: Object.keys(items[0])
+          } : null
+        })
+
         setScoreResults(prevResults => {
           const allResults = [...prevResults]
           let hasChanges = false
@@ -599,12 +629,12 @@ export default function ExperimentsDashboard(): JSX.Element {
         })
       },
       error: (error: Error) => {
-        console.error('Subscription error:', error)
+        console.error('Score results subscription error:', error)
       }
     })
 
     return () => {
-      console.log('Cleaning up subscription')
+      console.log('Cleaning up score results subscription')
       sub.unsubscribe()
     }
   }, [selectedExperiment?.id])

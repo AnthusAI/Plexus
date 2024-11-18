@@ -7,8 +7,58 @@ export async function listFromModel<T>(
   nextToken?: string,
   limit?: number
 ): Promise<AmplifyListResult<T>> {
-  const response = await model.list(filter ? { filter } : undefined)
-  return response as AmplifyListResult<T>
+  console.log('Listing from model:', {
+    modelName: model?.name,
+    filter,
+    nextToken,
+    limit
+  })
+
+  const options: any = {}
+  if (filter) options.filter = filter
+  if (nextToken) options.nextToken = nextToken
+  if (limit) options.limit = limit
+
+  try {
+    // Collect all results across pages
+    let allData: T[] = []
+    let currentNextToken = nextToken
+
+    do {
+      if (currentNextToken) options.nextToken = currentNextToken
+      
+      const response = await model.list(options)
+      console.log('List page response:', {
+        count: response.data?.length,
+        nextToken: response.nextToken,
+        sampleItem: response.data?.[0] ? {
+          id: response.data[0].id,
+          allFields: Object.keys(response.data[0])
+        } : null
+      })
+
+      if (response.data?.length) {
+        allData = [...allData, ...response.data]
+      }
+
+      currentNextToken = response.nextToken
+    } while (currentNextToken)
+
+    console.log('All pages fetched:', {
+      totalCount: allData.length,
+      firstId: allData[0]?.id,
+      lastId: allData[allData.length - 1]?.id
+    })
+
+    return {
+      data: allData,
+      nextToken: null  // No more pages
+    } as AmplifyListResult<T>
+
+  } catch (error) {
+    console.error('Error listing from model:', error)
+    throw error
+  }
 }
 
 export function observeQueryFromModel<T>(
@@ -96,6 +146,8 @@ export async function getFromModel<T>(
 }
 
 export function observeScoreResults(client: any, experimentId: string) {
+  console.log('Setting up score results subscription for experiment:', experimentId)
+  
   return client.models.ScoreResult.observeQuery({
     filter: { experimentId: { eq: experimentId } },
     limit: 1000,

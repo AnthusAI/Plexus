@@ -776,35 +776,50 @@ def simulate_experiment_progress(experiment_id: str, client: PlexusDashboardClie
 
 @experiment.command()
 @click.argument('id', required=True)
-def count_results(id: str):
-    """Count score results for an experiment"""
+@click.option('--limit', type=int, default=1000, help='Maximum number of results to return')
+def list_results(id: str, limit: int):
+    """List score results for an experiment"""
     client = PlexusDashboardClient()
     
     try:
         # Get experiment with score results included
         response = client.execute("""
-            query GetExperiment($id: ID!) {
+            query GetExperiment($id: ID!, $limit: Int) {
                 getExperiment(id: $id) {
-                    scoreResults {
+                    scoreResults(limit: $limit) {
                         items {
+                            id
                             value
                             confidence
                             metadata
                             correct
+                            createdAt
+                            experimentId
                         }
                     }
                 }
             }
-        """, {'id': id})
+        """, {'id': id, 'limit': limit})
         
         # Get the items array directly from the nested response
         items = response.get('getExperiment', {}).get('scoreResults', {}).get('items', [])
         result_count = len(items)
             
-        click.echo(f"Score results for experiment {id}: {result_count}")
+        click.echo(f"Found {result_count} score results for experiment {id}:")
+        
+        for item in items:
+            created = item.get('createdAt', '').replace('Z', '').replace('T', ' ')
+            click.echo(
+                f"ID: {item.get('id')}, "
+                f"ExperimentId: {item.get('experimentId')}, "
+                f"Value: {item.get('value')}, "
+                f"Confidence: {item.get('confidence')}, "
+                f"Correct: {item.get('correct')}, "
+                f"Created: {created}"
+            )
         
     except Exception as e:
-        logger.error(f"Error counting results: {e}")
+        logger.error(f"Error listing results: {e}")
         click.echo(f"Error: {e}", err=True)
 
 if __name__ == '__main__':
