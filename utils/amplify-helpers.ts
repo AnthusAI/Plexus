@@ -114,16 +114,6 @@ export function observeQueryFromModel<T>(
             return;
           }
 
-          // Log the full raw data for each item
-          console.log('Raw subscription items:', data.items.map((item: any) => ({
-            id: item.id,
-            type: item.type,
-            processedItems: item.processedItems,
-            totalItems: item.totalItems,
-            accuracy: item.accuracy,
-            allFields: Object.keys(item)
-          })));
-
           handlers.next(data);
         },
         error: (error: Error) => {
