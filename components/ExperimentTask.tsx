@@ -194,10 +194,12 @@ const DetailContent = React.memo(({
           />
         </div>
 
-        <MetricsGaugesExplanation
-          explanation={data.metricsExplanation}
-          goal={data.scoreGoal}
-        />
+        <div className="mb-2">
+          <MetricsGaugesExplanation
+            explanation={data.metricsExplanation}
+            goal={data.scoreGoal}
+          />
+        </div>
 
         <MetricsGauges 
           gauges={metrics} 
