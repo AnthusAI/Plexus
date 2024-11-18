@@ -1,32 +1,34 @@
 import React from 'react'
 import { Button } from '@/components/ui/button'
 import type { LucideIcon } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 export interface CardButtonProps {
   icon: LucideIcon
+  onClick?: () => void
+  active?: boolean
   label?: string
-  onClick: () => void
 }
 
 export function CardButton({
   icon: Icon,
   onClick,
-  label,
+  active = false,
+  label
 }: CardButtonProps) {
-  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation()
-    onClick()
-  }
-
   return (
     <Button
       variant="ghost"
-      size="sm"
-      className="px-3 h-9 bg-background hover:!bg-accent hover:!text-accent-foreground"
-      onClick={handleClick}
+      size={label ? "default" : "icon"}
+      className={cn(
+        label ? "gap-2" : "h-8 w-8",
+        "rounded-md",
+        active && "bg-accent"
+      )}
+      onClick={onClick}
     >
       <Icon className="h-4 w-4" />
-      {label && <span className="ml-1.5 text-sm">{label}</span>}
+      {label && <span>{label}</span>}
     </Button>
   )
 } 

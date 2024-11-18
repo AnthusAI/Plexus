@@ -201,15 +201,11 @@ function observeScoreResults(client: any, experimentId: string) {
     filter: { experimentId: { eq: experimentId } },
     selectionSet: [
       'id',
-      'value',
-      'confidence',
-      'metadata',
-      'correct',
-      'itemId',
-      'accountId',
-      'scoringJobId',
-      'experimentId',
-      'scorecardId'
+      'scoreResults.id',
+      'scoreResults.value',
+      'scoreResults.confidence',
+      'scoreResults.metadata',
+      'scoreResults.correct'
     ]
   })
 }
@@ -221,6 +217,71 @@ interface SubscriptionResponse {
 
 // Add this type to help with the state update
 type ExperimentTaskPropsType = ExperimentTaskProps['task']
+
+interface ExperimentWithResults {
+  id: string
+  scoreResults: Array<{
+    id: string
+    value: number
+    confidence: number | null
+    metadata: any
+    correct: boolean | null
+    createdAt: string
+    itemId: string
+    experimentId: string
+    scorecardId: string
+  }>
+}
+
+interface ExperimentQueryResponse {
+  data: {
+    id: string
+    scoreResults: Array<{
+      id: string
+      value: number
+      confidence: number | null
+      metadata: any
+      correct: boolean | null
+      createdAt: string
+      itemId: string
+      experimentId: string
+      scorecardId: string
+    }>
+  }
+}
+
+// Define the structure of scoreResults
+interface ScoreResult {
+  id: string
+  value: number
+  confidence: number | null
+  metadata: any
+  correct: boolean | null
+  createdAt: string
+  itemId: string
+  experimentId: string
+  scorecardId: string
+}
+
+// Define the structure of the Experiment with scoreResults
+interface ExperimentWithResults {
+  id: string
+  scoreResults: ScoreResult[]
+}
+
+// Add this helper function near the top with other helpers
+async function getExperimentWithScoreResults(client: any, experimentId: string) {
+  const response = await client.models.Experiment.get(
+    { id: experimentId },
+    { 
+      selectionSet: [
+        'id',
+        'scoreResults.*'
+      ]
+    }
+  )
+  return response as { data: ExperimentWithResults }
+}
 
 export default function ExperimentsDashboard(): JSX.Element {
   const [experiments, setExperiments] = useState<NonNullable<Schema['Experiment']['type']>[]>([])
@@ -556,16 +617,8 @@ export default function ExperimentsDashboard(): JSX.Element {
     const fetchInitialResults = async () => {
       console.log('Fetching initial score results through experiment relationship...')
       try {
-        // Get the experiment with its score results
-        const { data: experimentWithResults } = await client.models.Experiment.get(
-          { id: selectedExperiment.id },
-          { 
-            selectionSet: [
-              'id',
-              'scoreResults.*'  // Request all fields of score results
-            ]
-          }
-        )
+        const response = await getExperimentWithScoreResults(client, selectedExperiment.id)
+        const experimentWithResults = response.data
 
         console.log('Query response:', {
           experimentId: experimentWithResults?.id,
@@ -582,7 +635,7 @@ export default function ExperimentsDashboard(): JSX.Element {
           const sortedResults = [...experimentWithResults.scoreResults].sort((a, b) => 
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           )
-          setScoreResults(sortedResults)
+          setScoreResults(sortedResults as Schema['ScoreResult']['type'][])
         }
       } catch (error) {
         console.error('Error fetching initial score results:', error)
@@ -593,8 +646,8 @@ export default function ExperimentsDashboard(): JSX.Element {
     
     // Then set up subscription for updates
     console.log('Setting up score results subscription...')
-    const sub = observeScoreResults(client, selectedExperiment.id).subscribe({
-      next: ({ items }: { items: Schema['ScoreResult']['type'][] }) => {
+    const subscription = observeScoreResults(client, selectedExperiment.id).subscribe({
+      next: ({ items }: { items: ScoreResult[] }) => {  // Use ScoreResult interface
         console.log('Score results subscription update:', {
           count: items.length,
           sampleResult: items[0] ? {
@@ -610,14 +663,14 @@ export default function ExperimentsDashboard(): JSX.Element {
           const allResults = [...prevResults]
           let hasChanges = false
           
-          items.forEach((newItem: Schema['ScoreResult']['type']) => {
+          items.forEach((newItem) => {
             const existingIndex = allResults.findIndex(r => r.id === newItem.id)
             if (existingIndex === -1) {
               hasChanges = true
-              allResults.push(newItem)
+              allResults.push(newItem as Schema['ScoreResult']['type'])
             } else if (JSON.stringify(allResults[existingIndex]) !== JSON.stringify(newItem)) {
               hasChanges = true
-              allResults[existingIndex] = newItem
+              allResults[existingIndex] = newItem as Schema['ScoreResult']['type']
             }
           })
           
@@ -635,7 +688,7 @@ export default function ExperimentsDashboard(): JSX.Element {
 
     return () => {
       console.log('Cleaning up score results subscription')
-      sub.unsubscribe()
+      subscription.unsubscribe()
     }
   }, [selectedExperiment?.id])
 

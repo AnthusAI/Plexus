@@ -1,7 +1,7 @@
 import type { Schema } from "@/amplify/data/resource"
 import type { AmplifyListResult, AmplifyGetResult } from "@/types/shared"
 
-export async function listFromModel<T>(
+export async function listFromModel<T extends { id: string }>(
   model: any,
   filter?: any,
   nextToken?: string,
@@ -150,12 +150,7 @@ export function observeScoreResults(client: any, experimentId: string) {
   
   return client.models.ScoreResult.observeQuery({
     filter: { experimentId: { eq: experimentId } },
-    limit: 1000,
-    sort: {
-      field: 'createdAt',
-      direction: 'desc'
-    },
-    fields: [
+    selectionSet: [
       'id',
       'value',
       'confidence',
