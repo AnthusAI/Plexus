@@ -270,17 +270,40 @@ interface ExperimentWithResults {
 }
 
 // Add this helper function near the top with other helpers
-async function getExperimentWithScoreResults(client: any, experimentId: string) {
-  const response = await client.models.Experiment.get(
-    { id: experimentId },
-    { 
-      selectionSet: [
-        'id',
-        'scoreResults.*'
-      ]
-    }
-  )
-  return response as { data: ExperimentWithResults }
+async function getExperimentScoreResults(client: any, experimentId: string, nextToken?: string) {
+  console.log('Fetching score results for experiment:', {
+    experimentId,
+    nextToken,
+    usingNextToken: !!nextToken
+  })
+
+  // Increase limit to get more items per page
+  const response = await client.models.ScoreResult.list({
+    filter: { experimentId: { eq: experimentId } },
+    limit: 10000, // Increased from 1000 to 10000
+    nextToken,
+    sortDirection: 'DESC',
+    sortField: 'createdAt'
+  })
+
+  console.log('Score results response:', {
+    experimentId,
+    hasData: !!response?.data,
+    resultsCount: response?.data?.length,
+    nextToken: response?.nextToken,
+    hasNextToken: !!response?.nextToken,
+    sampleResult: response?.data?.[0] ? {
+      id: response.data[0].id,
+      value: response.data[0].value,
+      allFields: Object.keys(response.data[0])
+    } : null,
+    payloadSize: JSON.stringify(response.data).length
+  })
+
+  return {
+    data: response.data || [],
+    nextToken: response.nextToken
+  }
 }
 
 export default function ExperimentsDashboard(): JSX.Element {
@@ -611,84 +634,93 @@ export default function ExperimentsDashboard(): JSX.Element {
       return
     }
 
+    // Clear existing results immediately when switching experiments
+    setScoreResults([])
+
     console.log('Starting score results handling for experiment:', selectedExperiment.id)
     
-    // First, get initial results
+    let subscription: { unsubscribe: () => void } | null = null
+    
+    // First, get initial results with pagination
     const fetchInitialResults = async () => {
-      console.log('Fetching initial score results through experiment relationship...')
+      console.log('Fetching initial score results...')
       try {
-        const response = await getExperimentWithScoreResults(client, selectedExperiment.id)
-        const experimentWithResults = response.data
+        let nextToken: string | undefined | null = undefined
 
-        console.log('Query response:', {
-          experimentId: experimentWithResults?.id,
-          resultsCount: experimentWithResults?.scoreResults?.length,
-          sampleResult: experimentWithResults?.scoreResults?.[0] ? {
-            id: experimentWithResults.scoreResults[0].id,
-            value: experimentWithResults.scoreResults[0].value,
-            experimentId: experimentWithResults.scoreResults[0].experimentId,
-            allFields: Object.keys(experimentWithResults.scoreResults[0])
-          } : null
+        do {
+          const response = await getExperimentScoreResults(client, selectedExperiment.id, nextToken)
+          nextToken = response.nextToken
+          
+          console.log('Fetched page of results:', {
+            newResults: response.data.length,
+            hasMorePages: !!nextToken,
+            nextToken
+          })
+
+          // Update state immediately with each page of results
+          setScoreResults(prevResults => {
+            const allResults = [...prevResults, ...response.data]
+            return allResults.sort((a, b) => 
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            )
+          })
+
+        } while (nextToken)
+
+        console.log('Finished fetching all results')
+
+        // Only start subscription after initial fetch is complete
+        console.log('Setting up score results subscription...')
+        subscription = observeScoreResults(client, selectedExperiment.id).subscribe({
+          next: ({ items }: { items: Schema['ScoreResult']['type'][] }) => {
+            console.log('Score results subscription update:', {
+              count: items.length,
+              sampleResult: items[0] ? {
+                id: items[0].id,
+                value: items[0].value,
+                allFields: Object.keys(items[0])
+              } : null
+            })
+
+            setScoreResults(prevResults => {
+              const allResults = [...prevResults]
+              let hasChanges = false
+
+              items.forEach(newItem => {
+                const existingIndex = allResults.findIndex(r => r.id === newItem.id)
+                if (existingIndex === -1) {
+                  hasChanges = true
+                  allResults.push(newItem)
+                } else if (JSON.stringify(allResults[existingIndex]) !== JSON.stringify(newItem)) {
+                  hasChanges = true
+                  allResults[existingIndex] = newItem
+                }
+              })
+
+              if (!hasChanges) return prevResults
+
+              return allResults.sort((a, b) => 
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              )
+            })
+          },
+          error: (error: Error) => {
+            console.error('Score results subscription error:', error)
+          }
         })
 
-        if (experimentWithResults?.scoreResults) {
-          const sortedResults = [...experimentWithResults.scoreResults].sort((a, b) => 
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          )
-          setScoreResults(sortedResults as Schema['ScoreResult']['type'][])
-        }
       } catch (error) {
         console.error('Error fetching initial score results:', error)
       }
     }
     
     fetchInitialResults()
-    
-    // Then set up subscription for updates
-    console.log('Setting up score results subscription...')
-    const subscription = observeScoreResults(client, selectedExperiment.id).subscribe({
-      next: ({ items }: { items: ScoreResult[] }) => {  // Use ScoreResult interface
-        console.log('Score results subscription update:', {
-          count: items.length,
-          sampleResult: items[0] ? {
-            id: items[0].id,
-            value: items[0].value,
-            confidence: items[0].confidence,
-            correct: items[0].correct,
-            allFields: Object.keys(items[0])
-          } : null
-        })
-
-        setScoreResults(prevResults => {
-          const allResults = [...prevResults]
-          let hasChanges = false
-          
-          items.forEach((newItem) => {
-            const existingIndex = allResults.findIndex(r => r.id === newItem.id)
-            if (existingIndex === -1) {
-              hasChanges = true
-              allResults.push(newItem as Schema['ScoreResult']['type'])
-            } else if (JSON.stringify(allResults[existingIndex]) !== JSON.stringify(newItem)) {
-              hasChanges = true
-              allResults[existingIndex] = newItem as Schema['ScoreResult']['type']
-            }
-          })
-          
-          if (!hasChanges) return prevResults
-          
-          return allResults.sort((a, b) => 
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          )
-        })
-      },
-      error: (error: Error) => {
-        console.error('Score results subscription error:', error)
-      }
-    })
 
     return () => {
-      console.log('Cleaning up score results subscription')
-      subscription.unsubscribe()
+      if (subscription) {
+        console.log('Cleaning up score results subscription')
+        subscription.unsubscribe()
+      }
     }
   }, [selectedExperiment?.id])
 
@@ -746,7 +778,10 @@ export default function ExperimentsDashboard(): JSX.Element {
         {filteredExperiments.map((experiment) => (
           <TableRow 
             key={experiment.id} 
-            onClick={() => setSelectedExperiment(experiment)} 
+            onClick={() => {
+              setScoreResults([])  // Clear score results before setting new experiment
+              setSelectedExperiment(experiment)
+            }} 
             className={`cursor-pointer transition-colors duration-200 
               ${experiment.id === selectedExperiment?.id ? 'bg-muted' : 'hover:bg-muted'}`}
           >

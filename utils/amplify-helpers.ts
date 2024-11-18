@@ -156,12 +156,10 @@ export function observeScoreResults(client: any, experimentId: string) {
       'confidence',
       'metadata',
       'correct',
+      'createdAt',
       'itemId',
-      'accountId',
-      'scoringJobId',
       'experimentId',
-      'scorecardId',
-      'createdAt'
+      'scorecardId'
     ]
   })
 } 
