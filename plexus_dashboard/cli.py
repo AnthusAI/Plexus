@@ -826,5 +826,56 @@ def list_results(id: str, limit: int):
         logger.error(f"Error listing results: {e}")
         click.echo(f"Error: {e}", err=True)
 
+@cli.group()
+def result_test():
+    """Manage result test records"""
+    pass
+
+@result_test.command()
+@click.argument('experiment_id', required=True)
+@click.option('--value', required=True, help='Test value to record')
+def create(experiment_id: str, value: str):
+    """Create a new result test record
+    
+    Example:
+        plexus-dashboard result-test create abc123 --value "test-value-1"
+    """
+    client = PlexusDashboardClient()
+    
+    try:
+        # Execute the mutation directly since this is a test model
+        mutation = """
+        mutation CreateResultTest($input: CreateResultTestInput!) {
+            createResultTest(input: $input) {
+                id
+                value
+                experimentId
+                createdAt
+            }
+        }
+        """
+        
+        variables = {
+            'input': {
+                'value': value,
+                'experimentId': experiment_id
+            }
+        }
+        
+        result = client.execute(mutation, variables)
+        
+        if not result or 'createResultTest' not in result:
+            raise Exception(f"Failed to create result test. Response: {result}")
+            
+        created = result['createResultTest']
+        click.echo(f"Created result test: {created['id']}")
+        click.echo(f"Value: {created['value']}")
+        click.echo(f"Experiment ID: {created['experimentId']}")
+        click.echo(f"Created at: {created['createdAt']}")
+        
+    except Exception as e:
+        logger.error(f"Error creating result test: {str(e)}")
+        click.echo(f"Error: {str(e)}", err=True)
+
 if __name__ == '__main__':
     cli() 

@@ -34,7 +34,7 @@ import { CardButton } from '@/components/CardButton'
 import { formatDuration } from '@/utils/format-duration'
 import { ExperimentDashboardSkeleton } from "@/components/loading-skeleton"
 import { ModelListResult, AmplifyListResult, AmplifyGetResult } from '@/types/shared'
-import { listFromModel, observeQueryFromModel, getFromModel, observeScoreResults, observeResultTests } from "@/utils/amplify-helpers"
+import { listFromModel, observeQueryFromModel, getFromModel, observeScoreResults } from "@/utils/amplify-helpers"
 import type { ExperimentTaskData } from '@/components/ExperimentTask'
 
 const ACCOUNT_KEY = 'call-criteria'
@@ -303,7 +303,6 @@ export default function ExperimentsDashboard(): JSX.Element {
   const [hasMounted, setHasMounted] = useState(false)
   const isNarrowViewport = useViewportWidth()
   const [scoreResults, setScoreResults] = useState<Schema['ScoreResult']['type'][]>([])
-  const [resultTests, setResultTests] = useState<Schema['ResultTest']['type'][]>([])
 
   // Add mounted state check
   useEffect(() => {
@@ -314,59 +313,6 @@ export default function ExperimentsDashboard(): JSX.Element {
   useEffect(() => {
     selectedExperimentRef.current = selectedExperiment;
   }, [selectedExperiment]);
-
-  // Move the ResultTest subscription effect here
-  useEffect(() => {
-    if (!selectedExperiment?.id) return
-    
-    let isMounted = true
-    console.log('Starting result tests subscription for experiment:', selectedExperiment.id)
-    
-    const subscription = observeResultTests(client, selectedExperiment.id).subscribe({
-      next: ({ items, isSynced }: { items: Schema['ResultTest']['type'][], isSynced: boolean }) => {
-        console.log('Result tests subscription update:', {
-          count: items?.length,
-          isSynced,
-          items
-        })
-
-        if (!isMounted) return
-
-        if (!items || !Array.isArray(items)) {
-          console.warn('Invalid items received:', items)
-          return
-        }
-
-        const validItems = items.filter(item => 
-          item != null && 
-          typeof item === 'object' &&
-          'id' in item &&
-          'value' in item
-        )
-
-        setResultTests(prev => {
-          const merged = [...prev]
-          for (const item of validItems) {
-            const existingIndex = merged.findIndex(existing => existing.id === item.id)
-            if (existingIndex === -1) {
-              merged.push(item)
-            } else {
-              merged[existingIndex] = item
-            }
-          }
-          return merged
-        })
-      },
-      error: (error: Error) => {
-        console.error('Result tests subscription error:', error)
-      }
-    })
-
-    return () => {
-      isMounted = false
-      subscription.unsubscribe()
-    }
-  }, [selectedExperiment?.id])
 
   const getExperimentTaskProps = async (experiment: Schema['Experiment']['type']) => {
     const progress = calculateProgress(experiment.processedItems, experiment.totalItems);
