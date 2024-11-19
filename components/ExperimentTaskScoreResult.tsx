@@ -21,7 +21,7 @@ export function ExperimentTaskScoreResult({
     JSON.parse(metadata) : metadata
 
   return (
-    <Card className="px-0 pb-0 bg-card rounded-lg border-0">
+    <Card className="px-0 pb-0 bg-card-light rounded-lg border-0 shadow-none">
       <CardContent className="flex flex-col p-2">
         <div className="flex items-start justify-between">
           <div className="flex items-start space-x-4">
@@ -46,7 +46,7 @@ export function ExperimentTaskScoreResult({
             </div>
           </div>
           {confidence !== undefined && confidence !== null && (
-            <Badge className="bg-card-light self-start">
+            <Badge className="bg-card self-start shadow-none">
               {Math.round(confidence * 100)}% confident
             </Badge>
           )}

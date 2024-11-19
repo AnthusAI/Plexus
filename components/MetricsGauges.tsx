@@ -51,7 +51,7 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
             key={index} 
             className={cn(
               "flex justify-center rounded-lg p-2",
-              gauge.priority && variant === 'detail' && "bg-muted"
+              gauge.priority && variant === 'detail' ? "bg-card-light" : "bg-card"
             )}
           >
             <Gauge
@@ -59,7 +59,7 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
               title={gauge.label}
               min={gauge.min}
               max={gauge.max}
-              backgroundColor={gauge.backgroundColor}
+              backgroundColor={gauge.priority ? gauge.backgroundColor : 'var(--card-light)'}
               showTicks={variant === 'detail'}
               information={gauge.information}
               priority={gauge.priority}

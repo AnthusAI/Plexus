@@ -2,6 +2,7 @@ import React from 'react'
 import type { Meta, StoryObj } from '@storybook/react'
 import { expect, within } from '@storybook/test'
 import MetricsGauges from '@/components/MetricsGauges'
+import { Card } from '@/components/ui/card'
 
 const meta = {
   title: 'Visualization/MetricsGauges',
@@ -68,6 +69,11 @@ export const Grid: Story = {
     ...createGaugeConfig(75),
     variant: 'grid'
   },
+  render: (args) => (
+    <Card>
+      <MetricsGauges {...args} />
+    </Card>
+  ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await expect(canvas.getByText('Accuracy')).toBeInTheDocument()
@@ -81,6 +87,11 @@ export const Detail: Story = {
     variant: 'detail',
     metricsExplanation: "This experiment uses accuracy as the primary metric, along with precision and sensitivity to provide a complete picture of model performance across all classes."
   },
+  render: (args) => (
+    <Card>
+      <MetricsGauges {...args} />
+    </Card>
+  ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     

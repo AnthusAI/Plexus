@@ -139,75 +139,151 @@ export async function getFromModel<T>(
 export function observeScoreResults(client: any, experimentId: string) {
   console.log('Setting up score results subscription for experiment:', experimentId)
   
-  const subscription = client.models.ScoreResult.observeQuery({
-    filter: { experimentId: { eq: experimentId } },
-    fields: [
-      'id',
-      'value',
-      'confidence',
-      'metadata',
-      'correct',
-      'itemId',
-      'accountId',
-      'scoringJobId',
-      'experimentId',
-      'scorecardId',
-      'createdAt'
-    ]
-  })
-
-  // Wrap the subscription to handle null items
-  return {
-    subscribe: (handlers: {
-      next: (data: any) => void,
-      error: (error: Error) => void
-    }) => {
-      return subscription.subscribe({
-        next: (data: any) => {
-          // Filter out any null items
-          if (data?.items) {
-            const validItems = data.items.filter((item: Schema['ScoreResult']['type'] | null) => item != null)
-            handlers.next({
-              ...data,
-              items: validItems
-            })
-          }
-        },
-        error: handlers.error
-      })
-    }
-  }
-}
-
-export function observeResultTests(client: any, experimentId: string) {
-  console.log('Setting up result tests subscription for experiment:', experimentId)
-  
-  const subscription = client.models.ResultTest.observeQuery({
-    filter: { experimentId: { eq: experimentId } },
-    fields: ['id', 'value', 'experimentId', 'createdAt']
-  })
+  const subscriptions: { unsubscribe: () => void }[] = []
 
   return {
     subscribe: (handlers: {
       next: (data: any) => void,
       error: (error: Error) => void
     }) => {
-      return subscription.subscribe({
-        next: (data: any) => {
-          console.log('ResultTest subscription update:', data)
-          if (data?.items) {
-            const validItems = data.items.filter((item: Schema['ResultTest']['type'] | null) => item != null)
-            handlers.next({
-              ...data,
-              items: validItems
+      // Function to fetch latest data using the GSI with pagination
+      const fetchLatestData = async () => {
+        try {
+          console.log('Starting to fetch ScoreResults for experiment:', experimentId)
+          
+          let allData: Schema['ScoreResult']['type'][] = []
+          let nextToken: string | null = null
+          let pageCount = 0
+          
+          do {
+            pageCount++
+            console.log('Fetching ScoreResult page:', {
+              pageNumber: pageCount,
+              nextToken,
+              experimentId
             })
-          }
+
+            const response: {
+              data: Schema['ScoreResult']['type'][]
+              nextToken: string | null
+            } = await client.models.ScoreResult.listScoreResultByExperimentId({
+              experimentId,
+              limit: 10000,
+              nextToken,
+              fields: [
+                'id',
+                'value',
+                'confidence',
+                'metadata',
+                'correct',
+                'itemId',
+                'accountId',
+                'scoringJobId',
+                'experimentId',
+                'scorecardId',
+                'createdAt'
+              ]
+            })
+            
+            const pageSize = response?.data?.length || 0
+            console.log('Received page response:', {
+              pageNumber: pageCount,
+              pageSize,
+              hasNextToken: !!response.nextToken,
+              nextToken: response.nextToken,
+              firstId: response.data?.[0]?.id,
+              lastId: response.data?.[pageSize - 1]?.id
+            })
+            
+            if (response?.data) {
+              allData = [...allData, ...response.data]
+            }
+            
+            nextToken = response.nextToken
+            
+            console.log('Pagination status:', {
+              pageNumber: pageCount,
+              newRecordsInPage: pageSize,
+              totalRecordsSoFar: allData.length,
+              hasMorePages: !!nextToken
+            })
+          } while (nextToken)
+
+          // Sort all results in memory
+          const sortedData = [...allData].sort((a, b) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          )
+
+          console.log('Completed fetching all ScoreResults:', {
+            totalPages: pageCount,
+            totalRecords: sortedData.length,
+            experimentId,
+            firstRecordId: sortedData[0]?.id,
+            lastRecordId: sortedData[sortedData.length - 1]?.id
+          })
+
+          handlers.next({
+            items: sortedData,
+            isSynced: true
+          })
+        } catch (error: unknown) {
+          const err = error as Error
+          console.error('Error fetching ScoreResults:', {
+            error: err,
+            experimentId,
+            errorMessage: err.message,
+            errorStack: err.stack
+          })
+        }
+      }
+
+      // Get initial data
+      fetchLatestData()
+
+      // Subscribe to create events
+      const createSub = client.models.ScoreResult.onCreate().subscribe({
+        next: () => {
+          console.log('ScoreResult onCreate triggered, fetching latest data')
+          fetchLatestData()
         },
         error: (error: Error) => {
-          console.error('ResultTest subscription error:', error)
+          console.error('ScoreResult onCreate error:', error)
           handlers.error(error)
         }
       })
+      subscriptions.push(createSub)
+
+      // Subscribe to update events
+      const updateSub = client.models.ScoreResult.onUpdate().subscribe({
+        next: () => {
+          console.log('ScoreResult onUpdate triggered, fetching latest data')
+          fetchLatestData()
+        },
+        error: (error: Error) => {
+          console.error('ScoreResult onUpdate error:', error)
+          handlers.error(error)
+        }
+      })
+      subscriptions.push(updateSub)
+
+      // Subscribe to delete events
+      const deleteSub = client.models.ScoreResult.onDelete().subscribe({
+        next: () => {
+          console.log('ScoreResult onDelete triggered, fetching latest data')
+          fetchLatestData()
+        },
+        error: (error: Error) => {
+          console.error('ScoreResult onDelete error:', error)
+          handlers.error(error)
+        }
+      })
+      subscriptions.push(deleteSub)
+
+      return {
+        unsubscribe: () => {
+          subscriptions.forEach(sub => sub.unsubscribe())
+        }
+      }
     }
   }
 } 
