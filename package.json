@@ -41,7 +41,7 @@
     "@spotlightjs/spotlight": "^2.5.0",
     "@storybook/addon-themes": "^8.3.6",
     "@tailwindcss/container-queries": "^0.1.1",
-    "aws-amplify": "^6.4.0",
+    "aws-amplify": "^6.8.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
