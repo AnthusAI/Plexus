@@ -34,7 +34,7 @@ import { CardButton } from '@/components/CardButton'
 import { formatDuration } from '@/utils/format-duration'
 import { ExperimentDashboardSkeleton } from "@/components/loading-skeleton"
 import { ModelListResult, AmplifyListResult, AmplifyGetResult } from '@/types/shared'
-import { listFromModel, observeQueryFromModel, getFromModel } from "@/utils/amplify-helpers"
+import { listFromModel, observeQueryFromModel, getFromModel, observeScoreResults, observeResultTests } from "@/utils/amplify-helpers"
 import type { ExperimentTaskData } from '@/components/ExperimentTask'
 
 const ACCOUNT_KEY = 'call-criteria'
@@ -101,7 +101,8 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
     accuracy: typeof rawExperiment.accuracy === 'number' ? rawExperiment.accuracy : null,
     items: async (options?: any) => ({ data: [], nextToken: null }),
     scoreResults: async (options?: any) => ({ data: [], nextToken: null }),
-    scoringJobs: async (options?: any) => ({ data: [], nextToken: null })
+    scoringJobs: async (options?: any) => ({ data: [], nextToken: null }),
+    resultTests: async (options?: any) => ({ data: [], nextToken: null })
   };
 
   return {
@@ -194,23 +195,6 @@ interface ExperimentParameters {
 
 // Keep the client definition
 const client = generateClient<Schema>()
-
-// Add this helper function at the top of the file
-function observeScoreResults(client: any, experimentId: string) {
-  return client.models.ScoreResult.observeQuery({
-    filter: { experimentId: { eq: experimentId } },
-    indexName: 'byExperimentId',
-    limit: 10000,
-    selectionSet: [
-      'id',
-      'value',
-      'confidence',
-      'metadata',
-      'correct',
-      'createdAt'
-    ]
-  })
-}
 
 // Add this type at the top with other interfaces
 interface SubscriptionResponse {
@@ -319,6 +303,7 @@ export default function ExperimentsDashboard(): JSX.Element {
   const [hasMounted, setHasMounted] = useState(false)
   const isNarrowViewport = useViewportWidth()
   const [scoreResults, setScoreResults] = useState<Schema['ScoreResult']['type'][]>([])
+  const [resultTests, setResultTests] = useState<Schema['ResultTest']['type'][]>([])
 
   // Add mounted state check
   useEffect(() => {
@@ -329,6 +314,59 @@ export default function ExperimentsDashboard(): JSX.Element {
   useEffect(() => {
     selectedExperimentRef.current = selectedExperiment;
   }, [selectedExperiment]);
+
+  // Move the ResultTest subscription effect here
+  useEffect(() => {
+    if (!selectedExperiment?.id) return
+    
+    let isMounted = true
+    console.log('Starting result tests subscription for experiment:', selectedExperiment.id)
+    
+    const subscription = observeResultTests(client, selectedExperiment.id).subscribe({
+      next: ({ items, isSynced }: { items: Schema['ResultTest']['type'][], isSynced: boolean }) => {
+        console.log('Result tests subscription update:', {
+          count: items?.length,
+          isSynced,
+          items
+        })
+
+        if (!isMounted) return
+
+        if (!items || !Array.isArray(items)) {
+          console.warn('Invalid items received:', items)
+          return
+        }
+
+        const validItems = items.filter(item => 
+          item != null && 
+          typeof item === 'object' &&
+          'id' in item &&
+          'value' in item
+        )
+
+        setResultTests(prev => {
+          const merged = [...prev]
+          for (const item of validItems) {
+            const existingIndex = merged.findIndex(existing => existing.id === item.id)
+            if (existingIndex === -1) {
+              merged.push(item)
+            } else {
+              merged[existingIndex] = item
+            }
+          }
+          return merged
+        })
+      },
+      error: (error: Error) => {
+        console.error('Result tests subscription error:', error)
+      }
+    })
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [selectedExperiment?.id])
 
   const getExperimentTaskProps = async (experiment: Schema['Experiment']['type']) => {
     const progress = calculateProgress(experiment.processedItems, experiment.totalItems);
@@ -626,35 +664,61 @@ export default function ExperimentsDashboard(): JSX.Element {
 
   // Update the score results subscription effect
   useEffect(() => {
-    setScoreResults([]) // Clear existing results
-    
     if (!selectedExperiment?.id) return
     
     let isMounted = true
-    let subscription: { unsubscribe: () => void } | null = null
+    console.log('Starting score results subscription for experiment:', selectedExperiment.id)
     
-    console.log('Starting score results handling for experiment:', selectedExperiment.id)
-    
-    subscription = observeScoreResults(client, selectedExperiment.id).subscribe({
+    const subscription = observeScoreResults(client, selectedExperiment.id).subscribe({
       next: ({ items, isSynced }: { items: Schema['ScoreResult']['type'][], isSynced: boolean }) => {
+        console.log('Score results subscription update')
+
         if (!isMounted) return
-        
+
+        // Defensive type check and null check
+        if (!items || !Array.isArray(items)) {
+          console.warn('Invalid items received:', items)
+          return
+        }
+
+        // Additional defensive filtering
+        const validItems = items.filter(item => 
+          item != null && 
+          typeof item === 'object' &&
+          'id' in item &&
+          'value' in item
+        )
+
         console.log('Score results subscription update:', {
-          count: items.length,
+          count: validItems.length,
           isSynced,
-          sampleResult: items[0] ? {
-            id: items[0].id,
-            value: items[0].value,
-            allFields: Object.keys(items[0])
+          sampleResult: validItems[0] ? {
+            id: validItems[0].id,
+            value: validItems[0].value,
+            allFields: Object.keys(validItems[0])
           } : null
         })
 
         // Sort and update all results at once
-        const sortedItems = [...items].sort((a, b) => 
+        const sortedItems = [...validItems].sort((a, b) => 
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         )
         
-        setScoreResults(sortedItems)
+        setScoreResults(prev => {
+          // Merge new items with existing ones
+          const merged = [...prev]
+          for (const item of sortedItems) {
+            const existingIndex = merged.findIndex(existing => existing.id === item.id)
+            if (existingIndex === -1) {
+              merged.push(item)
+            } else {
+              merged[existingIndex] = item
+            }
+          }
+          return merged.sort((a, b) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          )
+        })
       },
       error: (error: Error) => {
         console.error('Score results subscription error:', error)
@@ -663,10 +727,7 @@ export default function ExperimentsDashboard(): JSX.Element {
 
     return () => {
       isMounted = false
-      if (subscription) {
-        console.log('Cleaning up score results subscription')
-        subscription.unsubscribe()
-      }
+      subscription.unsubscribe()
     }
   }, [selectedExperiment?.id])
 

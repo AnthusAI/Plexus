@@ -1,5 +1,6 @@
 import type { Schema } from "@/amplify/data/resource"
 import type { AmplifyListResult, AmplifyGetResult } from "@/types/shared"
+import { tap } from "node:test/reporters"
 
 export async function listFromModel<T extends { id: string }>(
   model: any,
@@ -138,18 +139,75 @@ export async function getFromModel<T>(
 export function observeScoreResults(client: any, experimentId: string) {
   console.log('Setting up score results subscription for experiment:', experimentId)
   
-  return client.models.ScoreResult.observeQuery({
+  const subscription = client.models.ScoreResult.observeQuery({
     filter: { experimentId: { eq: experimentId } },
-    selectionSet: [
+    fields: [
       'id',
       'value',
       'confidence',
       'metadata',
       'correct',
-      'createdAt',
       'itemId',
+      'accountId',
+      'scoringJobId',
       'experimentId',
-      'scorecardId'
+      'scorecardId',
+      'createdAt'
     ]
   })
+
+  // Wrap the subscription to handle null items
+  return {
+    subscribe: (handlers: {
+      next: (data: any) => void,
+      error: (error: Error) => void
+    }) => {
+      return subscription.subscribe({
+        next: (data: any) => {
+          // Filter out any null items
+          if (data?.items) {
+            const validItems = data.items.filter((item: Schema['ScoreResult']['type'] | null) => item != null)
+            handlers.next({
+              ...data,
+              items: validItems
+            })
+          }
+        },
+        error: handlers.error
+      })
+    }
+  }
+}
+
+export function observeResultTests(client: any, experimentId: string) {
+  console.log('Setting up result tests subscription for experiment:', experimentId)
+  
+  const subscription = client.models.ResultTest.observeQuery({
+    filter: { experimentId: { eq: experimentId } },
+    fields: ['id', 'value', 'experimentId', 'createdAt']
+  })
+
+  return {
+    subscribe: (handlers: {
+      next: (data: any) => void,
+      error: (error: Error) => void
+    }) => {
+      return subscription.subscribe({
+        next: (data: any) => {
+          console.log('ResultTest subscription update:', data)
+          if (data?.items) {
+            const validItems = data.items.filter((item: Schema['ResultTest']['type'] | null) => item != null)
+            handlers.next({
+              ...data,
+              items: validItems
+            })
+          }
+        },
+        error: (error: Error) => {
+          console.error('ResultTest subscription error:', error)
+          handlers.error(error)
+        }
+      })
+    }
+  }
 } 
