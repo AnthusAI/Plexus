@@ -123,6 +123,7 @@ const schema = a.schema({
       isDatasetClassDistributionBalanced: a.boolean(),
       predictedClassDistribution: a.json(),
       isPredictedClassDistributionBalanced: a.boolean(),
+      resultTests: a.hasMany('ResultTest', 'experimentId'),
     })
     .authorization((allow) => [
       allow.publicApiKey(),
@@ -255,6 +256,20 @@ const schema = a.schema({
     .authorization((allow) => [
       allow.publicApiKey(),
       allow.authenticated()
+    ]),
+
+  ResultTest: a
+    .model({
+      value: a.string().required(),
+      experimentId: a.string().required(),
+      experiment: a.belongsTo('Experiment', 'experimentId'),
+    })
+    .authorization((allow) => [
+      allow.publicApiKey(),
+      allow.authenticated()
+    ])
+    .secondaryIndexes((idx) => [
+      idx("experimentId")
     ]),
 });
 
