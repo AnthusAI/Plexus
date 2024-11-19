@@ -27,7 +27,12 @@ class Classifier(BaseNode):
         chat_history: Annotated[List, Field(default_factory=list)]
         completion: Optional[str] = None
         classification: Optional[str] = None
-        retry_count: int = Field(default=0)
+        explanation: Optional[str] = None
+        confidence: Optional[float] = None
+        retry_count: Optional[int] = Field(
+            default=0, 
+            description="Number of retry attempts"
+        )
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
@@ -83,7 +88,7 @@ class Classifier(BaseNode):
                 messages = state.chat_history
 
             chat_prompt = ChatPromptTemplate.from_messages(messages)
-            completion = await model.invoke(chat_prompt.format_prompt().to_messages())
+            completion = await model.ainvoke(chat_prompt.format_prompt().to_messages())
             
             return {**state.model_dump(), "completion": completion.content}
 
