@@ -1,11 +1,11 @@
 import { signOut } from '../actions'
 import DashboardLayout from '@/components/dashboard-layout'
-import DataDashboard from '@/components/data-dashboard'
+import DatasetsDashboard from '@/components/datasets-dashboard'
 
-export default function DataPage() {
+export default function DatasetsPage() {
   return (
     <DashboardLayout signOut={signOut}>
-      <DataDashboard />
+      <DatasetsDashboard />
     </DashboardLayout>
   )
 }
