@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
+import { Button, type ButtonProps } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
