@@ -337,8 +337,8 @@ class PlexusDashboardClient(_BaseAPIClient):
         self.Scorecard = ScorecardNamespace(self)
         self.Account = AccountNamespace(self)
 
-    def updateExperiment(self, id: str, **kwargs) -> None:
-        """Update experiment fields."""
+    def updateEvaluation(self, id: str, **kwargs) -> None:
+        """Update evaluation fields."""
         try:
             # Always update the updatedAt timestamp
             kwargs['updatedAt'] = datetime.now(timezone.utc).isoformat().replace(
@@ -346,8 +346,8 @@ class PlexusDashboardClient(_BaseAPIClient):
             )
             
             mutation = """
-            mutation UpdateExperiment($input: UpdateExperimentInput!) {
-                updateExperiment(input: $input) {
+            mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                updateEvaluation(input: $input) {
                     id
                     type
                     accountId
@@ -389,5 +389,5 @@ class PlexusDashboardClient(_BaseAPIClient):
             self.execute(mutation, variables)
             
         except Exception as e:
-            logger.error(f"Error updating experiment: {e}")
+            logger.error(f"Error updating evaluation: {e}")
             raise

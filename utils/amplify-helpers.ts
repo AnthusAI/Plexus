@@ -136,8 +136,8 @@ export async function getFromModel<T>(
   return response as AmplifyGetResult<T>
 }
 
-export function observeScoreResults(client: any, experimentId: string) {
-  console.log('Setting up score results subscription for experiment:', experimentId)
+export function observeScoreResults(client: any, evaluationId: string) {
+  console.log('Setting up score results subscription for evaluation:', evaluationId)
   
   const subscriptions: { unsubscribe: () => void }[] = []
 
@@ -149,7 +149,7 @@ export function observeScoreResults(client: any, experimentId: string) {
       // Function to fetch latest data using the GSI with pagination
       const fetchLatestData = async () => {
         try {
-          console.log('Starting to fetch ScoreResults for experiment:', experimentId)
+          console.log('Starting to fetch ScoreResults for evaluation:', evaluationId)
           
           let allData: Schema['ScoreResult']['type'][] = []
           let nextToken: string | null = null
@@ -160,14 +160,14 @@ export function observeScoreResults(client: any, experimentId: string) {
             console.log('Fetching ScoreResult page:', {
               pageNumber: pageCount,
               nextToken,
-              experimentId
+              evaluationId
             })
 
             const response: {
               data: Schema['ScoreResult']['type'][]
               nextToken: string | null
-            } = await client.models.ScoreResult.listScoreResultByExperimentId({
-              experimentId,
+            } = await client.models.ScoreResult.listScoreResultByEvaluationId({
+              evaluationId,
               limit: 10000,
               nextToken,
               fields: [
@@ -179,7 +179,7 @@ export function observeScoreResults(client: any, experimentId: string) {
                 'itemId',
                 'accountId',
                 'scoringJobId',
-                'experimentId',
+                'evaluationId',
                 'scorecardId',
                 'createdAt'
               ]
@@ -217,7 +217,7 @@ export function observeScoreResults(client: any, experimentId: string) {
           console.log('Completed fetching all ScoreResults:', {
             totalPages: pageCount,
             totalRecords: sortedData.length,
-            experimentId,
+            evaluationId,
             firstRecordId: sortedData[0]?.id,
             lastRecordId: sortedData[sortedData.length - 1]?.id
           })
@@ -230,7 +230,7 @@ export function observeScoreResults(client: any, experimentId: string) {
           const err = error as Error
           console.error('Error fetching ScoreResults:', {
             error: err,
-            experimentId,
+            evaluationId,
             errorMessage: err.message,
             errorStack: err.stack
           })

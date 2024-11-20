@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { Split, Filter, Download } from 'lucide-react'
-import { ExperimentTaskScoreResult } from './ExperimentTaskScoreResult'
+import { EvaluationTaskScoreResult } from './EvaluationTaskScoreResult'
 import { AccuracyBar } from '@/components/ui/accuracy-bar'
 import { CardButton } from '@/components/CardButton'
 import {
@@ -18,19 +18,19 @@ interface FilterState {
   actualValue: string | null
 }
 
-export interface ExperimentTaskScoreResultsProps {
+export interface EvaluationTaskScoreResultsProps {
   results: Schema['ScoreResult']['type'][]
   accuracy: number
   selectedPredictedValue?: string | null
   selectedActualValue?: string | null
 }
 
-export function ExperimentTaskScoreResults({ 
+export function EvaluationTaskScoreResults({ 
   results, 
   accuracy,
   selectedPredictedValue,
   selectedActualValue
-}: ExperimentTaskScoreResultsProps) {
+}: EvaluationTaskScoreResultsProps) {
   const [filters, setFilters] = useState<FilterState>({
     showCorrect: null,
     predictedValue: null,
@@ -192,7 +192,7 @@ export function ExperimentTaskScoreResults({
         <div className="flex-1 overflow-y-auto">
           <div className="space-y-2">
             {filteredResults.map((result) => (
-              <ExperimentTaskScoreResult
+              <EvaluationTaskScoreResult
                 key={result.id}
                 id={result.id}
                 value={result.value}

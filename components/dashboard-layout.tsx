@@ -19,7 +19,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Input } from "@/components/ui/input"
-import { ChatExperimentCard } from "@/components/chat-experiment-card"
+import { ChatEvaluationCard } from "@/components/chat-evaluation-card"
 
 import SquareLogo, { LogoVariant } from './logo-square'
 import { useSidebar } from "@/app/contexts/SidebarContext"
@@ -137,7 +137,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     { name: "Alerts", icon: Siren, path: "/alerts" },
     { name: "Feedback", icon: MessageCircleMore, path: "/feedback-queues" },
     { name: "Reports", icon: FileBarChart, path: "/reports" },
-    { name: "Experiments", icon: FlaskConical, path: "/experiments" },
+    { name: "Evaluations", icon: FlaskConical, path: "/evaluations" },
     { name: "Analysis", icon: Sparkles, path: "/analysis" },
     { name: "Scorecards", icon: ListTodo, path: "/scorecards" },
     { name: "Data", icon: Database, path: "/data" },
@@ -340,9 +340,9 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               {rightSidebarState !== 'collapsed' && (
                 <div className="space-y-4 mb-4">
                   {[
-                    <ChatExperimentCard
+                    <ChatEvaluationCard
                       key="exp1"
-                      experimentId="Experiment started"
+                      evaluationId="Evaluation started"
                       status="running"
                       progress={42}
                       accuracy={86.7}
@@ -362,9 +362,9 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                         <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
                       </Avatar>
                     </div>,
-                    <ChatExperimentCard
+                    <ChatEvaluationCard
                       key="exp2"
-                      experimentId="Experiment completed"
+                      evaluationId="Evaluation completed"
                       status="completed"
                       progress={100}
                       accuracy={92}
@@ -384,9 +384,9 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                         <AvatarFallback className="bg-background dark:bg-border">DN</AvatarFallback>
                       </Avatar>
                     </div>,
-                    <ChatExperimentCard
+                    <ChatEvaluationCard
                       key="exp3"
-                      experimentId="New experiment"
+                      evaluationId="New evaluation"
                       status="running"
                       progress={87}
                       accuracy={88.2}
@@ -396,11 +396,11 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                       score="Good Call"
                     />,
                     <div key="msg3" className="bg-plexus-chat text-plexus-chat-foreground p-3 rounded-lg max-w-[80%]">
-                      Certainly! I'm starting a new experiment run for the "CS3 Services v2" scorecard on the "Good Call" score.
+                      Certainly! I'm starting a new evaluation run for the "CS3 Services v2" scorecard on the "Good Call" score.
                     </div>,
                     <div key="user3" className="flex items-start space-x-2 justify-end">
                       <div className="bg-user-chat text-user-chat-foreground p-3 rounded-lg max-w-[80%]">
-                        Start a new experiment run on the "CS3 Services v2" scorecard for the "Good Call" score.
+                        Start a new evaluation run on the "CS3 Services v2" scorecard for the "Good Call" score.
                       </div>
                       <Avatar className="h-8 w-8 mt-1">
                         <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>

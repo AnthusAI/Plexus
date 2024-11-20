@@ -1,28 +1,28 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import ExperimentTask from '@/components/ExperimentTask';
-import type { ExperimentTaskProps } from '@/components/ExperimentTask';
+import EvaluationTask from '@/components/EvaluationTask';
+import type { EvaluationTaskProps } from '@/components/EvaluationTask';
 
 const meta = {
-  title: 'Tasks/Types/ExperimentTask',
-  component: ExperimentTask,
+  title: 'Tasks/Types/EvaluationTask',
+  component: EvaluationTask,
   parameters: {
     layout: 'centered',
   },
-} satisfies Meta<typeof ExperimentTask>;
+} satisfies Meta<typeof EvaluationTask>;
 
 export default meta;
-type Story = StoryObj<typeof ExperimentTask>;
+type Story = StoryObj<typeof EvaluationTask>;
 
-const createTask = (id: number, processedItems: number, totalItems: number): ExperimentTaskProps => ({
+const createTask = (id: number, processedItems: number, totalItems: number): EvaluationTaskProps => ({
   task: {
     id: id.toString(),
-    type: 'Experiment started',
+    type: 'Evaluation started',
     scorecard: 'Test Scorecard',
     score: 'Test Score',
     time: '2 hours ago',
-    summary: 'Experiment Summary',
-    description: 'Experiment Description',
+    summary: 'Evaluation Summary',
+    description: 'Evaluation Description',
     data: {
       accuracy: 90,
       metrics: [
@@ -116,10 +116,10 @@ export const DetailFullWidth: Story = {
 export const GridWithMany = {
   render: () => (
     <div className="grid grid-cols-2 gap-4">
-      <ExperimentTask {...createTask(1, 25, 100)} />
-      <ExperimentTask {...createTask(2, 50, 100)} />
-      <ExperimentTask {...createTask(3, 75, 100)} />
-      <ExperimentTask {...createTask(4, 100, 100)} />
+      <EvaluationTask {...createTask(1, 25, 100)} />
+      <EvaluationTask {...createTask(2, 50, 100)} />
+      <EvaluationTask {...createTask(3, 75, 100)} />
+      <EvaluationTask {...createTask(4, 100, 100)} />
     </div>
   ),
 };

@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ThumbsUp, ThumbsDown } from 'lucide-react'
 
-export interface ExperimentTaskScoreResultProps {
+export interface EvaluationTaskScoreResultProps {
   id: string
   value: number
   confidence?: number | null
@@ -11,12 +11,12 @@ export interface ExperimentTaskScoreResultProps {
   correct?: boolean | null
 }
 
-export function ExperimentTaskScoreResult({ 
+export function EvaluationTaskScoreResult({ 
   value, 
   confidence, 
   metadata,
   correct
-}: ExperimentTaskScoreResultProps) {
+}: EvaluationTaskScoreResultProps) {
   const parsedMetadata = typeof metadata === 'string' ? 
     JSON.parse(metadata) : metadata
 
@@ -46,7 +46,8 @@ export function ExperimentTaskScoreResult({
             </div>
           </div>
           {confidence !== undefined && confidence !== null && (
-            <Badge className="bg-card self-start shadow-none">
+            <Badge className="bg-card self-start shadow-none
+">
               {Math.round(confidence * 100)}% confident
             </Badge>
           )}

@@ -1,7 +1,7 @@
 import React from 'react'
-import { ActivityData, isExperimentActivity, ScoringJobTaskData, ExperimentTaskData, OptimizationActivity } from '@/types/tasks'
+import { ActivityData, isEvaluationActivity, ScoringJobTaskData, EvaluationTaskData, OptimizationActivity } from '@/types/tasks'
 import { BaseTaskProps } from '@/components/Task'
-import ExperimentTaskComponent from '@/components/ExperimentTask'
+import EvaluationTaskComponent from '@/components/EvaluationTask'
 import AlertTask from '@/components/AlertTask'
 import ReportTask from '@/components/ReportTask'
 import OptimizationTask from '@/components/OptimizationTask'
@@ -17,7 +17,7 @@ interface ActivityRendererProps {
 }
 
 type ScoringJobTaskProps = BaseTaskProps<ScoringJobTaskData>
-type ExperimentTaskProps = BaseTaskProps<ExperimentTaskData>
+type EvaluationTaskProps = BaseTaskProps<EvaluationTaskData>
 
 const ActivityRenderer: React.FC<ActivityRendererProps> = ({
   activity,
@@ -44,10 +44,10 @@ const ActivityRenderer: React.FC<ActivityRendererProps> = ({
           onClose={onClose}
         />
       )
-    case 'Experiment completed':
-    case 'Experiment started':
-      return isExperimentActivity(activity) ? (
-        <ExperimentTaskComponent
+    case 'Evaluation completed':
+    case 'Evaluation started':
+      return isEvaluationActivity(activity) ? (
+        <EvaluationTaskComponent
           variant="detail"
           task={{
             ...activity,

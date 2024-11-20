@@ -1,7 +1,7 @@
 """
-Experiment Model - Python representation of the GraphQL Experiment type.
+Evaluation Model - Python representation of the GraphQL Evaluation type.
 
-This model represents individual experiments in the system, tracking:
+This model represents individual Evaluations in the system, tracking:
 - Accuracy and performance metrics
 - Processing status and progress
 - Error states and details
@@ -22,7 +22,7 @@ from ..client import _BaseAPIClient
 logger = logging.getLogger(__name__)
 
 @dataclass
-class Experiment(BaseModel):
+class Evaluation(BaseModel):
     type: str
     accountId: str
     status: str
@@ -149,8 +149,8 @@ class Experiment(BaseModel):
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
         **kwargs
-    ) -> 'Experiment':
-        """Create a new experiment."""
+    ) -> 'Evaluation':
+        """Create a new Evaluation."""
         now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
         
         input_data = {
@@ -168,23 +168,23 @@ class Experiment(BaseModel):
             input_data['scoreId'] = scoreId
         
         mutation = """
-        mutation CreateExperiment($input: CreateExperimentInput!) {
-            createExperiment(input: $input) {
+        mutation CreateEvaluation($input: CreateEvaluationInput!) {
+            createEvaluation(input: $input) {
                 %s
             }
         }
         """ % cls.fields()
         
         result = client.execute(mutation, {'input': input_data})
-        logger.info(f"Create experiment response: {result}")
+        logger.info(f"Create Evaluation response: {result}")
         
-        if not result or 'createExperiment' not in result:
-            raise Exception(f"Failed to create experiment. Response: {result}")
+        if not result or 'createEvaluation' not in result:
+            raise Exception(f"Failed to create Evaluation. Response: {result}")
         
-        return cls.from_dict(result['createExperiment'], client)
+        return cls.from_dict(result['createEvaluation'], client)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Experiment':
+    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Evaluation':
         # Convert string dates to datetime objects
         for date_field in ['createdAt', 'updatedAt', 'startedAt']:
             if data.get(date_field):
@@ -221,7 +221,7 @@ class Experiment(BaseModel):
         )
 
     def update(self, **kwargs) -> None:
-        """Update experiment fields in a background thread.
+        """Update Evaluation fields in a background thread.
         
         This is a non-blocking operation - the mutation is performed
         in a background thread.
@@ -229,7 +229,7 @@ class Experiment(BaseModel):
         Args:
             **kwargs: Fields to update
         """
-        def _update_experiment():
+        def _update_Evaluation():
             try:
                 # Always update the updatedAt timestamp
                 kwargs['updatedAt'] = datetime.now(timezone.utc).isoformat().replace(
@@ -237,8 +237,8 @@ class Experiment(BaseModel):
                 )
                 
                 mutation = """
-                mutation UpdateExperiment($input: UpdateExperimentInput!) {
-                    updateExperiment(input: $input) {
+                mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                    updateEvaluation(input: $input) {
                         %s
                     }
                 }
@@ -254,24 +254,24 @@ class Experiment(BaseModel):
                 self._client.execute(mutation, variables)
                 
             except Exception as e:
-                logger.error(f"Error updating experiment: {e}")
+                logger.error(f"Error updating Evaluation: {e}")
         
         # Spawn background thread
-        thread = Thread(target=_update_experiment, daemon=True)
+        thread = Thread(target=_update_Evaluation, daemon=True)
         thread.start()
 
     @classmethod
-    def get_by_id(cls, id: str, client: _BaseAPIClient, include_score_results: bool = False) -> 'Experiment':
+    def get_by_id(cls, id: str, client: _BaseAPIClient, include_score_results: bool = False) -> 'Evaluation':
         query = """
-        query GetExperiment($id: ID!) {
-            getExperiment(id: $id) {
+        query GetEvaluation($id: ID!) {
+            getEvaluation(id: $id) {
                 %s
             }
         }
         """ % (cls.fields() + (' scoreResults { items { value confidence metadata correct } }' if include_score_results else ''))
         
         result = client.execute(query, {'id': id})
-        if not result or 'getExperiment' not in result:
-            raise Exception(f"Failed to get experiment {id}. Response: {result}")
+        if not result or 'getEvaluation' not in result:
+            raise Exception(f"Failed to get Evaluation {id}. Response: {result}")
         
-        return cls.from_dict(result['getExperiment'], client)
+        return cls.from_dict(result['getEvaluation'], client)

@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { ExperimentListAccuracyBar } from '@/components/ExperimentListAccuracyBar'
+import { EvaluationListAccuracyBar } from '@/components/EvaluationListAccuracyBar'
 
 const meta = {
-  title: 'Visualization/ExperimentListAccuracyBar',
-  component: ExperimentListAccuracyBar,
+  title: 'Visualization/EvaluationListAccuracyBar',
+  component: EvaluationListAccuracyBar,
   parameters: {
     layout: 'centered',
   },
@@ -14,10 +14,10 @@ const meta = {
       </div>
     ),
   ],
-} satisfies Meta<typeof ExperimentListAccuracyBar>
+} satisfies Meta<typeof EvaluationListAccuracyBar>
 
 export default meta
-type Story = StoryObj<typeof ExperimentListAccuracyBar>
+type Story = StoryObj<typeof EvaluationListAccuracyBar>
 
 export const Single: Story = {
   args: {
@@ -59,19 +59,19 @@ export const Demo: Story = {
         <div className="grid grid-cols-2 gap-16">
           <div className="space-y-4">
             <h3 className="font-medium mb-2">Not Focused</h3>
-            <ExperimentListAccuracyBar progress={100} accuracy={100} />
-            <ExperimentListAccuracyBar progress={100} accuracy={75} />
-            <ExperimentListAccuracyBar progress={100} accuracy={50} />
-            <ExperimentListAccuracyBar progress={100} accuracy={25} />
-            <ExperimentListAccuracyBar progress={100} accuracy={0} />
+            <EvaluationListAccuracyBar progress={100} accuracy={100} />
+            <EvaluationListAccuracyBar progress={100} accuracy={75} />
+            <EvaluationListAccuracyBar progress={100} accuracy={50} />
+            <EvaluationListAccuracyBar progress={100} accuracy={25} />
+            <EvaluationListAccuracyBar progress={100} accuracy={0} />
           </div>
           <div className="space-y-4">
             <h3 className="font-medium mb-2">Focused</h3>
-            <ExperimentListAccuracyBar progress={100} accuracy={100} isFocused />
-            <ExperimentListAccuracyBar progress={100} accuracy={75} isFocused />
-            <ExperimentListAccuracyBar progress={100} accuracy={50} isFocused />
-            <ExperimentListAccuracyBar progress={100} accuracy={25} isFocused />
-            <ExperimentListAccuracyBar progress={100} accuracy={0} isFocused />
+            <EvaluationListAccuracyBar progress={100} accuracy={100} isFocused />
+            <EvaluationListAccuracyBar progress={100} accuracy={75} isFocused />
+            <EvaluationListAccuracyBar progress={100} accuracy={50} isFocused />
+            <EvaluationListAccuracyBar progress={100} accuracy={25} isFocused />
+            <EvaluationListAccuracyBar progress={100} accuracy={0} isFocused />
           </div>
         </div>
       </div>

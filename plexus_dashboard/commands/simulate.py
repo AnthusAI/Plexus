@@ -15,7 +15,7 @@ from sklearn.metrics import (
 )
 from plexus_dashboard.api.client import PlexusDashboardClient
 from plexus_dashboard.api.models.account import Account
-from plexus_dashboard.api.models.experiment import Experiment
+from plexus_dashboard.api.models.evaluation import Evaluation
 from plexus_dashboard.api.models.score import Score
 from plexus_dashboard.api.models.scorecard import Scorecard
 from plexus_dashboard.api.models.score_result import ScoreResult

@@ -9,19 +9,19 @@ class Sample(BaseModel):
     """
     Sample Model - Python representation of the GraphQL Sample type.
 
-    Represents individual samples within an experiment, tracking:
+    Represents individual samples within an evaluation, tracking:
     - Raw data being evaluated
     - Predictions and ground truth
     - Correctness of predictions
     - Creation and update timestamps
 
-    This model is typically used in conjunction with Experiment for:
+    This model is typically used in conjunction with Evaluation for:
     - Recording individual test cases
     - Tracking prediction accuracy
     - Building confusion matrices
     - Training data management
 
-    Unlike Experiment, Sample uses synchronous mutations as it's
+    Unlike Evaluation, Sample uses synchronous mutations as it's
     typically used in high-volume batch operations where immediate
     feedback is needed.
 
@@ -29,7 +29,7 @@ class Sample(BaseModel):
         # Create a new sample
         sample = Sample.create(
             client=client,
-            experimentId="exp-123",
+            evaluationId="exp-123",
             data={"text": "example content"},
             prediction="positive",
             groundTruth="positive"
@@ -41,7 +41,7 @@ class Sample(BaseModel):
             isCorrect=False
         )
     """
-    experimentId: str
+    evaluationId: str
     data: Dict
     createdAt: datetime
     updatedAt: datetime
@@ -52,7 +52,7 @@ class Sample(BaseModel):
     def __init__(
         self,
         id: str,
-        experimentId: str,
+        evaluationId: str,
         data: Dict,
         createdAt: datetime,
         updatedAt: datetime,
@@ -62,7 +62,7 @@ class Sample(BaseModel):
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
-        self.experimentId = experimentId
+        self.evaluationId = evaluationId
         self.data = data
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -74,7 +74,7 @@ class Sample(BaseModel):
     def fields(cls) -> str:
         return """
             id
-            experimentId
+            evaluationId
             data
             createdAt
             updatedAt
@@ -84,12 +84,12 @@ class Sample(BaseModel):
         """
 
     @classmethod
-    def create(cls, client: _BaseAPIClient, experimentId: str, data: Dict, 
+    def create(cls, client: _BaseAPIClient, evaluationId: str, data: Dict, 
                **kwargs) -> 'Sample':
         now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
         
         input_data = {
-            'experimentId': experimentId,
+            'evaluationId': evaluationId,
             'data': data,
             'createdAt': now,
             'updatedAt': now,
@@ -117,7 +117,7 @@ class Sample(BaseModel):
 
         return cls(
             id=data['id'],
-            experimentId=data['experimentId'],
+            evaluationId=data['evaluationId'],
             data=data['data'],
             createdAt=data['createdAt'],
             updatedAt=data['updatedAt'],

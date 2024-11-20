@@ -13,7 +13,7 @@ export const menuItems: MenuItem[] = [
   { name: "Feedback", icon: Inbox, path: "/feedback-queues" },
   { name: "Items", icon: AudioLines, path: "/items" },
   { name: "Reports", icon: FileBarChart, path: "/reports" },
-  { name: "Experiments", icon: FlaskConical, path: "/experiments" },
+  { name: "Evaluation", icon: FlaskConical, path: "/evaluations" },
   { name: "Analysis", icon: Sparkles, path: "/analysis" },
   { name: "Scorecards", icon: ListTodo, path: "/scorecards" },
   { name: "Data", icon: Database, path: "/data" },

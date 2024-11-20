@@ -18,7 +18,7 @@ def sample_data():
 def sample_sample(mock_client, sample_data):
     return Sample(
         id="test-id",
-        experimentId="test-experiment",
+        evaluationId="test-evaluation",
         data=sample_data,
         createdAt=datetime.now(timezone.utc),
         updatedAt=datetime.now(timezone.utc),
@@ -32,7 +32,7 @@ def test_update_prediction(sample_sample):
     sample_sample._client.execute.return_value = {
         'updateSample': {
             'id': sample_sample.id,
-            'experimentId': sample_sample.experimentId,
+            'evaluationId': sample_sample.evaluationId,
             'data': sample_sample.data,
             'createdAt': sample_sample.createdAt.isoformat(),
             'updatedAt': datetime.now(timezone.utc).isoformat(),
@@ -50,7 +50,7 @@ def test_update_prevents_modifying_created_at(sample_sample):
     with pytest.raises(ValueError, match="createdAt cannot be modified"):
         sample_sample.update(createdAt=datetime.now(timezone.utc))
 
-def test_create_requires_experiment_id_and_data(mock_client):
-    """Test that create requires experimentId and data"""
+def test_create_requires_evaluation_id_and_data(mock_client):
+    """Test that create requires evaluationId and data"""
     with pytest.raises(TypeError):
         Sample.create(client=mock_client)

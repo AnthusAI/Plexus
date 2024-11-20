@@ -1,10 +1,10 @@
 import React from 'react'
 import type { Meta, StoryObj } from '@storybook/react'
-import { ExperimentTaskScoreResults } from '../components/ExperimentTaskScoreResults'
+import { EvaluationTaskScoreResults } from '../components/EvaluationTaskScoreResults'
 
-const meta: Meta<typeof ExperimentTaskScoreResults> = {
-  title: 'Components/ExperimentTaskScoreResults',
-  component: ExperimentTaskScoreResults,
+const meta: Meta<typeof EvaluationTaskScoreResults> = {
+  title: 'Components/EvaluationTaskScoreResults',
+  component: EvaluationTaskScoreResults,
   parameters: {
     layout: 'centered',
   },
@@ -12,7 +12,7 @@ const meta: Meta<typeof ExperimentTaskScoreResults> = {
 }
 
 export default meta
-type Story = StoryObj<typeof ExperimentTaskScoreResults>
+type Story = StoryObj<typeof EvaluationTaskScoreResults>
 
 const mockResults = [
   {

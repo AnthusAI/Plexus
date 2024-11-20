@@ -22,7 +22,7 @@ import { TaskStatus } from '@/types/shared'
 import { formatDuration } from '@/utils/format-duration'
 
 // Import new task components
-import ExperimentTaskComponent from '@/components/ExperimentTask'
+import EvaluationTaskComponent from '@/components/EvaluationTask'
 import AlertTask from '@/components/AlertTask'
 import ReportTask from '@/components/ReportTask'
 import OptimizationTask from '@/components/OptimizationTask'
@@ -37,11 +37,11 @@ import {
   FeedbackTaskData,
   OptimizationTaskData,
   ScoreUpdatedTaskData,
-  ExperimentTaskData,
+  EvaluationTaskData,
   ScoringJobTaskData,
   ReportTaskData,
-  isExperimentActivity,
-  ExperimentActivity
+  isEvaluationActivity,
+  EvaluationActivity
 } from '@/types/tasks'
 
 const timeToMinutes = (timeString: string): number => {
@@ -76,20 +76,20 @@ const timeToMinutes = (timeString: string): number => {
 }
 
 const barChartData = [
-  { name: "Mon", scored: 4, experiments: 3, analysis: 2, feedback: 1 },
-  { name: "Tue", scored: 3, experiments: 4, analysis: 3, feedback: 2 },
-  { name: "Wed", scored: 5, experiments: 2, analysis: 4, feedback: 1 },
-  { name: "Thu", scored: 2, experiments: 5, analysis: 1, feedback: 3 },
-  { name: "Fri", scored: 3, experiments: 3, analysis: 3, feedback: 2 },
-  { name: "Sat", scored: 1, experiments: 2, analysis: 2, feedback: 1 },
-  { name: "Sun", scored: 4, experiments: 1, analysis: 5, feedback: 2 },
+  { name: "Mon", scored: 4, evaluations: 3, analysis: 2, feedback: 1 },
+  { name: "Tue", scored: 3, evaluations: 4, analysis: 3, feedback: 2 },
+  { name: "Wed", scored: 5, evaluations: 2, analysis: 4, feedback: 1 },
+  { name: "Thu", scored: 2, evaluations: 5, analysis: 1, feedback: 3 },
+  { name: "Fri", scored: 3, evaluations: 3, analysis: 3, feedback: 2 },
+  { name: "Sat", scored: 1, evaluations: 2, analysis: 2, feedback: 1 },
+  { name: "Sun", scored: 4, evaluations: 1, analysis: 5, feedback: 2 },
 ]
 
 // New data for recent activities
 const recentActivities: ActivityData[] = [
   {
     id: "0",
-    type: "Experiment started",
+    type: "Evaluation started",
     scorecard: "CS3 Services v2",
     score: "Good Call",
     timestamp: new Date().toISOString(),
@@ -268,7 +268,7 @@ const recentActivities: ActivityData[] = [
   },
   {
     id: "6",
-    type: "Experiment completed",
+    type: "Evaluation completed",
     scorecard: "SelectQuote TermLife v1",
     score: "Temperature Check",
     timestamp: new Date(Date.now() - 180 * 60 * 1000).toISOString(),
@@ -277,7 +277,7 @@ const recentActivities: ActivityData[] = [
     description: "Accuracy",
     data: {
       id: "exp-2",
-      title: "Temperature Check Experiment",
+      title: "Temperature Check Evaluation",
       accuracy: 94,
       metrics: [
         {
@@ -403,7 +403,7 @@ const recentActivities: ActivityData[] = [
 
 const chartConfig = {
   scored: { label: "Scored", color: "var(--chart-1)" },
-  experiments: { label: "Experiments", color: "var(--chart-2)" },
+  evaluations: { label: "Evaluations", color: "var(--chart-2)" },
   analysis: { label: "Analysis", color: "var(--chart-3)" },
   feedback: { label: "Feedback", color: "var(--chart-4)" },
   positive: { label: "Positive", color: "var(--true)" },
@@ -413,7 +413,7 @@ const chartConfig = {
 interface BarData {
   name: string;
   scored: number;
-  experiments: number;
+  evaluations: number;
   analysis: number;
   feedback: number;
   [key: string]: string | number;
@@ -497,8 +497,8 @@ export default function ActivityDashboard() {
 
   const renderActivityIcon = (type: string) => {
     switch (type) {
-      case "Experiment completed":
-      case "Experiment started":
+      case "Evaluation completed":
+      case "Evaluation started":
         return <FlaskConical className="h-6 w-6" />
       case "Optimization started":
         return <Sparkles className="h-6 w-6" />
@@ -518,9 +518,9 @@ export default function ActivityDashboard() {
 
   const renderVisualization = (activity: ActivityData) => {
     switch (activity.type) {
-      case "Experiment completed":
-      case "Experiment started":
-        if (isExperimentActivity(activity)) {
+      case "Evaluation completed":
+      case "Evaluation started":
+        if (isEvaluationActivity(activity)) {
           const accuracy = activity.data.accuracy ?? 0
           const processedItems = activity.data.processedItems ?? 0
           const totalItems = activity.data.totalItems ?? 0
@@ -715,7 +715,7 @@ export default function ActivityDashboard() {
                       cursor="pointer"
                     />
                     <Bar
-                      dataKey="experiments"
+                      dataKey="evaluations"
                       stackId="a"
                       fill="var(--chart-2)"
                       onClick={handleBarClick}
@@ -764,10 +764,10 @@ export default function ActivityDashboard() {
                           onClick={() => setSelectedActivity(activity)}
                         />
                       )
-                    case 'Experiment completed':
-                    case 'Experiment started':
-                      return isExperimentActivity(activity) ? (
-                        <ExperimentTaskComponent
+                    case 'Evaluation completed':
+                    case 'Evaluation started':
+                      return isEvaluationActivity(activity) ? (
+                        <EvaluationTaskComponent
                           variant="grid"
                           task={{
                             ...activity,
@@ -899,10 +899,10 @@ export default function ActivityDashboard() {
             <div className="" />
             {(() => {
               switch (selectedActivity.type) {
-                case 'Experiment completed':
-                case 'Experiment started':
-                  return isExperimentActivity(selectedActivity) ? (
-                    <ExperimentTaskComponent 
+                case 'Evaluation completed':
+                case 'Evaluation started':
+                  return isEvaluationActivity(selectedActivity) ? (
+                    <EvaluationTaskComponent 
                       variant="detail" 
                       task={selectedActivity} 
                       isFullWidth={isFullWidth}
@@ -1021,10 +1021,10 @@ export default function ActivityDashboard() {
           <div className="container flex items-center justify-center h-full max-w-lg">
             {(() => {
               switch (selectedActivity.type) {
-                case 'Experiment completed':
-                case 'Experiment started':
-                  return isExperimentActivity(selectedActivity) ? (
-                    <ExperimentTaskComponent 
+                case 'Evaluation completed':
+                case 'Evaluation started':
+                  return isEvaluationActivity(selectedActivity) ? (
+                    <EvaluationTaskComponent 
                       variant="detail" 
                       task={selectedActivity} 
                       isFullWidth={isFullWidth}

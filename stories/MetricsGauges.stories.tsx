@@ -85,7 +85,7 @@ export const Detail: Story = {
   args: {
     ...createDetailGaugeConfig(92, 89, 95, 91),
     variant: 'detail',
-    metricsExplanation: "This experiment uses accuracy as the primary metric, along with precision and sensitivity to provide a complete picture of model performance across all classes."
+    metricsExplanation: "This evaluation uses accuracy as the primary metric, along with precision and sensitivity to provide a complete picture of model performance across all classes."
   },
   render: (args) => (
     <Card>

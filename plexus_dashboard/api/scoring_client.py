@@ -1,5 +1,5 @@
 """
-ScoringClient - High-level client for experiment scoring and logging.
+ScoringClient - High-level client for evaluation scoring and logging.
 
 This client maintains scoring context and provides a simpler interface for logging
 results. It handles:
