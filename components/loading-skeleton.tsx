@@ -1,4 +1,4 @@
-export function ExperimentDashboardSkeleton() {
+export function EvaluationDashboardSkeleton() {
   return (
     <div className="space-y-4 h-full flex flex-col animate-pulse">
       <div className="h-10 bg-muted rounded w-1/3" />

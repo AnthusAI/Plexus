@@ -146,7 +146,7 @@ export default function ScorecardsComponent() {
       accountId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      experiments: async () => ({
+      evaluations: async () => ({
         data: [],
         nextToken: null
       }),
@@ -162,7 +162,7 @@ export default function ScorecardsComponent() {
           description: '',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          experiments: async () => ({
+          evaluations: async () => ({
             data: [],
             nextToken: null
           }),
@@ -260,7 +260,7 @@ export default function ScorecardsComponent() {
       
       const fullScorecardData: Schema['Scorecard']['type'] = {
         ...scorecardData,
-        experiments: async () => ({
+        evaluations: async () => ({
           data: [],
           nextToken: null
         }),
@@ -274,7 +274,7 @@ export default function ScorecardsComponent() {
             name: accountData.name!,
             key: accountData.key!,
             description: accountData.description ?? '',
-            experiments: async () => ({
+            evaluations: async () => ({
               data: [],
               nextToken: null
             }),

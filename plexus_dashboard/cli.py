@@ -3,12 +3,12 @@ Plexus Dashboard CLI - Command line interface for the Plexus Dashboard API.
 
 This CLI mirrors the GraphQL API schema structure, providing commands and options
 that map directly to the API's models and their attributes. The command hierarchy
-is organized by model (experiment, account, etc.), with subcommands for operations
+is organized by model (evaluation, account, etc.), with subcommands for operations
 (create, update, etc.).
 
 Example command structure:
-    plexus-dashboard experiment create  # Creates an Experiment record
-    plexus-dashboard experiment update  # Updates an Experiment record
+    plexus-dashboard evaluation create  # Creates an Evaluation record
+    plexus-dashboard evaluation update  # Updates an Evaluation record
     plexus-dashboard account list      # Lists Account records
 
 Each command's options correspond directly to the GraphQL model's fields,
@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 from typing import Optional
 from plexus_dashboard.api.client import PlexusDashboardClient
 from plexus_dashboard.api.models.account import Account
-from plexus_dashboard.api.models.experiment import Experiment
+from plexus_dashboard.api.models.evaluation import Evaluation
 from plexus_dashboard.api.models.scorecard import Scorecard
 from plexus_dashboard.api.models.score import Score
 from plexus_dashboard.api.models.score_result import ScoreResult
@@ -64,18 +64,18 @@ def cli():
     load_dotenv()
 
 @cli.group()
-def experiment():
-    """Manage experiments"""
+def evaluation():
+    """Manage evaluations"""
     pass
 
-@experiment.command()
+@evaluation.command()
 @click.option('--account-key', default='call-criteria', help='Account key identifier')
-@click.option('--type', required=True, help='Type of experiment (e.g., accuracy, consistency)')
-@click.option('--parameters', type=str, help='JSON string of experiment parameters')
-@click.option('--metrics', type=str, help='JSON string of experiment metrics')
+@click.option('--type', required=True, help='Type of evaluation (e.g., accuracy, consistency)')
+@click.option('--parameters', type=str, help='JSON string of evaluation parameters')
+@click.option('--metrics', type=str, help='JSON string of evaluation metrics')
 @click.option('--inferences', type=int, help='Number of inferences made')
 @click.option('--results', type=int, help='Number of results processed')
-@click.option('--cost', type=float, help='Cost of the experiment')
+@click.option('--cost', type=float, help='Cost of the evaluation')
 @click.option('--progress', type=float, help='Progress percentage (0-100)')
 @click.option('--accuracy', type=float, help='Accuracy percentage (0-100)')
 @click.option('--accuracy-type', help='Type of accuracy measurement')
@@ -84,10 +84,10 @@ def experiment():
 @click.option('--precision', type=float, help='Precision percentage (0-100)')
 @click.option('--status', default='PENDING', 
               type=click.Choice(['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED']),
-              help='Status of the experiment')
+              help='Status of the evaluation')
 @click.option('--total-items', type=int, help='Total number of items to process')
 @click.option('--processed-items', type=int, help='Number of items processed')
-@click.option('--error-message', help='Error message if experiment failed')
+@click.option('--error-message', help='Error message if evaluation failed')
 @click.option('--error-details', type=str, help='JSON string of detailed error information')
 @click.option('--scorecard-id', help='Scorecard ID (if known)')
 @click.option('--scorecard-key', help='Scorecard key to look up')
@@ -123,12 +123,12 @@ def create(
     score_name: Optional[str] = None,
     confusion_matrix: Optional[str] = None,
 ):
-    """Create a new experiment with specified attributes.
+    """Create a new evaluation with specified attributes.
     
     Examples:
-        plexus-dashboard experiment create --type accuracy
-        plexus-dashboard experiment create --type accuracy --accuracy 95.5 --status COMPLETED
-        plexus-dashboard experiment create --type consistency --scorecard-id abc123
+        plexus-dashboard evaluation create --type accuracy
+        plexus-dashboard evaluation create --type accuracy --accuracy 95.5 --status COMPLETED
+        plexus-dashboard evaluation create --type consistency --scorecard-id abc123
     """
     client = PlexusDashboardClient()
     
@@ -191,9 +191,9 @@ def create(
         if error_details: input_data['errorDetails'] = error_details
         if confusion_matrix: input_data['confusionMatrix'] = confusion_matrix
         
-        # Create the experiment
-        logger.info("Creating experiment...")
-        experiment = Experiment.create(
+        # Create the evaluation
+        logger.info("Creating evaluation...")
+        evaluation = Evaluation.create(
             client=client,
             type=type,
             accountId=account.id,
@@ -212,29 +212,29 @@ def create(
             scoreId=score.id if 'score' in locals() else None,
             confusionMatrix=confusion_matrix,
         )
-        logger.info(f"Created experiment: {experiment.id}")
+        logger.info(f"Created evaluation: {evaluation.id}")
         
         # Output results
-        click.echo(f"Created experiment: {experiment.id}")
-        click.echo(f"Type: {experiment.type}")
-        click.echo(f"Status: {experiment.status}")
-        click.echo(f"Created at: {experiment.createdAt}")
+        click.echo(f"Created evaluation: {evaluation.id}")
+        click.echo(f"Type: {evaluation.type}")
+        click.echo(f"Status: {evaluation.status}")
+        click.echo(f"Created at: {evaluation.createdAt}")
         
     except Exception as e:
-        logger.error(f"Error creating experiment: {str(e)}")
+        logger.error(f"Error creating evaluation: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
-@experiment.command()
+@evaluation.command()
 @click.argument('id', required=True)
-@click.option('--type', help='Type of experiment (e.g., accuracy, consistency)')
+@click.option('--type', help='Type of evaluation (e.g., accuracy, consistency)')
 @click.option('--status',
               type=click.Choice(['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED']),
-              help='Status of the experiment')
-@click.option('--parameters', type=str, help='JSON string of experiment parameters')
-@click.option('--metrics', type=str, help='JSON string of experiment metrics')
+              help='Status of the evaluation')
+@click.option('--parameters', type=str, help='JSON string of evaluation parameters')
+@click.option('--metrics', type=str, help='JSON string of evaluation metrics')
 @click.option('--inferences', type=int, help='Number of inferences made')
 @click.option('--results', type=int, help='Number of results processed')
-@click.option('--cost', type=float, help='Cost of the experiment')
+@click.option('--cost', type=float, help='Cost of the evaluation')
 @click.option('--progress', type=float, help='Progress percentage (0-100)')
 @click.option('--accuracy', type=float, help='Accuracy percentage (0-100)')
 @click.option('--accuracy-type', help='Type of accuracy measurement')
@@ -243,7 +243,7 @@ def create(
 @click.option('--precision', type=float, help='Precision percentage (0-100)')
 @click.option('--total-items', type=int, help='Total number of items to process')
 @click.option('--processed-items', type=int, help='Number of items processed')
-@click.option('--error-message', help='Error message if experiment failed')
+@click.option('--error-message', help='Error message if evaluation failed')
 @click.option('--error-details', type=str, help='JSON string of detailed error information')
 @click.option('--scorecard-id', help='Scorecard ID (if known)')
 @click.option('--scorecard-key', help='Scorecard key to look up')
@@ -274,29 +274,29 @@ def update(
     score_name: Optional[str] = None,
     confusion_matrix: Optional[str] = None,
 ):
-    """Update an existing experiment.
+    """Update an existing evaluation.
     
     Required fields (type, status) will keep their previous values if not specified.
     The updatedAt timestamp is automatically set to the current time.
     
     Examples:
-        plexus-dashboard experiment update abc123 --accuracy 97.8
-        plexus-dashboard experiment update def456 --status COMPLETED
-        plexus-dashboard experiment update ghi789 --type consistency --status FAILED
+        plexus-dashboard evaluation update abc123 --accuracy 97.8
+        plexus-dashboard evaluation update def456 --status COMPLETED
+        plexus-dashboard evaluation update ghi789 --type consistency --status FAILED
     """
     client = PlexusDashboardClient()
     
     try:
-        # First get the existing experiment
-        logger.info(f"Looking up experiment: {id}")
-        experiment = Experiment.get_by_id(id, client)
-        logger.info(f"Found experiment: {experiment.id}")
+        # First get the existing evaluation
+        logger.info(f"Looking up evaluation: {id}")
+        evaluation = Evaluation.get_by_id(id, client)
+        logger.info(f"Found evaluation: {evaluation.id}")
         
         # Build update data with only provided fields
         update_data = {
             # Use provided values or fall back to existing values for required fields
-            'type': type or experiment.type,
-            'status': status or experiment.status,
+            'type': type or evaluation.type,
+            'status': status or evaluation.status,
         }
         
         # Add optional fields if provided
@@ -317,19 +317,19 @@ def update(
         if error_details is not None: update_data['errorDetails'] = error_details
         if confusion_matrix is not None: update_data['confusionMatrix'] = confusion_matrix
         
-        # Update the experiment
-        logger.info("Updating experiment...")
-        updated = experiment.update(**update_data)
-        logger.info(f"Updated experiment: {updated.id}")
+        # Update the evaluation
+        logger.info("Updating evaluation...")
+        updated = evaluation.update(**update_data)
+        logger.info(f"Updated evaluation: {updated.id}")
         
         # Output results
-        click.echo(f"Updated experiment: {updated.id}")
+        click.echo(f"Updated evaluation: {updated.id}")
         click.echo(f"Type: {updated.type}")
         click.echo(f"Status: {updated.status}")
         click.echo(f"Updated at: {updated.updatedAt}")
         
     except Exception as e:
-        logger.error(f"Error updating experiment: {str(e)}")
+        logger.error(f"Error updating evaluation: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
 @cli.group()
@@ -415,7 +415,7 @@ def update(id: str, value: Optional[float], confidence: Optional[float], metadat
         logging.getLogger(__name__).error(f"Error updating score result: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
-@experiment.command()
+@evaluation.command()
 @click.option('--account-key', help='Account key')
 @click.option('--account-name', help='Account name')
 @click.option('--account-id', help='Account ID')
@@ -440,14 +440,14 @@ def simulate(
     num_items: int,
     accuracy: float,
 ):
-    """Simulate a machine learning evaluation experiment with synthetic data.
+    """Simulate a machine learning evaluation evaluation with synthetic data.
     
     This command creates a realistic simulation of an ML model evaluation run by:
-    1. Creating an Experiment record to track the evaluation
+    1. Creating an Evaluation record to track the evaluation
     2. Generating synthetic binary classification results (Yes/No predictions)
     3. Creating ScoreResult records for each prediction
     4. Computing standard ML metrics (accuracy, precision, sensitivity, specificity)
-    5. Updating the Experiment with real-time metric calculations
+    5. Updating the Evaluation with real-time metric calculations
     """
     try:
         # Initial client for setup
@@ -493,7 +493,7 @@ def simulate(
                 score = Score.get_by_name(score_name, client)
             logger.info(f"Using score: {score.name} ({score.id})")
 
-        # Randomly decide experiment characteristics
+        # Randomly decide evaluation characteristics
         is_binary = random.random() < 0.3  # 30% chance of binary classification
         num_classes = select_num_classes()
         is_balanced = random.random() < 0.5  # 50% chance of balanced distribution
@@ -522,9 +522,9 @@ def simulate(
             score_goal=score_goal
         )
 
-        # Create initial experiment record
+        # Create initial evaluation record
         started_at = datetime.now(timezone.utc)
-        experiment = Experiment.create(
+        evaluation = Evaluation.create(
             client=client,
             type="accuracy",
             accountId=account.id,
@@ -579,7 +579,7 @@ def simulate(
                     "correct": is_correct,
                     "itemId": f"item_{i}",
                     "accountId": account.id,
-                    "experimentId": experiment.id,
+                    "evaluationId": evaluation.id,
                     "scorecardId": scorecard.id,
                     "scoringJobId": None,
                     "metadata": {
@@ -632,7 +632,7 @@ def simulate(
                     for count in class_counts
                 )
 
-                # Update experiment with current metrics and accuracy
+                # Update evaluation with current metrics and accuracy
                 update_data = {
                     "type": "accuracy",
                     "metrics": json.dumps(metrics) if metrics else None,
@@ -654,13 +654,13 @@ def simulate(
                 }
                 
                 # Log the update data to verify metricsExplanation is included
-                logger.info(f"Updating experiment with data: {json.dumps(update_data, indent=2)}")
+                logger.info(f"Updating evaluation with data: {json.dumps(update_data, indent=2)}")
                 
                 # Create new client for update
                 update_client = PlexusDashboardClient()
-                # Use the client's updateExperiment method directly
-                update_client.updateExperiment(
-                    id=experiment.id,
+                # Use the client's updateEvaluation method directly
+                update_client.updateEvaluation(
+                    id=evaluation.id,
                     **update_data
                 )
                 
@@ -677,8 +677,8 @@ def simulate(
         
         # Final update
         final_client = PlexusDashboardClient()
-        final_client.updateExperiment(
-            id=experiment.id,
+        final_client.updateEvaluation(
+            id=evaluation.id,
             status="COMPLETED",
             elapsedSeconds=int((datetime.now(timezone.utc) - started_at).total_seconds()),
             estimatedRemainingSeconds=0,
@@ -688,24 +688,24 @@ def simulate(
         
     except Exception as e:
         logger.error(f"Error in simulation: {str(e)}")
-        if 'experiment' in locals():
+        if 'evaluation' in locals():
             try:
                 # Error update
                 error_client = PlexusDashboardClient()
-                error_client.updateExperiment(
-                    id=experiment.id,
+                error_client.updateEvaluation(
+                    id=evaluation.id,
                     status="FAILED",
                     errorMessage=str(e),
                     elapsedSeconds=int((datetime.now(timezone.utc) - started_at).total_seconds()),
                     estimatedRemainingSeconds=None
                 )
             except Exception as update_error:
-                logger.error(f"Error updating experiment status: {str(update_error)}")
+                logger.error(f"Error updating evaluation status: {str(update_error)}")
         click.echo(f"Error: {str(e)}", err=True)
 
-def simulate_experiment_progress(experiment_id: str, client: PlexusDashboardClient):
-    """Simulate experiment progress by updating metrics over time."""
-    experiment = client.get_experiment(experiment_id)
+def simulate_evaluation_progress(evaluation_id: str, client: PlexusDashboardClient):
+    """Simulate evaluation progress by updating metrics over time."""
+    evaluation = client.get_evaluation(evaluation_id)
     
     # Initial values
     total_items = 100
@@ -751,8 +751,8 @@ def simulate_experiment_progress(experiment_id: str, client: PlexusDashboardClie
         # Convert confusion matrix to JSON string
         confusion_matrix_json = json.dumps(confusion_matrix)
         
-        # Update experiment
-        experiment.update(
+        # Update evaluation
+        evaluation.update(
             status="RUNNING",
             processedItems=processed,
             totalItems=total_items,
@@ -771,25 +771,25 @@ def simulate_experiment_progress(experiment_id: str, client: PlexusDashboardClie
             time.sleep(random.uniform(0.5, 2.0))
     
     # Final update
-    experiment.update(
+    evaluation.update(
         status="COMPLETED",
         processedItems=total_items,
         totalItems=total_items,
         estimatedTimeRemaining="00:00:00"
     )
 
-@experiment.command()
+@evaluation.command()
 @click.argument('id', required=True)
 @click.option('--limit', type=int, default=1000, help='Maximum number of results to return')
 def list_results(id: str, limit: int):
-    """List score results for an experiment"""
+    """List score results for an evaluation"""
     client = PlexusDashboardClient()
     
     try:
-        # Get experiment with score results included
+        # Get evaluation with score results included
         response = client.execute("""
-            query GetExperiment($id: ID!, $limit: Int) {
-                getExperiment(id: $id) {
+            query GetEvaluation($id: ID!, $limit: Int) {
+                getEvaluation(id: $id) {
                     scoreResults(limit: $limit) {
                         items {
                             id
@@ -798,7 +798,7 @@ def list_results(id: str, limit: int):
                             metadata
                             correct
                             createdAt
-                            experimentId
+                            evaluationId
                         }
                     }
                 }
@@ -806,16 +806,16 @@ def list_results(id: str, limit: int):
         """, {'id': id, 'limit': limit})
         
         # Get the items array directly from the nested response
-        items = response.get('getExperiment', {}).get('scoreResults', {}).get('items', [])
+        items = response.get('getEvaluation', {}).get('scoreResults', {}).get('items', [])
         result_count = len(items)
             
-        click.echo(f"Found {result_count} score results for experiment {id}:")
+        click.echo(f"Found {result_count} score results for evaluation {id}:")
         
         for item in items:
             created = item.get('createdAt', '').replace('Z', '').replace('T', ' ')
             click.echo(
                 f"ID: {item.get('id')}, "
-                f"ExperimentId: {item.get('experimentId')}, "
+                f"EvaluationId: {item.get('evaluationId')}, "
                 f"Value: {item.get('value')}, "
                 f"Confidence: {item.get('confidence')}, "
                 f"Correct: {item.get('correct')}, "
@@ -832,9 +832,9 @@ def result_test():
     pass
 
 @result_test.command()
-@click.argument('experiment_id', required=True)
+@click.argument('evaluation_id', required=True)
 @click.option('--value', required=True, help='Test value to record')
-def create(experiment_id: str, value: str):
+def create(evaluation_id: str, value: str):
     """Create a new result test record
     
     Example:
@@ -849,7 +849,7 @@ def create(experiment_id: str, value: str):
             createResultTest(input: $input) {
                 id
                 value
-                experimentId
+                evaluationId
                 createdAt
             }
         }
@@ -858,7 +858,7 @@ def create(experiment_id: str, value: str):
         variables = {
             'input': {
                 'value': value,
-                'experimentId': experiment_id
+                'evaluationId': evaluation_id
             }
         }
         
@@ -870,7 +870,7 @@ def create(experiment_id: str, value: str):
         created = result['createResultTest']
         click.echo(f"Created result test: {created['id']}")
         click.echo(f"Value: {created['value']}")
-        click.echo(f"Experiment ID: {created['experimentId']}")
+        click.echo(f"Evaluation ID: {created['evaluationId']}")
         click.echo(f"Created at: {created['createdAt']}")
         
     except Exception as e:

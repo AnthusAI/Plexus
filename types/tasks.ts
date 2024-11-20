@@ -19,7 +19,7 @@ export type BatchJobTaskData = BaseTaskData & {
   batchJobs?: BatchJobTaskData[]
 }
 
-export type ExperimentTaskData = BaseTaskData & {
+export type EvaluationTaskData = BaseTaskData & {
   accuracy: number | null
   sensitivity: number | null
   specificity: number | null
@@ -98,8 +98,8 @@ export type BatchJobActivity = BaseActivity & {
   data: BatchJobTaskData
 }
 
-export type ExperimentActivity = BaseActivity & {
-  type: 'Experiment completed' | 'Experiment started'
+export type EvaluationActivity = BaseActivity & {
+  type: 'Evaluation completed' | 'Evaluation started'
   data: {
     id: string
     title: string
@@ -154,19 +154,19 @@ export type ScoringJobActivity = BaseActivity & {
 export type ActivityData =
   | AlertActivity
   | BatchJobActivity
-  | ExperimentActivity
+  | EvaluationActivity
   | FeedbackActivity
   | OptimizationActivity
   | ReportActivity
   | ScoreUpdatedActivity
   | ScoringJobActivity
 
-export const isExperimentActivity = (
+export const isEvaluationActivity = (
   activity: ActivityData
-): activity is ExperimentActivity => {
+): activity is EvaluationActivity => {
   return (
-    activity.type === 'Experiment started' ||
-    activity.type === 'Experiment completed'
+    activity.type === 'Evaluation started' ||
+    activity.type === 'Evaluation completed'
   )
 }
 

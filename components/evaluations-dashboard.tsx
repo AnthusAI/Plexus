@@ -27,15 +27,15 @@ import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
 import { Progress } from "@/components/ui/progress"
 import ScorecardContext from "@/components/ScorecardContext"
-import ExperimentTask, { type ExperimentTaskProps } from "@/components/ExperimentTask"
-import { ExperimentListProgressBar } from "@/components/ExperimentListProgressBar"
-import { ExperimentListAccuracyBar } from "@/components/ExperimentListAccuracyBar"
+import EvaluationTask, { type EvaluationTaskProps } from "@/components/EvaluationTask"
+import { EvaluationListProgressBar } from "@/components/EvaluationListProgressBar"
+import { EvaluationListAccuracyBar } from "@/components/EvaluationListAccuracyBar"
 import { CardButton } from '@/components/CardButton'
 import { formatDuration } from '@/utils/format-duration'
-import { ExperimentDashboardSkeleton } from "@/components/loading-skeleton"
+import { EvaluationDashboardSkeleton } from "@/components/loading-skeleton"
 import { ModelListResult, AmplifyListResult, AmplifyGetResult } from '@/types/shared'
 import { listFromModel, observeQueryFromModel, getFromModel, observeScoreResults } from "@/utils/amplify-helpers"
-import type { ExperimentTaskData } from '@/components/ExperimentTask'
+import type { EvaluationTaskData } from '@/components/EvaluationTask'
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -56,49 +56,49 @@ const calculateProgress = (processedItems?: number | null, totalItems?: number |
   return Math.round((processedItems / totalItems) * 100);
 };
 
-// Update the transformExperiment function
-const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] => {
-  if (!rawExperiment) {
-    throw new Error('Cannot transform null experiment')
+// Update the transformEvaluation function
+const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['type'] => {
+  if (!rawEvaluation) {
+    throw new Error('Cannot transform null Evaluation')
   }
 
-  console.log('Raw experiment data:', {
-    id: rawExperiment.id,
-    type: rawExperiment.type,
-    accuracy: rawExperiment.accuracy,
-    metrics: rawExperiment.metrics,
-    allFields: Object.keys(rawExperiment)
+  console.log('Raw Evaluation data:', {
+    id: rawEvaluation.id,
+    type: rawEvaluation.type,
+    accuracy: rawEvaluation.accuracy,
+    metrics: rawEvaluation.metrics,
+    allFields: Object.keys(rawEvaluation)
   });
 
   // Create a strongly typed base object with ALL fields
-  const safeExperiment = {
-    id: rawExperiment.id || '',
-    type: rawExperiment.type || '',
-    parameters: rawExperiment.parameters || {},
-    metrics: rawExperiment.metrics || {},
-    inferences: rawExperiment.inferences || 0,
-    cost: rawExperiment.cost || 0,
-    createdAt: rawExperiment.createdAt || new Date().toISOString(),
-    updatedAt: rawExperiment.updatedAt || new Date().toISOString(),
-    status: rawExperiment.status || '',
-    startedAt: rawExperiment.startedAt || null,
-    totalItems: rawExperiment.totalItems || 0,
-    processedItems: rawExperiment.processedItems || 0,
-    errorMessage: rawExperiment.errorMessage || null,
-    errorDetails: rawExperiment.errorDetails || null,
-    accountId: rawExperiment.accountId || '',
-    scorecardId: rawExperiment.scorecardId || null,
-    scoreId: rawExperiment.scoreId || null,
-    confusionMatrix: rawExperiment.confusionMatrix || null,
-    elapsedSeconds: rawExperiment.elapsedSeconds || 0,
-    estimatedRemainingSeconds: rawExperiment.estimatedRemainingSeconds || 0,
-    scoreGoal: rawExperiment.scoreGoal || null,
-    datasetClassDistribution: rawExperiment.datasetClassDistribution || null,
-    isDatasetClassDistributionBalanced: rawExperiment.isDatasetClassDistributionBalanced ?? null,
-    predictedClassDistribution: rawExperiment.predictedClassDistribution || null,
-    isPredictedClassDistributionBalanced: rawExperiment.isPredictedClassDistributionBalanced || null,
-    metricsExplanation: rawExperiment.metricsExplanation || null,
-    accuracy: typeof rawExperiment.accuracy === 'number' ? rawExperiment.accuracy : null,
+  const safeEvaluation = {
+    id: rawEvaluation.id || '',
+    type: rawEvaluation.type || '',
+    parameters: rawEvaluation.parameters || {},
+    metrics: rawEvaluation.metrics || {},
+    inferences: rawEvaluation.inferences || 0,
+    cost: rawEvaluation.cost || 0,
+    createdAt: rawEvaluation.createdAt || new Date().toISOString(),
+    updatedAt: rawEvaluation.updatedAt || new Date().toISOString(),
+    status: rawEvaluation.status || '',
+    startedAt: rawEvaluation.startedAt || null,
+    totalItems: rawEvaluation.totalItems || 0,
+    processedItems: rawEvaluation.processedItems || 0,
+    errorMessage: rawEvaluation.errorMessage || null,
+    errorDetails: rawEvaluation.errorDetails || null,
+    accountId: rawEvaluation.accountId || '',
+    scorecardId: rawEvaluation.scorecardId || null,
+    scoreId: rawEvaluation.scoreId || null,
+    confusionMatrix: rawEvaluation.confusionMatrix || null,
+    elapsedSeconds: rawEvaluation.elapsedSeconds || 0,
+    estimatedRemainingSeconds: rawEvaluation.estimatedRemainingSeconds || 0,
+    scoreGoal: rawEvaluation.scoreGoal || null,
+    datasetClassDistribution: rawEvaluation.datasetClassDistribution || null,
+    isDatasetClassDistributionBalanced: rawEvaluation.isDatasetClassDistributionBalanced ?? null,
+    predictedClassDistribution: rawEvaluation.predictedClassDistribution || null,
+    isPredictedClassDistributionBalanced: rawEvaluation.isPredictedClassDistributionBalanced || null,
+    metricsExplanation: rawEvaluation.metricsExplanation || null,
+    accuracy: typeof rawEvaluation.accuracy === 'number' ? rawEvaluation.accuracy : null,
     items: async (options?: any) => ({ data: [], nextToken: null }),
     scoreResults: async (options?: any) => ({ data: [], nextToken: null }),
     scoringJobs: async (options?: any) => ({ data: [], nextToken: null }),
@@ -106,41 +106,41 @@ const transformExperiment = (rawExperiment: any): Schema['Experiment']['type'] =
   };
 
   return {
-    ...safeExperiment,
+    ...safeEvaluation,
     account: async () => ({
       data: {
-        id: rawExperiment.account?.id || '',
-        name: rawExperiment.account?.name || '',
-        key: rawExperiment.account?.key || '',
+        id: rawEvaluation.account?.id || '',
+        name: rawEvaluation.account?.name || '',
+        key: rawEvaluation.account?.key || '',
         scorecards: async (options?: any) => ({ data: [], nextToken: null }),
-        experiments: async (options?: any) => ({ data: [], nextToken: null }),
+        evaluations: async (options?: any) => ({ data: [], nextToken: null }),
         batchJobs: async (options?: any) => ({ data: [], nextToken: null }),
         items: async (options?: any) => ({ data: [], nextToken: null }),
         scoringJobs: async (options?: any) => ({ data: [], nextToken: null }),
         scoreResults: async (options?: any) => ({ data: [], nextToken: null }),
-        createdAt: rawExperiment.account?.createdAt || new Date().toISOString(),
-        updatedAt: rawExperiment.account?.updatedAt || new Date().toISOString(),
-        description: rawExperiment.account?.description || ''
+        createdAt: rawEvaluation.account?.createdAt || new Date().toISOString(),
+        updatedAt: rawEvaluation.account?.updatedAt || new Date().toISOString(),
+        description: rawEvaluation.account?.description || ''
       }
     }),
     scorecard: async () => {
-      if (rawExperiment.scorecard?.data) {
-        return { data: rawExperiment.scorecard.data }
+      if (rawEvaluation.scorecard?.data) {
+        return { data: rawEvaluation.scorecard.data }
       }
-      if (rawExperiment.scorecardId) {
+      if (rawEvaluation.scorecardId) {
         const { data: scorecard } = await getFromModel<Schema['Scorecard']['type']>(
           client.models.Scorecard,
-          rawExperiment.scorecardId
+          rawEvaluation.scorecardId
         )
         return { data: scorecard }
       }
       return { data: null }
     },
     score: async () => ({
-      data: rawExperiment.score ? {
-        ...rawExperiment.score,
+      data: rawEvaluation.score ? {
+        ...rawEvaluation.score,
         section: async () => ({ data: null }),
-        experiments: async () => ({ data: [], nextToken: null }),
+        evaluations: async () => ({ data: [], nextToken: null }),
         batchJobs: async () => ({ data: [], nextToken: null })
       } : null
     })
@@ -178,15 +178,15 @@ async function listAccounts(): ModelListResult<Schema['Account']['type']> {
   )
 }
 
-async function listExperiments(accountId: string): ModelListResult<Schema['Experiment']['type']> {
-  return listFromModel<Schema['Experiment']['type']>(
-    client.models.Experiment,
+async function listEvaluations(accountId: string): ModelListResult<Schema['Evaluation']['type']> {
+  return listFromModel<Schema['Evaluation']['type']>(
+    client.models.Evaluation,
     { accountId: { eq: accountId } }
   )
 }
 
 // Add this interface near the top of the file
-interface ExperimentParameters {
+interface EvaluationParameters {
   scoreType?: string
   dataBalance?: string
   scoreGoal?: string
@@ -202,9 +202,9 @@ interface SubscriptionResponse {
 }
 
 // Add this type to help with the state update
-type ExperimentTaskPropsType = ExperimentTaskProps['task']
+type EvaluationTaskPropsType = EvaluationTaskProps['task']
 
-interface ExperimentWithResults {
+interface EvaluationWithResults {
   id: string
   scoreResults: Array<{
     id: string
@@ -214,12 +214,12 @@ interface ExperimentWithResults {
     correct: boolean | null
     createdAt: string
     itemId: string
-    experimentId: string
+    EvaluationId: string
     scorecardId: string
   }>
 }
 
-interface ExperimentQueryResponse {
+interface EvaluationQueryResponse {
   data: {
     id: string
     scoreResults: Array<{
@@ -230,7 +230,7 @@ interface ExperimentQueryResponse {
       correct: boolean | null
       createdAt: string
       itemId: string
-      experimentId: string
+      EvaluationId: string
       scorecardId: string
     }>
   }
@@ -245,27 +245,27 @@ interface ScoreResult {
   correct: boolean | null
   createdAt: string
   itemId: string
-  experimentId: string
+  EvaluationId: string
   scorecardId: string
 }
 
-// Define the structure of the Experiment with scoreResults
-interface ExperimentWithResults {
+// Define the structure of the Evaluation with scoreResults
+interface EvaluationWithResults {
   id: string
   scoreResults: ScoreResult[]
 }
 
 // Add this helper function near the top with other helpers
-async function getExperimentScoreResults(client: any, experimentId: string, nextToken?: string) {
-  console.log('Fetching score results for experiment:', {
-    experimentId,
+async function getEvaluationScoreResults(client: any, EvaluationId: string, nextToken?: string) {
+  console.log('Fetching score results for Evaluation:', {
+    EvaluationId,
     nextToken,
     usingNextToken: !!nextToken
   })
 
   // Remove sortDirection from initial query
   const params: any = {
-    experimentId,
+    EvaluationId,
     limit: 10000
   }
   
@@ -273,7 +273,7 @@ async function getExperimentScoreResults(client: any, experimentId: string, next
     params.nextToken = nextToken
   }
 
-  const response = await client.models.ScoreResult.listScoreResultByExperimentId(params)
+  const response = await client.models.ScoreResult.listScoreResultByEvaluationId(params)
 
   // Sort the results in memory instead
   const sortedData = response.data ? 
@@ -287,12 +287,12 @@ async function getExperimentScoreResults(client: any, experimentId: string, next
   }
 }
 
-export default function ExperimentsDashboard(): JSX.Element {
-  const [experiments, setExperiments] = useState<NonNullable<Schema['Experiment']['type']>[]>([])
-  const [experimentTaskProps, setExperimentTaskProps] = useState<ExperimentTaskProps['task'] | null>(null)
+export default function EvaluationsDashboard(): JSX.Element {
+  const [Evaluations, setEvaluations] = useState<NonNullable<Schema['Evaluation']['type']>[]>([])
+  const [EvaluationTaskProps, setEvaluationTaskProps] = useState<EvaluationTaskProps['task'] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [selectedExperiment, setSelectedExperiment] = useState<Schema['Experiment']['type'] | null>(null)
-  const selectedExperimentRef = useRef<Schema['Experiment']['type'] | null>(null)
+  const [selectedEvaluation, setSelectedEvaluation] = useState<Schema['Evaluation']['type'] | null>(null)
+  const selectedEvaluationRef = useRef<Schema['Evaluation']['type'] | null>(null)
   const [accountId, setAccountId] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
@@ -309,29 +309,29 @@ export default function ExperimentsDashboard(): JSX.Element {
     setHasMounted(true);
   }, []);
 
-  // Update ref when selectedExperiment changes
+  // Update ref when selectedEvaluation changes
   useEffect(() => {
-    selectedExperimentRef.current = selectedExperiment;
-  }, [selectedExperiment]);
+    selectedEvaluationRef.current = selectedEvaluation;
+  }, [selectedEvaluation]);
 
-  const getExperimentTaskProps = async (experiment: Schema['Experiment']['type']) => {
-    const progress = calculateProgress(experiment.processedItems, experiment.totalItems);
+  const getEvaluationTaskProps = async (Evaluation: Schema['Evaluation']['type']) => {
+    const progress = calculateProgress(Evaluation.processedItems, Evaluation.totalItems);
     
     // Get scorecard name
-    const scorecardResult = await experiment.scorecard?.();
+    const scorecardResult = await Evaluation.scorecard?.();
     const scorecardName = scorecardResult?.data?.name || '';
     
     // Get score name
-    const scoreResult = await experiment.score?.();
+    const scoreResult = await Evaluation.score?.();
     const scoreName = scoreResult?.data?.name || '';
 
     // Parse metrics JSON if it exists
     let metrics = [];
-    if (experiment.metrics) {
+    if (Evaluation.metrics) {
         try {
-            metrics = typeof experiment.metrics === 'string' 
-                ? JSON.parse(experiment.metrics)
-                : experiment.metrics;
+            metrics = typeof Evaluation.metrics === 'string' 
+                ? JSON.parse(Evaluation.metrics)
+                : Evaluation.metrics;
         } catch (e) {
             console.error('Error parsing metrics:', e);
         }
@@ -339,72 +339,72 @@ export default function ExperimentsDashboard(): JSX.Element {
 
     // Parse class distributions
     let datasetClassDistribution = null;
-    if (experiment.datasetClassDistribution) {
+    if (Evaluation.datasetClassDistribution) {
         try {
-            datasetClassDistribution = typeof experiment.datasetClassDistribution === 'string' 
-                ? JSON.parse(experiment.datasetClassDistribution)
-                : experiment.datasetClassDistribution;
+            datasetClassDistribution = typeof Evaluation.datasetClassDistribution === 'string' 
+                ? JSON.parse(Evaluation.datasetClassDistribution)
+                : Evaluation.datasetClassDistribution;
         } catch (e) {
             console.error('Error parsing dataset class distribution:', e);
         }
     }
 
     let predictedClassDistribution = null;
-    if (experiment.predictedClassDistribution) {
+    if (Evaluation.predictedClassDistribution) {
         try {
-            predictedClassDistribution = typeof experiment.predictedClassDistribution === 'string' 
-                ? JSON.parse(experiment.predictedClassDistribution)
-                : experiment.predictedClassDistribution;
+            predictedClassDistribution = typeof Evaluation.predictedClassDistribution === 'string' 
+                ? JSON.parse(Evaluation.predictedClassDistribution)
+                : Evaluation.predictedClassDistribution;
         } catch (e) {
             console.error('Error parsing predicted class distribution:', e);
         }
     }
 
     let confusionMatrix = { matrix: [], labels: [] };
-    if (experiment.confusionMatrix) {
+    if (Evaluation.confusionMatrix) {
         try {
-            confusionMatrix = typeof experiment.confusionMatrix === 'string'
-                ? JSON.parse(experiment.confusionMatrix)
-                : experiment.confusionMatrix;
+            confusionMatrix = typeof Evaluation.confusionMatrix === 'string'
+                ? JSON.parse(Evaluation.confusionMatrix)
+                : Evaluation.confusionMatrix;
         } catch (e) {
             console.error('Error parsing confusion matrix:', e);
         }
     }
     
     return {
-        id: experiment.id,
-        type: experiment.type,
+        id: Evaluation.id,
+        type: Evaluation.type,
         scorecard: scorecardName,
         score: scoreName,
-        time: formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true }),
-        summary: experiment.errorMessage || `${progress}% complete`,
-        description: experiment.errorDetails ? 
-            typeof experiment.errorDetails === 'string' ? 
-                experiment.errorDetails : 
-                JSON.stringify(experiment.errorDetails) : 
+        time: formatDistanceToNow(new Date(Evaluation.createdAt), { addSuffix: true }),
+        summary: Evaluation.errorMessage || `${progress}% complete`,
+        description: Evaluation.errorDetails ? 
+            typeof Evaluation.errorDetails === 'string' ? 
+                Evaluation.errorDetails : 
+                JSON.stringify(Evaluation.errorDetails) : 
             undefined,
         data: {
-            accuracy: experiment.accuracy ?? 0,
+            accuracy: Evaluation.accuracy ?? 0,
             metrics: metrics,  // Use the parsed metrics array
-            processedItems: experiment.processedItems || 0,
-            totalItems: experiment.totalItems || 0,
+            processedItems: Evaluation.processedItems || 0,
+            totalItems: Evaluation.totalItems || 0,
             progress,
-            inferences: experiment.inferences || 0,
-            cost: experiment.cost ?? null,
-            status: experiment.status || 'Unknown',
-            elapsedSeconds: typeof experiment.elapsedSeconds === 'number' ? experiment.elapsedSeconds : 0,
-            estimatedRemainingSeconds: typeof experiment.estimatedRemainingSeconds === 'number' ? 
-                experiment.estimatedRemainingSeconds : 0,
-            startedAt: experiment.startedAt || null,
-            errorMessage: experiment.errorMessage ?? null,
-            errorDetails: experiment.errorDetails ?? null,
+            inferences: Evaluation.inferences || 0,
+            cost: Evaluation.cost ?? null,
+            status: Evaluation.status || 'Unknown',
+            elapsedSeconds: typeof Evaluation.elapsedSeconds === 'number' ? Evaluation.elapsedSeconds : 0,
+            estimatedRemainingSeconds: typeof Evaluation.estimatedRemainingSeconds === 'number' ? 
+                Evaluation.estimatedRemainingSeconds : 0,
+            startedAt: Evaluation.startedAt || null,
+            errorMessage: Evaluation.errorMessage ?? null,
+            errorDetails: Evaluation.errorDetails ?? null,
             confusionMatrix,
-            scoreGoal: experiment.scoreGoal ?? null,
+            scoreGoal: Evaluation.scoreGoal ?? null,
             datasetClassDistribution,
-            isDatasetClassDistributionBalanced: experiment.isDatasetClassDistributionBalanced ?? null,
+            isDatasetClassDistributionBalanced: Evaluation.isDatasetClassDistributionBalanced ?? null,
             predictedClassDistribution,
-            isPredictedClassDistributionBalanced: experiment.isPredictedClassDistributionBalanced ?? null,
-            metricsExplanation: experiment.metricsExplanation,
+            isPredictedClassDistributionBalanced: Evaluation.isPredictedClassDistributionBalanced ?? null,
+            metricsExplanation: Evaluation.metricsExplanation,
         },
     };
   }
@@ -423,25 +423,25 @@ export default function ExperimentsDashboard(): JSX.Element {
           const foundAccountId = accounts[0].id
           setAccountId(foundAccountId)
           
-          const { data: experimentModels } = await listExperiments(foundAccountId)
+          const { data: EvaluationModels } = await listEvaluations(foundAccountId)
           
-          const filteredExperiments = experimentModels
-            .map(transformExperiment)
+          const filteredEvaluations = EvaluationModels
+            .map(transformEvaluation)
             .sort((a, b) => 
               new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             )
           
-          setExperiments(filteredExperiments)
+          setEvaluations(filteredEvaluations)
           setIsLoading(false)
 
           // Set up subscription with more selective updates
-          subscription = observeQueryFromModel<Schema['Experiment']['type']>(
-            client.models.Experiment,
+          subscription = observeQueryFromModel<Schema['Evaluation']['type']>(
+            client.models.Evaluation,
             { accountId: { eq: foundAccountId } }
           ).subscribe({
-            next: async ({ items }: { items: Schema['Experiment']['type'][] }) => {
+            next: async ({ items }: { items: Schema['Evaluation']['type'][] }) => {
               try {
-                console.log('Subscription update - experiments:', items.map(item => ({
+                console.log('Subscription update - Evaluations:', items.map(item => ({
                   id: item.id,
                   type: item.type,
                   accuracy: item.accuracy,
@@ -449,18 +449,18 @@ export default function ExperimentsDashboard(): JSX.Element {
                   totalItems: item.totalItems
                 })))
 
-                setExperiments(prevExperiments => {
-                  const updatedExperiments = [...prevExperiments]
+                setEvaluations(prevEvaluations => {
+                  const updatedEvaluations = [...prevEvaluations]
                   let hasChanges = false
 
-                  items.forEach((newItem: Schema['Experiment']['type']) => {
-                    const index = updatedExperiments.findIndex(exp => exp.id === newItem.id)
+                  items.forEach((newItem: Schema['Evaluation']['type']) => {
+                    const index = updatedEvaluations.findIndex(exp => exp.id === newItem.id)
                     if (index === -1) {
-                      // New experiment - use transform to get full object
+                      // New Evaluation - use transform to get full object
                       hasChanges = true
-                      updatedExperiments.push(transformExperiment(newItem))
+                      updatedEvaluations.push(transformEvaluation(newItem))
                     } else {
-                      const existingExp = updatedExperiments[index]
+                      const existingExp = updatedEvaluations[index]
                       // Only update if relevant fields have changed
                       const relevantFieldsChanged = 
                         existingExp.status !== newItem.status ||
@@ -475,7 +475,7 @@ export default function ExperimentsDashboard(): JSX.Element {
 
                       if (relevantFieldsChanged) {
                         hasChanges = true
-                        // Create updated experiment preserving existing fields
+                        // Create updated Evaluation preserving existing fields
                         const updatedExp = {
                           ...existingExp,  // Keep all existing fields
                           // Update all fields that can change
@@ -489,49 +489,49 @@ export default function ExperimentsDashboard(): JSX.Element {
                           accuracy: newItem.accuracy ?? existingExp.accuracy,  // Update accuracy
                           type: newItem.type ?? existingExp.type  // Update type
                         }
-                        updatedExperiments[index] = transformExperiment(updatedExp)
+                        updatedEvaluations[index] = transformEvaluation(updatedExp)
                       }
                     }
                   })
 
                   return hasChanges ? 
-                    updatedExperiments.sort((a, b) => 
+                    updatedEvaluations.sort((a, b) => 
                       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
                     ) : 
-                    prevExperiments
+                    prevEvaluations
                 })
 
-                // Update selected experiment if needed
-                if (selectedExperimentRef.current) {
-                  const updatedItem = items.find(item => item.id === selectedExperimentRef.current?.id)
+                // Update selected Evaluation if needed
+                if (selectedEvaluationRef.current) {
+                  const updatedItem = items.find(item => item.id === selectedEvaluationRef.current?.id)
                   if (updatedItem) {
                     const relevantFieldsChanged = 
-                      selectedExperimentRef.current.status !== updatedItem.status ||
-                      selectedExperimentRef.current.processedItems !== updatedItem.processedItems ||
-                      selectedExperimentRef.current.totalItems !== updatedItem.totalItems ||
-                      selectedExperimentRef.current.metrics !== updatedItem.metrics ||
-                      selectedExperimentRef.current.errorMessage !== updatedItem.errorMessage ||
-                      selectedExperimentRef.current.errorDetails !== updatedItem.errorDetails ||
-                      selectedExperimentRef.current.metricsExplanation !== updatedItem.metricsExplanation ||
-                      selectedExperimentRef.current.accuracy !== updatedItem.accuracy ||  // Include accuracy changes
-                      selectedExperimentRef.current.type !== updatedItem.type  // Include type changes
+                      selectedEvaluationRef.current.status !== updatedItem.status ||
+                      selectedEvaluationRef.current.processedItems !== updatedItem.processedItems ||
+                      selectedEvaluationRef.current.totalItems !== updatedItem.totalItems ||
+                      selectedEvaluationRef.current.metrics !== updatedItem.metrics ||
+                      selectedEvaluationRef.current.errorMessage !== updatedItem.errorMessage ||
+                      selectedEvaluationRef.current.errorDetails !== updatedItem.errorDetails ||
+                      selectedEvaluationRef.current.metricsExplanation !== updatedItem.metricsExplanation ||
+                      selectedEvaluationRef.current.accuracy !== updatedItem.accuracy ||  // Include accuracy changes
+                      selectedEvaluationRef.current.type !== updatedItem.type  // Include type changes
 
                     if (relevantFieldsChanged) {
-                      const transformed = transformExperiment({
-                        ...selectedExperimentRef.current,
+                      const transformed = transformEvaluation({
+                        ...selectedEvaluationRef.current,
                         ...updatedItem,
                         // Explicitly update all fields that can change
-                        status: updatedItem.status ?? selectedExperimentRef.current.status,
-                        processedItems: updatedItem.processedItems ?? selectedExperimentRef.current.processedItems,
-                        totalItems: updatedItem.totalItems ?? selectedExperimentRef.current.totalItems,
-                        metrics: updatedItem.metrics ?? selectedExperimentRef.current.metrics,
-                        errorMessage: updatedItem.errorMessage ?? selectedExperimentRef.current.errorMessage,
-                        errorDetails: updatedItem.errorDetails ?? selectedExperimentRef.current.errorDetails,
-                        metricsExplanation: updatedItem.metricsExplanation ?? selectedExperimentRef.current.metricsExplanation,
-                        accuracy: updatedItem.accuracy ?? selectedExperimentRef.current.accuracy,
-                        type: updatedItem.type ?? selectedExperimentRef.current.type
+                        status: updatedItem.status ?? selectedEvaluationRef.current.status,
+                        processedItems: updatedItem.processedItems ?? selectedEvaluationRef.current.processedItems,
+                        totalItems: updatedItem.totalItems ?? selectedEvaluationRef.current.totalItems,
+                        metrics: updatedItem.metrics ?? selectedEvaluationRef.current.metrics,
+                        errorMessage: updatedItem.errorMessage ?? selectedEvaluationRef.current.errorMessage,
+                        errorDetails: updatedItem.errorDetails ?? selectedEvaluationRef.current.errorDetails,
+                        metricsExplanation: updatedItem.metricsExplanation ?? selectedEvaluationRef.current.metricsExplanation,
+                        accuracy: updatedItem.accuracy ?? selectedEvaluationRef.current.accuracy,
+                        type: updatedItem.type ?? selectedEvaluationRef.current.type
                       })
-                      setSelectedExperiment(transformed)
+                      setSelectedEvaluation(transformed)
                     }
                   }
                 }
@@ -568,34 +568,34 @@ export default function ExperimentsDashboard(): JSX.Element {
       
       const newScorecardNames: Record<string, string> = {};
       
-      if (!experiments || experiments.length === 0) {
+      if (!Evaluations || Evaluations.length === 0) {
         setScorecardNames({});
         return;
       }
 
       try {
-        // Process experiments sequentially instead of in parallel
-        for (const experiment of experiments) {
-          if (!experiment?.id) continue;
+        // Process Evaluations sequentially instead of in parallel
+        for (const Evaluation of Evaluations) {
+          if (!Evaluation?.id) continue;
           
           try {
-            if (experiment.scorecard) {
-              const result = await experiment.scorecard();
-              newScorecardNames[experiment.id] = result?.data?.name || 'Unknown Scorecard';
+            if (Evaluation.scorecard) {
+              const result = await Evaluation.scorecard();
+              newScorecardNames[Evaluation.id] = result?.data?.name || 'Unknown Scorecard';
             } else {
-              newScorecardNames[experiment.id] = 'Unknown Scorecard';
+              newScorecardNames[Evaluation.id] = 'Unknown Scorecard';
             }
           } catch (error) {
-            console.error(`Error fetching scorecard name for experiment ${experiment.id}:`, error);
-            newScorecardNames[experiment.id] = 'Unknown Scorecard';
+            console.error(`Error fetching scorecard name for Evaluation ${Evaluation.id}:`, error);
+            newScorecardNames[Evaluation.id] = 'Unknown Scorecard';
           }
         }
 
         setScorecardNames(newScorecardNames);
       } catch (error) {
         console.error('Error in fetchScorecardNames:', error);
-        // Set default names for all experiments on error
-        const defaultNames = experiments.reduce((acc, exp) => {
+        // Set default names for all Evaluations on error
+        const defaultNames = Evaluations.reduce((acc, exp) => {
           if (exp?.id) {
             acc[exp.id] = 'Unknown Scorecard';
           }
@@ -606,16 +606,16 @@ export default function ExperimentsDashboard(): JSX.Element {
     };
 
     fetchScorecardNames();
-  }, [experiments]);
+  }, [Evaluations]);
 
   // Update the score results subscription effect
   useEffect(() => {
-    if (!selectedExperiment?.id) return
+    if (!selectedEvaluation?.id) return
     
     let isMounted = true
-    console.log('Starting score results subscription for experiment:', selectedExperiment.id)
+    console.log('Starting score results subscription for Evaluation:', selectedEvaluation.id)
     
-    const subscription = observeScoreResults(client, selectedExperiment.id).subscribe({
+    const subscription = observeScoreResults(client, selectedEvaluation.id).subscribe({
       next: ({ items, isSynced }: { items: Schema['ScoreResult']['type'][], isSynced: boolean }) => {
         console.log('Score results subscription update')
 
@@ -675,15 +675,15 @@ export default function ExperimentsDashboard(): JSX.Element {
       isMounted = false
       subscription.unsubscribe()
     }
-  }, [selectedExperiment?.id])
+  }, [selectedEvaluation?.id])
 
-  // Next, let's optimize the experimentTaskProps update to avoid unnecessary re-renders
+  // Next, let's optimize the EvaluationTaskProps update to avoid unnecessary re-renders
   useEffect(() => {
-    const updateExperimentTaskProps = async () => {
-      if (selectedExperiment) {
-        const props = await getExperimentTaskProps(selectedExperiment)
+    const updateEvaluationTaskProps = async () => {
+      if (selectedEvaluation) {
+        const props = await getEvaluationTaskProps(selectedEvaluation)
         
-        setExperimentTaskProps(prevProps => {
+        setEvaluationTaskProps(prevProps => {
           // Only update if there are actual changes
           if (!prevProps) return { ...props, data: { ...props.data, scoreResults } }
           
@@ -702,41 +702,41 @@ export default function ExperimentsDashboard(): JSX.Element {
           }
         })
       } else {
-        setExperimentTaskProps(null)
+        setEvaluationTaskProps(null)
       }
     }
 
-    updateExperimentTaskProps()
-  }, [selectedExperiment, scoreResults])
+    updateEvaluationTaskProps()
+  }, [selectedEvaluation, scoreResults])
 
   // Move these to the top, before any early returns
-  const filteredExperiments = useMemo(() => {
-    return experiments.filter(experiment => {
+  const filteredEvaluations = useMemo(() => {
+    return Evaluations.filter(Evaluation => {
       if (!selectedScorecard) return true
-      return experiment.scorecardId === selectedScorecard
+      return Evaluation.scorecardId === selectedScorecard
     })
-  }, [experiments, selectedScorecard])
+  }, [Evaluations, selectedScorecard])
 
-  const ExperimentList = useMemo(() => (
+  const EvaluationList = useMemo(() => (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[30%]">Experiment</TableHead>
+          <TableHead className="w-[30%]">Evaluation</TableHead>
           <TableHead className="w-[10%] @[630px]:table-cell hidden">Type</TableHead>
           <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Progress</TableHead>
           <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Accuracy</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {filteredExperiments.map((experiment) => (
+        {filteredEvaluations.map((Evaluation) => (
           <TableRow 
-            key={experiment.id} 
+            key={Evaluation.id} 
             onClick={() => {
-              setScoreResults([])  // Clear score results before setting new experiment
-              setSelectedExperiment(experiment)
+              setScoreResults([])  // Clear score results before setting new Evaluation
+              setSelectedEvaluation(Evaluation)
             }} 
             className={`cursor-pointer transition-colors duration-200 
-              ${experiment.id === selectedExperiment?.id ? 'bg-muted' : 'hover:bg-muted'}`}
+              ${Evaluation.id === selectedEvaluation?.id ? 'bg-muted' : 'hover:bg-muted'}`}
           >
             <TableCell className="font-medium sm:pr-4">
               <div className="block @[630px]:hidden">
@@ -744,29 +744,29 @@ export default function ExperimentsDashboard(): JSX.Element {
                   {/* Left column - reduce width to ~40% */}
                   <div className="w-[40%] space-y-0.5">
                     <div className="font-semibold truncate">
-                      <span className={experiment.id === selectedExperiment?.id ? 'text-focus' : ''}>
-                        {scorecardNames[experiment.id] || 'Unknown Scorecard'}
+                      <span className={Evaluation.id === selectedEvaluation?.id ? 'text-focus' : ''}>
+                        {scorecardNames[Evaluation.id] || 'Unknown Scorecard'}
                       </span>
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
+                      {formatDistanceToNow(new Date(Evaluation.createdAt), { addSuffix: true })}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {experiment.type || ''}
+                      {Evaluation.type || ''}
                     </div>
                   </div>
 
                   {/* Right column - increase width to ~55% for progress bars */}
                   <div className="w-[55%] space-y-2">
-                    <ExperimentListProgressBar 
-                      progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
-                      totalSamples={experiment.totalItems ?? 0}
-                      isFocused={experiment.id === selectedExperiment?.id}
+                    <EvaluationListProgressBar 
+                      progress={calculateProgress(Evaluation.processedItems, Evaluation.totalItems)}
+                      totalSamples={Evaluation.totalItems ?? 0}
+                      isFocused={Evaluation.id === selectedEvaluation?.id}
                     />
-                    <ExperimentListAccuracyBar 
-                      progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
-                      accuracy={experiment.accuracy ?? 0}
-                      isFocused={experiment.id === selectedExperiment?.id}
+                    <EvaluationListAccuracyBar 
+                      progress={calculateProgress(Evaluation.processedItems, Evaluation.totalItems)}
+                      accuracy={Evaluation.accuracy ?? 0}
+                      isFocused={Evaluation.id === selectedEvaluation?.id}
                     />
                   </div>
                 </div>
@@ -774,68 +774,68 @@ export default function ExperimentsDashboard(): JSX.Element {
               {/* Wide variant - visible at 630px and above */}
               <div className="hidden @[630px]:block">
                 <div className="font-semibold">
-                  <span className={experiment.id === selectedExperiment?.id ? 'text-focus' : ''}>
-                    {scorecardNames[experiment.id] || 'Unknown Scorecard'}
+                  <span className={Evaluation.id === selectedEvaluation?.id ? 'text-focus' : ''}>
+                    {scorecardNames[Evaluation.id] || 'Unknown Scorecard'}
                   </span>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {formatDistanceToNow(new Date(experiment.createdAt), { addSuffix: true })}
+                  {formatDistanceToNow(new Date(Evaluation.createdAt), { addSuffix: true })}
                 </div>
               </div>
             </TableCell>
             <TableCell className="hidden @[630px]:table-cell text-sm text-muted-foreground">
-              {experiment.type || ''}
+              {Evaluation.type || ''}
             </TableCell>
             <TableCell className="hidden @[630px]:table-cell w-[15%] text-right">
-              <ExperimentListProgressBar 
-                progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
-                totalSamples={experiment.totalItems ?? 0}
-                isFocused={experiment.id === selectedExperiment?.id}
+              <EvaluationListProgressBar 
+                progress={calculateProgress(Evaluation.processedItems, Evaluation.totalItems)}
+                totalSamples={Evaluation.totalItems ?? 0}
+                isFocused={Evaluation.id === selectedEvaluation?.id}
               />
             </TableCell>
             <TableCell className="hidden @[630px]:table-cell w-[15%]">
-              <ExperimentListAccuracyBar 
-                progress={calculateProgress(experiment.processedItems, experiment.totalItems)}
-                accuracy={experiment.accuracy ?? 0}
-                isFocused={experiment.id === selectedExperiment?.id}
+              <EvaluationListAccuracyBar 
+                progress={calculateProgress(Evaluation.processedItems, Evaluation.totalItems)}
+                accuracy={Evaluation.accuracy ?? 0}
+                isFocused={Evaluation.id === selectedEvaluation?.id}
               />
             </TableCell>
           </TableRow>
         ))}
       </TableBody>
     </Table>
-  ), [filteredExperiments, selectedExperiment?.id, scorecardNames])
+  ), [filteredEvaluations, selectedEvaluation?.id, scorecardNames])
 
-  const experimentTaskComponent = useMemo(() => {
-    if (!selectedExperiment || !experimentTaskProps) return null
+  const EvaluationTaskComponent = useMemo(() => {
+    if (!selectedEvaluation || !EvaluationTaskProps) return null
     
     return (
-      <ExperimentTask
+      <EvaluationTask
         variant="detail"
-        task={experimentTaskProps}
+        task={EvaluationTaskProps}
         isFullWidth={isFullWidth}
         onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
         onClose={() => {
-          setSelectedExperiment(null)
+          setSelectedEvaluation(null)
           setIsFullWidth(false)
         }}
       />
     )
-  }, [selectedExperiment?.id, experimentTaskProps, isFullWidth])
+  }, [selectedEvaluation?.id, EvaluationTaskProps, isFullWidth])
 
   // Now do the early returns
   if (!hasMounted) {
-    return <ExperimentDashboardSkeleton />;
+    return <EvaluationDashboardSkeleton />;
   }
 
   if (isLoading || !hasMounted) {
-    return <ExperimentDashboardSkeleton />;
+    return <EvaluationDashboardSkeleton />;
   }
 
   if (error) {
     return (
       <div className="p-4 text-red-500">
-        Error loading experiments: {error.message}
+        Error loading Evaluations: {error.message}
       </div>
     )
   }
@@ -848,7 +848,7 @@ export default function ExperimentsDashboard(): JSX.Element {
           <div className={`
             flex flex-col
             ${isFullWidth ? 'hidden' : ''} 
-            ${(!selectedExperiment || isNarrowViewport) ? 'w-full' : 'w-1/2'}
+            ${(!selectedEvaluation || isNarrowViewport) ? 'w-full' : 'w-1/2'}
           `}>
             <div className="mb-4">
               <ScorecardContext 
@@ -860,14 +860,14 @@ export default function ExperimentsDashboard(): JSX.Element {
               />
             </div>
             <div className="flex-1 overflow-auto @container">
-              {ExperimentList}
+              {EvaluationList}
             </div>
           </div>
 
-          {selectedExperiment && experimentTaskProps && !isNarrowViewport && (
+          {selectedEvaluation && EvaluationTaskProps && !isNarrowViewport && (
             <div className={`${isFullWidth ? 'w-full' : 'w-1/2 min-w-[300px]'} flex flex-col flex-1`}>
               <div className="flex-1 flex flex-col">
-                {experimentTaskComponent}
+                {EvaluationTaskComponent}
               </div>
             </div>
           )}

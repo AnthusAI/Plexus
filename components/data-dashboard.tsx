@@ -363,7 +363,7 @@ export default function DataDashboard() {
                               <FlaskConical className="h-4 w-4" />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent>Run Experiment</TooltipContent>
+                          <TooltipContent>Run Evaluation</TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
                       <TooltipProvider>
@@ -437,7 +437,7 @@ export default function DataDashboard() {
                         <FlaskConical className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Run Experiment</TooltipContent>
+                    <TooltipContent>Run Evaluation</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
                 <TooltipProvider>
@@ -665,9 +665,9 @@ export default function DataDashboard() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => router.push('/experiments')}>
+            <DropdownMenuItem onClick={() => router.push('/evaluations')}>
               <FlaskConical className="mr-2 h-4 w-4" />
-              <span>Run Experiment</span>
+              <span>Run Evaluation</span>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => router.push('/analysis')}>
               <Sparkles className="mr-2 h-4 w-4" />
@@ -748,7 +748,7 @@ export default function DataDashboard() {
                                         <FlaskConical className="h-4 w-4" />
                                       </Button>
                                     </TooltipTrigger>
-                                    <TooltipContent>Run Experiment</TooltipContent>
+                                    <TooltipContent>Run Evaluation</TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
                                 <TooltipProvider>
@@ -822,7 +822,7 @@ export default function DataDashboard() {
                                   <FlaskConical className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Run Experiment</TooltipContent>
+                              <TooltipContent>Run Evaluation</TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                           <TooltipProvider>

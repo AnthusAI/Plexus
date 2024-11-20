@@ -20,7 +20,7 @@ const meta: Meta<typeof MetricsGaugesExplanation> = {
 export default meta
 type Story = StoryObj<typeof MetricsGaugesExplanation>
 
-const baseExplanation = "This experiment measures the model's ability to correctly " +
+const baseExplanation = "This evaluation measures the model's ability to correctly " +
   "identify positive cases while maintaining a balance between precision " + 
   "and recall. The metrics show strong performance across all key indicators."
 

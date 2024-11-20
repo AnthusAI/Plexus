@@ -7,12 +7,12 @@ import { ConfusionMatrix } from '@/components/confusion-matrix'
 import { CardButton } from '@/components/CardButton'
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
-import { ExperimentTaskScoreResult } from '@/components/ExperimentTaskScoreResult'
+import { EvaluationTaskScoreResult } from '@/components/EvaluationTaskScoreResult'
 import type { Schema } from "@/amplify/data/resource"
 import MetricsGaugesExplanation from '@/components/MetricsGaugesExplanation'
-import { ExperimentTaskScoreResults } from '@/components/ExperimentTaskScoreResults'
+import { EvaluationTaskScoreResults } from '@/components/EvaluationTaskScoreResults'
 
-export interface ExperimentMetric {
+export interface EvaluationMetric {
   name: string
   value: number
   unit?: string
@@ -20,9 +20,9 @@ export interface ExperimentMetric {
   priority: boolean
 }
 
-export interface ExperimentTaskData {
+export interface EvaluationTaskData {
   accuracy: number | null
-  metrics: ExperimentMetric[]
+  metrics: EvaluationMetric[]
   metricsExplanation?: string | null
   processedItems: number
   totalItems: number
@@ -47,7 +47,7 @@ export interface ExperimentTaskData {
   scoreResults?: Schema['ScoreResult']['type'][]
 }
 
-export interface ExperimentTaskProps {
+export interface EvaluationTaskProps {
   variant?: 'grid' | 'detail'
   task: {
     id: string
@@ -57,7 +57,7 @@ export interface ExperimentTaskProps {
     time: string
     summary?: string
     description?: string
-    data: ExperimentTaskData
+    data: EvaluationTaskData
   }
   onClick?: () => void
   controlButtons?: React.ReactNode
@@ -66,28 +66,28 @@ export interface ExperimentTaskProps {
   onClose?: () => void
 }
 
-function computeExperimentType(data: ExperimentTaskData): string {
+function computeEvaluationType(data: EvaluationTaskData): string {
   if (data.errorMessage || data.errorDetails) {
-    return "Error in experiment"
+    return "Error in Evaluation"
   }
   
   if (data.progress === 100) {
-    return "Experiment done"
+    return "Evaluation done"
   }
   
   if (data.progress >= 90) {
-    return "Experiment finishing"
+    return "Evaluation finishing"
   }
   
   if (data.progress >= 10) {
-    return "Experiment running"
+    return "Evaluation running"
   }
   
   if (data.progress > 0) {
-    return "Experiment started"
+    return "Evaluation started"
   }
   
-  return "Experiment pending"
+  return "Evaluation pending"
 }
 
 function formatDuration(seconds: number): string {
@@ -116,7 +116,7 @@ function computeIsBalanced(distribution: { label: string, count: number }[] | nu
   )
 }
 
-const GridContent = React.memo(({ data }: { data: ExperimentTaskData }) => (
+const GridContent = React.memo(({ data }: { data: EvaluationTaskData }) => (
   <div className="mt-4">
     <ProgressBar 
       progress={data.progress}
@@ -138,7 +138,7 @@ const DetailContent = React.memo(({
   metrics,
   metricsVariant,
 }: { 
-  data: ExperimentTaskData
+  data: EvaluationTaskData
   isFullWidth: boolean
   metrics: any[]
   metricsVariant: 'grid' | 'detail'
@@ -223,7 +223,7 @@ const DetailContent = React.memo(({
 
       {data.scoreResults && data.scoreResults.length > 0 && (
         <div className={isFullWidth ? 'w-full' : 'mt-8'}>
-          <ExperimentTaskScoreResults 
+          <EvaluationTaskScoreResults 
             results={data.scoreResults} 
             accuracy={data.accuracy ?? 0}
             selectedPredictedValue={selectedPredictedActual.predicted}
@@ -235,7 +235,7 @@ const DetailContent = React.memo(({
   )
 })
 
-export default function ExperimentTask({ 
+export default function EvaluationTask({ 
   variant = 'grid',
   task,
   onClick,
@@ -243,9 +243,9 @@ export default function ExperimentTask({
   isFullWidth,
   onToggleFullWidth,
   onClose
-}: ExperimentTaskProps) {
-  const data = task.data ?? {} as ExperimentTaskData
-  const computedType = computeExperimentType(data)
+}: EvaluationTaskProps) {
+  const data = task.data ?? {} as EvaluationTaskData
+  const computedType = computeEvaluationType(data)
 
   const metrics = useMemo(() => 
     variant === 'detail' ? 

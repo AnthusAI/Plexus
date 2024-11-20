@@ -1,17 +1,17 @@
 import React from "react"
 import { ProgressBar } from "@/components/ui/progress-bar"
 
-interface ExperimentListProgressBarProps {
+interface EvaluationListProgressBarProps {
   progress: number
   totalSamples?: number
   isFocused?: boolean
 }
 
-export function ExperimentListProgressBar({ 
+export function EvaluationListProgressBar({ 
   progress, 
   totalSamples,
   isFocused = false
-}: ExperimentListProgressBarProps) {
+}: EvaluationListProgressBarProps) {
   const roundedProgress = Math.round(progress)
   
   return (

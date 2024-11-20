@@ -100,9 +100,9 @@ plexus-dashboard score-result update abc123 \
   --metadata '{"reviewed": true}'
 ```
 
-### Working with Experiments
+### Working with Evaluations
 
-The library provides background processing for experiment operations:
+The library provides background processing for Evaluation operations:
 
 ```python
 from plexus_dashboard.api.client import PlexusDashboardClient
@@ -114,8 +114,8 @@ client = PlexusDashboardClient(
     }
 )
 
-# Create an experiment (non-blocking)
-client.Experiment.create(
+# Create an Evaluation (non-blocking)
+client.Evaluation.create(
     type="accuracy",
     accountId="acc-123",
     scorecardId="card-123",
@@ -125,19 +125,19 @@ client.Experiment.create(
     }
 )
 
-# Get an existing experiment
-experiment = client.Experiment.get_by_id("exp-123")
+# Get an existing Evaluation
+Evaluation = client.Evaluation.get_by_id("exp-123")
 
-# Update experiment status (non-blocking)
-experiment.update(
+# Update Evaluation status (non-blocking)
+Evaluation.update(
     status="RUNNING",
     progress=0.45,
     processedItems=45,
     totalItems=100
 )
 
-# Add experiment results (non-blocking)
-experiment.update(
+# Add Evaluation results (non-blocking)
+Evaluation.update(
     status="COMPLETED",
     accuracy=0.95,
     metrics={
@@ -153,8 +153,8 @@ experiment.update(
     }
 )
 
-# Log experiment failure (non-blocking)
-experiment.update(
+# Log Evaluation failure (non-blocking)
+Evaluation.update(
     status="FAILED",
     errorMessage="Model API timeout",
     errorDetails={
@@ -165,13 +165,13 @@ experiment.update(
 )
 ```
 
-### Simulating Experiments
+### Simulating Evaluations
 
 The CLI provides a simulation command for testing and demonstration purposes:
 
 ```bash
-# Simulate an evaluation experiment
-plexus-dashboard experiment simulate \
+# Simulate an evaluation Evaluation
+plexus-dashboard Evaluation simulate \
   --account-key call-criteria \
   --scorecard-key agent-scorecard \
   --num-items 100 \
@@ -179,13 +179,13 @@ plexus-dashboard experiment simulate \
 ```
 
 The simulate command:
-- Creates an Experiment record
+- Creates an Evaluation record
 - Generates synthetic binary classification results
 - Computes standard ML metrics in real-time
-- Updates the experiment with metrics as results are generated
+- Updates the Evaluation with metrics as results are generated
 
 This is useful for:
-- Testing the experiment tracking system
+- Testing the Evaluation tracking system
 - Demonstrating the metrics calculation pipeline
 - Generating sample data for UI development
 - Validating metric calculations
@@ -228,20 +228,20 @@ Each result includes:
 All client operations are thread-safe and can be used in concurrent environments.
 
 #### Background Processing
-All mutations (create/update) in the Experiment model are performed in background 
+All mutations (create/update) in the Evaluation model are performed in background 
 threads for non-blocking operation. This allows the main application to continue 
-while experiment data is being saved.
+while Evaluation data is being saved.
 
 - Create operations spawn a new thread
 - Update operations spawn a new thread
 - Errors are logged but don't affect the main thread
-- No batching (experiments are processed individually)
+- No batching (Evaluations are processed individually)
 
 #### Error Handling
 Background operations handle errors gracefully:
 ```python
 # This won't block or raise errors in the main thread
-experiment.update(
+Evaluation.update(
     status="RUNNING",
     progress=0.5
 )

@@ -7,7 +7,7 @@ const schema = a.schema({
       key: a.string().required(),
       description: a.string(),
       scorecards: a.hasMany('Scorecard', 'accountId'),
-      experiments: a.hasMany('Experiment', 'accountId'),
+      evaluations: a.hasMany('Evaluation', 'accountId'),
       batchJobs: a.hasMany('BatchJob', 'accountId'),
       items: a.hasMany('Item', 'accountId'),
       scoringJobs: a.hasMany('ScoringJob', 'accountId'),
@@ -30,7 +30,7 @@ const schema = a.schema({
       accountId: a.string().required(),
       account: a.belongsTo('Account', 'accountId'),
       sections: a.hasMany('ScorecardSection', 'scorecardId'),
-      experiments: a.hasMany('Experiment', 'scorecardId'),
+      evaluations: a.hasMany('Evaluation', 'scorecardId'),
       batchJobs: a.hasMany('BatchJob', 'scorecardId'),
       itemId: a.string(),
       item: a.belongsTo('Item', 'itemId'),
@@ -78,7 +78,7 @@ const schema = a.schema({
       configuration: a.json(),
       distribution: a.json(),
       versionHistory: a.json(),
-      experiments: a.hasMany('Experiment', 'scoreId'),
+      evaluations: a.hasMany('Evaluation', 'scoreId'),
       batchJobs: a.hasMany('BatchJob', 'scoreId'),
     })
     .authorization((allow) => [
@@ -89,7 +89,7 @@ const schema = a.schema({
       idx("sectionId")
     ]),
 
-  Experiment: a
+  Evaluation: a
     .model({
       type: a.string().required(),
       parameters: a.json(),
@@ -115,9 +115,9 @@ const schema = a.schema({
       scoreId: a.string(),
       score: a.belongsTo('Score', 'scoreId'),
       confusionMatrix: a.json(),
-      items: a.hasMany('Item', 'experimentId'),
-      scoreResults: a.hasMany('ScoreResult', 'experimentId'),
-      scoringJobs: a.hasMany('ScoringJob', 'experimentId'),
+      items: a.hasMany('Item', 'EvaluationId'),
+      scoreResults: a.hasMany('ScoreResult', 'EvaluationId'),
+      scoringJobs: a.hasMany('ScoringJob', 'EvaluationId'),
       scoreGoal: a.string(),
       datasetClassDistribution: a.json(),
       isDatasetClassDistributionBalanced: a.boolean(),
@@ -176,8 +176,8 @@ const schema = a.schema({
       scoringJobs: a.hasMany('ScoringJob', 'itemId'),
       scoreResults: a.hasMany('ScoreResult', 'itemId'),
       scorecards: a.hasMany('Scorecard', 'itemId'),
-      experimentId: a.string(),
-      experiment: a.belongsTo('Experiment', 'experimentId'),
+      evaluationId: a.string(),
+      evaluation: a.belongsTo('Evaluation', 'evaluationId'),
     })
     .authorization((allow) => [
       allow.publicApiKey(),
@@ -200,8 +200,8 @@ const schema = a.schema({
       account: a.belongsTo('Account', 'accountId'),
       scorecardId: a.string().required(),
       scorecard: a.belongsTo('Scorecard', 'scorecardId'),
-      experimentId: a.string(),
-      experiment: a.belongsTo('Experiment', 'experimentId'),
+      evaluationId: a.string(),
+      evaluation: a.belongsTo('Evaluation', 'evaluationId'),
       batchJobLinks: a.hasMany('BatchJobScoringJob', 'scoringJobId'),
       scoreResults: a.hasMany('ScoreResult', 'scoringJobId'),
     })
@@ -213,7 +213,7 @@ const schema = a.schema({
       idx("accountId"),
       idx("itemId"),
       idx("scorecardId"),
-      idx("experimentId")
+      idx("evaluationId")
     ]),
 
   ScoreResult: a
@@ -228,8 +228,8 @@ const schema = a.schema({
       account: a.belongsTo('Account', 'accountId'),
       scoringJobId: a.string(),
       scoringJob: a.belongsTo('ScoringJob', 'scoringJobId'),
-      experimentId: a.string(),
-      experiment: a.belongsTo('Experiment', 'experimentId'),
+      evaluationId: a.string(),
+      evaluation: a.belongsTo('Evaluation', 'evaluationId'),
       scorecardId: a.string().required(),
       scorecard: a.belongsTo('Scorecard', 'scorecardId'),
     })
@@ -241,7 +241,7 @@ const schema = a.schema({
       idx("accountId"),
       idx("itemId"),
       idx("scoringJobId"),
-      idx("experimentId"),
+      idx("evaluationId"),
       idx("scorecardId")
     ]),
 

@@ -1,17 +1,17 @@
 import React from "react"
 import { cn } from "@/lib/utils"
 
-interface ExperimentListAccuracyBarProps {
+interface EvaluationListAccuracyBarProps {
   progress: number
   accuracy: number
   isFocused?: boolean
 }
 
-export function ExperimentListAccuracyBar({ 
+export function EvaluationListAccuracyBar({ 
   progress, 
   accuracy,
   isFocused = false 
-}: ExperimentListAccuracyBarProps) {
+}: EvaluationListAccuracyBarProps) {
   const roundedAccuracy = Math.round(accuracy)
   const clampedAccuracy = Math.min(Math.max(roundedAccuracy, 0), 100)
   const clampedProgress = Math.min(Math.max(progress, 0), 100)

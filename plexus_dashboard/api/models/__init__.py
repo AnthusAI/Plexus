@@ -1,6 +1,6 @@
 from .account import Account
-from .experiment import Experiment
+from .evaluation import Evaluation
 from .scorecard import Scorecard
 from .score import Score
 
-__all__ = ['Account', 'Experiment', 'Scorecard', 'Score'] 
+__all__ = ['Account', 'Evaluation', 'Scorecard', 'Score'] 

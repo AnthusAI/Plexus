@@ -13,7 +13,7 @@ class ScoreResult(BaseModel):
     confidence: Optional[float] = None
     metadata: Optional[Dict] = None
     scoringJobId: Optional[str] = None
-    experimentId: Optional[str] = None
+    evaluationId: Optional[str] = None
     correct: Optional[bool] = None
 
     def __init__(
@@ -26,7 +26,7 @@ class ScoreResult(BaseModel):
         confidence: Optional[float] = None,
         metadata: Optional[Dict] = None,
         scoringJobId: Optional[str] = None,
-        experimentId: Optional[str] = None,
+        evaluationId: Optional[str] = None,
         correct: Optional[bool] = None,
         client: Optional[_BaseAPIClient] = None
     ):
@@ -38,7 +38,7 @@ class ScoreResult(BaseModel):
         self.confidence = confidence
         self.metadata = metadata
         self.scoringJobId = scoringJobId
-        self.experimentId = experimentId
+        self.evaluationId = evaluationId
         self.correct = correct
 
     @classmethod
@@ -52,7 +52,7 @@ class ScoreResult(BaseModel):
             confidence
             metadata
             scoringJobId
-            experimentId
+            evaluationId
             correct
         """
 
@@ -76,7 +76,7 @@ class ScoreResult(BaseModel):
             confidence=data.get('confidence'),
             metadata=metadata,
             scoringJobId=data.get('scoringJobId'),
-            experimentId=data.get('experimentId'),
+            evaluationId=data.get('evaluationId'),
             correct=data.get('correct'),
             client=client
         )
@@ -90,7 +90,7 @@ class ScoreResult(BaseModel):
         accountId: str, 
         scorecardId: str,
         scoringJobId: Optional[str] = None,
-        experimentId: Optional[str] = None,
+        evaluationId: Optional[str] = None,
         **kwargs
     ) -> 'ScoreResult':
         """Create a new score result.
@@ -102,14 +102,14 @@ class ScoreResult(BaseModel):
             accountId: Account context (required)
             scorecardId: ID of scorecard used (required)
             scoringJobId: ID of scoring job (optional)
-            experimentId: ID of experiment (optional)
+            evaluationId: ID of evaluation (optional)
             **kwargs: Optional fields:
                      - confidence: float
                      - metadata: dict (will be JSON serialized)
                      - correct: bool
         
         Note:
-            Either scoringJobId or experimentId should be provided, but not required
+            Either scoringJobId or evaluationId should be provided, but not required
         """
         # Convert metadata to string if present
         if 'metadata' in kwargs:
@@ -125,8 +125,8 @@ class ScoreResult(BaseModel):
         
         if scoringJobId is not None:
             input_data['scoringJobId'] = scoringJobId
-        if experimentId is not None:
-            input_data['experimentId'] = experimentId
+        if evaluationId is not None:
+            input_data['evaluationId'] = evaluationId
         
         mutation = """
         mutation CreateScoreResult($input: CreateScoreResultInput!) {

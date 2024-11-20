@@ -8,7 +8,7 @@ establishing a consistent pattern for:
 - ID-based record retrieval
 - Client association
 
-Each model class (Account, Experiment, etc.) inherits from this base,
+Each model class (Account, Evaluation, etc.) inherits from this base,
 ensuring consistent behavior across the API interface.
 
 Implementation Notes:
@@ -26,7 +26,7 @@ Example Usage:
     account = Account.get_by_key("my-account", client)
     
     # Background mutations (if implemented)
-    experiment.update(status="RUNNING")  # Returns immediately
+    evaluation.update(status="RUNNING")  # Returns immediately
     
     # Batch operations (if implemented)
     ScoreResult.batch_create(client, items)

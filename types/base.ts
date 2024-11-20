@@ -9,8 +9,8 @@ export interface BaseTaskData {
 export type ActivityType = 
   | 'Alert'
   | 'Batch Job'
-  | 'Experiment started' 
-  | 'Experiment completed'
+  | 'Evaluation started' 
+  | 'Evaluation completed'
   | 'Feedback queue started'
   | 'Feedback queue completed'
   | 'Optimization started'

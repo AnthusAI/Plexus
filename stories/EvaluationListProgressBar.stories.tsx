@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { ExperimentListProgressBar } from '@/components/ExperimentListProgressBar'
+import { EvaluationListProgressBar } from '@/components/EvaluationListProgressBar'
 
 const meta = {
-  title: 'Visualization/ExperimentListProgressBar',
-  component: ExperimentListProgressBar,
+  title: 'Visualization/EvaluationListProgressBar',
+  component: EvaluationListProgressBar,
   parameters: {
     layout: 'centered',
   },
@@ -14,10 +14,10 @@ const meta = {
       </div>
     ),
   ],
-} satisfies Meta<typeof ExperimentListProgressBar>
+} satisfies Meta<typeof EvaluationListProgressBar>
 
 export default meta
-type Story = StoryObj<typeof ExperimentListProgressBar>
+type Story = StoryObj<typeof EvaluationListProgressBar>
 
 export const Single: Story = {
   args: {
@@ -59,19 +59,19 @@ export const Demo: Story = {
         <div className="grid grid-cols-2 gap-16">
           <div className="space-y-4">
             <h3 className="font-medium mb-2">Not Focused</h3>
-            <ExperimentListProgressBar progress={0} totalSamples={100} />
-            <ExperimentListProgressBar progress={25} totalSamples={100} />
-            <ExperimentListProgressBar progress={50} totalSamples={100} />
-            <ExperimentListProgressBar progress={75} totalSamples={100} />
-            <ExperimentListProgressBar progress={100} totalSamples={100} />
+            <EvaluationListProgressBar progress={0} totalSamples={100} />
+            <EvaluationListProgressBar progress={25} totalSamples={100} />
+            <EvaluationListProgressBar progress={50} totalSamples={100} />
+            <EvaluationListProgressBar progress={75} totalSamples={100} />
+            <EvaluationListProgressBar progress={100} totalSamples={100} />
           </div>
           <div className="space-y-4">
             <h3 className="font-medium mb-2">Focused</h3>
-            <ExperimentListProgressBar progress={0} totalSamples={100} isFocused />
-            <ExperimentListProgressBar progress={25} totalSamples={100} isFocused />
-            <ExperimentListProgressBar progress={50} totalSamples={100} isFocused />
-            <ExperimentListProgressBar progress={75} totalSamples={100} isFocused />
-            <ExperimentListProgressBar progress={100} totalSamples={100} isFocused />
+            <EvaluationListProgressBar progress={0} totalSamples={100} isFocused />
+            <EvaluationListProgressBar progress={25} totalSamples={100} isFocused />
+            <EvaluationListProgressBar progress={50} totalSamples={100} isFocused />
+            <EvaluationListProgressBar progress={75} totalSamples={100} isFocused />
+            <EvaluationListProgressBar progress={100} totalSamples={100} isFocused />
           </div>
         </div>
       </div>

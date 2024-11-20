@@ -3,8 +3,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { PieChart, Pie, ResponsiveContainer } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 
-interface ChatExperimentCardProps {
-  experimentId: string
+interface ChatEvaluationCardProps {
+  evaluationId: string
   status: "running" | "completed" | "failed"
   progress?: number
   accuracy?: number
@@ -59,8 +59,8 @@ function MiniStackedPieChart({ accuracy }: { accuracy: number }) {
   )
 }
 
-export function ChatExperimentCard({ 
-  experimentId, 
+export function ChatEvaluationCard({ 
+  evaluationId, 
   status, 
   progress, 
   accuracy, 
@@ -68,7 +68,7 @@ export function ChatExperimentCard({
   estimatedTimeRemaining,
   scorecard,
   score,
-}: ChatExperimentCardProps) {
+}: ChatEvaluationCardProps) {
   return (
     <Card className="w-full">
       <CardContent className="p-4">
@@ -76,7 +76,7 @@ export function ChatExperimentCard({
           <div className="mr-2">
             <FlaskConical className="h-4 w-4 text-foreground" />
           </div>
-          <h4 className="text-sm font-semibold flex-grow">{experimentId}</h4>
+          <h4 className="text-sm font-semibold flex-grow">{evaluationId}</h4>
         </div>
         <div className="text-xs text-muted-foreground mb-2">
           {scorecard} - {score}

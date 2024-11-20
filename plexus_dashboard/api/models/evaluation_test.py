@@ -1,5 +1,5 @@
 """
-Tests for the Experiment model.
+Tests for the Evaluation model.
 
 These tests verify:
 1. Background processing of mutations (create/update)
@@ -15,7 +15,7 @@ import pytest
 import time
 from unittest.mock import Mock, patch
 from datetime import datetime, timezone
-from .experiment import Experiment
+from .evaluation import Evaluation
 
 @pytest.fixture
 def mock_client():
@@ -23,15 +23,15 @@ def mock_client():
     return Mock()
 
 @pytest.fixture
-def sample_experiment(mock_client):
-    """Creates a sample experiment instance for testing.
+def sample_Evaluation(mock_client):
+    """Creates a sample Evaluation instance for testing.
     
-    Returns an experiment with realistic test data including:
+    Returns an Evaluation with realistic test data including:
     - Required fields (type, accountId, status, etc.)
     - Optional fields (parameters, metrics, etc.)
     - Timestamps in proper format
     """
-    return Experiment(
+    return Evaluation(
         id="test-id",
         type="accuracy",
         accountId="acc-123",
@@ -42,16 +42,16 @@ def sample_experiment(mock_client):
         client=mock_client
     )
 
-def test_create_experiment_background(mock_client):
-    """Test that experiment creation happens in background.
+def test_create_Evaluation_background(mock_client):
+    """Test that Evaluation creation happens in background.
     
     Verifies:
     1. create() returns immediately
     2. Mutation is executed in background thread
     3. Error handling doesn't affect main thread
     """
-    # Start experiment creation
-    Experiment.create(
+    # Start Evaluation creation
+    Evaluation.create(
         client=mock_client,
         type="accuracy",
         accountId="acc-123",
@@ -64,10 +64,10 @@ def test_create_experiment_background(mock_client):
     # Verify mutation was called
     mock_client.execute.assert_called_once()
     mutation = mock_client.execute.call_args[0][0]
-    assert "mutation CreateExperiment" in mutation
+    assert "mutation CreateEvaluation" in mutation
 
-def test_update_experiment_background(sample_experiment):
-    """Test that experiment updates happen in background.
+def test_update_Evaluation_background(sample_Evaluation):
+    """Test that Evaluation updates happen in background.
     
     Verifies:
     1. update() returns immediately
@@ -75,8 +75,8 @@ def test_update_experiment_background(sample_experiment):
     3. updatedAt is automatically set
     4. Error handling doesn't affect main thread
     """
-    # Update experiment
-    sample_experiment.update(
+    # Update Evaluation
+    sample_Evaluation.update(
         status="RUNNING",
         progress=0.5
     )
@@ -85,13 +85,13 @@ def test_update_experiment_background(sample_experiment):
     time.sleep(0.1)
     
     # Verify mutation was called
-    sample_experiment._client.execute.assert_called_once()
-    variables = sample_experiment._client.execute.call_args[0][1]
+    sample_Evaluation._client.execute.assert_called_once()
+    variables = sample_Evaluation._client.execute.call_args[0][1]
     assert variables['input']['status'] == "RUNNING"
     assert variables['input']['progress'] == 0.5
     assert 'updatedAt' in variables['input']
 
-def test_error_handling_in_background(sample_experiment):
+def test_error_handling_in_background(sample_Evaluation):
     """Test that background thread errors are handled gracefully.
     
     Verifies:
@@ -100,13 +100,13 @@ def test_error_handling_in_background(sample_experiment):
     3. Errors are logged but don't raise
     """
     # Make the mutation raise an error
-    sample_experiment._client.execute.side_effect = Exception("Test error")
+    sample_Evaluation._client.execute.side_effect = Exception("Test error")
     
     # This should not raise, despite the error
-    sample_experiment.update(status="RUNNING")
+    sample_Evaluation.update(status="RUNNING")
     
     # Give background thread time to process
     time.sleep(0.1)
     
     # Verify mutation was attempted
-    sample_experiment._client.execute.assert_called_once()
+    sample_Evaluation._client.execute.assert_called_once()
