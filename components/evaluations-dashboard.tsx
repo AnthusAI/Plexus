@@ -179,6 +179,10 @@ async function listAccounts(): ModelListResult<Schema['Account']['type']> {
 }
 
 async function listEvaluations(accountId: string): ModelListResult<Schema['Evaluation']['type']> {
+  if (!client?.models?.Evaluation) {
+    throw new Error('Evaluation model not found in client')
+  }
+  
   return listFromModel<Schema['Evaluation']['type']>(
     client.models.Evaluation,
     { accountId: { eq: accountId } }
@@ -411,7 +415,10 @@ export default function EvaluationsDashboard(): JSX.Element {
 
   // Modify the main subscription handler to be more selective about updates
   useEffect(() => {
-    if (!client) return
+    if (!client?.models?.Evaluation) {
+      console.error('Client or Evaluation model not initialized')
+      return
+    }
 
     let subscription: { unsubscribe: () => void } | null = null
 
@@ -423,133 +430,143 @@ export default function EvaluationsDashboard(): JSX.Element {
           const foundAccountId = accounts[0].id
           setAccountId(foundAccountId)
           
-          const { data: EvaluationModels } = await listEvaluations(foundAccountId)
+          // Add error handling for listEvaluations
+          try {
+            const { data: EvaluationModels } = await listEvaluations(foundAccountId)
+            
+            const filteredEvaluations = EvaluationModels
+              .map(transformEvaluation)
+              .sort((a, b) => 
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              )
+            
+            setEvaluations(filteredEvaluations)
+          } catch (error) {
+            console.error('Error listing evaluations:', error)
+            setEvaluations([])
+          }
           
-          const filteredEvaluations = EvaluationModels
-            .map(transformEvaluation)
-            .sort((a, b) => 
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-            )
-          
-          setEvaluations(filteredEvaluations)
           setIsLoading(false)
 
-          // Set up subscription with more selective updates
-          subscription = observeQueryFromModel<Schema['Evaluation']['type']>(
-            client.models.Evaluation,
-            { accountId: { eq: foundAccountId } }
-          ).subscribe({
-            next: async ({ items }: { items: Schema['Evaluation']['type'][] }) => {
-              try {
-                console.log('Subscription update - Evaluations:', items.map(item => ({
-                  id: item.id,
-                  type: item.type,
-                  accuracy: item.accuracy,
-                  processedItems: item.processedItems,
-                  totalItems: item.totalItems
-                })))
+          // Update subscription setup with null check
+          if (client?.models?.Evaluation) {
+            subscription = observeQueryFromModel<Schema['Evaluation']['type']>(
+              client.models.Evaluation,
+              { accountId: { eq: foundAccountId } }
+            ).subscribe({
+              next: async ({ items }: { items: Schema['Evaluation']['type'][] }) => {
+                try {
+                  console.log('Subscription update - Evaluations:', items.map(item => ({
+                    id: item.id,
+                    type: item.type,
+                    accuracy: item.accuracy,
+                    processedItems: item.processedItems,
+                    totalItems: item.totalItems
+                  })))
 
-                setEvaluations(prevEvaluations => {
-                  const updatedEvaluations = [...prevEvaluations]
-                  let hasChanges = false
+                  setEvaluations(prevEvaluations => {
+                    const updatedEvaluations = [...prevEvaluations]
+                    let hasChanges = false
 
-                  items.forEach((newItem: Schema['Evaluation']['type']) => {
-                    const index = updatedEvaluations.findIndex(exp => exp.id === newItem.id)
-                    if (index === -1) {
-                      // New Evaluation - use transform to get full object
-                      hasChanges = true
-                      updatedEvaluations.push(transformEvaluation(newItem))
-                    } else {
-                      const existingExp = updatedEvaluations[index]
-                      // Only update if relevant fields have changed
-                      const relevantFieldsChanged = 
-                        existingExp.status !== newItem.status ||
-                        existingExp.processedItems !== newItem.processedItems ||
-                        existingExp.totalItems !== newItem.totalItems ||
-                        existingExp.metrics !== newItem.metrics ||
-                        existingExp.errorMessage !== newItem.errorMessage ||
-                        existingExp.errorDetails !== newItem.errorDetails ||
-                        existingExp.metricsExplanation !== newItem.metricsExplanation ||
-                        existingExp.accuracy !== newItem.accuracy ||  // Include accuracy changes
-                        existingExp.type !== newItem.type  // Include type changes
-
-                      if (relevantFieldsChanged) {
+                    items.forEach((newItem: Schema['Evaluation']['type']) => {
+                      const index = updatedEvaluations.findIndex(exp => exp.id === newItem.id)
+                      if (index === -1) {
+                        // New Evaluation - use transform to get full object
                         hasChanges = true
-                        // Create updated Evaluation preserving existing fields
-                        const updatedExp = {
-                          ...existingExp,  // Keep all existing fields
-                          // Update all fields that can change
-                          status: newItem.status ?? existingExp.status,
-                          processedItems: newItem.processedItems ?? existingExp.processedItems,
-                          totalItems: newItem.totalItems ?? existingExp.totalItems,
-                          metrics: newItem.metrics ?? existingExp.metrics,
-                          errorMessage: newItem.errorMessage ?? existingExp.errorMessage,
-                          errorDetails: newItem.errorDetails ?? existingExp.errorDetails,
-                          metricsExplanation: newItem.metricsExplanation ?? existingExp.metricsExplanation,
-                          accuracy: newItem.accuracy ?? existingExp.accuracy,  // Update accuracy
-                          type: newItem.type ?? existingExp.type  // Update type
+                        updatedEvaluations.push(transformEvaluation(newItem))
+                      } else {
+                        const existingExp = updatedEvaluations[index]
+                        // Only update if relevant fields have changed
+                        const relevantFieldsChanged = 
+                          existingExp.status !== newItem.status ||
+                          existingExp.processedItems !== newItem.processedItems ||
+                          existingExp.totalItems !== newItem.totalItems ||
+                          existingExp.metrics !== newItem.metrics ||
+                          existingExp.errorMessage !== newItem.errorMessage ||
+                          existingExp.errorDetails !== newItem.errorDetails ||
+                          existingExp.metricsExplanation !== newItem.metricsExplanation ||
+                          existingExp.accuracy !== newItem.accuracy ||  // Include accuracy changes
+                          existingExp.type !== newItem.type  // Include type changes
+
+                        if (relevantFieldsChanged) {
+                          hasChanges = true
+                          // Create updated Evaluation preserving existing fields
+                          const updatedExp = {
+                            ...existingExp,  // Keep all existing fields
+                            // Update all fields that can change
+                            status: newItem.status ?? existingExp.status,
+                            processedItems: newItem.processedItems ?? existingExp.processedItems,
+                            totalItems: newItem.totalItems ?? existingExp.totalItems,
+                            metrics: newItem.metrics ?? existingExp.metrics,
+                            errorMessage: newItem.errorMessage ?? existingExp.errorMessage,
+                            errorDetails: newItem.errorDetails ?? existingExp.errorDetails,
+                            metricsExplanation: newItem.metricsExplanation ?? existingExp.metricsExplanation,
+                            accuracy: newItem.accuracy ?? existingExp.accuracy,  // Update accuracy
+                            type: newItem.type ?? existingExp.type  // Update type
+                          }
+                          updatedEvaluations[index] = transformEvaluation(updatedExp)
                         }
-                        updatedEvaluations[index] = transformEvaluation(updatedExp)
                       }
-                    }
+                    })
+
+                    return hasChanges ? 
+                      updatedEvaluations.sort((a, b) => 
+                        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                      ) : 
+                      prevEvaluations
                   })
 
-                  return hasChanges ? 
-                    updatedEvaluations.sort((a, b) => 
-                      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                    ) : 
-                    prevEvaluations
-                })
+                  // Update selected Evaluation if needed
+                  if (selectedEvaluationRef.current) {
+                    const updatedItem = items.find(item => item.id === selectedEvaluationRef.current?.id)
+                    if (updatedItem) {
+                      const relevantFieldsChanged = 
+                        selectedEvaluationRef.current.status !== updatedItem.status ||
+                        selectedEvaluationRef.current.processedItems !== updatedItem.processedItems ||
+                        selectedEvaluationRef.current.totalItems !== updatedItem.totalItems ||
+                        selectedEvaluationRef.current.metrics !== updatedItem.metrics ||
+                        selectedEvaluationRef.current.errorMessage !== updatedItem.errorMessage ||
+                        selectedEvaluationRef.current.errorDetails !== updatedItem.errorDetails ||
+                        selectedEvaluationRef.current.metricsExplanation !== updatedItem.metricsExplanation ||
+                        selectedEvaluationRef.current.accuracy !== updatedItem.accuracy ||  // Include accuracy changes
+                        selectedEvaluationRef.current.type !== updatedItem.type  // Include type changes
 
-                // Update selected Evaluation if needed
-                if (selectedEvaluationRef.current) {
-                  const updatedItem = items.find(item => item.id === selectedEvaluationRef.current?.id)
-                  if (updatedItem) {
-                    const relevantFieldsChanged = 
-                      selectedEvaluationRef.current.status !== updatedItem.status ||
-                      selectedEvaluationRef.current.processedItems !== updatedItem.processedItems ||
-                      selectedEvaluationRef.current.totalItems !== updatedItem.totalItems ||
-                      selectedEvaluationRef.current.metrics !== updatedItem.metrics ||
-                      selectedEvaluationRef.current.errorMessage !== updatedItem.errorMessage ||
-                      selectedEvaluationRef.current.errorDetails !== updatedItem.errorDetails ||
-                      selectedEvaluationRef.current.metricsExplanation !== updatedItem.metricsExplanation ||
-                      selectedEvaluationRef.current.accuracy !== updatedItem.accuracy ||  // Include accuracy changes
-                      selectedEvaluationRef.current.type !== updatedItem.type  // Include type changes
-
-                    if (relevantFieldsChanged) {
-                      const transformed = transformEvaluation({
-                        ...selectedEvaluationRef.current,
-                        ...updatedItem,
-                        // Explicitly update all fields that can change
-                        status: updatedItem.status ?? selectedEvaluationRef.current.status,
-                        processedItems: updatedItem.processedItems ?? selectedEvaluationRef.current.processedItems,
-                        totalItems: updatedItem.totalItems ?? selectedEvaluationRef.current.totalItems,
-                        metrics: updatedItem.metrics ?? selectedEvaluationRef.current.metrics,
-                        errorMessage: updatedItem.errorMessage ?? selectedEvaluationRef.current.errorMessage,
-                        errorDetails: updatedItem.errorDetails ?? selectedEvaluationRef.current.errorDetails,
-                        metricsExplanation: updatedItem.metricsExplanation ?? selectedEvaluationRef.current.metricsExplanation,
-                        accuracy: updatedItem.accuracy ?? selectedEvaluationRef.current.accuracy,
-                        type: updatedItem.type ?? selectedEvaluationRef.current.type
-                      })
-                      setSelectedEvaluation(transformed)
+                      if (relevantFieldsChanged) {
+                        const transformed = transformEvaluation({
+                          ...selectedEvaluationRef.current,
+                          ...updatedItem,
+                          // Explicitly update all fields that can change
+                          status: updatedItem.status ?? selectedEvaluationRef.current.status,
+                          processedItems: updatedItem.processedItems ?? selectedEvaluationRef.current.processedItems,
+                          totalItems: updatedItem.totalItems ?? selectedEvaluationRef.current.totalItems,
+                          metrics: updatedItem.metrics ?? selectedEvaluationRef.current.metrics,
+                          errorMessage: updatedItem.errorMessage ?? selectedEvaluationRef.current.errorMessage,
+                          errorDetails: updatedItem.errorDetails ?? selectedEvaluationRef.current.errorDetails,
+                          metricsExplanation: updatedItem.metricsExplanation ?? selectedEvaluationRef.current.metricsExplanation,
+                          accuracy: updatedItem.accuracy ?? selectedEvaluationRef.current.accuracy,
+                          type: updatedItem.type ?? selectedEvaluationRef.current.type
+                        })
+                        setSelectedEvaluation(transformed)
+                      }
                     }
                   }
+                } catch (error) {
+                  console.error('Error in subscription handler:', error)
                 }
-              } catch (error) {
-                console.error('Error in subscription handler:', error)
+              },
+              error: (error: Error) => {
+                console.error('Subscription error:', error)
+                setError(error)
               }
-            },
-            error: (error: Error) => {
-              console.error('Subscription error:', error)
-              setError(error)
-            }
-          })
+            })
+          }
         } else {
           setIsLoading(false)
         }
       } catch (error) {
         console.error('Error in setupRealTimeSync:', error)
         setIsLoading(false)
+        setError(error instanceof Error ? error : new Error('Unknown error occurred'))
       }
     }
 
