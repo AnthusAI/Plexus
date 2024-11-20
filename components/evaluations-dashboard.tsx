@@ -36,6 +36,8 @@ import { EvaluationDashboardSkeleton } from "@/components/loading-skeleton"
 import { ModelListResult, AmplifyListResult, AmplifyGetResult } from '@/types/shared'
 import { listFromModel, observeQueryFromModel, getFromModel, observeScoreResults } from "@/utils/amplify-helpers"
 import type { EvaluationTaskData } from '@/components/EvaluationTask'
+import { useAuthenticator } from '@aws-amplify/ui-react';
+import { useRouter } from 'next/navigation';
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -292,6 +294,20 @@ async function getEvaluationScoreResults(client: any, EvaluationId: string, next
 }
 
 export default function EvaluationsDashboard(): JSX.Element {
+  const { authStatus, user } = useAuthenticator(context => [context.authStatus]);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (authStatus === 'unauthenticated') {
+      router.push('/');
+      return;
+    }
+  }, [authStatus, router]);
+
+  if (authStatus !== 'authenticated') {
+    return <EvaluationDashboardSkeleton />;
+  }
+
   const [Evaluations, setEvaluations] = useState<NonNullable<Schema['Evaluation']['type']>[]>([])
   const [EvaluationTaskProps, setEvaluationTaskProps] = useState<EvaluationTaskProps['task'] | null>(null)
   const [isLoading, setIsLoading] = useState(true)

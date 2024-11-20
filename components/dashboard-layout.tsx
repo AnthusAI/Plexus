@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button as BaseButton, ButtonProps } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,7 +41,7 @@ const useMediaQuery = (query: string): boolean => {
 }
 
 const DashboardButton: React.FC<ButtonProps> = ({ className, ...props }) => (
-  <BaseButton className={`!rounded-[6px] ${className}`} {...props} />
+  <Button className={`!rounded-[6px] ${className}`} {...props} />
 )
 
 const MobileHeader = ({ 
@@ -219,20 +219,23 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
       <div className="mt-auto px-3 space-y-2 py-4">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <DashboardButton variant="ghost" className={`w-full justify-start px-0`}>
+            <Button
+              variant="ghost"
+              className={`w-full justify-start px-0 cursor-pointer`}
+            >
               <Avatar className={`h-8 w-8 ${isLeftSidebarOpen ? 'mr-2' : ''}`}>
                 <AvatarImage src={accounts[0].avatar} alt={accounts[0].name} />
                 <AvatarFallback className="bg-background dark:bg-border">{accounts[0].initials}</AvatarFallback>
               </Avatar>
               {isLeftSidebarOpen && <span>{accounts[0].name}</span>}
-            </DashboardButton>
+            </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
+          <DropdownMenuContent align="start" className="w-[200px]">
             <DropdownMenuLabel>Switch Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {accounts.map((account) => (
-              <DropdownMenuItem key={account.name}>
-                <Avatar className={`h-8 w-8 mr-2 bg-background dark:bg-border`}>
+              <DropdownMenuItem key={account.name} className="cursor-pointer">
+                <Avatar className="h-8 w-8 mr-2">
                   <AvatarImage src={account.avatar} alt={account.name} />
                   <AvatarFallback className="bg-muted dark:bg-border">{account.initials}</AvatarFallback>
                 </Avatar>
@@ -244,22 +247,28 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <DashboardButton variant="ghost" className={`w-full justify-start px-0`}>
+            <Button
+              variant="ghost"
+              className={`w-full justify-start px-0 cursor-pointer`}
+            >
               <Avatar className={`h-8 w-8 ${isLeftSidebarOpen ? 'mr-2' : ''}`}>
                 <AvatarImage src="/user-avatar.png" alt="User avatar" />
                 <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
               </Avatar>
               {isLeftSidebarOpen && <span>Ryan Porter</span>}
-            </DashboardButton>
+            </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>My User</DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="w-[200px]">
+            <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Settings</DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer">
+              <Settings className="mr-2 h-4 w-4" />
+              Settings
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer" onClick={signOut}>
               <LogOut className="mr-2 h-4 w-4" />
-              <button onClick={signOut}>Sign out</button>
+              Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
