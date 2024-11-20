@@ -187,7 +187,7 @@ const ITEMS_TIME_RANGE_OPTIONS = [
   { value: "custom", label: "Custom" },
 ]
 
-export default function DataDashboard() {
+export default function DatasetsDashboard() {
   const router = useRouter()
   const [items, setItems] = useState(generateInitialItems)
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
