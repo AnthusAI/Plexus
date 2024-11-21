@@ -81,7 +81,7 @@ export function ProgressBar({
           {processedItems !== undefined && totalItems !== undefined && (
             <span className={cn(
               "text-sm font-medium",
-              isFocused && isInProgress ? "text-focus" : "text-primary-foreground"
+              isFocused ? "text-focus" : "text-primary-foreground"
             )}>
               {processedItems} / {totalItems}
             </span>
