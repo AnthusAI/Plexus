@@ -114,10 +114,10 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
       <Select onValueChange={value => {
         setSelectedScorecard(value === "all" ? null : value)
       }}>
-        <SelectTrigger className="w-[200px] h-10">
+        <SelectTrigger className="w-[200px] h-10 bg-card-light border-none">
           <SelectValue placeholder="Scorecard" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="bg-card border-none">
           <SelectItem value="all">All Scorecards</SelectItem>
           {scorecards?.map(field => (
             <SelectItem key={field.value} value={field.value}>
@@ -131,10 +131,10 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
         disabled={!selectedScorecard}
         value={selectedScore || "all"}
       >
-        <SelectTrigger className="w-[200px] h-10">
+        <SelectTrigger className="w-[200px] h-10 bg-card-light border-none">
           <SelectValue placeholder="Score" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="bg-card border-none">
           <SelectItem value="all">All Scores</SelectItem>
           {selectedScorecard && scores?.map(option => (
             <SelectItem key={option.value} value={option.value}>
