@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Activity, Logs, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X } from "lucide-react"
+import { Activity, Logs, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -133,14 +133,13 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   const menuItems = [
     { name: "Activity", icon: Activity, path: "/activity" },
-    { name: "Items", icon: Logs, path: "/items" },
-    { name: "Alerts", icon: Siren, path: "/alerts" },
-    { name: "Feedback", icon: MessageCircleMore, path: "/feedback-queues" },
-    { name: "Reports", icon: FileBarChart, path: "/reports" },
-    { name: "Evaluations", icon: FlaskConical, path: "/evaluations" },
     { name: "Scorecards", icon: ListTodo, path: "/scorecards" },
     { name: "Datasets", icon: Database, path: "/datasets" },
-    { name: "Settings", icon: Settings, path: "/settings" },
+    { name: "Evaluations", icon: FlaskConical, path: "/evaluations" },
+    { name: "Reports", icon: FileBarChart, path: "/reports" },
+    { name: "Alerts", icon: Siren, path: "/alerts" },
+    { name: "Items", icon: Logs, path: "/items" },
+    { name: "Feedback", icon: MessageCircleMore, path: "/feedback-queues" },
   ]
 
   const accounts = [
@@ -225,23 +224,42 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             >
               <Avatar className={`h-8 w-8 ${isLeftSidebarOpen ? 'mr-2' : ''}`}>
                 <AvatarImage src={accounts[0].avatar} alt={accounts[0].name} />
-                <AvatarFallback className="bg-background dark:bg-border">{accounts[0].initials}</AvatarFallback>
+                <AvatarFallback className="bg-background dark:bg-border">
+                  {accounts[0].initials}
+                </AvatarFallback>
               </Avatar>
               {isLeftSidebarOpen && <span>{accounts[0].name}</span>}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-[200px]">
-            <DropdownMenuLabel>Switch Account</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {accounts.map((account) => (
-              <DropdownMenuItem key={account.name} className="cursor-pointer">
-                <Avatar className="h-8 w-8 mr-2">
-                  <AvatarImage src={account.avatar} alt={account.name} />
-                  <AvatarFallback className="bg-muted dark:bg-border">{account.initials}</AvatarFallback>
-                </Avatar>
-                <span>{account.name}</span>
+            <Link href="/settings">
+              <DropdownMenuItem className="cursor-pointer">
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
               </DropdownMenuItem>
-            ))}
+            </Link>
+            <DropdownMenuSeparator />
+            <DropdownMenu>
+              <DropdownMenuTrigger className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <ArrowLeftRight className="mr-2 h-4 w-4" />
+                  Select Account
+                </DropdownMenuItem>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="right" align="start" className="w-[200px]">
+                {accounts.map((account) => (
+                  <DropdownMenuItem key={account.name} className="cursor-pointer">
+                    <Avatar className="h-8 w-8 mr-2">
+                      <AvatarImage src={account.avatar} alt={account.name} />
+                      <AvatarFallback className="bg-muted dark:bg-border">
+                        {account.initials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span>{account.name}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -261,10 +279,12 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           <DropdownMenuContent align="end" className="w-[200px]">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer">
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
-            </DropdownMenuItem>
+            <Link href="/settings">
+              <DropdownMenuItem className="cursor-pointer">
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </DropdownMenuItem>
+            </Link>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="cursor-pointer" onClick={signOut}>
               <LogOut className="mr-2 h-4 w-4" />
