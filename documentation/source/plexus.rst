@@ -28,7 +28,7 @@ Submodules
    plexus.scores.CompositeScore_test
    plexus.CustomLogging
    plexus.DataCache
-   plexus.Experiment
+   plexus.Evaluation
    plexus.PromptTemplateLoader
    plexus.PromptTemplateLoader_test
    plexus.Registries

@@ -54,15 +54,17 @@ setup(
         'langchain-aws>=0.1.9',
         'langchain-openai>=0.1.14',
         'langchain-google-vertexai>=1.0.6',
-        'langgraph-checkpoint-sqlite==2.0.1',
+        'langgraph-checkpoint-postgres==2.0.1',
         'openpyxl==3.1.5',
         'rapidfuzz==3.9.4',
         'datasets',
         'gensim',
         'watchtower',
-        'pyairtable'
+        'pyairtable',
+        'aiosqlite',
     ],
     dependency_links=[
-        'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator'
+        'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator',
+        'git+https://github.com/AnthusAI/Plexus-Dashboard.git@main#egg=plexus-dashboard',
     ]
 )

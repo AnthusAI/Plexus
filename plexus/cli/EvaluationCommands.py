@@ -6,11 +6,12 @@ import click
 import yaml
 import asyncio
 import pandas as pd
+import traceback
 
 from plexus.CustomLogging import logging, set_log_group
 from plexus.Scorecard import Scorecard
 from plexus.Registries import scorecard_registry
-from plexus.Experiment import AccuracyExperiment
+from plexus.Evaluation import AccuracyEvaluation
 from plexus.cli.console import console
 
 import importlib
@@ -23,9 +24,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 set_log_group('plexus/cli/evaluation')
-
-# Add this at the top of your file
-console_lock = threading.Lock()
 
 @click.group()
 def evaluate():
@@ -65,100 +63,118 @@ def accuracy(
     ):
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
-    These experiment runs will generate metrics and artifacts that Plexus will log in MLFLow.
-    The scoring reports from evaluation will include accuracy metrics.
     """
+    async def _run_accuracy():
+        experiment = None
+        try:
+            if use_langsmith_trace:
+                os.environ['LANGCHAIN_TRACING_V2'] = 'true'
+            else:
+                os.environ.pop('LANGCHAIN_TRACING_V2', None)
 
+            if not scorecard_name:
+                logging.error("Scorecard not specified")
+                sys.exit(1)
+
+            scorecard_folder = os.path.join('scorecards', scorecard_name)
+            override_folder: str = os.path.join(scorecard_folder, 'experiments/calibrations')
+
+            logging.info('Running accuracy experiment...')
+            Scorecard.load_and_register_scorecards('scorecards/')
+            scorecard_type = scorecard_registry.get(scorecard_name)
+            if scorecard_type is None:
+                logging.error(f"Scorecard with name '{scorecard_name}' not found.")
+                return
+
+            scorecard_instance = scorecard_type(scorecard=scorecard_name)
+            logging.info(f"Using scorecard {scorecard_name} with class {scorecard_instance.__class__.__name__}")
+
+            # Check if any score in the scorecard uses the data-driven approach
+            uses_data_driven = any('data' in score_config for score_config in scorecard_instance.scores)
+
+            # We used to support multiple, comma-separated score names.  But lots of our
+            # score names have commas in them.  So, we don't support that anymore.
+            if score_name is not None and score_name != '':
+                score_names = [score_name]
+            else:
+                # Fix: Get score names from the list of score dictionaries
+                score_names = [score['name'] for score in scorecard_instance.scores]
+            
+            if not score_names:
+                logging.error("No score names specified")
+                return
+
+            content_ids_to_sample_set = set(re.split(r',\s+', content_ids_to_sample.strip())) if content_ids_to_sample.strip() else None
+
+            for single_score_name in score_names:
+                logging.info(f"Running experiment for score: {single_score_name}")
+                
+                single_score_labeled_samples = []
+                labeled_samples_filename = None
+                if uses_data_driven:
+                    score_config = next((score for score in scorecard_instance.scores if score['name'] == single_score_name), None)
+                    if score_config:
+                        single_score_labeled_samples = get_data_driven_samples(
+                            scorecard_instance, scorecard_name, single_score_name, 
+                            score_config, fresh, content_ids_to_sample_set)
+                    else:
+                        logging.warning(f"Score '{single_score_name}' not found in scorecard. Skipping.")
+                        continue
+                else:
+                    # Use the default labeled samples file if not data-driven
+                    labeled_samples_filename = os.path.join(scorecard_folder, 'experiments', 'labeled-samples.csv')
+                
+                single_score_experiment_args = {
+                    'scorecard_name': scorecard_name,
+                    'scorecard': scorecard_instance,
+                    'override_folder': override_folder,
+                    'number_of_texts_to_sample': number_of_samples,
+                    'sampling_method': sampling_method,
+                    'random_seed': random_seed,
+                    'subset_of_score_names': [single_score_name],
+                    'experiment_label': experiment_label
+                }
+                
+                if uses_data_driven:
+                    if not single_score_labeled_samples:
+                        raise ValueError("The dataset is empty. Cannot proceed with the experiment.")
+                    single_score_experiment_args['labeled_samples'] = single_score_labeled_samples
+                else:
+                    single_score_experiment_args['labeled_samples_filename'] = labeled_samples_filename
+                
+                async with AccuracyEvaluation(**single_score_experiment_args) as experiment:
+                    await experiment.run()
+
+                logging.info("All score experiments completed.")
+
+        finally:
+            if experiment:
+                await experiment.cleanup()
+
+    # Create and run the event loop only once at the top level
     try:
         loop = asyncio.get_event_loop()
-        logging.warning("An event loop is already running at the start of the accuracy command")
-        logging.warning(f"Current event loop: {loop}")
-        logging.warning(f"Loop is running: {loop.is_running()}")
     except RuntimeError:
-        logging.info("No running event loop detected at the start of the accuracy command")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
-    # Set LANGCHAIN_TRACING_V2 environment variable if use_langsmith_trace is True
-    if use_langsmith_trace:
-        os.environ['LANGCHAIN_TRACING_V2'] = 'true'
-        logging.info("LangSmith tracing enabled")
-    else:
-        os.environ.pop('LANGCHAIN_TRACING_V2', None)
-        logging.info("LangSmith tracing disabled")
-
-    if not scorecard_name:
-        logging.error("Scorecard not specified")
-        sys.exit(1)
-
-    scorecard_folder = os.path.join('scorecards', scorecard_name)
-    override_folder: str = os.path.join(scorecard_folder, 'experiments/calibrations')
-
-    logging.info('Running accuracy experiment...')
-    Scorecard.load_and_register_scorecards('scorecards/')
-    scorecard_type = scorecard_registry.get(scorecard_name)
-    if scorecard_type is None:
-        logging.error(f"Scorecard with name '{scorecard_name}' not found.")
-        return
-    # Instantiate the scorecard type and tell it where to find the score definition files.
-    scorecard_instance = scorecard_type(scorecard=scorecard_name)
-    logging.info(f"  Using scorecard {scorecard_name} with class {scorecard_instance.__class__.__name__}")
-
-    # Check if any score in the scorecard uses the data-driven approach
-    uses_data_driven = any('data' in score_config for score_config in scorecard_instance.scores)
-
-    # We used to support multiple, comma-separated score names.  But lots of our
-    # score names have commas in them.  So, we don't support that anymore.
-    if score_name is not None and score_name != '':
-        score_names = [score_name]
-    else:
-        # Fix: Get score names from the list of score dictionaries
-        score_names = [score['name'] for score in scorecard_instance.scores]
-    
-    if not score_names:
-        logging.error("No score names specified")
-        return
-
-    content_ids_to_sample_set = set(re.split(r',\s+', content_ids_to_sample.strip())) if content_ids_to_sample.strip() else None
-
-    for single_score_name in score_names:
-        logging.info(f"Running experiment for score: {single_score_name}")
-        
-        single_score_labeled_samples = []
-        labeled_samples_filename = None
-        if uses_data_driven:
-            score_config = next((score for score in scorecard_instance.scores if score['name'] == single_score_name), None)
-            if score_config:
-                single_score_labeled_samples = get_data_driven_samples(
-                    scorecard_instance, scorecard_name, single_score_name, 
-                    score_config, fresh, content_ids_to_sample_set)
-            else:
-                logging.warning(f"Score '{single_score_name}' not found in scorecard. Skipping.")
-                continue
-        else:
-            # Use the default labeled samples file if not data-driven
-            labeled_samples_filename = os.path.join(scorecard_folder, 'experiments', 'labeled-samples.csv')
-        
-        single_score_experiment_args = {
-            'scorecard_name': scorecard_name,
-            'scorecard': scorecard_instance,
-            'override_folder': override_folder,
-            'number_of_texts_to_sample': number_of_samples,
-            'sampling_method': sampling_method,
-            'random_seed': random_seed,
-            'subset_of_score_names': [single_score_name],
-            'experiment_label': experiment_label
-        }
-        
-        if uses_data_driven:
-            if not single_score_labeled_samples:
-                raise ValueError("The dataset is empty. Cannot proceed with the experiment.")
-            single_score_experiment_args['labeled_samples'] = single_score_labeled_samples
-        else:
-            single_score_experiment_args['labeled_samples_filename'] = labeled_samples_filename
-        
-        with AccuracyExperiment(**single_score_experiment_args) as experiment:
-            experiment.run()
-
-    logging.info("All score experiments completed.")
+    try:
+        loop.run_until_complete(_run_accuracy())
+    finally:
+        try:
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                if not task.done():
+                    task.cancel()
+            
+            if pending:
+                loop.run_until_complete(
+                    asyncio.gather(*pending, return_exceptions=True)
+                )
+            
+            loop.close()
+        except Exception as e:
+            logging.error(f"Error during cleanup: {e}")
 
 def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, score_config, fresh, content_ids_to_sample_set):
     score_class_name = score_config['class']
