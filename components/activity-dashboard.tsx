@@ -680,7 +680,7 @@ export default function ActivityDashboard() {
     <div className="h-full flex">
       {/* Left side with chart and activities */}
       <div className="@container flex-1 overflow-y-auto">
-        <div className="space-y-4">
+        <div className="space-y-2">
           <div className="flex items-center justify-between">
             <ScorecardContext 
               selectedScorecard={selectedScorecard}
@@ -694,7 +694,7 @@ export default function ActivityDashboard() {
             />
           </div>
 
-          <Card className="shadow-none border-none mb-6 bg-card-light">
+          <Card className="shadow-none border-none mb-6 bg-card">
             <CardContent className="p-0">
               <div ref={chartContainerRef} className="w-full h-[300px]">
                 <ChartContainer config={chartConfig} className="h-full w-full">
@@ -743,7 +743,7 @@ export default function ActivityDashboard() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-4 pb-8 grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3">
+          <div className="grid gap-2 pb-8 grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3">
             {displayedActivities.map((activity) => (
               <div key={activity.id} className="w-full">
                 {(() => {
@@ -894,7 +894,7 @@ export default function ActivityDashboard() {
 
       {/* Right side detail view */}
       {selectedActivity && !isNarrowViewport && (
-        <div className={`${isFullWidth ? 'w-full' : 'w-1/3 min-w-[300px]'} overflow-y-auto pl-4`}>
+        <div className={`${isFullWidth ? 'w-full' : 'w-1/3 min-w-[300px]'} overflow-y-auto pl-2`}>
           <div className="">
             <div className="" />
             {(() => {
