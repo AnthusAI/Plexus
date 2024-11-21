@@ -4,7 +4,13 @@ import traceback
 import graphviz
 from types import FunctionType
 from typing import Type, Tuple, Literal, Optional, Any, TypedDict, List, Dict
-from pydantic import BaseModel, ConfigDict, create_model
+from pydantic import BaseModel, ConfigDict, create_model, Field
+import concurrent.futures
+import aiosqlite
+import importlib
+import asyncio
+from os import getenv
+from dotenv import load_dotenv
 
 from plexus.LangChainUser import LangChainUser
 from plexus.scores.Score import Score
@@ -17,11 +23,22 @@ from langgraph.prebuilt import ToolExecutor
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
 from langchain.globals import set_debug, set_verbose
-if os.getenv('DEBUG') or True:
+if os.getenv('DEBUG'):
     set_debug(True)
 else:
     set_debug(False)
     set_verbose(False)
+
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from pathlib import Path
+import uuid
+
+class BatchProcessingPause(Exception):
+    """Signals that execution has been paused for batch processing"""
+    def __init__(self, thread_id: str, state: dict):
+        self.thread_id = thread_id
+        self.state = state
+        super().__init__(f"Execution paused for batch processing. Thread ID: {thread_id}")
 
 class LangGraphScore(Score, LangChainUser):
     """
@@ -43,6 +60,15 @@ class LangGraphScore(Score, LangChainUser):
         input: Optional[dict] = None
         output: Optional[dict] = None
         single_line_messages: bool = False
+        checkpoint_db_path: Optional[str] = Field(
+            default="./.plexus/checkpoints/langgraph.db",
+            description="Path to SQLite checkpoint database"
+        )
+        thread_id: Optional[str] = None  # For persistence across calls
+        postgres_url: Optional[str] = Field(
+            default=None,
+            description="PostgreSQL connection URL for LangGraph checkpoints"
+        )
 
     class Result(Score.Result):
         """
@@ -61,6 +87,15 @@ class LangGraphScore(Score, LangChainUser):
         value: Optional[str] = None
         explanation: Optional[str] = None
         reasoning: Optional[str] = None
+        chat_history: List[Any] = Field(default_factory=list)
+        completion: Optional[str] = None
+        classification: Optional[str] = None
+        confidence: Optional[float] = None
+        retry_count: Optional[int] = Field(default=0)
+        messages: Optional[List[Dict[str, Any]]] = None
+        at_llm_breakpoint: Optional[bool] = Field(default=False)
+
+        model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(self, **parameters):
         """
@@ -74,30 +109,209 @@ class LangGraphScore(Score, LangChainUser):
         Score.__init__(self, **parameters)
         self.token_counter = self._create_token_counter()
         self.openai_callback = None
-        self.model = None  # Will be initialized in async setup
+        self.model = None
         self.parameters = self.Parameters(**parameters)
         self.node_instances = []
-        
-        self.workflow = self.build_compiled_workflow()
-        # TODO: Enable this only for evaluations by passing in a parameter.
-        # self.generate_graph_visualization()
+        self.workflow = None
+        self.checkpointer = None
+        self.db_connection = None
 
     async def async_setup(self):
-        """
-        Asynchronous setup for LangGraphScore.
-
-        This method initializes the language model asynchronously.
-        """
+        """Asynchronous setup for LangGraphScore."""
         self.model = await self._ainitialize_model()
+        
+        # Load environment variables
+        load_dotenv()
+        
+        # Get PostgreSQL URL from parameters or environment
+        db_uri = self.parameters.postgres_url or \
+                 getenv('PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI')
+        
+        if db_uri:
+            logging.info("Using PostgreSQL checkpoint database")
+            # Create checkpointer and store the context manager
+            self._checkpointer_context = AsyncPostgresSaver.from_conn_string(db_uri)
+            # Enter the context and store the checkpointer
+            self.checkpointer = await self._checkpointer_context.__aenter__()
+            
+            # Initialize tables
+            logging.info("Setting up checkpointer database tables...")
+            await self.checkpointer.setup()
+            logging.info("PostgreSQL checkpointer setup complete")
+        else:
+            logging.info("No PostgreSQL URL provided - running without checkpointing")
+            self.checkpointer = None
+            self._checkpointer_context = None
+        
+        # Build workflow with optional checkpointer
+        self.workflow = await self.build_compiled_workflow()
+
+    @staticmethod
+    def process_node(node_data):
+        """Process a single node to build its workflow."""
+        node_name, node_instance = node_data
+        logging.info(f"Adding node: {node_name}")
+        return node_name, node_instance.build_compiled_workflow(
+            graph_state_class=LangGraphScore.GraphState
+        )
+
+    @staticmethod
+    def add_edges(workflow, node_instances, entry_point):
+        """Add edges between nodes in the workflow."""
+        for i, (node_name, _) in enumerate(node_instances):
+            if i == 0 and entry_point:
+                workflow.add_edge(entry_point, node_name)
+            
+            if i > 0:
+                previous_node = node_instances[i-1][0]
+                node_config = next((node for node in self.parameters.graph 
+                                  if node['name'] == previous_node), None)
+                if node_config and 'conditions' in node_config:
+                    logging.info(f"Node '{previous_node}' has conditions: {node_config['conditions']}")
+                    
+                    conditions = node_config['conditions']
+                    if isinstance(conditions, list):
+                        value_setters = {}
+                        for j, condition in enumerate(conditions):
+                            value_setter_name = f"{previous_node}_value_setter_{j}"
+                            value_setters[condition['value'].lower()] = value_setter_name
+                            workflow.add_node(
+                                value_setter_name, 
+                                LangGraphScore.create_value_setter_node(
+                                    condition.get('output', {})
+                                )
+                            )
+
+                        def create_routing_function(conditions, value_setters, node_name):
+                            def routing_function(state):
+                                for condition in conditions:
+                                    if hasattr(state, condition['state']) and \
+                                       getattr(state, condition['state']).lower() == \
+                                           condition['value'].lower():
+                                        return value_setters[condition['value'].lower()]
+                                return node_name
+                            return routing_function
+
+                        workflow.add_conditional_edges(
+                            previous_node,
+                            create_routing_function(conditions, value_setters, node_name)
+                        )
+
+                        for condition in conditions:
+                            value_setter_name = value_setters[condition['value'].lower()]
+                            next_node = condition.get('node', 'final')
+                            if next_node != 'END':
+                                workflow.add_edge(value_setter_name, next_node)
+                            else:
+                                workflow.add_edge(value_setter_name, END)
+                    else:
+                        logging.error(f"Conditions is not a list: {conditions}")
+                        workflow.add_edge(previous_node, node_name)
+                else:
+                    logging.debug(f"Node '{previous_node}' does not have conditions")
+                    workflow.add_edge(previous_node, node_name)
+
+    async def build_compiled_workflow(self):
+        """Build the LangGraph workflow with optional persistence."""
+        workflow = StateGraph(self.GraphState)
+        node_instances = []
+
+        # First pass: Collect node instances
+        if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
+            for node_configuration_entry in self.parameters.graph:
+                logging.info(f"Processing node configuration: {node_configuration_entry}")
+                
+                for attribute in ['model_provider', 'model_name', 'model_region', 
+                                'temperature', 'max_tokens']:
+                    if attribute not in node_configuration_entry:
+                        node_configuration_entry[attribute] = getattr(
+                            self.parameters, attribute
+                        )
+
+                if 'class' in node_configuration_entry and 'name' in node_configuration_entry:
+                    node_class_name = node_configuration_entry['class']
+                    node_name = node_configuration_entry['name']
+                    try:
+                        logging.info(f"Attempting to import class: {node_class_name}")
+                        node_class = self._import_class(node_class_name)
+                        if node_class is None:
+                            raise ValueError(f"Could not import class {node_class_name}")
+                        logging.info(f"Node class type: {type(node_class)}")
+                        logging.info(f"Node class dir: {dir(node_class)}")
+                        
+                        node_instance = node_class(**node_configuration_entry)
+                        node_instances.append((node_name, node_instance))
+                    except Exception as e:
+                        logging.error(f"Error creating node instance for {node_class_name}: {str(e)}")
+                        logging.error(f"Configuration: {node_configuration_entry}")
+                        raise
+        else:
+            raise ValueError("Invalid or missing graph configuration in parameters.")
+
+        # Add input aliasing node if needed
+        if hasattr(self.parameters, 'input') and self.parameters.input is not None:
+            input_aliasing_function = LangGraphScore.generate_input_aliasing_function(
+                self.parameters.input
+            )
+            workflow.add_node('input_aliasing', input_aliasing_function)
+            entry_point = 'input_aliasing'
+        else:
+            entry_point = None
+
+        # Process nodes (keeping this synchronous since it's CPU-bound)
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            processed_nodes = list(executor.map(
+                LangGraphScore.process_node, node_instances
+            ))
+
+        # Add nodes and edges
+        for node_name, node_workflow in processed_nodes:
+            workflow.add_node(node_name, node_workflow)
+
+        # Add the 'final' node before we try to connect to it
+        def final_function(state):
+            return state
+        workflow.add_node('final', final_function)
+
+        LangGraphScore.add_edges(workflow, node_instances, entry_point)
+        workflow.add_edge(node_instances[-1][0], 'final')
+
+        # Add output aliasing if needed
+        if hasattr(self.parameters, 'output') and self.parameters.output is not None:
+            output_aliasing_function = LangGraphScore.generate_output_aliasing_function(
+                self.parameters.output
+            )
+            workflow.add_node('output_aliasing', output_aliasing_function)
+            workflow.add_edge('final', 'output_aliasing')
+            final_node = 'output_aliasing'
+        else:
+            final_node = 'final'
+
+        # Set entry and end points
+        if entry_point:
+            workflow.set_entry_point(entry_point)
+        else:
+            workflow.set_entry_point(node_instances[0][0])
+        workflow.add_edge(final_node, END)
+
+        try:
+            # Compile with checkpointer only if configured
+            app = workflow.compile(
+                checkpointer=self.checkpointer if self.checkpointer else None
+            )
+            
+            # Store node instances for later token usage calculation
+            self.node_instances = node_instances
+            
+            return app
+            
+        except Exception as e:
+            logging.error(f"Error compiling workflow: {str(e)}")
+            logging.error(f"Full exception: {traceback.format_exc()}")
+            raise
 
     @classmethod
     async def create(cls, **parameters):
-        """
-        Create and set up a LangGraphScore instance asynchronously.
-
-        :param parameters: Configuration parameters for the score and language model.
-        :return: An initialized LangGraphScore instance.
-        """
         instance = cls(**parameters)
         await instance.async_setup()
         return instance
@@ -333,15 +547,45 @@ class LangGraphScore(Score, LangChainUser):
 
     @staticmethod
     def _import_class(class_name):
-        default_module_path = 'plexus.scores.nodes.'
-        full_class_name = default_module_path + class_name
-        components = full_class_name.split('.')
-        module_path = '.'.join(components[:-1])
-        class_name = components[-1]
-        module = __import__(module_path, fromlist=[class_name])
-        imported_class = getattr(module, class_name)
-        logging.info(f"Imported {imported_class} from {module_path}")
-        return imported_class
+        """Import a class from the nodes module."""
+        try:
+            # Import from the nodes package
+            module = importlib.import_module('plexus.scores.nodes')
+            logging.info(f"Attempting to get class {class_name} from nodes module")
+            logging.info(f"Module contents: {dir(module)}")
+            
+            # List all modules in plexus.scores.nodes
+            import pkgutil
+            package = importlib.import_module('plexus.scores.nodes')
+            modules = [name for _, name, _ in pkgutil.iter_modules(package.__path__)]
+            logging.info(f"Available modules in plexus.scores.nodes: {modules}")
+            
+            # Try to import specific module
+            specific_module_path = f'plexus.scores.nodes.{class_name}'
+            logging.info(f"Attempting to import from specific path: {specific_module_path}")
+            specific_module = importlib.import_module(specific_module_path)
+            logging.info(f"Specific module contents: {dir(specific_module)}")
+            
+            # Check what's actually in the module
+            for item_name in dir(specific_module):
+                item = getattr(specific_module, item_name)
+                if not item_name.startswith('_'):  # Skip private attributes
+                    logging.info(f"Item '{item_name}' is of type: {type(item)}")
+                    if isinstance(item, type):
+                        logging.info(f"Found class: {item_name}")
+                        if item_name == class_name:
+                            logging.info(f"Found matching class {class_name}")
+                            return item
+            
+            raise ImportError(
+                f"Could not find class {class_name} in module {specific_module_path}\n"
+                f"Available items: {[name for name in dir(specific_module) if not name.startswith('_')]}"
+            )
+            
+        except Exception as e:
+            logging.error(f"Error importing class {class_name}: {str(e)}")
+            logging.error(f"Stack trace: {traceback.format_exc()}")
+            raise
 
     def get_prompt_templates(self):
         """
@@ -406,193 +650,124 @@ class LangGraphScore(Score, LangChainUser):
             return state
         return value_setter
 
-    def build_compiled_workflow(self):
-        """
-        Build the LangGraph workflow.
-
-        :param generate_visualization: If True, generate and save a graph visualization.
-        """
-        # First pass: Collect node instances
-        node_instances = []
-        node_names = []
-        if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
-            for node_configuration_entry in self.parameters.graph:
-
-                for attribute in ['model_provider', 'model_name', 'model_region', 'temperature', 'max_tokens', 'single_line_messages']:
-                    if attribute not in node_configuration_entry:
-                        node_configuration_entry[attribute] = getattr(self.parameters, attribute)
-
-                if 'class' in node_configuration_entry and 'name' in node_configuration_entry:
-                    node_class_name = node_configuration_entry['class']
-                    node_name = node_configuration_entry['name']
-                    node_class = LangGraphScore._import_class(node_class_name)
-                    logging.info(f"Node class: {node_class}")
-                    node_instance = node_class(**node_configuration_entry)
-                    node_instances.append((node_name, node_instance))
-                    node_names.append(node_name)
-        else:
-            raise ValueError("Invalid or missing graph configuration in parameters.")
-
-        # Create the combined GraphState class
-        combined_graphstate_class = self.create_combined_graphstate_class([instance for _, instance in node_instances])
-
-        # Create the workflow
-        workflow = StateGraph(combined_graphstate_class)
-
-        # Add input aliasing node if needed
-        if hasattr(self.parameters, 'input') and self.parameters.input is not None:
-            input_aliasing_function = LangGraphScore.generate_input_aliasing_function(self.parameters.input)
-            workflow.add_node('input_aliasing', input_aliasing_function)
-            entry_point = 'input_aliasing'
-        else:
-            entry_point = None
-
-        # Create a 'final' node
-        def final_function(state):
-            return state
-
-        workflow.add_node('final', final_function)
-
-        # Add nodes and edges
-        import concurrent.futures
-        import threading
-
-        def process_node(node_data):
-            node_name, node_instance = node_data
-            logging.info(f"Adding node: {node_name}")
-            return node_name, node_instance.build_compiled_workflow(graph_state_class=combined_graphstate_class)
-
-        def add_edges(workflow, node_instances, entry_point):
-            for i, (node_name, _) in enumerate(node_instances):
-                if i == 0 and entry_point:
-                    workflow.add_edge(entry_point, node_name)
-                
-                if i > 0:
-                    previous_node = node_instances[i-1][0]
-                    node_config = next((node for node in self.parameters.graph if node['name'] == previous_node), None)
-                    if node_config and 'conditions' in node_config:
-                        logging.info(f"Node '{previous_node}' has conditions: {node_config['conditions']}")
-                        
-                        conditions = node_config['conditions']
-                        if isinstance(conditions, list):
-                            value_setters = {}
-                            for j, condition in enumerate(conditions):
-                                value_setter_name = f"{previous_node}_value_setter_{j}"
-                                value_setters[condition['value'].lower()] = value_setter_name
-                                workflow.add_node(value_setter_name, self.create_value_setter_node(condition.get('output', {})))
-
-                            def create_routing_function(conditions, value_setters, node_name):
-                                def routing_function(state):
-                                    for condition in conditions:
-                                        if hasattr(state, condition['state']) and \
-                                           getattr(state, condition['state']).lower() == condition['value'].lower():
-                                            return value_setters[condition['value'].lower()]
-                                    return node_name
-                                return routing_function
-
-                            workflow.add_conditional_edges(
-                                previous_node,
-                                create_routing_function(conditions, value_setters, node_name)
-                            )
-
-                            for condition in conditions:
-                                value_setter_name = value_setters[condition['value'].lower()]
-                                next_node = condition.get('node', 'final')
-                                if next_node != 'END':
-                                    workflow.add_edge(value_setter_name, next_node)
-                                else:
-                                    workflow.add_edge(value_setter_name, END)
-                        else:
-                            logging.error(f"Conditions is not a list: {conditions}")
-                            workflow.add_edge(previous_node, node_name)
-                    else:
-                        logging.debug(f"Node '{previous_node}' does not have conditions")
-                        workflow.add_edge(previous_node, node_name)
-
-        # Process nodes in parallel
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            processed_nodes = list(executor.map(process_node, node_instances))
-
-        # Add nodes to workflow
-        for node_name, node_workflow in processed_nodes:
-            workflow.add_node(node_name, node_workflow)
-
-        # Add edges (this part remains sequential due to dependencies)
-        add_edges(workflow, node_instances, entry_point)
-
-        # Connect the last node to the 'final' node
-        workflow.add_edge(node_instances[-1][0], 'final')
-
-        # Add output aliasing node if needed
-        if hasattr(self.parameters, 'output') and self.parameters.output is not None:
-            output_aliasing_function = LangGraphScore.generate_output_aliasing_function(self.parameters.output)
-            workflow.add_node('output_aliasing', output_aliasing_function)
-            workflow.add_edge('final', 'output_aliasing')
-            final_node = 'output_aliasing'
-        else:
-            final_node = 'final'
-
-        # Set entry and end points
-        if entry_point:
-            workflow.set_entry_point(entry_point)
-        else:
-            workflow.set_entry_point(node_instances[0][0])
-        workflow.add_edge(final_node, END)
-
-        app = workflow.compile()
-
-        # Store node instances for later token usage calculation
-        self.node_instances = node_instances
-
-        return app
-
     async def predict(self, context, model_input: Score.Input):
-        text = model_input.text
-        metadata = model_input.metadata
-
-        results = {
-            result['name']: {
-                "id": result['id'],
-                "value": result['result'].value if result['result'] else None,
-                "explanation": result['result'].explanation if result['result'] else None
-            }
-            for result in model_input.results or []
-        }
-
         try:
-            # Process the text to create a single string input
-            processed_text = self.preprocess_text(text)
+            thread_id = self.parameters.thread_id or str(uuid.uuid4())
+            logging.info(f"Using thread_id: {thread_id}")
             
-            # Invoke the app with the processed text asynchronously
-            result = await self.workflow.ainvoke({
-                "text": processed_text,
-                "metadata": metadata,
-                "results": results
-            })
-            logging.debug(f"LangGraph result: {result}")
+            config = {
+                "configurable": {
+                    "thread_id": thread_id
+                }
+            }
+
+            text = model_input.text
+            metadata = model_input.metadata
+            results = {
+                result['name']: {
+                    "id": result['id'],
+                    "value": result['result'].value if result['result'] else None,
+                    "explanation": result['result'].explanation if result['result'] else None
+                }
+                for result in model_input.results or []
+            }
+
+            processed_text = self.preprocess_text(text)
+            final_result = None
+            
+            # Start invoking the workflow
+            async for event in self.workflow.astream(
+                {
+                    "text": processed_text,
+                    "metadata": metadata,
+                    "results": results
+                },
+                config=config
+            ):
+                # Check if we've hit a breakpoint
+                if isinstance(event, dict) and event.get('at_llm_breakpoint'):
+                    logging.info("Hit LLM breakpoint, pausing for batch processing")
+                    await self.cleanup()  # Clean up before pausing
+                    raise BatchProcessingPause(thread_id, event)
+                
+                # Store the latest event as our potential final result
+                final_result = event
+                logging.info(f"Received event: {event}")
+
+            # After the stream ends, check if we have a valid result
+            if isinstance(final_result, dict):
+                # Unwrap output_aliasing if present
+                result_dict = final_result.get('output_aliasing', final_result)
+                
+                if 'classification' in result_dict:
+                    logging.info(f"Creating result from classification: {result_dict['classification']}")
+                    return [self.Result(
+                        parameters=self.parameters,
+                        value=result_dict['classification'],
+                        explanation=result_dict.get('explanation', '')
+                    )]
+                elif 'value' in result_dict:
+                    logging.info(f"Creating result from value: {result_dict['value']}")
+                    return [self.Result(
+                        parameters=self.parameters,
+                        value=result_dict['value'],
+                        explanation=result_dict.get('explanation', '')
+                    )]
+
+            # If we get here without returning, something went wrong
+            logging.error("Workflow completed without producing a valid result")
+            logging.error(f"Final event: {final_result}")
+            return None
+
+        except BatchProcessingPause:
+            # Clean up and re-raise
+            await self.cleanup()
+            raise
         except Exception as e:
             logging.error(f"Error during app.ainvoke: {str(e)}")
+            await self.cleanup()
             raise
-
-        # Ensure we have a valid value (either string or boolean)
-        value = result.get("value")
-        if value is None:
-            value = ""  # Default to empty string if no value is provided
-        explanation = result.get("explanation")
-        logging.info(f"LangGraph value: {value}")
-        logging.info(f"LangGraph explanation: {explanation}")
-
-        return [
-            LangGraphScore.Result(
-                parameters=self.parameters,
-                value=value,
-                explanation=explanation
-            )
-        ]
 
     def preprocess_text(self, text):
         # Join all text elements into a single string
         if isinstance(text, list):
             return " ".join(text)
         return text
+
+    async def cleanup(self):
+        """Cleanup resources."""
+        try:
+            # Close PostgreSQL checkpointer if it was initialized
+            if hasattr(self, '_checkpointer_context') and \
+               self._checkpointer_context is not None:
+                try:
+                    logging.info("Closing PostgreSQL checkpointer...")
+                    await self._checkpointer_context.__aexit__(None, None, None)
+                    self.checkpointer = None
+                    self._checkpointer_context = None
+                    logging.info("PostgreSQL checkpointer closed")
+                except Exception as e:
+                    logging.error(f"Error closing PostgreSQL checkpointer: {e}")
+
+            # Close Azure credentials
+            if hasattr(self, '_credential'):
+                try:
+                    logging.info("Closing Azure credential...")
+                    await self._credential.close()
+                    self._credential = None
+                    logging.info("Azure credential closed")
+                except Exception as e:
+                    logging.error(f"Error closing Azure credential: {e}")
+
+        except Exception as e:
+            logging.error(f"Error during cleanup: {e}")
+
+    async def __aenter__(self):
+        """Async context manager entry."""
+        await self.async_setup()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit."""
+        await self.cleanup()
 

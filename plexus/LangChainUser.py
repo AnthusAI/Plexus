@@ -15,6 +15,9 @@ from plexus.scores.Score import Score
 
 from langchain_community.chat_models import BedrockChat, ChatVertexAI
 
+import threading
+from azure.identity import ChainedTokenCredential, AzureCliCredential, DefaultAzureCredential
+
 class LangChainUser:
 
     class Parameters(BaseModel):
@@ -187,3 +190,36 @@ class LangChainUser:
                 "successful_requests": self.token_counter.llm_calls,
                 "cached_tokens": self.token_counter.cached_tokens
             }
+
+    def get_azure_credential(self):
+        """Get Azure credential for authentication."""
+        if not hasattr(self, '_credential'):
+            self._credential = ChainedTokenCredential(
+                AzureCliCredential(process_timeout=10),
+                DefaultAzureCredential(process_timeout=10),
+            )
+            # Name the credential refresh threads
+            for thread in threading.enumerate():
+                if thread.name.startswith('Thread-'):
+                    if 'azure' in str(thread._target).lower():
+                        thread.name = f"AzureCredential-{thread.ident}"
+        return self._credential
+
+    async def cleanup(self):
+        """Clean up Azure credentials and any associated threads."""
+        if hasattr(self, '_credential'):
+            try:
+                logging.info("Force closing Azure credential...")
+                # Force close any underlying sessions
+                if hasattr(self._credential, '_client'):
+                    if hasattr(self._credential._client, '_pipeline'):
+                        pipeline = self._credential._client._pipeline
+                        if hasattr(pipeline, '_transport'):
+                            transport = pipeline._transport
+                            if hasattr(transport, '_session'):
+                                transport._session.close()
+                await self._credential.close()
+                self._credential = None
+                logging.info("Azure credential force closed")
+            except Exception as e:
+                logging.error(f"Error closing Azure credential: {e}")

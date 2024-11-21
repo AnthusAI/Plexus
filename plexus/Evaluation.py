@@ -9,13 +9,14 @@ import logging
 import requests
 import random
 import time
+from datetime import datetime, timezone
 import string
 import pprint
 import asyncio
 from decimal import Decimal
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from tenacity import retry, wait_fixed, stop_after_attempt, before_log, retry_if_exception_type
+from tenacity import retry, wait_fixed, stop_after_attempt, before_log, retry_if_exception_type, wait_exponential
 from requests.exceptions import Timeout, RequestException
 import mlflow
 from concurrent.futures import ThreadPoolExecutor
@@ -38,7 +39,16 @@ from .ScorecardResultsAnalysis import ScorecardResultsAnalysis
 
 from sklearn.metrics import confusion_matrix
 
-class Experiment:
+from plexus_dashboard.api.client import PlexusDashboardClient
+from plexus_dashboard.api.models.account import Account
+from plexus_dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+from plexus_dashboard.api.models.scorecard import Scorecard as DashboardScorecard
+from plexus_dashboard.api.models.score import Score as DashboardScore
+from plexus_dashboard.api.models.score_result import ScoreResult
+
+from plexus.scores.LangGraphScore import LangGraphScore, BatchProcessingPause
+
+class Evaluation:
     def __init__(self, *,
         scorecard_name: str,
         scorecard: Scorecard,
@@ -50,7 +60,8 @@ class Experiment:
         session_ids_to_sample = None,
         subset_of_score_names = None,
         experiment_label = None,
-        max_mismatches_to_report=5
+        max_mismatches_to_report=5,
+        account_key: str = 'call-criteria'  # Default account key
     ):
         self.scorecard_name = scorecard_name
         self.scorecard = scorecard
@@ -69,6 +80,73 @@ class Experiment:
         self.mismatches = []
         self.total_correct = 0
         self.total_questions = 0
+
+        # Initialize dashboard client and experiment ID
+        try:
+            logging.info("Initializing Plexus Dashboard client...")
+            self.dashboard_client = PlexusDashboardClient()
+            
+            # Look up account using default key
+            account_key = 'call-criteria'
+            logging.info(f"Looking up account with key: {account_key}")
+            account = Account.get_by_key(account_key, self.dashboard_client)
+            logging.info(f"Found account: {account.name} ({account.id})")
+            
+            # Store the account ID
+            self.account_id = account.id
+            
+            # Look up scorecard using available identifiers
+            logging.info(f"Looking up scorecard with name: {self.scorecard.name}")
+            if hasattr(self.scorecard, 'key'):
+                logging.info(f"Using scorecard key: {self.scorecard.key}")
+                scorecard = DashboardScorecard.get_by_key(self.scorecard.key, self.dashboard_client)
+            elif hasattr(self.scorecard, 'id'):
+                logging.info(f"Using scorecard ID: {self.scorecard.id}")
+                scorecard = DashboardScorecard.get_by_id(self.scorecard.id, self.dashboard_client)
+            else:
+                logging.info(f"Looking up scorecard by name: {self.scorecard.name}")
+                scorecard = DashboardScorecard.get_by_name(self.scorecard.name, self.dashboard_client)
+            logging.info(f"Found scorecard: {scorecard.name} ({scorecard.id})")
+            
+            # Store the scorecard ID
+            self.scorecard_id = scorecard.id
+            
+            # Create initial experiment record
+            started_at = datetime.now(timezone.utc)
+            experiment_params = {
+                "type": "accuracy",
+                "accountId": account.id,
+                "scorecardId": scorecard.id,
+                "status": "RUNNING",
+                "accuracy": 0.0,
+                "createdAt": started_at.isoformat().replace('+00:00', 'Z'),
+                "updatedAt": started_at.isoformat().replace('+00:00', 'Z'),
+                "totalItems": self.number_of_texts_to_sample,
+                "processedItems": 0,
+                "parameters": json.dumps({
+                    "sampling_method": self.sampling_method,
+                    "sample_size": self.number_of_texts_to_sample
+                }),
+                "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
+                "estimatedRemainingSeconds": self.number_of_texts_to_sample
+            }
+            logging.info(f"Creating experiment with params: {experiment_params}")
+            
+            response = DashboardEvaluation.create(
+                client=self.dashboard_client,
+                **experiment_params
+            )
+            self.experiment_id = response.id
+            self.started_at = started_at
+            logging.info(f"Created dashboard experiment with ID: {self.experiment_id}")
+
+        except Exception as e:
+            logging.error(f"Failed to initialize dashboard client or create experiment: {str(e)}", exc_info=True)
+            self.dashboard_client = None
+            self.experiment_id = None
+            
+        self.all_results = []  # Add this to track all results
+        self.processed_items = 0  # Add this to track processed items
 
     def __enter__(self):
         self.start_mlflow_run()
@@ -142,39 +220,152 @@ class Experiment:
     def run(self):
         pass
 
-class AccuracyExperiment(Experiment):
-    def __init__(self, *, override_folder=None, labeled_samples=None, labeled_samples_filename=None, **kwargs):
-        super().__init__(**kwargs)
-        self.scorecard_name = kwargs.get('scorecard_name')
-        self.override_folder = override_folder
-        self.override_data = self.load_override_data() if self.override_folder else {}
-        self.labeled_samples = labeled_samples
-        self.labeled_samples_filename = labeled_samples_filename
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10)
+    )
+    def log_to_dashboard(self, metrics, status="RUNNING"):
+        """Log metrics to Plexus Dashboard with retry logic"""
+        
+        if not self.dashboard_client or not self.experiment_id:
+            logging.warning("Dashboard client or experiment ID not available - skipping metrics update")
+            return
+            
+        try:
+            logging.info(f"Updating dashboard experiment {self.experiment_id} with metrics: {metrics}")
+            
+            elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
+            
+            # Convert metrics to the expected format
+            metrics_list = [
+                {"name": "Accuracy", "value": metrics["accuracy"] * 100},
+                {"name": "Precision", "value": metrics["precision"] * 100},
+                {"name": "Sensitivity", "value": metrics["sensitivity"] * 100},
+                {"name": "Specificity", "value": metrics["specificity"] * 100}
+            ]
+            
+            # Format confusion matrix data for the API
+            confusion_matrix_data = metrics["confusion_matrices"][0]  # Get first score's matrix
+            matrix_data = {
+                "matrix": confusion_matrix_data["matrix"],
+                "labels": confusion_matrix_data["labels"]
+            }
+            
+            update_params = {
+                "id": self.experiment_id,
+                "type": "accuracy",
+                "metrics": json.dumps(metrics_list),
+                "processedItems": self.processed_items,
+                "elapsedSeconds": elapsed_seconds,
+                "estimatedRemainingSeconds": int(elapsed_seconds * (self.number_of_texts_to_sample - self.processed_items) / self.processed_items) if self.processed_items > 0 else self.number_of_texts_to_sample,
+                "accuracy": metrics["accuracy"] * 100,
+                "updatedAt": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+                "status": status,
+                "predictedClassDistribution": json.dumps(metrics["predicted_distribution"]),
+                "confusionMatrix": json.dumps(matrix_data)
+            }
+            logging.info(f"Update parameters: {update_params}")
+            
+            self.dashboard_client.updateEvaluation(**update_params)
+            logging.info("Successfully updated dashboard experiment")
+            
+        except Exception as e:
+            logging.error(f"Failed to log to dashboard: {str(e)}")
+            raise  # Re-raise the exception to see the full stack trace
 
-    def load_override_data(self):
-        override_data = {}
-        if os.path.exists(self.override_folder):
-            for filename in os.listdir(self.override_folder):
-                if filename.endswith(".csv"):
-                    filepath = os.path.join(self.override_folder, filename)
-                    try:
-                        df = pd.read_csv(filepath, keep_default_na=False)  # Prevents automatic conversion of "NA" to NaN
-                        for _, row in df.iterrows():
-                            form_id = row['form_id'] or row['f_id']
-                            question_name = row['question_name'] or row['question']
-                            correct_value = row['correct_value'].strip() or row['Spot Check Answer'].strip()
-                            if correct_value:  # Ignore rows where correct_value is an empty string
-                                if form_id not in override_data:
-                                    override_data[form_id] = {}
-                                override_data[form_id][question_name] = correct_value
-                    except Exception as e:
-                        print(f"Could not read {filepath}: {e}")
-        return override_data
+    def calculate_metrics(self, results):
+        """Calculate classification metrics, predicted distribution, and confusion matrices"""
+        tp = fp = tn = fn = 0
+        predicted_distributions = {}  # Track counts for each score
+        confusion_matrices = {}  # Track confusion matrices per score
+        
+        for result in results:
+            for score_identifier, score_result in result['results'].items():
+                predicted = str(score_result.value).lower()
+                actual = str(score_result.metadata['human_label']).lower()
+                score_name = score_result.parameters.name
+                
+                # Initialize confusion matrix for this score if needed
+                if score_name not in confusion_matrices:
+                    confusion_matrices[score_name] = {
+                        'matrix': {},
+                        'labels': set()
+                    }
+                
+                # Add labels to set
+                confusion_matrices[score_name]['labels'].add(actual)
+                confusion_matrices[score_name]['labels'].add(predicted)
+                
+                # Initialize matrix entry if needed
+                if actual not in confusion_matrices[score_name]['matrix']:
+                    confusion_matrices[score_name]['matrix'][actual] = {}
+                if predicted not in confusion_matrices[score_name]['matrix'][actual]:
+                    confusion_matrices[score_name]['matrix'][actual][predicted] = 0
+                
+                # Update confusion matrix
+                confusion_matrices[score_name]['matrix'][actual][predicted] += 1
+                
+                # Update predicted distribution counts
+                if score_name not in predicted_distributions:
+                    predicted_distributions[score_name] = {}
+                if predicted not in predicted_distributions[score_name]:
+                    predicted_distributions[score_name][predicted] = 0
+                predicted_distributions[score_name][predicted] += 1
+                
+                # Calculate standard metrics
+                if actual == predicted == "yes":
+                    tp += 1
+                elif actual == predicted == "no":
+                    tn += 1
+                elif predicted == "yes" and actual == "no":
+                    fp += 1
+                elif predicted == "no" and actual == "yes":
+                    fn += 1
 
-    @Experiment.time_execution
-    def run(self):
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(self._async_run())
+        # Format confusion matrices for API
+        formatted_confusion_matrices = []
+        for score_name, matrix_data in confusion_matrices.items():
+            labels = sorted(list(matrix_data['labels']))
+            matrix = []
+            
+            # Create the matrix in the correct order
+            for i, actual_label in enumerate(labels):
+                row = []
+                for predicted_label in labels:
+                    count = matrix_data['matrix'].get(actual_label, {}).get(predicted_label, 0)
+                    row.append(count)
+                matrix.append(row)
+            
+            formatted_confusion_matrices.append({
+                "score_name": score_name,
+                "matrix": matrix,
+                "labels": labels
+            })
+
+        # Format predicted distributions for API
+        predicted_label_distributions = []
+        for score_name, distribution in predicted_distributions.items():
+            for label, count in distribution.items():
+                predicted_label_distributions.append({
+                    "label": label,
+                    "count": count
+                })
+
+        # Calculate standard metrics
+        total = tp + tn + fp + fn
+        accuracy = (tp + tn) / total if total > 0 else 0
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
+        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+
+        return {
+            "accuracy": accuracy,
+            "precision": precision,
+            "sensitivity": sensitivity,
+            "specificity": specificity,
+            "predicted_distribution": predicted_label_distributions,
+            "confusion_matrices": formatted_confusion_matrices
+        }
 
     async def _async_run(self):
         # Configure logging
@@ -198,10 +389,63 @@ class AccuracyExperiment(Experiment):
             df = pd.DataFrame(self.labeled_samples)
         else:
             df = pd.read_csv(self.labeled_samples_filename)
-        logging.info(f"CSV file loaded into DataFrame: {self.labeled_samples_filename}")
-        logging.info(f"  DataFrame shape: {df.shape}")
-        logging.info(f"  DataFrame columns: {df.columns}")
-        logging.info(f"  DataFrame head: {df.head()}")
+        
+        # Calculate original label distribution before sampling
+        label_distributions = []
+        is_dataset_balanced = True  # Track overall dataset balance
+        
+        for score_name in self.score_names():
+            score_instance = Score.from_name(self.scorecard_name, score_name)
+            label_score_name = score_instance.get_label_score_name()
+            
+            # Try both possible column names for labels
+            label_column = label_score_name + '_label'
+            if label_column in df.columns:
+                labels = df[label_column]
+            elif label_score_name in df.columns:
+                labels = df[label_score_name]
+            else:
+                logging.warning(f"No label column found for {score_name}")
+                continue
+            
+            # Clean and standardize labels
+            labels = labels.astype(str).str.lower().str.strip()
+            labels = labels.replace({'nan': 'na', 'n/a': 'na', '': 'na'})
+            
+            # Calculate distribution
+            value_counts = labels.value_counts()
+            
+            # Format distribution to match expected format exactly
+            distribution = [
+                {"label": str(label), "count": int(count)}
+                for label, count in value_counts.items()
+            ]
+            
+            # Check if distribution is balanced
+            total = sum(d["count"] for d in distribution)
+            expected_count = total / len(distribution)
+            tolerance = 0.2  # 20% tolerance
+            score_is_balanced = all(
+                abs(d["count"] - expected_count) <= expected_count * tolerance 
+                for d in distribution
+            )
+            
+            # Update overall balance status
+            is_dataset_balanced = is_dataset_balanced and score_is_balanced
+            
+            # Only include the distribution in the format expected by the API
+            label_distributions.extend(distribution)
+
+        # Update the experiment with the original distribution
+        if self.dashboard_client and self.experiment_id:
+            try:
+                self.dashboard_client.updateEvaluation(
+                    id=self.experiment_id,
+                    datasetClassDistribution=json.dumps(label_distributions),
+                    isDatasetClassDistributionBalanced=is_dataset_balanced
+                )
+            except Exception as e:
+                logging.error(f"Failed to update dataset distribution: {e}")
 
         # Ensure we have the necessary columns
         if 'text' not in df.columns:
@@ -291,8 +535,16 @@ class AccuracyExperiment(Experiment):
                 n=self.number_of_texts_to_sample,
                 random_state=self.random_seed
             )
-        results = await self.score_all_texts(selected_sample_rows)
-        
+
+        # Process results in batches but don't wait to update metrics
+        batch_size = 10
+        results = []
+        for i in range(0, len(selected_sample_rows), batch_size):
+            batch = selected_sample_rows[i:i+batch_size]
+            batch_results = await self.score_all_texts(batch)
+            logging.info(f"Batch results: {len(batch_results)} results processed.")
+            results.extend(batch_results)
+            
         if not os.path.exists(report_folder_path):
             os.makedirs(report_folder_path)
 
@@ -434,11 +686,15 @@ class AccuracyExperiment(Experiment):
 
         self.generate_metrics_json(report_folder_path, len(selected_sample_rows), expenses)
 
+        # Log final metrics
+        final_metrics = self.calculate_metrics(results)
+        self.log_to_dashboard(final_metrics, status="COMPLETED")
+
     def generate_report(self, score_instance, overall_accuracy, expenses, sample_size):
         score_config = score_instance.parameters
 
         report = f"""
-Experiment Report:
+Evaluation Report:
 ------------------
 
 Prompts:
@@ -526,7 +782,9 @@ Total cost:       ${expenses['total_cost']:.6f}
         form_id = columns.get('form_id', '')
         metadata_string = columns.get('metadata', {})
         
-        # Check if metadata_string is already a dict, if not, try to parse it
+        # Initialize human_labels dictionary
+        human_labels = {}
+        
         if isinstance(metadata_string, dict):
             metadata = metadata_string
         else:
@@ -544,42 +802,42 @@ Total cost:       ${expenses['total_cost']:.6f}
             subset_of_score_names=self.score_names_to_process()
         )
 
-        # Extract human labels for each question from the DataFrame row
-        human_labels = {}
-        for score_identifier in scorecard_results.keys():
-            score_instance = Score.from_name(
-                self.scorecard.properties['name'], score_identifier)
-            label_score_name = score_instance.get_label_score_name()
-            score_name = score_instance.parameters.name  # Get the score name
-            label_column = label_score_name + '_label'
-            if label_column in row.index:
-                human_labels[score_name] = row[label_column]  # Use score_name instead of score_identifier
-            elif label_score_name in row.index:
-                human_labels[score_name] = row[label_score_name]  # Use score_name instead of score_identifier
-            else:
-                logging.warning(f"Neither '{score_identifier}' nor '{label_score_name}' found in the row. Available columns: {row.index.tolist()}")
-                human_labels[score_name] = 'N/A'  # Use score_name instead of score_identifier
+        result = {
+            'content_id': content_id,
+            'session_id': session_id,
+            'form_id': form_id,
+            'results': scorecard_results,
+            'human_labels': human_labels
+        }
 
         for score_identifier in scorecard_results.keys():
             try:
                 score_result = scorecard_results[score_identifier]
+                score_instance = Score.from_name(self.scorecard.name, score_identifier)
+                label_score_name = score_instance.get_label_score_name()
+                score_name = score_instance.parameters.name
 
-                # Use score_name instead of column_name/score_identifier
-                column_name = score_identifier
-                human_label = str(human_labels.get(score_name, 'N/A')).lower().rstrip('.!?')
+                label_column = label_score_name + '_label'
+                if label_column in row.index:
+                    human_label = row[label_column]
+                elif label_score_name in row.index:
+                    human_label = row[label_score_name]
+                else:
+                    logging.warning(f"Neither '{score_identifier}' nor '{label_score_name}' found in the row. Available columns: {row.index.tolist()}")
+                    human_label = 'N/A'
+
+                human_label = str(human_label).lower().rstrip('.!?')
                 if human_label == 'nan':
                     human_label = ''
                 if human_label == 'n/a':
                     human_label = 'na'
                 human_explanation = columns.get(f"{label_score_name} comment", 'None')
 
-                # Normalize both values before comparison
                 score_result_value = ' '.join(str(score_result.value).lower().strip().split())
                 human_label = ' '.join(human_label.strip().split())
                 if not score_result_value:
                     score_result_value = 'na'
 
-                # Apply overrides if available
                 if form_id in self.override_data:
                     for override_question_name, correct_value in self.override_data[form_id].items():
                         if str(override_question_name) in human_labels:
@@ -589,31 +847,46 @@ Total cost:       ${expenses['total_cost']:.6f}
                 score_result.metadata['human_label'] = human_label
                 score_result.metadata['human_explanation'] = human_explanation
                 score_result.metadata['correct'] = score_result_value == human_label
-
-                # Log warnings for mismatches and append to incorrect results
-                if not score_result.metadata['correct']:
-                    logging.warning(f"Human label '{human_label}' does not match score '{score_result_value}' for question '{score_identifier}' in session '{session_id}'")
-
-                # Also, add the full text to the score result.
                 score_result.metadata['text'] = text
 
-                logging.debug(f"Score result for {score_identifier}: {score_result}")
+                # Log individual score result
+                # try:
+                ScoreResult.create(
+                    client=self.dashboard_client,
+                    value=1.0 if score_result.metadata['correct'] else 0.0,
+                    confidence=None,
+                    correct=score_result.metadata['correct'],
+                    itemId=content_id,
+                    accountId=self.account_id,
+                    evaluationId=self.experiment_id,
+                    scorecardId=self.scorecard.id,
+                    scoringJobId=None,
+                    metadata={
+                        "true_value": human_label,
+                        "predicted_value": score_result_value,
+                        "label": score_result_value,
+                        "text": text[:1000]  # Truncate text to reasonable length
+                    }
+                )
+                # except Exception as e:
+                #     logging.error(f"Failed to create score result: {e}")
 
             except Exception as e:
                 logging.exception(f"Error processing {score_identifier}: {e}")
-                # Log the full response if it's an HTTPError
                 if isinstance(e, requests.exceptions.HTTPError):
                     logging.error(f"HTTPError: {e.response.text}")
 
                 score_result = Score.Result(value="Error", error=str(e))
 
-        return {
-            'content_id': content_id,
-            'session_id': session_id,
-            'form_id': form_id,
-            'results': scorecard_results,
-            'human_labels': human_labels
-        }
+        # Add result to all_results and increment processed_items
+        self.all_results.append(result)
+        self.processed_items += 1
+
+        # Calculate metrics based on all results so far
+        metrics = self.calculate_metrics(self.all_results)
+        self.log_to_dashboard(metrics)
+
+        return result
 
     def generate_csv_scorecard_report(self, *, results):
         report = "session_id,question_name,human_label,result_value,correct_value\n"
@@ -748,7 +1021,7 @@ Total cost:       ${expenses['total_cost']:.6f}
         
         mlflow.log_artifact(f"{report_folder_path}/performance_{question.replace(' ', '_')}.png")
         
-class ConsistencyExperiment(Experiment):
+class ConsistencyEvaluation(Evaluation):
     def __init__(self, *, number_of_times_to_sample_each_text, **kwargs):
         super().__init__(**kwargs)
         self.number_of_times_to_sample_each_text = number_of_times_to_sample_each_text
@@ -756,3 +1029,199 @@ class ConsistencyExperiment(Experiment):
     def log_parameters(self):
         super().log_parameters()
         mlflow.log_param("number_of_times_to_sample_each_text", self.number_of_times_to_sample_each_text)
+
+class AccuracyEvaluation(Evaluation):
+    def __init__(self, *, override_folder=None, labeled_samples=None, labeled_samples_filename=None, **kwargs):
+        super().__init__(**kwargs)
+        self.scorecard_name = kwargs.get('scorecard_name')
+        self.override_folder = override_folder
+        self.override_data = self.load_override_data() if self.override_folder else {}
+        self.labeled_samples = labeled_samples
+        self.labeled_samples_filename = labeled_samples_filename
+
+    def load_override_data(self):
+        override_data = {}
+        if os.path.exists(self.override_folder):
+            for filename in os.listdir(self.override_folder):
+                if filename.endswith(".csv"):
+                    filepath = os.path.join(self.override_folder, filename)
+                    try:
+                        df = pd.read_csv(filepath, keep_default_na=False)
+                        for _, row in df.iterrows():
+                            form_id = row['form_id'] or row['f_id']
+                            question_name = row['question_name'] or row['question']
+                            correct_value = row['correct_value'].strip() or row['Spot Check Answer'].strip()
+                            if correct_value:
+                                if form_id not in override_data:
+                                    override_data[form_id] = {}
+                                override_data[form_id][question_name] = correct_value
+                    except Exception as e:
+                        print(f"Could not read {filepath}: {e}")
+        return override_data
+
+    @Evaluation.time_execution
+    async def run(self):
+        """Now this is an async function that just runs _async_run directly"""
+        return await self._async_run()
+
+    async def score_all_texts(self, selected_sample_rows):
+        tasks = [self.score_text(row) for _, row in selected_sample_rows.iterrows()]
+        results = await asyncio.gather(*tasks)
+        return results
+
+    @retry(
+        wait=wait_fixed(2),
+        stop=stop_after_attempt(5),
+        before=before_log(logging.getLogger(), logging.INFO),
+        retry=retry_if_exception_type((Timeout, RequestException))
+    )
+    async def score_text(self, row):
+        logging.info("Scoring text...")
+
+        text = row['text']
+        content_id = row.get('content_id', '')
+        session_id = row.get('Session ID', content_id)
+        columns = row.get('columns', {})
+        form_id = columns.get('form_id', '')
+        metadata_string = columns.get('metadata', {})
+        
+        # Initialize human_labels dictionary
+        human_labels = {}
+        
+        if isinstance(metadata_string, dict):
+            metadata = metadata_string
+        else:
+            try:
+                metadata = json.loads(metadata_string)
+            except json.JSONDecodeError:
+                logging.warning(f"Failed to parse metadata as JSON. Using empty dict. Metadata: {metadata_string}")
+                metadata = {}
+
+        logging.info(f"Processing text for content_id: {content_id}, session_id: {session_id}, form_id: {form_id}")
+
+        scorecard_results = await self.scorecard.score_entire_text(
+            text=text,
+            metadata=metadata,
+            subset_of_score_names=self.score_names_to_process()
+        )
+
+        result = {
+            'content_id': content_id,
+            'session_id': session_id,
+            'form_id': form_id,
+            'results': scorecard_results,
+            'human_labels': human_labels
+        }
+
+        for score_identifier in scorecard_results.keys():
+            try:
+                score_result = scorecard_results[score_identifier]
+                score_instance = Score.from_name(self.scorecard.name, score_identifier)
+                label_score_name = score_instance.get_label_score_name()
+                score_name = score_instance.parameters.name
+
+                label_column = label_score_name + '_label'
+                if label_column in row.index:
+                    human_label = row[label_column]
+                elif label_score_name in row.index:
+                    human_label = row[label_score_name]
+                else:
+                    logging.warning(f"Neither '{score_identifier}' nor '{label_score_name}' found in the row. Available columns: {row.index.tolist()}")
+                    human_label = 'N/A'
+
+                human_label = str(human_label).lower().rstrip('.!?')
+                if human_label == 'nan':
+                    human_label = ''
+                if human_label == 'n/a':
+                    human_label = 'na'
+                human_explanation = columns.get(f"{label_score_name} comment", 'None')
+
+                score_result_value = ' '.join(str(score_result.value).lower().strip().split())
+                human_label = ' '.join(human_label.strip().split())
+                if not score_result_value:
+                    score_result_value = 'na'
+
+                if form_id in self.override_data:
+                    for override_question_name, correct_value in self.override_data[form_id].items():
+                        if str(override_question_name) in human_labels:
+                            logging.info(f"OVERRIDING human label for question '{override_question_name}' in form '{form_id}' from '{human_labels[str(override_question_name)]}' to '{correct_value}'")
+                            human_labels[str(override_question_name)] = correct_value
+
+                score_result.metadata['human_label'] = human_label
+                score_result.metadata['human_explanation'] = human_explanation
+                score_result.metadata['correct'] = score_result_value == human_label
+                score_result.metadata['text'] = text
+
+                # Log individual score result
+                # try:
+                ScoreResult.create(
+                    client=self.dashboard_client,
+                    value=1.0 if score_result.metadata['correct'] else 0.0,
+                    confidence=None,
+                    correct=score_result.metadata['correct'],
+                    itemId=content_id,
+                    accountId=self.account_id,
+                    evaluationId=self.experiment_id,
+                    scorecardId=self.scorecard_id,
+                    scoringJobId=None,
+                    metadata={
+                        "true_value": human_label,
+                        "predicted_value": score_result_value,
+                        "label": score_result_value,
+                        "text": text[:1000]  # Truncate text to reasonable length
+                    }
+                )
+                # except Exception as e:
+                #     logging.error(f"Failed to create score result: {e}")
+
+            except Exception as e:
+                logging.exception(f"Error processing {score_identifier}: {e}")
+                if isinstance(e, requests.exceptions.HTTPError):
+                    logging.error(f"HTTPError: {e.response.text}")
+
+                score_result = Score.Result(value="Error", error=str(e))
+
+        # Add result to all_results and increment processed_items
+        self.all_results.append(result)
+        self.processed_items += 1
+
+        # Calculate metrics based on all results so far
+        metrics = self.calculate_metrics(self.all_results)
+        self.log_to_dashboard(metrics)
+
+        return result
+
+    async def cleanup(self):
+        """Clean up all resources."""
+        try:
+            # Clean up scorecard first
+            if hasattr(self, 'scorecard'):
+                if isinstance(self.scorecard, LangGraphScore):
+                    await self.scorecard.cleanup()
+                elif hasattr(self.scorecard, 'cleanup'):
+                    await self.scorecard.cleanup()
+            
+            # Wait for any remaining tasks
+            for task in asyncio.all_tasks():
+                if not task.done() and task != asyncio.current_task():
+                    task.cancel()
+                    try:
+                        await asyncio.wait_for(task, timeout=0.5)
+                    except asyncio.TimeoutError:
+                        pass
+
+        except Exception as e:
+            logging.error(f"Error during AccuracyEvaluation cleanup: {e}")
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.cleanup()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self.__aexit__(exc_type, exc_val, exc_tb))

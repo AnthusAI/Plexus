@@ -21,6 +21,7 @@ from plexus.Registries import scorecard_registry
 import plexus.scores
 from plexus.scores.Score import Score
 from plexus.logging.Cloudwatch import CloudWatchLogger
+from plexus.scores.LangGraphScore import BatchProcessingPause
 
 class Scorecard:
     """
@@ -175,6 +176,7 @@ class Scorecard:
         :param metadata: The metadata.
         :param modality: The modality.
         :return: The score result.
+        :raises BatchProcessingPause: When scoring needs to be suspended for batch processing
         """
         logging.info(f"Getting score result for: {score}")
         
@@ -203,6 +205,7 @@ class Scorecard:
                 return
 
             logging.info(f"Predicting score for: {score}")
+            # Let BatchProcessingPause propagate up
             score_result = await score_instance.predict(
                 context=None,
                 model_input=plexus.scores.Score.Input(
@@ -316,7 +319,12 @@ class Scorecard:
                     ),
                     timeout=1200
                 )
-                results_by_score_id[score_id] = score_result[0]  # Store result by score ID
+                
+                if score_result is None:
+                    logging.info(f"Score {score_name} returned None (possibly paused for batch processing)")
+                    return
+                
+                results_by_score_id[score_id] = score_result[0]
                 results.append({
                     'id': score_id,
                     'name': score_name,
@@ -324,26 +332,36 @@ class Scorecard:
                 })
                 logging.info(f"Processed score: {score_name} (ID: {score_id})")
 
-                # Check if any waiting scores can now be processed
+                # Queue up dependent scores
                 for waiting_score_id, waiting_score_info in dependency_graph.items():
                     if waiting_score_id not in results_by_score_id and all(dep in results_by_score_id for dep in waiting_score_info['deps']):
                         await processing_queue.put(waiting_score_id)
-                        logging.info(f"Added score to queue as dependencies are met: {waiting_score_info['name']} (ID: {waiting_score_id})")
+                        logging.info(f"Added score to queue as dependencies are met: {waiting_score_info['name']}")
 
-            except asyncio.TimeoutError:
-                logging.error(f"Timeout processing score: {score_name} (ID: {score_id})")
-            except Exception as e:
-                logging.error(f"Error processing score {score_name} (ID: {score_id}): {str(e)}")
+            except BatchProcessingPause as e:
+                logging.info(f"Score {score_name} paused for batch processing (thread_id: {e.thread_id})")
+                # Mark this score as paused and store its state
+                results_by_score_id[score_id] = "PAUSED"
+                raise  # Re-raise to be handled by higher-level code
 
-        while len(results_by_score_id) < len(subset_of_score_names):
-            score_id_to_process = await processing_queue.get()
-            logging.info(f"Retrieved score from queue for processing: {dependency_graph[score_id_to_process]['name']} (ID: {score_id_to_process})")
-            logging.info(f"Current results: {list(results_by_score_id.keys())}")
-            logging.info(f"Remaining scores: {set(dependency_graph.keys()) - set(results_by_score_id.keys())}")
-            await process_score(score_id_to_process)
+        remaining_scores = set(dependency_graph.keys())
+        while remaining_scores:
+            try:
+                score_id_to_process = await processing_queue.get()
+                if score_id_to_process not in remaining_scores:
+                    continue
+                
+                logging.info(f"Processing score: {dependency_graph[score_id_to_process]['name']}")
+                await process_score(score_id_to_process)
+                remaining_scores.remove(score_id_to_process)
+                
+            except BatchProcessingPause as e:
+                # Remove the paused score from remaining scores
+                remaining_scores.remove(score_id_to_process)
+                # Re-raise to be handled by caller
+                raise
 
         logging.info(f"All scores processed. Total scores: {len(results_by_score_id)}")
-        logging.info(f"Scorecard total cost: {self.scorecard_total_cost}")
         return results_by_score_id
 
     def get_accumulated_costs(self):
