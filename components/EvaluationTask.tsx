@@ -72,7 +72,7 @@ function computeEvaluationType(data: EvaluationTaskData): string {
   }
   
   if (data.progress === 100) {
-    return "Evaluation done"
+    return "Evaluation completed"
   }
   
   if (data.progress >= 90) {
@@ -163,7 +163,7 @@ const DetailContent = React.memo(({
   }
 
   return (
-    <div className={`w-full ${isFullWidth ? 'grid grid-cols-2 gap-8' : ''}`}>
+    <div className={`w-full ${isFullWidth ? 'grid grid-cols-2 gap-4' : ''}`}>
       <div className="w-full">
         <div className="mb-4">
           <ProgressBar 
