@@ -890,7 +890,7 @@ export default function EvaluationsDashboard(): JSX.Element {
   return (
     <ClientOnly>
       <div className="h-full flex flex-col">
-        <div className={`flex ${isNarrowViewport ? 'flex-col' : isFullWidth ? '' : 'space-x-6'} flex-1 h-full`}>
+        <div className={`flex ${isNarrowViewport ? 'flex-col' : isFullWidth ? '' : 'space-x-2'} flex-1 h-full`}>
           <div className={`
             flex flex-col
             ${isFullWidth ? 'hidden' : ''} 
