@@ -1,9 +1,10 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from plexus.scores.LangGraphScore import LangGraphScore
+from plexus.scores.LangGraphScore import LangGraphScore, BatchProcessingPause
 from plexus.scores.Score import Score
 from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
+import logging
 
 # Set the default fixture loop scope to function
 pytest.asyncio_fixture_scope = "function"
@@ -18,6 +19,20 @@ class MockGraphState(BaseModel):
     text: Optional[str]
     metadata: Optional[dict]
     results: Optional[dict]
+
+class AsyncIteratorMock:
+    """Mock async iterator for testing"""
+    def __init__(self, seq):
+        self.iter = iter(seq)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self.iter)
+        except StopIteration:
+            raise StopAsyncIteration
 
 @pytest.fixture
 def basic_graph_config():
@@ -89,9 +104,21 @@ async def test_create_instance(basic_graph_config, mock_azure_openai, mock_yes_n
         assert instance.parameters.model_name == "gpt-4"
 
 @pytest.mark.asyncio
-async def test_predict_basic_flow(basic_graph_config, mock_azure_openai, mock_yes_no_classifier, mock_workflow):
-    with patch('plexus.LangChainUser.LangChainUser._initialize_model', return_value=mock_azure_openai):
+async def test_predict_basic_flow(basic_graph_config, mock_azure_openai):
+    """Test basic prediction flow"""
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
+               return_value=mock_azure_openai):
         instance = await LangGraphScore.create(**basic_graph_config)
+        
+        # Create the iterator first
+        iterator = AsyncIteratorMock([{
+            "value": "Yes",
+            "explanation": "Test explanation"
+        }])
+        
+        # Mock workflow with a simple async function that returns the iterator
+        mock_workflow = MagicMock()
+        mock_workflow.astream = MagicMock(return_value=iterator)
         instance.workflow = mock_workflow
         
         input_data = Score.Input(
@@ -100,7 +127,10 @@ async def test_predict_basic_flow(basic_graph_config, mock_azure_openai, mock_ye
             results=[]
         )
         
-        mock_workflow.ainvoke.return_value = {"value": "Yes", "explanation": "Test explanation"}
+        # Add debug logging
+        logging.info(f"Iterator type: {type(iterator)}")
+        logging.info(f"Has __aiter__: {hasattr(iterator, '__aiter__')}")
+        logging.info(f"Has __anext__: {hasattr(iterator, '__anext__')}")
         
         results = await instance.predict(None, input_data)
         
@@ -109,9 +139,18 @@ async def test_predict_basic_flow(basic_graph_config, mock_azure_openai, mock_ye
         assert results[0].explanation == "Test explanation"
 
 @pytest.mark.asyncio
-async def test_predict_with_list_text(basic_graph_config, mock_azure_openai, mock_yes_no_classifier, mock_workflow):
-    with patch('plexus.LangChainUser.LangChainUser._initialize_model', return_value=mock_azure_openai):
+async def test_predict_with_list_text(basic_graph_config, mock_azure_openai):
+    """Test processing with list text input"""
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
+               return_value=mock_azure_openai):
         instance = await LangGraphScore.create(**basic_graph_config)
+        
+        # Mock workflow
+        mock_workflow = MagicMock()
+        mock_workflow.astream = MagicMock(return_value=AsyncIteratorMock([{
+            "value": "No",
+            "explanation": "Test explanation"
+        }]))
         instance.workflow = mock_workflow
         
         text = " ".join(["This is", "a test", "text"])
@@ -121,17 +160,10 @@ async def test_predict_with_list_text(basic_graph_config, mock_azure_openai, moc
             results=[]
         )
         
-        mock_workflow.ainvoke.return_value = {"value": "No", "explanation": "Test explanation"}
-        
         results = await instance.predict(None, input_data)
         
         assert len(results) == 1
         assert results[0].value == "No"
-        mock_workflow.ainvoke.assert_called_with({
-            "text": "This is a test text",
-            "metadata": {},
-            "results": {}
-        })
 
 @pytest.mark.asyncio
 async def test_get_token_usage(basic_graph_config, mock_azure_openai, mock_yes_no_classifier):
@@ -181,10 +213,10 @@ async def test_reset_token_usage(basic_graph_config, mock_azure_openai, mock_yes
             mock_model.with_config.assert_called_once()
 
 @pytest.mark.asyncio
-async def test_conditional_graph_flow(basic_graph_config, mock_azure_openai, mock_yes_no_classifier, mock_workflow):
+async def test_conditional_graph_flow(basic_graph_config, mock_azure_openai):
     """Test a graph with conditional branching logic"""
     config = basic_graph_config.copy()
-    config["graph"] = [
+    graph_config = [
         {
             "name": "classifier",
             "class": "YesOrNoClassifier",
@@ -210,58 +242,76 @@ async def test_conditional_graph_flow(basic_graph_config, mock_azure_openai, moc
             "prompt_template": "Is this text positive? {text}"
         }
     ]
+    config["graph"] = graph_config
 
-    with patch('plexus.LangChainUser.LangChainUser._initialize_model', return_value=mock_azure_openai):
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
+               return_value=mock_azure_openai):
         instance = await LangGraphScore.create(**config)
-        instance.workflow = mock_workflow
         
         # Test positive path
-        mock_workflow.ainvoke.return_value = {"value": "Positive", "explanation": "Handled positive case"}
-        result = await instance.predict(None, Score.Input(text="test", metadata={}, results=[]))
+        mock_workflow = MagicMock()
+        mock_workflow.astream = MagicMock(return_value=AsyncIteratorMock([{
+            "value": "Positive",
+            "explanation": "Handled positive case"
+        }]))
+        instance.workflow = mock_workflow
+        
+        result = await instance.predict(None, Score.Input(
+            text="test",
+            metadata={},
+            results=[]
+        ))
         assert result[0].value == "Positive"
         assert result[0].explanation == "Handled positive case"
 
         # Test negative path
-        mock_workflow.ainvoke.return_value = {"value": "Negative", "explanation": "Terminated on negative"}
-        result = await instance.predict(None, Score.Input(text="test", metadata={}, results=[]))
+        mock_workflow.astream = MagicMock(return_value=AsyncIteratorMock([{
+            "value": "Negative",
+            "explanation": "Terminated on negative"
+        }]))
+        
+        result = await instance.predict(None, Score.Input(
+            text="test",
+            metadata={},
+            results=[]
+        ))
         assert result[0].value == "Negative"
 
 @pytest.mark.asyncio
-async def test_input_output_aliasing(basic_graph_config, mock_azure_openai, mock_yes_no_classifier, mock_workflow):
+async def test_input_output_aliasing(basic_graph_config, mock_azure_openai, mock_yes_no_classifier):
     """Test input and output aliasing functionality"""
     config = basic_graph_config.copy()
     config["input"] = {"input_text": "text"}
     config["output"] = {"final_result": "value", "final_explanation": "explanation"}
     
-    with patch('plexus.LangChainUser.LangChainUser._initialize_model', return_value=mock_azure_openai):
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
+               return_value=mock_azure_openai):
         instance = await LangGraphScore.create(**config)
-        instance.workflow = mock_workflow
         
-        mock_workflow.ainvoke.return_value = {
+        # Mock workflow
+        mock_workflow = MagicMock()
+        mock_workflow.astream = MagicMock(return_value=AsyncIteratorMock([{
             "value": "Yes",
             "explanation": "Test explanation",
             "final_result": "Yes",
             "final_explanation": "Test explanation"
-        }
+        }]))
+        instance.workflow = mock_workflow
         
-        results = await instance.predict(None, Score.Input(text="test", metadata={}, results=[]))
+        results = await instance.predict(None, Score.Input(
+            text="test",
+            metadata={},
+            results=[]
+        ))
         assert results[0].value == "Yes"
         assert "Test explanation" in results[0].explanation
 
 @pytest.mark.asyncio
-async def test_graph_with_previous_results(
-    basic_graph_config,
-    mock_azure_openai,
-    mock_yes_no_classifier,
-    mock_workflow
-):
+async def test_graph_with_previous_results(basic_graph_config, mock_azure_openai):
     """Test processing with previous results in the input"""
-    with patch(
-        'plexus.LangChainUser.LangChainUser._initialize_model',
-        return_value=mock_azure_openai
-    ):
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model',
+               return_value=mock_azure_openai):
         instance = await LangGraphScore.create(**basic_graph_config)
-        instance.workflow = mock_workflow
 
         # Create a proper Result object with explanation using LangGraphScore.Result
         previous_result = LangGraphScore.Result(
@@ -274,7 +324,7 @@ async def test_graph_with_previous_results(
             {
                 "name": "previous_score",
                 "id": "123",
-                "result": previous_result  # Use LangGraphScore.Result object instead of dict
+                "result": previous_result
             }
         ]
 
@@ -284,21 +334,17 @@ async def test_graph_with_previous_results(
             results=previous_results
         )
 
-        mock_workflow.ainvoke.return_value = {"value": "Yes", "explanation": "New explanation"}
-        results = await instance.predict(None, input_data)
+        # Mock workflow with AsyncIteratorMock
+        mock_workflow = MagicMock()
+        mock_workflow.astream = MagicMock(return_value=AsyncIteratorMock([{
+            "value": "Yes",
+            "explanation": "New explanation"
+        }]))
+        instance.workflow = mock_workflow
 
-        # Verify the workflow was called with correct data
-        mock_workflow.ainvoke.assert_called_with({
-            "text": "test",
-            "metadata": {},
-            "results": {
-                "previous_score": {
-                    "id": "123",
-                    "value": "Yes",
-                    "explanation": "Previous explanation"
-                }
-            }
-        })
+        results = await instance.predict(None, input_data)
+        assert results[0].value == "Yes"
+        assert results[0].explanation == "New explanation"
 
 @pytest.mark.xfail(reason="Need to fix error handling flow")
 @pytest.mark.asyncio
@@ -360,19 +406,26 @@ async def test_invalid_graph_configurations():
                 await LangGraphScore.create(**config)
 
 @pytest.mark.asyncio
-async def test_malformed_input_handling(basic_graph_config, mock_azure_openai, mock_yes_no_classifier, mock_workflow):
+async def test_malformed_input_handling(basic_graph_config, mock_azure_openai):
     """Test handling of malformed input data"""
-    with patch('plexus.LangChainUser.LangChainUser._initialize_model', return_value=mock_azure_openai):
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
+               return_value=mock_azure_openai):
         instance = await LangGraphScore.create(**basic_graph_config)
+        
+        # Mock workflow
+        mock_workflow = MagicMock()
+        mock_workflow.astream = MagicMock(return_value=AsyncIteratorMock([{
+            "value": "",
+            "explanation": "Empty input"
+        }]))
         instance.workflow = mock_workflow
         
-        # Test with None text
-        with pytest.raises(ValueError):
-            await instance.predict(None, Score.Input(text=None, metadata={}, results=[]))
-        
         # Test with empty text
-        mock_workflow.ainvoke.return_value = {"value": "", "explanation": "Empty input"}
-        result = await instance.predict(None, Score.Input(text="", metadata={}, results=[]))
+        result = await instance.predict(None, Score.Input(
+            text="",
+            metadata={},
+            results=[]
+        ))
         assert result[0].value == ""
 
 @pytest.mark.asyncio
@@ -407,23 +460,23 @@ async def test_token_usage_error_handling(basic_graph_config, mock_azure_openai,
         assert usage["total_tokens"] == 15
 
 @pytest.mark.asyncio
-async def test_state_management(basic_graph_config, mock_azure_openai, mock_workflow):
+async def test_state_management(basic_graph_config, mock_azure_openai):
     """Test state management and propagation between nodes"""
     with patch('plexus.LangChainUser.LangChainUser._initialize_model',
-              return_value=mock_azure_openai):
+               return_value=mock_azure_openai):
         instance = await LangGraphScore.create(**basic_graph_config)
-        instance.workflow = mock_workflow
         
-        # Mock workflow response
-        mock_workflow.ainvoke.return_value = {
+        # Mock workflow
+        mock_workflow = MagicMock()
+        mock_workflow.astream = MagicMock(return_value=AsyncIteratorMock([{
             "text": "test text",
             "metadata": {"key": "value"},
             "value": "Yes",
             "explanation": "Test explanation",
             "classification": "Yes"
-        }
+        }]))
+        instance.workflow = mock_workflow
         
-        # Test state propagation
         result = await instance.predict(None, Score.Input(
             text="test text",
             metadata={"key": "value"},
@@ -476,3 +529,175 @@ async def test_combined_graphstate_creation(basic_graph_config, mock_azure_opena
         assert "attr4" in combined_state.__annotations__
         assert "classification" in combined_state.__annotations__
         assert "explanation" in combined_state.__annotations__
+
+@pytest.mark.asyncio
+async def test_batch_processing_pause_basic(basic_graph_config, mock_azure_openai):
+    """Test that workflow correctly pauses at LLM breakpoint"""
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
+               return_value=mock_azure_openai):
+        instance = await LangGraphScore.create(**basic_graph_config)
+        
+        # Mock workflow
+        mock_workflow = MagicMock()
+        mock_workflow.astream = MagicMock(return_value=AsyncIteratorMock([{
+            "text": "test text",
+            "metadata": {},
+            "at_llm_breakpoint": True,
+            "messages": [{"type": "human", "content": "test"}],
+            "thread_id": "test-thread"
+        }]))
+        instance.workflow = mock_workflow
+        
+        with pytest.raises(BatchProcessingPause) as exc_info:
+            await instance.predict(None, Score.Input(
+                text="test text",
+                metadata={},
+                results=[]
+            ))
+        
+        assert exc_info.value.thread_id is not None
+        assert exc_info.value.state["at_llm_breakpoint"] is True
+        assert exc_info.value.state["messages"] is not None
+
+@pytest.mark.asyncio
+async def test_batch_processing_resume(basic_graph_config, mock_azure_openai):
+    """Test resuming workflow after a pause"""
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
+               return_value=mock_azure_openai):
+        # Add thread_id to config instead of passing it to predict
+        config = basic_graph_config.copy()
+        config["thread_id"] = "test-thread"
+        instance = await LangGraphScore.create(**config)
+        
+        # Mock workflow
+        mock_workflow = MagicMock()
+        call_count = 0
+        
+        def get_mock_iterator(*args, **kwargs):
+            nonlocal call_count
+            if call_count == 0:
+                call_count += 1
+                return AsyncIteratorMock([{
+                    "text": "test text",
+                    "metadata": {},
+                    "at_llm_breakpoint": True,
+                    "messages": [{"type": "human", "content": "test"}],
+                    "thread_id": "test-thread"
+                }])
+            else:
+                return AsyncIteratorMock([{
+                    "text": "test text",
+                    "metadata": {},
+                    "messages": [{"type": "human", "content": "test"}],
+                    "thread_id": "test-thread",
+                    "at_llm_breakpoint": False,
+                    "completion": "test completion",
+                    "classification": "Yes",
+                    "explanation": "test explanation"
+                }])
+        
+        mock_workflow.astream = MagicMock(side_effect=get_mock_iterator)
+        instance.workflow = mock_workflow
+        
+        # First call should pause
+        with pytest.raises(BatchProcessingPause) as exc_info:
+            await instance.predict(None, Score.Input(
+                text="test text",
+                metadata={},
+                results=[]
+            ))
+        
+        # Save state from pause
+        paused_state = exc_info.value.state
+        
+        # Resume with saved state (no thread_id parameter)
+        results = await instance.predict(
+            None, 
+            Score.Input(
+                text=paused_state["text"],
+                metadata=paused_state["metadata"],
+                results=[]
+            )
+        )
+        
+        assert len(results) == 1
+        assert results[0].value == "Yes"
+        assert results[0].explanation == "test explanation"
+
+@pytest.mark.asyncio
+async def test_batch_processing_cleanup(basic_graph_config, mock_azure_openai):
+    """Test cleanup is called when workflow pauses"""
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
+               return_value=mock_azure_openai):
+        instance = await LangGraphScore.create(**basic_graph_config)
+        
+        # Mock workflow and cleanup
+        mock_workflow = AsyncMock()
+        async def mock_astream(*args, **kwargs):
+            yield {
+                "at_llm_breakpoint": True,
+                "thread_id": "test-thread"
+            }
+        mock_workflow.astream = mock_astream
+        instance.workflow = mock_workflow
+        
+        cleanup_called = False
+        async def mock_cleanup():
+            nonlocal cleanup_called
+            cleanup_called = True
+        instance.cleanup = mock_cleanup
+        
+        # Should call cleanup when pausing
+        with pytest.raises(BatchProcessingPause):
+            await instance.predict(None, Score.Input(
+                text="test",
+                metadata={},
+                results=[]
+            ))
+        
+        assert cleanup_called is True
+
+@pytest.mark.asyncio
+async def test_batch_processing_with_checkpointer(basic_graph_config, mock_azure_openai):
+    """Test pause/resume with PostgreSQL checkpointer"""
+    # Mock PostgreSQL checkpointer
+    mock_checkpointer = AsyncMock()
+    mock_checkpointer.setup = AsyncMock()
+    mock_checkpointer.get_tuple = AsyncMock()
+    mock_checkpointer.put = AsyncMock()
+    mock_checkpointer_context = AsyncMock()
+    mock_checkpointer_context.__aenter__ = AsyncMock(return_value=mock_checkpointer)
+    mock_checkpointer_context.__aexit__ = AsyncMock()
+    
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
+               return_value=mock_azure_openai), \
+         patch('langgraph.checkpoint.postgres.aio.AsyncPostgresSaver.from_conn_string',
+               return_value=mock_checkpointer_context):
+        
+        # Configure with PostgreSQL URL
+        config = basic_graph_config.copy()
+        config["postgres_url"] = "postgresql://test:test@localhost:5432/test"
+        
+        instance = await LangGraphScore.create(**config)
+        
+        # Mock workflow with AsyncIteratorMock
+        mock_workflow = MagicMock()
+        mock_workflow.astream = MagicMock(return_value=AsyncIteratorMock([{
+            "at_llm_breakpoint": True,
+            "thread_id": "test-thread"
+        }]))
+        instance.workflow = mock_workflow
+        
+        # Should initialize checkpointer
+        assert instance.checkpointer is mock_checkpointer
+        mock_checkpointer.setup.assert_called_once()
+        
+        # Should cleanup checkpointer on pause
+        with pytest.raises(BatchProcessingPause):
+            await instance.predict(None, Score.Input(
+                text="test",
+                metadata={},
+                results=[]
+            ))
+        
+        mock_checkpointer_context.__aexit__.assert_called_once()

@@ -156,7 +156,7 @@ class LangGraphScore(Score, LangChainUser):
         )
 
     @staticmethod
-    def add_edges(workflow, node_instances, entry_point):
+    def add_edges(workflow, node_instances, entry_point, graph_config):
         """Add edges between nodes in the workflow."""
         for i, (node_name, _) in enumerate(node_instances):
             if i == 0 and entry_point:
@@ -164,7 +164,7 @@ class LangGraphScore(Score, LangChainUser):
             
             if i > 0:
                 previous_node = node_instances[i-1][0]
-                node_config = next((node for node in self.parameters.graph 
+                node_config = next((node for node in graph_config
                                   if node['name'] == previous_node), None)
                 if node_config and 'conditions' in node_config:
                     logging.info(f"Node '{previous_node}' has conditions: {node_config['conditions']}")
@@ -273,7 +273,7 @@ class LangGraphScore(Score, LangChainUser):
             return state
         workflow.add_node('final', final_function)
 
-        LangGraphScore.add_edges(workflow, node_instances, entry_point)
+        LangGraphScore.add_edges(workflow, node_instances, entry_point, self.parameters.graph)
         workflow.add_edge(node_instances[-1][0], 'final')
 
         # Add output aliasing if needed
