@@ -138,21 +138,23 @@ const TaskContent = <TData = unknown>({
   customSummary?: React.ReactNode
 }) => (
   <CardContent className="p-4 pt-0 pb-4 flex flex-col flex-1">
-    <div className="flex flex-col h-full">
-      <div className="space-y-1 w-full">
-        <div className="text-lg font-bold">
-          {task.description && (
-            <div className="text-sm text-muted-foreground">
-              {task.description}
-            </div>
-          )}
-          {customSummary ? customSummary : <div>{task.summary}</div>}
+    {variant === 'grid' ? (
+      <div className="flex flex-col h-full">
+        <div className="space-y-1 w-full">
+          <div className="text-lg font-bold">
+            {task.description && (
+              <div className="text-sm text-muted-foreground">
+                {task.description}
+              </div>
+            )}
+            {customSummary ? customSummary : <div>{task.summary}</div>}
+          </div>
         </div>
+        {visualization && (
+          <div className="flex-1 w-full mt-4">{visualization}</div>
+        )}
       </div>
-      {visualization && (
-        <div className="flex-1 w-full mt-4">{visualization}</div>
-      )}
-    </div>
+    ) : null}
     {children}
   </CardContent>
 )
