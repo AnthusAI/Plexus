@@ -72,20 +72,33 @@ export function ProgressBar({
           style={{ width: clampedProgress > 0 ? `${clampedProgress}%` : 'auto' }}
         />
         <div className="absolute top-0 left-0 right-0 h-full flex justify-between items-center px-2">
+          {processedItems !== undefined && totalItems !== undefined && (
+            <span>
+              <span className={cn(
+                "text-sm font-medium",
+                isFocused
+                  ? "text-focus" 
+                  : "text-primary-foreground"
+              )}>
+                {processedItems}
+              </span>
+              <span className="text-sm font-medium text-primary-foreground"> / </span>
+              <span className={cn(
+                "text-sm font-medium",
+                isFocused && processedItems !== totalItems 
+                  ? "text-focus" 
+                  : "text-primary-foreground" 
+              )}>
+                {totalItems}
+              </span>
+            </span>
+          )}
           <span className={cn(
             "text-sm font-medium",
             isFocused && isInProgress ? "text-focus" : "text-primary-foreground"
           )}>
             {displayProgress}%
           </span>
-          {processedItems !== undefined && totalItems !== undefined && (
-            <span className={cn(
-              "text-sm font-medium",
-              isFocused ? "text-focus" : "text-primary-foreground"
-            )}>
-              {processedItems} / {totalItems}
-            </span>
-          )}
         </div>
       </div>
     </div>

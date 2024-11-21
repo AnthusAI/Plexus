@@ -22,12 +22,6 @@ function AuthenticatedApp() {
       </div>
       <div className="w-full max-w-md">
         <Authenticator hideSignUp={true}>
-          {({ signOut, user }) => (
-            <div>
-              <h1>Welcome, {user?.username}!</h1>
-              <button onClick={signOut}>Sign out</button>
-            </div>
-          )}
         </Authenticator>
       </div>
     </div>

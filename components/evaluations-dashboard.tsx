@@ -786,7 +786,7 @@ export default function EvaluationsDashboard(): JSX.Element {
           >
             <TableCell className="font-medium sm:pr-4">
               <div className="block @[630px]:hidden">
-                <div className="flex justify-between mb-4">
+                <div className="flex justify-between">
                   {/* Left column - reduce width to ~40% */}
                   <div className="w-[40%] space-y-0.5">
                     <div className="font-semibold truncate">

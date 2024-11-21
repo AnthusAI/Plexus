@@ -238,12 +238,12 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         </div>
       </ScrollArea>
 
-      <div className="mt-auto px-3 space-y-2 py-4">
+      <div className="mt-auto pl-2 space-y-2 py-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              className={`w-full justify-start px-0 cursor-pointer`}
+              className={`w-full justify-start px-2 pr-2 cursor-pointer`}
             >
               <Avatar className={`h-8 w-8 ${isLeftSidebarOpen ? 'mr-2' : ''}`}>
                 <AvatarImage 
@@ -306,7 +306,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              className={`w-full justify-start px-0 cursor-pointer`}
+              className={`w-full justify-start px-2 pr-2 cursor-pointer`}
             >
               <Avatar className={`h-8 w-8 ${isLeftSidebarOpen ? 'mr-2' : ''}`}>
                 <AvatarImage src="/user-avatar.png" alt="User avatar" />
@@ -338,7 +338,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               <TooltipTrigger asChild>
                 <DashboardButton
                   variant="ghost"
-                  className="p-2 group"
+                  className="pl-4 group"
                   onClick={toggleLeftSidebar}
                 >
                   <PanelLeft className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
@@ -356,7 +356,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 <TooltipTrigger asChild>
                   <DashboardButton
                     variant="ghost"
-                    className="p-2 group"
+                    className="pr-4 group"
                     onClick={toggleTheme}
                   >
                     {theme === "dark" ? (
