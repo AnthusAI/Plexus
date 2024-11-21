@@ -34,20 +34,23 @@ const SampleControl = ({ onSampleChange }: { onSampleChange: (method: string, co
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" className="w-[200px] h-10 justify-start text-left font-normal">
+        <Button 
+          variant="outline" 
+          className="w-[200px] h-8justify-start text-left font-normal bg-card-light border-none"
+        >
           <span>Sample: {method}</span>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-0" align="start">
+      <PopoverContent className="w-[200px] p-0 bg-card border-none" align="start">
         <div className="p-4 space-y-4">
           <div className="space-y-2">
             <Label>Sampling Method</Label>
             <Select value={method} onValueChange={handleMethodChange}>
-              <SelectTrigger className="w-full h-10">
+              <SelectTrigger className="w-full h-8 bg-card-light border-none">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-card border-none">
                 <SelectItem value="All">All</SelectItem>
                 <SelectItem value="Random">Random</SelectItem>
                 <SelectItem value="Sequential">Sequential</SelectItem>
@@ -62,7 +65,7 @@ const SampleControl = ({ onSampleChange }: { onSampleChange: (method: string, co
               onChange={handleCountChange}
               min={1}
               max={1000}
-              className="h-10"
+              className="h-8 bg-card-light border-none"
             />
           </div>
         </div>

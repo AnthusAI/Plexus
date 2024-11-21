@@ -82,7 +82,7 @@ export const NoTicks: Story = {
 
 export const MetricsGrid: Story = {
   render: () => (
-    <div className="grid grid-cols-2 gap-8 max-w-4xl">
+    <div className="grid grid-cols-2 gap-4 max-w-4xl">
       <Gauge
         value={92.5}
         title="Accuracy"

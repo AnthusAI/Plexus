@@ -9,19 +9,18 @@ interface TimeRangeSelectorProps {
 }
 
 export const TimeRangeSelector: React.FC<TimeRangeSelectorProps> = ({ onTimeRangeChange, options }) => {
-  // Ensure options is always an array
   const safeOptions = Array.isArray(options) ? options : [];
 
   if (safeOptions.length === 0) {
-    return null; // Don't render anything if there are no options
+    return null;
   }
 
   return (
     <Select onValueChange={(value) => onTimeRangeChange(value)}>
-      <SelectTrigger className="w-[200px] h-10">
+      <SelectTrigger className="w-[200px] h-8 bg-card-light border-none">
         <SelectValue placeholder="Select time range" />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="bg-card border-none">
         {safeOptions.map((option) => (
           <SelectItem key={option.value} value={option.value}>
             {option.label}

@@ -784,7 +784,7 @@ export default function EvaluationsDashboard(): JSX.Element {
             className={`cursor-pointer transition-colors duration-200 
               ${Evaluation.id === selectedEvaluation?.id ? 'bg-muted' : 'hover:bg-muted'}`}
           >
-            <TableCell className="font-medium sm:pr-4">
+            <TableCell className="font-medium">
               <div className="block @[630px]:hidden">
                 <div className="flex justify-between">
                   {/* Left column - reduce width to ~40% */}

@@ -114,7 +114,7 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
       <Select onValueChange={value => {
         setSelectedScorecard(value === "all" ? null : value)
       }}>
-        <SelectTrigger className="w-[200px] h-10 bg-card-light border-none">
+        <SelectTrigger className="w-[200px] h-8 bg-card-light border-none">
           <SelectValue placeholder="Scorecard" />
         </SelectTrigger>
         <SelectContent className="bg-card border-none">
@@ -131,7 +131,7 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
         disabled={!selectedScorecard}
         value={selectedScore || "all"}
       >
-        <SelectTrigger className="w-[200px] h-10 bg-card-light border-none">
+        <SelectTrigger className="w-[200px] h-8 bg-card-light border-none">
           <SelectValue placeholder="Score" />
         </SelectTrigger>
         <SelectContent className="bg-card border-none">

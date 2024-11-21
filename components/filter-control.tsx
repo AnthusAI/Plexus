@@ -76,26 +76,27 @@ export function FilterControl({ onFilterChange, availableFields }: FilterControl
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" className="">
+        <Button variant="outline" className="bg-card-light border-none">
           <Filter className="mr-2 h-4 w-4" />
           {filters.some(group => group.conditions.length > 0) ? 'Filtered' : 'Filter'}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[450px] p-0" align="start">
+      <PopoverContent className="w-[450px] p-0 bg-card border-none" align="start">
         <div className="p-4 space-y-4">
           {filters.map((group, groupIndex) => (
             <div key={groupIndex} className="space-y-2">
               <div className="flex items-center justify-between">
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
                   onClick={() => toggleGroupType(groupIndex)}
+                  className="bg-card-light border-none"
                 >
                   {group.type}
                 </Button>
                 {groupIndex > 0 && (
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
                     onClick={() => {
                       const newFilters = [...filters]
@@ -103,6 +104,7 @@ export function FilterControl({ onFilterChange, availableFields }: FilterControl
                       setFilters(newFilters)
                       onFilterChange(newFilters)
                     }}
+                    className="bg-card-light border-none"
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -114,10 +116,10 @@ export function FilterControl({ onFilterChange, availableFields }: FilterControl
                     value={condition.field}
                     onValueChange={(value) => updateCondition(groupIndex, conditionIndex, 'field', value)}
                   >
-                    <SelectTrigger className="w-[120px]">
+                    <SelectTrigger className="w-[120px] bg-card-light border-none">
                       <SelectValue placeholder="Field" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-card border-none">
                       {availableFields.map((field) => (
                         <SelectItem key={field.value} value={field.value}>
                           {field.label}
@@ -129,10 +131,10 @@ export function FilterControl({ onFilterChange, availableFields }: FilterControl
                     value={condition.operator}
                     onValueChange={(value) => updateCondition(groupIndex, conditionIndex, 'operator', value)}
                   >
-                    <SelectTrigger className="w-[120px]">
+                    <SelectTrigger className="w-[120px] bg-card-light border-none">
                       <SelectValue placeholder="Operator" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-card border-none">
                       {operators.map((op) => (
                         <SelectItem key={op.value} value={op.value}>
                           {op.label}
@@ -159,7 +161,7 @@ export function FilterControl({ onFilterChange, availableFields }: FilterControl
                 variant="outline"
                 size="sm"
                 onClick={() => addCondition(groupIndex)}
-                className="w-full"
+                className="w-full bg-card-light border-none"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Add Condition
@@ -171,7 +173,7 @@ export function FilterControl({ onFilterChange, availableFields }: FilterControl
               variant="outline"
               size="sm"
               onClick={addGroup}
-              className="w-full"
+              className="w-full bg-card-light border-none"
             >
               <Plus className="mr-2 h-4 w-4" />
               Add OR Group
