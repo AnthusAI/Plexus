@@ -111,7 +111,9 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
 
   return (
     <div className="flex flex-wrap gap-2">
-      <Select onValueChange={setSelectedScorecard}>
+      <Select onValueChange={value => {
+        setSelectedScorecard(value === "all" ? null : value)
+      }}>
         <SelectTrigger className="w-[200px] h-10">
           <SelectValue placeholder="Scorecard" />
         </SelectTrigger>
