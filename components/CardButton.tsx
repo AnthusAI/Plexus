@@ -23,7 +23,7 @@ export function CardButton({
       className={cn(
         label ? "gap-2" : "h-8 w-8",
         "rounded-md",
-        active && "bg-accent"
+        active ? "bg-accent" : "bg-card-light"
       )}
       onClick={onClick}
     >

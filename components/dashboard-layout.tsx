@@ -5,6 +5,8 @@ import { Activity, Logs, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, Pan
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
+import { generateClient } from "aws-amplify/data"
+import type { Schema } from "@/amplify/data/resource"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button, type ButtonProps } from "@/components/ui/button"
@@ -78,12 +80,41 @@ const MobileHeader = ({
   </div>
 )
 
+const client = generateClient<Schema>()
+
+type Account = Schema['Account']['type']
+
 const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; signOut: () => Promise<void> }) => {
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true)
   const { rightSidebarState, setRightSidebarState } = useSidebar()
   const { theme, setTheme } = useTheme()
   const isDesktop = useMediaQuery("(min-width: 1024px)")
   const isMobile = useMediaQuery("(max-width: 1023px)")
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
+  const [isLoadingAccounts, setIsLoadingAccounts] = useState(true)
+
+  useEffect(() => {
+    async function fetchAccounts() {
+      try {
+        const { data: accountsData } = await client.models.Account.list()
+        setAccounts(accountsData)
+        if (accountsData.length > 0 && !selectedAccount) {
+          setSelectedAccount(accountsData[0])
+        }
+      } catch (error) {
+        console.error('Error fetching accounts:', error)
+      } finally {
+        setIsLoadingAccounts(false)
+      }
+    }
+
+    fetchAccounts()
+  }, [selectedAccount])
+
+  const handleAccountSelect = (account: Account) => {
+    setSelectedAccount(account)
+  }
 
   useEffect(() => {    
     if (isDesktop) {
@@ -140,14 +171,6 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     { name: "Alerts", icon: Siren, path: "/alerts" },
     { name: "Items", icon: Logs, path: "/items" },
     { name: "Feedback", icon: MessageCircleMore, path: "/feedback-queues" },
-  ]
-
-  const accounts = [
-    { name: "Call Criteria", avatar: "/avatar1.png", initials: "CC" },
-    { name: "Legal Leads", avatar: "/avatar2.png", initials: "LL" },
-    { name: "Snap, Inc", avatar: "/avatar4.png", initials: "SN" },
-    { name: "HuggingFace", avatar: "/avatar5.png", initials: "HF" },
-    { name: "MATRE", avatar: "/avatar3.png", initials: "M" },
   ]
 
   const LeftSidebar = () => (
@@ -223,12 +246,15 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               className={`w-full justify-start px-0 cursor-pointer`}
             >
               <Avatar className={`h-8 w-8 ${isLeftSidebarOpen ? 'mr-2' : ''}`}>
-                <AvatarImage src={accounts[0].avatar} alt={accounts[0].name} />
+                <AvatarImage 
+                  src={`/avatar-${selectedAccount?.key || '1'}.png`} 
+                  alt={selectedAccount?.name || 'Account'} 
+                />
                 <AvatarFallback className="bg-background dark:bg-border">
-                  {accounts[0].initials}
+                  {selectedAccount?.name?.split(' ').map(word => word[0]).join('') || 'AC'}
                 </AvatarFallback>
               </Avatar>
-              {isLeftSidebarOpen && <span>{accounts[0].name}</span>}
+              {isLeftSidebarOpen && <span>{selectedAccount?.name || 'Select Account'}</span>}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-[200px]">
@@ -247,17 +273,30 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 </DropdownMenuItem>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="right" align="start" className="w-[200px]">
-                {accounts.map((account) => (
-                  <DropdownMenuItem key={account.name} className="cursor-pointer">
-                    <Avatar className="h-8 w-8 mr-2">
-                      <AvatarImage src={account.avatar} alt={account.name} />
-                      <AvatarFallback className="bg-muted dark:bg-border">
-                        {account.initials}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span>{account.name}</span>
-                  </DropdownMenuItem>
-                ))}
+                {isLoadingAccounts ? (
+                  <DropdownMenuItem>Loading accounts...</DropdownMenuItem>
+                ) : accounts.length === 0 ? (
+                  <DropdownMenuItem>No accounts found</DropdownMenuItem>
+                ) : (
+                  accounts.map((account) => (
+                    <DropdownMenuItem 
+                      key={account.id} 
+                      className="cursor-pointer"
+                      onClick={() => handleAccountSelect(account)}
+                    >
+                      <Avatar className="h-8 w-8 mr-2">
+                        <AvatarImage 
+                          src={`/avatar-${account.key}.png`} 
+                          alt={account.name} 
+                        />
+                        <AvatarFallback className="bg-muted dark:bg-border">
+                          {account.name.split(' ').map(word => word[0]).join('')}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span>{account.name}</span>
+                    </DropdownMenuItem>
+                  ))
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </DropdownMenuContent>
