@@ -77,7 +77,20 @@ const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['type'] =
     id: rawEvaluation.id || '',
     type: rawEvaluation.type || '',
     parameters: rawEvaluation.parameters || {},
-    metrics: rawEvaluation.metrics || {},
+    metrics: (() => {
+      try {
+        if (!rawEvaluation.metrics) return []
+        if (Array.isArray(rawEvaluation.metrics)) return rawEvaluation.metrics
+        if (typeof rawEvaluation.metrics === 'string') {
+          const parsed = JSON.parse(rawEvaluation.metrics)
+          return Array.isArray(parsed) ? parsed : []
+        }
+        return []
+      } catch (e) {
+        console.warn('Error parsing metrics:', e)
+        return []
+      }
+    })(),
     inferences: rawEvaluation.inferences || 0,
     cost: rawEvaluation.cost || 0,
     createdAt: rawEvaluation.createdAt || new Date().toISOString(),
