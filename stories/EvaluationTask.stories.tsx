@@ -14,112 +14,108 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof EvaluationTask>;
 
-const createTask = (id: number, processedItems: number, totalItems: number): EvaluationTaskProps => ({
+// Sample data for our stories
+const createSampleData = () => ({
+  accuracy: 85.5,
+  metrics: [
+    { name: "Accuracy", value: 85.5, unit: "%", maximum: 100, priority: true },
+    { name: "Precision", value: 88.2, unit: "%", maximum: 100, priority: true },
+    { name: "Sensitivity", value: 82.1, unit: "%", maximum: 100, priority: true },
+    { name: "Specificity", value: 91.3, unit: "%", maximum: 100, priority: true }
+  ],
+  processedItems: 150,
+  totalItems: 200,
+  progress: 75,
+  inferences: 150,
+  cost: 0.15,
+  status: 'running',
+  elapsedSeconds: 3600,
+  estimatedRemainingSeconds: 1200,
+  confusionMatrix: {
+    matrix: [
+      [45, 5],
+      [10, 40]
+    ],
+    labels: ["Positive", "Negative"]
+  },
+  scoreResults: Array.from({ length: 20 }, (_, i) => ({
+    id: `result-${i}`,
+    value: Math.random() > 0.15 ? 1 : 0,
+    confidence: 0.7 + (Math.random() * 0.3),
+    metadata: JSON.stringify({
+      predicted_value: `Category ${(i % 3) + 1}`,
+      true_value: `Category ${(i % 3) + 1 + (Math.random() > 0.85 ? 1 : 0)}`
+    }),
+    createdAt: new Date().toISOString(),
+    itemId: `item-${i}`,
+    EvaluationId: 'eval-1',
+    scorecardId: 'scorecard-1'
+  }))
+})
+
+// Base task props
+const baseTask: EvaluationTaskProps = {
+  variant: 'detail',
   task: {
-    id: id.toString(),
-    type: 'Evaluation started',
-    scorecard: 'Test Scorecard',
-    score: 'Test Score',
+    id: '1',
+    type: 'Evaluation running',
+    scorecard: 'Customer Intent Analysis',
+    score: 'Intent Classification',
     time: '2 hours ago',
-    summary: 'Evaluation Summary',
-    description: 'Evaluation Description',
-    data: {
-      accuracy: 90,
-      metrics: [
-        {
-          name: "Accuracy",
-          value: 90,
-          unit: "%",
-          maximum: 100,
-          priority: true
-        },
-        {
-          name: "Precision",
-          value: 91,
-          unit: "%",
-          maximum: 100,
-          priority: true
-        },
-        {
-          name: "Sensitivity",
-          value: 92,
-          unit: "%",
-          maximum: 100,
-          priority: true
-        },
-        {
-          name: "Specificity",
-          value: 89,
-          unit: "%",
-          maximum: 100,
-          priority: true
-        }
-      ],
-      processedItems,
-      totalItems,
-      progress: Math.round((processedItems / totalItems) * 100),
-      inferences: 150,
-      cost: 5,
-      status: 'In Progress',
-      elapsedSeconds: 5400,
-      estimatedRemainingSeconds: 1800,
-      confusionMatrix: {
-        matrix: [
-          [45, 3, 2],
-          [2, 43, 2],
-          [1, 2, 40],
-        ],
-        labels: ["Positive", "Negative", "Neutral"],
-      }
-    },
+    data: createSampleData()
   },
-});
+  isFullWidth: true,
+  onToggleFullWidth: () => console.log('Toggle full width'),
+  onClose: () => console.log('Close')
+}
 
-export const Grid: Story = {
-  args: createTask(1, 75, 100),
-};
-
-export const Detail: Story = {
-  args: {
-    ...createTask(2, 90, 100),
-    variant: 'detail',
-    isFullWidth: false,
-    onToggleFullWidth: () => console.log('Toggle full width'),
-    onClose: () => console.log('Close'),
-  },
+// Story for one-column layout (<800px)
+export const OneColumn: Story = {
+  args: baseTask,
   decorators: [
     (Story) => (
-      <div className="w-[600px]">
+      <div style={{ width: '700px', height: '800px' }}>
         <Story />
       </div>
-    ),
-  ],
-};
+    )
+  ]
+}
 
-export const DetailFullWidth: Story = {
-  args: {
-    ...Detail.args,
-    isFullWidth: true,
-  },
+// Story for two-column layout (800px-1179px)
+export const TwoColumns: Story = {
+  args: baseTask,
+  decorators: [
+    (Story) => (
+      <div style={{ width: '1000px', height: '800px' }}>
+        <Story />
+      </div>
+    )
+  ]
+}
+
+// Story for three-column layout (1180px+)
+export const ThreeColumns: Story = {
+  args: baseTask,
+  decorators: [
+    (Story) => (
+      <div style={{ width: '1300px', height: '800px' }}>
+        <Story />
+      </div>
+    )
+  ]
+}
+
+// Story showing responsive behavior
+export const Responsive: Story = {
+  args: baseTask,
   parameters: {
-    layout: 'fullscreen',
+    layout: 'fullscreen'
   },
   decorators: [
     (Story) => (
-      <div className="w-full h-screen p-4">
+      <div className="p-4 w-full h-screen resize overflow-auto">
         <Story />
       </div>
-    ),
-  ],
-};
-
-export const GridWithMany = {
-  render: () => (
-    <div className="grid grid-cols-2 gap-4">
-      <EvaluationTask {...createTask(1, 25, 100)} />
-      <EvaluationTask {...createTask(2, 50, 100)} />
-      <EvaluationTask {...createTask(3, 75, 100)} />
-      <EvaluationTask {...createTask(4, 100, 100)} />
-    </div>
-  ),
-};
+    )
+  ]
+}

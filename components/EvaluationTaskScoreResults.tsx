@@ -23,13 +23,19 @@ export interface EvaluationTaskScoreResultsProps {
   accuracy: number
   selectedPredictedValue?: string | null
   selectedActualValue?: string | null
+  onResultSelect?: (result: Schema['ScoreResult']['type']) => void
+  selectedScoreResult?: Schema['ScoreResult']['type'] | null
+  navigationControls?: React.ReactNode
 }
 
 export function EvaluationTaskScoreResults({ 
   results, 
   accuracy,
   selectedPredictedValue,
-  selectedActualValue
+  selectedActualValue,
+  onResultSelect,
+  selectedScoreResult,
+  navigationControls
 }: EvaluationTaskScoreResultsProps) {
   const [filters, setFilters] = useState<FilterState>({
     showCorrect: null,
@@ -108,14 +114,15 @@ export function EvaluationTaskScoreResults({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="relative">
+      <div className="flex-none relative mb-1">
         <div className="flex items-start">
-          <Split className="w-4 h-4 mr-1 mt-0.5 text-foreground shrink-0" />
+          <Split className="w-4 h-4 mr-1 text-foreground shrink-0" />
           <span className="text-sm text-foreground">
             {filteredResults.length} Predictions
           </span>
         </div>
-        <div className="absolute bottom-0 right-0 flex items-center gap-1">
+        <div className="absolute bottom-1 right-0 flex items-center gap-2">
+          {navigationControls}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <div>
@@ -184,24 +191,30 @@ export function EvaluationTaskScoreResults({
           />
         </div>
       </div>
-      <div className="flex flex-col flex-1 gap-4 mt-1">
+      <div className="flex-none mb-4">
         <AccuracyBar 
           accuracy={filteredAccuracy} 
           onSegmentClick={handleAccuracySegmentClick}
         />
-        <div className="flex-1 overflow-y-auto">
-          <div className="space-y-2">
-            {filteredResults.map((result) => (
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="space-y-2">
+          {filteredResults.map((result) => (
+            <div 
+              key={result.id}
+              onClick={() => onResultSelect?.(result)}
+              className="cursor-pointer"
+            >
               <EvaluationTaskScoreResult
-                key={result.id}
                 id={result.id}
                 value={result.value}
                 confidence={result.confidence}
                 metadata={result.metadata}
                 correct={result.value === 1}
+                isFocused={selectedScoreResult?.id === result.id}
               />
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

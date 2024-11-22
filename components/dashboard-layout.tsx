@@ -6,6 +6,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
 import { generateClient } from "aws-amplify/data"
+import { listFromModel } from "@/utils/amplify-helpers"
 import type { Schema } from "@/amplify/data/resource"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -97,7 +98,9 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   useEffect(() => {
     async function fetchAccounts() {
       try {
-        const { data: accountsData } = await client.models.Account.list()
+        const { data: accountsData } = await listFromModel<Schema['Account']['type']>(
+          client.models.Account
+        )
         setAccounts(accountsData)
         if (accountsData.length > 0 && !selectedAccount) {
           setSelectedAccount(accountsData[0])
@@ -176,7 +179,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   const LeftSidebar = () => (
     <div className={`flex flex-col h-full py-2 bg-muted ${isMobile ? 'pr-3' : ''}`}>
       <div className={`mb-4 ${isLeftSidebarOpen ? 'pl-2' : ''}`}>
-        <Link href="/" className={`block ${isLeftSidebarOpen ? 'w-full max-w-md' : 'w-8'}`}>
+        <Link href="/" className={`block ${isLeftSidebarOpen ? 'w-full max-w-md' : 'w-12 pl-2'}`}>
           {isLeftSidebarOpen ? (
             <SquareLogo variant={LogoVariant.Wide} />
           ) : (
@@ -611,7 +614,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         >
           <div className="flex-1 flex flex-col bg-background rounded-lg overflow-hidden">
             <div className="flex-1 overflow-y-auto">
-              <div className={`h-full pr-2 pb-0 pl-2 ${isMobile ? '' : 'pt-2'}`}>
+              <div className={`h-full pr-2 pb-2 pl-2 ${isMobile ? '' : 'pt-2'}`}>
                 {children}
               </div>
             </div>

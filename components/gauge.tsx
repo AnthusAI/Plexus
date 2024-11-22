@@ -210,14 +210,17 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   const clipHeight = showTicks ? 168 : 144
 
   return (
-    <div className="flex flex-col items-center w-full">
-      <div className="relative w-full max-w-[20em]">
-        <div className="relative w-full aspect-square overflow-visible">
+    <div className="flex flex-col items-center w-full h-full max-h-[220px]">
+      <div className="relative w-full h-full" style={{ maxWidth: '20em' }}>
+        <div className="relative w-full h-full">
           <svg 
-            width="100%" 
-            height="100%" 
             viewBox={`-120 -${topPadding} 240 ${viewBoxHeight}`}
             preserveAspectRatio="xMidYMid meet"
+            style={{ 
+              width: '100%', 
+              height: '100%',
+              maxHeight: '100%' 
+            }}
           >
             <defs>
               <clipPath id="gaugeClip">
@@ -282,13 +285,12 @@ const GaugeComponent: React.FC<GaugeProps> = ({
           {title && (
             <div 
               className={cn(
-                "absolute left-1/2 -translate-x-1/2 flex items-center gap-2 text-base whitespace-nowrap",
+                "absolute left-1/2 -translate-x-1/2 flex items-center gap-2 whitespace-nowrap",
+                "text-[clamp(0.75rem,4vw,1rem)]",
                 priority ? "text-focus" : "text-foreground"
               )}
               style={{
-                bottom: showTicks 
-                  ? 'max(-10px, calc(-22px + 20%))' 
-                  : 'max(-10px, calc(-28px + 26%))'
+                bottom: showTicks ? '5%' : '2%'
               }}
             >
               {title}
@@ -315,7 +317,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
           )}
         </div>
         {showInfo && information && (
-          <div className="w-full text-sm text-left -mt-6 mb-8 pl-4 text-muted-foreground">
+          <div className="w-full text-sm text-left -mt-6 mb-8 pl-4 text-muted-foreground overflow-y-auto max-h-[100px]">
             {information.split('\n\n').map((paragraph, index) => (
               <p key={index} className={index > 0 ? 'mt-4' : ''}>
                 {paragraph}
