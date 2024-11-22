@@ -3,7 +3,7 @@ import logging
 import traceback
 import graphviz
 from types import FunctionType
-from typing import Type, Tuple, Literal, Optional, Any, TypedDict, List, Dict
+from typing import Type, Tuple, Literal, Optional, Any, TypedDict, List, Dict, Union
 from pydantic import BaseModel, ConfigDict, create_model, Field
 import concurrent.futures
 import aiosqlite
@@ -32,13 +32,15 @@ else:
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from pathlib import Path
 import uuid
+from langgraph.errors import NodeInterrupt
 
 class BatchProcessingPause(Exception):
     """Signals that execution has been paused for batch processing"""
-    def __init__(self, thread_id: str, state: dict):
+    def __init__(self, thread_id: str, state: dict, message: str = None):
         self.thread_id = thread_id
         self.state = state
-        super().__init__(f"Execution paused for batch processing. Thread ID: {thread_id}")
+        self.message = message or "Execution paused for batch processing"
+        super().__init__(f"{self.message}. Thread ID: {thread_id}")
 
 class LangGraphScore(Score, LangChainUser):
     """
@@ -64,7 +66,10 @@ class LangGraphScore(Score, LangChainUser):
             default="./.plexus/checkpoints/langgraph.db",
             description="Path to SQLite checkpoint database"
         )
-        thread_id: Optional[str] = None  # For persistence across calls
+        thread_id: Optional[str] = Field(
+            default=None,
+            description="Deprecated - thread_id is now automatically set from content_id"
+        )
         postgres_url: Optional[str] = Field(
             default=None,
             description="PostgreSQL connection URL for LangGraph checkpoints"
@@ -83,6 +88,10 @@ class LangGraphScore(Score, LangChainUser):
         text: str
         metadata: Optional[dict] = None
         results: Optional[dict] = None
+        messages: Optional[List[Dict[str, Any]]] = Field(
+            default=None,
+            description="Messages for LLM prompts"
+        )
         is_not_empty: Optional[bool] = None
         value: Optional[str] = None
         explanation: Optional[str] = None
@@ -92,7 +101,6 @@ class LangGraphScore(Score, LangChainUser):
         classification: Optional[str] = None
         confidence: Optional[float] = None
         retry_count: Optional[int] = Field(default=0)
-        messages: Optional[List[Dict[str, Any]]] = None
         at_llm_breakpoint: Optional[bool] = Field(default=False)
 
         model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -216,10 +224,15 @@ class LangGraphScore(Score, LangChainUser):
         workflow = StateGraph(self.GraphState)
         node_instances = []
 
+        # Add final node
+        def final_function(state):
+            return state
+        workflow.add_node('final', final_function)
+
         # First pass: Collect node instances
         if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
             for node_configuration_entry in self.parameters.graph:
-                logging.info(f"Processing node configuration: {node_configuration_entry}")
+                logging.debug(f"Processing node configuration: {node_configuration_entry}")
                 
                 for attribute in ['model_provider', 'model_name', 'model_region', 
                                 'temperature', 'max_tokens']:
@@ -236,8 +249,6 @@ class LangGraphScore(Score, LangChainUser):
                         node_class = self._import_class(node_class_name)
                         if node_class is None:
                             raise ValueError(f"Could not import class {node_class_name}")
-                        logging.info(f"Node class type: {type(node_class)}")
-                        logging.info(f"Node class dir: {dir(node_class)}")
                         
                         node_instance = node_class(**node_configuration_entry)
                         node_instances.append((node_name, node_instance))
@@ -248,32 +259,23 @@ class LangGraphScore(Score, LangChainUser):
         else:
             raise ValueError("Invalid or missing graph configuration in parameters.")
 
-        # Add input aliasing node if needed
-        if hasattr(self.parameters, 'input') and self.parameters.input is not None:
-            input_aliasing_function = LangGraphScore.generate_input_aliasing_function(
-                self.parameters.input
-            )
-            workflow.add_node('input_aliasing', input_aliasing_function)
-            entry_point = 'input_aliasing'
-        else:
-            entry_point = None
-
-        # Process nodes (keeping this synchronous since it's CPU-bound)
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            processed_nodes = list(executor.map(
-                LangGraphScore.process_node, node_instances
+        # Process nodes
+        for node_name, node_instance in node_instances:
+            workflow.add_node(node_name, node_instance.build_compiled_workflow(
+                graph_state_class=LangGraphScore.GraphState
             ))
 
-        # Add nodes and edges
-        for node_name, node_workflow in processed_nodes:
-            workflow.add_node(node_name, node_workflow)
+        # Set entry point to first node
+        first_node = node_instances[0][0]
+        workflow.set_entry_point(first_node)
 
-        # Add the 'final' node before we try to connect to it
-        def final_function(state):
-            return state
-        workflow.add_node('final', final_function)
+        # Add remaining edges
+        for i in range(len(node_instances) - 1):
+            current_node = node_instances[i][0]
+            next_node = node_instances[i + 1][0]
+            workflow.add_edge(current_node, next_node)
 
-        LangGraphScore.add_edges(workflow, node_instances, entry_point, self.parameters.graph)
+        # Add edge from last node to final
         workflow.add_edge(node_instances[-1][0], 'final')
 
         # Add output aliasing if needed
@@ -287,11 +289,7 @@ class LangGraphScore(Score, LangChainUser):
         else:
             final_node = 'final'
 
-        # Set entry and end points
-        if entry_point:
-            workflow.set_entry_point(entry_point)
-        else:
-            workflow.set_entry_point(node_instances[0][0])
+        # Add edge to END
         workflow.add_edge(final_node, END)
 
         try:
@@ -650,51 +648,68 @@ class LangGraphScore(Score, LangChainUser):
             return state
         return value_setter
 
-    async def predict(self, context, model_input: Score.Input):
+    async def predict(self, context, model_input: Optional[Union[Score.Input, dict]]):
         try:
-            thread_id = self.parameters.thread_id or str(uuid.uuid4())
-            logging.info(f"Using thread_id: {thread_id}")
-            
+            def truncate_strings(obj, max_length=80):
+                if isinstance(obj, dict):
+                    return {k: truncate_strings(v) for k, v in obj.items()}
+                elif isinstance(obj, str):
+                    return f"{obj[:max_length]}..." if len(obj) > max_length else obj
+                return obj
+
+            # Handle resume case (model_input is None)
+            if model_input is None:
+                logging.info("Resuming from checkpoint - passing None to continue")
+                thread_id = None  # Will be in config
+                initial_state = None  # Let LangGraph use checkpoint
+            else:
+                # Normal execution with input
+                thread_id = model_input.metadata.get('content_id') if hasattr(model_input, 'metadata') else None
+                if not thread_id:
+                    thread_id = str(uuid.uuid4())
+                    logging.warning(
+                        f"No content_id found in metadata, using generated UUID: {thread_id}"
+                    )
+                
+                # Create initial state with all required fields
+                initial_state = self.GraphState(
+                    text=self.preprocess_text(model_input.text),
+                    metadata=model_input.metadata,
+                    results={
+                        result['name']: {
+                            "id": result['id'],
+                            "value": result['result'].value if result['result'] else None,
+                            "explanation": result['result'].explanation if result['result'] else None
+                        }
+                        for result in model_input.results or []
+                    },
+                    messages=None  # Ensure messages field exists in initial state
+                ).model_dump()
+
+            logging.info(f"Using content_id as thread_id: {thread_id}")
             config = {
                 "configurable": {
-                    "thread_id": thread_id
+                    "thread_id": str(thread_id) if thread_id else None
                 }
             }
 
-            text = model_input.text
-            metadata = model_input.metadata
-            results = {
-                result['name']: {
-                    "id": result['id'],
-                    "value": result['result'].value if result['result'] else None,
-                    "explanation": result['result'].explanation if result['result'] else None
-                }
-                for result in model_input.results or []
-            }
-
-            processed_text = self.preprocess_text(text)
-            final_result = None
+            batch_mode = os.getenv('PLEXUS_ENABLE_BATCH_MODE', '').lower() == 'true'
+            breakpoints_enabled = os.getenv('PLEXUS_ENABLE_LLM_BREAKPOINTS', '').lower() == 'true'
+            logging.info(
+                f"Mode: batch_mode={batch_mode}, breakpoints_enabled={breakpoints_enabled}"
+            )
             
-            # Start invoking the workflow
-            async for event in self.workflow.astream(
-                {
-                    "text": processed_text,
-                    "metadata": metadata,
-                    "results": results
-                },
-                config=config
-            ):
-                # Check if we've hit a breakpoint
-                if isinstance(event, dict) and event.get('at_llm_breakpoint'):
-                    logging.info("Hit LLM breakpoint, pausing for batch processing")
-                    await self.cleanup()  # Clean up before pausing
-                    raise BatchProcessingPause(thread_id, event)
-                
-                # Store the latest event as our potential final result
-                final_result = event
-                logging.info(f"Received event: {event}")
-
-            # After the stream ends, check if we have a valid result
+            try:
+                # Use ainvoke instead of astream
+                final_result = await self.workflow.ainvoke(
+                    initial_state,  # Will be None when resuming
+                    config=config
+                )
+            except NodeInterrupt:
+                # Let NodeInterrupt propagate up without trying to create a result
+                raise
+            
+            # After invoke completes, check if we have a valid result
             if isinstance(final_result, dict):
                 # Unwrap output_aliasing if present
                 result_dict = final_result.get('output_aliasing', final_result)
@@ -719,13 +734,8 @@ class LangGraphScore(Score, LangChainUser):
             logging.error(f"Final event: {final_result}")
             return None
 
-        except BatchProcessingPause:
-            # Clean up and re-raise
-            await self.cleanup()
-            raise
         except Exception as e:
             logging.error(f"Error during app.ainvoke: {str(e)}")
-            await self.cleanup()
             raise
 
     def preprocess_text(self, text):
@@ -737,6 +747,9 @@ class LangGraphScore(Score, LangChainUser):
     async def cleanup(self):
         """Cleanup resources."""
         try:
+            # Give LangGraph a chance to finish any pending operations
+            await asyncio.sleep(0.1)
+
             # Close PostgreSQL checkpointer if it was initialized
             if hasattr(self, '_checkpointer_context') and \
                self._checkpointer_context is not None:

@@ -1,12 +1,14 @@
 from typing import List, Dict, Any, Optional, Tuple, Annotated, Union
 from pydantic import Field, BaseModel, ConfigDict
 from langgraph.graph import StateGraph
+from langgraph.errors import NodeInterrupt
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, SystemMessage
 from plexus.scores.nodes.BaseNode import BaseNode
 from plexus.CustomLogging import logging
 import traceback
+import os
 
 class Classifier(BaseNode):
     """
@@ -69,19 +71,25 @@ class Classifier(BaseNode):
 
         async def llm_request(state):
             logging.info("Entering llm_request node")
-            logging.info(f"Initial state type: {type(state)}")
+            logging.info(f"Initial state: {state}")
             
             # Convert to dict if needed
             if not isinstance(state, dict):
                 state = state.model_dump()
             
+            # Check if messages already exist in state
+            if state.get('messages'):
+                logging.info("Found existing messages in state - using these instead of building new ones")
+                logging.info(f"Existing messages: {state['messages']}")
+                return state
+            
             # Build messages from chat history or initial prompt if empty
             if not state.get('chat_history'):
-                logging.info("No chat history, building initial messages")
+                logging.info("No chat history or existing messages, building initial messages")
                 try:
                     prompt = prompt_templates[0].format_prompt(**state)
                     messages = prompt.to_messages()
-                    logging.info(f"Built messages: {[type(m).__name__ for m in messages]}")
+                    logging.info(f"Built new messages: {[type(m).__name__ for m in messages]}")
                 except Exception as e:
                     logging.error(f"Error building messages: {e}")
                     raise
@@ -89,32 +97,28 @@ class Classifier(BaseNode):
                 logging.info(f"Using existing chat history with {len(state['chat_history'])} messages")
                 messages = state['chat_history']
 
-            try:
-                # Serialize messages to dict format
-                serialized_messages = []
-                for msg in messages:
-                    msg_dict = {
-                        "type": msg.__class__.__name__.lower().replace("message", ""),
-                        "content": msg.content,
-                        "_type": type(msg).__name__
-                    }
-                    serialized_messages.append(msg_dict)
-                    logging.info(f"Serialized message: {msg_dict}")
-                
-                # Return state as dict with all fields
-                result_state = {**state}  # Make a copy
-                result_state.update({
-                    'messages': serialized_messages,
-                    'at_llm_breakpoint': True
-                })
-                
-                logging.info(f"Final state keys: {result_state.keys()}")
-                return result_state
-
-            except Exception as e:
-                logging.error(f"Error in state transformation: {e}")
-                logging.error(f"Stack trace: {traceback.format_exc()}")
-                raise
+            # Serialize messages to dict format
+            serialized_messages = []
+            for msg in messages:
+                msg_dict = {
+                    "type": msg.__class__.__name__.lower().replace("message", ""),
+                    "content": msg.content,
+                    "_type": type(msg).__name__
+                }
+                serialized_messages.append(msg_dict)
+                truncated_msg = {
+                    k: f"{str(v)[:80]}..." if isinstance(v, str) and len(str(v)) > 80 else v
+                    for k, v in msg_dict.items()
+                }
+                logging.info(f"Serialized new message: {truncated_msg}")
+            
+            # Return state with messages
+            new_state = {
+                **state,
+                "messages": serialized_messages
+            }
+            logging.info("Returning state with newly built messages")
+            return new_state
 
         return llm_request
 
@@ -201,6 +205,20 @@ class Classifier(BaseNode):
                 state = state.model_dump()
             
             logging.info(f"State keys: {state.keys()}")
+            if 'messages' in state:
+                logging.info(f"Found messages in state: {state['messages']}")
+            else:
+                logging.error("No messages found in state!")
+
+            # Check if we should break before making the API call
+            batch_mode = os.getenv('PLEXUS_ENABLE_BATCH_MODE', '').lower() == 'true'
+            breakpoints_enabled = os.getenv('PLEXUS_ENABLE_LLM_BREAKPOINTS', '').lower() == 'true'
+            
+            if batch_mode and breakpoints_enabled:
+                logging.info("Breaking before LLM API call with messages in state")
+                raise NodeInterrupt(
+                    "Pausing before LLM API call"
+                )
             
             try:
                 if 'messages' not in state or not state['messages']:

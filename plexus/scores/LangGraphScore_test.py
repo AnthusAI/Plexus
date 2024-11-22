@@ -5,6 +5,7 @@ from plexus.scores.Score import Score
 from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
 import logging
+import os
 
 # Set the default fixture loop scope to function
 pytest.asyncio_fixture_scope = "function"
@@ -701,3 +702,34 @@ async def test_batch_processing_with_checkpointer(basic_graph_config, mock_azure
             ))
         
         mock_checkpointer_context.__aexit__.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_batch_mode_with_item_id(basic_graph_config, mock_azure_openai):
+    """Test batch mode with item ID for thread identification"""
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
+               return_value=mock_azure_openai), \
+         patch.dict(os.environ, {'PLEXUS_ENABLE_BATCH_MODE': 'true'}):
+        
+        instance = await LangGraphScore.create(**basic_graph_config)
+        
+        # Mock workflow
+        mock_workflow = MagicMock()
+        mock_workflow.astream = MagicMock(return_value=AsyncIteratorMock([{
+            "text": "test text",
+            "metadata": {},
+            "at_llm_breakpoint": True,
+            "messages": [{"type": "human", "content": "test"}],
+        }]))
+        instance.workflow = mock_workflow
+        
+        test_item_id = "test_item_123"
+        with pytest.raises(BatchProcessingPause) as exc_info:
+            await instance.predict(None, Score.Input(
+                text="test text",
+                metadata={"item_id": test_item_id},
+                results=[]
+            ))
+        
+        assert exc_info.value.thread_id == test_item_id
+        assert exc_info.value.state["at_llm_breakpoint"] is True
+        assert exc_info.value.state["messages"] is not None
