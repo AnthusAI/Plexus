@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X, Split } from 'lucide-react'
+import { FlaskConical, Square, X, Split, ChevronLeft } from 'lucide-react'
 import MetricsGauges from '@/components/MetricsGauges'
 import { ProgressBar } from "@/components/ui/progress-bar"
 import { ConfusionMatrix } from '@/components/confusion-matrix'
@@ -11,6 +11,8 @@ import { EvaluationTaskScoreResult } from '@/components/EvaluationTaskScoreResul
 import type { Schema } from "@/amplify/data/resource"
 import MetricsGaugesExplanation from '@/components/MetricsGaugesExplanation'
 import { EvaluationTaskScoreResults } from '@/components/EvaluationTaskScoreResults'
+import { EvaluationTaskScoreResultDetail } from '@/components/EvaluationTaskScoreResultDetail'
+import { useResizeObserver } from '@/hooks/use-resize-observer'
 
 export interface EvaluationMetric {
   name: string
@@ -45,6 +47,7 @@ export interface EvaluationTaskData {
   predictedClassDistribution?: { label: string, count: number }[]
   isPredictedClassDistributionBalanced?: boolean | null
   scoreResults?: Schema['ScoreResult']['type'][]
+  selectedScoreResult?: Schema['ScoreResult']['type'] | null
 }
 
 export interface EvaluationTaskProps {
@@ -143,94 +146,164 @@ const DetailContent = React.memo(({
   metrics: any[]
   metricsVariant: 'grid' | 'detail'
 }) => {
+  const [selectedScoreResult, setSelectedScoreResult] = useState<Schema['ScoreResult']['type'] | null>(null)
+  const [containerWidth, setContainerWidth] = useState(0)
+  const containerRef = useRef<HTMLDivElement>(null)
   const [selectedPredictedActual, setSelectedPredictedActual] = useState<{
     predicted: string | null
     actual: string | null
   }>({ predicted: null, actual: null })
 
+  useResizeObserver(containerRef, (entry) => {
+    setContainerWidth(entry.contentRect.width)
+  })
+
   const handleActualLabelSelect = (label: string) => {
     setSelectedPredictedActual(prev => ({
-      predicted: null,
-      actual: prev.actual === label ? null : label
+      ...prev,
+      actual: prev.actual === label ? null : label,
+      predicted: null
     }))
   }
 
   const handlePredictedLabelSelect = (label: string) => {
     setSelectedPredictedActual(prev => ({
+      ...prev,
       predicted: prev.predicted === label ? null : label,
       actual: null
     }))
   }
 
+  const isWideEnoughForTwo = containerWidth >= 800
+  const isWideEnoughForThree = containerWidth >= 1180 && isFullWidth
+  
+  const showAsColumns = isWideEnoughForTwo
+  const showMainPanel = !selectedScoreResult || isWideEnoughForThree
+  const showResultsList = !selectedScoreResult || showAsColumns
+  const showResultDetail = selectedScoreResult
+
+  const handleScoreResultSelect = (result: Schema['ScoreResult']['type']) => {
+    setSelectedScoreResult(result)
+  }
+
+  const handleScoreResultClose = () => {
+    setSelectedScoreResult(null)
+  }
+
   return (
-    <div className={`w-full ${isFullWidth ? 'grid grid-cols-2 gap-4' : ''}`}>
-      <div className="w-full">
-        <div className="mb-4">
-          <ProgressBar 
-            progress={data.progress}
-            elapsedTime={data.elapsedSeconds !== null ? 
-              formatDuration(data.elapsedSeconds) : undefined}
-            processedItems={data.processedItems}
-            totalItems={data.totalItems}
-            estimatedTimeRemaining={data.estimatedRemainingSeconds !== null ? 
-              formatDuration(data.estimatedRemainingSeconds) : undefined}
-            color="secondary"
-            isFocused={true}
-          />
-        </div>
+    <div 
+      ref={containerRef}
+      className="w-full min-w-[300px] h-full"
+    >
+      <div className={`${showAsColumns ? 'grid gap-4' : 'space-y-4'} h-full`} 
+        style={{
+          gridTemplateColumns: isWideEnoughForThree && selectedScoreResult 
+            ? '1fr 1fr 1fr' 
+            : isWideEnoughForTwo
+              ? selectedScoreResult 
+                ? '1fr 1fr'  // Show results list and detail only
+                : '1fr 1fr'  // Show main and results list
+              : '1fr'
+        }}
+      >
+        {showMainPanel && (
+          <div className="w-full h-full overflow-y-auto pr-2">
+            <div className="mb-4">
+              <ProgressBar 
+                progress={data.progress}
+                elapsedTime={data.elapsedSeconds !== null ? 
+                  formatDuration(data.elapsedSeconds) : undefined}
+                processedItems={data.processedItems}
+                totalItems={data.totalItems}
+                estimatedTimeRemaining={data.estimatedRemainingSeconds !== null ? 
+                  formatDuration(data.estimatedRemainingSeconds) : undefined}
+                color="secondary"
+                isFocused={true}
+              />
+            </div>
 
-        <div className="mb-4">
-          <ClassDistributionVisualizer
-            data={data.datasetClassDistribution}
-            isBalanced={data.isDatasetClassDistributionBalanced}
-            onLabelSelect={handleActualLabelSelect}
-          />
-        </div>
+            <div className="mb-4">
+              <ClassDistributionVisualizer
+                data={data.datasetClassDistribution}
+                isBalanced={data.isDatasetClassDistributionBalanced}
+                onLabelSelect={handleActualLabelSelect}
+              />
+            </div>
 
-        <div className="mb-4">
-          <PredictedClassDistributionVisualizer
-            data={data.predictedClassDistribution}
-            onLabelSelect={handlePredictedLabelSelect}
-          />
-        </div>
+            <div className="mb-4">
+              <PredictedClassDistributionVisualizer
+                data={data.predictedClassDistribution}
+                onLabelSelect={handlePredictedLabelSelect}
+              />
+            </div>
 
-        <div className="mb-2">
-          <MetricsGaugesExplanation
-            explanation={data.metricsExplanation}
-            goal={data.scoreGoal}
-          />
-        </div>
+            <div className="mb-2">
+              <MetricsGaugesExplanation
+                explanation={data.metricsExplanation}
+                goal={data.scoreGoal}
+              />
+            </div>
 
-        <MetricsGauges 
-          gauges={metrics} 
-          variant="detail"
-        />
-
-        {data.confusionMatrix?.matrix && 
-         data.confusionMatrix.matrix.length > 0 && 
-         data.confusionMatrix.labels && (
-          <div className="">
-            <ConfusionMatrix 
-              data={{
-                matrix: data.confusionMatrix.matrix,
-                labels: data.confusionMatrix.labels
-              }}
-              onSelectionChange={setSelectedPredictedActual}
+            <MetricsGauges 
+              gauges={metrics} 
+              variant="detail"
             />
+
+            {data.confusionMatrix?.matrix && 
+             data.confusionMatrix.matrix.length > 0 && 
+             data.confusionMatrix.labels && (
+              <div className="mt-4">
+                <ConfusionMatrix 
+                  data={{
+                    matrix: data.confusionMatrix.matrix,
+                    labels: data.confusionMatrix.labels
+                  }}
+                  onSelectionChange={setSelectedPredictedActual}
+                />
+              </div>
+            )}
+
+            {!showAsColumns && data.scoreResults && data.scoreResults.length > 0 && (
+              <div className="mt-4">
+                <EvaluationTaskScoreResults 
+                  results={data.scoreResults} 
+                  accuracy={data.accuracy ?? 0}
+                  selectedPredictedValue={selectedPredictedActual.predicted}
+                  selectedActualValue={selectedPredictedActual.actual}
+                  onResultSelect={handleScoreResultSelect}
+                  selectedScoreResult={selectedScoreResult}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {showAsColumns && showResultsList && data.scoreResults && data.scoreResults.length > 0 && (
+          <div className="w-full h-full relative">
+            <div className="absolute inset-0 pr-0">
+              <EvaluationTaskScoreResults 
+                results={data.scoreResults} 
+                accuracy={data.accuracy ?? 0}
+                selectedPredictedValue={selectedPredictedActual.predicted}
+                selectedActualValue={selectedPredictedActual.actual}
+                onResultSelect={handleScoreResultSelect}
+                selectedScoreResult={selectedScoreResult}
+              />
+            </div>
+          </div>
+        )}
+
+        {showResultDetail && selectedScoreResult && (
+          <div className="w-full h-full relative">
+            <div className="absolute inset-0 pr-0">
+              <EvaluationTaskScoreResultDetail
+                result={selectedScoreResult}
+                onClose={handleScoreResultClose}
+              />
+            </div>
           </div>
         )}
       </div>
-
-      {data.scoreResults && data.scoreResults.length > 0 && (
-        <div className={isFullWidth ? 'w-full' : 'mt-8'}>
-          <EvaluationTaskScoreResults 
-            results={data.scoreResults} 
-            accuracy={data.accuracy ?? 0}
-            selectedPredictedValue={selectedPredictedActual.predicted}
-            selectedActualValue={selectedPredictedActual.actual}
-          />
-        </div>
-      )}
     </div>
   )
 })

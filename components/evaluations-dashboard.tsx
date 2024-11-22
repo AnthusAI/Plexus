@@ -1,6 +1,6 @@
 "use client"
-import React, { useMemo } from "react"
-import { useState, useEffect, useRef } from "react"
+import React, { useMemo, useCallback, useRef } from "react"
+import { useState, useEffect } from "react"
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -306,6 +306,13 @@ async function getEvaluationScoreResults(client: any, EvaluationId: string, next
   }
 }
 
+// Add this type near other interfaces
+interface DragState {
+  isDragging: boolean
+  startX: number
+  startWidth: number
+}
+
 export default function EvaluationsDashboard(): JSX.Element {
   const { authStatus, user } = useAuthenticator(context => [context.authStatus]);
   const router = useRouter();
@@ -336,6 +343,13 @@ export default function EvaluationsDashboard(): JSX.Element {
   const [hasMounted, setHasMounted] = useState(false)
   const isNarrowViewport = useViewportWidth()
   const [scoreResults, setScoreResults] = useState<Schema['ScoreResult']['type'][]>([])
+  const [leftPanelWidth, setLeftPanelWidth] = useState<number>(50)
+  const dragStateRef = useRef<DragState>({
+    isDragging: false,
+    startX: 0,
+    startWidth: 50
+  })
+  const containerRef = useRef<HTMLDivElement>(null)
 
   // Add mounted state check
   useEffect(() => {
@@ -869,6 +883,37 @@ export default function EvaluationsDashboard(): JSX.Element {
     )
   }, [selectedEvaluation?.id, EvaluationTaskProps, isFullWidth])
 
+  // Add these handlers
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    dragStateRef.current = {
+      isDragging: true,
+      startX: e.clientX,
+      startWidth: leftPanelWidth
+    }
+    document.addEventListener('mousemove', handleDragMove)
+    document.addEventListener('mouseup', handleDragEnd)
+  }, [leftPanelWidth])
+
+  const handleDragMove = useCallback((e: MouseEvent) => {
+    if (!dragStateRef.current.isDragging || !containerRef.current) return
+
+    const containerWidth = containerRef.current.offsetWidth
+    const deltaX = e.clientX - dragStateRef.current.startX
+    const newWidthPercent = (dragStateRef.current.startWidth * 
+      containerWidth / 100 + deltaX) / containerWidth * 100
+
+    // Constrain width between 20% and 80%
+    const constrainedWidth = Math.min(Math.max(newWidthPercent, 20), 80)
+    setLeftPanelWidth(constrainedWidth)
+  }, [])
+
+  const handleDragEnd = useCallback(() => {
+    dragStateRef.current.isDragging = false
+    document.removeEventListener('mousemove', handleDragMove)
+    document.removeEventListener('mouseup', handleDragEnd)
+  }, [])
+
   // Now do the early returns
   if (!hasMounted) {
     return <EvaluationDashboardSkeleton />;
@@ -889,14 +934,18 @@ export default function EvaluationsDashboard(): JSX.Element {
   // Rest of the component remains the same...
   return (
     <ClientOnly>
-      <div className="h-full flex flex-col">
-        <div className={`flex ${isNarrowViewport ? 'flex-col' : isFullWidth ? '' : 'space-x-2'} flex-1 h-full`}>
+      <div className="h-full flex flex-col" ref={containerRef}>
+        <div className={`flex ${isNarrowViewport ? 'flex-col' : isFullWidth ? '' : 'space-x-2'} flex-1 h-full w-full`}>
           <div className={`
             flex flex-col
             ${isFullWidth ? 'hidden' : ''} 
-            ${(!selectedEvaluation || isNarrowViewport) ? 'w-full' : 'w-1/2'}
-          `}>
-            <div className="mb-4">
+            ${(!selectedEvaluation || !isNarrowViewport) ? 'flex h-full' : 'hidden'}
+            ${(!selectedEvaluation || isNarrowViewport) ? 'w-full' : ''}
+          `}
+          style={!isNarrowViewport && selectedEvaluation ? {
+            width: `${leftPanelWidth}%`
+          } : undefined}>
+            <div className="mb-4 flex-shrink-0">
               <ScorecardContext 
                 selectedScorecard={selectedScorecard}
                 setSelectedScorecard={setSelectedScorecard}
@@ -905,16 +954,29 @@ export default function EvaluationsDashboard(): JSX.Element {
                 availableFields={[]}
               />
             </div>
-            <div className="flex-1 overflow-auto @container">
+            <div className="flex-1 min-h-0 overflow-y-auto @container">
               {EvaluationList}
             </div>
           </div>
 
-          {selectedEvaluation && EvaluationTaskProps && !isNarrowViewport && (
-            <div className={`${isFullWidth ? 'w-full' : 'w-1/2 min-w-[300px]'} flex flex-col flex-1`}>
-              <div className="flex-1 flex flex-col">
-                {EvaluationTaskComponent}
-              </div>
+          {selectedEvaluation && !isNarrowViewport && !isFullWidth && (
+            <div
+              className="w-1 hover:w-2 hover:bg-primary/50 cursor-col-resize 
+                transition-all duration-150 flex-shrink-0"
+              onMouseDown={handleDragStart}
+            />
+          )}
+
+          {selectedEvaluation && EvaluationTaskProps && (
+            <div className={`
+              flex flex-col flex-1 
+              ${isNarrowViewport || isFullWidth ? 'w-full' : ''}
+              h-full
+            `}
+            style={!isNarrowViewport && !isFullWidth ? {
+              width: `${100 - leftPanelWidth}%`
+            } : undefined}>
+              {EvaluationTaskComponent}
             </div>
           )}
         </div>

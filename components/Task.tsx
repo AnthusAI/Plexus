@@ -64,12 +64,19 @@ const Task = <TData = unknown>({
 
   return (
     <Card 
-      className={`bg-card shadow-none border-none rounded-lg transition-colors duration-200 flex flex-col h-full
-        ${variant === 'grid' ? 'cursor-pointer' : ''}`}
+      className={`
+        bg-card shadow-none border-none rounded-lg transition-colors duration-200 
+        flex flex-col h-full min-w-[300px]
+        ${variant === 'grid' ? 'cursor-pointer' : ''}
+      `}
       onClick={variant === 'grid' ? onClick : undefined}
     >
-      {renderHeader(childProps)}
-      {renderContent(childProps)}
+      <div className="flex-none">
+        {renderHeader(childProps)}
+      </div>
+      <CardContent className="flex-1 min-h-0 p-4">
+        {renderContent(childProps)}
+      </CardContent>
     </Card>
   )
 }
@@ -137,7 +144,7 @@ const TaskContent = <TData = unknown>({
   visualization?: React.ReactNode,
   customSummary?: React.ReactNode
 }) => (
-  <CardContent className="p-4 pt-0 pb-4 flex flex-col flex-1">
+  <CardContent className="h-full p-0 flex flex-col flex-1">
     {variant === 'grid' ? (
       <div className="flex flex-col h-full">
         <div className="space-y-1 w-full">
