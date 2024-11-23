@@ -27,6 +27,7 @@ import {
 } from "lucide-react"
 import { CardButton } from "@/components/CardButton"
 import { format, formatDistanceToNow } from "date-fns"
+import { listFromModel, observeQueryFromModel } from "@/utils/amplify-helpers"
 
 const ACCOUNT_KEY = 'call-criteria'
 const client = generateClient<Schema>()
@@ -43,10 +44,11 @@ export default function BatchesDashboard() {
     async function setupRealTimeSync() {
       try {
         const [accountResult, initialBatchJobs] = await Promise.all([
-          client.models.Account.list({
-            filter: { key: { eq: ACCOUNT_KEY } }
-          }),
-          client.models.BatchJob.list()
+          listFromModel<Schema['Account']['type']>(
+            client.models.Account, 
+            { key: { eq: ACCOUNT_KEY } }
+          ),
+          listFromModel<Schema['BatchJob']['type']>(client.models.BatchJob)
         ])
 
         if (accountResult.data.length > 0) {
@@ -58,11 +60,12 @@ export default function BatchesDashboard() {
           ))
           setIsLoading(false)
 
-          subscription = client.models.BatchJob.observeQuery({
-            filter: { accountId: { eq: foundAccountId } }
-          }).subscribe({
-            next: ({ items }) => {
-              setBatchJobs(items.filter(item => 
+          subscription = observeQueryFromModel<Schema['BatchJob']['type']>(
+            client.models.BatchJob,
+            { accountId: { eq: foundAccountId } }
+          ).subscribe({
+            next: ({ items }: { items: Schema['BatchJob']['type'][] }) => {
+              setBatchJobs(items.filter((item: Schema['BatchJob']['type']) => 
                 item && item.accountId === foundAccountId
               ))
             },
