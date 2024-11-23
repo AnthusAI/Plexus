@@ -56,7 +56,7 @@ const MobileHeader = ({
   toggleRightSidebar: () => void;
   rightSidebarState: 'collapsed' | 'normal' | 'expanded';
 }) => (
-  <div className="hidden max-lg:flex items-center justify-between p-1 bg-background">
+  <div className="hidden max-lg:flex items-center justify-between p-1 px-2 bg-background">
     <DashboardButton
       variant="ghost"
       size="icon"
@@ -610,7 +610,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               (isMobile ? 'mr-0' : 'mr-14')}
             ${isLeftSidebarOpen ? 'pl-2' : 'pl-0'}
             ${rightSidebarState !== 'collapsed' ? 'pr-2' : 'pr-0'}
-            ${isMobile ? 'pb-2' : 'py-2'}
+            ${isMobile ? '' : 'py-2'}
           `}
         >
           <div className="flex-1 flex flex-col bg-background rounded-lg overflow-hidden">
