@@ -190,7 +190,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
       </div>
 
       <ScrollArea className="flex-grow overflow-y-auto">
-        <div className={`space-y-1 ${isLeftSidebarOpen ? 'pl-2' : 'px-3'}`}>
+        <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
           {menuItems.map((item) => (
             <TooltipProvider key={item.name}>
               <Tooltip>
@@ -210,7 +210,9 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                         (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
                           ? "bg-secondary text-secondary-foreground"
                           : ""
-                      } ${isLeftSidebarOpen ? '' : 'px-2'}`}
+                      } ${isLeftSidebarOpen ? '' : 'px-2'} ${
+                        isMobile ? 'py-3' : ''
+                      }`}
                     >
                       <item.icon className={`h-4 w-4 group-hover:text-accent-foreground ${
                         isLeftSidebarOpen ? 'mr-2' : ''
