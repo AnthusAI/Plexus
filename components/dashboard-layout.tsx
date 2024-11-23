@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Activity, Logs, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight } from "lucide-react"
+import { Activity, Logs, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -173,6 +173,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     { name: "Reports", icon: FileBarChart, path: "/reports" },
     { name: "Alerts", icon: Siren, path: "/alerts" },
     { name: "Items", icon: Logs, path: "/items" },
+    { name: "Batches", icon: Layers3, path: "/batches" },
     { name: "Feedback", icon: MessageCircleMore, path: "/feedback-queues" },
   ]
 
