@@ -642,6 +642,7 @@ export default function ActivityDashboard() {
     </Button>
   )
 
+  const containerRef = useRef<HTMLDivElement>(null)
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const [chartDimensions, setChartDimensions] = useState({ width: 0, height: 300 })
 
@@ -676,10 +677,54 @@ export default function ActivityDashboard() {
     { value: 'Assumptive Close', label: 'Assumptive Close' },
   ]
 
+  const [leftPanelWidth, setLeftPanelWidth] = useState<number>(67) // Start at roughly 2/3
+  const dragStateRef = useRef<{
+    isDragging: boolean
+    startX: number
+    startWidth: number
+  }>({
+    isDragging: false,
+    startX: 0,
+    startWidth: 67
+  })
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    dragStateRef.current = {
+      isDragging: true,
+      startX: e.clientX,
+      startWidth: leftPanelWidth
+    }
+    document.addEventListener('mousemove', handleDragMove)
+    document.addEventListener('mouseup', handleDragEnd)
+  }, [leftPanelWidth])
+
+  const handleDragMove = useCallback((e: MouseEvent) => {
+    if (!dragStateRef.current.isDragging || !containerRef.current) return
+
+    const containerWidth = containerRef.current.offsetWidth
+    const deltaX = e.clientX - dragStateRef.current.startX
+    const newWidthPercent = (dragStateRef.current.startWidth * 
+      containerWidth / 100 + deltaX) / containerWidth * 100
+
+    // Constrain width between 20% and 80%
+    const constrainedWidth = Math.min(Math.max(newWidthPercent, 20), 80)
+    setLeftPanelWidth(constrainedWidth)
+  }, [])
+
+  const handleDragEnd = useCallback(() => {
+    dragStateRef.current.isDragging = false
+    document.removeEventListener('mousemove', handleDragMove)
+    document.removeEventListener('mouseup', handleDragEnd)
+  }, [])
+
   return (
-    <div className="h-full flex">
+    <div className="h-full flex" ref={containerRef}>
       {/* Left side with chart and activities */}
-      <div className="@container flex-1 overflow-y-auto">
+      <div 
+        className="@container overflow-y-auto"
+        style={{ width: selectedActivity && !isNarrowViewport ? `${leftPanelWidth}%` : '100%' }}
+      >
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <ScorecardContext 
@@ -892,9 +937,23 @@ export default function ActivityDashboard() {
         </div>
       </div>
 
+      {/* Resize handle */}
+      {selectedActivity && !isNarrowViewport && !isFullWidth && (
+        <div
+          className="w-2 relative cursor-col-resize flex-shrink-0 group"
+          onMouseDown={handleDragStart}
+        >
+          <div className="absolute inset-0 rounded-full transition-colors duration-150 
+            group-hover:bg-accent" />
+        </div>
+      )}
+
       {/* Right side detail view */}
       {selectedActivity && !isNarrowViewport && (
-        <div className={`${isFullWidth ? 'w-full' : 'w-1/3 min-w-[300px]'} overflow-y-auto pl-2`}>
+        <div 
+          className={`${isFullWidth ? 'w-full' : ''} overflow-y-auto`}
+          style={!isFullWidth ? { width: `${100 - leftPanelWidth}%` } : undefined}
+        >
           <div className="">
             <div className="" />
             {(() => {

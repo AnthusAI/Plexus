@@ -935,7 +935,7 @@ export default function EvaluationsDashboard(): JSX.Element {
   return (
     <ClientOnly>
       <div className="h-full flex flex-col" ref={containerRef}>
-        <div className={`flex ${isNarrowViewport ? 'flex-col' : isFullWidth ? '' : 'space-x-2'} flex-1 h-full w-full`}>
+        <div className={`flex ${isNarrowViewport ? 'flex-col' : ''} flex-1 h-full w-full`}>
           <div className={`
             flex flex-col
             ${isFullWidth ? 'hidden' : ''} 
@@ -961,10 +961,12 @@ export default function EvaluationsDashboard(): JSX.Element {
 
           {selectedEvaluation && !isNarrowViewport && !isFullWidth && (
             <div
-              className="w-1 hover:w-2 hover:bg-primary/50 cursor-col-resize 
-                transition-all duration-150 flex-shrink-0"
+              className="w-2 relative cursor-col-resize flex-shrink-0 group"
               onMouseDown={handleDragStart}
-            />
+            >
+              <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                group-hover:bg-accent" />
+            </div>
           )}
 
           {selectedEvaluation && EvaluationTaskProps && (
