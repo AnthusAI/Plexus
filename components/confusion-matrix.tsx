@@ -60,7 +60,7 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
 
   const getBackgroundColor = (value: number) => {
     const intensity = Math.round((value / maxValue) * 10)
-    return `hsl(var(--violet-${Math.max(1, intensity)}))` 
+    return `hsl(var(--violet-${Math.max(3, intensity)}))` 
   }
 
   const getTextColor = (value: number) => {

@@ -56,12 +56,17 @@ export function EvaluationTaskScoreResults({
     const actual = new Set<string>()
     
     results.forEach(result => {
-      const metadata = typeof result.metadata === 'string' ? 
-        JSON.parse(result.metadata) : 
+      const parsedMetadata = typeof result.metadata === 'string' ? 
+        JSON.parse(JSON.parse(result.metadata)) : 
         result.metadata
-      
-      if (metadata?.predicted_value) predicted.add(metadata.predicted_value)
-      if (metadata?.true_value) actual.add(metadata.true_value)
+
+      const firstResultKey = parsedMetadata?.results ? 
+        Object.keys(parsedMetadata.results)[0] : null
+      const scoreResult = firstResultKey ? 
+        parsedMetadata.results[firstResultKey] : null
+
+      if (scoreResult?.value) predicted.add(scoreResult.value)
+      if (scoreResult?.metadata?.human_label) actual.add(scoreResult.metadata.human_label)
     })
     
     return {
@@ -72,23 +77,28 @@ export function EvaluationTaskScoreResults({
 
   const filteredResults = useMemo(() => {
     return results.filter(result => {
-      const metadata = typeof result.metadata === 'string' ? 
-        JSON.parse(result.metadata) : 
+      const parsedMetadata = typeof result.metadata === 'string' ? 
+        JSON.parse(JSON.parse(result.metadata)) : 
         result.metadata
+
+      const firstResultKey = parsedMetadata?.results ? 
+        Object.keys(parsedMetadata.results)[0] : null
+      const scoreResult = firstResultKey ? 
+        parsedMetadata.results[firstResultKey] : null
       
-      const isCorrect = result.value === 1
+      const isCorrect = scoreResult?.metadata?.correct ?? false
       
       if (filters.showCorrect !== null && isCorrect !== filters.showCorrect) {
         return false
       }
       
       if (filters.predictedValue && 
-          metadata.predicted_value !== filters.predictedValue) {
+          scoreResult?.value !== filters.predictedValue) {
         return false
       }
-      
+
       if (filters.actualValue && 
-          metadata.true_value !== filters.actualValue) {
+          scoreResult?.metadata?.human_label !== filters.actualValue) {
         return false
       }
       
@@ -168,7 +178,7 @@ export function EvaluationTaskScoreResults({
                   Predicted: {value}
                 </DropdownMenuCheckboxItem>
               ))}
-              
+
               <DropdownMenuSeparator />
               
               {uniqueValues.actual.map(value => (
