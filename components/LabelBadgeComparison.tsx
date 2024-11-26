@@ -27,7 +27,7 @@ export function LabelBadgeComparison({
     <div className={`flex items-center gap-2 ${className}`}>
       <Badge 
         variant="secondary"
-        className={`text-lg px-2 py-0.5 rounded-md ${textColor} ${
+        className={`text-sm px-2 py-0.5 rounded-md ${textColor} ${
           isCorrect ? "bg-true" : "bg-false"
         }`}
       >
@@ -38,7 +38,7 @@ export function LabelBadgeComparison({
           <ArrowRight className="h-5 w-5 text-muted-foreground" />
           <Badge
             variant="secondary"
-            className={`text-lg px-2 py-0.5 rounded-md bg-neutral ${textColor}`}
+            className={`text-sm px-2 py-0.5 rounded-md bg-neutral ${textColor}`}
           >
             {actualLabel}
           </Badge>
