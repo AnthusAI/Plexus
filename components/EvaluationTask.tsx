@@ -75,7 +75,7 @@ function computeEvaluationType(data: EvaluationTaskData): string {
   }
   
   if (data.progress === 100) {
-    return "Evaluation completed"
+    return "Evaluation finished"
   }
   
   if (data.progress >= 90) {
