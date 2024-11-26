@@ -71,7 +71,6 @@ export function observeQueryFromModel<T>(
 
   const subscription = model.observeQuery({
     filter: filter || undefined,
-    // Include all fields we want to observe
     fields: [
       'id',
       'type',
@@ -92,6 +91,17 @@ export function observeQueryFromModel<T>(
       'accountId',
       'scorecardId',
       'scoreId',
+      {
+        name: 'score',
+        fields: [
+          'id',
+          'name',
+          'type',
+          'description',
+          'createdAt',
+          'updatedAt'
+        ]
+      },
       'confusionMatrix',
       'elapsedSeconds',
       'estimatedRemainingSeconds',

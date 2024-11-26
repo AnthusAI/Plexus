@@ -355,34 +355,102 @@ export function ScorecardForm({
               console.log('Score update result:', updateResult)
             } else {
               console.log('Creating new score for section:', sectionId)
-              const createResult = await amplifyClient.Score.create({
-                name: score.name,
-                type: score.type || 'Boolean',
-                order: score.order,
-                sectionId: sectionId,
-                accuracy: score.accuracy || 0,
-                version: score.version || Date.now().toString(),
-                aiProvider: score.aiProvider || undefined,
-                aiModel: score.aiModel || undefined,
-                isFineTuned: score.isFineTuned || false,
-                configuration: score.configuration ? JSON.parse(JSON.stringify(score.configuration)) : {},
-                distribution: score.distribution ? JSON.parse(JSON.stringify(score.distribution)) : [],
-                versionHistory: score.versionHistory ? JSON.parse(JSON.stringify(score.versionHistory)) : []
-              })
-              console.log('New score result:', createResult)
-              if (!createResult.data) {
-                throw new Error('Failed to create score')
-              }
-
-              // Update formData with the real ID
-              const sectionIndex = formData.sections.findIndex(s => s.id === sectionId)
-              if (sectionIndex !== -1) {
-                const scoreIndex = formData.sections[sectionIndex].scores.findIndex(
-                  s => s.id === score.id
-                )
-                if (scoreIndex !== -1) {
-                  formData.sections[sectionIndex].scores[scoreIndex].id = createResult.data.id
+              try {
+                // Start with just the required fields
+                const basicScoreData = {
+                  name: score.name || 'New Score',
+                  type: score.type || 'Boolean',
+                  order: Math.floor(Number(score.order) || 0),
+                  sectionId
                 }
+
+                console.log('Attempting score creation with basic data:', JSON.stringify(basicScoreData, null, 2))
+
+                try {
+                  // First try with just required fields
+                  const createResult = await amplifyClient.Score.create(basicScoreData)
+                  
+                  if (!createResult.data) {
+                    console.error('Basic score creation failed:', createResult)
+                    throw new Error('Failed to create score with basic data')
+                  }
+
+                  // If basic creation succeeds, update with additional fields
+                  const scoreId = createResult.data.id
+                  console.log('Basic score created with ID:', scoreId)
+
+                  const updateData = {
+                    id: scoreId,
+                    name: score.name || 'New Score',
+                    type: score.type || 'Boolean',
+                    order: Math.floor(Number(score.order) || 0),
+                    sectionId,
+                    ...(typeof score.accuracy === 'number' && { accuracy: score.accuracy }),
+                    ...(score.version && { version: String(score.version) }),
+                    ...(score.aiProvider && { aiProvider: String(score.aiProvider) }),
+                    ...(score.aiModel && { aiModel: String(score.aiModel) }),
+                    ...(typeof score.isFineTuned === 'boolean' && { isFineTuned: score.isFineTuned }),
+                    ...(Object.keys(score.configuration || {}).length > 0 && { 
+                      configuration: score.configuration 
+                    }),
+                    ...(score.distribution?.length > 0 && { 
+                      distribution: score.distribution.map(d => ({
+                        category: String(d.category),
+                        value: Number(d.value)
+                      }))
+                    }),
+                    ...(score.versionHistory?.length > 0 && { 
+                      versionHistory: score.versionHistory.map(v => ({
+                        version: String(v.version),
+                        parent: v.parent ? String(v.parent) : null,
+                        timestamp: new Date(v.timestamp).toISOString(),
+                        accuracy: Number(v.accuracy),
+                        distribution: v.distribution?.map(d => ({
+                          category: String(d.category),
+                          value: Number(d.value)
+                        })) || []
+                      }))
+                    })
+                  }
+
+                  console.log('Updating score with additional data:', JSON.stringify(updateData, null, 2))
+                  
+                  const updateResult = await amplifyClient.Score.update(updateData)
+                  console.log('Score update result:', updateResult)
+
+                  if (!updateResult.data) {
+                    console.error('Score update failed:', updateResult)
+                    throw new Error('Failed to update score with additional data')
+                  }
+
+                  // Update formData with the real ID
+                  const sectionIndex = formData.sections.findIndex(s => s.id === sectionId)
+                  if (sectionIndex !== -1) {
+                    const scoreIndex = formData.sections[sectionIndex].scores.findIndex(
+                      s => s.id === score.id
+                    )
+                    if (scoreIndex !== -1) {
+                      formData.sections[sectionIndex].scores[scoreIndex].id = scoreId
+                    }
+                  }
+
+                } catch (error) {
+                  // Log the full error details
+                  console.error('Score creation error details:', {
+                    error,
+                    message: error instanceof Error ? error.message : 'Unknown error',
+                    stack: error instanceof Error ? error.stack : undefined,
+                    // @ts-ignore - checking for GraphQL error structure
+                    errors: error.errors ? error.errors : undefined
+                  })
+                  throw error
+                }
+              } catch (error) {
+                console.error('Error in score creation block:', error)
+                if (error instanceof Error) {
+                  throw new Error(`Failed to create score: ${error.message}`)
+                }
+                throw error
               }
             }
           }

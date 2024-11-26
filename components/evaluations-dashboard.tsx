@@ -64,14 +64,6 @@ const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['type'] =
     throw new Error('Cannot transform null Evaluation')
   }
 
-  console.log('Raw Evaluation data:', {
-    id: rawEvaluation.id,
-    type: rawEvaluation.type,
-    accuracy: rawEvaluation.accuracy,
-    metrics: rawEvaluation.metrics,
-    allFields: Object.keys(rawEvaluation)
-  });
-
   // Create a strongly typed base object with ALL fields
   const safeEvaluation = {
     id: rawEvaluation.id || '',
@@ -151,14 +143,30 @@ const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['type'] =
       }
       return { data: null }
     },
-    score: async () => ({
-      data: rawEvaluation.score ? {
-        ...rawEvaluation.score,
-        section: async () => ({ data: null }),
-        evaluations: async () => ({ data: [], nextToken: null }),
-        batchJobs: async () => ({ data: [], nextToken: null })
-      } : null
-    })
+    score: async () => {
+      console.log('Transform - raw score data:', {
+        rawScore: rawEvaluation.score,
+        scoreId: rawEvaluation.scoreId,
+        fullEvaluation: rawEvaluation
+      });
+      
+      // If we have the score data already, use it
+      if (rawEvaluation.score?.data) {
+        return { data: rawEvaluation.score.data }
+      }
+      
+      // If we have a scoreId, fetch the score
+      if (rawEvaluation.scoreId) {
+        const { data: score } = await getFromModel<Schema['Score']['type']>(
+          client.models.Score,
+          rawEvaluation.scoreId
+        )
+        console.log('Fetched score:', score);
+        return { data: score }
+      }
+      
+      return { data: null }
+    }
   };
 };
 
@@ -350,6 +358,7 @@ export default function EvaluationsDashboard(): JSX.Element {
     startWidth: 50
   })
   const containerRef = useRef<HTMLDivElement>(null)
+  const [scoreNames, setScoreNames] = useState<Record<string, string>>({});
 
   // Add mounted state check
   useEffect(() => {
@@ -528,15 +537,22 @@ export default function EvaluationsDashboard(): JSX.Element {
                           existingExp.errorMessage !== newItem.errorMessage ||
                           existingExp.errorDetails !== newItem.errorDetails ||
                           existingExp.metricsExplanation !== newItem.metricsExplanation ||
-                          existingExp.accuracy !== newItem.accuracy ||  // Include accuracy changes
-                          existingExp.type !== newItem.type  // Include type changes
+                          existingExp.accuracy !== newItem.accuracy ||
+                          existingExp.type !== newItem.type ||
+                          JSON.stringify(existingExp.datasetClassDistribution) !== 
+                            JSON.stringify(newItem.datasetClassDistribution) ||
+                          existingExp.isDatasetClassDistributionBalanced !== 
+                            newItem.isDatasetClassDistributionBalanced ||
+                          JSON.stringify(existingExp.predictedClassDistribution) !== 
+                            JSON.stringify(newItem.predictedClassDistribution) ||
+                          existingExp.isPredictedClassDistributionBalanced !== 
+                            newItem.isPredictedClassDistributionBalanced
 
                         if (relevantFieldsChanged) {
                           hasChanges = true
                           // Create updated Evaluation preserving existing fields
                           const updatedExp = {
                             ...existingExp,  // Keep all existing fields
-                            // Update all fields that can change
                             status: newItem.status ?? existingExp.status,
                             processedItems: newItem.processedItems ?? existingExp.processedItems,
                             totalItems: newItem.totalItems ?? existingExp.totalItems,
@@ -544,8 +560,12 @@ export default function EvaluationsDashboard(): JSX.Element {
                             errorMessage: newItem.errorMessage ?? existingExp.errorMessage,
                             errorDetails: newItem.errorDetails ?? existingExp.errorDetails,
                             metricsExplanation: newItem.metricsExplanation ?? existingExp.metricsExplanation,
-                            accuracy: newItem.accuracy ?? existingExp.accuracy,  // Update accuracy
-                            type: newItem.type ?? existingExp.type  // Update type
+                            accuracy: newItem.accuracy ?? existingExp.accuracy,
+                            type: newItem.type ?? existingExp.type,
+                            datasetClassDistribution: newItem.datasetClassDistribution ?? existingExp.datasetClassDistribution,
+                            isDatasetClassDistributionBalanced: newItem.isDatasetClassDistributionBalanced ?? existingExp.isDatasetClassDistributionBalanced,
+                            predictedClassDistribution: newItem.predictedClassDistribution ?? existingExp.predictedClassDistribution,
+                            isPredictedClassDistributionBalanced: newItem.isPredictedClassDistributionBalanced ?? existingExp.isPredictedClassDistributionBalanced
                           }
                           updatedEvaluations[index] = transformEvaluation(updatedExp)
                         }
@@ -571,8 +591,16 @@ export default function EvaluationsDashboard(): JSX.Element {
                         selectedEvaluationRef.current.errorMessage !== updatedItem.errorMessage ||
                         selectedEvaluationRef.current.errorDetails !== updatedItem.errorDetails ||
                         selectedEvaluationRef.current.metricsExplanation !== updatedItem.metricsExplanation ||
-                        selectedEvaluationRef.current.accuracy !== updatedItem.accuracy ||  // Include accuracy changes
-                        selectedEvaluationRef.current.type !== updatedItem.type  // Include type changes
+                        selectedEvaluationRef.current.accuracy !== updatedItem.accuracy ||
+                        selectedEvaluationRef.current.type !== updatedItem.type ||
+                        JSON.stringify(selectedEvaluationRef.current.datasetClassDistribution) !== 
+                          JSON.stringify(updatedItem.datasetClassDistribution) ||
+                        selectedEvaluationRef.current.isDatasetClassDistributionBalanced !== 
+                          updatedItem.isDatasetClassDistributionBalanced ||
+                        JSON.stringify(selectedEvaluationRef.current.predictedClassDistribution) !== 
+                          JSON.stringify(updatedItem.predictedClassDistribution) ||
+                        selectedEvaluationRef.current.isPredictedClassDistributionBalanced !== 
+                          updatedItem.isPredictedClassDistributionBalanced
 
                       if (relevantFieldsChanged) {
                         const transformed = transformEvaluation({
@@ -622,50 +650,83 @@ export default function EvaluationsDashboard(): JSX.Element {
     }
   }, [client])
 
-  // Update the fetchScorecardNames function
+  // Update the fetchNames function with debug logging
   useEffect(() => {
-    const fetchScorecardNames = async () => {
-      
+    const fetchNames = async () => {
       const newScorecardNames: Record<string, string> = {};
+      const newScoreNames: Record<string, string> = {};
       
       if (!Evaluations || Evaluations.length === 0) {
         setScorecardNames({});
+        setScoreNames({});
         return;
       }
 
       try {
-        // Process Evaluations sequentially instead of in parallel
         for (const Evaluation of Evaluations) {
           if (!Evaluation?.id) continue;
           
           try {
+            // Fetch scorecard name
             if (Evaluation.scorecard) {
-              const result = await Evaluation.scorecard();
-              newScorecardNames[Evaluation.id] = result?.data?.name || 'Unknown Scorecard';
+              const scorecardResult = await Evaluation.scorecard();
+              newScorecardNames[Evaluation.id] = scorecardResult?.data?.name || 'Unknown Scorecard';
             } else {
               newScorecardNames[Evaluation.id] = 'Unknown Scorecard';
             }
+
+            // Updated score name fetching
+            if (Evaluation.score) {
+              console.log('Fetching score for evaluation:', {
+                evaluationId: Evaluation.id,
+                scoreId: Evaluation.scoreId,
+                hasScoreFunction: !!Evaluation.score
+              });
+              
+              const scoreResult = await Evaluation.score();
+              console.log('Full score result:', {
+                fullResult: scoreResult,
+                data: scoreResult?.data,
+                rawData: Evaluation.score
+              });
+              
+              const scoreName = scoreResult?.data?.name;
+              console.log('Score name extraction:', {
+                scoreName,
+                scoreData: scoreResult?.data,
+                paths: {
+                  directName: scoreResult?.data?.name,
+                  rawName: Evaluation.score?.name
+                }
+              });
+              
+              newScoreNames[Evaluation.id] = scoreName || 'Unknown Score';
+            } else {
+              newScoreNames[Evaluation.id] = 'Unknown Score';
+            }
           } catch (error) {
-            console.error(`Error fetching scorecard name for Evaluation ${Evaluation.id}:`, error);
+            console.error(`Error fetching names for Evaluation ${Evaluation.id}:`, error);
             newScorecardNames[Evaluation.id] = 'Unknown Scorecard';
+            newScoreNames[Evaluation.id] = 'Unknown Score';
           }
         }
 
         setScorecardNames(newScorecardNames);
+        setScoreNames(newScoreNames);
       } catch (error) {
-        console.error('Error in fetchScorecardNames:', error);
-        // Set default names for all Evaluations on error
+        console.error('Error in fetchNames:', error);
         const defaultNames = Evaluations.reduce((acc, exp) => {
           if (exp?.id) {
-            acc[exp.id] = 'Unknown Scorecard';
+            acc[exp.id] = 'Unknown';
           }
           return acc;
         }, {} as Record<string, string>);
         setScorecardNames(defaultNames);
+        setScoreNames(defaultNames);
       }
     };
 
-    fetchScorecardNames();
+    fetchNames();
   }, [Evaluations]);
 
   // Update the score results subscription effect
@@ -801,12 +862,14 @@ export default function EvaluationsDashboard(): JSX.Element {
             <TableCell className="font-medium">
               <div className="block @[630px]:hidden">
                 <div className="flex justify-between">
-                  {/* Left column - reduce width to ~40% */}
                   <div className="w-[40%] space-y-0.5">
                     <div className="font-semibold truncate">
                       <span className={Evaluation.id === selectedEvaluation?.id ? 'text-focus' : ''}>
                         {scorecardNames[Evaluation.id] || 'Unknown Scorecard'}
                       </span>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {scoreNames[Evaluation.id] || 'Unknown Score'}
                     </div>
                     <div className="text-sm text-muted-foreground">
                       {formatDistanceToNow(new Date(Evaluation.createdAt), { addSuffix: true })}
@@ -815,8 +878,6 @@ export default function EvaluationsDashboard(): JSX.Element {
                       {Evaluation.type || ''}
                     </div>
                   </div>
-
-                  {/* Right column - increase width to ~55% for progress bars */}
                   <div className="w-[55%] space-y-2">
                     <EvaluationListProgressBar 
                       progress={calculateProgress(Evaluation.processedItems, Evaluation.totalItems)}
@@ -831,12 +892,14 @@ export default function EvaluationsDashboard(): JSX.Element {
                   </div>
                 </div>
               </div>
-              {/* Wide variant - visible at 630px and above */}
               <div className="hidden @[630px]:block">
                 <div className="font-semibold">
                   <span className={Evaluation.id === selectedEvaluation?.id ? 'text-focus' : ''}>
                     {scorecardNames[Evaluation.id] || 'Unknown Scorecard'}
                   </span>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {scoreNames[Evaluation.id] || 'Unknown Score'}
                 </div>
                 <div className="text-sm text-muted-foreground">
                   {formatDistanceToNow(new Date(Evaluation.createdAt), { addSuffix: true })}
@@ -864,7 +927,7 @@ export default function EvaluationsDashboard(): JSX.Element {
         ))}
       </TableBody>
     </Table>
-  ), [filteredEvaluations, selectedEvaluation?.id, scorecardNames])
+  ), [filteredEvaluations, selectedEvaluation?.id, scorecardNames, scoreNames])
 
   const EvaluationTaskComponent = useMemo(() => {
     if (!selectedEvaluation || !EvaluationTaskProps) return null
@@ -913,6 +976,21 @@ export default function EvaluationsDashboard(): JSX.Element {
     document.removeEventListener('mousemove', handleDragMove)
     document.removeEventListener('mouseup', handleDragEnd)
   }, [])
+
+  // Add this effect inside the EvaluationsDashboard component, 
+  // after the other useEffect hooks but before the return statement
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (selectedEvaluation && event.key === 'Escape') {
+        setSelectedEvaluation(null)
+        setIsFullWidth(false)
+        setScoreResults([])
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedEvaluation]) // Only re-attach if selectedEvaluation changes
 
   // Now do the early returns
   if (!hasMounted) {
