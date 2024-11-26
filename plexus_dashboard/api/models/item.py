@@ -5,42 +5,7 @@ from .base import BaseModel
 from ..client import _BaseAPIClient
 
 @dataclass
-class Sample(BaseModel):
-    """
-    Sample Model - Python representation of the GraphQL Sample type.
-
-    Represents individual samples within an evaluation, tracking:
-    - Raw data being evaluated
-    - Predictions and ground truth
-    - Correctness of predictions
-    - Creation and update timestamps
-
-    This model is typically used in conjunction with Evaluation for:
-    - Recording individual test cases
-    - Tracking prediction accuracy
-    - Building confusion matrices
-    - Training data management
-
-    Unlike Evaluation, Sample uses synchronous mutations as it's
-    typically used in high-volume batch operations where immediate
-    feedback is needed.
-
-    Example Usage:
-        # Create a new sample
-        sample = Sample.create(
-            client=client,
-            evaluationId="exp-123",
-            data={"text": "example content"},
-            prediction="positive",
-            groundTruth="positive"
-        )
-        
-        # Update prediction
-        updated = sample.update(
-            prediction="negative",
-            isCorrect=False
-        )
-    """
+class Item(BaseModel):
     evaluationId: str
     data: Dict
     createdAt: datetime
@@ -85,7 +50,7 @@ class Sample(BaseModel):
 
     @classmethod
     def create(cls, client: _BaseAPIClient, evaluationId: str, data: Dict, 
-               **kwargs) -> 'Sample':
+               **kwargs) -> 'Item':
         now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
         
         input_data = {
@@ -97,18 +62,18 @@ class Sample(BaseModel):
         }
         
         mutation = """
-        mutation CreateSample($input: CreateSampleInput!) {
-            createSample(input: $input) {
+        mutation CreateItem($input: CreateItemInput!) {
+            createItem(input: $input) {
                 %s
             }
         }
         """ % cls.fields()
         
         result = client.execute(mutation, {'input': input_data})
-        return cls.from_dict(result['createSample'], client)
+        return cls.from_dict(result['createItem'], client)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Sample':
+    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Item':
         for date_field in ['createdAt', 'updatedAt']:
             if data.get(date_field):
                 data[date_field] = datetime.fromisoformat(
@@ -127,7 +92,7 @@ class Sample(BaseModel):
             client=client
         )
 
-    def update(self, **kwargs) -> 'Sample':
+    def update(self, **kwargs) -> 'Item':
         if 'createdAt' in kwargs:
             raise ValueError("createdAt cannot be modified after creation")
             
@@ -139,8 +104,8 @@ class Sample(BaseModel):
         }
         
         mutation = """
-        mutation UpdateSample($input: UpdateSampleInput!) {
-            updateSample(input: $input) {
+        mutation UpdateItem($input: UpdateItemInput!) {
+            updateItem(input: $input) {
                 %s
             }
         }
@@ -154,4 +119,4 @@ class Sample(BaseModel):
         }
         
         result = self._client.execute(mutation, variables)
-        return self.from_dict(result['updateSample'], self._client) 
+        return self.from_dict(result['updateItem'], self._client) 

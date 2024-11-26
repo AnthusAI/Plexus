@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import Mock
-from .sample import Sample
+from .item import Item
 
 @pytest.fixture
 def mock_client():
@@ -15,8 +15,8 @@ def sample_data():
     }
 
 @pytest.fixture
-def sample_sample(mock_client, sample_data):
-    return Sample(
+def sample_item(mock_client, sample_data):
+    return Item(
         id="test-id",
         evaluationId="test-evaluation",
         data=sample_data,
@@ -25,16 +25,15 @@ def sample_sample(mock_client, sample_data):
         client=mock_client
     )
 
-def test_update_prediction(sample_sample):
-    """Test updating sample prediction"""
+def test_update_prediction(sample_item):
     new_prediction = "positive"
     
-    sample_sample._client.execute.return_value = {
-        'updateSample': {
-            'id': sample_sample.id,
-            'evaluationId': sample_sample.evaluationId,
-            'data': sample_sample.data,
-            'createdAt': sample_sample.createdAt.isoformat(),
+    sample_item._client.execute.return_value = {
+        'updateItem': {
+            'id': sample_item.id,
+            'evaluationId': sample_item.evaluationId,
+            'data': sample_item.data,
+            'createdAt': sample_item.createdAt.isoformat(),
             'updatedAt': datetime.now(timezone.utc).isoformat(),
             'prediction': new_prediction,
             'groundTruth': None,
@@ -42,15 +41,13 @@ def test_update_prediction(sample_sample):
         }
     }
     
-    updated = sample_sample.update(prediction=new_prediction)
+    updated = sample_item.update(prediction=new_prediction)
     assert updated.prediction == new_prediction
 
-def test_update_prevents_modifying_created_at(sample_sample):
-    """Test that update prevents modifying createdAt"""
+def test_update_prevents_modifying_created_at(sample_item):
     with pytest.raises(ValueError, match="createdAt cannot be modified"):
-        sample_sample.update(createdAt=datetime.now(timezone.utc))
+        sample_item.update(createdAt=datetime.now(timezone.utc))
 
 def test_create_requires_evaluation_id_and_data(mock_client):
-    """Test that create requires evaluationId and data"""
     with pytest.raises(TypeError):
-        Sample.create(client=mock_client)
+        Item.create(client=mock_client) 
