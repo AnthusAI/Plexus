@@ -200,3 +200,122 @@ def test_log_score_with_override(mock_client, mock_account, mock_scorecard):
         call_kwargs = mock_client.log_score.call_args[1]
         assert call_kwargs['scorecardId'] == "card-456"
         assert call_kwargs['metadata'] == {'source': 'test'} 
+
+def test_client_caches_resolved_ids(mock_client):
+    """Test that resolved IDs are cached"""
+    with patch('plexus_dashboard.api.client_manager.PlexusDashboardClient') as mock_client_class:
+        mock_client_class.return_value = mock_client
+        manager = ClientManager.for_account("test-account")
+        
+        # First call should resolve ID
+        account_id = manager._resolve_account_id()
+        assert mock_client.execute.call_count == 1
+        
+        # Second call should use cache
+        account_id_2 = manager._resolve_account_id()
+        assert mock_client.execute.call_count == 1
+        assert account_id == account_id_2
+
+def test_client_handles_missing_ids(mock_client):
+    """Test handling of missing IDs"""
+    with patch('plexus_dashboard.api.client_manager.PlexusDashboardClient') as mock_client_class:
+        mock_client_class.return_value = mock_client
+        manager = ClientManager.for_account("test-account")
+        
+        # Mock empty response
+        mock_client.execute.return_value = {
+            'listAccounts': {'items': []}
+        }
+        
+        with pytest.raises(ValueError, match="No account found"):
+            manager._resolve_account_id()
+
+def test_client_batches_score_logs(mock_client):
+    """Test that score logging uses batching"""
+    with patch('plexus_dashboard.api.client_manager.PlexusDashboardClient') as mock_client_class:
+        mock_client_class.return_value = mock_client
+        manager = ClientManager.for_account("test-account")
+        
+        # Setup account resolution
+        mock_client.execute.return_value = {
+            'listAccounts': {'items': [{
+                'id': 'acc-123',
+                'key': 'test-account',
+                'name': 'Test Account',
+                'description': 'Test account description'
+            }]}
+        }
+        
+        # Log multiple scores
+        for i in range(3):
+            manager.log_score(0.95, f"item-{i}", batch_size=5)
+        
+        # Verify batching behavior
+        assert mock_client.log_score.call_count == 3
+        for i, call in enumerate(mock_client.log_score.call_args_list):
+            assert call[1]['itemId'] == f"item-{i}"
+            assert call[1]['batch_size'] == 5
+
+def test_client_handles_immediate_logging(mock_client):
+    """Test immediate (non-batched) score logging"""
+    with patch('plexus_dashboard.api.client_manager.PlexusDashboardClient') as mock_client_class:
+        mock_client_class.return_value = mock_client
+        manager = ClientManager.for_account("test-account")
+        
+        # Setup account resolution
+        mock_client.execute.return_value = {
+            'listAccounts': {'items': [{
+                'id': 'acc-123',
+                'key': 'test-account',
+                'name': 'Test Account',
+                'description': 'Test account description'
+            }]}
+        }
+        
+        # Log score with immediate=True
+        manager.log_score(0.95, "item-123", immediate=True)
+        
+        # Verify immediate logging
+        mock_client.log_score.assert_called_once()
+        assert mock_client.log_score.call_args[1]['immediate'] is True
+
+def test_client_maintains_context(mock_client):
+    """Test that client maintains context between calls"""
+    with patch('plexus_dashboard.api.client_manager.PlexusDashboardClient') as mock_client_class:
+        mock_client_class.return_value = mock_client
+        manager = ClientManager.for_scorecard(
+            account_key="test-account",
+            scorecard_key="test-scorecard"
+        )
+        
+        # Setup mock responses
+        mock_client.execute.side_effect = [
+            # Account resolution
+            {'listAccounts': {'items': [{
+                'id': 'acc-123',
+                'key': 'test-account',
+                'name': 'Test Account',
+                'description': 'Test account description'
+            }]}},
+            # Scorecard resolution
+            {'listScorecards': {'items': [{
+                'id': 'card-123',
+                'key': 'test-scorecard',
+                'name': 'Test Scorecard',
+                'description': 'Test scorecard description',
+                'accountId': 'acc-123',
+                'externalId': 'ext-123'
+            }]}}
+        ]
+        
+        # Log multiple scores - should reuse resolved IDs
+        manager.log_score(0.95, "item-1")
+        manager.log_score(0.85, "item-2")
+        
+        # Verify ID resolution happened only once per type
+        assert mock_client.execute.call_count == 2
+        
+        # Verify both scores used same IDs
+        calls = mock_client.log_score.call_args_list
+        assert calls[0][1]['accountId'] == calls[1][1]['accountId']
+        assert calls[0][1]['scorecardId'] == calls[1][1]['scorecardId'] 
