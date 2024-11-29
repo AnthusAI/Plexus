@@ -33,6 +33,8 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from pathlib import Path
 import uuid
 from langgraph.errors import NodeInterrupt
+from plexus_dashboard.api.client_manager import ClientManager
+from plexus_dashboard.api.models.account import Account
 
 class BatchProcessingPause(Exception):
     """Signals that execution has been paused for batch processing"""
@@ -664,14 +666,13 @@ class LangGraphScore(Score, LangChainUser):
                 initial_state = None  # Let LangGraph use checkpoint
             else:
                 # Normal execution with input
-                thread_id = model_input.metadata.get('content_id') if hasattr(model_input, 'metadata') else None
+                thread_id = model_input.metadata.get('content_id')
                 if not thread_id:
                     thread_id = str(uuid.uuid4())
                     logging.warning(
                         f"No content_id found in metadata, using generated UUID: {thread_id}"
                     )
                 
-                # Create initial state with all required fields
                 initial_state = self.GraphState(
                     text=self.preprocess_text(model_input.text),
                     metadata=model_input.metadata,
@@ -683,7 +684,7 @@ class LangGraphScore(Score, LangChainUser):
                         }
                         for result in model_input.results or []
                     },
-                    messages=None  # Ensure messages field exists in initial state
+                    messages=None
                 ).model_dump()
 
             logging.info(f"Using content_id as thread_id: {thread_id}")
@@ -698,44 +699,144 @@ class LangGraphScore(Score, LangChainUser):
             logging.info(
                 f"Mode: batch_mode={batch_mode}, breakpoints_enabled={breakpoints_enabled}"
             )
-            
-            try:
-                # Use ainvoke instead of astream
-                final_result = await self.workflow.ainvoke(
-                    initial_state,  # Will be None when resuming
-                    config=config
-                )
-            except NodeInterrupt:
-                # Let NodeInterrupt propagate up without trying to create a result
-                raise
-            
-            # After invoke completes, check if we have a valid result
+
+            final_result = await self.workflow.ainvoke(
+                initial_state,  # Will be None when resuming
+                config=config
+            )
+            logging.info(f"Raw workflow result: {final_result}")
+
+            # Check for breakpoint state FIRST before any other processing
+            if isinstance(final_result, dict) and (
+                final_result.get('at_llm_breakpoint') or 
+                final_result.get('should_end')
+            ):
+                logging.info("Found breakpoint state, creating batch job")
+                if batch_mode:
+                    # Initialize client manager with context from metadata
+                    client_manager = ClientManager.for_scorecard(
+                        account_key=model_input.metadata.get('account_key'),
+                        scorecard_key=model_input.metadata.get('scorecard_key'),
+                        score_name=model_input.metadata.get('score_name')
+                    )
+                    
+                    # Create a fully serializable copy of the state
+                    serializable_state = {}
+                    for key, value in final_result.items():
+                        if key == 'messages':
+                            if isinstance(value, list):
+                                serializable_state[key] = [
+                                    {
+                                        'type': msg.get('type', ''),
+                                        'content': msg.get('content', ''),
+                                        '_type': msg.get('_type', '')
+                                    } if isinstance(msg, dict) else
+                                    {
+                                        'type': msg.__class__.__name__.lower().replace(
+                                            'message', ''
+                                        ),
+                                        'content': msg.content,
+                                        '_type': msg.__class__.__name__
+                                    }
+                                    for msg in value
+                                ]
+                        elif key == 'chat_history':
+                            if isinstance(value, list):
+                                serializable_state[key] = [
+                                    {
+                                        'type': msg.__class__.__name__.lower().replace(
+                                            'message', ''
+                                        ),
+                                        'content': msg.content,
+                                        '_type': msg.__class__.__name__
+                                    }
+                                    for msg in value
+                                ]
+                        else:
+                            serializable_state[key] = value
+                    
+                    logging.info(f"Created serializable state: {serializable_state}")
+                    
+                    # Create batch job with serializable state
+                    scoring_job, batch_job = client_manager.api_client.batch_scoring_job(
+                        item_id=thread_id,
+                        scorecard_id=client_manager._resolve_scorecard_id(),
+                        accountId=client_manager._resolve_account_id(),
+                        model_provider=self.parameters.model_provider,
+                        model_name=self.parameters.model_name,
+                        provider='OPENAI',
+                        scoreId=model_input.metadata.get('score_name'),
+                        batch_job_input={  # Rename to batch_job_input to match client expectations
+                            'scorecardId': client_manager._resolve_scorecard_id(),
+                            'scoreId': model_input.metadata.get('score_name')
+                        },
+                        parameters={
+                            'state': serializable_state,
+                            'thread_id': thread_id,
+                            'breakpoint': True,
+                            'original_metadata': model_input.metadata,
+                            'model_provider': self.parameters.model_provider,
+                            'model_name': self.parameters.model_name
+                        }
+                    )
+                    
+                    logging.info(f"Created batch job {batch_job.id} for thread {thread_id}")
+                    raise BatchProcessingPause(
+                        thread_id=thread_id,
+                        state=serializable_state,
+                        message=f"Workflow paused for batch processing. Batch job ID: {batch_job.id}"
+                    )
+                else:
+                    raise NodeInterrupt("Workflow paused at breakpoint")
+
+            # Return None if we hit a breakpoint - no results to process yet
+            if final_result.get('at_llm_breakpoint') or final_result.get('should_end'):
+                logging.info("Workflow interrupted at breakpoint - no results to process")
+                return None
+
+            # Only continue processing if we have a valid result
             if isinstance(final_result, dict):
+                logging.info(f"Final result keys: {final_result.keys()}")
+                
                 # Unwrap output_aliasing if present
                 result_dict = final_result.get('output_aliasing', final_result)
+                logging.info(f"Result dict after unwrapping: {result_dict}")
                 
-                if 'classification' in result_dict:
+                # Check for classification or value
+                if result_dict.get('classification') is not None:
                     logging.info(f"Creating result from classification: {result_dict['classification']}")
-                    return [self.Result(
+                    result = [self.Result(
                         parameters=self.parameters,
                         value=result_dict['classification'],
                         explanation=result_dict.get('explanation', '')
                     )]
-                elif 'value' in result_dict:
+                    logging.info(f"Created result object: {result}")
+                    return result
+                elif result_dict.get('value') is not None:
                     logging.info(f"Creating result from value: {result_dict['value']}")
-                    return [self.Result(
+                    result = [self.Result(
                         parameters=self.parameters,
                         value=result_dict['value'],
                         explanation=result_dict.get('explanation', '')
                     )]
+                    logging.info(f"Created result object: {result}")
+                    return result
+                else:
+                    logging.error("No classification or value found in result")
+                    logging.error(f"Available keys: {list(result_dict.keys())}")
+                    return None
 
             # If we get here without returning, something went wrong
             logging.error("Workflow completed without producing a valid result")
             logging.error(f"Final event: {final_result}")
             return None
 
+        except BatchProcessingPause:
+            # Expected condition - let it propagate up
+            raise
         except Exception as e:
-            logging.error(f"Error during app.ainvoke: {str(e)}")
+            logging.error(f"Error during prediction: {e}")
+            logging.error(f"Full traceback: {traceback.format_exc()}")
             raise
 
     def preprocess_text(self, text):

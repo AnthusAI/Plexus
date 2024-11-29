@@ -1,6 +1,6 @@
 from typing import List, Dict, Any, Optional, Tuple, Annotated, Union
 from pydantic import Field, BaseModel, ConfigDict
-from langgraph.graph import StateGraph
+from langgraph.graph import StateGraph, END
 from langgraph.errors import NodeInterrupt
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -64,14 +64,14 @@ class Classifier(BaseNode):
                 "explanation": output
             }
 
-    def get_llm_node(self):
+    def get_llm_prompt_node(self):
         """Node that only handles the LLM request."""
         model = self.model
         prompt_templates = self.get_prompt_templates()
 
         async def llm_request(state):
-            logging.info("Entering llm_request node")
-            logging.info(f"Initial state: {state}")
+            logging.info("<*> Entering llm_request node")
+            logging.debug(f"Initial state: {state}")
             
             # Convert to dict if needed
             if not isinstance(state, dict):
@@ -131,23 +131,33 @@ class Classifier(BaseNode):
         )
 
         async def parse_completion(state):
-            logging.info("Entering parse_completion node")
+            logging.info("<*> Entering parse_completion node")
             if isinstance(state, dict):
                 state = self.GraphState(**state)
             
             logging.info("Parsing completion")
+            logging.debug(f"State before parsing: {state}")
             logging.debug(f"Completion to parse: {state.completion}")
-            result = parser.parse(state.completion)
-            logging.info(f"Parsed classification: {result['classification']}")
             
-            return {**state.model_dump(), **result}
+            # Add check for None completion
+            if state.completion is None:
+                logging.info("No completion to parse - workflow likely interrupted")
+                return state
+            
+            result = parser.parse(state.completion)
+            logging.info(f"Parsed result: {result}")
+            
+            final_state = {**state.model_dump(), **result}
+            logging.info(f"Final state after parsing: {final_state}")
+            
+            return final_state
 
         return parse_completion
 
     def get_retry_node(self):
         """Node that prepares for retry by updating chat history."""
         async def prepare_retry(state):
-            logging.info("Entering prepare_retry node")
+            logging.info("<*> Entering prepare_retry node")
             if isinstance(state, dict):
                 state = self.GraphState(**state)
             
@@ -181,7 +191,7 @@ class Classifier(BaseNode):
     def get_max_retries_node(self):
         """Node that handles the case when max retries are reached."""
         async def handle_max_retries(state):
-            logging.info("Entering handle_max_retries node")
+            logging.info("<*> Entering handle_max_retries node")
             if isinstance(state, dict):
                 state = self.GraphState(**state)
             
@@ -197,18 +207,11 @@ class Classifier(BaseNode):
         model = self.model
 
         async def llm_call(state):
-            logging.info("Entering llm_call node")
-            logging.info(f"Initial state type: {type(state)}")
+            logging.info("<*> Entering llm_call node")
             
             # Convert to dict if needed
             if not isinstance(state, dict):
                 state = state.model_dump()
-            
-            logging.info(f"State keys: {state.keys()}")
-            if 'messages' in state:
-                logging.info(f"Found messages in state: {state['messages']}")
-            else:
-                logging.error("No messages found in state!")
 
             # Check if we should break before making the API call
             batch_mode = os.getenv('PLEXUS_ENABLE_BATCH_MODE', '').lower() == 'true'
@@ -216,9 +219,12 @@ class Classifier(BaseNode):
             
             if batch_mode and breakpoints_enabled:
                 logging.info("Breaking before LLM API call with messages in state")
-                raise NodeInterrupt(
-                    "Pausing before LLM API call"
-                )
+                # Return state with breakpoint flag
+                return {
+                    **state,
+                    "at_llm_breakpoint": True,
+                    "should_end": True  # Signal that we want to end
+                }
             
             try:
                 if 'messages' not in state or not state['messages']:
@@ -276,32 +282,48 @@ class Classifier(BaseNode):
 
         return llm_call
 
+    def should_continue(self, state):
+        """Determines whether to continue or end based on state."""
+        if isinstance(state, dict) and state.get("should_end"):
+            logging.info("Found should_end flag, ending workflow")
+            return "end"
+        return "continue"
+
     def add_core_nodes(self, workflow: StateGraph) -> StateGraph:
         # Add all nodes
-        workflow.add_node("llm_request", self.get_llm_node())
+        workflow.add_node("llm_prompt", self.get_llm_prompt_node())
         workflow.add_node("llm_call", self.get_llm_call_node())
         workflow.add_node("parse", self.get_parser_node())
         workflow.add_node("retry", self.get_retry_node())
         workflow.add_node("max_retries", self.get_max_retries_node())
 
-        # Add conditional edges
+        # Add conditional edges for llm_call
+        workflow.add_conditional_edges(
+            "llm_call",
+            self.should_continue,
+            {
+                "continue": "parse",
+                "end": END
+            }
+        )
+
+        # Add conditional edges for parse
         workflow.add_conditional_edges(
             "parse",
             self.should_retry,
             {
                 "retry": "retry",
-                "end": "__end__",
+                "end": END,
                 "max_retries": "max_retries"
             }
         )
         
         # Add regular edges
-        workflow.add_edge("llm_request", "llm_call")
-        workflow.add_edge("llm_call", "parse")
-        workflow.add_edge("retry", "llm_request")
-        workflow.add_edge("max_retries", "__end__")
+        workflow.add_edge("llm_prompt", "llm_call")
+        workflow.add_edge("retry", "llm_prompt")
+        workflow.add_edge("max_retries", END)
         
         # Set entry point
-        workflow.set_entry_point("llm_request")
+        workflow.set_entry_point("llm_prompt")
         
         return workflow
