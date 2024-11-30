@@ -337,13 +337,50 @@ class _BaseAPIClient:
         provider: str,
         scoreId: Optional[str] = None,
         parameters: Optional[Dict] = None,
+        max_batch_size: int = 100,
         **kwargs
     ) -> Tuple['ScoringJob', 'BatchJob']:
         """Create or add to a batch scoring job."""
         from .models.scoring_job import ScoringJob
         from .models.batch_job import BatchJob
 
-        # First create the scoring job
+        # Look for an existing open batch job
+        query = """
+        query GetOpenBatchJobs(
+            $accountId: String!,
+            $scorecardId: String!,
+            $modelProvider: String!,
+            $modelName: String!
+        ) {
+            listBatchJobs(
+                filter: {
+                    accountId: { eq: $accountId },
+                    scorecardId: { eq: $scorecardId },
+                    modelProvider: { eq: $modelProvider },
+                    modelName: { eq: $modelName },
+                    status: { eq: "OPEN" }
+                }
+            ) {
+                items {
+                    id
+                    batchJobScoringJobs {
+                        items {
+                            scoringJobId
+                        }
+                    }
+                }
+            }
+        }
+        """
+
+        result = self.execute(query, {
+            'accountId': accountId,
+            'scorecardId': scorecardId,
+            'modelProvider': model_provider,
+            'modelName': model_name
+        })
+
+        # Create new scoring job
         scoring_job = ScoringJob.create(
             client=self,
             accountId=accountId,
@@ -353,22 +390,32 @@ class _BaseAPIClient:
             parameters=parameters or {},
             **kwargs
         )
+
+        # Find existing batch or create new one
+        batch_job = None
+        open_batches = result.get('listBatchJobs', {}).get('items', [])
         
-        # Then create the batch job
-        batch_job = BatchJob.create(
-            client=self,
-            accountId=accountId,
-            type='MODEL_INFERENCE',
-            modelProvider=model_provider,
-            modelName=model_name,
-            provider=provider,
-            parameters=parameters or {},
-            scorecardId=scorecardId,
-            scoreId=scoreId,
-            **kwargs
-        )
-        
-        # Link the scoring job to the batch job
+        for batch in open_batches:
+            scoring_job_count = len(batch.get('batchJobScoringJobs', {}).get('items', []))
+            if scoring_job_count < max_batch_size:
+                batch_job = BatchJob.get_by_id(batch['id'], self)
+                break
+
+        if not batch_job:
+            batch_job = BatchJob.create(
+                client=self,
+                accountId=accountId,
+                type='MODEL_INFERENCE',
+                modelProvider=model_provider,
+                modelName=model_name,
+                provider=provider,
+                parameters=parameters or {},
+                scorecardId=scorecardId,
+                scoreId=scoreId,
+                **kwargs
+            )
+
+        # Link scoring job to batch job
         mutation = """
         mutation CreateBatchJobScoringJob(
             $batchJobId: String!, 
@@ -383,12 +430,44 @@ class _BaseAPIClient:
             }
         }
         """
-        
+
         self.execute(mutation, {
             'batchJobId': batch_job.id,
             'scoringJobId': scoring_job.id
         })
-        
+
+        # Check if batch is now full
+        count_query = """
+        query GetBatchJobCount($batchJobId: String!) {
+            getBatchJob(id: $batchJobId) {
+                batchJobScoringJobs {
+                    items {
+                        scoringJobId
+                    }
+                }
+            }
+        }
+        """
+
+        count_result = self.execute(count_query, {'batchJobId': batch_job.id})
+        current_count = len(count_result.get('getBatchJob', {})
+                           .get('batchJobScoringJobs', {})
+                           .get('items', []))
+
+        if current_count >= max_batch_size:
+            close_mutation = """
+            mutation UpdateBatchJob($batchJobId: String!) {
+                updateBatchJob(input: {
+                    id: $batchJobId,
+                    status: "CLOSED"
+                }) {
+                    id
+                    status
+                }
+            }
+            """
+            self.execute(close_mutation, {'batchJobId': batch_job.id})
+
         return scoring_job, batch_job
 
 class PlexusDashboardClient(_BaseAPIClient):
