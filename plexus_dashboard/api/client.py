@@ -55,7 +55,7 @@ Error Handling:
 """
 
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple, TYPE_CHECKING
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 from gql.transport.exceptions import TransportQueryError
@@ -63,6 +63,10 @@ from queue import Queue, Empty
 from threading import Thread, Event
 import time
 from datetime import datetime, timezone
+
+if TYPE_CHECKING:
+    from .models.scoring_job import ScoringJob
+    from .models.batch_job import BatchJob
 
 class _BaseAPIClient:
     """Base API client with GraphQL functionality"""
@@ -391,3 +395,67 @@ class PlexusDashboardClient(_BaseAPIClient):
         except Exception as e:
             logger.error(f"Error updating evaluation: {e}")
             raise
+
+    def batch_scoring_job(
+        self,
+        itemId: str,
+        scorecardId: str,
+        accountId: str,
+        model_provider: str,
+        model_name: str,
+        provider: str,
+        scoreId: Optional[str] = None,
+        parameters: Optional[Dict] = None,
+        **kwargs
+    ) -> Tuple['ScoringJob', 'BatchJob']:
+        """Create or add to a batch scoring job."""
+        from .models.scoring_job import ScoringJob
+        from .models.batch_job import BatchJob
+
+        # First create the scoring job
+        scoring_job = ScoringJob.create(
+            client=self,
+            accountId=accountId,
+            scorecardId=scorecardId,
+            itemId=itemId,
+            scoreId=scoreId,
+            parameters=parameters or {},
+            **kwargs
+        )
+        
+        # Then create the batch job
+        batch_job = BatchJob.create(
+            client=self,
+            accountId=accountId,
+            type='MODEL_INFERENCE',
+            modelProvider=model_provider,
+            modelName=model_name,
+            provider=provider,
+            parameters=parameters or {},
+            scorecardId=scorecardId,
+            scoreId=scoreId,
+            **kwargs
+        )
+        
+        # Link the scoring job to the batch job
+        mutation = """
+        mutation CreateBatchJobScoringJob(
+            $batchJobId: String!, 
+            $scoringJobId: String!
+        ) {
+            createBatchJobScoringJob(input: {
+                batchJobId: $batchJobId
+                scoringJobId: $scoringJobId
+            }) {
+                batchJobId
+                scoringJobId
+            }
+        }
+        """
+        
+        self.execute(mutation, {
+            'batchJobId': batch_job.id,
+            'scoringJobId': scoring_job.id
+        })
+        
+        return scoring_job, batch_job
