@@ -33,7 +33,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from pathlib import Path
 import uuid
 from langgraph.errors import NodeInterrupt
-from plexus_dashboard.api.client_manager import ClientManager
+from plexus_dashboard.api.client import PlexusDashboardClient
 from plexus_dashboard.api.models.account import Account
 
 class BatchProcessingPause(Exception):
@@ -714,7 +714,7 @@ class LangGraphScore(Score, LangChainUser):
                 logging.info("Found breakpoint state, creating batch job")
                 if batch_mode:
                     # Initialize client manager with context from metadata
-                    client_manager = ClientManager.for_scorecard(
+                    client = PlexusDashboardClient.for_scorecard(
                         account_key=model_input.metadata.get('account_key'),
                         scorecard_key=model_input.metadata.get('scorecard_key'),
                         score_name=model_input.metadata.get('score_name')
@@ -760,13 +760,13 @@ class LangGraphScore(Score, LangChainUser):
                     # Create batch job with serializable state
                     try:
                         # Get the score ID from the client manager's context
-                        score_id = client_manager._resolve_score_id()
+                        score_id = client._resolve_score_id()
                         logging.info(f"Resolved score ID: {score_id}")
                         
-                        scoring_job, batch_job = client_manager.api_client.batch_scoring_job(
+                        scoring_job, batch_job = client.batch_scoring_job(
                             itemId=thread_id,
-                            scorecardId=client_manager._resolve_scorecard_id(),
-                            accountId=client_manager._resolve_account_id(),
+                            scorecardId=client._resolve_scorecard_id(),
+                            accountId=client._resolve_account_id(),
                             model_provider=self.parameters.model_provider,
                             model_name=self.parameters.model_name,
                             provider='OPENAI',
