@@ -19,7 +19,7 @@ type BatchJobIndexFields = "accountId" | "scorecardId" | "type" | "scoreId" |
     "status" | "modelProvider" | "modelName" | "batchId";
 type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId";
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
-    "evaluationId";
+    "evaluationId" | "scoreId";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
     "evaluationId" | "scoringJobId";
 
@@ -227,6 +227,8 @@ const schema = a.schema({
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             evaluationId: a.string(),
             evaluation: a.belongsTo('Evaluation', 'evaluationId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
             batchJobLinks: a.hasMany('BatchJobScoringJob', 'scoringJobId'),
             scoreResults: a.hasMany('ScoreResult', 'scoringJobId'),
         })
@@ -238,7 +240,8 @@ const schema = a.schema({
             idx("accountId" as ScoringJobIndexFields),
             idx("itemId" as ScoringJobIndexFields),
             idx("scorecardId" as ScoringJobIndexFields),
-            idx("evaluationId" as ScoringJobIndexFields)
+            idx("evaluationId" as ScoringJobIndexFields),
+            idx("scoreId" as ScoringJobIndexFields)
         ]),
 
     ScoreResult: a
