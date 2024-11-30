@@ -758,34 +758,47 @@ class LangGraphScore(Score, LangChainUser):
                     logging.info(f"Created serializable state: {serializable_state}")
                     
                     # Create batch job with serializable state
-                    scoring_job, batch_job = client_manager.api_client.batch_scoring_job(
-                        item_id=thread_id,
-                        scorecard_id=client_manager._resolve_scorecard_id(),
-                        accountId=client_manager._resolve_account_id(),
-                        model_provider=self.parameters.model_provider,
-                        model_name=self.parameters.model_name,
-                        provider='OPENAI',
-                        scoreId=model_input.metadata.get('score_name'),
-                        batch_job_input={  # Rename to batch_job_input to match client expectations
-                            'scorecardId': client_manager._resolve_scorecard_id(),
-                            'scoreId': model_input.metadata.get('score_name')
-                        },
-                        parameters={
-                            'state': serializable_state,
-                            'thread_id': thread_id,
-                            'breakpoint': True,
-                            'original_metadata': model_input.metadata,
-                            'model_provider': self.parameters.model_provider,
-                            'model_name': self.parameters.model_name
-                        }
-                    )
-                    
-                    logging.info(f"Created batch job {batch_job.id} for thread {thread_id}")
-                    raise BatchProcessingPause(
-                        thread_id=thread_id,
-                        state=serializable_state,
-                        message=f"Workflow paused for batch processing. Batch job ID: {batch_job.id}"
-                    )
+                    try:
+                        # Get the score ID from the client manager's context
+                        score_id = client_manager._resolve_score_id()
+                        logging.info(f"Resolved score ID: {score_id}")
+                        
+                        scoring_job, batch_job = client_manager.api_client.batch_scoring_job(
+                            itemId=thread_id,
+                            scorecardId=client_manager._resolve_scorecard_id(),
+                            accountId=client_manager._resolve_account_id(),
+                            model_provider=self.parameters.model_provider,
+                            model_name=self.parameters.model_name,
+                            provider='OPENAI',
+                            scoreId=score_id,
+                            parameters={
+                                'state': serializable_state,
+                                'thread_id': thread_id,
+                                'breakpoint': True,
+                                'original_metadata': model_input.metadata,
+                                'model_provider': self.parameters.model_provider,
+                                'model_name': self.parameters.model_name
+                            }
+                        )
+                        
+                        logging.info(f"Created batch job {batch_job.id} for thread {thread_id}")
+                        
+                        # Clean up before raising the exception
+                        await self.cleanup()
+                        
+                        raise BatchProcessingPause(
+                            thread_id=thread_id,
+                            state=serializable_state,
+                            message=f"Workflow paused for batch processing. Batch job ID: {batch_job.id}. Thread ID: {thread_id}"
+                        )
+                    except Exception as e:
+                        logging.error(f"Failed to create batch job: {str(e)}")
+                        await self.cleanup()
+                        raise BatchProcessingPause(
+                            thread_id=thread_id,
+                            state=serializable_state,
+                            message=f"Workflow paused for batch processing. Thread ID: {thread_id}"
+                        )
                 else:
                     raise NodeInterrupt("Workflow paused at breakpoint")
 
