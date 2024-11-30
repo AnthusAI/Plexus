@@ -103,6 +103,7 @@ const schema = a.schema({
             versionHistory: a.json(),
             evaluations: a.hasMany('Evaluation', 'scoreId'),
             batchJobs: a.hasMany('BatchJob', 'scoreId'),
+            scoringJobs: a.hasMany('ScoringJob', 'scoreId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
