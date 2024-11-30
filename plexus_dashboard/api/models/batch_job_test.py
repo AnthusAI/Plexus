@@ -8,26 +8,20 @@ def mock_client():
     return Mock()
 
 @pytest.fixture
-def sample_parameters():
-    return {
-        'model': 'gpt-4',
-        'temperature': 0.7
-    }
-
-@pytest.fixture
-def sample_batch_job(mock_client, sample_parameters):
+def sample_batch_job(mock_client):
     return BatchJob(
         id="test-id",
         accountId="acc-123",
         status="PENDING",
         type="inference",
-        parameters=sample_parameters,
-        createdAt=datetime.now(timezone.utc),
-        updatedAt=datetime.now(timezone.utc),
+        provider="OPENAI",
+        batchId="batch-123",
+        modelProvider="openai",
+        modelName="gpt-4",
         client=mock_client
     )
 
-def test_create_batch_job(mock_client, sample_parameters):
+def test_create_batch_job(mock_client):
     now = datetime.now(timezone.utc)
     mock_client.execute.return_value = {
         'createBatchJob': {
@@ -35,9 +29,10 @@ def test_create_batch_job(mock_client, sample_parameters):
             'accountId': 'acc-123',
             'status': 'PENDING',
             'type': 'inference',
-            'parameters': sample_parameters,
-            'createdAt': now.isoformat(),
-            'updatedAt': now.isoformat()
+            'provider': 'OPENAI',
+            'batchId': 'batch-123',
+            'modelProvider': 'openai',
+            'modelName': 'gpt-4'
         }
     }
     
@@ -45,13 +40,16 @@ def test_create_batch_job(mock_client, sample_parameters):
         client=mock_client,
         accountId='acc-123',
         type='inference',
-        parameters=sample_parameters
+        modelProvider='openai',
+        modelName='gpt-4',
+        parameters={'temperature': 0.7}
     )
     
     assert job.id == 'new-id'
     assert job.accountId == 'acc-123'
     assert job.status == 'PENDING'
-    assert job.parameters == sample_parameters
+    assert job.modelProvider == 'openai'
+    assert job.modelName == 'gpt-4'
 
 def test_update_batch_job(sample_batch_job):
     now = datetime.now(timezone.utc)
@@ -61,23 +59,24 @@ def test_update_batch_job(sample_batch_job):
             'accountId': sample_batch_job.accountId,
             'status': 'RUNNING',
             'type': sample_batch_job.type,
-            'parameters': sample_batch_job.parameters,
-            'createdAt': sample_batch_job.createdAt.isoformat(),
-            'updatedAt': now.isoformat(),
-            'processedItems': 50,
-            'totalItems': 100
+            'provider': sample_batch_job.provider,
+            'batchId': sample_batch_job.batchId,
+            'modelProvider': sample_batch_job.modelProvider,
+            'modelName': sample_batch_job.modelName,
+            'totalRequests': 100,
+            'completedRequests': 50
         }
     }
     
     updated = sample_batch_job.update(
         status='RUNNING',
-        processedItems=50,
-        totalItems=100
+        totalRequests=100,
+        completedRequests=50
     )
     
     assert updated.status == 'RUNNING'
-    assert updated.processedItems == 50
-    assert updated.totalItems == 100
+    assert updated.totalRequests == 100
+    assert updated.completedRequests == 50
 
 def test_get_by_id(mock_client):
     now = datetime.now(timezone.utc)
@@ -87,9 +86,10 @@ def test_get_by_id(mock_client):
             'accountId': 'acc-123',
             'status': 'COMPLETED',
             'type': 'inference',
-            'parameters': {'model': 'gpt-4'},
-            'createdAt': now.isoformat(),
-            'updatedAt': now.isoformat(),
+            'provider': 'OPENAI',
+            'batchId': 'batch-123',
+            'modelProvider': 'openai',
+            'modelName': 'gpt-4',
             'completedAt': now.isoformat()
         }
     }
@@ -110,16 +110,15 @@ def test_from_dict_handles_datetime_fields():
         'accountId': 'acc-123',
         'status': 'RUNNING',
         'type': 'inference',
-        'parameters': {'model': 'gpt-4'},
-        'createdAt': now.isoformat(),
-        'updatedAt': now.isoformat(),
+        'provider': 'OPENAI',
+        'batchId': 'batch-123',
+        'modelProvider': 'openai',
+        'modelName': 'gpt-4',
         'startedAt': now.isoformat(),
         'completedAt': now.isoformat()
     }
     
     job = BatchJob.from_dict(data, Mock())
     
-    assert isinstance(job.createdAt, datetime)
-    assert isinstance(job.updatedAt, datetime)
     assert isinstance(job.startedAt, datetime)
     assert isinstance(job.completedAt, datetime) 

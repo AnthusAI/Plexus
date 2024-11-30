@@ -98,3 +98,51 @@ class Score(BaseModel):
             versionHistory=data.get('versionHistory'),
             client=client
         )
+
+    @classmethod
+    def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'Score':
+        query = """
+        query GetScore($id: ID!) {
+            getScore(id: $id) {
+                %s
+            }
+        }
+        """ % cls.fields()
+        
+        result = client.execute(query, {'id': id})
+        if not result or 'getScore' not in result:
+            raise Exception(f"Failed to get Score {id}")
+            
+        return cls.from_dict(result['getScore'], client)
+
+    @classmethod
+    def get_by_name(cls, name: str, scorecard_id: str, client: _BaseAPIClient) -> Optional['Score']:
+        """Get a score by its name within a scorecard"""
+        # First get all sections for this scorecard
+        sections_query = """
+        query GetScorecardSections($scorecardId: String!) {
+            listScorecardSections(filter: { scorecardId: { eq: $scorecardId } }) {
+                items {
+                    id
+                    scores {
+                        items {
+                            %s
+                        }
+                    }
+                }
+            }
+        }
+        """ % cls.fields()
+        
+        sections_result = client.execute(sections_query, {'scorecardId': scorecard_id})
+        if not sections_result or 'listScorecardSections' not in sections_result:
+            return None
+            
+        # Look through all sections for a score with matching name
+        for section in sections_result['listScorecardSections']['items']:
+            if section.get('scores', {}).get('items'):
+                for score in section['scores']['items']:
+                    if score.get('name') == name:
+                        return cls.from_dict(score, client)
+        
+        return None

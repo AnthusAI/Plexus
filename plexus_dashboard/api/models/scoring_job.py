@@ -11,18 +11,13 @@ class ScoringJob(BaseModel):
     createdAt: datetime
     updatedAt: datetime
     scorecardId: str
-    parameters: Dict
-    totalItems: Optional[int] = None
-    processedItems: Optional[int] = None
-    errorMessage: Optional[str] = None
-    errorDetails: Optional[Dict] = None
+    itemId: str
     startedAt: Optional[datetime] = None
     completedAt: Optional[datetime] = None
-    elapsedSeconds: Optional[int] = None
-    estimatedRemainingSeconds: Optional[int] = None
-    batchSize: Optional[int] = None
-    concurrency: Optional[int] = None
-    cost: Optional[float] = None
+    errorMessage: Optional[str] = None
+    errorDetails: Optional[Dict] = None
+    evaluationId: Optional[str] = None
+    scoreId: Optional[str] = None
 
     def __init__(
         self,
@@ -32,18 +27,13 @@ class ScoringJob(BaseModel):
         createdAt: datetime,
         updatedAt: datetime,
         scorecardId: str,
-        parameters: Dict,
-        totalItems: Optional[int] = None,
-        processedItems: Optional[int] = None,
-        errorMessage: Optional[str] = None,
-        errorDetails: Optional[Dict] = None,
+        itemId: str,
         startedAt: Optional[datetime] = None,
         completedAt: Optional[datetime] = None,
-        elapsedSeconds: Optional[int] = None,
-        estimatedRemainingSeconds: Optional[int] = None,
-        batchSize: Optional[int] = None,
-        concurrency: Optional[int] = None,
-        cost: Optional[float] = None,
+        errorMessage: Optional[str] = None,
+        errorDetails: Optional[Dict] = None,
+        evaluationId: Optional[str] = None,
+        scoreId: Optional[str] = None,
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
@@ -52,18 +42,13 @@ class ScoringJob(BaseModel):
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.scorecardId = scorecardId
-        self.parameters = parameters
-        self.totalItems = totalItems
-        self.processedItems = processedItems
-        self.errorMessage = errorMessage
-        self.errorDetails = errorDetails
+        self.itemId = itemId
         self.startedAt = startedAt
         self.completedAt = completedAt
-        self.elapsedSeconds = elapsedSeconds
-        self.estimatedRemainingSeconds = estimatedRemainingSeconds
-        self.batchSize = batchSize
-        self.concurrency = concurrency
-        self.cost = cost
+        self.errorMessage = errorMessage
+        self.errorDetails = errorDetails
+        self.evaluationId = evaluationId
+        self.scoreId = scoreId
 
     @classmethod
     def fields(cls) -> str:
@@ -74,18 +59,13 @@ class ScoringJob(BaseModel):
             createdAt
             updatedAt
             scorecardId
-            parameters
-            totalItems
-            processedItems
-            errorMessage
-            errorDetails
+            itemId
             startedAt
             completedAt
-            elapsedSeconds
-            estimatedRemainingSeconds
-            batchSize
-            concurrency
-            cost
+            errorMessage
+            errorDetails
+            evaluationId
+            scoreId
         """
 
     @classmethod
@@ -94,27 +74,21 @@ class ScoringJob(BaseModel):
         client: _BaseAPIClient,
         accountId: str,
         scorecardId: str,
+        itemId: str,
         parameters: Dict,
-        batchSize: Optional[int] = None,
-        concurrency: Optional[int] = None,
         **kwargs
     ) -> 'ScoringJob':
-        now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-        
         input_data = {
             'accountId': accountId,
             'scorecardId': scorecardId,
-            'parameters': parameters,
-            'status': kwargs.pop('status', 'PENDING'),
-            'createdAt': now,
-            'updatedAt': now,
-            **kwargs
+            'itemId': itemId,
+            'status': kwargs.pop('status', 'PENDING')
         }
         
-        if batchSize is not None:
-            input_data['batchSize'] = batchSize
-        if concurrency is not None:
-            input_data['concurrency'] = concurrency
+        optional_fields = ['errorMessage', 'errorDetails', 'evaluationId', 'scoreId']
+        for field in optional_fields:
+            if field in kwargs:
+                input_data[field] = kwargs[field]
         
         mutation = """
         mutation CreateScoringJob($input: CreateScoringJobInput!) {

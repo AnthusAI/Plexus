@@ -3,58 +3,68 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from .base import BaseModel
 from ..client import _BaseAPIClient
+import uuid
 
 @dataclass
 class BatchJob(BaseModel):
     accountId: str
     status: str
-    createdAt: datetime
-    updatedAt: datetime
     type: str
-    parameters: Dict
-    totalItems: Optional[int] = None
-    processedItems: Optional[int] = None
+    provider: str
+    batchId: str
+    modelProvider: str
+    modelName: str
+    startedAt: Optional[datetime] = None
+    estimatedEndAt: Optional[datetime] = None
+    completedAt: Optional[datetime] = None
+    totalRequests: Optional[int] = None
+    completedRequests: Optional[int] = None
+    failedRequests: Optional[int] = None
     errorMessage: Optional[str] = None
     errorDetails: Optional[Dict] = None
-    startedAt: Optional[datetime] = None
-    completedAt: Optional[datetime] = None
-    elapsedSeconds: Optional[int] = None
-    estimatedRemainingSeconds: Optional[int] = None
+    scorecardId: Optional[str] = None
+    scoreId: Optional[str] = None
 
     def __init__(
         self,
         id: str,
         accountId: str,
         status: str,
-        createdAt: datetime,
-        updatedAt: datetime,
         type: str,
-        parameters: Dict,
-        totalItems: Optional[int] = None,
-        processedItems: Optional[int] = None,
+        provider: str,
+        batchId: str,
+        modelProvider: str,
+        modelName: str,
+        startedAt: Optional[datetime] = None,
+        estimatedEndAt: Optional[datetime] = None,
+        completedAt: Optional[datetime] = None,
+        totalRequests: Optional[int] = None,
+        completedRequests: Optional[int] = None,
+        failedRequests: Optional[int] = None,
         errorMessage: Optional[str] = None,
         errorDetails: Optional[Dict] = None,
-        startedAt: Optional[datetime] = None,
-        completedAt: Optional[datetime] = None,
-        elapsedSeconds: Optional[int] = None,
-        estimatedRemainingSeconds: Optional[int] = None,
+        scorecardId: Optional[str] = None,
+        scoreId: Optional[str] = None,
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
         self.accountId = accountId
         self.status = status
-        self.createdAt = createdAt
-        self.updatedAt = updatedAt
         self.type = type
-        self.parameters = parameters
-        self.totalItems = totalItems
-        self.processedItems = processedItems
+        self.provider = provider
+        self.batchId = batchId
+        self.modelProvider = modelProvider
+        self.modelName = modelName
+        self.startedAt = startedAt
+        self.estimatedEndAt = estimatedEndAt
+        self.completedAt = completedAt
+        self.totalRequests = totalRequests
+        self.completedRequests = completedRequests
+        self.failedRequests = failedRequests
         self.errorMessage = errorMessage
         self.errorDetails = errorDetails
-        self.startedAt = startedAt
-        self.completedAt = completedAt
-        self.elapsedSeconds = elapsedSeconds
-        self.estimatedRemainingSeconds = estimatedRemainingSeconds
+        self.scorecardId = scorecardId
+        self.scoreId = scoreId
 
     @classmethod
     def fields(cls) -> str:
@@ -62,18 +72,21 @@ class BatchJob(BaseModel):
             id
             accountId
             status
-            createdAt
-            updatedAt
             type
-            parameters
-            totalItems
-            processedItems
+            provider
+            batchId
+            modelProvider
+            modelName
+            startedAt
+            estimatedEndAt
+            completedAt
+            totalRequests
+            completedRequests
+            failedRequests
             errorMessage
             errorDetails
-            startedAt
-            completedAt
-            elapsedSeconds
-            estimatedRemainingSeconds
+            scorecardId
+            scoreId
         """
 
     @classmethod
@@ -82,20 +95,29 @@ class BatchJob(BaseModel):
         client: _BaseAPIClient,
         accountId: str,
         type: str,
+        modelProvider: str,
+        modelName: str,
         parameters: Dict,
         **kwargs
     ) -> 'BatchJob':
-        now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-        
         input_data = {
             'accountId': accountId,
             'type': type,
-            'parameters': parameters,
-            'status': kwargs.pop('status', 'PENDING'),
-            'createdAt': now,
-            'updatedAt': now,
-            **kwargs
+            'provider': 'OPENAI',
+            'batchId': str(uuid.uuid4()),
+            'modelProvider': modelProvider,
+            'modelName': modelName,
+            'status': kwargs.pop('status', 'PENDING')
         }
+        
+        optional_fields = [
+            'scorecardId', 'scoreId', 'errorMessage', 'errorDetails',
+            'startedAt', 'estimatedEndAt', 'completedAt',
+            'totalRequests', 'completedRequests', 'failedRequests'
+        ]
+        for field in optional_fields:
+            if field in kwargs:
+                input_data[field] = kwargs[field]
         
         mutation = """
         mutation CreateBatchJob($input: CreateBatchJobInput!) {
@@ -110,15 +132,20 @@ class BatchJob(BaseModel):
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'BatchJob':
-        for date_field in ['createdAt', 'updatedAt', 'startedAt', 'completedAt']:
+        # Convert datetime fields
+        for date_field in ['startedAt', 'estimatedEndAt', 'completedAt']:
             if data.get(date_field):
                 data[date_field] = datetime.fromisoformat(
                     data[date_field].replace('Z', '+00:00')
                 )
-
+        
+        # Remove fields not in constructor
+        filtered_data = {k: v for k, v in data.items() 
+                       if k not in ['createdAt', 'updatedAt']}
+        
         return cls(
             client=client,
-            **data
+            **filtered_data
         )
 
     def update(self, **kwargs) -> 'BatchJob':
