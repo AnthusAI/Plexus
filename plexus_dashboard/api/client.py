@@ -56,6 +56,7 @@ Error Handling:
 
 import os
 from typing import Optional, Dict, Any, Tuple, TYPE_CHECKING
+from dataclasses import dataclass
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 from gql.transport.exceptions import TransportQueryError
@@ -67,16 +68,30 @@ from datetime import datetime, timezone
 if TYPE_CHECKING:
     from .models.scoring_job import ScoringJob
     from .models.batch_job import BatchJob
+    from .models.account import Account
+    from .models.scorecard import Scorecard
+    from .models.score import Score
+
+@dataclass
+class ClientContext:
+    account_key: Optional[str] = None
+    account_id: Optional[str] = None
+    scorecard_key: Optional[str] = None
+    scorecard_id: Optional[str] = None
+    score_name: Optional[str] = None
+    score_id: Optional[str] = None
 
 class _BaseAPIClient:
-    """Base API client with GraphQL functionality"""
     def __init__(
         self,
         api_url: Optional[str] = None,
         api_key: Optional[str] = None,
+        context: Optional[ClientContext] = None
     ):
         self.api_url = api_url or os.environ.get('PLEXUS_API_URL')
         self.api_key = api_key or os.environ.get('PLEXUS_API_KEY')
+        self.context = context or ClientContext()
+        self._cache = {}
         
         # Initialize background logging attributes
         self._log_queue = None
@@ -103,6 +118,11 @@ class _BaseAPIClient:
         )
         
         # Initialize model namespaces
+        from .namespaces import (
+            ScoreResultNamespace,
+            ScorecardNamespace,
+            AccountNamespace
+        )
         self.ScoreResult = ScoreResultNamespace(self)
         self.Scorecard = ScorecardNamespace(self)
         self.Account = AccountNamespace(self)
@@ -112,80 +132,9 @@ class _BaseAPIClient:
         self._stop_logging = Event()
         self._log_thread = Thread(target=self._process_logs, daemon=True)
         self._log_thread.start()
-    
-    def execute(self, query: str, variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        try:
-            return self.client.execute(gql(query), variable_values=variables)
-        except TransportQueryError as e:
-            raise Exception(f"GraphQL query failed: {str(e)}")
-    
-    def log_score(
-        self, 
-        value: float, 
-        item_id: str, 
-        *,  # Force keyword arguments
-        immediate: bool = False,
-        batch_size: Optional[int] = 10,
-        batch_timeout: Optional[float] = 1.0,
-        **kwargs
-    ) -> None:
-        """Fire-and-forget score logging with configurable batching.
-        
-        This method provides flexible logging options:
-        1. Standard batched logging (default)
-        2. Immediate logging (immediate=True)
-        3. Custom batch configurations (batch_size, batch_timeout)
-        
-        The method is non-blocking and thread-safe. Errors during logging
-        are caught and logged but don't affect the calling code.
-        
-        Args:
-            value: Score value to log (required)
-            item_id: ID of the item being scored (required)
-            immediate: If True, log immediately in a new thread (no batching)
-            batch_size: Max items per batch (None for no limit), default 10
-            batch_timeout: Max seconds before flushing batch (None for no timeout), default 1s
-            **kwargs: Additional score result fields (accountId, etc.)
-        
-        Thread Safety:
-            This method is thread-safe and can be called from multiple threads.
-            The background processing ensures proper batching and API communication.
-        
-        Error Handling:
-            Errors during logging are caught and logged but not propagated.
-            This ensures the main application continues running even if logging fails.
-        """
-        if immediate:
-            thread = Thread(
-                target=self._log_single_score,
-                args=(value, item_id),
-                kwargs=kwargs,
-                daemon=True
-            )
-            thread.start()
-        else:
-            self._log_queue.put({
-                'value': value,
-                'itemId': item_id,
-                'batch_size': batch_size,
-                'batch_timeout': batch_timeout,
-                **kwargs
-            })
-    
-    def _log_single_score(self, value: float, item_id: str, **kwargs):
-        try:
-            from .models.score_result import ScoreResult
-            ScoreResult.create(
-                client=self,
-                value=value,
-                itemId=item_id,
-                **kwargs
-            )
-        except Exception as e:
-            # Log error but don't raise - this is fire-and-forget
-            print(f"Error logging score: {e}")
-    
+
     def _process_logs(self):
+        """Process logs in background thread."""
         batches = {}  # Dict of batch_config -> items
         last_flush = time.time()
         
@@ -221,31 +170,9 @@ class _BaseAPIClient:
                         self._flush_logs(items)
                 batches.clear()
                 last_flush = current_time
-    
-    def _flush_logs(self, items):
-        try:
-            from .models.score_result import ScoreResult
-            ScoreResult.batch_create(self, items)
-        except Exception as e:
-            # Log error but don't raise - this is fire-and-forget
-            print(f"Error flushing logs: {e}")
-    
+
     def flush(self) -> None:
-        """Flush any pending log items immediately.
-        
-        This method:
-        1. Stops the background logging thread
-        2. Collects any remaining items from the queue
-        3. Sends them to the API in a final batch
-        4. Waits for the thread to finish (with timeout)
-        
-        This is automatically called during shutdown but can also be
-        called manually to ensure all logs are sent.
-        
-        Thread Safety:
-            Safe to call from any thread, but should typically be called
-            only during shutdown or when immediate flushing is required.
-        """
+        """Flush any pending log items immediately."""
         if not self._stop_logging:
             return
             
@@ -271,130 +198,134 @@ class _BaseAPIClient:
     def __del__(self):
         self.flush()
 
-class ScoreResultNamespace:
-    def __init__(self, client: _BaseAPIClient):
-        self._client = client
-        
-    def create(
-        self,
-        value: float,
-        item_id: str,
-        *,
+    def execute(self, query: str, variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        try:
+            return self.client.execute(gql(query), variable_values=variables)
+        except TransportQueryError as e:
+            raise Exception(f"GraphQL query failed: {str(e)}")
+
+    def _resolve_account_id(self) -> str:
+        """Get account ID, resolving from key if needed"""
+        if self.context.account_id:
+            return self.context.account_id
+            
+        cache_key = f"account:{self.context.account_key}"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+            
+        from .models.account import Account
+        account = Account.get_by_key(self.context.account_key, self)
+        self._cache[cache_key] = account.id
+        self.context.account_id = account.id
+        return account.id
+    
+    def _resolve_scorecard_id(self, override_key: Optional[str] = None) -> Optional[str]:
+        """Get scorecard ID, resolving from key if needed"""
+        key = override_key or self.context.scorecard_key
+        if not key:
+            return None
+            
+        cache_key = f"scorecard:{key}"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+            
+        from .models.scorecard import Scorecard
+        scorecard = Scorecard.get_by_key(key, self)
+        self._cache[cache_key] = scorecard.id
+        if not override_key:
+            self.context.scorecard_id = scorecard.id
+        return scorecard.id
+    
+    def _resolve_score_id(self) -> Optional[str]:
+        """Get score ID, resolving from name if needed"""
+        if self.context.score_id:
+            return self.context.score_id
+            
+        if not self.context.score_name:
+            return None
+            
+        cache_key = f"score:{self.context.score_name}:{self.context.scorecard_key}"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+            
+        scorecard_id = self._resolve_scorecard_id()
+        if not scorecard_id:
+            return None
+            
+        from .models.score import Score
+        score = Score.get_by_name(self.context.score_name, scorecard_id, self)
+        if not score:
+            return None
+            
+        self._cache[cache_key] = score.id
+        self.context.score_id = score.id
+        return score.id
+
+    def log_score(
+        self, 
+        value: float, 
+        item_id: str, 
+        *, 
         immediate: bool = False,
         batch_size: Optional[int] = 10,
         batch_timeout: Optional[float] = 1.0,
+        confidence: Optional[float] = None,
+        metadata: Optional[Dict] = None,
+        scorecard_key: Optional[str] = None,
+        score_name: Optional[str] = None,
         **kwargs
     ) -> None:
-        """Create a new score result, optionally in background"""
-        # ... implementation ...
+        score_data = {
+            'value': value,
+            'itemId': item_id,
+            **kwargs
+        }
 
-class ScorecardNamespace:
-    def __init__(self, client: _BaseAPIClient):
-        self._client = client
+        # Try to resolve IDs from context if not provided
+        if 'accountId' not in score_data and self.context.account_key:
+            score_data['accountId'] = self._resolve_account_id()
+            
+        if 'scorecardId' not in score_data and (scorecard_key or self.context.scorecard_key):
+            scorecard_id = self._resolve_scorecard_id(scorecard_key)
+            if scorecard_id:
+                score_data['scorecardId'] = scorecard_id
         
-    def get_by_key(self, key: str):
-        from .models.scorecard import Scorecard
-        return Scorecard.get_by_key(key, self._client)
-        
-    def get_by_id(self, id: str):
-        from .models.scorecard import Scorecard
-        return Scorecard.get_by_id(id, self._client)
-
-class AccountNamespace:
-    def __init__(self, client: _BaseAPIClient):
-        self._client = client
-        
-    def get_by_key(self, key: str):
-        from .models.account import Account
-        return Account.get_by_key(key, self._client)
-        
-    def get_by_id(self, id: str):
-        from .models.account import Account
-        return Account.get_by_id(id, self._client)
-
-class PlexusDashboardClient(_BaseAPIClient):
-    """
-    Client for the Plexus Dashboard API.
-    
-    Provides access to all API resources with schema-matching namespaces:
-        client.ScoreResult.create(...)
-        client.ScoreResult.batch_create(...)
-        client.Scorecard.get_by_key(...)
-        etc.
-    
-    Features:
-    - Background processing with configurable batching
-    - ID resolution and caching
-    - Thread-safe operations
-    """
-    def __init__(
-        self,
-        api_url: Optional[str] = None,
-        api_key: Optional[str] = None,
-        context: Optional[Dict[str, str]] = None
-    ):
-        super().__init__(api_url, api_key)
-        self.context = context or {}
-        
-        # Initialize model namespaces
-        self.ScoreResult = ScoreResultNamespace(self)
-        self.Scorecard = ScorecardNamespace(self)
-        self.Account = AccountNamespace(self)
-
-    def updateEvaluation(self, id: str, **kwargs) -> None:
-        """Update evaluation fields."""
-        try:
-            # Always update the updatedAt timestamp
-            kwargs['updatedAt'] = datetime.now(timezone.utc).isoformat().replace(
-                '+00:00', 'Z'
+        if confidence is not None:
+            score_data['confidence'] = confidence
+        if metadata:
+            score_data['metadata'] = metadata
+            
+        if immediate:
+            thread = Thread(
+                target=self._log_single_score,
+                args=(),
+                kwargs=score_data,
+                daemon=True
             )
-            
-            mutation = """
-            mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                updateEvaluation(input: $input) {
-                    id
-                    type
-                    accountId
-                    status
-                    createdAt
-                    updatedAt
-                    parameters
-                    metrics
-                    metricsExplanation
-                    inferences
-                    accuracy
-                    cost
-                    startedAt
-                    elapsedSeconds
-                    estimatedRemainingSeconds
-                    totalItems
-                    processedItems
-                    errorMessage
-                    errorDetails
-                    scorecardId
-                    scoreId
-                    confusionMatrix
-                    scoreGoal
-                    datasetClassDistribution
-                    isDatasetClassDistributionBalanced
-                    predictedClassDistribution
-                    isPredictedClassDistributionBalanced
-                }
-            }
-            """
-            
-            variables = {
-                'input': {
-                    'id': id,
-                    **kwargs
-                }
-            }
-            
-            self.execute(mutation, variables)
-            
+            thread.start()
+        else:
+            self._log_queue.put({
+                'batch_size': batch_size,
+                'batch_timeout': batch_timeout,
+                **score_data
+            })
+
+    def _log_single_score(self, **kwargs):
+        try:
+            from .models.score_result import ScoreResult
+            ScoreResult.create(
+                client=self,
+                **kwargs
+            )
         except Exception as e:
-            logger.error(f"Error updating evaluation: {e}")
-            raise
+            print(f"Error logging score: {e}")
+    
+    def _flush_logs(self, items):
+        try:
+            from .models.score_result import ScoreResult
+            ScoreResult.batch_create(self, items)
+        except Exception as e:
+            print(f"Error flushing logs: {e}")
 
     def batch_scoring_job(
         self,
@@ -459,3 +390,46 @@ class PlexusDashboardClient(_BaseAPIClient):
         })
         
         return scoring_job, batch_job
+
+class PlexusDashboardClient(_BaseAPIClient):
+    """
+    Client for the Plexus Dashboard API.
+    
+    Provides access to all API resources with schema-matching namespaces:
+        client.ScoreResult.create(...)
+        client.ScoreResult.batch_create(...)
+        client.Scorecard.get_by_key(...)
+        etc.
+    
+    Features:
+    - Background processing with configurable batching
+    - ID resolution and caching
+    - Thread-safe operations
+    - Context management for accounts, scorecards, and scores
+    """
+    def __init__(
+        self,
+        api_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+        context: Optional[ClientContext] = None
+    ):
+        super().__init__(api_url=api_url, api_key=api_key, context=context)
+
+    @classmethod
+    def for_account(cls, account_key: str) -> 'PlexusDashboardClient':
+        """Create a client initialized with account context"""
+        return cls(context=ClientContext(account_key=account_key))
+        
+    @classmethod
+    def for_scorecard(
+        cls,
+        account_key: str,
+        scorecard_key: str,
+        score_name: Optional[str] = None
+    ) -> 'PlexusDashboardClient':
+        """Create a client initialized with full scoring context"""
+        return cls(context=ClientContext(
+            account_key=account_key,
+            scorecard_key=scorecard_key,
+            score_name=score_name
+        ))
