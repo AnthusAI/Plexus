@@ -103,6 +103,30 @@ class ClientManager:
             self.context.scorecard_id = scorecard.id
         return scorecard.id
     
+    def _resolve_score_id(self) -> Optional[str]:
+        """Get score ID, resolving from name if needed"""
+        if self.context.score_id:
+            return self.context.score_id
+            
+        if not self.context.score_name:
+            return None
+            
+        cache_key = f"score:{self.context.score_name}:{self.context.scorecard_key}"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+            
+        scorecard_id = self._resolve_scorecard_id()
+        if not scorecard_id:
+            return None
+            
+        score = Score.get_by_name(self.context.score_name, scorecard_id, self.api_client)
+        if not score:
+            return None
+            
+        self._cache[cache_key] = score.id
+        self.context.score_id = score.id
+        return score.id
+    
     def log_score(
         self,
         value: float,
