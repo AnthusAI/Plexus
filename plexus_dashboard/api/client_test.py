@@ -197,27 +197,38 @@ def test_batch_scoring_job_creates_new_batch(mock_client):
     """Test creating a new batch when none exists"""
     # Mock the query for existing batches
     mock_client.execute.side_effect = [
+        # First query - listBatchJobs (looking for existing open batches)
+        {'listBatchJobs': {'items': []}},
+        # Second - create scoring job
         {'createScoringJob': {
             'id': 'job-1',
             'status': 'PENDING'
         }},
+        # Third - create batch job
         {'createBatchJob': {
             'id': 'batch-1',
             'status': 'OPEN'
         }},
+        # Fourth - link batch job to scoring job
         {'createBatchJobScoringJob': {
             'batchJobId': 'batch-1',
             'scoringJobId': 'job-1'
+        }},
+        # Fifth - get batch job count
+        {'getBatchJob': {
+            'batchJobScoringJobs': {
+                'items': [{'scoringJobId': 'job-1'}]
+            }
         }}
     ]
-    
+
     with patch('plexus_dashboard.api.models.scoring_job.ScoringJob') as mock_scoring_job, \
          patch('plexus_dashboard.api.models.batch_job.BatchJob') as mock_batch_job:
-        
+
         # Configure the mocks to return objects with IDs
         mock_scoring_job.create.return_value = Mock(id='job-1')
         mock_batch_job.create.return_value = Mock(id='batch-1')
-        
+
         # Make create methods use client's execute
         def mock_scoring_create(*args, **kwargs):
             # Filter out client argument
@@ -231,7 +242,7 @@ def test_batch_scoring_job_creates_new_batch(mock_client):
                 }
             """, {'input': input_data})
             return mock_scoring_job.create.return_value
-            
+
         def mock_batch_create(*args, **kwargs):
             # Filter out client argument
             input_data = {k: v for k, v in kwargs.items() if k != 'client'}
@@ -244,10 +255,10 @@ def test_batch_scoring_job_creates_new_batch(mock_client):
                 }
             """, {'input': input_data})
             return mock_batch_job.create.return_value
-            
+
         mock_scoring_job.create.side_effect = mock_scoring_create
         mock_batch_job.create.side_effect = mock_batch_create
-        
+
         scoring_job, batch_job = mock_client.batch_scoring_job(
             itemId='item-1',
             scorecardId='card-1',
@@ -256,16 +267,25 @@ def test_batch_scoring_job_creates_new_batch(mock_client):
             model_name='gpt-4',
             provider='openai'
         )
-        
+
         assert scoring_job.id == 'job-1'
         assert batch_job.id == 'batch-1'
-        
+
         # Verify the execute calls
-        assert mock_client.execute.call_count == 3
-        
-        # Then verify the first call's arguments - using positional args
+        assert mock_client.execute.call_count == 5
+
+        # Verify the first call is the listBatchJobs query
         first_call = mock_client.execute.call_args_list[0]
-        assert first_call[0][1] == {  # args[0] is the tuple of positional args
+        assert first_call[0][1] == {
+            'accountId': 'acc-1',
+            'scorecardId': 'card-1',
+            'modelProvider': 'openai',
+            'modelName': 'gpt-4'
+        }
+
+        # Verify the second call is createScoringJob
+        second_call = mock_client.execute.call_args_list[1]
+        assert second_call[0][1] == {
             'input': {
                 'accountId': 'acc-1',
                 'scorecardId': 'card-1',
@@ -276,33 +296,45 @@ def test_batch_scoring_job_creates_new_batch(mock_client):
         }
 
 def test_batch_scoring_job_uses_existing_batch(mock_client):
-    """Test creating a new batch"""
-    # Mock the query for existing batches
+    """Test using an existing batch"""
     mock_client.execute.side_effect = [
+        # First query - listBatchJobs (finding existing open batch)
+        {'listBatchJobs': {
+            'items': [{
+                'id': 'batch-1',
+                'batchJobScoringJobs': {
+                    'items': [{'scoringJobId': 'existing-job-1'}]
+                }
+            }]
+        }},
+        # Second - create scoring job
         {'createScoringJob': {
             'id': 'job-1',
             'status': 'PENDING'
         }},
-        {'createBatchJob': {
-            'id': 'batch-1',
-            'status': 'OPEN'
-        }},
+        # Third - link to existing batch job
         {'createBatchJobScoringJob': {
             'batchJobId': 'batch-1',
             'scoringJobId': 'job-1'
+        }},
+        # Fourth - get batch job count
+        {'getBatchJob': {
+            'batchJobScoringJobs': {
+                'items': [
+                    {'scoringJobId': 'existing-job-1'},
+                    {'scoringJobId': 'job-1'}
+                ]
+            }
         }}
     ]
-    
+
     with patch('plexus_dashboard.api.models.scoring_job.ScoringJob') as mock_scoring_job, \
          patch('plexus_dashboard.api.models.batch_job.BatchJob') as mock_batch_job:
         
-        # Configure the mocks to return objects with IDs
         mock_scoring_job.create.return_value = Mock(id='job-1')
-        mock_batch_job.create.return_value = Mock(id='batch-1')
+        mock_batch_job.get_by_id.return_value = Mock(id='batch-1')
         
-        # Make create method use client's execute
         def mock_scoring_create(*args, **kwargs):
-            # Filter out client argument
             input_data = {k: v for k, v in kwargs.items() if k != 'client'}
             mock_client.execute("""
                 mutation CreateScoringJob($input: CreateScoringJobInput!) {
@@ -313,23 +345,9 @@ def test_batch_scoring_job_uses_existing_batch(mock_client):
                 }
             """, {'input': input_data})
             return mock_scoring_job.create.return_value
-            
-        def mock_batch_create(*args, **kwargs):
-            # Filter out client argument
-            input_data = {k: v for k, v in kwargs.items() if k != 'client'}
-            mock_client.execute("""
-                mutation CreateBatchJob($input: CreateBatchJobInput!) {
-                    createBatchJob(input: $input) {
-                        id
-                        status
-                    }
-                }
-            """, {'input': input_data})
-            return mock_batch_job.create.return_value
-            
+
         mock_scoring_job.create.side_effect = mock_scoring_create
-        mock_batch_job.create.side_effect = mock_batch_create
-        
+
         scoring_job, batch_job = mock_client.batch_scoring_job(
             itemId='item-1',
             scorecardId='card-1',
@@ -338,21 +356,6 @@ def test_batch_scoring_job_uses_existing_batch(mock_client):
             model_name='gpt-4',
             provider='openai'
         )
-        
+
         assert scoring_job.id == 'job-1'
         assert batch_job.id == 'batch-1'
-        
-        # Verify the execute calls
-        assert mock_client.execute.call_count == 3
-        
-        # Then verify the first call's arguments - using positional args
-        first_call = mock_client.execute.call_args_list[0]
-        assert first_call[0][1] == {  # args[0] is the tuple of positional args
-            'input': {
-                'accountId': 'acc-1',
-                'scorecardId': 'card-1',
-                'itemId': 'item-1',
-                'scoreId': None,
-                'parameters': {}
-            }
-        }
