@@ -13,6 +13,7 @@ from plexus.CustomLogging import logging
 from plexus.Registries import scorecard_registry
 from langgraph.errors import NodeInterrupt
 from plexus.scores.LangGraphScore import BatchProcessingPause
+from plexus.Scorecard import Scorecard
 
 
 @click.command(help="Predict a scorecard or specific score(s) within a scorecard.")
@@ -24,129 +25,91 @@ from plexus.scores.LangGraphScore import BatchProcessingPause
 @click.option('--use-langsmith-trace', is_flag=True, default=False, help='Activate LangSmith trace client for LangChain components')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 def predict(scorecard_name, score_name, content_id, number, excel, use_langsmith_trace, fresh):
-    """Click command wrapper that runs the async predict_impl function"""
-    
-    # Get or create event loop
+    """Predict scores for a scorecard"""
     try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
+        # Configure event loop with custom exception handler
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-    
-    # Create coroutine
-    coro = predict_impl(
-        scorecard_name, score_name, content_id, number, excel,
-        use_langsmith_trace, fresh
-    )
+        loop.set_exception_handler(
+            lambda l, c: handle_exception(l, c, scorecard_name, score_name)
+        )
 
-    try:
-        # Set the exception handler
-        loop.set_exception_handler(lambda l, ctx: handle_exception(
-            l, ctx, scorecard_name=scorecard_name, score_name=score_name
-        ))
-        
-        # Run the coroutine
-        loop.run_until_complete(coro)
-    except KeyboardInterrupt:
-        sys.exit(1)
-    except Exception as e:
-        if not isinstance(e, BatchProcessingPause):
-            logging.error(f"Unexpected error: {e}")
-            raise
-    finally:
-        loop.close()
-
-async def predict_impl(scorecard_name, score_name, content_id, number, excel, use_langsmith_trace, fresh):
-    """Async implementation of the predict command"""
-    try:
-        logging.info("=== Starting predict_impl() ===")
-        if use_langsmith_trace:
-            os.environ['LANGCHAIN_TRACING_V2'] = 'true'
-            logging.info("LangSmith tracing enabled")
-        else:
-            os.environ.pop('LANGCHAIN_TRACING_V2', None)
-            logging.info("LangSmith tracing disabled")
-
-        logging.info(f"Predicting Scorecard [magenta1][b]{scorecard_name}[/b][/magenta1]...")
-
-        plexus.Scorecard.load_and_register_scorecards('scorecards/')
-        scorecard_class = scorecard_registry.get(scorecard_name)
-
-        if scorecard_class is None:
-            logging.error(f"Scorecard with name '{scorecard_name}' not found.")
-            return
-
-        logging.info(f"Found registered Scorecard named [magenta1][b]{scorecard_class.name}[/b][/magenta1] implemented in Python class [magenta1][b]{scorecard_class.__name__}[/b][/magenta1]")
-
+        # Create and run coroutine
         if score_name:
             score_names = [name.strip() for name in score_name.split(',')]
         else:
-            score_names = list(scorecard_class.scores.keys())
-            logging.info(f"No score name provided. Predicting all scores for Scorecard [magenta1][b]{scorecard_class.name}[/b][/magenta1]...")
-
-        results = []
-
-        for iteration in range(number):
-            if number > 1:
-                logging.info(f"Iteration {iteration + 1} of {number}")
+            score_names = []
+        
+        coro = predict_impl(
+            scorecard_name, score_names, content_id, excel, 
+            use_langsmith_trace, fresh
+        )
+        try:
+            loop.run_until_complete(coro)
+        finally:
+            # Clean up any remaining tasks
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
             
+            # Allow tasks to complete cancellation
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            
+            loop.close()
+    except KeyboardInterrupt:
+        logging.info("Operation cancelled by user")
+        sys.exit(1)
+    except Exception as e:
+        logging.error(f"Error during prediction: {e}")
+        logging.error(f"Full traceback: {traceback.format_exc()}")
+        sys.exit(1)
+
+async def predict_impl(
+    scorecard_name: str,
+    score_names: list,
+    content_id: str = None,
+    excel: bool = False,
+    use_langsmith_trace: bool = False,
+    fresh: bool = False
+):
+    """Implementation of predict command"""
+    try:
+        results = []
+        scorecard_class = get_scorecard_class(scorecard_name)
+        
+        for score_name in score_names:
             sample_row, used_content_id = select_sample(
-                scorecard_class, score_names[0], content_id, fresh
+                scorecard_class, score_name, content_id, fresh
             )
             
-            row_result = {}
-            for single_score_name in score_names:
-                try:
-                    logging.info(f"Starting prediction for score: {single_score_name}")
-                    transcript, predictions, costs = await predict_score(
-                        single_score_name, scorecard_class, sample_row, used_content_id
-                    )
-                    
-                    logging.info(f"Got predictions: {predictions}")
-                    
-                    # Initialize basic result fields
-                    row_result['content_id'] = used_content_id
-                    row_result['text'] = transcript if transcript else ""
-                    
-                    # Check if we have valid predictions
-                    if predictions and isinstance(predictions, list) and len(predictions) > 0:
-                        prediction = predictions[0]
-                        logging.info(f"Processing prediction: {prediction}")
-                        
-                        row_result[f'{single_score_name}_value'] = prediction.value
-                        row_result[f'{single_score_name}_explanation'] = \
-                            prediction.explanation
-                        row_result[f'{single_score_name}_cost'] = float(costs['total_cost'])
-                    else:
-                        logging.info(
-                            f"No valid predictions returned for {single_score_name} - "
-                            "likely hit a breakpoint or got empty result"
-                        )
-                        row_result[f'{single_score_name}_value'] = None
-                        row_result[f'{single_score_name}_explanation'] = None
-                        row_result[f'{single_score_name}_cost'] = 0.0
-                    
-                except BatchProcessingPause:
-                    # Let it propagate up to be handled by the event loop handler
-                    raise
-                except Exception as e:
-                    logging.error(f"Error processing score {single_score_name}: {e}")
-                    logging.error(f"Full traceback: {traceback.format_exc()}")
-                    raise
+            row_result = {'content_id': used_content_id}
+            if sample_row is not None:
+                row_result['text'] = sample_row.iloc[0].get('text', '')
             
-            # Only add row_result if we have any non-None values
-            if any(
-                row_result.get(f'{name}_value') is not None 
-                for name in score_names
-            ):
-                if len(score_names) > 1:
-                    # Only compare non-None values
-                    values = [
-                        row_result[f'{name}_value'] 
-                        for name in score_names 
-                        if row_result.get(f'{name}_value') is not None
-                    ]
-                    row_result['match?'] = len(set(values)) == 1 if values else None
+            try:
+                transcript, predictions, costs = await predict_score(
+                    score_name, scorecard_class, sample_row, used_content_id
+                )
+                
+                if predictions and predictions.get('value') is not None:
+                    row_result[f'{score_name}_value'] = predictions.get('value')
+                    row_result[f'{score_name}_explanation'] = predictions.get('explanation')
+                    row_result[f'{score_name}_cost'] = costs
+                    logging.info(f"Got predictions: {predictions}")
+                else:
+                    row_result[f'{score_name}_value'] = None
+                    row_result[f'{score_name}_explanation'] = None
+                    row_result[f'{score_name}_cost'] = None
+                
+            except BatchProcessingPause:
+                raise
+            except Exception as e:
+                logging.error(f"Error processing score {score_name}: {e}")
+                logging.error(f"Full traceback: {traceback.format_exc()}")
+                raise
+            
+            if any(row_result.get(f'{name}_value') is not None for name in score_names):
                 results.append(row_result)
 
         if excel and results:
@@ -166,6 +129,11 @@ async def predict_impl(scorecard_name, score_name, content_id, number, excel, us
         logging.error(f"Unexpected error: {e}")
         logging.error(f"Full traceback: {traceback.format_exc()}")
         raise
+    finally:
+        # Final cleanup of any remaining tasks
+        for task in asyncio.all_tasks():
+            if not task.done() and task != asyncio.current_task():
+                task.cancel()
 
 def output_excel(results, score_names, scorecard_name):
     df = pd.DataFrame(results)
@@ -354,7 +322,10 @@ async def predict_score(score_name, scorecard_class, sample_row, used_content_id
                     )
 
             result = await predict_score_impl(score_instance, {}, score_input)
-            return result
+            if result[0] is not None:  # Check if we got actual results
+                return result
+            logging.info(f"No valid predictions returned for {score_name} - likely hit a breakpoint or got empty result")
+            return None, None, None
             
         except BatchProcessingPause:
             # Clean up and re-raise
@@ -393,11 +364,15 @@ async def predict_score_impl(score_instance, context, input_data):
             checkpoint = await score_instance.checkpointer.aget(config)
             if checkpoint:
                 logging.info(f"Found checkpoint for thread {thread_id}, resuming execution")
-                prediction_result = await score_instance.workflow.ainvoke(
-                    None,  # Pass None to resume from checkpoint
-                    config=config  # Just pass thread_id in config
-                )
-                logging.info(f"Got prediction_result: {prediction_result}")
+                try:
+                    prediction_result = await score_instance.workflow.ainvoke(
+                        None,  # Pass None to resume from checkpoint
+                        config=config  # Just pass thread_id in config
+                    )
+                    logging.info(f"Got prediction_result: {prediction_result}")
+                except BatchProcessingPause:
+                    await score_instance.cleanup()
+                    return None, None, None
             else:
                 logging.info("No checkpoint found, starting fresh prediction")
                 prediction_result = await score_instance.predict(context, input_data)
@@ -407,15 +382,24 @@ async def predict_score_impl(score_instance, context, input_data):
             prediction_result = await score_instance.predict(context, input_data)
             logging.info(f"Fresh prediction result: {prediction_result}")
             
-        costs = score_instance.get_accumulated_costs()
-        logging.info("Returning final results")
-        return input_data.text, prediction_result, costs
+        # Only calculate costs and return results if we have a valid prediction
+        if prediction_result and prediction_result.get('value') is not None:
+            costs = score_instance.get_accumulated_costs()
+            logging.info("Returning final results")
+            try:
+                # Attempt to cleanup any remaining tasks
+                tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+                for task in tasks:
+                    task.cancel()
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
+            except Exception as e:
+                logging.warning(f"Error during task cleanup: {e}")
+            return input_data.text, prediction_result, costs
         
-    except BatchProcessingPause as e:
-        # Clean up and re-raise with full context
-        await score_instance.cleanup()
-        logging.info(f"Batch job created: {e.message}")
-        raise
+        logging.info("No valid predictions returned - likely hit a breakpoint or got empty result")
+        return None, None, None
+        
     except Exception as e:
         logging.error(f"Error in predict_score_impl: {e}")
         logging.error(f"Full traceback: {traceback.format_exc()}")
@@ -457,3 +441,12 @@ def handle_exception(loop, context, scorecard_name=None, score_name=None):
         logging.error(f"Exception: {exception}")
         loop.default_exception_handler(context)
         loop.stop()
+
+def get_scorecard_class(scorecard_name: str):
+    """Get the scorecard class from the registry."""
+    Scorecard.load_and_register_scorecards('scorecards/')
+    scorecard_class = scorecard_registry.get(scorecard_name)
+    if scorecard_class is None:
+        logging.error(f"Scorecard with name '{scorecard_name}' not found.")
+        raise ValueError(f"Scorecard with name '{scorecard_name}' not found.")
+    return scorecard_class
