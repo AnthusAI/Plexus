@@ -25,6 +25,8 @@ load_dotenv()
 
 set_log_group('plexus/cli/evaluation')
 
+from plexus.scores.Score import Score
+
 @click.group()
 def evaluate():
     """
@@ -111,8 +113,19 @@ def accuracy(
                 
                 single_score_labeled_samples = []
                 labeled_samples_filename = None
+                
+                # Look up Score ID from the API
+                score_config = next((score for score in scorecard_instance.scores 
+                                   if score['name'] == single_score_name), None)
+                
+                if score_config and 'id' in score_config:
+                    score_id = score_config['id']
+                    logging.info(f"Found Score ID {score_id} for {single_score_name}")
+                else:
+                    logging.warning(f"Could not find Score ID for {single_score_name}")
+                    score_id = None
+
                 if uses_data_driven:
-                    score_config = next((score for score in scorecard_instance.scores if score['name'] == single_score_name), None)
                     if score_config:
                         single_score_labeled_samples = get_data_driven_samples(
                             scorecard_instance, scorecard_name, single_score_name, 
@@ -123,7 +136,7 @@ def accuracy(
                 else:
                     # Use the default labeled samples file if not data-driven
                     labeled_samples_filename = os.path.join(scorecard_folder, 'experiments', 'labeled-samples.csv')
-                
+
                 single_score_experiment_args = {
                     'scorecard_name': scorecard_name,
                     'scorecard': scorecard_instance,
@@ -132,7 +145,8 @@ def accuracy(
                     'sampling_method': sampling_method,
                     'random_seed': random_seed,
                     'subset_of_score_names': [single_score_name],
-                    'experiment_label': experiment_label
+                    'experiment_label': experiment_label,
+                    'score_id': score_id
                 }
                 
                 if uses_data_driven:
@@ -143,6 +157,7 @@ def accuracy(
                     single_score_experiment_args['labeled_samples_filename'] = labeled_samples_filename
                 
                 async with AccuracyEvaluation(**single_score_experiment_args) as experiment:
+                    # Here we can set the score_id on the experiment instance if needed
                     await experiment.run()
 
                 logging.info("All score experiments completed.")
@@ -160,18 +175,19 @@ def accuracy(
 
     try:
         loop.run_until_complete(_run_accuracy())
+    except asyncio.CancelledError:
+        logging.info("Task was cancelled - cleaning up...")
+    except Exception as e:
+        logging.error(f"Error during execution: {e}")
+        raise
     finally:
         try:
-            pending = asyncio.all_tasks(loop)
-            for task in pending:
-                if not task.done():
-                    task.cancel()
-            
-            if pending:
+            tasks = [t for t in asyncio.all_tasks(loop) 
+                    if not t.done()]
+            if tasks:
                 loop.run_until_complete(
-                    asyncio.gather(*pending, return_exceptions=True)
+                    asyncio.wait(tasks, timeout=2.0)
                 )
-            
             loop.close()
         except Exception as e:
             logging.error(f"Error during cleanup: {e}")
