@@ -179,6 +179,7 @@ const schema = a.schema({
             scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
             scoringJobs: a.hasMany('BatchJobScoringJob', 'batchJobId'),
+            scoringJobCountCache: a.integer(),
             modelProvider: a.string().required(),
             modelName: a.string().required(),
         })
