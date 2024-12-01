@@ -7,6 +7,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, SystemMessage
 from plexus.scores.nodes.BaseNode import BaseNode
 from plexus.CustomLogging import logging
+from plexus.scores.LangGraphScore import BatchProcessingPause
 import traceback
 import os
 
@@ -219,12 +220,16 @@ class Classifier(BaseNode):
             
             if batch_mode and breakpoints_enabled:
                 logging.info("Breaking before LLM API call with messages in state")
-                # Return state with breakpoint flag
-                return {
-                    **state,
-                    "at_llm_breakpoint": True,
-                    "should_end": True  # Signal that we want to end
-                }
+                # Raise BatchProcessingPause directly
+                raise BatchProcessingPause(
+                    thread_id=state.get('metadata', {}).get('content_id', 'unknown'),
+                    state={
+                        **state,
+                        "at_llm_breakpoint": True,
+                        "should_end": True
+                    },
+                    message="Pausing for batch processing at LLM call"
+                )
             
             try:
                 if 'messages' not in state or not state['messages']:
