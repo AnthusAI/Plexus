@@ -160,7 +160,6 @@ const schema = a.schema({
 
     BatchJob: a
         .model({
-            provider: a.string().required(),
             type: a.string().required(),
             batchId: a.string().required(),
             status: a.string().required(),
