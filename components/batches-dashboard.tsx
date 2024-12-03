@@ -32,14 +32,43 @@ import { listFromModel, observeQueryFromModel } from "@/utils/amplify-helpers"
 const ACCOUNT_KEY = 'call-criteria'
 const client = generateClient<Schema>()
 
+interface BatchJob {
+  id: string
+  type: string
+  status: string
+  accountId: string
+  batchId: string
+  completedRequests?: number
+  scoringJobCountCache: number
+  startedAt?: string
+  modelProvider?: string
+  modelName?: string
+  parameters?: Record<string, any>
+  createdAt: string
+  updatedAt: string
+}
+
+// Add these type definitions at the top of the file
+import { Schema } from '@/amplify/data/resource'
+type BatchJobType = Schema['BatchJob']['Type']
+type SubscriptionMessage = {
+  data: BatchJobType
+  errors?: Array<{ message: string }>
+}
+
 export default function BatchesDashboard() {
-  const [batchJobs, setBatchJobs] = useState<Schema['BatchJob']['type'][]>([])
+  const [batchJobs, setBatchJobs] = useState<BatchJob[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [accountId, setAccountId] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
 
   useEffect(() => {
-    let subscription: { unsubscribe: () => void } | null = null
+    // Define subscription type
+    type SubscriptionCleanup = {
+      unsubscribe: () => void;
+    }
+    
+    let subscription: SubscriptionCleanup | null = null
 
     async function setupRealTimeSync() {
       try {
@@ -48,7 +77,7 @@ export default function BatchesDashboard() {
             client.models.Account, 
             { key: { eq: ACCOUNT_KEY } }
           ),
-          listFromModel<Schema['BatchJob']['type']>(client.models.BatchJob)
+          listFromModel<BatchJob>(client.models.BatchJob)
         ])
 
         if (accountResult.data.length > 0) {
@@ -60,20 +89,61 @@ export default function BatchesDashboard() {
           ))
           setIsLoading(false)
 
-          subscription = observeQueryFromModel<Schema['BatchJob']['type']>(
-            client.models.BatchJob,
-            { accountId: { eq: foundAccountId } }
-          ).subscribe({
-            next: ({ items }: { items: Schema['BatchJob']['type'][] }) => {
-              setBatchJobs(items.filter((item: Schema['BatchJob']['type']) => 
+          console.log('Setting up subscriptions for BatchJobs with filter:', {
+            accountId: foundAccountId
+          })
+
+          const handleBatchUpdate = (message: SubscriptionMessage) => {
+            console.log('Received batch update:', message)
+            // Refresh the full list when we get an update
+            listFromModel<BatchJob>(
+              client.models.BatchJob
+            ).then(result => {
+              const items = result.data
+              console.log('Refreshed batch jobs:', items)
+              setBatchJobs(items.filter(item => 
                 item && item.accountId === foundAccountId
               ))
-            },
+            })
+          }
+
+          // Subscribe to onCreate with proper typing
+          const createSub = client.models.BatchJob.onCreate().subscribe({
+            next: (message: SubscriptionMessage) => handleBatchUpdate(message),
             error: (error: Error) => {
-              console.error('Subscription error:', error)
+              console.error('onCreate subscription error:', error)
               setError(error)
             }
           })
+
+          // Subscribe to onUpdate with proper typing
+          const updateSub = client.models.BatchJob.onUpdate().subscribe({
+            next: (message: SubscriptionMessage) => handleBatchUpdate(message),
+            error: (error: Error) => {
+              console.error('onUpdate subscription error:', error)
+              setError(error)
+            }
+          })
+
+          // Subscribe to onDelete with proper typing
+          const deleteSub = client.models.BatchJob.onDelete().subscribe({
+            next: (message: SubscriptionMessage) => handleBatchUpdate(message),
+            error: (error: Error) => {
+              console.error('onDelete subscription error:', error)
+              setError(error)
+            }
+          })
+
+          subscription = {
+            unsubscribe: () => {
+              console.log('Cleaning up subscriptions')
+              createSub.unsubscribe()
+              updateSub.unsubscribe()
+              deleteSub.unsubscribe()
+            }
+          }
+
+          console.log('Subscriptions setup complete')
         } else {
           setIsLoading(false)
         }
@@ -88,6 +158,7 @@ export default function BatchesDashboard() {
 
     return () => {
       if (subscription) {
+        console.log('Cleaning up subscription')
         subscription.unsubscribe()
       }
     }
@@ -106,9 +177,9 @@ export default function BatchesDashboard() {
     }
   }
 
-  const getProgressPercentage = (job: Schema['BatchJob']['type']) => {
-    if (!job.totalRequests) return 0
-    return Math.round((job.completedRequests || 0) / job.totalRequests * 100)
+  const getProgressPercentage = (job: BatchJob) => {
+    if (!job.scoringJobCountCache) return 0
+    return Math.round((job.completedRequests || 0) / job.scoringJobCountCache * 100)
   }
 
   if (isLoading) {
@@ -162,7 +233,7 @@ export default function BatchesDashboard() {
                               Batch ID: {job.batchId}
                             </div>
                             <div className="text-sm text-muted-foreground">
-                              {job.completedRequests || 0} / {job.totalRequests || 0} 
+                              {job.completedRequests || 0} / {job.scoringJobCountCache || 0} 
                               completed
                             </div>
                           </div>
@@ -199,7 +270,7 @@ export default function BatchesDashboard() {
                   <TableCell className="hidden @[630px]:table-cell">
                     <div className="space-y-1">
                       <div className="text-sm">
-                        {job.completedRequests || 0} / {job.totalRequests || 0} completed
+                        {job.completedRequests || 0} / {job.scoringJobCountCache || 0} completed
                       </div>
                       <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
                         <div 
