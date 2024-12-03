@@ -64,6 +64,7 @@ from queue import Queue, Empty
 from threading import Thread, Event
 import time
 from datetime import datetime, timezone
+import logging
 
 if TYPE_CHECKING:
     from .models.scoring_job import ScoringJob
@@ -327,6 +328,61 @@ class _BaseAPIClient:
         except Exception as e:
             print(f"Error flushing logs: {e}")
 
+    def _get_batch_job_count(self, batch_job_id: str, max_retries: int = 3) -> int:
+        """
+        Get accurate count of scoring jobs for a batch with retries and consistency check.
+        """
+        count_jobs_query = """
+        query CountBatchJobLinks(
+            $batchJobId: String!
+            $limit: Int
+            $nextToken: String
+        ) {
+            listBatchJobScoringJobs(
+                filter: { batchJobId: { eq: $batchJobId } }
+                limit: $limit
+                nextToken: $nextToken
+            ) {
+                items {
+                    scoringJobId
+                }
+                nextToken
+            }
+        }
+        """
+        
+        all_items = []
+        next_token = None
+        retries = 0
+        
+        while retries < max_retries:
+            try:
+                # Fetch items with pagination
+                variables = {
+                    'batchJobId': str(batch_job_id),
+                    'limit': 1000  # Adjust based on your needs
+                }
+                if next_token:
+                    variables['nextToken'] = next_token
+                    
+                result = self.execute(count_jobs_query, variables)
+                page_items = result.get('listBatchJobScoringJobs', {}).get('items', [])
+                all_items.extend(page_items)
+                
+                next_token = result.get('listBatchJobScoringJobs', {}).get('nextToken')
+                if not next_token:  # No more pages
+                    break
+                    
+            except Exception as e:
+                logging.warning(f"Error counting batch jobs (attempt {retries + 1}): {e}")
+                retries += 1
+                time.sleep(0.5)  # Add small delay between retries
+                continue
+                
+        total_jobs = len(all_items)
+        logging.info(f"Found {total_jobs} total scoring jobs for batch {batch_job_id}")
+        return total_jobs
+
     def batch_scoring_job(
         self,
         itemId: str,
@@ -336,12 +392,44 @@ class _BaseAPIClient:
         model_name: str,
         scoreId: Optional[str] = None,
         parameters: Optional[Dict] = None,
-        max_batch_size: int = 100,
+        max_batch_size: int = 3,
         **kwargs
     ) -> Tuple['ScoringJob', 'BatchJob']:
         """Create or add to a batch scoring job."""
         from .models.scoring_job import ScoringJob
         from .models.batch_job import BatchJob
+
+        logging.info(f"Starting batch_scoring_job with itemId={itemId}, scorecardId={scorecardId}, accountId={accountId}")
+
+        # First check all batch jobs to help debug
+        all_jobs_query = """
+        query GetAllBatchJobs(
+            $accountId: String!,
+            $scorecardId: String!
+        ) {
+            listBatchJobs(
+                filter: {
+                    accountId: { eq: $accountId },
+                    scorecardId: { eq: $scorecardId }
+                }
+            ) {
+                items {
+                    id
+                    totalRequests
+                    status
+                    modelProvider
+                    modelName
+                    scoringJobCountCache
+                }
+            }
+        }
+        """
+
+        all_jobs_result = self.execute(all_jobs_query, {
+            'accountId': accountId,
+            'scorecardId': scorecardId
+        })
+        logging.info(f"All existing batch jobs: {all_jobs_result.get('listBatchJobs', {}).get('items', [])}")
 
         # Look for an existing open batch job
         query = """
@@ -362,11 +450,11 @@ class _BaseAPIClient:
             ) {
                 items {
                     id
-                    batchJobScoringJobs {
-                        items {
-                            scoringJobId
-                        }
-                    }
+                    totalRequests
+                    status
+                    modelProvider
+                    modelName
+                    scoringJobCountCache
                 }
             }
         }
@@ -378,119 +466,207 @@ class _BaseAPIClient:
             'modelProvider': model_provider,
             'modelName': model_name
         })
-
-        # Create new scoring job
-        scoring_job = ScoringJob.create(
-            client=self,
-            accountId=accountId,
-            scorecardId=scorecardId,
-            itemId=itemId,
-            scoreId=scoreId,
-            parameters=parameters or {},
-            **kwargs
-        )
+        logging.info(f"Looking for open batch jobs with: accountId={accountId}, scorecardId={scorecardId}, modelProvider={model_provider}, modelName={model_name}")
+        logging.info(f"Found batch jobs: {result.get('listBatchJobs', {}).get('items', [])}")
 
         # Find existing batch or create new one
         batch_job = None
         open_batches = result.get('listBatchJobs', {}).get('items', [])
         
         for batch in open_batches:
-            scoring_job_count = len(batch.get('batchJobScoringJobs', {}).get('items', []))
-            if scoring_job_count < max_batch_size:
+            total_requests = batch.get('totalRequests')
+            # If totalRequests is None or less than max_batch_size, use this batch
+            if total_requests is None or total_requests < max_batch_size:
+                logging.info(f"Found usable open batch: {batch}")
                 batch_job = BatchJob.get_by_id(batch['id'], self)
                 break
 
         if not batch_job:
+            logging.info("No usable open batch found, creating new one")
             batch_job = BatchJob.create(
                 client=self,
                 accountId=accountId,
-                type='MODEL_INFERENCE',
+                type='MultiStepScore',
                 modelProvider=model_provider,
                 modelName=model_name,
                 parameters=parameters or {},
                 scorecardId=scorecardId,
                 scoreId=scoreId,
+                status='OPEN',
+                scoringJobCountCache=0,  # Initialize cache to 0
                 **kwargs
             )
+            logging.info(f"Created new batch job: {batch_job.id}")
 
-        # Link scoring job to batch job
-        mutation = """
-        mutation CreateBatchJobScoringJob(
-            $batchJobId: String!, 
-            $scoringJobId: String!
-        ) {
-            createBatchJobScoringJob(input: {
-                batchJobId: $batchJobId
-                scoringJobId: $scoringJobId
-            }) {
+        # Create new scoring job with batch ID
+        logging.info(f"Creating scoring job for batch {batch_job.id}")
+        scoring_job = ScoringJob.create(
+            client=self,
+            accountId=accountId,
+            scorecardId=scorecardId,
+            itemId=itemId,
+            scoreId=scoreId,
+            batchId=batch_job.id,  # Link to batch job at creation
+            parameters=parameters or {},
+            **kwargs
+        )
+        logging.info(f"Created scoring job: {scoring_job.id}")
+
+        # Create the link between batch job and scoring job
+        link_mutation = """
+        mutation CreateBatchJobScoringJob($input: CreateBatchJobScoringJobInput!) {
+            createBatchJobScoringJob(input: $input) {
                 batchJobId
                 scoringJobId
             }
         }
         """
-
-        self.execute(mutation, {
-            'batchJobId': batch_job.id,
-            'scoringJobId': scoring_job.id
-        })
-
-        # Check if batch is now full
-        count_query = """
-        query GetBatchJobCount($batchJobId: String!) {
-            getBatchJob(id: $batchJobId) {
-                batchJobScoringJobs {
-                    items {
-                        scoringJobId
-                    }
+        link_result = self.execute(
+            link_mutation,
+            {
+                'input': {
+                    'batchJobId': batch_job.id,
+                    'scoringJobId': scoring_job.id
                 }
             }
-        }
-        """
+        )
+        logging.info(f"Created batch-scoring link: {link_result}")
 
-        count_result = self.execute(count_query, {'batchJobId': batch_job.id})
-        current_count = len(count_result.get('getBatchJob', {})
-                           .get('batchJobScoringJobs', {})
-                           .get('items', []))
+        # Count actual scoring jobs for this batch using BatchJobScoringJob
+        total_jobs = self._get_batch_job_count(batch_job.id)
+        logging.info(f"Total scoring jobs in batch: {total_jobs}")
+        logging.info(f"Max batch size: {max_batch_size}")
 
-        # After linking scoring job to batch job, update the counter cache
-        update_mutation = """
-        mutation UpdateBatchJob($batchJobId: String!, $count: Int!) {
-            updateBatchJob(input: {
-                id: $batchJobId,
-                scoringJobCountCache: $count
-            }) {
+        # Get current batch status
+        batch_query = """
+        query GetBatchStatus($batchId: ID!) {
+            getBatchJob(id: $batchId) {
                 id
+                status
+                totalRequests
                 scoringJobCountCache
             }
         }
         """
+        batch_status_result = self.execute(batch_query, {'batchId': batch_job.id})
+        current_status = batch_status_result.get('getBatchJob', {}).get('status')
+        logging.info(f"Current batch status: {current_status}")
 
-        # Update the counter cache
-        self.execute(update_mutation, {
-            'batchJobId': batch_job.id,
-            'count': current_count
-        })
-
-        if current_count >= max_batch_size:
+        # Update batch job count and cache
+        update_count_mutation = """
+        mutation UpdateBatchJobCount($input: UpdateBatchJobInput!) {
+            updateBatchJob(input: $input) {
+                id
+                scoringJobCountCache
+                status
+            }
+        }
+        """
+        update_result = self.execute(
+            update_count_mutation,
+            {
+                'input': {
+                    'id': batch_job.id,
+                    'accountId': batch_job.accountId,
+                    'status': batch_job.status,
+                    'type': batch_job.type,
+                    'batchId': batch_job.batchId,
+                    'modelProvider': batch_job.modelProvider,
+                    'modelName': batch_job.modelName,
+                    'scoringJobCountCache': total_jobs
+                }
+            }
+        )
+        logging.info(f"Updated batch job count: {update_result}")
+        
+        # If we've reached or exceeded max_batch_size and batch is still open, close it
+        if total_jobs >= max_batch_size and current_status == 'OPEN':
+            logging.info(
+                f"Batch job {batch_job.id} has reached max size "
+                f"({total_jobs}/{max_batch_size}). Closing batch."
+            )
             close_mutation = """
-            mutation UpdateBatchJob($batchJobId: String!) {
-                updateBatchJob(input: {
-                    id: $batchJobId,
-                    status: "CLOSED",
-                    scoringJobCountCache: $count
-                }) {
+            mutation CloseBatchJob($input: UpdateBatchJobInput!) {
+                updateBatchJob(input: $input) {
                     id
                     status
                     scoringJobCountCache
                 }
             }
             """
-            self.execute(close_mutation, {
-                'batchJobId': batch_job.id,
-                'count': current_count
-            })
+            close_result = self.execute(
+                close_mutation, 
+                {
+                    'input': {
+                        'id': batch_job.id,
+                        'accountId': batch_job.accountId,
+                        'status': 'CLOSED',
+                        'type': batch_job.type,
+                        'batchId': batch_job.batchId,
+                        'modelProvider': batch_job.modelProvider,
+                        'modelName': batch_job.modelName,
+                        'scoringJobCountCache': total_jobs
+                    }
+                }
+            )
+            logging.info(f"Batch job closed: {close_result}")
 
         return scoring_job, batch_job
+
+    def updateEvaluation(self, id: str, **kwargs) -> None:
+        """Update evaluation fields."""
+        try:
+            # Always update the updatedAt timestamp
+            kwargs['updatedAt'] = datetime.now(timezone.utc).isoformat().replace(
+                '+00:00', 'Z'
+            )
+            
+            mutation = """
+            mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                updateEvaluation(input: $input) {
+                    id
+                    type
+                    accountId
+                    status
+                    createdAt
+                    updatedAt
+                    parameters
+                    metrics
+                    metricsExplanation
+                    inferences
+                    accuracy
+                    cost
+                    startedAt
+                    elapsedSeconds
+                    estimatedRemainingSeconds
+                    totalItems
+                    processedItems
+                    errorMessage
+                    errorDetails
+                    scorecardId
+                    scoreId
+                    confusionMatrix
+                    scoreGoal
+                    datasetClassDistribution
+                    isDatasetClassDistributionBalanced
+                    predictedClassDistribution
+                    isPredictedClassDistributionBalanced
+                }
+            }
+            """
+            
+            variables = {
+                'input': {
+                    'id': id,
+                    **kwargs
+                }
+            }
+            
+            return self.execute(mutation, variables)
+            
+        except Exception as e:
+            logging.error(f"Error updating evaluation: {e}")
+            raise
 
 class PlexusDashboardClient(_BaseAPIClient):
     """

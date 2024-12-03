@@ -175,29 +175,7 @@ export function observeQueryFromModel<T>(
     fields
   });
 
-  return {
-    subscribe: (handlers: { 
-      next: (data: { items: T[] }) => void
-      error: (error: Error) => void 
-    }) => {
-      const wrappedHandlers = {
-        next: (data: any) => {
-          if (!data?.items) {
-            console.error('Missing items in subscription data:', data);
-            return;
-          }
-
-          handlers.next(data);
-        },
-        error: (error: Error) => {
-          console.error('Subscription error:', error);
-          handlers.error(error);
-        }
-      };
-      
-      return subscription.subscribe(wrappedHandlers);
-    }
-  } as any;
+  return subscription;
 }
 
 export async function getFromModel<T>(
