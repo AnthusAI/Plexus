@@ -6,17 +6,7 @@ import { cn } from '@/lib/utils'
 import { ProgressBar } from "@/components/ui/progress-bar"
 import { Separator } from "@/components/ui/separator"
 import BatchJobTask from '@/components/BatchJobTask'
-
-export interface RelatedBatchJob {
-  id: string
-  provider: string
-  type: string
-  status: string
-  totalRequests: number
-  completedRequests: number
-  failedRequests: number
-  errorMessage?: string
-}
+import { RelatedBatchJob } from '@/types/tasks'
 
 export interface ScoringJobTaskData {
   status: string
@@ -121,14 +111,18 @@ export default function ScoringJobTask({
                   time: task.time,
                   summary: `${batchJob.type} job`,
                   data: {
-                    id: batchJob.id,
-                    title: `${batchJob.type} Job`,
-                    provider: batchJob.provider,
                     type: batchJob.type,
                     status: batchJob.status,
-                    totalRequests: batchJob.totalRequests,
-                    completedRequests: batchJob.completedRequests,
-                    failedRequests: batchJob.failedRequests
+                    totalRequests: batchJob.totalRequests || 0,
+                    completedRequests: batchJob.completedRequests || 0,
+                    failedRequests: batchJob.failedRequests || 0,
+                    startedAt: batchJob.startedAt || undefined,
+                    completedAt: batchJob.completedAt || undefined,
+                    errorMessage: batchJob.errorMessage || undefined,
+                    errorDetails: batchJob.errorDetails || undefined,
+                    modelProvider: batchJob.modelProvider,
+                    modelName: batchJob.modelName,
+                    scoringJobs: []
                   }
                 }}
               />

@@ -14,6 +14,7 @@ class BatchJob(BaseModel):
     batchId: str
     modelProvider: str
     modelName: str
+    scoringJobCountCache: Optional[int] = None
     startedAt: Optional[datetime] = None
     estimatedEndAt: Optional[datetime] = None
     completedAt: Optional[datetime] = None
@@ -35,6 +36,7 @@ class BatchJob(BaseModel):
         batchId: str,
         modelProvider: str,
         modelName: str,
+        scoringJobCountCache: Optional[int] = None,
         startedAt: Optional[datetime] = None,
         estimatedEndAt: Optional[datetime] = None,
         completedAt: Optional[datetime] = None,
@@ -55,6 +57,7 @@ class BatchJob(BaseModel):
         self.batchId = batchId
         self.modelProvider = modelProvider
         self.modelName = modelName
+        self.scoringJobCountCache = scoringJobCountCache
         self.startedAt = startedAt
         self.estimatedEndAt = estimatedEndAt
         self.completedAt = completedAt
@@ -77,6 +80,7 @@ class BatchJob(BaseModel):
             batchId
             modelProvider
             modelName
+            scoringJobCountCache
             startedAt
             estimatedEndAt
             completedAt

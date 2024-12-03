@@ -170,10 +170,10 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     { name: "Scorecards", icon: ListTodo, path: "/scorecards" },
     { name: "Datasets", icon: Database, path: "/datasets" },
     { name: "Evaluations", icon: FlaskConical, path: "/evaluations" },
-    { name: "Reports", icon: FileBarChart, path: "/reports" },
     { name: "Items", icon: StickyNote, path: "/items" },
     { name: "Batches", icon: Layers3, path: "/batches" },
     { name: "Feedback", icon: MessageCircleMore, path: "/feedback-queues" },
+    { name: "Reports", icon: FileBarChart, path: "/reports" },
     { name: "Alerts", icon: Siren, path: "/alerts" },
   ]
 

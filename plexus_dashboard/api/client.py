@@ -390,7 +390,6 @@ class _BaseAPIClient:
         accountId: str,
         model_provider: str,
         model_name: str,
-        provider: str,
         scoreId: Optional[str] = None,
         parameters: Optional[Dict] = None,
         max_batch_size: int = 3,

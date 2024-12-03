@@ -14,36 +14,38 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof BatchJobTask>;
 
-const baseTask = {
-  id: 1,
+const defaultTask = {
+  id: '1',
   type: 'Batch Job',
   scorecard: 'Test Scorecard',
   score: 'Test Score',
-  time: '2 hours ago',
-  summary: 'Processing items',
-  description: 'Processing a batch of items',
+  time: new Date().toISOString(),
+  summary: 'Test Summary',
   data: {
-    provider: 'OpenAI',
-    type: 'inference',
-    status: 'in_progress',
+    type: 'batch',
+    status: 'running',
+    modelProvider: 'OpenAI',
+    modelName: 'gpt-4',
     totalRequests: 100,
-    completedRequests: 65,
+    completedRequests: 50,
     failedRequests: 0,
-  },
+    startedAt: new Date().toISOString(),
+    scoringJobs: []
+  }
 }
 
-export const Default: Story = {
+export const Default = {
   args: {
-    task: baseTask,
-  },
+    task: defaultTask
+  }
 }
 
 export const WithError: Story = {
   args: {
     task: {
-      ...baseTask,
+      ...defaultTask,
       data: {
-        ...baseTask.data,
+        ...defaultTask.data,
         status: 'failed',
         errorMessage: 'API rate limit exceeded',
       },
@@ -54,9 +56,9 @@ export const WithError: Story = {
 export const Complete: Story = {
   args: {
     task: {
-      ...baseTask,
+      ...defaultTask,
       data: {
-        ...baseTask.data,
+        ...defaultTask.data,
         status: 'done',
         completedRequests: 100,
       },
@@ -67,7 +69,7 @@ export const Complete: Story = {
 export const Nested: Story = {
   args: {
     variant: 'nested',
-    task: baseTask,
+    task: defaultTask,
   },
 }
 
@@ -75,9 +77,9 @@ export const NestedComplete: Story = {
   args: {
     variant: 'nested',
     task: {
-      ...baseTask,
+      ...defaultTask,
       data: {
-        ...baseTask.data,
+        ...defaultTask.data,
         status: 'done',
         completedRequests: 100,
       },
