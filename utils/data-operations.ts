@@ -14,7 +14,7 @@ export async function listFromModel<T>(
   filter?: any,
   nextToken?: string,
   limit?: number
-): Promise<AmplifyListResult<T>> {
+): Promise<{ data: T[] }> {
   const options: any = {}
   if (filter) options.filter = filter
   if (nextToken) options.nextToken = nextToken
@@ -23,15 +23,15 @@ export async function listFromModel<T>(
   try {
     const response = await client.models[modelName].list(options)
     
-    // For BatchJob model, sort the results by createdAt in descending order
     if (modelName === 'BatchJob' && Array.isArray(response.data)) {
-      const sortedData = [...response.data].sort((a: BatchJobType, b: BatchJobType) => {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      })
-      response.data = sortedData
+      return {
+        data: [...response.data].sort((a: any, b: any) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )
+      }
     }
     
-    return response as AmplifyListResult<T>
+    return response
   } catch (error) {
     console.error(`Error listing from ${modelName}:`, error)
     throw error

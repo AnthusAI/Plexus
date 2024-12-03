@@ -61,31 +61,37 @@ interface ScoreData {
   name: string;
 }
 
-type BatchJobType = Omit<Schema['BatchJob']['type'], 'scorecard' | 'score'> & {
-  scorecard?: {
-    id: string;
-    name: string;
-  } | null;
-  score?: {
-    id: string;
-    name: string;
-  } | null;
-  batchId: string;
-  modelProvider: string;
-  modelName: string;
-  scoringJobCountCache?: number | null;
-};
+interface BatchJobType {
+  id: string
+  type: string
+  status: string
+  startedAt?: string | null
+  estimatedEndAt?: string | null
+  completedAt?: string | null
+  completedRequests?: number
+  failedRequests?: number
+  errorMessage?: string
+  errorDetails?: any
+  accountId: string
+  scorecardId?: string
+  scoreId?: string
+  modelProvider: string
+  modelName: string
+  scoringJobCountCache?: number
+  createdAt: string
+  updatedAt: string
+  scoringJobs?: any[]
+  account?: any
+  batchId?: string
+}
 
-interface BatchJobWithCount extends Omit<Schema['BatchJob']['type'], 'scorecard' | 'score'> {
-  scorecard?: {
-    id: string;
-    name: string;
-  } | null;
-  score?: {
-    id: string;
-    name: string;
-  } | null;
-  scoringJobsCount: number;
+interface BatchJobWithCount extends BatchJobType {
+  scorecard: { id: string; name: string } | null
+  score: { id: string; name: string } | null
+  scoringJobsCount: number
+  scoringJobs: any[]
+  account: any
+  batchId: string
 }
 
 interface BatchJobListResponse {
@@ -227,6 +233,54 @@ interface SubscriptionResponse {
   items: Schema['BatchJob']['type'][];
 }
 
+async function loadRelatedData(batchJobs: BatchJobType[]): Promise<BatchJobWithCount[]> {
+  const scorecardIds = [...new Set(batchJobs
+    .filter(j => j.scorecardId)
+    .map(j => j.scorecardId as string))]
+  const scoreIds = [...new Set(batchJobs
+    .filter(j => j.scoreId)
+    .map(j => j.scoreId as string))]
+
+  console.log('Loading related data:', {
+    batchJobCount: batchJobs.length,
+    scorecardIds,
+    scoreIds
+  });
+
+  const [scorecards, scores] = await Promise.all([
+    Promise.all(scorecardIds.map(id => getFromModel<Schema['Scorecard']['type']>('Scorecard', id))),
+    Promise.all(scoreIds.map(id => getFromModel<Schema['Score']['type']>('Score', id)))
+  ])
+
+  console.log('Loaded related data:', {
+    scorecards: scorecards.map(s => ({ id: s.data?.id, name: s.data?.name })),
+    scores: scores.map(s => ({ id: s.data?.id, name: s.data?.name }))
+  });
+
+  const scorecardMap = new Map(
+    scorecards.map(result => [result.data?.id, result.data])
+  )
+  const scoreMap = new Map(
+    scores.map(result => [result.data?.id, result.data])
+  )
+
+  return batchJobs.map(job => ({
+    ...job,
+    scorecard: job.scorecardId ? {
+      id: job.scorecardId,
+      name: scorecardMap.get(job.scorecardId)?.name || 'Unknown Scorecard'
+    } : null,
+    score: job.scoreId ? {
+      id: job.scoreId,
+      name: scoreMap.get(job.scoreId)?.name || 'Unknown Score'
+    } : null,
+    scoringJobsCount: job.scoringJobCountCache || 0,
+    scoringJobs: [],
+    account: {},
+    batchId: job.id
+  })) as BatchJobWithCount[]
+}
+
 export default function BatchesDashboard() {
   const [batchJobs, setBatchJobs] = useState<BatchJobWithCount[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -312,14 +366,8 @@ export default function BatchesDashboard() {
         // Initial data fetch
         const { data: batchJobModels } = await listBatchJobs(foundAccountId);
         
-        // Transform the batch jobs before setting state
-        const transformedJobs: BatchJobWithCount[] = batchJobModels.map(job => ({
-          ...job,
-          scorecard: null, // Will be populated later if needed
-          score: null, // Will be populated later if needed
-          scoringJobsCount: job.scoringJobCountCache || 0
-        }));
-        
+        // Transform the batch jobs and load related data
+        const transformedJobs = await loadRelatedData(batchJobModels);
         setBatchJobs(transformedJobs);
         setIsLoading(false);
 
@@ -330,14 +378,9 @@ export default function BatchesDashboard() {
         const handleBatchUpdate = (data: any) => {
           console.log('Received batch update:', data);
           // Refresh the full list when we get an update
-          listBatchJobs(foundAccountId).then(result => {
-            console.log('Refreshed batch jobs:', result.data);
-            const transformedJobs: BatchJobWithCount[] = result.data.map(job => ({
-              ...job,
-              scorecard: null,
-              score: null,
-              scoringJobsCount: job.scoringJobCountCache || 0
-            }));
+          listBatchJobs(foundAccountId).then(async result => {
+            if (!result.data) return;
+            const transformedJobs = await loadRelatedData(result.data);
             setBatchJobs(transformedJobs);
           });
         };
