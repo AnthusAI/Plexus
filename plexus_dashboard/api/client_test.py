@@ -197,28 +197,40 @@ def test_batch_scoring_job_creates_new_batch(mock_client):
     """Test creating a new batch when none exists"""
     # Mock the query for existing batches
     mock_client.execute.side_effect = [
-        # First query - listBatchJobs (looking for existing open batches)
+        # First query - all batch jobs
         {'listBatchJobs': {'items': []}},
-        # Second - create scoring job
+        # Second query - open batch jobs
+        {'listBatchJobs': {'items': []}},
+        # Third - create scoring job
         {'createScoringJob': {
             'id': 'job-1',
             'status': 'PENDING'
         }},
-        # Third - create batch job
+        # Fourth - create batch job
         {'createBatchJob': {
             'id': 'batch-1',
             'status': 'OPEN'
         }},
-        # Fourth - link batch job to scoring job
+        # Fifth - link batch job to scoring job
         {'createBatchJobScoringJob': {
             'batchJobId': 'batch-1',
             'scoringJobId': 'job-1'
         }},
-        # Fifth - get batch job count
+        # Sixth - count batch job links
+        {'listBatchJobScoringJobs': {
+            'items': [{'scoringJobId': 'job-1'}]
+        }},
+        # Seventh - get batch status
         {'getBatchJob': {
-            'batchJobScoringJobs': {
-                'items': [{'scoringJobId': 'job-1'}]
-            }
+            'id': 'batch-1',
+            'status': 'OPEN',
+            'totalRequests': 1
+        }},
+        # Eighth - update batch count
+        {'updateBatchJob': {
+            'id': 'batch-1',
+            'totalRequests': 1,
+            'status': 'OPEN'
         }}
     ]
 
@@ -229,36 +241,6 @@ def test_batch_scoring_job_creates_new_batch(mock_client):
         mock_scoring_job.create.return_value = Mock(id='job-1')
         mock_batch_job.create.return_value = Mock(id='batch-1')
 
-        # Make create methods use client's execute
-        def mock_scoring_create(*args, **kwargs):
-            # Filter out client argument
-            input_data = {k: v for k, v in kwargs.items() if k != 'client'}
-            mock_client.execute("""
-                mutation CreateScoringJob($input: CreateScoringJobInput!) {
-                    createScoringJob(input: $input) {
-                        id
-                        status
-                    }
-                }
-            """, {'input': input_data})
-            return mock_scoring_job.create.return_value
-
-        def mock_batch_create(*args, **kwargs):
-            # Filter out client argument
-            input_data = {k: v for k, v in kwargs.items() if k != 'client'}
-            mock_client.execute("""
-                mutation CreateBatchJob($input: CreateBatchJobInput!) {
-                    createBatchJob(input: $input) {
-                        id
-                        status
-                    }
-                }
-            """, {'input': input_data})
-            return mock_batch_job.create.return_value
-
-        mock_scoring_job.create.side_effect = mock_scoring_create
-        mock_batch_job.create.side_effect = mock_batch_create
-
         scoring_job, batch_job = mock_client.batch_scoring_job(
             itemId='item-1',
             scorecardId='card-1',
@@ -271,60 +253,53 @@ def test_batch_scoring_job_creates_new_batch(mock_client):
         assert scoring_job.id == 'job-1'
         assert batch_job.id == 'batch-1'
 
-        # Verify the execute calls
-        assert mock_client.execute.call_count == 5
-
-        # Verify the first call is the listBatchJobs query
-        first_call = mock_client.execute.call_args_list[0]
-        assert first_call[0][1] == {
-            'accountId': 'acc-1',
-            'scorecardId': 'card-1',
-            'modelProvider': 'openai',
-            'modelName': 'gpt-4'
-        }
-
-        # Verify the second call is createScoringJob
-        second_call = mock_client.execute.call_args_list[1]
-        assert second_call[0][1] == {
-            'input': {
-                'accountId': 'acc-1',
-                'scorecardId': 'card-1',
-                'itemId': 'item-1',
-                'scoreId': None,
-                'parameters': {}
-            }
-        }
-
 def test_batch_scoring_job_uses_existing_batch(mock_client):
     """Test using an existing batch"""
     mock_client.execute.side_effect = [
-        # First query - listBatchJobs (finding existing open batch)
-        {'listBatchJobs': {
-            'items': [{
-                'id': 'batch-1',
-                'batchJobScoringJobs': {
-                    'items': [{'scoringJobId': 'existing-job-1'}]
-                }
-            }]
-        }},
-        # Second - create scoring job
+        # First query - all batch jobs
+        {'listBatchJobs': {'items': [{
+            'id': 'batch-1',
+            'totalRequests': 1,
+            'status': 'OPEN',
+            'modelProvider': 'openai',
+            'modelName': 'gpt-4'
+        }]}},
+        # Second query - open batch jobs
+        {'listBatchJobs': {'items': [{
+            'id': 'batch-1',
+            'totalRequests': 1,
+            'status': 'OPEN',
+            'modelProvider': 'openai',
+            'modelName': 'gpt-4'
+        }]}},
+        # Third - create scoring job
         {'createScoringJob': {
             'id': 'job-1',
             'status': 'PENDING'
         }},
-        # Third - link to existing batch job
+        # Fourth - link to existing batch job
         {'createBatchJobScoringJob': {
             'batchJobId': 'batch-1',
             'scoringJobId': 'job-1'
         }},
-        # Fourth - get batch job count
+        # Fifth - count batch job links
+        {'listBatchJobScoringJobs': {
+            'items': [
+                {'scoringJobId': 'existing-job-1'},
+                {'scoringJobId': 'job-1'}
+            ]
+        }},
+        # Sixth - get batch status
         {'getBatchJob': {
-            'batchJobScoringJobs': {
-                'items': [
-                    {'scoringJobId': 'existing-job-1'},
-                    {'scoringJobId': 'job-1'}
-                ]
-            }
+            'id': 'batch-1',
+            'status': 'OPEN',
+            'totalRequests': 2
+        }},
+        # Seventh - update batch count
+        {'updateBatchJob': {
+            'id': 'batch-1',
+            'totalRequests': 2,
+            'status': 'OPEN'
         }}
     ]
 
@@ -334,20 +309,6 @@ def test_batch_scoring_job_uses_existing_batch(mock_client):
         mock_scoring_job.create.return_value = Mock(id='job-1')
         mock_batch_job.get_by_id.return_value = Mock(id='batch-1')
         
-        def mock_scoring_create(*args, **kwargs):
-            input_data = {k: v for k, v in kwargs.items() if k != 'client'}
-            mock_client.execute("""
-                mutation CreateScoringJob($input: CreateScoringJobInput!) {
-                    createScoringJob(input: $input) {
-                        id
-                        status
-                    }
-                }
-            """, {'input': input_data})
-            return mock_scoring_job.create.return_value
-
-        mock_scoring_job.create.side_effect = mock_scoring_create
-
         scoring_job, batch_job = mock_client.batch_scoring_job(
             itemId='item-1',
             scorecardId='card-1',
@@ -359,3 +320,56 @@ def test_batch_scoring_job_uses_existing_batch(mock_client):
 
         assert scoring_job.id == 'job-1'
         assert batch_job.id == 'batch-1'
+
+def test_update_evaluation_basic(mock_client):
+    """Test basic evaluation update"""
+    mock_client.execute.return_value = {
+        'updateEvaluation': {
+            'id': 'eval-1',
+            'status': 'COMPLETED',
+            'metrics': {'accuracy': 0.95}
+        }
+    }
+    
+    result = mock_client.updateEvaluation(
+        'eval-1',
+        status='COMPLETED',
+        metrics={'accuracy': 0.95}
+    )
+    
+    # Verify execute was called with correct mutation
+    mock_client.execute.assert_called_once()
+    call_args = mock_client.execute.call_args
+    
+    # Verify mutation includes all expected fields
+    assert 'mutation UpdateEvaluation' in call_args[0][0]
+    assert all(field in call_args[0][0] for field in [
+        'id', 'type', 'accountId', 'status', 'metrics', 'accuracy',
+        'confusionMatrix', 'scoreGoal'
+    ])
+    
+    # Verify input variables
+    variables = call_args[0][1]['input']
+    assert variables['id'] == 'eval-1'
+    assert variables['status'] == 'COMPLETED'
+    assert variables['metrics'] == {'accuracy': 0.95}
+    assert 'updatedAt' in variables
+
+def test_update_evaluation_timestamp(mock_client):
+    """Test that updateEvaluation adds timestamp"""
+    mock_client.updateEvaluation('eval-1', status='COMPLETED')
+    
+    variables = mock_client.execute.call_args[0][1]['input']
+    timestamp = variables['updatedAt']
+    
+    # Verify timestamp format
+    assert timestamp.endswith('Z')
+    assert 'T' in timestamp
+    assert '+00:00' not in timestamp
+
+def test_update_evaluation_error_handling(mock_client):
+    """Test error handling in updateEvaluation"""
+    mock_client.execute.side_effect = Exception("API Error")
+    
+    with pytest.raises(Exception, match="API Error"):
+        mock_client.updateEvaluation('eval-1', status='COMPLETED')

@@ -74,68 +74,20 @@ export function observeQueryFromModel<T>(
     fields: [
       'id',
       'type',
-      'accuracy',
-      'parameters',
-      'metrics',
-      'metricsExplanation',
-      'inferences',
-      'cost',
-      'createdAt',
-      'updatedAt',
       'status',
-      'startedAt',
-      'totalItems',
-      'processedItems',
-      'errorMessage',
-      'errorDetails',
       'accountId',
-      'scorecardId',
-      'scoreId',
-      {
-        name: 'score',
-        fields: [
-          'id',
-          'name',
-          'type',
-          'description',
-          'createdAt',
-          'updatedAt'
-        ]
-      },
-      'confusionMatrix',
-      'elapsedSeconds',
-      'estimatedRemainingSeconds',
-      'scoreGoal',
-      'datasetClassDistribution',
-      'isDatasetClassDistributionBalanced',
-      'predictedClassDistribution',
-      'isPredictedClassDistributionBalanced'
+      'scoringJobCountCache',
+      'completedRequests',
+      'startedAt',
+      'modelProvider',
+      'modelName',
+      'parameters',
+      'createdAt',
+      'updatedAt'
     ]
   });
 
-  return {
-    subscribe: (handlers: { 
-      next: (data: { items: T[] }) => void
-      error: (error: Error) => void 
-    }) => {
-      const wrappedHandlers = {
-        next: (data: any) => {
-          if (!data?.items) {
-            console.error('Missing items in subscription data:', data);
-            return;
-          }
-
-          handlers.next(data);
-        },
-        error: (error: Error) => {
-          console.error('Subscription error:', error);
-          handlers.error(error);
-        }
-      };
-      
-      return subscription.subscribe(wrappedHandlers);
-    }
-  } as any;
+  return subscription;
 }
 
 export async function getFromModel<T>(
