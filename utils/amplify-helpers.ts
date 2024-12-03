@@ -1,6 +1,19 @@
 import type { Schema } from "@/amplify/data/resource"
 import type { AmplifyListResult, AmplifyGetResult } from "@/types/shared"
 import { tap } from "node:test/reporters"
+import { Observable } from "rxjs"
+
+interface ScoringJobsSubscriptionData {
+  items: Schema['ScoringJob']['type'][]
+  isSynced: boolean
+}
+
+interface BatchJobScoringJobLink {
+  id: string
+  scoringJob: Schema['ScoringJob']['type']
+  batchJobId: string
+  scoringJobId: string
+}
 
 export async function listFromModel<T extends { id: string }>(
   model: any,
@@ -64,53 +77,102 @@ export async function listFromModel<T extends { id: string }>(
 
 export function observeQueryFromModel<T>(
   model: any,
-  filter?: Record<string, any>
+  filter?: Record<string, any>,
+  modelName?: string
 ) {
-  console.log('Setting up subscription for model:', model?.name);
+  // Use provided modelName first, then try to detect it
+  const detectedModelName = modelName || 
+                          model?.constructor?.name?.replace('Model', '') || 
+                          Object.keys(model || {}).find(key => key.endsWith('Model'))?.replace('Model', '') ||
+                          'Unknown';
+  
+  console.log('Setting up subscription for model:', {
+    providedModelName: modelName,
+    detectedModelName,
+    modelConstructor: model?.constructor?.name,
+    modelKeys: Object.keys(model || {})
+  });
   console.log('Filter:', filter);
+
+  // Define fields based on model name
+  let fields: any[];
+  switch (detectedModelName) {
+    case 'BatchJob':
+      fields = [
+        'id',
+        'type',
+        'status',
+        'startedAt',
+        'estimatedEndAt',
+        'completedAt',
+        'totalRequests',
+        'completedRequests',
+        'failedRequests',
+        'errorMessage',
+        'errorDetails',
+        'accountId',
+        'scorecardId',
+        'scoreId',
+        'modelProvider',
+        'modelName',
+        'scoringJobCountCache',
+        'createdAt',
+        'updatedAt'
+      ];
+      break;
+    case 'Evaluation':
+      fields = [
+        'id',
+        'type',
+        'accuracy',
+        'parameters',
+        'metrics',
+        'metricsExplanation',
+        'inferences',
+        'cost',
+        'createdAt',
+        'updatedAt',
+        'status',
+        'startedAt',
+        'totalItems',
+        'processedItems',
+        'errorMessage',
+        'errorDetails',
+        'accountId',
+        'scorecardId',
+        'scoreId',
+        {
+          name: 'score',
+          fields: [
+            'id',
+            'name',
+            'type',
+            'description',
+            'createdAt',
+            'updatedAt'
+          ]
+        },
+        'confusionMatrix',
+        'elapsedSeconds',
+        'estimatedRemainingSeconds',
+        'scoreGoal',
+        'datasetClassDistribution',
+        'isDatasetClassDistributionBalanced',
+        'predictedClassDistribution',
+        'isPredictedClassDistributionBalanced'
+      ];
+      break;
+    default:
+      console.warn('Unknown model type:', detectedModelName);
+      fields = ['id', 'createdAt', 'updatedAt'];
+      break;
+  }
+
+  console.log('Using fields for subscription:', fields);
 
   const subscription = model.observeQuery({
     filter: filter || undefined,
-    fields: [
-      'id',
-      'type',
-      'accuracy',
-      'parameters',
-      'metrics',
-      'metricsExplanation',
-      'inferences',
-      'cost',
-      'createdAt',
-      'updatedAt',
-      'status',
-      'startedAt',
-      'totalItems',
-      'processedItems',
-      'errorMessage',
-      'errorDetails',
-      'accountId',
-      'scorecardId',
-      'scoreId',
-      {
-        name: 'score',
-        fields: [
-          'id',
-          'name',
-          'type',
-          'description',
-          'createdAt',
-          'updatedAt'
-        ]
-      },
-      'confusionMatrix',
-      'elapsedSeconds',
-      'estimatedRemainingSeconds',
-      'scoreGoal',
-      'datasetClassDistribution',
-      'isDatasetClassDistributionBalanced',
-      'predictedClassDistribution',
-      'isPredictedClassDistributionBalanced'
-    ]
+    fields
   });
 
   return {

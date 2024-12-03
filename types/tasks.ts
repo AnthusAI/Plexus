@@ -7,16 +7,27 @@ export type AlertTaskData = BaseTaskData & {
 }
 
 export type BatchJobTaskData = BaseTaskData & {
-  provider: string
+  modelProvider: string
+  modelName: string
   type: string
   status: string
   totalRequests: number
   completedRequests: number
   failedRequests: number
   startedAt?: string
+  estimatedEndAt?: string
   completedAt?: string
   errorMessage?: string
-  batchJobs?: BatchJobTaskData[]
+  errorDetails?: any
+  scoringJobs?: {
+    id: string
+    status: string
+    startedAt?: string | null
+    completedAt?: string | null
+    errorMessage?: string | null
+    scoringJobId: string
+    batchJobId: string
+  }[]
 }
 
 export type EvaluationTaskData = BaseTaskData & {
@@ -171,13 +182,29 @@ export const isEvaluationActivity = (
 }
 
 // Add this to the exports
-export type RelatedBatchJob = BaseTaskData & {
-  provider: string
+export type RelatedBatchJob = {
+  id: string
   type: string
   status: string
+  modelProvider: string
+  modelName: string
   totalRequests: number
   completedRequests: number
   failedRequests: number
+  startedAt?: string
+  estimatedEndAt?: string
+  completedAt?: string
+  errorMessage?: string
+  errorDetails?: any
+  scoringJobs?: {
+    id: string
+    status: string
+    startedAt?: string | null
+    completedAt?: string | null
+    errorMessage?: string | null
+    scoringJobId: string
+    batchJobId: string
+  }[]
 }
 
 // Add this to the existing types in tasks.ts

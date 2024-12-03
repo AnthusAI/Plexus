@@ -334,7 +334,6 @@ class _BaseAPIClient:
         accountId: str,
         model_provider: str,
         model_name: str,
-        provider: str,
         scoreId: Optional[str] = None,
         parameters: Optional[Dict] = None,
         max_batch_size: int = 100,
@@ -408,7 +407,6 @@ class _BaseAPIClient:
                 type='MODEL_INFERENCE',
                 modelProvider=model_provider,
                 modelName=model_name,
-                provider=provider,
                 parameters=parameters or {},
                 scorecardId=scorecardId,
                 scoreId=scoreId,
@@ -454,19 +452,43 @@ class _BaseAPIClient:
                            .get('batchJobScoringJobs', {})
                            .get('items', []))
 
+        # After linking scoring job to batch job, update the counter cache
+        update_mutation = """
+        mutation UpdateBatchJob($batchJobId: String!, $count: Int!) {
+            updateBatchJob(input: {
+                id: $batchJobId,
+                scoringJobCountCache: $count
+            }) {
+                id
+                scoringJobCountCache
+            }
+        }
+        """
+
+        # Update the counter cache
+        self.execute(update_mutation, {
+            'batchJobId': batch_job.id,
+            'count': current_count
+        })
+
         if current_count >= max_batch_size:
             close_mutation = """
             mutation UpdateBatchJob($batchJobId: String!) {
                 updateBatchJob(input: {
                     id: $batchJobId,
-                    status: "CLOSED"
+                    status: "CLOSED",
+                    scoringJobCountCache: $count
                 }) {
                     id
                     status
+                    scoringJobCountCache
                 }
             }
             """
-            self.execute(close_mutation, {'batchJobId': batch_job.id})
+            self.execute(close_mutation, {
+                'batchJobId': batch_job.id,
+                'count': current_count
+            })
 
         return scoring_job, batch_job
 
