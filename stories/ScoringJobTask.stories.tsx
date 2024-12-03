@@ -14,64 +14,38 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof ScoringJobTask>
 
-const baseTask = {
-  id: 1,
+const defaultTask = {
+  id: '1',
   type: 'Scoring Job',
-  scorecard: 'Customer Satisfaction',
-  score: 'Overall Score',
-  time: '2 hours ago',
-  summary: 'Scoring customer feedback',
-  description: 'Processing batch of customer reviews',
+  scorecard: 'Test Scorecard',
+  score: 'Test Score',
+  time: new Date().toISOString(),
+  summary: 'Test Summary',
   data: {
-    status: 'in_progress',
-    itemName: 'Q4 Reviews',
-    scorecardName: 'Customer Satisfaction',
-    totalItems: 300,
-    completedItems: 145,
-    batchJobs: [
-      {
-        id: '1',
-        provider: 'OpenAI',
-        type: 'sentiment-analysis',
-        status: 'done',
-        totalRequests: 100,
-        completedRequests: 100,
-        failedRequests: 0,
-      },
-      {
-        id: '2',
-        provider: 'Anthropic',
-        type: 'categorization',
-        status: 'in_progress',
-        totalRequests: 100,
-        completedRequests: 45,
-        failedRequests: 0,
-      },
-      {
-        id: '3',
-        provider: 'Cohere',
-        type: 'topic-extraction',
-        status: 'pending',
-        totalRequests: 100,
-        completedRequests: 0,
-        failedRequests: 0,
-      },
-    ],
-  },
+    type: 'scoring',
+    status: 'running',
+    modelProvider: 'OpenAI',
+    modelName: 'gpt-4',
+    totalRequests: 100,
+    completedRequests: 50,
+    failedRequests: 0,
+    startedAt: new Date().toISOString(),
+    scoringJobs: []
+  }
 }
 
-export const Default: Story = {
+export const Default = {
   args: {
-    task: baseTask,
-  },
+    task: defaultTask
+  }
 }
 
 export const WithError: Story = {
   args: {
     task: {
-      ...baseTask,
+      ...defaultTask,
       data: {
-        ...baseTask.data,
+        ...defaultTask.data,
         status: 'failed',
         errorMessage: 'Failed to connect to scoring service',
         totalItems: 300,
@@ -79,7 +53,8 @@ export const WithError: Story = {
         batchJobs: [
           {
             id: '1',
-            provider: 'OpenAI',
+            modelProvider: 'OpenAI',
+            modelName: 'gpt-4',
             type: 'sentiment-analysis',
             status: 'failed',
             totalRequests: 100,
@@ -89,7 +64,8 @@ export const WithError: Story = {
           },
           {
             id: '2',
-            provider: 'Anthropic',
+            modelProvider: 'Anthropic',
+            modelName: 'claude-2',
             type: 'categorization',
             status: 'canceled',
             totalRequests: 100,
@@ -105,17 +81,34 @@ export const WithError: Story = {
 export const Complete: Story = {
   args: {
     task: {
-      ...baseTask,
+      ...defaultTask,
       data: {
-        ...baseTask.data,
+        ...defaultTask.data,
         status: 'done',
         totalItems: 300,
         completedItems: 300,
-        batchJobs: baseTask.data.batchJobs?.map(job => ({
-          ...job,
-          status: 'done',
-          completedRequests: 100,
-        })),
+        batchJobs: [
+          {
+            id: '1',
+            modelProvider: 'OpenAI',
+            modelName: 'gpt-4',
+            type: 'sentiment-analysis',
+            status: 'done',
+            totalRequests: 100,
+            completedRequests: 100,
+            failedRequests: 0,
+          },
+          {
+            id: '2',
+            modelProvider: 'Anthropic',
+            modelName: 'claude-2',
+            type: 'categorization',
+            status: 'done',
+            totalRequests: 100,
+            completedRequests: 100,
+            failedRequests: 0,
+          },
+        ],
       },
     },
   },
@@ -124,7 +117,7 @@ export const Complete: Story = {
 export const DetailView: Story = {
   args: {
     variant: 'detail',
-    task: baseTask,
+    task: defaultTask,
   },
   decorators: [
     (Story) => (

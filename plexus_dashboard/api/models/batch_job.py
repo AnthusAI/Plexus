@@ -10,10 +10,10 @@ class BatchJob(BaseModel):
     accountId: str
     status: str
     type: str
-    provider: str
     batchId: str
     modelProvider: str
     modelName: str
+    scoringJobCountCache: Optional[int] = None
     startedAt: Optional[datetime] = None
     estimatedEndAt: Optional[datetime] = None
     completedAt: Optional[datetime] = None
@@ -31,10 +31,10 @@ class BatchJob(BaseModel):
         accountId: str,
         status: str,
         type: str,
-        provider: str,
         batchId: str,
         modelProvider: str,
         modelName: str,
+        scoringJobCountCache: Optional[int] = None,
         startedAt: Optional[datetime] = None,
         estimatedEndAt: Optional[datetime] = None,
         completedAt: Optional[datetime] = None,
@@ -51,10 +51,10 @@ class BatchJob(BaseModel):
         self.accountId = accountId
         self.status = status
         self.type = type
-        self.provider = provider
         self.batchId = batchId
         self.modelProvider = modelProvider
         self.modelName = modelName
+        self.scoringJobCountCache = scoringJobCountCache
         self.startedAt = startedAt
         self.estimatedEndAt = estimatedEndAt
         self.completedAt = completedAt
@@ -73,10 +73,10 @@ class BatchJob(BaseModel):
             accountId
             status
             type
-            provider
             batchId
             modelProvider
             modelName
+            scoringJobCountCache
             startedAt
             estimatedEndAt
             completedAt
@@ -103,7 +103,6 @@ class BatchJob(BaseModel):
         input_data = {
             'accountId': accountId,
             'type': type,
-            'provider': 'OPENAI',
             'batchId': str(uuid.uuid4()),
             'modelProvider': modelProvider,
             'modelName': modelName,
