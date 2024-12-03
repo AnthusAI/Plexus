@@ -92,11 +92,22 @@ async def predict_impl(
                     score_name, scorecard_class, sample_row, used_content_id
                 )
                 
-                if predictions and predictions.get('value') is not None:
-                    row_result[f'{score_name}_value'] = predictions.get('value')
-                    row_result[f'{score_name}_explanation'] = predictions.get('explanation')
-                    row_result[f'{score_name}_cost'] = costs
-                    logging.info(f"Got predictions: {predictions}")
+                if predictions:
+                    if isinstance(predictions, list):
+                        # Handle list of results
+                        prediction = predictions[0] if predictions else None
+                        if prediction:
+                            row_result[f'{score_name}_value'] = prediction.value
+                            row_result[f'{score_name}_explanation'] = prediction.explanation
+                            row_result[f'{score_name}_cost'] = costs
+                            logging.info(f"Got predictions: {predictions}")
+                    else:
+                        # Handle dictionary result
+                        if predictions.get('value') is not None:
+                            row_result[f'{score_name}_value'] = predictions.get('value')
+                            row_result[f'{score_name}_explanation'] = predictions.get('explanation')
+                            row_result[f'{score_name}_cost'] = costs
+                            logging.info(f"Got predictions: {predictions}")
                 else:
                     row_result[f'{score_name}_value'] = None
                     row_result[f'{score_name}_explanation'] = None
@@ -208,20 +219,23 @@ def select_sample_data_driven(scorecard_class, score_name, content_id, score_con
     batch_mode = os.getenv('PLEXUS_ENABLE_BATCH_MODE', '').lower() == 'true'
     
     if content_id:
-        sample_row = score_instance.dataframe[score_instance.dataframe['content_id'] == content_id]
-        if sample_row.empty:
-            logging.warning(f"Content ID '{content_id}' not found in the data. Selecting a random sample.")
-            if batch_mode:
-                # Use a consistent seed for batch mode testing
-                sample_row = score_instance.dataframe.sample(n=1, random_state=42)
-            else:
+        # Convert content_id to integer since all values in DataFrame are integers
+        try:
+            content_id_int = int(content_id)
+            exists = content_id_int in score_instance.dataframe['content_id'].values
+            logging.info(f"Content ID {content_id_int} {'exists' if exists else 'does not exist'} in dataset")
+            
+            sample_row = score_instance.dataframe[
+                score_instance.dataframe['content_id'] == content_id_int
+            ]
+            if sample_row.empty:
+                logging.warning(f"Content ID '{content_id}' not found in the data. Selecting a random sample.")
                 sample_row = score_instance.dataframe.sample(n=1)
+        except ValueError:
+            logging.error(f"Invalid content ID format: {content_id}. Must be an integer.")
+            raise
     else:
-        if batch_mode:
-            # Use a consistent seed for batch mode testing
-            sample_row = score_instance.dataframe.sample(n=1, random_state=42)
-        else:
-            sample_row = score_instance.dataframe.sample(n=1)
+        sample_row = score_instance.dataframe.sample(n=1)
     
     used_content_id = sample_row.iloc[0]['content_id']
     logging.info(f"Selected content_id: {used_content_id}")
@@ -321,6 +335,7 @@ async def predict_score(score_name, scorecard_class, sample_row, used_content_id
                         id=used_content_id, text="", metadata=metadata
                     )
 
+            logging.info(f"Input metadata: {score_input.metadata}")
             result = await predict_score_impl(score_instance, {}, score_input)
             if result[0] is not None:  # Check if we got actual results
                 return result
@@ -351,7 +366,6 @@ async def predict_score_impl(score_instance, context, input_data):
     try:
         logging.info("Starting score prediction...")
         
-        # Get thread_id for config
         thread_id = input_data.metadata.get('content_id')
         config = {
             "configurable": {
@@ -359,47 +373,60 @@ async def predict_score_impl(score_instance, context, input_data):
             }
         }
         
-        # If we have a checkpoint, pass None as input to resume
         if hasattr(score_instance, 'checkpointer') and score_instance.checkpointer:
-            checkpoint = await score_instance.checkpointer.aget(config)
-            if checkpoint:
-                logging.info(f"Found checkpoint for thread {thread_id}, resuming execution")
-                try:
-                    prediction_result = await score_instance.workflow.ainvoke(
-                        None,  # Pass None to resume from checkpoint
-                        config=config  # Just pass thread_id in config
-                    )
-                    logging.info(f"Got prediction_result: {prediction_result}")
-                except BatchProcessingPause:
-                    await score_instance.cleanup()
-                    return None, None, None
-            else:
-                logging.info("No checkpoint found, starting fresh prediction")
+            batch_mode = os.getenv('PLEXUS_ENABLE_BATCH_MODE', '').lower() == 'true'
+            
+            if batch_mode:
+                logging.info("Batch mode enabled, ignoring checkpoints and starting fresh prediction")
                 prediction_result = await score_instance.predict(context, input_data)
                 logging.info(f"Fresh prediction result: {prediction_result}")
+            else:
+                checkpoint = await score_instance.checkpointer.aget(config)
+                if checkpoint:
+                    logging.info(f"Found checkpoint for thread {thread_id}, resuming execution")
+                    prediction_result = await score_instance.workflow.ainvoke(
+                        None,
+                        config=config
+                    )
+                    logging.info(f"Got prediction_result: {prediction_result}")
+                else:
+                    logging.info("No checkpoint found, starting fresh prediction")
+                    prediction_result = await score_instance.predict(context, input_data)
+                    logging.info(f"Fresh prediction result: {prediction_result}")
         else:
             logging.info("No checkpointer, starting fresh prediction")
             prediction_result = await score_instance.predict(context, input_data)
             logging.info(f"Fresh prediction result: {prediction_result}")
             
-        # Only calculate costs and return results if we have a valid prediction
-        if prediction_result and prediction_result.get('value') is not None:
-            costs = score_instance.get_accumulated_costs()
-            logging.info("Returning final results")
-            try:
-                # Attempt to cleanup any remaining tasks
-                tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-                for task in tasks:
-                    task.cancel()
-                if tasks:
-                    await asyncio.gather(*tasks, return_exceptions=True)
-            except Exception as e:
-                logging.warning(f"Error during task cleanup: {e}")
-            return input_data.text, prediction_result, costs
+        if prediction_result:
+            if isinstance(prediction_result, list):
+                # Handle list of results
+                prediction_value = prediction_result[0].value if prediction_result else None
+                prediction_explanation = prediction_result[0].explanation if prediction_result else None
+            else:
+                # Handle dictionary result
+                prediction_value = prediction_result.get('value')
+                prediction_explanation = prediction_result.get('explanation')
+                
+            if prediction_value is not None:
+                costs = score_instance.get_accumulated_costs()
+                logging.info("Returning final results")
+                try:
+                    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+                    for task in tasks:
+                        task.cancel()
+                    if tasks:
+                        await asyncio.gather(*tasks, return_exceptions=True)
+                except Exception as e:
+                    logging.warning(f"Error during task cleanup: {e}")
+                return input_data.text, prediction_result, costs
         
         logging.info("No valid predictions returned - likely hit a breakpoint or got empty result")
         return None, None, None
         
+    except BatchProcessingPause:
+        # Let BatchProcessingPause propagate up to LangGraphScore
+        raise
     except Exception as e:
         logging.error(f"Error in predict_score_impl: {e}")
         logging.error(f"Full traceback: {traceback.format_exc()}")
