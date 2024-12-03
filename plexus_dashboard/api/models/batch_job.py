@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from .base import BaseModel
 from ..client import _BaseAPIClient
 import uuid
+import logging
 
 @dataclass
 class BatchJob(BaseModel):
@@ -24,6 +25,7 @@ class BatchJob(BaseModel):
     errorDetails: Optional[Dict] = None
     scorecardId: Optional[str] = None
     scoreId: Optional[str] = None
+    scoringJobCountCache: Optional[int] = None
 
     def __init__(
         self,
@@ -45,6 +47,7 @@ class BatchJob(BaseModel):
         errorDetails: Optional[Dict] = None,
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
+        scoringJobCountCache: Optional[int] = None,
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
@@ -65,6 +68,7 @@ class BatchJob(BaseModel):
         self.errorDetails = errorDetails
         self.scorecardId = scorecardId
         self.scoreId = scoreId
+        self.scoringJobCountCache = scoringJobCountCache
 
     @classmethod
     def fields(cls) -> str:
@@ -87,6 +91,7 @@ class BatchJob(BaseModel):
             errorDetails
             scorecardId
             scoreId
+            scoringJobCountCache
         """
 
     @classmethod
@@ -112,11 +117,14 @@ class BatchJob(BaseModel):
         optional_fields = [
             'scorecardId', 'scoreId', 'errorMessage', 'errorDetails',
             'startedAt', 'estimatedEndAt', 'completedAt',
-            'totalRequests', 'completedRequests', 'failedRequests'
+            'totalRequests', 'completedRequests', 'failedRequests',
+            'scoringJobCountCache'
         ]
         for field in optional_fields:
             if field in kwargs:
                 input_data[field] = kwargs[field]
+        
+        logging.info(f"Creating BatchJob with input: {input_data}")
         
         mutation = """
         mutation CreateBatchJob($input: CreateBatchJobInput!) {
@@ -126,7 +134,9 @@ class BatchJob(BaseModel):
         }
         """ % cls.fields()
         
+        logging.info(f"Executing BatchJob creation mutation: {mutation}")
         result = client.execute(mutation, {'input': input_data})
+        logging.info(f"BatchJob creation result: {result}")
         return cls.from_dict(result['createBatchJob'], client)
 
     @classmethod
@@ -148,16 +158,7 @@ class BatchJob(BaseModel):
         )
 
     def update(self, **kwargs) -> 'BatchJob':
-        if 'createdAt' in kwargs:
-            raise ValueError("createdAt cannot be modified after creation")
-            
-        update_data = {
-            'updatedAt': datetime.now(timezone.utc).isoformat().replace(
-                '+00:00', 'Z'
-            ),
-            **kwargs
-        }
-        
+        """Update batch job fields."""
         mutation = """
         mutation UpdateBatchJob($input: UpdateBatchJobInput!) {
             updateBatchJob(input: $input) {
@@ -166,14 +167,35 @@ class BatchJob(BaseModel):
         }
         """ % self.fields()
         
-        variables = {
-            'input': {
-                'id': self.id,
-                **update_data
+        # First get current state to ensure we have all required fields
+        query = """
+        query GetBatchJob($id: ID!) {
+            getBatchJob(id: $id) {
+                accountId
+                status
+                type
+                batchId
+                modelProvider
+                modelName
             }
         }
+        """
+        result = self._client.execute(query, {'id': self.id})
+        current_data = result.get('getBatchJob', {})
         
-        result = self._client.execute(mutation, variables)
+        # Combine current required fields with updates
+        input_data = {
+            'id': self.id,
+            'accountId': current_data['accountId'],
+            'status': current_data['status'],
+            'type': current_data['type'],
+            'batchId': current_data['batchId'],
+            'modelProvider': current_data['modelProvider'],
+            'modelName': current_data['modelName'],
+            **kwargs
+        }
+        
+        result = self._client.execute(mutation, {'input': input_data})
         return self.from_dict(result['updateBatchJob'], self._client)
 
     @classmethod
