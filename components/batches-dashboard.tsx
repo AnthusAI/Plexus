@@ -1,9 +1,10 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { generateClient } from "aws-amplify/data"
+import { dataClient, listFromModel, getFromModel } from '@/utils/data-operations'
 import type { Schema } from "@/amplify/data/resource"
+import type { ModelListResult, AmplifyGetResult } from "@/types/shared"
 import {
   Table,
   TableBody,
@@ -27,289 +28,570 @@ import {
 } from "lucide-react"
 import { CardButton } from "@/components/CardButton"
 import { format, formatDistanceToNow } from "date-fns"
-import { listFromModel, observeQueryFromModel } from "@/utils/amplify-helpers"
+import { observeQueryFromModel } from "@/utils/amplify-helpers"
+import { useMediaQuery } from "../hooks/use-media-query"
+import BatchJobTask from "@/components/BatchJobTask"
+import { Subscription } from 'rxjs'
+import { ProgressBar } from "@/components/ui/progress-bar"
+import { Badge } from "@/components/ui/badge"
 
 const ACCOUNT_KEY = 'call-criteria'
-const client = generateClient<Schema>()
 
-interface BatchJob {
-  id: string
-  type: string
-  status: string
-  accountId: string
-  batchId: string
-  completedRequests?: number
-  scoringJobCountCache: number
-  startedAt?: string
-  modelProvider?: string
-  modelName?: string
-  parameters?: Record<string, any>
-  createdAt: string
-  updatedAt: string
+async function listAccounts(): Promise<ModelListResult<Schema['Account']['type']>> {
+  return listFromModel<Schema['Account']['type']>(
+    'Account',
+    { key: { eq: ACCOUNT_KEY } }
+  )
 }
 
-// Add these type definitions at the top of the file
-import { Schema } from '@/amplify/data/resource'
-type BatchJobType = Schema['BatchJob']['Type']
-type SubscriptionMessage = {
-  data: BatchJobType
-  errors?: Array<{ message: string }>
+async function listBatchJobs(accountId: string): Promise<ModelListResult<Schema['BatchJob']['type']>> {
+  return listFromModel<Schema['BatchJob']['type']>(
+    'BatchJob',
+    { accountId: { eq: accountId } }
+  )
+}
+
+interface ScorecardData {
+  id: string;
+  name: string;
+}
+
+interface ScoreData {
+  id: string;
+  name: string;
+}
+
+type BatchJobType = Omit<Schema['BatchJob']['type'], 'scorecard' | 'score'> & {
+  scorecard?: {
+    id: string;
+    name: string;
+  } | null;
+  score?: {
+    id: string;
+    name: string;
+  } | null;
+  batchId: string;
+  modelProvider: string;
+  modelName: string;
+  scoringJobCountCache?: number | null;
+};
+
+interface BatchJobWithCount extends Omit<Schema['BatchJob']['type'], 'scorecard' | 'score'> {
+  scorecard?: {
+    id: string;
+    name: string;
+  } | null;
+  score?: {
+    id: string;
+    name: string;
+  } | null;
+  scoringJobsCount: number;
+}
+
+interface BatchJobListResponse {
+  data: BatchJobType[];
+}
+
+interface ScoringJobListResponse {
+  data: Schema['ScoringJob']['type'][];
+}
+
+function getProgressPercentage(job: BatchJobWithCount): number {
+  if (!job.scoringJobCountCache) return 0
+  return Math.round((job.completedRequests || 0) / job.scoringJobCountCache * 100)
+}
+
+function getStatusIcon(status: string): JSX.Element {
+  switch (status.toUpperCase()) {
+    case 'RUNNING':
+      return <PlayCircle className="h-4 w-4 text-primary animate-pulse" />
+    case 'COMPLETED':
+      return <StopCircle className="h-4 w-4 text-success" />
+    case 'FAILED':
+      return <AlertCircle className="h-4 w-4 text-destructive" />
+    default:
+      return <Activity className="h-4 w-4 text-muted-foreground" />
+  }
+}
+
+function formatTimeAgo(dateStr?: string | null): string {
+  if (!dateStr) return 'Not started'
+  try {
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return 'Invalid date'
+    return formatDistanceToNow(date, { addSuffix: true })
+  } catch (error) {
+    console.error('Error formatting date:', error)
+    return 'Invalid date'
+  }
+}
+
+async function getScorecard(id: string): Promise<AmplifyGetResult<Schema['Scorecard']['type']>> {
+  if (!dataClient.models.Scorecard) {
+    throw new Error('Scorecard model not found in client')
+  }
+  return dataClient.models.Scorecard.get({ id })
+}
+
+async function getScore(id: string): Promise<AmplifyGetResult<Schema['Score']['type']>> {
+  if (!dataClient.models.Score) {
+    throw new Error('Score model not found in client')
+  }
+  return dataClient.models.Score.get({ id })
+}
+
+const mapBatchJob = async (job: BatchJobType): Promise<BatchJobWithCount> => {
+  let scorecardData: ScorecardData | null = null;
+  let scoreData: ScoreData | null = null;
+
+  if (job.scorecardId) {
+    try {
+      const scorecardResult = await getScorecard(job.scorecardId);
+      if (scorecardResult?.data) {
+        scorecardData = {
+          id: scorecardResult.data.id,
+          name: scorecardResult.data.name
+        };
+      }
+    } catch (err) {
+      console.error('Error fetching scorecard:', err);
+    }
+  }
+
+  if (job.scoreId) {
+    try {
+      const scoreResult = await getScore(job.scoreId);
+      if (scoreResult?.data) {
+        scoreData = {
+          id: scoreResult.data.id,
+          name: scoreResult.data.name
+        };
+      }
+    } catch (err) {
+      console.error('Error fetching score:', err);
+    }
+  }
+
+  return {
+    id: job.id,
+    type: job.type,
+    status: job.status,
+    startedAt: job.startedAt,
+    estimatedEndAt: job.estimatedEndAt,
+    completedAt: job.completedAt,
+    completedRequests: job.completedRequests,
+    failedRequests: job.failedRequests,
+    errorMessage: job.errorMessage,
+    errorDetails: job.errorDetails,
+    accountId: job.accountId,
+    scorecardId: job.scorecardId,
+    scoreId: job.scoreId,
+    modelProvider: job.modelProvider,
+    modelName: job.modelName,
+    scoringJobCountCache: job.scoringJobCountCache,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    scoringJobsCount: job.scoringJobCountCache || 0,
+    scorecard: scorecardData,
+    score: scoreData
+  };
+};
+
+const BATCH_JOB_SUBSCRIPTION = `
+  subscription OnBatchJobChange($accountId: String!) {
+    onBatchJobChange(accountId: $accountId) {
+      id
+      type
+      status
+      startedAt
+      estimatedEndAt
+      completedAt
+      totalRequests
+      completedRequests
+      failedRequests
+      errorMessage
+      errorDetails
+      accountId
+      scorecardId
+      scoreId
+      modelProvider
+      modelName
+      scoringJobCountCache
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+interface SubscriptionResponse {
+  items: Schema['BatchJob']['type'][];
 }
 
 export default function BatchesDashboard() {
-  const [batchJobs, setBatchJobs] = useState<BatchJob[]>([])
+  const [batchJobs, setBatchJobs] = useState<BatchJobWithCount[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [accountId, setAccountId] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
+  const [selectedBatchJob, setSelectedBatchJob] = useState<BatchJobWithCount | null>(null)
+  const [isFullWidth, setIsFullWidth] = useState(false)
+  const [leftPanelWidth, setLeftPanelWidth] = useState(50)
+  const isNarrowViewport = useMediaQuery('(max-width: 768px)')
+  const [subscription, setSubscription] = useState<{ unsubscribe: () => void } | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const dragStateRef = useRef<{
+    isDragging: boolean
+    startX: number
+    startWidth: number
+  }>({
+    isDragging: false,
+    startX: 0,
+    startWidth: 50
+  })
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
 
-  useEffect(() => {
-    // Define subscription type
-    type SubscriptionCleanup = {
-      unsubscribe: () => void;
+  const handleDragStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    dragStateRef.current = {
+      isDragging: true,
+      startX: e.clientX,
+      startWidth: leftPanelWidth
     }
-    
-    let subscription: SubscriptionCleanup | null = null
+    document.addEventListener('mousemove', handleDragMove)
+    document.addEventListener('mouseup', handleDragEnd)
+  }, [leftPanelWidth])
 
-    async function setupRealTimeSync() {
-      try {
-        const [accountResult, initialBatchJobs] = await Promise.all([
-          listFromModel<Schema['Account']['type']>(
-            client.models.Account, 
-            { key: { eq: ACCOUNT_KEY } }
-          ),
-          listFromModel<BatchJob>(client.models.BatchJob)
-        ])
+  const handleDragMove = useCallback((e: MouseEvent) => {
+    if (!dragStateRef.current.isDragging || !containerRef.current) return
 
-        if (accountResult.data.length > 0) {
-          const foundAccountId = accountResult.data[0].id
-          setAccountId(foundAccountId)
-          
-          setBatchJobs(initialBatchJobs.data.filter(b => 
-            b.accountId === foundAccountId
-          ))
-          setIsLoading(false)
+    const containerWidth = containerRef.current.offsetWidth
+    const deltaX = e.clientX - dragStateRef.current.startX
+    const newWidthPercent = (dragStateRef.current.startWidth * 
+      containerWidth / 100 + deltaX) / containerWidth * 100
 
-          console.log('Setting up subscriptions for BatchJobs with filter:', {
-            accountId: foundAccountId
-          })
-
-          const handleBatchUpdate = (message: SubscriptionMessage) => {
-            console.log('Received batch update:', message)
-            // Refresh the full list when we get an update
-            listFromModel<BatchJob>(
-              client.models.BatchJob
-            ).then(result => {
-              const items = result.data
-              console.log('Refreshed batch jobs:', items)
-              setBatchJobs(items.filter(item => 
-                item && item.accountId === foundAccountId
-              ))
-            })
-          }
-
-          // Subscribe to onCreate with proper typing
-          const createSub = client.models.BatchJob.onCreate().subscribe({
-            next: (message: SubscriptionMessage) => handleBatchUpdate(message),
-            error: (error: Error) => {
-              console.error('onCreate subscription error:', error)
-              setError(error)
-            }
-          })
-
-          // Subscribe to onUpdate with proper typing
-          const updateSub = client.models.BatchJob.onUpdate().subscribe({
-            next: (message: SubscriptionMessage) => handleBatchUpdate(message),
-            error: (error: Error) => {
-              console.error('onUpdate subscription error:', error)
-              setError(error)
-            }
-          })
-
-          // Subscribe to onDelete with proper typing
-          const deleteSub = client.models.BatchJob.onDelete().subscribe({
-            next: (message: SubscriptionMessage) => handleBatchUpdate(message),
-            error: (error: Error) => {
-              console.error('onDelete subscription error:', error)
-              setError(error)
-            }
-          })
-
-          subscription = {
-            unsubscribe: () => {
-              console.log('Cleaning up subscriptions')
-              createSub.unsubscribe()
-              updateSub.unsubscribe()
-              deleteSub.unsubscribe()
-            }
-          }
-
-          console.log('Subscriptions setup complete')
-        } else {
-          setIsLoading(false)
-        }
-      } catch (error) {
-        console.error('Error setting up real-time sync:', error)
-        setError(error as Error)
-        setIsLoading(false)
-      }
-    }
-
-    setupRealTimeSync()
-
-    return () => {
-      if (subscription) {
-        console.log('Cleaning up subscription')
-        subscription.unsubscribe()
-      }
-    }
+    // Constrain width between 20% and 80%
+    const constrainedWidth = Math.min(Math.max(newWidthPercent, 20), 80)
+    setLeftPanelWidth(constrainedWidth)
   }, [])
 
-  const getStatusIcon = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'running':
-        return <PlayCircle className="h-4 w-4 text-green-500" />
-      case 'failed':
-        return <AlertCircle className="h-4 w-4 text-red-500" />
-      case 'stopped':
-        return <StopCircle className="h-4 w-4 text-yellow-500" />
-      default:
-        return null
+  const handleDragEnd = useCallback(() => {
+    dragStateRef.current.isDragging = false
+    document.removeEventListener('mousemove', handleDragMove)
+    document.removeEventListener('mouseup', handleDragEnd)
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (selectedBatchJob && event.key === 'Escape') {
+        setSelectedBatchJob(null)
+        setIsFullWidth(false)
+      }
     }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedBatchJob])
+
+  const handleActionClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation()
   }
 
-  const getProgressPercentage = (job: BatchJob) => {
-    if (!job.scoringJobCountCache) return 0
-    return Math.round((job.completedRequests || 0) / job.scoringJobCountCache * 100)
+  useEffect(() => {
+    let subscriptions: { unsubscribe: () => void }[] = [];
+
+    const setupRealTimeSync = async () => {
+      try {
+        const { data: accounts } = await listAccounts();
+        if (accounts.length === 0) {
+          setIsLoading(false);
+          return;
+        }
+
+        const foundAccountId = accounts[0].id;
+        setAccountId(foundAccountId);
+
+        // Initial data fetch
+        const { data: batchJobModels } = await listBatchJobs(foundAccountId);
+        
+        // Transform the batch jobs before setting state
+        const transformedJobs: BatchJobWithCount[] = batchJobModels.map(job => ({
+          ...job,
+          scorecard: null, // Will be populated later if needed
+          score: null, // Will be populated later if needed
+          scoringJobsCount: job.scoringJobCountCache || 0
+        }));
+        
+        setBatchJobs(transformedJobs);
+        setIsLoading(false);
+
+        console.log('Setting up subscriptions for BatchJobs with filter:', {
+          accountId: foundAccountId
+        });
+
+        const handleBatchUpdate = (data: any) => {
+          console.log('Received batch update:', data);
+          // Refresh the full list when we get an update
+          listBatchJobs(foundAccountId).then(result => {
+            console.log('Refreshed batch jobs:', result.data);
+            const transformedJobs: BatchJobWithCount[] = result.data.map(job => ({
+              ...job,
+              scorecard: null,
+              score: null,
+              scoringJobsCount: job.scoringJobCountCache || 0
+            }));
+            setBatchJobs(transformedJobs);
+          });
+        };
+
+        if (dataClient.models.BatchJob) {
+          // Subscribe to onCreate
+          const createSub = dataClient.models.BatchJob.onCreate().subscribe({
+            next: handleBatchUpdate,
+            error: (error: Error) => {
+              console.error('onCreate subscription error:', error);
+              setError(error);
+            }
+          });
+
+          // Subscribe to onUpdate
+          const updateSub = dataClient.models.BatchJob.onUpdate().subscribe({
+            next: handleBatchUpdate,
+            error: (error: Error) => {
+              console.error('onUpdate subscription error:', error);
+              setError(error);
+            }
+          });
+
+          // Subscribe to onDelete
+          const deleteSub = dataClient.models.BatchJob.onDelete().subscribe({
+            next: handleBatchUpdate,
+            error: (error: Error) => {
+              console.error('onDelete subscription error:', error);
+              setError(error);
+            }
+          });
+
+          subscriptions.push(createSub);
+          subscriptions.push(updateSub);
+          subscriptions.push(deleteSub);
+
+          console.log('Subscriptions setup complete');
+        }
+
+      } catch (error) {
+        console.error('Error in setupRealTimeSync:', error);
+        setIsLoading(false);
+        setError(error instanceof Error ? error : new Error('Unknown error'));
+      }
+    };
+
+    setupRealTimeSync();
+
+    return () => {
+      console.log('Cleaning up subscriptions');
+      subscriptions.forEach(sub => sub.unsubscribe());
+    };
+  }, []);
+
+  const handleBatchJobClick = (job: BatchJobWithCount) => {
+    setSelectedBatchJob(job)
+  }
+
+  const handleBatchJobClose = () => {
+    setSelectedBatchJob(null)
+    setIsFullWidth(false)
   }
 
   if (isLoading) {
-    return <div>Loading batch jobs...</div>
+    return <div>Loading...</div>
   }
 
   if (error) {
-    return (
-      <div className="p-4 text-red-500">
-        Error loading batch jobs: {error.message}
-      </div>
-    )
+    return <div>Error: {error.message}</div>
   }
 
   return (
-    <div className="space-y-4 h-full flex flex-col">
-      <div className="flex-grow overflow-hidden pb-2">
-        <div className="@container overflow-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[40%]">Batch Job</TableHead>
-                <TableHead className="w-[20%] @[630px]:table-cell hidden">
-                  Status
-                </TableHead>
-                <TableHead className="w-[30%] @[630px]:table-cell hidden">
-                  Progress
-                </TableHead>
-                <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">
-                  Actions
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {batchJobs.map((job) => (
-                <TableRow 
-                  key={job.id}
-                  className="transition-colors duration-200 hover:bg-muted"
-                >
-                  <TableCell>
-                    <div>
-                      {/* Narrow variant - visible below 630px */}
-                      <div className="block @[630px]:hidden">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <div className="font-medium flex items-center gap-2">
-                              {getStatusIcon(job.status)}
-                              {job.type}
+    <div className="h-full flex flex-col" ref={containerRef}>
+      <div className={`flex ${isNarrowViewport ? 'flex-col' : ''} flex-1 h-full w-full`}>
+        <div 
+          className={`
+            flex flex-col
+            ${isFullWidth ? 'hidden' : ''} 
+            ${(!selectedBatchJob || !isNarrowViewport) ? 'flex h-full' : 'hidden'}
+            ${(!selectedBatchJob || isNarrowViewport) ? 'w-full' : ''}
+          `}
+          style={!isNarrowViewport && selectedBatchJob && !isFullWidth ? {
+            width: `${leftPanelWidth}%`
+          } : undefined}
+        >
+          <div className="p-2">
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-2xl font-semibold">Batch Jobs</h1>
+            </div>
+            <div className="space-y-4">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[50%]">Job</TableHead>
+                    <TableHead className="w-[15%] @[630px]:table-cell hidden">Status</TableHead>
+                    <TableHead className="w-[35%] @[630px]:table-cell hidden">Progress</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {batchJobs.map((job) => (
+                    <TableRow 
+                      key={job.id}
+                      onClick={() => handleBatchJobClick(job)}
+                      className={`cursor-pointer transition-colors duration-200 
+                        ${job.id === selectedBatchJob?.id ? 'bg-muted' : 'hover:bg-muted'}`}
+                    >
+                      <TableCell>
+                        {/* Narrow variant - visible below 630px */}
+                        <div className="block @[630px]:hidden">
+                          <div className="flex justify-between">
+                            <div className="w-[40%] space-y-0.5">
+                              <div className="font-semibold truncate">
+                                <span className={job.id === selectedBatchJob?.id ? 'text-focus' : ''}>
+                                  {job.scorecard?.name || 'Unknown Scorecard'}
+                                </span>
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {job.score?.name || 'Unknown Score'}
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {job.type}
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {job.modelProvider} / {job.modelName}
+                              </div>
                             </div>
-                            <div className="text-sm text-muted-foreground">
-                              Batch ID: {job.batchId}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {job.completedRequests || 0} / {job.scoringJobCountCache || 0} 
-                              completed
+                            <div className="w-[55%] space-y-2">
+                              <div className="flex items-center gap-2 justify-end">
+                                <Badge 
+                                  variant={
+                                    job.status === 'COMPLETED' ? 'success' :
+                                    job.status === 'FAILED' ? 'destructive' :
+                                    'default'
+                                  }
+                                >
+                                  {job.status}
+                                </Badge>
+                              </div>
+                              <ProgressBar 
+                                progress={getProgressPercentage(job)}
+                                processedItems={job.completedRequests ?? 0}
+                                totalItems={job.scoringJobCountCache ?? 0}
+                                color="secondary"
+                                isFocused={job.id === selectedBatchJob?.id}
+                              />
                             </div>
                           </div>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <CardButton 
-                                icon={MoreHorizontal}
-                                onClick={() => {}}
-                              />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
-                                <Activity className="h-4 w-4 mr-2" /> View Details
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
                         </div>
-                      </div>
-                      {/* Wide variant - visible at 630px and above */}
-                      <div className="hidden @[630px]:block">
-                        <div className="font-medium">{job.type}</div>
-                        <div className="text-sm text-muted-foreground">
-                          Batch ID: {job.batchId}
+
+                        {/* Wide variant - visible at 630px and above */}
+                        <div className="hidden @[630px]:block">
+                          <div className="font-semibold">
+                            <span className={job.id === selectedBatchJob?.id ? 'text-focus' : ''}>
+                              {job.scorecard?.name || 'Unknown Scorecard'}
+                            </span>
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {job.score?.name || 'Unknown Score'}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {job.type}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {job.modelProvider} / {job.modelName}
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="hidden @[630px]:table-cell">
-                    <div className="flex items-center gap-2">
-                      {getStatusIcon(job.status)}
-                      <span className="capitalize">{job.status}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="hidden @[630px]:table-cell">
-                    <div className="space-y-1">
-                      <div className="text-sm">
-                        {job.completedRequests || 0} / {job.scoringJobCountCache || 0} completed
-                      </div>
-                      <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-primary rounded-full transition-all"
-                          style={{ width: `${getProgressPercentage(job)}%` }}
+                      </TableCell>
+
+                      <TableCell className="hidden @[630px]:table-cell w-[15%] text-right">
+                        <ProgressBar 
+                          progress={getProgressPercentage(job)}
+                          processedItems={job.completedRequests ?? 0}
+                          totalItems={job.scoringJobCountCache ?? 0}
+                          color="secondary"
+                          isFocused={job.id === selectedBatchJob?.id}
                         />
-                      </div>
-                      {job.startedAt && (
-                        <div className="text-xs text-muted-foreground">
-                          Started {formatDistanceToNow(new Date(job.startedAt), { 
-                            addSuffix: true 
-                          })}
+                      </TableCell>
+
+                      <TableCell className="hidden @[630px]:table-cell">
+                        <div className="flex items-center gap-2">
+                          {getStatusIcon(job.status)}
+                          <Badge 
+                            variant={
+                              job.status === 'COMPLETED' ? 'success' :
+                              job.status === 'FAILED' ? 'destructive' :
+                              'default'
+                            }
+                          >
+                            {job.status}
+                          </Badge>
                         </div>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="hidden @[630px]:table-cell text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          className="h-8 w-8 p-0"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                          <Activity className="h-4 w-4 mr-2" /> View Details
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
         </div>
+
+        {selectedBatchJob && !isNarrowViewport && !isFullWidth && (
+          <div
+            className="w-2 relative cursor-col-resize flex-shrink-0 group"
+            onMouseDown={handleDragStart}
+          >
+            <div className="absolute inset-0 rounded-full transition-colors duration-150 
+              group-hover:bg-accent" />
+          </div>
+        )}
+
+        {selectedBatchJob && (
+          <div className={`
+            flex flex-col flex-1 
+            ${isNarrowViewport || isFullWidth ? 'w-full' : ''}
+            h-full
+          `}
+          style={!isNarrowViewport && !isFullWidth ? {
+            width: `${100 - leftPanelWidth}%`
+          } : undefined}>
+            <BatchJobTask
+              variant="detail"
+              task={{
+                id: selectedBatchJob.id,
+                type: selectedBatchJob.type,
+                scorecard: '',
+                score: '',
+                time: selectedBatchJob.completedAt || selectedBatchJob.startedAt || new Date().toISOString(),
+                summary: `${getProgressPercentage(selectedBatchJob)}% complete`,
+                description: selectedBatchJob.errorMessage || undefined,
+                data: {
+                  type: selectedBatchJob.type,
+                  status: selectedBatchJob.status,
+                  totalRequests: selectedBatchJob.scoringJobCountCache || 0,
+                  completedRequests: selectedBatchJob.completedRequests || 0,
+                  failedRequests: selectedBatchJob.failedRequests || 0,
+                  startedAt: selectedBatchJob.startedAt || undefined,
+                  estimatedEndAt: selectedBatchJob.estimatedEndAt || undefined,
+                  completedAt: selectedBatchJob.completedAt || undefined,
+                  errorMessage: selectedBatchJob.errorMessage || undefined,
+                  errorDetails: selectedBatchJob.errorDetails || undefined,
+                  modelProvider: selectedBatchJob.modelProvider,
+                  modelName: selectedBatchJob.modelName,
+                  scoringJobs: []
+                }
+              }}
+              isFullWidth={isFullWidth}
+              onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+              onClose={() => {
+                setSelectedBatchJob(null)
+                setIsFullWidth(false)
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

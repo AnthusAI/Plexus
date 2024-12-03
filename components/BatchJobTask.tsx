@@ -1,179 +1,203 @@
-import React from 'react'
-import { Task, TaskHeader, TaskContent } from '@/components/Task'
-import { Package, PackageCheck } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
-import { ProgressBar } from "@/components/ui/progress-bar"
-import { BatchJobTaskData, RelatedBatchJob } from '@/types/tasks'
-import { BaseTaskProps } from '@/components/Task'
+"use client"
 
-interface BatchJobTaskProps extends BaseTaskProps<BatchJobTaskData> {}
+import React, { useMemo } from 'react'
+import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
+import { Package, Square, X } from 'lucide-react'
+import { ProgressBar } from "@/components/ui/progress-bar"
+import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
+import { CardButton } from '@/components/CardButton'
+import { formatTimeAgo } from '@/lib/format-time'
+
+export interface BatchJobTaskData {
+  modelProvider: string
+  modelName: string
+  type: string
+  status: string
+  totalRequests: number
+  completedRequests: number
+  failedRequests: number
+  startedAt?: string
+  estimatedEndAt?: string
+  completedAt?: string
+  errorMessage?: string
+  errorDetails?: any
+  scoringJobs?: {
+    id: string
+    status: string
+    startedAt?: string | null
+    completedAt?: string | null
+    errorMessage?: string | null
+    scoringJobId: string
+    batchJobId: string
+  }[]
+}
+
+export interface BatchJobTaskProps extends BaseTaskProps<BatchJobTaskData> {
+  variant: 'grid' | 'detail' | 'nested'
+  onToggleFullWidth?: () => void
+  onClose?: () => void
+}
 
 const getStatusDisplay = (status: string): { text: string; variant: string } => {
+  const normalizedStatus = status?.toUpperCase() || 'PENDING'
   const statusMap: Record<string, { text: string; variant: string }> = {
-    pending: { text: 'Pending', variant: 'secondary' },
-    in_progress: { text: 'In Progress', variant: 'default' },
-    done: { text: 'Done', variant: 'success' },
-    failed: { text: 'Failed', variant: 'destructive' },
-    canceled: { text: 'Canceled', variant: 'warning' },
+    PENDING: { text: 'Pending', variant: 'secondary' },
+    RUNNING: { text: 'Running', variant: 'default' },
+    COMPLETED: { text: 'Completed', variant: 'success' },
+    FAILED: { text: 'Failed', variant: 'destructive' },
+    CANCELED: { text: 'Canceled', variant: 'warning' },
   }
-  return statusMap[status.toLowerCase()] || { text: status, variant: 'default' }
+  return statusMap[normalizedStatus] || { text: status, variant: 'default' }
 }
 
-const transformBatchJobData = (task: BatchJobTaskProps['task']) => {
-  if (!task.data) return task
-  const data = task.data
-  return {
+export default function BatchJobTask({
+  task,
+  variant = 'grid',
+  onToggleFullWidth,
+  onClose,
+}: BatchJobTaskProps) {
+  const data = task.data ?? {} as BatchJobTaskData
+  const statusDisplay = getStatusDisplay(data.status)
+  const progress = data.totalRequests ? 
+    Math.round((data.completedRequests / data.totalRequests) * 100) : 0
+
+  const scoringJobs = data.scoringJobs || []
+  const showScoringJobs = variant === 'detail' && scoringJobs.length > 0
+
+  const taskWithTime = {
     ...task,
-    data: {
-      ...data,
-      progress: (data.completedRequests / data.totalRequests) * 100,
-      processedItems: data.completedRequests,
-      totalItems: data.totalRequests,
-      numberComplete: data.completedRequests,
-      numberTotal: data.totalRequests,
-      eta: data.startedAt,
-      elapsedTime: data.completedAt
-    }
+    time: data.completedAt || data.startedAt || task.time || new Date().toISOString()
   }
-}
 
-export default class BatchJobTask extends React.Component<BatchJobTaskProps> {
-  renderBatchJob = (batchJob: RelatedBatchJob) => (
-    <BatchJobTask
-      key={batchJob.id}
-      variant="nested"
-      task={{
-        id: batchJob.id,
-        type: 'Batch Job',
-        scorecard: this.props.task.scorecard,
-        score: this.props.task.score,
-        time: this.props.task.time,
-        summary: `${batchJob.provider} ${batchJob.type}`,
-        data: batchJob,
-      }}
-    />
-  )
-
-  render() {
-    const { variant = "grid", task, onClick, controlButtons, isFullWidth, onToggleFullWidth, onClose } = this.props
-    const data = task.data ?? {} as BatchJobTaskData
-    const statusDisplay = getStatusDisplay(data.status || 'pending')
-    const transformedTask = transformBatchJobData(task)
-
-    if (variant === 'nested') {
-      return (
-        <div className="bg-background/50 py-3 rounded-md space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {data.status === 'done' ? (
-                <PackageCheck className="h-4 w-4" />
-              ) : (
-                <Package className="h-4 w-4" />
-              )}
-              <span className="text-sm font-medium">
-                {data.provider}
-              </span>
-            </div>
-            <Badge 
-              variant={statusDisplay.variant as any}
-              className={cn(
-                "capitalize text-xs w-24 flex justify-center",
-                statusDisplay.variant === 'success' && "bg-green-600",
-                statusDisplay.variant === 'warning' && "bg-yellow-600",
-                statusDisplay.variant === 'destructive' && "bg-red-600",
-              )}
-            >
-              {statusDisplay.text}
-            </Badge>
-          </div>
-          <ProgressBar 
-            progress={(data.completedRequests / data.totalRequests) * 100}
-            processedItems={data.completedRequests}
-            totalItems={data.totalRequests}
-            color="secondary"
-          />
-          {data.errorMessage && (
-            <div className="text-xs text-destructive">
-              Error: {data.errorMessage}
-            </div>
+  const headerContent = useMemo(() => (
+    <div className="flex justify-end w-full">
+      {variant === 'detail' ? (
+        <div className="flex items-center space-x-2">
+          {typeof onToggleFullWidth === 'function' && (
+            <CardButton
+              icon={Square}
+              onClick={onToggleFullWidth}
+            />
+          )}
+          {typeof onClose === 'function' && (
+            <CardButton
+              icon={X}
+              onClick={onClose}
+            />
           )}
         </div>
-      )
-    }
+      ) : (
+        <Package className="h-6 w-6" />
+      )}
+    </div>
+  ), [variant, onToggleFullWidth, onClose])
 
-    const visualization = (
-      <div className="flex flex-col h-full">
-        <div className="flex justify-end mb-4">
-          <Badge 
-            variant={statusDisplay.variant as any}
-            className={cn(
-              "capitalize w-24 flex justify-center",
-              statusDisplay.variant === 'success' && "bg-green-600",
-              statusDisplay.variant === 'warning' && "bg-yellow-600",
-              statusDisplay.variant === 'destructive' && "bg-red-600",
-            )}
-          >
-            {statusDisplay.text}
-          </Badge>
-        </div>
-        {data.errorMessage && (
-          <div className="mt-2 text-sm text-destructive whitespace-pre-wrap">
-            Error: {data.errorMessage}
-          </div>
-        )}
-        <div className="flex-1" />
-        <ProgressBar 
-          progress={(data.completedRequests / data.totalRequests) * 100}
-          processedItems={data.completedRequests}
-          totalItems={data.totalRequests}
-          color="secondary"
-        />
-        
-        {variant === 'detail' && data.batchJobs && (
-          <div className="mt-8">
-            <div className="text-sm text-muted-foreground tracking-wider mb-2">
-              Batch jobs
-            </div>
-            <hr className="mb-4 border-border" />
-            <div className="space-y-2">
-              {data.batchJobs.map(this.renderBatchJob)}
-            </div>
-          </div>
-        )}
-      </div>
-    )
-
-    return (
-      <Task
-        variant={variant}
-        task={{
-          ...task,
-          data: {
-            ...data,
-            progress: (data.completedRequests / data.totalRequests) * 100
-          }
-        }}
-        onClick={onClick}
-        controlButtons={controlButtons}
-        isFullWidth={isFullWidth}
-        onToggleFullWidth={onToggleFullWidth}
-        onClose={onClose}
-        renderHeader={(props) => (
-          <TaskHeader {...props}>
-            <div className="flex justify-end w-full">
-              {data.status === 'done' ? (
-                <PackageCheck className="h-6 w-6" />
-              ) : (
-                <Package className="h-6 w-6" />
+  return (
+    <Task
+      variant={variant}
+      task={taskWithTime}
+      onToggleFullWidth={onToggleFullWidth}
+      onClose={onClose}
+      renderHeader={(props) => (
+        <TaskHeader {...props}>
+          {headerContent}
+        </TaskHeader>
+      )}
+      renderContent={(props) => (
+        <TaskContent {...props}>
+          <div className="flex flex-col h-full">
+            <div>
+              <div className="flex justify-start mb-4">
+                <Badge 
+                  variant={statusDisplay.variant as any}
+                  className={cn(
+                    "capitalize w-24 flex justify-center",
+                    statusDisplay.variant === 'success' && "bg-green-600",
+                    statusDisplay.variant === 'warning' && "bg-yellow-600",
+                    statusDisplay.variant === 'destructive' && "bg-red-600",
+                  )}
+                >
+                  {statusDisplay.text}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2 mb-4">
+                <Badge variant="outline" className="capitalize">
+                  {data.modelProvider}
+                </Badge>
+                <span className="text-sm text-muted-foreground">/</span>
+                <Badge variant="outline" className="capitalize">
+                  {data.modelName}
+                </Badge>
+              </div>
+              {data.errorMessage && (
+                <div className="mt-2 text-sm text-destructive whitespace-pre-wrap">
+                  Error: {data.errorMessage}
+                </div>
               )}
             </div>
-          </TaskHeader>
-        )}
-        renderContent={(props) => (
-          <TaskContent {...props} visualization={visualization} />
-        )}
-      />
-    )
-  }
+            <ProgressBar 
+              progress={progress}
+              processedItems={data.completedRequests}
+              totalItems={data.totalRequests}
+              color="secondary"
+            />
+            {showScoringJobs && (
+              <div className="mt-8">
+                <div className="text-sm text-muted-foreground tracking-wider mb-2">
+                  Scoring Jobs ({scoringJobs.length})
+                </div>
+                <hr className="mb-4 border-border" />
+                <div className="space-y-2">
+                  {scoringJobs.map((job) => (
+                    <div 
+                      key={job.id} 
+                      className="p-4 bg-card-light rounded-lg"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="font-medium">
+                            Scoring Job {job.scoringJobId}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Status: {job.status}
+                          </div>
+                          {job.startedAt && (
+                            <div className="text-sm text-muted-foreground">
+                              Started: {formatTimeAgo(job.startedAt)}
+                            </div>
+                          )}
+                          {job.completedAt && (
+                            <div className="text-sm text-muted-foreground">
+                              Completed: {formatTimeAgo(job.completedAt)}
+                            </div>
+                          )}
+                          {job.errorMessage && (
+                            <div className="text-sm text-destructive mt-2">
+                              Error: {job.errorMessage}
+                            </div>
+                          )}
+                        </div>
+                        <Badge 
+                          variant={getStatusDisplay(job.status).variant as any}
+                          className={cn(
+                            "capitalize",
+                            getStatusDisplay(job.status).variant === 'success' && "bg-green-600",
+                            getStatusDisplay(job.status).variant === 'warning' && "bg-yellow-600",
+                            getStatusDisplay(job.status).variant === 'destructive' && "bg-red-600",
+                          )}
+                        >
+                          {getStatusDisplay(job.status).text}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </TaskContent>
+      )}
+    />
+  )
 } 
