@@ -700,107 +700,178 @@ class LangGraphScore(Score, LangChainUser):
                 f"Mode: batch_mode={batch_mode}, breakpoints_enabled={breakpoints_enabled}"
             )
 
-            final_result = await self.workflow.ainvoke(
-                initial_state,  # Will be None when resuming
-                config=config
-            )
-            logging.info(f"Raw workflow result: {final_result}")
-
-            # Check for breakpoint state FIRST before any other processing
-            if isinstance(final_result, dict) and (
-                final_result.get('at_llm_breakpoint') or 
-                final_result.get('should_end')
-            ):
-                logging.info("Found breakpoint state, creating batch job")
-                if batch_mode:
-                    # Initialize client manager with context from metadata
+            try:
+                final_result = await self.workflow.ainvoke(
+                    initial_state,  # Will be None when resuming
+                    config=config
+                )
+                logging.info(f"Raw workflow result type: {type(final_result)}")
+                logging.info(f"Raw workflow result: {final_result}")
+            except BatchProcessingPause as e:
+                if not batch_mode:
+                    raise
+                
+                logging.info("Caught BatchProcessingPause, creating batch job")
+                # Initialize client manager with context from metadata
+                logging.info(f"Initializing dashboard client with metadata: {model_input.metadata}")
+                try:
                     client = PlexusDashboardClient.for_scorecard(
                         account_key=model_input.metadata.get('account_key'),
                         scorecard_key=model_input.metadata.get('scorecard_key'),
                         score_name=model_input.metadata.get('score_name')
                     )
+                    logging.info("Successfully initialized dashboard client")
+                except Exception as client_error:
+                    logging.error(f"Failed to initialize dashboard client: {str(client_error)}")
+                    raise
+
+                # Create batch job with serializable state
+                try:
+                    # Get the score ID from the client manager's context
+                    score_id = client._resolve_score_id()
+                    logging.info(f"Resolved score ID: {score_id}")
+                    scorecard_id = client._resolve_scorecard_id()
+                    logging.info(f"Resolved scorecard ID: {scorecard_id}")
+                    account_id = client._resolve_account_id()
+                    logging.info(f"Resolved account ID: {account_id}")
                     
-                    # Create a fully serializable copy of the state
-                    serializable_state = {}
-                    for key, value in final_result.items():
-                        if key == 'messages':
-                            if isinstance(value, list):
-                                serializable_state[key] = [
-                                    {
-                                        'type': msg.get('type', ''),
-                                        'content': msg.get('content', ''),
-                                        '_type': msg.get('_type', '')
-                                    } if isinstance(msg, dict) else
-                                    {
-                                        'type': msg.__class__.__name__.lower().replace(
-                                            'message', ''
-                                        ),
-                                        'content': msg.content,
-                                        '_type': msg.__class__.__name__
-                                    }
-                                    for msg in value
-                                ]
-                        elif key == 'chat_history':
-                            if isinstance(value, list):
-                                serializable_state[key] = [
-                                    {
-                                        'type': msg.__class__.__name__.lower().replace(
-                                            'message', ''
-                                        ),
-                                        'content': msg.content,
-                                        '_type': msg.__class__.__name__
-                                    }
-                                    for msg in value
-                                ]
-                        else:
-                            serializable_state[key] = value
+                    logging.info(f"Creating batch job with parameters: thread_id={thread_id}, scorecard_id={scorecard_id}, account_id={account_id}, model_provider={self.parameters.model_provider}, model_name={self.parameters.model_name}")
                     
-                    logging.info(f"Created serializable state: {serializable_state}")
+                    scoring_job, batch_job = client.batch_scoring_job(
+                        itemId=thread_id,
+                        scorecardId=scorecard_id,
+                        accountId=account_id,
+                        model_provider=self.parameters.model_provider,
+                        model_name=self.parameters.model_name,
+                        provider='OPENAI',
+                        scoreId=score_id,
+                        parameters={
+                            'state': e.state,
+                            'thread_id': thread_id,
+                            'breakpoint': True,
+                            'original_metadata': model_input.metadata,
+                            'model_provider': self.parameters.model_provider,
+                            'model_name': self.parameters.model_name
+                        }
+                    )
                     
-                    # Create batch job with serializable state
-                    try:
-                        # Get the score ID from the client manager's context
-                        score_id = client._resolve_score_id()
-                        logging.info(f"Resolved score ID: {score_id}")
+                    logging.info(f"Created batch job {batch_job.id} for thread {thread_id}")
+                    await self.cleanup()
+                    return None
+                except Exception as batch_error:
+                    logging.error(f"Failed to create batch job: {str(batch_error)}")
+                    logging.error(f"Full error traceback: {traceback.format_exc()}")
+                    await self.cleanup()
+                    raise
+
+            # Check for breakpoint state FIRST before any other processing
+            logging.info(f"Checking if result is dict: {isinstance(final_result, dict)}")
+            if isinstance(final_result, dict):
+                logging.info(f"Checking breakpoint flags: at_llm_breakpoint={final_result.get('at_llm_breakpoint')}, should_end={final_result.get('should_end')}")
+                if final_result.get('at_llm_breakpoint') or final_result.get('should_end'):
+                    logging.info("Found breakpoint state, creating batch job")
+                    if batch_mode:
+                        # Initialize client manager with context from metadata
+                        logging.info(f"Initializing dashboard client with metadata: {model_input.metadata}")
+                        try:
+                            client = PlexusDashboardClient.for_scorecard(
+                                account_key=model_input.metadata.get('account_key'),
+                                scorecard_key=model_input.metadata.get('scorecard_key'),
+                                score_name=model_input.metadata.get('score_name')
+                            )
+                            logging.info("Successfully initialized dashboard client")
+                        except Exception as e:
+                            logging.error(f"Failed to initialize dashboard client: {str(e)}")
+                            raise
                         
-                        scoring_job, batch_job = client.batch_scoring_job(
-                            itemId=thread_id,
-                            scorecardId=client._resolve_scorecard_id(),
-                            accountId=client._resolve_account_id(),
-                            model_provider=self.parameters.model_provider,
-                            model_name=self.parameters.model_name,
-                            provider='OPENAI',
-                            scoreId=score_id,
-                            parameters={
-                                'state': serializable_state,
-                                'thread_id': thread_id,
-                                'breakpoint': True,
-                                'original_metadata': model_input.metadata,
-                                'model_provider': self.parameters.model_provider,
-                                'model_name': self.parameters.model_name
-                            }
-                        )
+                        # Create a fully serializable copy of the state
+                        serializable_state = {}
+                        for key, value in final_result.items():
+                            if key == 'messages':
+                                if isinstance(value, list):
+                                    serializable_state[key] = [
+                                        {
+                                            'type': msg.get('type', ''),
+                                            'content': msg.get('content', ''),
+                                            '_type': msg.get('_type', '')
+                                        } if isinstance(msg, dict) else
+                                        {
+                                            'type': msg.__class__.__name__.lower().replace(
+                                                'message', ''
+                                            ),
+                                            'content': msg.content,
+                                            '_type': msg.__class__.__name__
+                                        }
+                                        for msg in value
+                                    ]
+                            elif key == 'chat_history':
+                                if isinstance(value, list):
+                                    serializable_state[key] = [
+                                        {
+                                            'type': msg.__class__.__name__.lower().replace(
+                                                'message', ''
+                                            ),
+                                            'content': msg.content,
+                                            '_type': msg.__class__.__name__
+                                        }
+                                        for msg in value
+                                    ]
+                            else:
+                                serializable_state[key] = value
                         
-                        logging.info(f"Created batch job {batch_job.id} for thread {thread_id}")
+                        logging.info(f"Created serializable state: {serializable_state}")
                         
-                        # Clean up before raising the exception
-                        await self.cleanup()
-                        
-                        raise BatchProcessingPause(
-                            thread_id=thread_id,
-                            state=serializable_state,
-                            message=f"Workflow paused for batch processing. Batch job ID: {batch_job.id}. Thread ID: {thread_id}"
-                        )
-                    except Exception as e:
-                        logging.error(f"Failed to create batch job: {str(e)}")
-                        await self.cleanup()
-                        raise BatchProcessingPause(
-                            thread_id=thread_id,
-                            state=serializable_state,
-                            message=f"Workflow paused for batch processing. Thread ID: {thread_id}"
-                        )
-                else:
-                    raise NodeInterrupt("Workflow paused at breakpoint")
+                        # Create batch job with serializable state
+                        try:
+                            # Get the score ID from the client manager's context
+                            score_id = client._resolve_score_id()
+                            logging.info(f"Resolved score ID: {score_id}")
+                            scorecard_id = client._resolve_scorecard_id()
+                            logging.info(f"Resolved scorecard ID: {scorecard_id}")
+                            account_id = client._resolve_account_id()
+                            logging.info(f"Resolved account ID: {account_id}")
+                            
+                            logging.info(f"Creating batch job with parameters: thread_id={thread_id}, scorecard_id={scorecard_id}, account_id={account_id}, model_provider={self.parameters.model_provider}, model_name={self.parameters.model_name}")
+                            
+                            scoring_job, batch_job = client.batch_scoring_job(
+                                itemId=thread_id,
+                                scorecardId=scorecard_id,
+                                accountId=account_id,
+                                model_provider=self.parameters.model_provider,
+                                model_name=self.parameters.model_name,
+                                provider='OPENAI',
+                                scoreId=score_id,
+                                parameters={
+                                    'state': serializable_state,
+                                    'thread_id': thread_id,
+                                    'breakpoint': True,
+                                    'original_metadata': model_input.metadata,
+                                    'model_provider': self.parameters.model_provider,
+                                    'model_name': self.parameters.model_name
+                                }
+                            )
+                            
+                            logging.info(f"Created batch job {batch_job.id} for thread {thread_id}")
+                            
+                            # Clean up before raising the exception
+                            await self.cleanup()
+                            
+                            raise BatchProcessingPause(
+                                thread_id=thread_id,
+                                state=serializable_state,
+                                message=f"Workflow paused for batch processing. Batch job ID: {batch_job.id}. Thread ID: {thread_id}"
+                            )
+                        except Exception as e:
+                            logging.error(f"Failed to create batch job: {str(e)}")
+                            logging.error(f"Full error traceback: {traceback.format_exc()}")
+                            await self.cleanup()
+                            raise BatchProcessingPause(
+                                thread_id=thread_id,
+                                state=serializable_state,
+                                message=f"Workflow paused for batch processing. Thread ID: {thread_id}"
+                            )
+                    else:
+                        raise NodeInterrupt("Workflow paused at breakpoint")
 
             # Return None if we hit a breakpoint - no results to process yet
             if final_result.get('at_llm_breakpoint') or final_result.get('should_end'):

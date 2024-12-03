@@ -81,7 +81,11 @@ class Classifier(BaseNode):
             # Check if messages already exist in state
             if state.get('messages'):
                 logging.info("Found existing messages in state - using these instead of building new ones")
-                logging.info(f"Existing messages: {state['messages']}")
+                truncated_messages = [
+                    {k: (v[:80] + '...') if isinstance(v, str) and len(v) > 80 else v 
+                     for k, v in msg.items()} for msg in state['messages']
+                ]
+                logging.info(f"Existing messages: {truncated_messages}")
                 return state
             
             # Build messages from chat history or initial prompt if empty
@@ -220,15 +224,18 @@ class Classifier(BaseNode):
             
             if batch_mode and breakpoints_enabled:
                 logging.info("Breaking before LLM API call with messages in state")
-                # Raise BatchProcessingPause directly
+                # Raise BatchProcessingPause with clean state
                 raise BatchProcessingPause(
                     thread_id=state.get('metadata', {}).get('content_id', 'unknown'),
                     state={
                         **state,
                         "at_llm_breakpoint": True,
-                        "should_end": True
-                    },
-                    message="Pausing for batch processing at LLM call"
+                        "should_end": True,
+                        "completion": None,  # Clear any completion
+                        "classification": None,  # Clear any classification
+                        "explanation": None,  # Clear any explanation
+                        "retry_count": 0  # Reset retry count
+                    }
                 )
             
             try:
