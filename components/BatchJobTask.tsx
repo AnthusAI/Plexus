@@ -11,6 +11,12 @@ import { formatTimeAgo } from '@/lib/format-time'
 import { BatchJobProgressBar, BatchJobStatus } from "@/components/ui/batch-job-progress-bar"
 import { dataClient, listFromModel, getFromModel } from '@/utils/data-operations'
 import type { Schema } from "@/amplify/data/resource"
+import { 
+  createBatchJobScoringJobSubscription,
+  createScoringJobSubscription,
+  BatchJobScoringJobSubscriptionData,
+  ScoringJobSubscriptionData
+} from '@/utils/subscriptions'
 
 interface ScoringJobData {
   id: string
@@ -90,7 +96,6 @@ export default function BatchJobTask({
       try {
         console.log('Loading scoring jobs for batch:', taskData.id);
         
-        // Use the secondary index to query ScoringJobs directly
         const result = await listFromModel('ScoringJob', {
           filter: {
             batchJobId: { eq: taskData.id }
@@ -117,60 +122,62 @@ export default function BatchJobTask({
           setScoringJobs(scoringJobs);
         }
         
-        // Set up subscriptions for real-time updates
-        if (dataClient.models.BatchJobScoringJob) {
-          // Subscribe to onCreate of BatchJobScoringJob
-          const createSub = (dataClient.models.BatchJobScoringJob.onCreate() as any)
-            .subscribe({
-              next: async (data: Schema['BatchJobScoringJob']['type']) => {
-                if (data.batchJobId === taskData.id) {
-                  const jobResult = await getFromModel('ScoringJob', data.scoringJobId)
-                  
-                  if (jobResult.data) {
-                    setScoringJobs(prev => [
-                      ...prev,
-                      {
-                        id: jobResult.data!.id,
-                        status: jobResult.data!.status,
-                        startedAt: jobResult.data!.startedAt || null,
-                        completedAt: jobResult.data!.completedAt || null,
-                        errorMessage: jobResult.data!.errorMessage || null,
-                        itemId: jobResult.data!.itemId,
-                        accountId: jobResult.data!.accountId,
-                        scorecardId: jobResult.data!.scorecardId,
-                        evaluationId: jobResult.data!.evaluationId || null,
-                        scoreId: jobResult.data!.scoreId || null,
-                        batchJobId: taskData.id
-                      }
-                    ]);
-                  }
-                }
-              },
-              error: (error: unknown) => console.error('onCreate subscription error:', error)
-            });
-
-          // Subscribe to onUpdate of ScoringJob
-          const updateSub = (dataClient.models.ScoringJob.onUpdate() as any)
-            .subscribe({
-              next: (data: Schema['ScoringJob']['type']) => {
-                setScoringJobs(prev => {
-                  const isJobInList = prev.some(job => job.id === data.id);
-                  if (!isJobInList) return prev;
-                  return prev.map(job => 
-                    job.id === data.id ? {
-                      ...job,
-                      ...data,
+        // Set up subscriptions using the utility functions
+        const createSub = createBatchJobScoringJobSubscription(
+          async (data) => {
+            try {
+              if (data.batchJobId === taskData.id) {
+                const jobResult = await getFromModel('ScoringJob', data.scoringJobId);
+                
+                if (jobResult.data) {
+                  setScoringJobs(prev => [
+                    ...prev,
+                    {
+                      id: jobResult.data!.id,
+                      status: jobResult.data!.status,
+                      startedAt: jobResult.data!.startedAt || null,
+                      completedAt: jobResult.data!.completedAt || null,
+                      errorMessage: jobResult.data!.errorMessage || null,
+                      itemId: jobResult.data!.itemId,
+                      accountId: jobResult.data!.accountId,
+                      scorecardId: jobResult.data!.scorecardId,
+                      evaluationId: jobResult.data!.evaluationId || null,
+                      scoreId: jobResult.data!.scoreId || null,
                       batchJobId: taskData.id
-                    } : job
-                  );
-                });
-              },
-              error: (error: unknown) => console.error('onUpdate subscription error:', error)
-            });
+                    }
+                  ]);
+                }
+              }
+            } catch (error) {
+              console.error('Error processing onCreate event:', error);
+            }
+          },
+          (error) => console.error('onCreate subscription error:', error)
+        );
 
-          subscriptions.push(createSub);
-          subscriptions.push(updateSub);
-        }
+        const updateSub = createScoringJobSubscription(
+          (data) => {
+            try {
+              setScoringJobs(prev => {
+                const isJobInList = prev.some(job => job.id === data.id);
+                if (!isJobInList) return prev;
+                return prev.map(job => 
+                  job.id === data.id ? {
+                    ...job,
+                    ...data,
+                    batchJobId: taskData.id
+                  } : job
+                );
+              });
+            } catch (error) {
+              console.error('Error processing onUpdate event:', error);
+            }
+          },
+          (error) => console.error('onUpdate subscription error:', error)
+        );
+
+        subscriptions.push(createSub);
+        subscriptions.push(updateSub);
 
         setIsLoading(false);
       } catch (error) {
