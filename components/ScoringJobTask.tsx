@@ -111,17 +111,19 @@ export default function ScoringJobTask({
                   time: task.time,
                   summary: `${batchJob.type} job`,
                   data: {
-                    type: batchJob.type,
-                    status: batchJob.status,
-                    totalRequests: batchJob.totalRequests || 0,
-                    completedRequests: batchJob.completedRequests || 0,
-                    failedRequests: batchJob.failedRequests || 0,
-                    startedAt: batchJob.startedAt || undefined,
-                    completedAt: batchJob.completedAt || undefined,
-                    errorMessage: batchJob.errorMessage || undefined,
-                    errorDetails: batchJob.errorDetails || undefined,
+                    id: batchJob.id,
                     modelProvider: batchJob.modelProvider,
                     modelName: batchJob.modelName,
+                    type: batchJob.type,
+                    status: batchJob.status,
+                    totalRequests: batchJob.totalRequests,
+                    completedRequests: batchJob.completedRequests,
+                    failedRequests: batchJob.failedRequests,
+                    startedAt: batchJob.startedAt || null,
+                    estimatedEndAt: batchJob.estimatedEndAt || null,
+                    completedAt: batchJob.completedAt || null,
+                    errorMessage: batchJob.errorMessage || null,
+                    errorDetails: batchJob.errorDetails || {},
                     scoringJobs: []
                   }
                 }}

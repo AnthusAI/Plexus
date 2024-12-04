@@ -38,6 +38,10 @@ import { BatchJobProgressBar, BatchJobStatus } from "@/components/ui/batch-job-p
 
 const ACCOUNT_KEY = 'call-criteria'
 
+type ScorecardType = Schema['Scorecard']['type']
+type ScoreType = Schema['Score']['type']
+type BatchJobType = Schema['BatchJob']['type']
+
 interface SimpleResponse<T> {
   data: T | null
 }
@@ -71,14 +75,16 @@ interface SimpleBatchJob {
 
 async function listAccounts(): Promise<SimpleResponse<SimpleAccount[]>> {
   try {
-    const result = await listFromModel<Schema['Account']['type']>('Account', {
-      key: { eq: ACCOUNT_KEY }
+    const result = await listFromModel('Account', {
+      filter: {
+        key: { eq: ACCOUNT_KEY }
+      }
     });
     return { 
       data: result.data?.map(account => ({
-        id: account.id,
-        name: account.name,
-        key: account.key
+        id: account.id as string,
+        name: account.name as string,
+        key: account.key as string
       })) || null 
     };
   } catch (error) {
@@ -89,24 +95,26 @@ async function listAccounts(): Promise<SimpleResponse<SimpleAccount[]>> {
 
 async function listBatchJobs(accountId: string): Promise<SimpleResponse<SimpleBatchJob[]>> {
   try {
-    const result = await listFromModel<Schema['BatchJob']['type']>('BatchJob', {
-      accountId: { eq: accountId }
+    const result = await listFromModel('BatchJob', {
+      filter: {
+        accountId: { eq: accountId }
+      }
     });
     return { 
       data: result.data?.map(job => ({
         ...job,
-        startedAt: job.startedAt || null,
-        estimatedEndAt: job.estimatedEndAt || null,
-        completedAt: job.completedAt || null,
-        errorMessage: job.errorMessage || null,
-        errorDetails: typeof job.errorDetails === 'object' && job.errorDetails !== null 
-          ? job.errorDetails 
-          : {},
-        completedRequests: job.completedRequests || 0,
-        failedRequests: job.failedRequests || null,
-        scorecardId: job.scorecardId || null,
-        scoreId: job.scoreId || null,
-        scoringJobCountCache: job.scoringJobCountCache || null
+        startedAt: (job.startedAt as string) || null,
+        estimatedEndAt: (job.estimatedEndAt as string) || null,
+        completedAt: (job.completedAt as string) || null,
+        errorMessage: (job.errorMessage as string) || null,
+        errorDetails: typeof job.errorDetails === 'object' && job.errorDetails !== null
+          ? job.errorDetails as Record<string, unknown>
+          : {} as Record<string, unknown>,
+        completedRequests: (job.completedRequests as number) || 0,
+        failedRequests: (job.failedRequests as number) || null,
+        scorecardId: (job.scorecardId as string) || null,
+        scoreId: (job.scoreId as string) || null,
+        scoringJobCountCache: (job.scoringJobCountCache as number) || null
       })) || null 
     };
   } catch (error) {
@@ -115,56 +123,28 @@ async function listBatchJobs(accountId: string): Promise<SimpleResponse<SimpleBa
   }
 }
 
-interface SimpleScorecardType {
+type ScoreCardData = {
   id: string
   name: string
   key: string
   accountId: string
 }
 
-interface SimpleScoreType {
+type ScoreData = {
   id: string
   name: string
   type: string
   sectionId: string
 }
 
-async function getScorecard(id: string): Promise<SimpleResponse<SimpleScorecardType>> {
-  try {
-    const result = await getFromModel<Schema['Scorecard']['type']>('Scorecard', id);
-    if (!result.data) return { data: null };
-    
-    return { 
-      data: {
-        id: result.data.id,
-        name: result.data.name,
-        key: result.data.key,
-        accountId: result.data.accountId
-      }
-    };
-  } catch (error) {
-    console.error('Error getting scorecard:', error);
-    return { data: null };
-  }
+async function getScorecard(id: string): Promise<SimpleResponse<ScorecardType>> {
+  const result = await getFromModel('Scorecard', id);
+  return result;
 }
 
-async function getScore(id: string): Promise<SimpleResponse<SimpleScoreType>> {
-  try {
-    const result = await getFromModel<Schema['Score']['type']>('Score', id);
-    if (!result.data) return { data: null };
-    
-    return { 
-      data: {
-        id: result.data.id,
-        name: result.data.name,
-        type: result.data.type,
-        sectionId: result.data.sectionId
-      }
-    };
-  } catch (error) {
-    console.error('Error getting score:', error);
-    return { data: null };
-  }
+async function getScore(id: string): Promise<SimpleResponse<ScoreType>> {
+  const result = await getFromModel('Score', id);
+  return result;
 }
 
 interface SimpleScoringJob {
@@ -199,11 +179,11 @@ interface BatchJobWithCount {
   scoringJobCountCache: number | null
   createdAt: string
   updatedAt: string
-  scorecard: SimpleScorecardType | null
-  score: SimpleScoreType | null
+  scorecard: ScorecardType | null
+  score: ScoreType | null
   scoringJobsCount: number
-  scoringJobs: SimpleScoringJob[]
-  account: Record<string, unknown>
+  scoringJobs: Schema['ScoringJob']['type'][]
+  account: Schema['Account']['type']
   batchId: string
 }
 
@@ -216,8 +196,8 @@ interface ScoringJobListResponse {
 }
 
 function getProgressPercentage(job: BatchJobWithCount): number {
-  const total = typeof job.scoringJobCountCache === 'number' ? job.scoringJobCountCache : 0;
-  const completed = typeof job.completedRequests === 'number' ? job.completedRequests : 0;
+  const total = job.scoringJobCountCache || 0;
+  const completed = job.completedRequests || 0;
   if (!total) return 0;
   return Math.round((completed / total) * 100);
 }
@@ -249,20 +229,15 @@ function formatTimeAgo(dateStr?: string | null): string {
   }
 }
 
-const mapBatchJob = async (job: SimpleBatchJob): Promise<BatchJobWithCount> => {
-  let scorecardData: SimpleScorecardType | null = null;
-  let scoreData: SimpleScoreType | null = null;
+const mapBatchJob = async (job: BatchJobType): Promise<BatchJobWithCount> => {
+  let scorecardData: ScorecardType | null = null;
+  let scoreData: ScoreType | null = null;
 
   if (job.scorecardId) {
     try {
       const scorecardResult = await getScorecard(job.scorecardId);
       if (scorecardResult?.data) {
-        scorecardData = {
-          id: scorecardResult.data.id,
-          name: scorecardResult.data.name,
-          key: scorecardResult.data.key,
-          accountId: scorecardResult.data.accountId
-        };
+        scorecardData = scorecardResult.data;
       }
     } catch (err) {
       console.error('Error fetching scorecard:', err);
@@ -273,12 +248,7 @@ const mapBatchJob = async (job: SimpleBatchJob): Promise<BatchJobWithCount> => {
     try {
       const scoreResult = await getScore(job.scoreId);
       if (scoreResult?.data) {
-        scoreData = {
-          id: scoreResult.data.id,
-          name: scoreResult.data.name,
-          type: scoreResult.data.type,
-          sectionId: scoreResult.data.sectionId
-        };
+        scoreData = scoreResult.data;
       }
     } catch (err) {
       console.error('Error fetching score:', err);
@@ -286,14 +256,32 @@ const mapBatchJob = async (job: SimpleBatchJob): Promise<BatchJobWithCount> => {
   }
 
   return {
-    ...job,
+    id: job.id,
+    type: job.type,
+    status: job.status,
+    startedAt: job.startedAt || null,
+    estimatedEndAt: job.estimatedEndAt || null,
+    completedAt: job.completedAt || null,
+    completedRequests: job.completedRequests || 0,
+    failedRequests: job.failedRequests || null,
+    errorMessage: job.errorMessage || null,
+    errorDetails: typeof job.errorDetails === 'object' ? 
+      job.errorDetails as Record<string, unknown> : 
+      {},
+    accountId: job.accountId,
+    scorecardId: job.scorecardId || null,
+    scoreId: job.scoreId || null,
+    modelProvider: job.modelProvider,
+    modelName: job.modelName,
+    scoringJobCountCache: job.scoringJobCountCache || null,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
     scorecard: scorecardData,
     score: scoreData,
     scoringJobsCount: job.scoringJobCountCache || 0,
     scoringJobs: [],
-    account: {},
-    batchId: job.id,
-    completedRequests: job.completedRequests || 0
+    account: {} as Schema['Account']['type'],
+    batchId: job.id
   };
 };
 
@@ -328,7 +316,10 @@ interface SubscriptionResponse {
 }
 
 interface BatchJobWithRelatedData extends BatchJobWithCount {
-  scoringJobs: SimpleScoringJob[];
+  scorecard: Schema['Scorecard']['type'] | null
+  score: Schema['Score']['type'] | null
+  scoringJobs: Schema['ScoringJob']['type'][]
+  account: Schema['Account']['type']
 }
 
 async function loadRelatedData(batchJobs: SimpleBatchJob[]): Promise<BatchJobWithRelatedData[]> {
@@ -346,42 +337,46 @@ async function loadRelatedData(batchJobs: SimpleBatchJob[]): Promise<BatchJobWit
   });
 
   const [scorecards, scores] = await Promise.all([
-    Promise.all(scorecardIds.map(id => getFromModel<Schema['Scorecard']['type']>('Scorecard', id))),
-    Promise.all(scoreIds.map(id => getFromModel<Schema['Score']['type']>('Score', id)))
+    Promise.all(scorecardIds.map(id => getFromModel('Scorecard', id))),
+    Promise.all(scoreIds.map(id => getFromModel('Score', id)))
   ])
 
   console.log('Loaded related data:', {
-    scorecards: scorecards.map(s => ({ id: s.data?.id, name: s.data?.name })),
-    scores: scores.map(s => ({ id: s.data?.id, name: s.data?.name }))
+    scorecards: scorecards.map((s: SimpleResponse<ScorecardType>) => ({ 
+      id: s.data?.id, 
+      name: s.data?.name 
+    })),
+    scores: scores.map((s: SimpleResponse<ScoreType>) => ({ 
+      id: s.data?.id, 
+      name: s.data?.name 
+    }))
   });
 
   const scorecardMap = new Map(
-    scorecards.map(result => [result.data?.id, result.data])
+    scorecards.map((result: SimpleResponse<ScorecardType>) => {
+      const data = result.data as ScorecardType
+      return [data.id, data]
+    })
   )
   const scoreMap = new Map(
-    scores.map(result => [result.data?.id, result.data])
+    scores.map((result: SimpleResponse<ScoreType>) => {
+      const data = result.data as ScoreType
+      return [data.id, data]
+    })
   )
 
-  return batchJobs.map(job => ({
+  const transformedJobs = batchJobs.map((job): BatchJobWithRelatedData => ({
     ...job,
-    scorecard: job.scorecardId ? {
-      id: job.scorecardId,
-      name: scorecardMap.get(job.scorecardId)?.name || 'Unknown Scorecard',
-      key: scorecardMap.get(job.scorecardId)?.key || '',
-      accountId: scorecardMap.get(job.scorecardId)?.accountId || ''
-    } : null,
-    score: job.scoreId ? {
-      id: job.scoreId,
-      name: scoreMap.get(job.scoreId)?.name || 'Unknown Score',
-      type: scoreMap.get(job.scoreId)?.type || '',
-      sectionId: scoreMap.get(job.scoreId)?.sectionId || ''
-    } : null,
-    scoringJobsCount: job.scoringJobCountCache || 0,
+    completedRequests: job.completedRequests ?? 0,
+    scorecard: (scorecardMap.get(job.scorecardId || '') || null) as Schema['Scorecard']['type'] | null,
+    score: (scoreMap.get(job.scoreId || '') || null) as Schema['Score']['type'] | null,
     scoringJobs: [],
-    account: {},
-    batchId: job.id,
-    completedRequests: job.completedRequests || 0
+    account: {} as Schema['Account']['type'],
+    scoringJobsCount: job.scoringJobCountCache || 0,
+    batchId: job.id
   }));
+
+  return transformedJobs;
 }
 
 function getStatusDisplay(status: string): { text: string; variant: string } {
@@ -394,6 +389,10 @@ function getStatusDisplay(status: string): { text: string; variant: string } {
     CANCELED: { text: 'Canceled', variant: 'warning' },
   }
   return statusMap[normalizedStatus] || { text: status, variant: 'default' }
+}
+
+function handleError(error: unknown) {
+  console.error('An error occurred:', error);
 }
 
 export default function BatchesDashboard() {
@@ -491,17 +490,19 @@ export default function BatchesDashboard() {
           setError(error instanceof Error ? error : new Error(String(error)));
         };
 
+        // @ts-ignore - Amplify Gen2 typing issue
         const createSub = dataClient.models.BatchJob.onCreate().subscribe({
-          next: (value) => handleBatchUpdate(value as Schema['BatchJob']['type']),
+          next: handleBatchUpdate,
           error: handleError
         });
 
+        // @ts-ignore - Amplify Gen2 typing issue
         const updateSub = dataClient.models.BatchJob.onUpdate().subscribe({
-          next: (value) => handleBatchUpdate(value as Schema['BatchJob']['type']),
+          next: handleBatchUpdate,
           error: handleError
         });
 
-        subscriptions.push(createSub, updateSub);
+        setSubscriptions([createSub, updateSub]);
       }
     } catch (error) {
       handleError(error);
@@ -737,6 +738,8 @@ export default function BatchesDashboard() {
                 description: selectedBatchJob.errorMessage || undefined,
                 data: {
                   id: selectedBatchJob.id,
+                  modelProvider: selectedBatchJob.modelProvider,
+                  modelName: selectedBatchJob.modelName,
                   type: selectedBatchJob.type,
                   status: selectedBatchJob.status,
                   totalRequests: selectedBatchJob.scoringJobCountCache || 0,
@@ -746,9 +749,7 @@ export default function BatchesDashboard() {
                   estimatedEndAt: selectedBatchJob.estimatedEndAt || null,
                   completedAt: selectedBatchJob.completedAt || null,
                   errorMessage: selectedBatchJob.errorMessage || null,
-                  errorDetails: selectedBatchJob.errorDetails || {},
-                  modelProvider: selectedBatchJob.modelProvider,
-                  modelName: selectedBatchJob.modelName,
+                  errorDetails: selectedBatchJob.errorDetails as Record<string, unknown> || {},
                   scoringJobs: []
                 }
               }}
