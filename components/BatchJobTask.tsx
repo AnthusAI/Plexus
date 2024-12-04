@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { Package, Square, X } from 'lucide-react'
 import { ProgressBar } from "@/components/ui/progress-bar"
@@ -8,8 +8,26 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { CardButton } from '@/components/CardButton'
 import { formatTimeAgo } from '@/lib/format-time'
+import { BatchJobProgressBar, BatchJobStatus } from "@/components/ui/batch-job-progress-bar"
+import { dataClient, listFromModel, getFromModel } from '@/utils/data-operations'
+import type { Schema } from "@/amplify/data/resource"
+
+interface ScoringJobData {
+  id: string
+  status: string
+  startedAt?: string | null
+  completedAt?: string | null
+  errorMessage?: string | null
+  itemId: string
+  accountId: string
+  scorecardId: string
+  evaluationId?: string | null
+  scoreId?: string | null
+  batchJobId: string
+}
 
 export interface BatchJobTaskData {
+  id: string
   modelProvider: string
   modelName: string
   type: string
@@ -17,20 +35,13 @@ export interface BatchJobTaskData {
   totalRequests: number
   completedRequests: number
   failedRequests: number
-  startedAt?: string
-  estimatedEndAt?: string
-  completedAt?: string
-  errorMessage?: string
-  errorDetails?: any
-  scoringJobs?: {
-    id: string
-    status: string
-    startedAt?: string | null
-    completedAt?: string | null
-    errorMessage?: string | null
-    scoringJobId: string
-    batchJobId: string
-  }[]
+  startedAt: string | null
+  estimatedEndAt: string | null
+  completedAt: string | null
+  errorMessage: string | null
+  errorDetails: Record<string, unknown>
+  scoringJobs?: ScoringJobData[]
+  provider: string
 }
 
 export interface BatchJobTaskProps extends BaseTaskProps<BatchJobTaskData> {
@@ -39,7 +50,7 @@ export interface BatchJobTaskProps extends BaseTaskProps<BatchJobTaskData> {
   onClose?: () => void
 }
 
-const getStatusDisplay = (status: string): { text: string; variant: string } => {
+function getStatusDisplay(status: string): { text: string; variant: string } {
   const normalizedStatus = status?.toUpperCase() || 'PENDING'
   const statusMap: Record<string, { text: string; variant: string }> = {
     PENDING: { text: 'Pending', variant: 'secondary' },
@@ -51,26 +62,146 @@ const getStatusDisplay = (status: string): { text: string; variant: string } => 
   return statusMap[normalizedStatus] || { text: status, variant: 'default' }
 }
 
+// Update the type guard to be more specific
+function isValidTaskData(data: unknown): data is Required<BatchJobTaskData> {
+  return data !== undefined && data !== null && typeof (data as any).id === 'string';
+}
+
 export default function BatchJobTask({
   task,
   variant = 'grid',
   onToggleFullWidth,
   onClose,
 }: BatchJobTaskProps) {
-  const data = task.data ?? {} as BatchJobTaskData
-  const statusDisplay = getStatusDisplay(data.status)
-  const progress = data.totalRequests ? 
-    Math.round((data.completedRequests / data.totalRequests) * 100) : 0
+  const [scoringJobs, setScoringJobs] = useState<ScoringJobData[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  const scoringJobs = data.scoringJobs || []
-  const showScoringJobs = variant === 'detail' && scoringJobs.length > 0
+  // Ensure task.data is valid before using it
+  if (!task.data || !isValidTaskData(task.data)) {
+    return null;
+  }
+
+  // Store task.data in a variable to avoid undefined checks
+  const taskData = task.data;
+
+  useEffect(() => {
+    let subscriptions: { unsubscribe: () => void }[] = []
+
+    const loadScoringJobs = async () => {
+      try {
+        console.log('Loading scoring jobs for batch:', taskData.id);
+        
+        // Use the secondary index to query ScoringJobs directly
+        const result = await listFromModel<Schema['ScoringJob']['type']>(
+          'listScoringJobByBatchId',
+          { 
+            batchId: taskData.id
+          }
+        );
+        
+        console.log('Scoring jobs result:', result);
+        
+        if (result.data) {
+          const validJobs = result.data.map(job => ({
+            id: job.id,
+            status: job.status,
+            startedAt: job.startedAt,
+            completedAt: job.completedAt,
+            errorMessage: job.errorMessage,
+            itemId: job.itemId,
+            accountId: job.accountId,
+            scorecardId: job.scorecardId,
+            evaluationId: job.evaluationId,
+            scoreId: job.scoreId,
+            batchJobId: taskData.id
+          }));
+          
+          setScoringJobs(validJobs);
+        }
+        
+        // Set up subscriptions for real-time updates
+        if (dataClient.models.BatchJobScoringJob) {
+          // Subscribe to onCreate of BatchJobScoringJob
+          const createSub = (dataClient.models.BatchJobScoringJob.onCreate() as any)
+            .subscribe({
+              next: async (data: Schema['BatchJobScoringJob']['type']) => {
+                if (data.batchJobId === taskData.id) {
+                  const jobResult = await getFromModel<Schema['ScoringJob']['type']>(
+                    'ScoringJob',
+                    data.scoringJobId
+                  );
+                  
+                  if (jobResult.data) {
+                    setScoringJobs(prev => [
+                      ...prev,
+                      {
+                        id: jobResult.data!.id,
+                        status: jobResult.data!.status,
+                        startedAt: jobResult.data!.startedAt || null,
+                        completedAt: jobResult.data!.completedAt || null,
+                        errorMessage: jobResult.data!.errorMessage || null,
+                        itemId: jobResult.data!.itemId,
+                        accountId: jobResult.data!.accountId,
+                        scorecardId: jobResult.data!.scorecardId,
+                        evaluationId: jobResult.data!.evaluationId || null,
+                        scoreId: jobResult.data!.scoreId || null,
+                        batchJobId: taskData.id
+                      }
+                    ]);
+                  }
+                }
+              },
+              error: (error: unknown) => console.error('onCreate subscription error:', error)
+            });
+
+          // Subscribe to onUpdate of ScoringJob
+          const updateSub = (dataClient.models.ScoringJob.onUpdate() as any)
+            .subscribe({
+              next: (data: Schema['ScoringJob']['type']) => {
+                setScoringJobs(prev => {
+                  const isJobInList = prev.some(job => job.id === data.id);
+                  if (!isJobInList) return prev;
+                  return prev.map(job => 
+                    job.id === data.id ? {
+                      ...job,
+                      ...data,
+                      batchJobId: taskData.id
+                    } : job
+                  );
+                });
+              },
+              error: (error: unknown) => console.error('onUpdate subscription error:', error)
+            });
+
+          subscriptions.push(createSub);
+          subscriptions.push(updateSub);
+        }
+
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Error loading scoring jobs:', error);
+        setIsLoading(false);
+      }
+    };
+
+    loadScoringJobs();
+
+    return () => {
+      subscriptions.forEach(sub => sub.unsubscribe());
+    };
+  }, [taskData.id]);
+
+  const progress = taskData.totalRequests ? 
+    Math.round((taskData.completedRequests / taskData.totalRequests) * 100) : 0;
+
+  const showScoringJobs = variant === 'detail' && scoringJobs.length > 0;
 
   const taskWithTime = {
     ...task,
-    time: data.completedAt || data.startedAt || task.time || new Date().toISOString()
-  }
+    time: taskData.completedAt || taskData.startedAt || task.time || new Date().toISOString()
+  };
 
-  const headerContent = useMemo(() => (
+  const headerContent = (
     <div className="flex justify-end w-full">
       {variant === 'detail' ? (
         <div className="flex items-center space-x-2">
@@ -91,7 +222,7 @@ export default function BatchJobTask({
         <Package className="h-6 w-6" />
       )}
     </div>
-  ), [variant, onToggleFullWidth, onClose])
+  )
 
   return (
     <Task
@@ -107,41 +238,43 @@ export default function BatchJobTask({
       renderContent={(props) => (
         <TaskContent {...props}>
           <div className="flex flex-col h-full">
-            <div>
-              <div className="flex justify-start mb-4">
-                <Badge 
-                  variant={statusDisplay.variant as any}
-                  className={cn(
-                    "capitalize w-24 flex justify-center",
-                    statusDisplay.variant === 'success' && "bg-green-600",
-                    statusDisplay.variant === 'warning' && "bg-yellow-600",
-                    statusDisplay.variant === 'destructive' && "bg-red-600",
-                  )}
-                >
-                  {statusDisplay.text}
-                </Badge>
+            <div className="space-y-4">
+              <div className="space-y-0.5">
+                <div className="font-semibold">
+                  {task.scorecard}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {task.score}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {formatTimeAgo(taskWithTime.time)}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  <div>{taskData.type}</div>
+                  <div>{taskData.modelProvider}</div>
+                  <div>{taskData.modelName}</div>
+                </div>
               </div>
-              <div className="flex items-center gap-2 mb-4">
-                <Badge variant="outline" className="capitalize">
-                  {data.modelProvider}
-                </Badge>
-                <span className="text-sm text-muted-foreground">/</span>
-                <Badge variant="outline" className="capitalize">
-                  {data.modelName}
-                </Badge>
+
+              <div className="space-y-2">
+                <BatchJobProgressBar 
+                  status={taskData.status as BatchJobStatus}
+                />
+                <ProgressBar 
+                  progress={progress}
+                  processedItems={taskData.completedRequests}
+                  totalItems={taskData.totalRequests}
+                  color="secondary"
+                />
               </div>
-              {data.errorMessage && (
+
+              {taskData.errorMessage && (
                 <div className="mt-2 text-sm text-destructive whitespace-pre-wrap">
-                  Error: {data.errorMessage}
+                  Error: {taskData.errorMessage}
                 </div>
               )}
             </div>
-            <ProgressBar 
-              progress={progress}
-              processedItems={data.completedRequests}
-              totalItems={data.totalRequests}
-              color="secondary"
-            />
+
             {showScoringJobs && (
               <div className="mt-8">
                 <div className="text-sm text-muted-foreground tracking-wider mb-2">
@@ -157,7 +290,7 @@ export default function BatchJobTask({
                       <div className="flex justify-between items-start">
                         <div>
                           <div className="font-medium">
-                            Scoring Job {job.scoringJobId}
+                            Scoring Job {job.id}
                           </div>
                           <div className="text-sm text-muted-foreground">
                             Status: {job.status}
@@ -182,9 +315,12 @@ export default function BatchJobTask({
                           variant={getStatusDisplay(job.status).variant as any}
                           className={cn(
                             "capitalize",
-                            getStatusDisplay(job.status).variant === 'success' && "bg-green-600",
-                            getStatusDisplay(job.status).variant === 'warning' && "bg-yellow-600",
-                            getStatusDisplay(job.status).variant === 'destructive' && "bg-red-600",
+                            getStatusDisplay(job.status).variant === 'success' && 
+                              "bg-green-600",
+                            getStatusDisplay(job.status).variant === 'warning' && 
+                              "bg-yellow-600",
+                            getStatusDisplay(job.status).variant === 'destructive' && 
+                              "bg-red-600",
                           )}
                         >
                           {getStatusDisplay(job.status).text}
