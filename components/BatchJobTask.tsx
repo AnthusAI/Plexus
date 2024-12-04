@@ -41,7 +41,6 @@ export interface BatchJobTaskData {
   errorMessage: string | null
   errorDetails: Record<string, unknown>
   scoringJobs?: ScoringJobData[]
-  provider: string
 }
 
 export interface BatchJobTaskProps extends BaseTaskProps<BatchJobTaskData> {
@@ -92,31 +91,30 @@ export default function BatchJobTask({
         console.log('Loading scoring jobs for batch:', taskData.id);
         
         // Use the secondary index to query ScoringJobs directly
-        const result = await listFromModel<Schema['ScoringJob']['type']>(
-          'listScoringJobByBatchId',
-          { 
-            batchId: taskData.id
+        const result = await listFromModel('ScoringJob', {
+          filter: {
+            batchJobId: { eq: taskData.id }
           }
-        );
+        })
         
         console.log('Scoring jobs result:', result);
         
         if (result.data) {
-          const validJobs = result.data.map(job => ({
-            id: job.id,
-            status: job.status,
-            startedAt: job.startedAt,
-            completedAt: job.completedAt,
-            errorMessage: job.errorMessage,
-            itemId: job.itemId,
-            accountId: job.accountId,
-            scorecardId: job.scorecardId,
-            evaluationId: job.evaluationId,
-            scoreId: job.scoreId,
-            batchJobId: taskData.id
-          }));
+          const scoringJobs = result.data.map(job => ({
+            id: job.id as string,
+            status: job.status as string,
+            startedAt: job.startedAt as string | null,
+            completedAt: job.completedAt as string | null,
+            errorMessage: job.errorMessage as string | null,
+            itemId: job.itemId as string,
+            accountId: job.accountId as string,
+            scorecardId: job.scorecardId as string,
+            evaluationId: job.evaluationId as string | null,
+            scoreId: job.scoreId as string | null,
+            batchJobId: job.batchJobId as string
+          }))
           
-          setScoringJobs(validJobs);
+          setScoringJobs(scoringJobs);
         }
         
         // Set up subscriptions for real-time updates
@@ -126,10 +124,7 @@ export default function BatchJobTask({
             .subscribe({
               next: async (data: Schema['BatchJobScoringJob']['type']) => {
                 if (data.batchJobId === taskData.id) {
-                  const jobResult = await getFromModel<Schema['ScoringJob']['type']>(
-                    'ScoringJob',
-                    data.scoringJobId
-                  );
+                  const jobResult = await getFromModel('ScoringJob', data.scoringJobId)
                   
                   if (jobResult.data) {
                     setScoringJobs(prev => [

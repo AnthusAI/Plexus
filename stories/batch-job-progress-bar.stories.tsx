@@ -29,11 +29,11 @@ export const AllStates: Story = {
         <BatchJobProgressBar status="OPEN" />
       </div>
       <div>
-        <div className="text-sm text-muted-foreground mb-2">PENDING - Job is closed and ready for processing</div>
-        <BatchJobProgressBar status="PENDING" />
+        <div className="text-sm text-muted-foreground mb-2">CLOSED - Job is closed and ready for processing</div>
+        <BatchJobProgressBar status="CLOSED" />
       </div>
       <div>
-        <div className="text-sm text-muted-foreground mb-2">RUNNING - Job is being processed</div>
+        <div className="text-sm text-muted-foreground mb-2">PROCESING - Job is being processed</div>
         <BatchJobProgressBar status="PROCESSING" />
       </div>
       <div>
@@ -61,9 +61,9 @@ export const Open: Story = {
   }
 }
 
-export const Pending: Story = {
+export const Closed: Story = {
   args: {
-    status: 'PENDING',
+    status: 'CLOSED',
   },
   parameters: {
     docs: {
