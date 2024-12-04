@@ -236,7 +236,8 @@ const recentActivities: ActivityData[] = [
         {
           id: '1',
           title: 'Sentiment Analysis Job',
-          provider: 'OpenAI',
+          modelProvider: 'OpenAI',
+          modelName: 'gpt-4',
           type: 'sentiment-analysis',
           status: 'done',
           totalRequests: 100,
@@ -246,7 +247,8 @@ const recentActivities: ActivityData[] = [
         {
           id: '2',
           title: 'Categorization Job',
-          provider: 'Anthropic',
+          modelProvider: 'Anthropic',
+          modelName: 'claude-2',
           type: 'categorization',
           status: 'in_progress',
           totalRequests: 100,
@@ -256,7 +258,8 @@ const recentActivities: ActivityData[] = [
         {
           id: '3',
           title: 'Topic Extraction Job',
-          provider: 'Cohere',
+          modelProvider: 'Cohere',
+          modelName: 'command',
           type: 'topic-extraction',
           status: 'pending',
           totalRequests: 100,
