@@ -30,6 +30,7 @@ interface ScoringJobData {
   evaluationId?: string | null
   scoreId?: string | null
   batchJobId: string
+  createdAt: string
 }
 
 export interface BatchJobTaskData {
@@ -59,18 +60,27 @@ function getStatusDisplay(status: string): { text: string; variant: string } {
   const normalizedStatus = status?.toUpperCase() || 'PENDING'
   const statusMap: Record<string, { text: string; variant: string }> = {
     PENDING: { text: 'Pending', variant: 'secondary' },
-    RUNNING: { text: 'Running', variant: 'default' },
-    COMPLETED: { text: 'Completed', variant: 'success' },
+    RUNNING: { text: 'Running', variant: 'secondary' },
+    COMPLETED: { text: 'success', variant: 'success' },
     FAILED: { text: 'Failed', variant: 'destructive' },
-    CANCELED: { text: 'Canceled', variant: 'warning' },
+    CANCELED: { text: 'Canceled', variant: 'secondary' },
   }
-  return statusMap[normalizedStatus] || { text: status, variant: 'default' }
+  return statusMap[normalizedStatus] || { text: status, variant: 'secondary' }
 }
 
 // Update the type guard to be more specific
 function isValidTaskData(data: unknown): data is Required<BatchJobTaskData> {
   return data !== undefined && data !== null && typeof (data as any).id === 'string';
 }
+
+// First, let's add some type helpers
+type ScoringJobModel = Schema['ScoringJob']['type'];
+type BatchJobScoringJobModel = Schema['BatchJobScoringJob']['type'];
+
+// First, add a type for the job result
+type ScoringJobResult = {
+  data: ScoringJobModel | null;
+};
 
 export default function BatchJobTask({
   task,
@@ -96,68 +106,91 @@ export default function BatchJobTask({
       try {
         console.log('Loading scoring jobs for batch:', taskData.id);
         
-        const result = await listFromModel('ScoringJob', {
-          filter: {
-            batchJobId: { eq: taskData.id }
+        // First get the links from BatchJobScoringJob
+        const linksResult = await listFromModel(
+          'BatchJobScoringJob',
+          { 
+            filter: {
+              batchJobId: { eq: taskData.id }
+            },
+            limit: 1000
           }
-        })
+        );
         
-        console.log('Scoring jobs result:', result);
+        console.log('BatchJobScoringJob links:', linksResult);
         
-        if (result.data) {
-          const scoringJobs = result.data.map(job => ({
-            id: job.id as string,
-            status: job.status as string,
-            startedAt: job.startedAt as string | null,
-            completedAt: job.completedAt as string | null,
-            errorMessage: job.errorMessage as string | null,
-            itemId: job.itemId as string,
-            accountId: job.accountId as string,
-            scorecardId: job.scorecardId as string,
-            evaluationId: job.evaluationId as string | null,
-            scoreId: job.scoreId as string | null,
-            batchJobId: job.batchJobId as string
-          }))
+        if (linksResult.data) {
+          // Get all scoring job IDs
+          const scoringJobIds = linksResult.data.map(link => link.scoringJobId);
           
-          setScoringJobs(scoringJobs);
+          // Then update the Promise.all section
+          const jobsResult = await Promise.all(
+            scoringJobIds.map(async id => {
+              const result = await getFromModel('ScoringJob', id);
+              return result as ScoringJobResult;
+            })
+          );
+          
+          // Filter out nulls and map to our format
+          const validJobs = jobsResult
+            .filter(result => result.data)
+            .map(result => {
+              const job = result.data!;
+              return {
+                id: job.id,
+                status: job.status,
+                startedAt: job.startedAt || null,
+                completedAt: job.completedAt || null,
+                errorMessage: job.errorMessage || null,
+                itemId: job.itemId,
+                accountId: job.accountId,
+                scorecardId: job.scorecardId,
+                evaluationId: job.evaluationId || null,
+                scoreId: job.scoreId || null,
+                batchJobId: taskData.id,
+                createdAt: job.createdAt
+              };
+            });
+          
+          setScoringJobs(validJobs);
         }
         
-        // Set up subscriptions using the utility functions
-        const createSub = createBatchJobScoringJobSubscription(
-          async (data) => {
-            try {
+        // Set up subscriptions with proper types
+        if (dataClient.models.BatchJobScoringJob) {
+          // Use the subscription helper for BatchJobScoringJob
+          const createSub = (createBatchJobScoringJobSubscription({
+            next: async (data) => {
               if (data.batchJobId === taskData.id) {
                 const jobResult = await getFromModel('ScoringJob', data.scoringJobId);
+                const result = jobResult as ScoringJobResult;
                 
-                if (jobResult.data) {
+                if (result.data) {
                   setScoringJobs(prev => [
                     ...prev,
                     {
-                      id: jobResult.data!.id,
-                      status: jobResult.data!.status,
-                      startedAt: jobResult.data!.startedAt || null,
-                      completedAt: jobResult.data!.completedAt || null,
-                      errorMessage: jobResult.data!.errorMessage || null,
-                      itemId: jobResult.data!.itemId,
-                      accountId: jobResult.data!.accountId,
-                      scorecardId: jobResult.data!.scorecardId,
-                      evaluationId: jobResult.data!.evaluationId || null,
-                      scoreId: jobResult.data!.scoreId || null,
-                      batchJobId: taskData.id
+                      id: result.data.id,
+                      status: result.data.status,
+                      startedAt: result.data.startedAt || null,
+                      completedAt: result.data.completedAt || null,
+                      errorMessage: result.data.errorMessage || null,
+                      itemId: result.data.itemId,
+                      accountId: result.data.accountId,
+                      scorecardId: result.data.scorecardId,
+                      evaluationId: result.data.evaluationId || null,
+                      scoreId: result.data.scoreId || null,
+                      batchJobId: taskData.id,
+                      createdAt: result.data.createdAt
                     }
                   ]);
                 }
               }
-            } catch (error) {
-              console.error('Error processing onCreate event:', error);
-            }
-          },
-          (error) => console.error('onCreate subscription error:', error)
-        );
+            },
+            error: (error: unknown) => console.error('onCreate subscription error:', error)
+          }) as { unsubscribe: () => void });
 
-        const updateSub = createScoringJobSubscription(
-          (data) => {
-            try {
+          // Use the subscription helper for ScoringJob updates
+          const updateSub = createScoringJobSubscription({
+            next: (data: ScoringJobSubscriptionData) => {
               setScoringJobs(prev => {
                 const isJobInList = prev.some(job => job.id === data.id);
                 if (!isJobInList) return prev;
@@ -169,15 +202,13 @@ export default function BatchJobTask({
                   } : job
                 );
               });
-            } catch (error) {
-              console.error('Error processing onUpdate event:', error);
-            }
-          },
-          (error) => console.error('onUpdate subscription error:', error)
-        );
+            },
+            error: (error: unknown) => console.error('onUpdate subscription error:', error)
+          });
 
-        subscriptions.push(createSub);
-        subscriptions.push(updateSub);
+          subscriptions.push(createSub);
+          subscriptions.push(updateSub);
+        }
 
         setIsLoading(false);
       } catch (error) {
@@ -290,39 +321,22 @@ export default function BatchJobTask({
                       className="p-4 bg-card-light rounded-lg"
                     >
                       <div className="flex justify-between items-start">
-                        <div>
-                          <div className="font-medium">
-                            Scoring Job {job.id}
-                          </div>
+                        <div className="space-y-1">
                           <div className="text-sm text-muted-foreground">
-                            Status: {job.status}
+                            Item: {job.itemId}
                           </div>
-                          {job.startedAt && (
-                            <div className="text-sm text-muted-foreground">
-                              Started: {formatTimeAgo(job.startedAt)}
-                            </div>
-                          )}
-                          {job.completedAt && (
-                            <div className="text-sm text-muted-foreground">
-                              Completed: {formatTimeAgo(job.completedAt)}
-                            </div>
-                          )}
-                          {job.errorMessage && (
-                            <div className="text-sm text-destructive mt-2">
-                              Error: {job.errorMessage}
-                            </div>
-                          )}
+                          <div className="text-xs text-muted-foreground">
+                            {formatTimeAgo(job.createdAt)}
+                          </div>
                         </div>
                         <Badge 
                           variant={getStatusDisplay(job.status).variant as any}
                           className={cn(
                             "capitalize",
-                            getStatusDisplay(job.status).variant === 'success' && 
-                              "bg-green-600",
-                            getStatusDisplay(job.status).variant === 'warning' && 
-                              "bg-yellow-600",
-                            getStatusDisplay(job.status).variant === 'destructive' && 
-                              "bg-red-600",
+                            job.status.toUpperCase() === 'COMPLETED' && "bg-true",
+                            job.status.toUpperCase() === 'FAILED' && "bg-false",
+                            !['COMPLETED', 'FAILED'].includes(job.status.toUpperCase()) && 
+                              "bg-neutral-600"
                           )}
                         >
                           {getStatusDisplay(job.status).text}
