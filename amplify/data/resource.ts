@@ -220,6 +220,7 @@ const schema = a.schema({
             completedAt: a.datetime(),
             errorMessage: a.string(),
             errorDetails: a.json(),
+            metadata: a.json(),
             itemId: a.string().required(),
             item: a.belongsTo('Item', 'itemId'),
             accountId: a.string().required(),
