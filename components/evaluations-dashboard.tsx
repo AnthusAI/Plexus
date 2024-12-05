@@ -321,6 +321,54 @@ interface DragState {
   startWidth: number
 }
 
+// Add this new function near the top with other helper functions
+async function loadRelatedData(evaluations: Schema['Evaluation']['type'][]): Promise<Schema['Evaluation']['type'][]> {
+  // Get unique IDs
+  const scorecardIds = [...new Set(evaluations
+    .filter(e => e.scorecardId)
+    .map(e => e.scorecardId as string))]
+  const scoreIds = [...new Set(evaluations
+    .filter(e => e.scoreId)
+    .map(e => e.scoreId as string))]
+
+  console.log('Loading related data:', {
+    evaluationCount: evaluations.length,
+    scorecardIds,
+    scoreIds
+  })
+
+  // Load all scorecards and scores in parallel
+  const [scorecards, scores] = await Promise.all([
+    Promise.all(scorecardIds.map(id => getFromModel<Schema['Scorecard']['type']>(
+      client.models.Scorecard, 
+      id
+    ))),
+    Promise.all(scoreIds.map(id => getFromModel<Schema['Score']['type']>(
+      client.models.Score,
+      id
+    )))
+  ])
+
+  // Create maps for quick lookups
+  const scorecardMap = new Map(
+    scorecards.map(result => [result.data?.id, result.data])
+  )
+  const scoreMap = new Map(
+    scores.map(result => [result.data?.id, result.data])
+  )
+
+  // Transform evaluations with pre-loaded data and explicitly return the result
+  return evaluations.map(evaluation => ({
+    ...evaluation,
+    scorecard: async () => ({
+      data: scorecardMap.get(evaluation.scorecardId || '') || null
+    }),
+    score: async () => ({
+      data: scoreMap.get(evaluation.scoreId || '') || null
+    })
+  }))
+}
+
 export default function EvaluationsDashboard(): JSX.Element {
   const { authStatus, user } = useAuthenticator(context => [context.authStatus]);
   const router = useRouter();
@@ -482,17 +530,19 @@ export default function EvaluationsDashboard(): JSX.Element {
           const foundAccountId = accounts[0].id
           setAccountId(foundAccountId)
           
-          // Add error handling for listEvaluations
           try {
-            const { data: EvaluationModels } = await listEvaluations(foundAccountId)
+            const { data: evaluationModels } = await listEvaluations(foundAccountId)
             
-            const filteredEvaluations = EvaluationModels
-              .map(transformEvaluation)
-              .sort((a, b) => 
-                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-              )
+            // Transform evaluations first
+            const transformedEvaluations = evaluationModels.map(transformEvaluation)
             
-            setEvaluations(filteredEvaluations)
+            // Then load related data efficiently
+            const evaluationsWithData = await loadRelatedData(transformedEvaluations)
+            
+            // Sort and set state
+            setEvaluations(evaluationsWithData.sort((a, b) => 
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            ))
           } catch (error) {
             console.error('Error listing evaluations:', error)
             setEvaluations([])
@@ -1048,14 +1098,16 @@ export default function EvaluationsDashboard(): JSX.Element {
           )}
 
           {selectedEvaluation && EvaluationTaskProps && (
-            <div className={`
-              flex flex-col flex-1 
-              ${isNarrowViewport || isFullWidth ? 'w-full' : ''}
-              h-full
-            `}
-            style={!isNarrowViewport && !isFullWidth ? {
-              width: `${100 - leftPanelWidth}%`
-            } : undefined}>
+            <div 
+              className={`
+                flex flex-col flex-1 
+                ${isNarrowViewport || isFullWidth ? 'w-full' : ''}
+                h-full
+              `}
+              style={!isNarrowViewport && !isFullWidth ? {
+                width: `${100 - leftPanelWidth}%`
+              } : undefined}
+            >
               {EvaluationTaskComponent}
             </div>
           )}
