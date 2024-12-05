@@ -158,53 +158,72 @@ export default function BatchJobTask({
         // Set up subscriptions with proper types
         if (dataClient.models.BatchJobScoringJob) {
           // Use the subscription helper for BatchJobScoringJob
-          const createSub = (createBatchJobScoringJobSubscription({
-            next: async (data) => {
-              if (data.batchJobId === taskData.id) {
-                const jobResult = await getFromModel('ScoringJob', data.scoringJobId);
-                const result = jobResult as ScoringJobResult;
-                
-                if (result.data) {
-                  setScoringJobs(prev => [
-                    ...prev,
-                    {
-                      id: result.data.id,
-                      status: result.data.status,
-                      startedAt: result.data.startedAt || null,
-                      completedAt: result.data.completedAt || null,
-                      errorMessage: result.data.errorMessage || null,
-                      itemId: result.data.itemId,
-                      accountId: result.data.accountId,
-                      scorecardId: result.data.scorecardId,
-                      evaluationId: result.data.evaluationId || null,
-                      scoreId: result.data.scoreId || null,
-                      batchJobId: taskData.id,
-                      createdAt: result.data.createdAt
-                    }
-                  ]);
-                }
+          const handleBatchJobData = async (data: BatchJobScoringJobSubscriptionData) => {
+            if (!data?.batchJobId || !data?.scoringJobId) return;
+            
+            if (data.batchJobId === taskData.id) {
+              const jobResult = await getFromModel('ScoringJob', data.scoringJobId);
+              const scoringJob = jobResult?.data;
+              
+              if (scoringJob) {
+                setScoringJobs((prev) => [
+                  ...prev,
+                  {
+                    id: scoringJob.id,
+                    status: scoringJob.status,
+                    startedAt: scoringJob.startedAt || null,
+                    completedAt: scoringJob.completedAt || null,
+                    errorMessage: scoringJob.errorMessage || null,
+                    itemId: scoringJob.itemId,
+                    accountId: scoringJob.accountId,
+                    scorecardId: scoringJob.scorecardId,
+                    evaluationId: scoringJob.evaluationId || null,
+                    scoreId: scoringJob.scoreId || null,
+                    batchJobId: taskData.id,
+                    createdAt: scoringJob.createdAt,
+                  },
+                ]);
               }
-            },
-            error: (error: unknown) => console.error('onCreate subscription error:', error)
-          }) as { unsubscribe: () => void });
+            }
+          };
+
+          const handleBatchJobError = (error: unknown) => {
+            console.error('onCreate subscription error:', error);
+          };
+
+          const createSub = createBatchJobScoringJobSubscription(
+            handleBatchJobData,
+            handleBatchJobError
+          );
 
           // Use the subscription helper for ScoringJob updates
-          const updateSub = createScoringJobSubscription({
-            next: (data: ScoringJobSubscriptionData) => {
-              setScoringJobs(prev => {
-                const isJobInList = prev.some(job => job.id === data.id);
-                if (!isJobInList) return prev;
-                return prev.map(job => 
-                  job.id === data.id ? {
-                    ...job,
-                    ...data,
-                    batchJobId: taskData.id
-                  } : job
-                );
-              });
-            },
-            error: (error: unknown) => console.error('onUpdate subscription error:', error)
-          });
+          const handleScoringJobData = (data: ScoringJobSubscriptionData) => {
+            if (!data?.id) return;
+            
+            setScoringJobs((prev) => {
+              const isJobInList = prev.some((job) => job.id === data.id);
+              if (!isJobInList) return prev;
+              
+              return prev.map((job) => 
+                job.id === data.id 
+                  ? {
+                      ...job,
+                      ...data,
+                      batchJobId: taskData.id,
+                    }
+                  : job
+              );
+            });
+          };
+
+          const handleScoringJobError = (error: unknown) => {
+            console.error('onUpdate subscription error:', error);
+          };
+
+          const updateSub = createScoringJobSubscription(
+            handleScoringJobData,
+            handleScoringJobError
+          );
 
           subscriptions.push(createSub);
           subscriptions.push(updateSub);
