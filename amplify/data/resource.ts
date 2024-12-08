@@ -248,7 +248,7 @@ const schema = a.schema({
 
     ScoreResult: a
         .model({
-            value: a.float().required(),
+            value: a.string().required(),
             confidence: a.float(),
             metadata: a.json(),
             correct: a.boolean(),
