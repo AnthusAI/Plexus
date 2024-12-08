@@ -108,7 +108,21 @@ export function EvaluationTaskScoreResults({
 
   const filteredAccuracy = useMemo(() => {
     if (filteredResults.length === 0) return null
-    const correctCount = filteredResults.filter(r => r.value === 1).length
+    const correctCount = filteredResults.filter(r => {
+      const parsedMetadata = typeof r.metadata === 'string' ? 
+        JSON.parse(JSON.parse(r.metadata)) : 
+        r.metadata
+
+      const firstResultKey = parsedMetadata?.results ? 
+        Object.keys(parsedMetadata.results)[0] : null
+      const scoreResult = firstResultKey ? 
+        parsedMetadata.results[firstResultKey] : null
+
+      if (typeof scoreResult?.value === 'number') {
+        return scoreResult.value === 1
+      }
+      return scoreResult?.value === 'Yes' || scoreResult?.value === 'Present'
+    }).length
     return (correctCount / filteredResults.length) * 100
   }, [filteredResults])
 
@@ -220,7 +234,11 @@ export function EvaluationTaskScoreResults({
                 value={result.value}
                 confidence={result.confidence}
                 metadata={result.metadata}
-                correct={result.value === 1}
+                correct={
+                  typeof result.value === 'number' 
+                    ? result.value === 1 
+                    : result.value === 'Yes' || result.value === 'Present'
+                }
                 isFocused={selectedScoreResult?.id === result.id}
               />
             </div>

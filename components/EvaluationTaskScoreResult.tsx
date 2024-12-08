@@ -5,7 +5,7 @@ import { LabelBadgeComparison } from '@/components/LabelBadgeComparison'
 
 export interface EvaluationTaskScoreResultProps {
   id: string
-  value: number
+  value: string | number
   confidence?: number | null
   metadata?: any
   correct?: boolean | null
