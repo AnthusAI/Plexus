@@ -21,6 +21,7 @@ import time
 import threading
 
 from dotenv import load_dotenv
+from os import getenv
 load_dotenv()
 
 set_log_group('plexus/cli/evaluation')
@@ -326,6 +327,16 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
         metadata_str = row_dictionary.get('metadata', '{}')
         metadata = json.loads(metadata_str)
         model_input_class = getattr(score_class, 'Input')
+        # Add required metadata for LangGraphScore
+        if score_class_name == 'LangGraphScore':
+            account_key = getenv('PLEXUS_ACCOUNT_KEY')
+            if not account_key:
+                raise ValueError("PLEXUS_ACCOUNT_KEY not found in environment")
+            metadata.update({
+                'account_key': account_key,
+                'scorecard_key': scorecard_class.name,
+                'score_name': score_name
+            })
         prediction_result = score_instance.predict(
             model_input_class(
                 text=text,
