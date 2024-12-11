@@ -28,6 +28,75 @@
                 "PYTHONPATH": "${workspaceFolder}"
             },
             // "justMyCode": false,
-        }
+        },
+        {
+            "name": "Plexus Predict",
+            "type": "python",
+            "request": "launch",
+            "module": "plexus",
+            "args": [
+                "predict",
+                "--scorecard-name", "randallreillyv1",
+                "--score-name", "IVR Present",
+                // "--content-id", "251030621"
+                "--number", "1",
+                // "--fresh"
+                // "--excel",
+                // "--use-langsmith-trace"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/../Call-Criteria-Python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Plexus Generate Batch",
+            "type": "python",
+            "request": "launch",
+            "module": "plexus",
+            "args": [
+                "batch",
+                "generate",
+                "--account-key", "call-criteria"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/../Call-Criteria-Python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Plexus Batch Status",
+            "type": "python",
+            "request": "launch",
+            "module": "plexus",
+            "args": [
+                "batch",
+                "status",
+                "--account-key", "call-criteria"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/../Call-Criteria-Python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Plexus Batch Complete",
+            "type": "python",
+            "request": "launch",
+            "module": "plexus",
+            "args": [
+                "batch",
+                "complete",
+                "--account-key", "call-criteria"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/../Call-Criteria-Python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
     ]
 }
