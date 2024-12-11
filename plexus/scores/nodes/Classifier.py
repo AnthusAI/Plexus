@@ -10,6 +10,7 @@ from plexus.CustomLogging import logging
 from plexus.scores.LangGraphScore import BatchProcessingPause
 import traceback
 import os
+from plexus_dashboard.api.client import PlexusDashboardClient
 
 class Classifier(BaseNode):
     """
@@ -80,12 +81,12 @@ class Classifier(BaseNode):
             
             # Check if messages already exist in state
             if state.get('messages'):
-                logging.info("Found existing messages in state - using these instead of building new ones")
+                logging.info("Found existing messages in state - skipping message creation")
                 truncated_messages = [
                     {k: (v[:80] + '...') if isinstance(v, str) and len(v) > 80 else v 
                      for k, v in msg.items()} for msg in state['messages']
                 ]
-                logging.info(f"Existing messages: {truncated_messages}")
+                logging.info(f"Using existing messages: {truncated_messages}")
                 return state
             
             # Build messages from chat history or initial prompt if empty
@@ -176,16 +177,22 @@ class Classifier(BaseNode):
             logging.info(f"Preparing retry attempt {state.retry_count + 1}")
             logging.debug(f"Retry message: {retry_message.content}")
             
-            return {**state.model_dump(), 
+            final_state = {**state.model_dump(), 
                     "chat_history": [*state.chat_history, retry_message],
                     "retry_count": state.retry_count + 1}
+            logging.info(f"Final state after retry preparation: {final_state}")
+            return final_state
 
         return prepare_retry
 
     def should_retry(self, state):
         """Determines whether to retry, end, or proceed based on state."""
+        logging.info("<*> Evaluating should_retry")
+        if isinstance(state, dict):
+            state = self.GraphState(**state)
+        
         if state.classification is not None:
-            logging.info("Classification found, ending")
+            logging.info(f"Classification found: {state.classification}, ending")
             return "end"
         if state.retry_count >= self.parameters.maximum_retry_count:
             logging.info("Maximum retries reached")
@@ -201,9 +208,11 @@ class Classifier(BaseNode):
                 state = self.GraphState(**state)
             
             logging.info("Setting classification to 'unknown' due to max retries")
-            return {**state.model_dump(), 
+            final_state = {**state.model_dump(), 
                     "classification": "unknown",
                     "explanation": "Maximum retries reached"}
+            logging.info(f"Final state after max retries: {final_state}")
+            return final_state
 
         return handle_max_retries
 
@@ -218,24 +227,152 @@ class Classifier(BaseNode):
             if not isinstance(state, dict):
                 state = state.model_dump()
 
+            # Check if completion already exists
+            if 'completion' in state and state['completion'] is not None:
+                logging.info("Found existing completion in state - skipping LLM call")
+                return {
+                    **state,
+                    'messages': None,  # Clear messages after use
+                    'at_llm_breakpoint': False
+                }
+
             # Check if we should break before making the API call
             batch_mode = os.getenv('PLEXUS_ENABLE_BATCH_MODE', '').lower() == 'true'
             breakpoints_enabled = os.getenv('PLEXUS_ENABLE_LLM_BREAKPOINTS', '').lower() == 'true'
             
             if batch_mode and breakpoints_enabled:
                 logging.info("Breaking before LLM API call with messages in state")
-                # Raise BatchProcessingPause with clean state
-                raise BatchProcessingPause(
-                    thread_id=state.get('metadata', {}).get('content_id', 'unknown'),
-                    state={
-                        **state,
-                        "at_llm_breakpoint": True,
-                        "should_end": True,
-                        "completion": None,  # Clear any completion
-                        "classification": None,  # Clear any classification
-                        "explanation": None,  # Clear any explanation
-                        "retry_count": 0  # Reset retry count
+                # Set flags in state for batch processing
+                state['at_llm_breakpoint'] = True
+                state['next_node'] = 'parse'  # Explicitly set next node
+                
+                # Create batch job here
+                metadata = state.get('metadata', {})
+                if not metadata:
+                    logging.error("No metadata found in state")
+                    logging.error(f"State keys: {state.keys()}")
+                    raise ValueError("No metadata found in state")
+                    
+                account_key = metadata.get('account_key')
+                if not account_key:
+                    logging.error("No account_key found in metadata")
+                    logging.error(f"Metadata keys: {metadata.keys()}")
+                    logging.error(f"Full metadata: {metadata}")
+                    raise ValueError("No account_key found in metadata")
+                    
+                client = PlexusDashboardClient.for_scorecard(
+                    account_key=account_key,
+                    scorecard_key=metadata.get('scorecard_key'),
+                    score_name=metadata.get('score_name')
+                )
+                
+                thread_id = metadata.get('content_id', 'unknown')
+                try:
+                    score_id = client._resolve_score_id()
+                    scorecard_id = client._resolve_scorecard_id()
+                    account_id = client._resolve_account_id()
+                except Exception as e:
+                    logging.error(f"Error resolving IDs: {str(e)}")
+                    logging.error(f"Account key: {account_key}")
+                    logging.error(f"Scorecard key: {metadata.get('scorecard_key')}")
+                    logging.error(f"Score name: {metadata.get('score_name')}")
+                    logging.error(f"Full metadata: {metadata}")
+                    raise
+                
+                # Create a serializable copy of the state
+                serializable_state = {}
+                logging.info(f"Creating serializable state from keys: {state.keys()}")
+
+                # First copy all primitive fields directly
+                for key, value in state.items():
+                    if isinstance(value, (str, int, float, bool, type(None))):
+                        serializable_state[key] = value
+                        logging.info(f"Copied primitive field {key}: {value}")
+
+                # Handle messages list specially
+                if 'messages' in state:
+                    if isinstance(state['messages'], list):
+                        serializable_state['messages'] = [
+                            {
+                                'type': msg.get('type', ''),
+                                'content': msg.get('content', ''),
+                                '_type': msg.get('_type', '')
+                            } if isinstance(msg, dict) else
+                            {
+                                'type': msg.__class__.__name__.lower().replace('message', ''),
+                                'content': msg.content,
+                                '_type': msg.__class__.__name__
+                            }
+                            for msg in state['messages']
+                        ]
+                        logging.info(f"Serialized messages: {serializable_state['messages']}")
+
+                # Handle chat_history list specially
+                if 'chat_history' in state:
+                    if isinstance(state['chat_history'], list):
+                        serializable_state['chat_history'] = [
+                            {
+                                'type': msg.__class__.__name__.lower().replace('message', ''),
+                                'content': msg.content,
+                                '_type': msg.__class__.__name__
+                            }
+                            for msg in state['chat_history']
+                        ]
+                        logging.info(f"Serialized chat_history: {serializable_state['chat_history']}")
+
+                # Handle metadata specially to ensure it's included
+                if 'metadata' in state:
+                    serializable_state['metadata'] = state['metadata']
+                    logging.info(f"Copied metadata: {serializable_state['metadata']}")
+
+                # Handle any remaining fields by converting to string representation
+                for key, value in state.items():
+                    if key not in serializable_state:
+                        try:
+                            serializable_state[key] = str(value)
+                            logging.info(f"Converted field {key} to string: {serializable_state[key]}")
+                        except Exception as e:
+                            logging.warning(f"Could not serialize field {key}: {str(e)}")
+
+                logging.info(f"Final serializable state: {serializable_state}")
+                
+                # Create batch job with serializable state
+                logging.info(f"Creating batch job with state: {serializable_state}")
+                logging.info(f"State type: {type(serializable_state)}")
+
+                client = PlexusDashboardClient.for_scorecard(
+                    account_key=state.get('metadata', {}).get('account_key'),
+                    scorecard_key=state.get('metadata', {}).get('scorecard_key'),
+                    score_name=state.get('metadata', {}).get('score_name')
+                )
+
+                logging.info(f"Creating batch job with metadata: {{'state': serializable_state}}")
+                logging.info(f"Score ID: {score_id}")
+                logging.info(f"Scorecard ID: {scorecard_id}")
+                logging.info(f"Account ID: {account_id}")
+
+                scoring_job, batch_job = client.batch_scoring_job(
+                    itemId=thread_id,
+                    scorecardId=scorecard_id,
+                    accountId=account_id,
+                    model_provider='ChatOpenAI',
+                    model_name='gpt-4o-mini',
+                    scoreId=score_id,
+                    status='PENDING',
+                    metadata={'state': serializable_state},
+                    parameters={
+                        'thread_id': thread_id,
+                        'breakpoint': True
                     }
+                )
+
+                logging.info(f"Created batch job with ID: {batch_job.id}")
+
+                raise BatchProcessingPause(
+                    thread_id=thread_id,
+                    state=state,
+                    batch_job_id=batch_job.id,
+                    message=f"Execution paused for batch processing. Batch job ID: {batch_job.id}"
                 )
             
             try:
@@ -294,32 +431,28 @@ class Classifier(BaseNode):
 
         return llm_call
 
-    def should_continue(self, state):
-        """Determines whether to continue or end based on state."""
-        if isinstance(state, dict) and state.get("should_end"):
-            logging.info("Found should_end flag, ending workflow")
-            return "end"
-        return "continue"
-
     def add_core_nodes(self, workflow: StateGraph) -> StateGraph:
+        """Add core nodes to the workflow."""
+        logging.info("Adding core nodes to workflow...")
+        
         # Add all nodes
         workflow.add_node("llm_prompt", self.get_llm_prompt_node())
+        logging.info("Added llm_prompt node")
+        
         workflow.add_node("llm_call", self.get_llm_call_node())
+        logging.info("Added llm_call node")
+        
         workflow.add_node("parse", self.get_parser_node())
+        logging.info("Added parse node")
+        
         workflow.add_node("retry", self.get_retry_node())
+        logging.info("Added retry node")
+        
         workflow.add_node("max_retries", self.get_max_retries_node())
-
-        # Add conditional edges for llm_call
-        workflow.add_conditional_edges(
-            "llm_call",
-            self.should_continue,
-            {
-                "continue": "parse",
-                "end": END
-            }
-        )
+        logging.info("Added max_retries node")
 
         # Add conditional edges for parse
+        logging.info("Adding conditional edges for parse...")
         workflow.add_conditional_edges(
             "parse",
             self.should_retry,
@@ -329,13 +462,17 @@ class Classifier(BaseNode):
                 "max_retries": "max_retries"
             }
         )
+        logging.info("Added parse edges")
         
         # Add regular edges
         workflow.add_edge("llm_prompt", "llm_call")
+        workflow.add_edge("llm_call", "parse")
         workflow.add_edge("retry", "llm_prompt")
         workflow.add_edge("max_retries", END)
+        logging.info("Added regular edges")
         
         # Set entry point
         workflow.set_entry_point("llm_prompt")
+        logging.info("Set entry point to llm_prompt")
         
         return workflow
