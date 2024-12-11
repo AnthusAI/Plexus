@@ -102,6 +102,7 @@ class MultiClassClassifier(BaseNode):
         parse_from_start = self.parameters.parse_from_start
 
         def classifier_node(state):
+            logging.info(f"Classifier node state: {state.model_dump()}")
             initial_prompt = prompt_templates[0]
             retry_count = 0 if state.retry_count is None else state.retry_count
             use_existing_completion = True
@@ -143,7 +144,9 @@ class MultiClassClassifier(BaseNode):
                     else:
                         result["explanation"] = current_completion
 
-                    return {**state.dict(), **result, "retry_count": retry_count}
+                    final_state = {**state.dict(), **result, "retry_count": retry_count}
+                    logging.debug(f"Classifier returning state: {final_state}")
+                    return final_state
 
                 # If we reach here, the classification was unknown, so we need to retry
                 chat_history.extend([
