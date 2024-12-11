@@ -86,10 +86,10 @@ class Evaluation:
         # Initialize dashboard client and experiment ID
         try:
             logging.info("Initializing Plexus Dashboard client...")
-            self.dashboard_client = PlexusDashboardClient()
+            account_key = 'call-criteria'
+            self.dashboard_client = PlexusDashboardClient.for_account(account_key)
             
             # Look up account using default key
-            account_key = 'call-criteria'
             logging.info(f"Looking up account with key: {account_key}")
             account = Account.get_by_key(account_key, self.dashboard_client)
             logging.info(f"Found account: {account.name} ({account.id})")
@@ -449,6 +449,17 @@ class Evaluation:
                 "labels": labels
             })
 
+        # Ensure we have at least one confusion matrix
+        if not formatted_confusion_matrices:
+            # Create a default binary confusion matrix if none exists
+            default_labels = ['yes', 'no']
+            default_matrix = [[0, 0], [0, 0]]
+            formatted_confusion_matrices.append({
+                "score_name": self.score_names()[0] if self.score_names() else "default",
+                "matrix": default_matrix,
+                "labels": default_labels
+            })
+
         # Format predicted distributions for API
         predicted_label_distributions = []
         for score_name, distribution in predicted_distributions.items():
@@ -458,6 +469,13 @@ class Evaluation:
                     "count": count
                 })
 
+        # Ensure we have at least one distribution entry
+        if not predicted_label_distributions:
+            predicted_label_distributions.append({
+                "label": "no_data",
+                "count": 0
+            })
+
         # Format actual distributions for API
         actual_label_distributions = []
         for score_name, distribution in actual_distributions.items():
@@ -466,6 +484,13 @@ class Evaluation:
                     "label": label,
                     "count": count
                 })
+
+        # Ensure we have at least one distribution entry
+        if not actual_label_distributions:
+            actual_label_distributions.append({
+                "label": "no_data",
+                "count": 0
+            })
 
         # Calculate standard metrics for binary classification
         total = tp + tn + fp + fn
