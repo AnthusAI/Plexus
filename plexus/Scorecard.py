@@ -15,13 +15,14 @@ import asyncio
 import boto3
 from botocore.exceptions import ClientError
 import tiktoken
+from os import getenv
 
 from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
 import plexus.scores
 from plexus.scores.Score import Score
 from plexus.logging.Cloudwatch import CloudWatchLogger
-from plexus.scores.LangGraphScore import BatchProcessingPause
+from plexus.scores.LangGraphScore import BatchProcessingPause, LangGraphScore
 
 class Scorecard:
     """
@@ -204,6 +205,18 @@ class Scorecard:
                 logging.error(f"Score with name '{score}' not found in scorecard '{self.name}'.")
                 return
 
+            # Add required metadata for LangGraphScore
+            if isinstance(score_instance, LangGraphScore):
+                account_key = getenv('PLEXUS_ACCOUNT_KEY')
+                if not account_key:
+                    raise ValueError("PLEXUS_ACCOUNT_KEY not found in environment")
+                metadata = metadata or {}
+                metadata.update({
+                    'account_key': account_key,
+                    'scorecard_key': self.name,
+                    'score_name': score
+                })
+
             logging.info(f"Predicting score for: {score}")
             # Let BatchProcessingPause propagate up
             score_result = await score_instance.predict(
@@ -308,6 +321,7 @@ class Scorecard:
             score_name = dependency_graph[score_id]['name']
             logging.info(f"Starting to process score: {score_name} (ID: {score_id})")
             try:
+                logging.info(f"About to predict score {score_name} at {pd.Timestamp.now()}")
                 score_result = await asyncio.wait_for(
                     self.get_score_result(
                         scorecard=self.scorecard_identifier,
@@ -317,7 +331,7 @@ class Scorecard:
                         modality=modality,
                         results=results
                     ),
-                    timeout=1200
+                    timeout=3600  # Increase to 1 hour for debugging
                 )
                 
                 if score_result is None:
