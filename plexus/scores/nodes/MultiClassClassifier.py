@@ -20,6 +20,7 @@ class MultiClassClassifier(BaseNode):
         fuzzy_match_threshold: float = Field(default=0.8)
         valid_classes: List[str] = Field(default_factory=list)
         explanation_message: Optional[str] = None
+        explanation_model: Optional[Dict[str, Any]] = None
         maximum_retry_count: int = Field(default=3, description="Maximum number of retries for classification")
         parse_from_start: Optional[bool] = False
 
@@ -138,7 +139,12 @@ class MultiClassClassifier(BaseNode):
                             AIMessage(content=current_completion),
                             HumanMessage(content=self.parameters.explanation_message)
                         ])
-                        explanation = model.invoke(explanation_prompt.format_prompt().to_messages())
+                        explanation_model = (
+                            self._initialize_model(self.parameters.explanation_model)
+                            if self.parameters.explanation_model
+                            else model
+                        )
+                        explanation = explanation_model.invoke(explanation_prompt.format_prompt().to_messages())
                         result["explanation"] = explanation.content
                     else:
                         result["explanation"] = current_completion
