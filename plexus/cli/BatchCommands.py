@@ -18,15 +18,57 @@ import asyncio
 from openai import OpenAI
 import aiohttp
 import requests
+import traceback
 
 from plexus.CustomLogging import logging
 from plexus.Registries import scorecard_registry
 from plexus.scores.Score import Score
+from plexus.Scorecard import Scorecard
 from plexus_dashboard.api.client import PlexusDashboardClient
 from plexus_dashboard.api.models.batch_job import BatchJob
+from plexus.cli.PredictionCommands import select_sample_data_driven, select_sample_csv
 
 # Maximum number of requests per batch
 MAX_BATCH_SIZE = 1000
+
+# Add this constant near the top with other constants
+STATUS_MAPPING = {
+    'validating': 'PROCESSING',
+    'created': 'PROCESSING',
+    'processing': 'PROCESSING',
+    'in_progress': 'PROCESSING',
+    'completed': 'PROCESSED',  # Changed from COMPLETED to PROCESSED
+    'failed': 'ERROR'
+}
+
+# Add this mapping near the top with other constants
+MESSAGE_TYPE_MAPPING = {
+    'human': 'user',
+    'ai': 'assistant',
+    'system': 'system'
+}
+
+def select_sample(scorecard_class, score_name, content_id, fresh):
+    """Wrapper for select_sample functions from PredictionCommands"""
+    score_configuration = next(
+        (score for score in scorecard_class.scores if score['name'] == score_name), 
+        {}
+    )
+    
+    # Check if the score uses the new data-driven approach
+    if 'data' in score_configuration:
+        return select_sample_data_driven(
+            scorecard_class, 
+            score_name, 
+            content_id, 
+            score_configuration, 
+            fresh
+        )
+    else:
+        # Use labeled-samples.csv for old scores
+        scorecard_key = scorecard_class.properties.get('key')        
+        csv_path = os.path.join('scorecards', scorecard_key, 'experiments', 'labeled-samples.csv')
+        return select_sample_csv(csv_path, content_id)
 
 @click.group()
 def batch():
@@ -97,6 +139,7 @@ async def get_scoring_jobs_for_batch(
                     id
                     itemId
                     status
+                    metadata
                 }
                 createdAt
             }
@@ -144,7 +187,7 @@ async def get_scoring_jobs_for_batch(
     is_flag=True,
     help='Generate batch file without submitting to OpenAI.'
 )
-def generate_batch(account_key, scorecard_key, score_name, clean_existing, 
+def generate(account_key, scorecard_key, score_name, clean_existing, 
                   verbose, no_submit):
     """Generate JSON-L files in the format required by the OpenAI batching API."""
     
@@ -167,29 +210,45 @@ async def submit_batch_to_openai(batch_file_path: str, model_name: str) -> dict:
     """Submit a batch job to OpenAI's batch processing endpoint."""
     client = OpenAI()
     
-    # First upload the file
-    with open(batch_file_path, 'rb') as f:
-        file_response = client.files.create(
-            file=f,
-            purpose='batch'
-        )
-    logging.info(f"File uploaded to OpenAI with ID: {file_response.id}")
-    
-    # Create the batch processing job
-    batch_response = client.batches.create(
-        input_file_id=file_response.id,
-        endpoint="/v1/chat/completions",
-        completion_window="24h"
-    )
-    
-    # Log the full response to see what we're getting
-    logging.info(f"OpenAI batch response: {batch_response}")
-    
-    # Make sure we're using the correct batch ID format
-    if not batch_response.id.startswith('batch_'):
-        logging.error(f"Unexpected batch ID format: {batch_response.id}")
+    try:
+        # First upload the file
+        with open(batch_file_path, 'rb') as f:
+            file_response = client.files.create(
+                file=f,
+                purpose='batch'
+            )
+        logging.info(f"File uploaded to OpenAI with ID: {file_response.id}")
         
-    return batch_response
+        # Create the batch processing job
+        batch_response = client.batches.create(
+            input_file_id=file_response.id,
+            endpoint="/v1/chat/completions",
+            completion_window="24h"
+        )
+        
+        # Log the full response to see what we're getting
+        logging.info(f"OpenAI batch response: {batch_response}")
+        
+        # Make sure we're using the correct batch ID format
+        if not batch_response.id.startswith('batch_'):
+            logging.error(f"Unexpected batch ID format: {batch_response.id}")
+            
+        return batch_response
+        
+    except Exception as e:
+        error_msg = str(e)
+        logging.error(f"Failed to submit batch to OpenAI: {error_msg}")
+        
+        # Try to parse validation errors from OpenAI
+        if hasattr(e, 'response') and hasattr(e.response, 'json'):
+            try:
+                error_details = e.response.json()
+                if 'error' in error_details:
+                    error_msg = error_details['error'].get('message', error_msg)
+            except:
+                pass
+        
+        raise Exception(f"OpenAI batch submission failed: {error_msg}")
 
 async def _generate_batch(account_key, scorecard_key, score_name, clean_existing, 
                          verbose, no_submit):
@@ -376,50 +435,69 @@ async def _generate_batch(account_key, scorecard_key, score_name, clean_existing
                     
                     if not matching_rows.empty:
                         for _, row in matching_rows.iterrows():
-                            # Generate messages using the classifier's prompt
-                            state = {
-                                "text": row['text'],
-                                "metadata": {"content_id": row['content_id']}
-                            }
+                            # Get messages from scoring job metadata
+                            matching_job = next(
+                                (job for job in scoring_jobs 
+                                 if job['itemId'] == str(row['content_id'])),
+                                None
+                            )
                             
-                            # Create a specific prompt template for IVR Present classification
-                            prompt_template = ChatPromptTemplate.from_messages([
-                                ("system", "You are an AI assistant that determines if an IVR system is present in a call transcript."),
-                                ("user", "Please analyze this call transcript and determine if an IVR system is present. "
-                                        "An IVR (Interactive Voice Response) system is an automated phone system that interacts "
-                                        "with callers before connecting to a human agent. "
-                                        "Respond with either 'Present' if you detect an IVR system, or 'Not Present' if you don't.\n\n"
-                                        "Transcript: {text}")
-                            ])
-                            
-                            messages = prompt_template.format_prompt(**state).to_messages()
-                            
-                            request = {
-                                "custom_id": str(row['content_id']),
-                                "method": "POST",
-                                "url": "/v1/chat/completions",
-                                "body": {
-                                    "model": batch_job.modelName,
-                                    "messages": [
-                                        {
-                                            "role": "system" if isinstance(msg, SystemMessage) else "user",
-                                            "content": msg.content
-                                        }
-                                        for msg in messages
-                                    ],
-                                    "temperature": 0.0,
-                                    "top_p": 0.03,
-                                    "max_tokens": 1000
+                            if not matching_job or not matching_job.get('metadata'):
+                                logging.warning(
+                                    f"No metadata found for content_id {row['content_id']}"
+                                )
+                                continue
+                                
+                            try:
+                                metadata = json.loads(matching_job['metadata'])
+                                state = metadata.get('state', {})
+                                messages = state.get('messages', [])
+                                
+                                if not messages:
+                                    logging.warning(
+                                        f"No messages found in metadata for {row['content_id']}"
+                                    )
+                                    continue
+                                    
+                                logging.info(f"Found {len(messages)} messages for {row['content_id']}")
+                                
+                                request = {
+                                    "custom_id": str(row['content_id']),
+                                    "method": "POST",
+                                    "url": "/v1/chat/completions",
+                                    "body": {
+                                        "model": batch_job.modelName,
+                                        "messages": [
+                                            {
+                                                "role": MESSAGE_TYPE_MAPPING.get(msg['type'], msg['type']),
+                                                "content": msg['content']
+                                            }
+                                            for msg in messages
+                                        ],
+                                        "temperature": 0.0,
+                                        "top_p": 0.03,
+                                        "max_tokens": 1000
+                                    }
                                 }
-                            }
-                            logging.info(f"Writing entry {entries_written + 1}:")
-                            logging.info(f"  form_id: {row['form_id']}")
-                            logging.info(f"  content_id: {row['content_id']}")
-                            logging.info(f"  text length: {len(row['text'])}")
-                            logging.info(f"  messages: {[type(m).__name__ for m in messages]}")
-                            json.dump(request, batch_file)
-                            batch_file.write("\n")
-                            entries_written += 1
+                                
+                                logging.info(f"Writing entry {entries_written + 1}:")
+                                logging.info(f"  form_id: {row['form_id']}")
+                                logging.info(f"  content_id: {row['content_id']}")
+                                logging.info(f"  text length: {len(row['text'])}")
+                                logging.info(f"  messages: {[msg['type'] for msg in messages]}")
+                                
+                                json.dump(request, batch_file)
+                                batch_file.write("\n")
+                                entries_written += 1
+                                
+                            except json.JSONDecodeError:
+                                logging.error(
+                                    f"Invalid JSON in metadata for content_id {row['content_id']}"
+                                )
+                            except Exception as e:
+                                logging.error(
+                                    f"Error processing content_id {row['content_id']}: {str(e)}"
+                                )
             
             logging.info(f"\nGenerated batch file with {entries_written} entries for job {batch_job.id} in {output_dir}")
 
@@ -550,16 +628,27 @@ async def _generate_batch(account_key, scorecard_key, score_name, clean_existing
                         logging.info(f"Batch job closed: {close_result}")
                     
                 except Exception as e:
-                    logging.error(f"Failed to submit batch job to OpenAI: {str(e)}")
-                    error_message = str(e)
-                    if len(error_message) > 1000:
-                        error_message = error_message[:997] + "..."
-                        
-                    update_data = {
-                        'status': "ERROR",
-                        'errorMessage': error_message
+                    error_msg = str(e)
+                    logging.error(f"Failed to submit batch job to OpenAI: {error_msg}")
+                    
+                    update_mutation = """
+                    mutation UpdateBatchJob($input: UpdateBatchJobInput!) {
+                        updateBatchJob(input: $input) {
+                            id
+                            status
+                            errorMessage
+                        }
                     }
-                    batch_job.update(**update_data)
+                    """
+                    
+                    update_input = {
+                        'id': batch_job.id,
+                        'accountId': batch_job.accountId,
+                        'status': 'ERROR',
+                        'errorMessage': error_msg[:1000]  # Truncate if too long
+                    }
+                    
+                    client.execute(update_mutation, {'input': update_input})
             else:
                 batch_job.update(status="PROCESSING") 
 
@@ -580,7 +669,7 @@ async def _check_status(account_key):
     
     # Query for batch jobs that are in progress
     query = """
-    query GetInProgressBatches($filter: ModelBatchJobFilterInput) {
+    query GetProcessingBatchJobs($filter: ModelBatchJobFilterInput) {
         listBatchJobs(filter: $filter) {
             items {
                 id
@@ -590,83 +679,439 @@ async def _check_status(account_key):
                 completedRequests
                 totalRequests
                 failedRequests
+                modelProvider
+                modelName
+                type
             }
         }
     }
     """
     filter_params = {
         'accountId': {'eq': account_id},
-        'status': {'ne': 'COMPLETED'}
+        'status': {'eq': 'PROCESSING'},
+        'and': [
+            {'modelProvider': {'attributeExists': True}},
+            {'modelName': {'attributeExists': True}}
+        ]
     }
     
     result = client.execute(query, {'filter': filter_params})
     batch_jobs = result.get('listBatchJobs', {}).get('items', [])
     
     if not batch_jobs:
-        logging.info("No in-progress batch jobs found")
+        logging.info("No in-progress batch jobs found with required fields")
         return
         
     openai_client = OpenAI()
     
     for job in batch_jobs:
-        openai_batch_id = job['batchId']
-        if not openai_batch_id:
-            logging.warning(f"Batch job {job['id']} has no OpenAI batch ID")
-            continue
-            
         try:
-            # Get status from OpenAI using the OpenAI batch ID
-            batch_info = openai_client.batches.retrieve(openai_batch_id)
-            logging.info(f"OpenAI batch status: {batch_info.status}")
+            openai_batch_id = job['batchId']
+            if not openai_batch_id:
+                logging.warning(f"Batch job {job['id']} has no OpenAI batch ID")
+                continue
+                
+            # Get the batch info to get the output file ID
+            batch_info = openai_client.batches.retrieve(job['batchId'])
+            logging.info(f"Retrieved batch info for {job['batchId']}")
+            logging.info("Batch info:")
+            logging.info(f"  status: {batch_info.status}")
+            logging.info(f"  output_file_id: {batch_info.output_file_id}")
+            logging.info(f"  request_counts: total={batch_info.request_counts.total}, "
+                        f"completed={batch_info.request_counts.completed}, "
+                        f"failed={batch_info.request_counts.failed}")
             
-            # Map OpenAI status to our status
-            status_mapping = {
-                'validating': 'PROCESSING',
-                'created': 'PROCESSING',
-                'processing': 'PROCESSING',
-                'in_progress': 'PROCESSING',
-                'completed': 'COMPLETED',
-                'failed': 'ERROR'
-            }
+            # Update counts if they've changed
+            if (batch_info.request_counts.completed != job.get('completedRequests') or
+                batch_info.request_counts.failed != job.get('failedRequests')):
+                update_mutation = """
+                mutation UpdateBatchJob($input: UpdateBatchJobInput!) {
+                    updateBatchJob(input: $input) {
+                        id
+                        status
+                        completedRequests
+                        failedRequests
+                        totalRequests
+                    }
+                }
+                """
+                
+                update_input = {
+                    'id': job['id'],
+                    'accountId': job['accountId'],
+                    'status': STATUS_MAPPING.get(batch_info.status, 'PROCESSING'),
+                    'type': job.get('type', 'MultiStepScore'),
+                    'batchId': job['batchId'],
+                    'modelProvider': job['modelProvider'],
+                    'modelName': job['modelName'],
+                    'completedRequests': batch_info.request_counts.completed,
+                    'failedRequests': batch_info.request_counts.failed,
+                    'totalRequests': batch_info.request_counts.total
+                }
+                
+                logging.info(f"Updating batch job {job['id']} with new counts:")
+                logging.info(f"  Completed: {batch_info.request_counts.completed}")
+                logging.info(f"  Failed: {batch_info.request_counts.failed}")
+                logging.info(f"  Total: {batch_info.request_counts.total}")
+                
+                client.execute(update_mutation, {'input': update_input})
             
-            new_status = status_mapping.get(batch_info.status, 'ERROR')
-            if new_status == 'ERROR':
-                logging.warning(f"Unrecognized OpenAI status: {batch_info.status}")
+            # Check if batch failed
+            if batch_info.status == 'failed' or batch_info.request_counts.failed == batch_info.request_counts.total:
+                logging.error(f"Batch {job['batchId']} failed")
+                # Update batch job with error status
+                error_mutation = """
+                mutation UpdateBatchJob($input: UpdateBatchJobInput!) {
+                    updateBatchJob(input: $input) {
+                        id
+                        status
+                        errorMessage
+                    }
+                }
+                """
+                
+                error_input = {
+                    'id': job['id'],
+                    'accountId': job['accountId'],
+                    'status': 'ERROR',
+                    'type': 'MultiStepScore',
+                    'batchId': job['batchId'],
+                    'modelProvider': job['modelProvider'],
+                    'modelName': job['modelName'],
+                    'errorMessage': f"OpenAI batch failed: {batch_info.status}"
+                }
+                
+                client.execute(error_mutation, {'input': error_input})
+                continue
             
-            # Update mutation
-            update_mutation = """
+            # Only try to get output file if batch completed successfully
+            if batch_info.status == 'completed' and batch_info.output_file_id:
+                content = openai_client.files.retrieve_content(batch_info.output_file_id)
+                logging.info(f"Retrieved content from output file {batch_info.output_file_id}")
+                # ... rest of output file processing code ...
+                
+        except Exception as e:
+            logging.error(f"Error processing batch {job['id']}: {str(e)}")
+            logging.error(f"Full traceback: {traceback.format_exc()}")
+            
+            # Update batch job with error status
+            error_mutation = """
             mutation UpdateBatchJob($input: UpdateBatchJobInput!) {
                 updateBatchJob(input: $input) {
                     id
                     status
-                    completedRequests
-                    totalRequests
-                    failedRequests
+                    errorMessage
                 }
             }
             """
             
-            # Get the counts directly from batch_info
-            logging.info(f"OpenAI batch request_counts: {batch_info.request_counts}")
-            completed_count = batch_info.request_counts.completed
-            total_count = batch_info.request_counts.total
-            failed_count = batch_info.request_counts.failed
-            logging.info(
-                f"Parsed counts - completed: {completed_count}, "
-                f"total: {total_count}, failed: {failed_count}"
-            )
-            
-            update_input = {
+            error_input = {
                 'id': job['id'],
                 'accountId': job['accountId'],
-                'status': new_status,
-                'completedRequests': completed_count,
-                'totalRequests': total_count,
-                'failedRequests': failed_count
+                'status': 'ERROR',
+                'type': 'MultiStepScore',
+                'batchId': job['batchId'],
+                'modelProvider': job['modelProvider'],
+                'modelName': job['modelName'],
+                'errorMessage': str(e)[:1000]  # Truncate if too long
             }
             
-            result = client.execute(update_mutation, {'input': update_input})
-            logging.info(f"Update result: {result}")
+            client.execute(error_mutation, {'input': error_input})
+
+@batch.command(help="Process results from completed OpenAI batch jobs")
+@click.option(
+    '--account-key',
+    required=True,
+    help='The account key'
+)
+def complete(account_key):
+    """Process results from OpenAI batch jobs marked as PROCESSED."""
+    asyncio.run(_complete_batches(account_key))
+
+async def _complete_batches(account_key):
+    """Async implementation of batch completion."""
+    client = PlexusDashboardClient.for_account(account_key)
+    account_id = client._resolve_account_id()
+    openai_client = OpenAI()
+    
+    # Load and register scorecards
+    Scorecard.load_and_register_scorecards('scorecards/')
+    
+    # Get processed batch jobs
+    query = """
+    query GetProcessedBatches($filter: ModelBatchJobFilterInput) {
+        listBatchJobs(filter: $filter) {
+            items {
+                id
+                accountId
+                batchId
+                status
+                modelProvider
+                modelName
+                scorecardId
+                scoreId
+                completedRequests
+                totalRequests
+                failedRequests
+            }
+        }
+    }
+    """
+    
+    filter_params = {
+        'accountId': {'eq': account_id},
+        'status': {'eq': 'PROCESSED'}
+    }
+    
+    result = client.execute(query, {'filter': filter_params})
+    batch_jobs = result.get('listBatchJobs', {}).get('items', [])
+    
+    if not batch_jobs:
+        logging.info("No processed batch jobs found waiting for completion")
+        return
+        
+    for job in batch_jobs:
+        logging.info(f"\nProcessing batch job:")
+        logging.info(f"  ID: {job['id']}")
+        logging.info(f"  OpenAI Batch ID: {job['batchId']}")
+        
+        try:
+            # Get the batch info to get the output file ID
+            batch_info = openai_client.batches.retrieve(job['batchId'])
+            logging.info(f"Retrieved batch info for {job['batchId']}")
             
+            # Skip if batch is still in progress or has no output
+            if batch_info.status in ['validating', 'created', 'processing', 'in_progress'] or \
+               not batch_info.output_file_id:
+                logging.info(f"Batch {job['batchId']} is still in progress or has no output - skipping")
+                continue
+            
+            # Get the output file content
+            content = openai_client.files.retrieve_content(batch_info.output_file_id)
+            logging.info(f"Retrieved content from output file {batch_info.output_file_id}")
+            
+            # Get scoring jobs for this batch
+            scoring_jobs = await get_scoring_jobs_for_batch(client, job['id'])
+            if not scoring_jobs:
+                logging.error(f"No scoring jobs found for batch {job['id']}")
+                continue
+            
+            # Get scorecard and score info
+            scorecard_result = client.execute("""
+                query GetScorecardInfo($scorecardId: ID!) {
+                    getScorecard(id: $scorecardId) {
+                        key
+                        name
+                    }
+                }
+            """, {'scorecardId': job['scorecardId']})
+            scorecard_key = scorecard_result['getScorecard']['key']
+            
+            score_result = client.execute("""
+                query GetScoreInfo($scoreId: ID!) {
+                    getScore(id: $scoreId) {
+                        name
+                    }
+                }
+            """, {'scoreId': job['scoreId']})
+            score_name = score_result['getScore']['name']
+            
+            # Get scorecard class
+            scorecard_class = scorecard_registry.get(scorecard_key.lower())
+            if not scorecard_class:
+                logging.error(f"Could not find scorecard class for key: {scorecard_key}")
+                continue
+            
+            # Process each line of the output
+            for line in content.splitlines():
+                result = json.loads(line)
+                content_id = result['custom_id']
+                response_content = result['response']['body']['choices'][0]['message']['content']
+                logging.info(f"Processing result for content_id {content_id}")
+                
+                try:
+                    # Get sample data
+                    sample_row, used_content_id = select_sample(
+                        scorecard_class, 
+                        score_name,
+                        content_id,
+                        fresh=False
+                    )
+                    
+                    if sample_row is None or sample_row.empty:
+                        logging.error(f"Could not find sample data for content_id {content_id}")
+                        continue
+                    
+                    # Create metadata for Score.Input
+                    metadata = {
+                        "content_id": str(content_id),
+                        "account_key": account_key,
+                        "scorecard_key": scorecard_key,
+                        "score_name": score_name,
+                        "batch": {
+                            "completion": response_content
+                        }
+                    }
+                    logging.info(f"Created metadata for Score.Input: {metadata}")
+
+                    # Create Score.Input with batch completion in metadata
+                    score_input = Score.Input(
+                        text=sample_row.iloc[0]['text'],
+                        metadata=metadata
+                    )
+
+                    # Create config for the score
+                    config = {
+                        "configurable": {
+                            "thread_id": str(content_id)
+                        }
+                    }
+
+                    # Let the score class handle all LangGraph details
+                    async with Score.from_name(scorecard_key, score_name) as score:
+                        result = await score.predict(config, score_input)
+                        logging.info(f"Prediction completed with result: {result}")
+
+                    # Get scoring job for this content_id - moved outside the if result check
+                    scoring_job = next(
+                        (sj for sj in scoring_jobs if sj['itemId'] == content_id),
+                        None
+                    )
+                    
+                    if scoring_job:
+                        # Update scoring job status to COMPLETED
+                        update_mutation = """
+                        mutation UpdateScoringJob($input: UpdateScoringJobInput!) {
+                            updateScoringJob(input: $input) {
+                                id
+                                status
+                            }
+                        }
+                        """
+                        
+                        update_input = {
+                            'id': scoring_job['id'],
+                            'status': 'COMPLETED',
+                            'accountId': job['accountId'],
+                            'scorecardId': job['scorecardId'],
+                            'itemId': content_id
+                        }
+                        
+                        client.execute(update_mutation, {'input': update_input})
+                        logging.info(f"Updated scoring job {scoring_job['id']} status to COMPLETED")
+
+                        # Create score result if we have a value
+                        if isinstance(result, dict) and 'value' in result:
+                            create_result_mutation = """
+                            mutation CreateScoreResult($input: CreateScoreResultInput!) {
+                                createScoreResult(input: $input) {
+                                    id
+                                    value
+                                }
+                            }
+                            """
+                            
+                            result_input = {
+                                'accountId': job['accountId'],
+                                'scorecardId': job['scorecardId'],
+                                'itemId': content_id,
+                                'scoringJobId': scoring_job['id'],
+                                'value': result['value']
+                            }
+                            
+                            client.execute(create_result_mutation, {'input': result_input})
+                            logging.info(f"Created score result for scoring job {scoring_job['id']}")
+
+                except Exception as e:
+                    logging.error(f"Error processing content_id {content_id}: {str(e)}")
+                    logging.error(f"Full traceback: {traceback.format_exc()}")
+                    continue
+
+            # After processing all results, update batch job status to COMPLETED
+            update_batch_mutation = """
+            mutation UpdateBatchJob($input: UpdateBatchJobInput!) {
+                updateBatchJob(input: $input) {
+                    id
+                    status
+                }
+            }
+            """
+            
+            update_batch_input = {
+                'id': job['id'],
+                'accountId': job['accountId'],
+                'status': 'COMPLETED',
+                'type': 'MultiStepScore',
+                'batchId': job['batchId'],
+                'modelProvider': job['modelProvider'],
+                'modelName': job['modelName']
+            }
+            
+            client.execute(update_batch_mutation, {'input': update_batch_input})
+            logging.info(f"Updated batch job {job['id']} status to COMPLETED")
+
         except Exception as e:
-            logging.error(f"Error checking batch {job['batchId']}: {str(e)}") 
+            logging.error(f"Error processing batch {job['id']}: {str(e)}")
+            logging.error(f"Full traceback: {traceback.format_exc()}")
+
+@batch.command(help="Mark a batch job as PROCESSED for testing")
+@click.option(
+    '--account-key',
+    required=True,
+    help='The account key'
+)
+@click.option(
+    '--batch-id',
+    required=True,
+    help='The batch job ID to mark as PROCESSED'
+)
+def mark_processed(account_key, batch_id):
+    """Manually mark a batch job as PROCESSED for testing."""
+    asyncio.run(_mark_processed(account_key, batch_id))
+
+async def _mark_processed(account_key, batch_id):
+    """Async implementation of marking a batch as PROCESSED."""
+    client = PlexusDashboardClient.for_account(account_key)
+    
+    update_mutation = """
+    mutation UpdateBatchJob($input: UpdateBatchJobInput!) {
+        updateBatchJob(input: $input) {
+            id
+            status
+        }
+    }
+    """
+    
+    # First get the current batch job to get its accountId
+    query = """
+    query GetBatchJob($id: ID!) {
+        getBatchJob(id: $id) {
+            id
+            accountId
+            type
+            modelProvider
+            modelName
+            batchId
+        }
+    }
+    """
+    
+    result = client.execute(query, {'id': batch_id})
+    batch_job = result.get('getBatchJob')
+    
+    if not batch_job:
+        logging.error(f"Could not find batch job with ID {batch_id}")
+        return
+        
+    update_input = {
+        'id': batch_id,
+        'accountId': batch_job['accountId'],
+        'status': 'PROCESSED',
+        'type': batch_job.get('type', 'MultiStepScore'),
+        'modelProvider': batch_job.get('modelProvider', 'ChatOpenAI'),
+        'modelName': batch_job.get('modelName', 'gpt-4'),
+        'batchId': batch_job.get('batchId')
+    }
+    
+    result = client.execute(update_mutation, {'input': update_input})
+    logging.info(f"Marked batch job {batch_id} as PROCESSED")

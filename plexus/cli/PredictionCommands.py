@@ -14,6 +14,9 @@ from plexus.Registries import scorecard_registry
 from langgraph.errors import NodeInterrupt
 from plexus.scores.LangGraphScore import BatchProcessingPause
 from plexus.Scorecard import Scorecard
+from plexus.scores.Score import Score
+from plexus_dashboard.api.client import PlexusDashboardClient
+from plexus.cli.shared import get_scoring_jobs_for_batch
 
 
 @click.command(help="Predict a scorecard or specific score(s) within a scorecard.")
@@ -46,6 +49,10 @@ def predict(scorecard_name, score_name, content_id, number, excel, use_langsmith
         )
         try:
             loop.run_until_complete(coro)
+        except BatchProcessingPause as e:
+            logging.info(f"Created batch job {e.batch_job_id} for thread {e.thread_id}")
+            rich.print(f"[green]Created batch job {e.batch_job_id}[/green]")
+            return  # Exit normally
         finally:
             # Clean up any remaining tasks
             pending = asyncio.all_tasks(loop)
@@ -243,7 +250,7 @@ def select_sample_data_driven(scorecard_class, score_name, content_id, score_con
     # Add required metadata for batch processing
     metadata = {
         "content_id": str(used_content_id),
-        "account_key": "call-criteria",
+        "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
         "scorecard_key": scorecard_class.properties.get('key'),
         "score_name": score_name
     }
@@ -283,149 +290,64 @@ def select_sample_csv(csv_path, content_id):
     return sample_row, used_content_id
 
 async def predict_score(score_name, scorecard_class, sample_row, used_content_id):
-    """Async function to predict a single score"""
+    """Predict a single score."""
+    score_instance = None  # Initialize outside try block
     try:
-        logging.info(f"Entering predict_score for {score_name}")
-        logging.info(f"Predicting Score [magenta1][b]{score_name}[/b][/magenta1]...")
-        score_configuration = next(
-            (score for score in scorecard_class.scores if score['name'] == score_name), 
-            {}
+        # Create score instance
+        score_input = create_score_input(
+            sample_row=sample_row, 
+            content_id=used_content_id, 
+            scorecard_class=scorecard_class,
+            score_name=score_name
         )
-
-        if not score_configuration:
-            logging.error(
-                f"Score with name '{score_name}' not found in scorecard "
-                f"'{scorecard_class.name}'."
-            )
-            return None, None, None
-
-        score_class = scorecard_class.score_registry.get(score_name)
-        if score_class is None:
-            logging.error(f"Score class for '{score_name}' not found in the registry.")
-            return None, None, None
-
-        score_configuration['scorecard_name'] = scorecard_class.name
-        score_configuration['score_name'] = score_name
-
-        # Create score instance without context manager
-        score_instance = score_class(**score_configuration)
-        await score_instance.async_setup()
         
+        # Run prediction
         try:
-            # Create input
-            score_input_class = getattr(score_class, 'Input', None)
-            if score_input_class is None:
-                logging.warning(
-                    f"Input class not found for score '{score_name}'. Using default."
-                )
-                metadata = {"content_id": str(used_content_id)}
-                score_input = {'id': used_content_id, 'text': "", 'metadata': metadata}
-            else:
-                if sample_row is not None:
-                    row_dictionary = sample_row.iloc[0].to_dict()
-                    text = row_dictionary.get('text', '')
-                    metadata_str = row_dictionary.get('metadata', '{}')
-                    metadata = json.loads(metadata_str)
-                    if 'content_id' not in metadata:
-                        metadata['content_id'] = str(used_content_id)
-                    score_input = score_input_class(text=text, metadata=metadata)
-                else:
-                    metadata = {"content_id": str(used_content_id)}
-                    score_input = score_input_class(
-                        id=used_content_id, text="", metadata=metadata
-                    )
-
-            logging.info(f"Input metadata: {score_input.metadata}")
-            result = await predict_score_impl(score_instance, {}, score_input)
+            result = await predict_score_impl(
+                scorecard_class=scorecard_class,
+                score_name=score_name,
+                content_id=used_content_id,
+                input_data=score_input,
+                fresh=False
+            )
+            
             if result[0] is not None:  # Check if we got actual results
                 return result
             logging.info(f"No valid predictions returned for {score_name} - likely hit a breakpoint or got empty result")
             return None, None, None
             
         except BatchProcessingPause:
-            # Clean up and re-raise
-            await score_instance.cleanup()
-            raise
+            raise  # Just re-raise, no cleanup needed here
         except Exception as e:
             logging.error(f"Error during prediction: {e}")
             logging.error(f"Full traceback: {traceback.format_exc()}")
-            await score_instance.cleanup()
             raise
             
     except BatchProcessingPause:
-        # Expected condition - re-raise
-        raise
+        raise  # Just re-raise
     except Exception as e:
         logging.error(f"Error in predict_score: {e}")
         logging.error(f"Full traceback: {traceback.format_exc()}")
         raise
 
-async def predict_score_impl(score_instance, context, input_data):
-    """Predict a single score."""
-    logging.info("Entering predict_score_impl")
+async def predict_score_impl(
+    scorecard_class,
+    score_name,
+    content_id,
+    input_data,
+    use_langsmith_trace=False,
+    fresh=False
+):
     try:
-        logging.info("Starting score prediction...")
-        
-        thread_id = input_data.metadata.get('content_id')
-        config = {
-            "configurable": {
-                "thread_id": str(thread_id)
-            }
-        }
-        
-        if hasattr(score_instance, 'checkpointer') and score_instance.checkpointer:
-            batch_mode = os.getenv('PLEXUS_ENABLE_BATCH_MODE', '').lower() == 'true'
-            
-            if batch_mode:
-                logging.info("Batch mode enabled, ignoring checkpoints and starting fresh prediction")
-                prediction_result = await score_instance.predict(context, input_data)
-                logging.info(f"Fresh prediction result: {prediction_result}")
-            else:
-                checkpoint = await score_instance.checkpointer.aget(config)
-                if checkpoint:
-                    logging.info(f"Found checkpoint for thread {thread_id}, resuming execution")
-                    prediction_result = await score_instance.workflow.ainvoke(
-                        None,
-                        config=config
-                    )
-                    logging.info(f"Got prediction_result: {prediction_result}")
-                else:
-                    logging.info("No checkpoint found, starting fresh prediction")
-                    prediction_result = await score_instance.predict(context, input_data)
-                    logging.info(f"Fresh prediction result: {prediction_result}")
-        else:
-            logging.info("No checkpointer, starting fresh prediction")
+        score_instance = Score.from_name(scorecard_class.properties['key'], score_name)
+        async with score_instance:
+            await score_instance.async_setup()
+            context = {}
             prediction_result = await score_instance.predict(context, input_data)
-            logging.info(f"Fresh prediction result: {prediction_result}")
+            return score_instance, prediction_result, None
             
-        if prediction_result:
-            if isinstance(prediction_result, list):
-                # Handle list of results
-                prediction_value = prediction_result[0].value if prediction_result else None
-                prediction_explanation = prediction_result[0].explanation if prediction_result else None
-            else:
-                # Handle dictionary result
-                prediction_value = prediction_result.get('value')
-                prediction_explanation = prediction_result.get('explanation')
-                
-            if prediction_value is not None:
-                costs = score_instance.get_accumulated_costs()
-                logging.info("Returning final results")
-                try:
-                    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-                    for task in tasks:
-                        task.cancel()
-                    if tasks:
-                        await asyncio.gather(*tasks, return_exceptions=True)
-                except Exception as e:
-                    logging.warning(f"Error during task cleanup: {e}")
-                return input_data.text, prediction_result, costs
-        
-        logging.info("No valid predictions returned - likely hit a breakpoint or got empty result")
-        return None, None, None
-        
     except BatchProcessingPause:
-        # Let BatchProcessingPause propagate up to LangGraphScore
+        # Just let it propagate up - state is already stored in batch job
         raise
     except Exception as e:
         logging.error(f"Error in predict_score_impl: {e}")
@@ -477,3 +399,25 @@ def get_scorecard_class(scorecard_name: str):
         logging.error(f"Scorecard with name '{scorecard_name}' not found.")
         raise ValueError(f"Scorecard with name '{scorecard_name}' not found.")
     return scorecard_class
+
+def create_score_input(sample_row, content_id, scorecard_class, score_name):
+    """Create a Score.Input object from sample data."""
+    score_class = Score.from_name(scorecard_class.properties['key'], score_name)
+    score_input_class = getattr(score_class, 'Input', None)
+    
+    if score_input_class is None:
+        logging.warning(f"Input class not found. Using default.")
+        metadata = {"content_id": str(content_id)}
+        return {'id': content_id, 'text': "", 'metadata': metadata}
+    
+    if sample_row is not None:
+        row_dictionary = sample_row.iloc[0].to_dict()
+        text = row_dictionary.get('text', '')
+        metadata_str = row_dictionary.get('metadata', '{}')
+        metadata = json.loads(metadata_str)
+        if 'content_id' not in metadata:
+            metadata['content_id'] = str(content_id)
+        return score_input_class(text=text, metadata=metadata)
+    else:
+        metadata = {"content_id": str(content_id)}
+        return score_input_class(id=content_id, text="", metadata=metadata)
