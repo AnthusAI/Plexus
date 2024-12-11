@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from .base import BaseModel
 from ..client import _BaseAPIClient
+import json
+import logging
 
 @dataclass
 class ScoringJob(BaseModel):
@@ -16,6 +18,7 @@ class ScoringJob(BaseModel):
     completedAt: Optional[datetime] = None
     errorMessage: Optional[str] = None
     errorDetails: Optional[Dict] = None
+    metadata: Optional[Dict] = None
     evaluationId: Optional[str] = None
     scoreId: Optional[str] = None
 
@@ -32,6 +35,7 @@ class ScoringJob(BaseModel):
         completedAt: Optional[datetime] = None,
         errorMessage: Optional[str] = None,
         errorDetails: Optional[Dict] = None,
+        metadata: Optional[Dict] = None,
         evaluationId: Optional[str] = None,
         scoreId: Optional[str] = None,
         client: Optional[_BaseAPIClient] = None
@@ -47,6 +51,7 @@ class ScoringJob(BaseModel):
         self.completedAt = completedAt
         self.errorMessage = errorMessage
         self.errorDetails = errorDetails
+        self.metadata = metadata
         self.evaluationId = evaluationId
         self.scoreId = scoreId
 
@@ -64,6 +69,7 @@ class ScoringJob(BaseModel):
             completedAt
             errorMessage
             errorDetails
+            metadata
             evaluationId
             scoreId
         """
@@ -78,17 +84,38 @@ class ScoringJob(BaseModel):
         parameters: Dict,
         **kwargs
     ) -> 'ScoringJob':
+        # Build input data with only fields defined in the GraphQL schema
         input_data = {
             'accountId': accountId,
             'scorecardId': scorecardId,
             'itemId': itemId,
-            'status': kwargs.pop('status', 'PENDING')
+            'status': kwargs.pop('status', 'PENDING'),
         }
         
-        optional_fields = ['errorMessage', 'errorDetails', 'evaluationId', 'scoreId']
-        for field in optional_fields:
+        # Add optional fields that are in the schema
+        allowed_fields = {
+            'scoreId',
+            'evaluationId',
+            'metadata',
+            'errorMessage',
+            'errorDetails',
+            'startedAt',
+            'completedAt'
+        }
+        
+        for field in allowed_fields:
             if field in kwargs:
-                input_data[field] = kwargs[field]
+                if field == 'metadata' and kwargs[field]:
+                    try:
+                        # Ensure metadata is JSON serialized
+                        input_data['metadata'] = json.dumps(kwargs[field])
+                        logging.info(f"Added metadata: {input_data['metadata']}")
+                    except Exception as e:
+                        logging.error(f"Failed to serialize metadata: {e}")
+                else:
+                    input_data[field] = kwargs[field]
+        
+        logging.info(f"Final input data for GraphQL mutation: {input_data}")
         
         mutation = """
         mutation CreateScoringJob($input: CreateScoringJobInput!) {
@@ -98,8 +125,13 @@ class ScoringJob(BaseModel):
         }
         """ % cls.fields()
         
-        result = client.execute(mutation, {'input': input_data})
-        return cls.from_dict(result['createScoringJob'], client)
+        try:
+            result = client.execute(mutation, {'input': input_data})
+            return cls.from_dict(result['createScoringJob'], client)
+        except Exception as e:
+            logging.error(f"GraphQL mutation failed with input data: {input_data}")
+            logging.error(f"Error: {str(e)}")
+            raise
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'ScoringJob':
@@ -108,6 +140,15 @@ class ScoringJob(BaseModel):
                 data[date_field] = datetime.fromisoformat(
                     data[date_field].replace('Z', '+00:00')
                 )
+        
+        if data.get('metadata'):
+            try:
+                data['metadata'] = json.loads(data['metadata'])
+                logging.info(f"Parsed metadata from JSON: {data['metadata']}")
+            except Exception as e:
+                logging.error(f"Failed to parse metadata JSON: {e}")
+                logging.error(f"Raw metadata: {data['metadata']}")
+                data['metadata'] = None
 
         return cls(
             client=client,
