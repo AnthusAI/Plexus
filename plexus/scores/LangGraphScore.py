@@ -11,6 +11,7 @@ import importlib
 import asyncio
 from os import getenv
 from dotenv import load_dotenv
+import json
 
 from plexus.LangChainUser import LangChainUser
 from plexus.scores.Score import Score
@@ -35,14 +36,15 @@ import uuid
 from langgraph.errors import NodeInterrupt
 from plexus_dashboard.api.client import PlexusDashboardClient
 from plexus_dashboard.api.models.account import Account
+from plexus_dashboard.api.models.scoring_job import ScoringJob
 
 class BatchProcessingPause(Exception):
-    """Signals that execution has been paused for batch processing"""
-    def __init__(self, thread_id: str, state: dict, message: str = None):
+    """Exception raised when execution should pause for batch processing."""
+    def __init__(self, thread_id, state, batch_job_id=None, message=None):
         self.thread_id = thread_id
         self.state = state
-        self.message = message or "Execution paused for batch processing"
-        super().__init__(f"{self.message}. Thread ID: {thread_id}")
+        self.batch_job_id = batch_job_id
+        super().__init__(message or f"Execution paused for batch processing. Thread ID: {thread_id}")
 
 class LangGraphScore(Score, LangChainUser):
     """
@@ -223,15 +225,9 @@ class LangGraphScore(Score, LangChainUser):
 
     async def build_compiled_workflow(self):
         """Build the LangGraph workflow with optional persistence."""
-        workflow = StateGraph(self.GraphState)
+        logging.info("=== Building Workflow ===")
+        # First collect node instances
         node_instances = []
-
-        # Add final node
-        def final_function(state):
-            return state
-        workflow.add_node('final', final_function)
-
-        # First pass: Collect node instances
         if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
             for node_configuration_entry in self.parameters.graph:
                 logging.debug(f"Processing node configuration: {node_configuration_entry}")
@@ -261,11 +257,24 @@ class LangGraphScore(Score, LangChainUser):
         else:
             raise ValueError("Invalid or missing graph configuration in parameters.")
 
-        # Process nodes
+        # Create combined state class that includes output aliases
+        combined_state_class = self.create_combined_graphstate_class(
+            [instance for _, instance in node_instances]
+        )
+        logging.info(f"Created combined state class: {combined_state_class}")
+        logging.info(f"Combined state fields: {combined_state_class.model_fields.keys()}")
+        
+        # Use combined state class when creating workflow
+        workflow = StateGraph(combined_state_class)
+
+        # Process nodes - now using combined_state_class
         for node_name, node_instance in node_instances:
-            workflow.add_node(node_name, node_instance.build_compiled_workflow(
-                graph_state_class=LangGraphScore.GraphState
-            ))
+            workflow.add_node(
+                node_name, 
+                node_instance.build_compiled_workflow(
+                    graph_state_class=combined_state_class
+                )
+            )
 
         # Set entry point to first node
         first_node = node_instances[0][0]
@@ -277,22 +286,24 @@ class LangGraphScore(Score, LangChainUser):
             next_node = node_instances[i + 1][0]
             workflow.add_edge(current_node, next_node)
 
-        # Add edge from last node to final
-        workflow.add_edge(node_instances[-1][0], 'final')
-
+        # Add final node and edge from last node to END
+        last_node = node_instances[-1][0]
+        
         # Add output aliasing if needed
         if hasattr(self.parameters, 'output') and self.parameters.output is not None:
+            logging.info(f"Adding output aliasing node with mapping: {self.parameters.output}")
             output_aliasing_function = LangGraphScore.generate_output_aliasing_function(
                 self.parameters.output
             )
             workflow.add_node('output_aliasing', output_aliasing_function)
-            workflow.add_edge('final', 'output_aliasing')
-            final_node = 'output_aliasing'
+            workflow.add_edge(last_node, 'output_aliasing')
+            workflow.add_edge('output_aliasing', END)
+            logging.info("Added output aliasing node to workflow")
         else:
-            final_node = 'final'
+            workflow.add_edge(last_node, END)
+            logging.info("No output aliasing needed, connected last node directly to END")
 
-        # Add edge to END
-        workflow.add_edge(final_node, END)
+        logging.info("=== Workflow Build Complete ===")
 
         try:
             # Compile with checkpointer only if configured
@@ -303,11 +314,13 @@ class LangGraphScore(Score, LangChainUser):
             # Store node instances for later token usage calculation
             self.node_instances = node_instances
             
+            logging.info(f"Created combined state class with fields: {combined_state_class.__annotations__}")
+            
             return app
             
         except Exception as e:
             logging.error(f"Error compiling workflow: {str(e)}")
-            logging.error(f"Full exception: {traceback.format_exc()}")
+            logging.error(f"Full traceback: {traceback.format_exc()}")
             raise
 
     @classmethod
@@ -488,41 +501,54 @@ class LangGraphScore(Score, LangChainUser):
         Dynamically create a combined GraphState class based on all nodes in the workflow.
         """
         attributes: Dict[str, Any] = {}
-        output_aliases: Dict[str, str] = {}
 
+        # Start with all fields from the base GraphState
+        attributes.update(self.GraphState.__annotations__)
+
+        # First collect all attributes from node instances
         for instance in instances:
+            # Add fields from the node's GraphState
             for attr_name, attr_type in instance.GraphState.__annotations__.items():
                 if attr_name in attributes:
                     if attributes[attr_name] != attr_type:
                         raise TypeError(f"Inconsistent type for attribute '{attr_name}': "
-                                        f"{attributes[attr_name]} != {attr_type}")
+                                      f"{attributes[attr_name]} != {attr_type}")
                 else:
                     attributes[attr_name] = attr_type
 
-            # Collect output aliases from node instances
-            if hasattr(instance.parameters, 'output') and instance.parameters.output is not None:
+            # Add fields from the node's output mapping
+            if hasattr(instance.parameters, 'output'):
+                logging.info(f"Adding output fields from node {instance.__class__.__name__}: {instance.parameters.output}")
                 for alias, original in instance.parameters.output.items():
                     if original in attributes:
                         attributes[alias] = attributes[original]
-                        output_aliases[alias] = attributes[original]
+                        logging.info(f"Added node output alias {alias} with type {attributes[original]}")
                     else:
-                        raise ValueError(f"Original attribute '{original}' not found in GraphState")
+                        logging.warning(f"Original field '{original}' not found for node output alias '{alias}'")
 
-        # Collect output aliases from main LangGraphScore parameter
+        # Then handle output aliases from the main LangGraphScore parameters
         if hasattr(self.parameters, 'output'):
+            logging.info(f"Adding score output fields: {self.parameters.output}")
             for alias, original in self.parameters.output.items():
-                if original in output_aliases:
-                    output_aliases[alias] = output_aliases[original]
-                elif original in attributes:
-                    output_aliases[alias] = attributes[original]
+                if original in attributes:
+                    attributes[alias] = attributes[original]
+                    logging.info(f"Added score output alias {alias} with type {attributes[original]}")
                 else:
-                    raise ValueError(f"Original attribute '{original}' not found in GraphState")
+                    # If original doesn't exist, default to Optional[str]
+                    attributes[alias] = Optional[str]
+                    logging.info(f"Added score output alias {alias} with default type Optional[str]")
 
-        # Add output aliases to attributes
-        for alias, attr_type in output_aliases.items():
-            attributes[alias] = attr_type
-
-        CombinedGraphState = create_model("CombinedGraphState", **{k: (v, None) for k, v in attributes.items()}, __base__=LangGraphScore.GraphState)
+        # Create the combined class with all fields
+        CombinedGraphState = create_model(
+            "CombinedGraphState", 
+            **{k: (v, None) for k, v in attributes.items()}, 
+            __base__=LangGraphScore.GraphState,
+            model_config=ConfigDict(extra='allow')  # Allow extra fields
+        )
+        
+        logging.info(f"Base GraphState fields: {self.GraphState.__annotations__}")
+        logging.info(f"Final combined state fields: {CombinedGraphState.__annotations__}")
+        
         return CombinedGraphState
 
     @staticmethod
@@ -538,11 +564,30 @@ class LangGraphScore(Score, LangChainUser):
     @staticmethod
     def generate_output_aliasing_function(output_mapping: dict) -> FunctionType:
         def output_aliasing(state):
-            logging.debug(f"Output aliasing: {output_mapping}")
+            logging.info("=== Output Aliasing Node Start ===")
+            logging.info(f"Input state type: {type(state)}")
+            logging.info(f"Input state fields: {state.model_fields.keys()}")
+            logging.info(f"Input state values: {state.model_dump()}")
+            
+            # Create a new dict with all current state values
+            new_state = state.model_dump()
+            
+            # Add aliased values
             for alias, original in output_mapping.items():
                 if hasattr(state, original):
-                    setattr(state, alias, getattr(state, original))
-            return state
+                    new_state[alias] = getattr(state, original)
+                    logging.info(f"Added alias {alias}={getattr(state, original)} from {original}")
+                else:
+                    logging.warning(f"Original field '{original}' not found in state")
+            
+            # Create new state with extra fields allowed
+            combined_state = state.__class__(**new_state)
+            logging.info(f"Output state type: {type(combined_state)}")
+            logging.info(f"Output state fields: {combined_state.model_fields.keys()}")
+            logging.info(f"Output state values: {combined_state.model_dump()}")
+            logging.info("=== Output Aliasing Node End ===")
+            return combined_state
+            
         return output_aliasing
 
     @staticmethod
@@ -651,272 +696,141 @@ class LangGraphScore(Score, LangChainUser):
         return value_setter
 
     async def predict(self, context, model_input: Optional[Union[Score.Input, dict]]):
-        try:
-            def truncate_strings(obj, max_length=80):
-                if isinstance(obj, dict):
-                    return {k: truncate_strings(v) for k, v in obj.items()}
-                elif isinstance(obj, str):
-                    return f"{obj[:max_length]}..." if len(obj) > max_length else obj
-                return obj
+        try:            
+            # Get thread_id from metadata
+            thread_id = model_input.metadata.get('content_id')
+            if not thread_id:
+                thread_id = str(uuid.uuid4())
+                logging.warning(
+                    f"No content_id found in metadata, using generated UUID: {thread_id}"
+                )
+            
+            # Check for required metadata, but allow evaluation mode
+            if not model_input.metadata.get('account_key'):
+                if model_input.metadata.get('evaluation_mode'):
+                    logging.info("Running in evaluation mode")
+                else:
+                    raise ValueError("No account_key found in metadata")
 
-            # Handle resume case (model_input is None)
-            if model_input is None:
-                logging.info("Resuming from checkpoint - passing None to continue")
-                thread_id = None  # Will be in config
-                initial_state = None  # Let LangGraph use checkpoint
-            else:
-                # Normal execution with input
-                thread_id = model_input.metadata.get('content_id')
-                if not thread_id:
-                    thread_id = str(uuid.uuid4())
-                    logging.warning(
-                        f"No content_id found in metadata, using generated UUID: {thread_id}"
-                    )
-                
-                initial_state = self.GraphState(
-                    text=self.preprocess_text(model_input.text),
-                    metadata=model_input.metadata,
-                    results={
-                        result['name']: {
-                            "id": result['id'],
-                            "value": result['result'].value if result['result'] else None,
-                            "explanation": result['result'].explanation if result['result'] else None
-                        }
-                        for result in model_input.results or []
-                    },
-                    messages=None
-                ).model_dump()
-
-            logging.info(f"Using content_id as thread_id: {thread_id}")
-            config = {
+            # Set up thread config
+            thread = {
                 "configurable": {
                     "thread_id": str(thread_id) if thread_id else None
                 }
             }
+            if context and 'configurable' in context:
+                thread['configurable'].update(context['configurable'])
 
-            batch_mode = os.getenv('PLEXUS_ENABLE_BATCH_MODE', '').lower() == 'true'
-            breakpoints_enabled = os.getenv('PLEXUS_ENABLE_LLM_BREAKPOINTS', '').lower() == 'true'
-            logging.info(
-                f"Mode: batch_mode={batch_mode}, breakpoints_enabled={breakpoints_enabled}"
-            )
+            # Check if we have batch results to inject
+            batch_data = model_input.metadata.get('batch', {})
+            if batch_data and 'completion' in batch_data:
+                logging.info("Found batch completion - resuming from checkpoint")
+                logging.info(f"Full metadata from model_input: {model_input.metadata}")
+                
+                # Get existing checkpoint state
+                checkpoint_state = await self.workflow.aget_state(thread, subgraphs=True)
+                if not checkpoint_state:
+                    raise ValueError("No checkpoint state found")
 
-            try:
-                final_result = await self.workflow.ainvoke(
-                    initial_state,  # Will be None when resuming
-                    config=config
+                logging.info(f"Current checkpoint state: {checkpoint_state}")
+                
+                # Create client using metadata from model_input
+                client = PlexusDashboardClient.for_scorecard(
+                    account_key=model_input.metadata.get('account_key'),
+                    scorecard_key=model_input.metadata.get('scorecard_key'),
+                    score_name=model_input.metadata.get('score_name')
                 )
-                logging.info(f"Raw workflow result type: {type(final_result)}")
-                logging.info(f"Raw workflow result: {final_result}")
-            except BatchProcessingPause as e:
-                if not batch_mode:
-                    raise
                 
-                logging.info("Caught BatchProcessingPause, creating batch job")
-                # Initialize client manager with context from metadata
-                logging.info(f"Initializing dashboard client with metadata: {model_input.metadata}")
-                try:
-                    client = PlexusDashboardClient.for_scorecard(
-                        account_key=model_input.metadata.get('account_key'),
-                        scorecard_key=model_input.metadata.get('scorecard_key'),
-                        score_name=model_input.metadata.get('score_name')
-                    )
-                    logging.info("Successfully initialized dashboard client")
-                except Exception as client_error:
-                    logging.error(f"Failed to initialize dashboard client: {str(client_error)}")
-                    raise
-
-                # Create batch job with serializable state
-                try:
-                    # Get the score ID from the client manager's context
-                    score_id = client._resolve_score_id()
-                    logging.info(f"Resolved score ID: {score_id}")
-                    scorecard_id = client._resolve_scorecard_id()
-                    logging.info(f"Resolved scorecard ID: {scorecard_id}")
-                    account_id = client._resolve_account_id()
-                    logging.info(f"Resolved account ID: {account_id}")
-                    
-                    logging.info(f"Creating batch job with parameters: thread_id={thread_id}, scorecard_id={scorecard_id}, account_id={account_id}, model_provider={self.parameters.model_provider}, model_name={self.parameters.model_name}")
-                    
-                    scoring_job, batch_job = client.batch_scoring_job(
-                        itemId=thread_id,
-                        scorecardId=scorecard_id,
-                        accountId=account_id,
-                        model_provider=self.parameters.model_provider,
-                        model_name=self.parameters.model_name,
-                        provider='OPENAI',
-                        scoreId=score_id,
-                        parameters={
-                            'state': e.state,
-                            'thread_id': thread_id,
-                            'breakpoint': True,
-                            'original_metadata': model_input.metadata,
-                            'model_provider': self.parameters.model_provider,
-                            'model_name': self.parameters.model_name
+                # Get scoring job directly using content_id
+                query = """
+                query GetScoringJob($itemId: String!) {
+                    listScoringJobs(filter: { itemId: { eq: $itemId } }, limit: 1) {
+                        items {
+                            id
+                            itemId
+                            status
+                            metadata
                         }
-                    )
-                    
-                    logging.info(f"Created batch job {batch_job.id} for thread {thread_id}")
-                    await self.cleanup()
-                    return None
-                except Exception as batch_error:
-                    logging.error(f"Failed to create batch job: {str(batch_error)}")
-                    logging.error(f"Full error traceback: {traceback.format_exc()}")
-                    await self.cleanup()
-                    raise
-
-            # Check for breakpoint state FIRST before any other processing
-            logging.info(f"Checking if result is dict: {isinstance(final_result, dict)}")
-            if isinstance(final_result, dict):
-                logging.info(f"Checking breakpoint flags: at_llm_breakpoint={final_result.get('at_llm_breakpoint')}, should_end={final_result.get('should_end')}")
-                if final_result.get('at_llm_breakpoint') or final_result.get('should_end'):
-                    logging.info("Found breakpoint state, creating batch job")
-                    if batch_mode:
-                        # Initialize client manager with context from metadata
-                        logging.info(f"Initializing dashboard client with metadata: {model_input.metadata}")
-                        try:
-                            client = PlexusDashboardClient.for_scorecard(
-                                account_key=model_input.metadata.get('account_key'),
-                                scorecard_key=model_input.metadata.get('scorecard_key'),
-                                score_name=model_input.metadata.get('score_name')
-                            )
-                            logging.info("Successfully initialized dashboard client")
-                        except Exception as e:
-                            logging.error(f"Failed to initialize dashboard client: {str(e)}")
-                            raise
-                        
-                        # Create a fully serializable copy of the state
-                        serializable_state = {}
-                        for key, value in final_result.items():
-                            if key == 'messages':
-                                if isinstance(value, list):
-                                    serializable_state[key] = [
-                                        {
-                                            'type': msg.get('type', ''),
-                                            'content': msg.get('content', ''),
-                                            '_type': msg.get('_type', '')
-                                        } if isinstance(msg, dict) else
-                                        {
-                                            'type': msg.__class__.__name__.lower().replace(
-                                                'message', ''
-                                            ),
-                                            'content': msg.content,
-                                            '_type': msg.__class__.__name__
-                                        }
-                                        for msg in value
-                                    ]
-                            elif key == 'chat_history':
-                                if isinstance(value, list):
-                                    serializable_state[key] = [
-                                        {
-                                            'type': msg.__class__.__name__.lower().replace(
-                                                'message', ''
-                                            ),
-                                            'content': msg.content,
-                                            '_type': msg.__class__.__name__
-                                        }
-                                        for msg in value
-                                    ]
-                            else:
-                                serializable_state[key] = value
-                        
-                        logging.info(f"Created serializable state: {serializable_state}")
-                        
-                        # Create batch job with serializable state
-                        try:
-                            # Get the score ID from the client manager's context
-                            score_id = client._resolve_score_id()
-                            logging.info(f"Resolved score ID: {score_id}")
-                            scorecard_id = client._resolve_scorecard_id()
-                            logging.info(f"Resolved scorecard ID: {scorecard_id}")
-                            account_id = client._resolve_account_id()
-                            logging.info(f"Resolved account ID: {account_id}")
-                            
-                            logging.info(f"Creating batch job with parameters: thread_id={thread_id}, scorecard_id={scorecard_id}, account_id={account_id}, model_provider={self.parameters.model_provider}, model_name={self.parameters.model_name}")
-                            
-                            scoring_job, batch_job = client.batch_scoring_job(
-                                itemId=thread_id,
-                                scorecardId=scorecard_id,
-                                accountId=account_id,
-                                model_provider=self.parameters.model_provider,
-                                model_name=self.parameters.model_name,
-                                provider='OPENAI',
-                                scoreId=score_id,
-                                parameters={
-                                    'state': serializable_state,
-                                    'thread_id': thread_id,
-                                    'breakpoint': True,
-                                    'original_metadata': model_input.metadata,
-                                    'model_provider': self.parameters.model_provider,
-                                    'model_name': self.parameters.model_name
-                                }
-                            )
-                            
-                            logging.info(f"Created batch job {batch_job.id} for thread {thread_id}")
-                            
-                            # Clean up before raising the exception
-                            await self.cleanup()
-                            
-                            raise BatchProcessingPause(
-                                thread_id=thread_id,
-                                state=serializable_state,
-                                message=f"Workflow paused for batch processing. Batch job ID: {batch_job.id}. Thread ID: {thread_id}"
-                            )
-                        except Exception as e:
-                            logging.error(f"Failed to create batch job: {str(e)}")
-                            logging.error(f"Full error traceback: {traceback.format_exc()}")
-                            await self.cleanup()
-                            raise BatchProcessingPause(
-                                thread_id=thread_id,
-                                state=serializable_state,
-                                message=f"Workflow paused for batch processing. Thread ID: {thread_id}"
-                            )
-                    else:
-                        raise NodeInterrupt("Workflow paused at breakpoint")
-
-            # Return None if we hit a breakpoint - no results to process yet
-            if final_result.get('at_llm_breakpoint') or final_result.get('should_end'):
-                logging.info("Workflow interrupted at breakpoint - no results to process")
-                return None
-
-            # Only continue processing if we have a valid result
-            if isinstance(final_result, dict):
-                logging.info(f"Final result keys: {final_result.keys()}")
+                    }
+                }
+                """
+                result = client.execute(query, {'itemId': str(thread_id)})
+                scoring_jobs = result.get('listScoringJobs', {}).get('items', [])
                 
-                # Unwrap output_aliasing if present
-                result_dict = final_result.get('output_aliasing', final_result)
-                logging.info(f"Result dict after unwrapping: {result_dict}")
-                
-                # Check for classification or value
-                if result_dict.get('classification') is not None:
-                    logging.info(f"Creating result from classification: {result_dict['classification']}")
-                    result = [self.Result(
-                        parameters=self.parameters,
-                        value=result_dict['classification'],
-                        explanation=result_dict.get('explanation', '')
-                    )]
-                    logging.info(f"Created result object: {result}")
-                    return result
-                elif result_dict.get('value') is not None:
-                    logging.info(f"Creating result from value: {result_dict['value']}")
-                    result = [self.Result(
-                        parameters=self.parameters,
-                        value=result_dict['value'],
-                        explanation=result_dict.get('explanation', '')
-                    )]
-                    logging.info(f"Created result object: {result}")
-                    return result
+                if scoring_jobs and scoring_jobs[0].get('metadata'):
+                    try:
+                        metadata = json.loads(scoring_jobs[0]['metadata'])
+                        state = metadata.get('state', {})
+                        messages = state.get('messages', [])
+                        logging.info(f"Recovered {len(messages)} messages from scoring job metadata")
+                    except json.JSONDecodeError:
+                        logging.error("Could not parse scoring job metadata")
+                        messages = []
                 else:
-                    logging.error("No classification or value found in result")
-                    logging.error(f"Available keys: {list(result_dict.keys())}")
-                    return None
+                    logging.warning("No messages found in scoring job metadata")
+                    messages = []
 
-            # If we get here without returning, something went wrong
-            logging.error("Workflow completed without producing a valid result")
-            logging.error(f"Final event: {final_result}")
-            return None
+                # Create state with both completion and messages
+                state = {
+                    **checkpoint_state.values,  # Keep all existing values
+                    'completion': batch_data['completion'],
+                    'messages': messages,  # Add recovered messages
+                    'at_llm_breakpoint': False
+                }
+                logging.info(f"Resuming with state: {state}")
+
+                # Resume execution from the checkpoint
+                logging.info("Resuming execution...")
+                final_result = await self.workflow.ainvoke(
+                    state,  # Pass in our modified state
+                    config=thread  # Use the parent thread config
+                )
+                logging.info(f"Execution completed with result: {final_result}")
+
+            else:
+                # Normal execution path - start from beginning
+                logging.info("Starting normal execution path")
+                
+                # Ensure required metadata fields are present
+                metadata = model_input.metadata or {}
+                if not metadata.get('account_key'):
+                    raise ValueError("No account_key found in metadata")
+                if not metadata.get('scorecard_key'):
+                    metadata['scorecard_key'] = self.parameters.scorecard_name
+                if not metadata.get('score_name'):
+                    metadata['score_name'] = self.parameters.name
+                
+                initial_state = self.GraphState(
+                    text=self.preprocess_text(model_input.text),
+                    metadata=metadata,
+                    messages=None
+                ).model_dump()
+                
+                logging.info(f"Initial state metadata: {metadata}")
+                
+                final_result = await self.workflow.ainvoke(
+                    initial_state,
+                    config=thread
+                )
+                
+                logging.info(f"Final workflow result: {final_result}")
+                
+                # Create Score.Result from final state
+                if final_result:
+                    result = self.Result(
+                        parameters=self.parameters,
+                        explanation=final_result.get('explanation', ''),
+                        value=final_result.get('value', None),
+                        metadata=model_input.metadata
+                    )
+                    logging.info(f"Returning result: {result}")
+                    return [result]  # Return as single-item list
+                else:
+                    logging.warning("No final result from workflow")
+                    return None
 
         except BatchProcessingPause:
-            # Expected condition - let it propagate up
+            # Just let it propagate up
             raise
         except Exception as e:
             logging.error(f"Error during prediction: {e}")
@@ -968,4 +882,40 @@ class LangGraphScore(Score, LangChainUser):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
         await self.cleanup()
+
+    async def get_scoring_jobs_for_batch(
+        self,
+        batch_job_id: str
+    ) -> List[Dict[str, Any]]:
+        """Get all scoring jobs associated with a batch job."""
+        # Create client using account_key from metadata
+        client = PlexusDashboardClient.for_scorecard(
+            account_key=self.parameters.account_key,
+            scorecard_key=self.parameters.scorecard_name,
+            score_name=self.parameters.name
+        )
+        
+        query = """
+        query GetBatchScoringJobs($batchJobId: String!) {
+            listBatchJobScoringJobs(
+                filter: { batchJobId: { eq: $batchJobId } }
+                limit: 1000
+            ) {
+                items {
+                    scoringJob {
+                        id
+                        itemId
+                        status
+                        metadata
+                    }
+                    createdAt
+                }
+            }
+        }
+        """
+        result = client.execute(query, {'batchJobId': batch_job_id})
+        scoring_jobs = [item['scoringJob'] 
+                       for item in result.get('listBatchJobScoringJobs', {}).get('items', [])]
+        logging.info(f"Found {len(scoring_jobs)} scoring jobs for batch {batch_job_id}")
+        return scoring_jobs
 
