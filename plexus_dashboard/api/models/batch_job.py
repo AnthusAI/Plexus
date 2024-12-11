@@ -25,7 +25,6 @@ class BatchJob(BaseModel):
     errorDetails: Optional[Dict] = None
     scorecardId: Optional[str] = None
     scoreId: Optional[str] = None
-    scoringJobCountCache: Optional[int] = None
 
     def __init__(
         self,
@@ -47,7 +46,6 @@ class BatchJob(BaseModel):
         errorDetails: Optional[Dict] = None,
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
-        scoringJobCountCache: Optional[int] = None,
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
@@ -68,7 +66,6 @@ class BatchJob(BaseModel):
         self.errorDetails = errorDetails
         self.scorecardId = scorecardId
         self.scoreId = scoreId
-        self.scoringJobCountCache = scoringJobCountCache
 
     @classmethod
     def fields(cls) -> str:
@@ -91,7 +88,6 @@ class BatchJob(BaseModel):
             errorDetails
             scorecardId
             scoreId
-            scoringJobCountCache
         """
 
     @classmethod
@@ -134,9 +130,7 @@ class BatchJob(BaseModel):
         }
         """ % cls.fields()
         
-        logging.info(f"Executing BatchJob creation mutation: {mutation}")
         result = client.execute(mutation, {'input': input_data})
-        logging.info(f"BatchJob creation result: {result}")
         return cls.from_dict(result['createBatchJob'], client)
 
     @classmethod

@@ -392,6 +392,7 @@ class _BaseAPIClient:
         model_name: str,
         scoreId: Optional[str] = None,
         parameters: Optional[Dict] = None,
+        metadata: Optional[Dict] = None,
         max_batch_size: int = 3,
         **kwargs
     ) -> Tuple['ScoringJob', 'BatchJob']:
@@ -400,25 +401,38 @@ class _BaseAPIClient:
         from .models.batch_job import BatchJob
 
         logging.info(f"Starting batch_scoring_job with itemId={itemId}, scorecardId={scorecardId}, accountId={accountId}")
+        if parameters:
+            logging.info(f"Received parameters: {parameters}")
+        if metadata:
+            logging.info(f"Received metadata: {metadata}")
 
         # First check all batch jobs to help debug
         all_jobs_query = """
         query GetAllBatchJobs(
             $accountId: String!,
-            $scorecardId: String!
+            $scorecardId: String!,
+            $modelProvider: String!,
+            $modelName: String!
         ) {
             listBatchJobs(
                 filter: {
                     accountId: { eq: $accountId },
-                    scorecardId: { eq: $scorecardId }
+                    scorecardId: { eq: $scorecardId },
+                    modelProvider: { eq: $modelProvider },
+                    modelName: { eq: $modelName }
                 }
             ) {
                 items {
                     id
-                    totalRequests
+                    accountId
+                    type
+                    batchId
                     status
                     modelProvider
                     modelName
+                    totalRequests
+                    completedRequests
+                    failedRequests
                     scoringJobCountCache
                 }
             }
@@ -427,9 +441,10 @@ class _BaseAPIClient:
 
         all_jobs_result = self.execute(all_jobs_query, {
             'accountId': accountId,
-            'scorecardId': scorecardId
+            'scorecardId': scorecardId,
+            'modelProvider': model_provider,
+            'modelName': model_name
         })
-        logging.info(f"All existing batch jobs: {all_jobs_result.get('listBatchJobs', {}).get('items', [])}")
 
         # Look for an existing open batch job
         query = """
@@ -466,8 +481,6 @@ class _BaseAPIClient:
             'modelProvider': model_provider,
             'modelName': model_name
         })
-        logging.info(f"Looking for open batch jobs with: accountId={accountId}, scorecardId={scorecardId}, modelProvider={model_provider}, modelName={model_name}")
-        logging.info(f"Found batch jobs: {result.get('listBatchJobs', {}).get('items', [])}")
 
         # Find existing batch or create new one
         batch_job = None
@@ -477,38 +490,46 @@ class _BaseAPIClient:
             total_requests = batch.get('totalRequests')
             # If totalRequests is None or less than max_batch_size, use this batch
             if total_requests is None or total_requests < max_batch_size:
-                logging.info(f"Found usable open batch: {batch}")
                 batch_job = BatchJob.get_by_id(batch['id'], self)
                 break
 
         if not batch_job:
             logging.info("No usable open batch found, creating new one")
+            create_params = {
+                'accountId': accountId,
+                'type': 'MultiStepScore',
+                'modelProvider': model_provider,
+                'modelName': model_name,
+                'parameters': parameters or {},
+                'scorecardId': scorecardId,
+                'scoreId': scoreId,
+                'scoringJobCountCache': 0,  # Initialize cache to 0
+            }
+            # Don't include status in kwargs since we set it explicitly
+            kwargs_without_status = {k: v for k, v in kwargs.items() if k != 'status'}
+            create_params.update(kwargs_without_status)
+            create_params['status'] = 'OPEN'  # Always set status to OPEN for new batch jobs
+            
             batch_job = BatchJob.create(
                 client=self,
-                accountId=accountId,
-                type='MultiStepScore',
-                modelProvider=model_provider,
-                modelName=model_name,
-                parameters=parameters or {},
-                scorecardId=scorecardId,
-                scoreId=scoreId,
-                status='OPEN',
-                scoringJobCountCache=0,  # Initialize cache to 0
-                **kwargs
+                **create_params
             )
             logging.info(f"Created new batch job: {batch_job.id}")
 
         # Create new scoring job with batch ID
         logging.info(f"Creating scoring job for batch {batch_job.id}")
+        
+        # Create scoring job with metadata
         scoring_job = ScoringJob.create(
             client=self,
             accountId=accountId,
             scorecardId=scorecardId,
             itemId=itemId,
             scoreId=scoreId,
-            batchId=batch_job.id,  # Link to batch job at creation
+            batchId=batch_job.id,
             parameters=parameters or {},
-            **kwargs
+            metadata=metadata,  # Pass metadata directly
+            status='PENDING'
         )
         logging.info(f"Created scoring job: {scoring_job.id}")
 
