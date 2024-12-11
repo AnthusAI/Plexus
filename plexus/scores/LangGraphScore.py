@@ -517,7 +517,7 @@ class LangGraphScore(Score, LangChainUser):
                     attributes[attr_name] = attr_type
 
             # Add fields from the node's output mapping
-            if hasattr(instance.parameters, 'output'):
+            if hasattr(instance.parameters, 'output') and instance.parameters.output is not None:
                 logging.info(f"Adding output fields from node {instance.__class__.__name__}: {instance.parameters.output}")
                 for alias, original in instance.parameters.output.items():
                     if original in attributes:
@@ -527,7 +527,7 @@ class LangGraphScore(Score, LangChainUser):
                         logging.warning(f"Original field '{original}' not found for node output alias '{alias}'")
 
         # Then handle output aliases from the main LangGraphScore parameters
-        if hasattr(self.parameters, 'output'):
+        if hasattr(self.parameters, 'output') and self.parameters.output is not None:
             logging.info(f"Adding score output fields: {self.parameters.output}")
             for alias, original in self.parameters.output.items():
                 if original in attributes:
