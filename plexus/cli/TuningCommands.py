@@ -44,16 +44,12 @@ def get_id_file_path(output_dir, file_type):
 @click.option('--score-name', help='The name of the score to generate JSON-L for. If not provided, all scores will be processed.')
 @click.option('--maximum-number', type=int, default=100, help='Maximum number of samples, total.')
 @click.option('--train-ratio', type=float, default=0.8, help='Ratio of training samples to total samples.')
-@click.option('--generate-completions', is_flag=True, help='Generate completions using an LLM.')
-@click.option('--completion-model', default='gpt-4o-mini-2024-07-18', help='The model to use for generating completions.')
-@click.option('--retry-mismatches', is_flag=True, help='Retry when generated answer does not match the label.')
 @click.option('--clean-existing', is_flag=True, help='Clean existing JSON-L files before generating new ones.')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 @click.option('--threads', type=int, default=20, help='Number of threads to use.')
 @click.option('--verbose', is_flag=True, help='Verbose output.')
 def generate_examples(scorecard_name, score_name,
-                      maximum_number, train_ratio, generate_completions,
-                      completion_model, retry_mismatches, clean_existing, fresh, verbose, threads):
+                      maximum_number, train_ratio, clean_existing, fresh, verbose, threads):
     """
     Generate JSON-L files that include a specified number of examples, using the prompt templates
     from the score configuration combined with data and ground-truth labels.
@@ -66,12 +62,6 @@ def generate_examples(scorecard_name, score_name,
     :type maximum_number: int
     :param train_ratio: Ratio of training samples to total samples.
     :type train_ratio: float
-    :param generate_completions: Generate completions using an LLM.
-    :type generate_completions: bool
-    :param completion_model: The model to use for generating completions.
-    :type completion_model: str
-    :param retry_mismatches: Retry when generated answer does not match the label.
-    :type retry_mismatches: bool
     :param verbose: Verbose output.
     :type verbose: bool
     """
@@ -156,155 +146,46 @@ def generate_examples(scorecard_name, score_name,
         nodes = score_instance.get_prompt_templates()
         logging.info(f"Nodes: {nodes}")
 
-        def process_row(scorecard_name, row, score_instance, score_configuration, generate_completions, completion_model, retry_mismatches, verbose):
+        def process_row(scorecard_name, row, score_instance, score_configuration):
             # Get the original user message from the score configuration
             user_message = score_instance.parameters.graph[0]['user_message']
-            
-            def generate_completion_with_retry(score_instance, row, correct_answer, max_attempts=5):
-                # Strip ending punctuation from the correct answer
-                cleaned_answer = re.sub(r'[.,?!]+$', '', correct_answer.strip())
-                hint = f"\n\n<hint>The correct answer is: \"{cleaned_answer}\"</hint>"    
 
-                # Create a temporary copy of the score instance for generating completions
-                score_class = score_instance.__class__
-                temp_score_configuration = score_configuration.copy()
-                temp_score_configuration['graph'][0]['user_message'] = user_message + hint
-                temp_score_instance = score_class(**temp_score_configuration)
-
-                logging.info(f"System message: {temp_score_instance.parameters.graph[0]['system_message']}")
-                logging.info(f"User message: {temp_score_instance.parameters.graph[0]['user_message']}")
-                logging.info(f"Hint: {hint}")
-
-                for attempt in range(max_attempts):
-                    # Adjust temperature based on the attempt number
-                    # temperature = min(0.2 * attempt, 1.0)
-                    # temp_score_instance.parameters.graph[0]['model_provider'].temperature = temperature
-
-                    # Use the predict method of the Score class
-                    result = temp_score_instance.predict(context=None, model_input=Score.Input(text=row['text']))
-                    if re.sub(r'[.,?!]+$', '', result[0].value.strip()).lower() == cleaned_answer.lower():
-                        
-                        # Use the example_refinement_template to refine the answer, if there is one.
-                        example_refinement_nodes = score_instance.get_example_refinement_templates()
-                        if example_refinement_nodes and example_refinement_nodes[0]:
-                            model = ChatOpenAI(model_name=completion_model)
-                            class CompletionOutputParser(BaseOutputParser[dict]):
-                                def parse(self, output: str) -> dict:
-                                    def extract_last_word(text):
-                                        cleaned_text = re.sub(r'[^\w\s]', '', text)
-                                        words = cleaned_text.split()
-                                        return words[-1] if words else ""
-                                    def extract_last_line(text):
-                                        lines = text.split("\n")
-                                        return lines[-1] if lines else ""
-                                    def extract_first_word(text):
-                                        cleaned_text = re.sub(r'[^\w\s]', '', text)
-                                        words = cleaned_text.split()
-                                        return words[0] if words else ""
-                                    def extract_first_line(text):
-                                        lines = text.split("\n")
-                                        return lines[0] if lines else ""
-                                    return {
-                                        "first_word": extract_first_word(output),
-                                        "first_line": extract_first_line(output),
-                                        "last_word": extract_last_word(output),
-                                        "last_line": extract_last_line(output),
-                                        "completion": output.strip(),
-                                    }
-                            output_parser = CompletionOutputParser()
-                            logging.info(f"Refining completion with template: {example_refinement_nodes}")
-                            logging.info(f"Raw completion: {result[0].explanation}")
-                            prompt = PromptTemplate(template=example_refinement_nodes[0], input_variables=["reformat"])
-                            refinement_chain = prompt | model | output_parser
-                            refined_result = refinement_chain.invoke({"reformat": result[0].explanation})
-                            refined_result['completion'] = refined_result['completion'].replace('\n\n', '\n').strip()
-
-                            # Remove quotes from the last line of the refined completion
-                            lines = refined_result['completion'].split('\n')
-                            last_line = lines[-1].strip()
-                            if last_line.startswith('"') and last_line.endswith('"'):
-                                lines[-1] = last_line[1:-1]
-                            refined_result['completion'] = '\n'.join(lines)
-
-                            original_panel = Panel(
-                                result[0].explanation,
-                                title="Original Completion",
-                                border_style="royal_blue1",
-                                expand=False,
-                                width=100
-                            )
-                            refined_panel = Panel(
-                                refined_result['completion'],
-                                title="Refined Completion",
-                                border_style="magenta1",
-                                expand=False,
-                                width=100
-                            )
-                            print(Columns([original_panel, refined_panel]))
-
-                            if (refined_result['last_word'].lower() == result[0].value.strip().lower()) or \
-                                (refined_result['last_line'].lower() == result[0].value.strip().lower()) or \
-                                (refined_result['last_line'].lower() in result[0].explanation.strip().lower().split('\n')[-1]):
-                                if verbose:
-                                    logging.info(f"Refined answer '{refined_result['completion']}' matches original answer '{result[0].value}'.")
-                                return refined_result['completion']
-                            else:
-                                if verbose:
-                                    logging.info(f"Refined answer '{refined_result['answer']}' does not match original answer '{result[0].value}'. Skipping.")
-                                return None
-
-                        return result[0].explanation
-
-                    if not retry_mismatches:
-                        if verbose:
-                            logging.info(f"Generated answer '{result[0].value}' does not match correct answer '{correct_answer}'. Skipping.")
-                        return None
-
-                    if verbose:
-                        logging.info(f"Attempt {attempt + 1}: Generated answer '{result[0].value}' "
-                                     f"does not match correct answer '{correct_answer}'.")
+            if 'completion_template' in score_instance.parameters.graph[0]:
+                labels = row.copy()
                 
-                logging.warning(f"Failed to generate matching completion after {max_attempts} attempts. "
-                                f"Skipping item.")
-                return None
-
-            if generate_completions:
-                
-                # Determine the correct score name
-                score_name = score_instance.parameters.score_name
-                if hasattr(score_instance.parameters, 'label_field') and score_instance.parameters.label_field:
-                    score_name = f"{score_name} {score_instance.get_label_score_name()}"
-
-                completion = generate_completion_with_retry(score_instance, row, row[score_name])
-                if completion is None:
-                    return None
-            else:
-
-                if 'completion_template' in score_instance.parameters.graph[0]:
-                    labels = row.copy()
-                    
-                    if 'massage_labels' in score_instance.parameters.graph[0]:
-                        massage_labels_code = score_instance.parameters.graph[0]['massage_labels']
-                        massage_labels_func = f"""
+                if 'massage_labels' in score_instance.parameters.graph[0]:
+                    massage_labels_code = score_instance.parameters.graph[0]['massage_labels']
+                    massage_labels_func = f"""
 def massage_labels(labels):
-    print("Executing massage_labels function")
-{textwrap.indent(massage_labels_code, '    ')}
-"""
-                        local_vars = {}
-                        exec(massage_labels_func, local_vars)
-                        labels = local_vars['massage_labels'](labels)
-                    
-                    prompt = PromptTemplate(
-                        input_types     = {"labels" : dict},
-                        input_variables = ["labels"],
-                        template        = score_instance.parameters.graph[0]['completion_template'])
-                    completion = prompt.format(labels=labels).strip()
-                    completion = re.sub(r'\s+$', '', completion)
-                else:
-                    completion = row[score_instance.get_label_score_name()]
-                logging.info(f"Completion: {completion}")
+    # Debug prints before transformation
+    print("\\nBefore massage:")
+    print(f"Good Call = {{labels.get('Good Call')}}")
+    print(f"Good Call comment = {{labels.get('Good Call comment')}}")
+    print(f"Non-Qualified Reason = {{labels.get('Non-Qualified Reason')}}")
+    print(f"Bad Call Reason = {{labels.get('Bad Call Reason')}}")
 
-            # Construct the messages for the JSON-L file without the hint
+{textwrap.indent(massage_labels_code, '    ')}
+
+    # Debug prints after transformation
+    print("\\nAfter massage:")
+    print(f"Bad Call Reason = {{labels.get('Bad Call Reason')}}")
+    return labels
+"""
+                    local_vars = {}
+                    exec(massage_labels_func, local_vars)
+                    labels = local_vars['massage_labels'](labels)
+                
+                prompt = PromptTemplate(
+                    input_types     = {"labels" : dict},
+                    input_variables = ["labels"],
+                    template        = score_instance.parameters.graph[0]['completion_template'])
+                completion = prompt.format(labels=labels).strip()
+                completion = re.sub(r'\s+$', '', completion)
+            else:
+                completion = row[score_instance.get_label_score_name()]
+            logging.info(f"Completion: {completion}")
+
+            # Construct the messages for the JSON-L file
             messages = [
                 {"role": "system", "content": score_instance.parameters.graph[0]['system_message']},
                 {"role": "user", "content": PromptTemplate.from_template(user_message, template_format = "jinja2").format(**{"text": row['text']})},
@@ -317,11 +198,7 @@ def massage_labels(labels):
         process_row_partial = partial(
             process_row,
             score_instance=score_instance,
-            score_configuration=score_configuration,
-            generate_completions=generate_completions,
-            completion_model=completion_model,
-            retry_mismatches=retry_mismatches,
-            verbose=verbose
+            score_configuration=score_configuration
         )
 
         train_file = open(train_file_path, "a")
@@ -383,6 +260,28 @@ def massage_labels(labels):
             val_id_file.close()
 
         logging.info(f"Generated JSON-L and ID files in {output_dir}")
+
+        # After processing all files, before the final logging messages:
+        completion_counts = {}
+        for file_path in [train_file_path, val_file_path]:
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    for line in f:
+                        entry = json.loads(line)
+                        completion = entry['messages'][-1]['content'].replace('\n', '\\n')
+                        completion_counts[completion] = completion_counts.get(completion, 0) + 1
+        
+        if completion_counts:
+            max_count = max(completion_counts.values())
+            max_label_length = max(len(label) for label in completion_counts.keys())
+            scale_factor = 50 / max_count  # Scale to max width of 50 characters
+            
+            logging.info("\nCompletion Distribution:")
+            for completion, count in sorted(completion_counts.items(), 
+                                         key=lambda x: (-x[1], x[0])):
+                bar_length = int(count * scale_factor)
+                bar = '█' * bar_length
+                logging.info(f"{completion:<{max_label_length}} | {bar} ({count})")
 
     logging.info("Finished processing all scores.")
 
