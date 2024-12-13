@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, Type
+from typing import Dict, Any, Optional, Type, ClassVar
 import nltk
 from types import FunctionType
 import pydantic
@@ -33,7 +33,7 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
         after: Optional[str]
 
     class SlicingOutputParser(BaseOutputParser[dict]):
-        FUZZY_MATCH_SCORE_CUTOFF = 70
+        FUZZY_MATCH_SCORE_CUTOFF: ClassVar[int] = 70
         text: str = Field(...)
 
         def __init__(self, *args, **kwargs):
