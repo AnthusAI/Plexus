@@ -346,11 +346,13 @@ class Scorecard:
                 })
                 logging.info(f"Processed score: {score_name} (ID: {score_id})")
 
-                # Queue up dependent scores
+                # Check if any waiting scores can now be processed
+                # Only check scores that directly depend on this score
                 for waiting_score_id, waiting_score_info in dependency_graph.items():
-                    if waiting_score_id not in results_by_score_id and all(dep in results_by_score_id for dep in waiting_score_info['deps']):
-                        await processing_queue.put(waiting_score_id)
-                        logging.info(f"Added score to queue as dependencies are met: {waiting_score_info['name']}")
+                    if score_id in waiting_score_info['deps']:  # Only check if this score is a dependency
+                        if waiting_score_id not in results_by_score_id and \
+                           all(dep in results_by_score_id for dep in waiting_score_info['deps']):
+                            await processing_queue.put(waiting_score_id)
 
             except BatchProcessingPause as e:
                 logging.info(f"Score {score_name} paused for batch processing (thread_id: {e.thread_id})")

@@ -7,6 +7,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from plexus.scores.nodes.BaseNode import BaseNode
 from plexus.CustomLogging import logging
+from plexus.utils.dict_utils import truncate_dict_strings
 from rapidfuzz import process, fuzz
 from time import sleep
 
@@ -20,6 +21,7 @@ class MultiClassClassifier(BaseNode):
         fuzzy_match_threshold: float = Field(default=0.8)
         valid_classes: List[str] = Field(default_factory=list)
         explanation_message: Optional[str] = None
+        explanation_model: Optional[Dict[str, Any]] = None
         maximum_retry_count: int = Field(default=3, description="Maximum number of retries for classification")
         parse_from_start: Optional[bool] = False
 
@@ -46,11 +48,12 @@ class MultiClassClassifier(BaseNode):
 
         def __init__(self, valid_classes: List[str], fuzzy_match: bool = False, 
                      fuzzy_match_threshold: float = 0.8, parse_from_start: bool = False):
-            super().__init__()
-            self.valid_classes = valid_classes
-            self.fuzzy_match = fuzzy_match
-            self.fuzzy_match_threshold = fuzzy_match_threshold
-            self.parse_from_start = parse_from_start
+            super().__init__(
+                valid_classes=valid_classes,
+                fuzzy_match=fuzzy_match,
+                fuzzy_match_threshold=fuzzy_match_threshold,
+                parse_from_start=parse_from_start
+            )
 
         def parse(self, output: str) -> Dict[str, Any]:
             # Clean the output (keep spaces for multi-word matching)
@@ -102,8 +105,9 @@ class MultiClassClassifier(BaseNode):
         parse_from_start = self.parameters.parse_from_start
 
         def classifier_node(state):
-            logging.info(f"Classifier node state: {state.model_dump()}")
+            logging.info(f"Classifier node state: {truncate_dict_strings(state.model_dump(), max_length=80)}")
             initial_prompt = prompt_templates[0]
+            logging.info(f"Initial prompt messages: {initial_prompt.messages}")
             retry_count = 0 if state.retry_count is None else state.retry_count
             use_existing_completion = True
 
@@ -112,17 +116,35 @@ class MultiClassClassifier(BaseNode):
                 initial_prompt.messages[0],
                 initial_prompt.messages[1].format(**state.dict())
             ]
+            chat_history_dicts = [
+                chat_history[0].__dict__['prompt'].__dict__,
+                chat_history[1].__dict__
+            ]
+            logging.info(f"Formatted chat history: {truncate_dict_strings(chat_history_dicts, max_length=80)}")
 
             while retry_count < self.parameters.maximum_retry_count:
-                if use_existing_completion and hasattr(state, 'completion'):
+                if use_existing_completion and hasattr(state, 'completion') and state.completion is not None:
                     current_completion = state.completion
+                    logging.info(f"Using existing completion: {current_completion}")
                 else:
                     # Create a ChatPromptTemplate from the current chat history
                     chat_prompt = ChatPromptTemplate.from_messages(chat_history)
+                    formatted_prompt = chat_prompt.format_prompt()
+                    messages = formatted_prompt.to_messages()
+                    message_dicts = [
+                        {
+                            'type': msg.type,
+                            'content': msg.content
+                        } for msg in messages
+                    ]
+                    logging.info(f"Formatted prompt messages: {truncate_dict_strings(message_dicts, max_length=80)}")
                     
                     # Invoke the model with the current chat history
-                    current_completion = model.invoke(chat_prompt.format_prompt().to_messages())
-                    current_completion = current_completion.content
+                    logging.info("About to invoke model...")
+                    response = model.invoke(formatted_prompt.to_messages())
+                    logging.info(f"Model response: {response}")
+                    current_completion = response.content
+                    logging.info(f"Extracted completion: {current_completion}")
 
                 # Parse the completion
                 result = self.ClassificationOutputParser(
@@ -139,13 +161,18 @@ class MultiClassClassifier(BaseNode):
                             AIMessage(content=current_completion),
                             HumanMessage(content=self.parameters.explanation_message)
                         ])
-                        explanation = model.invoke(explanation_prompt.format_prompt().to_messages())
+                        explanation_model = (
+                            self._initialize_model(self.parameters.explanation_model)
+                            if self.parameters.explanation_model
+                            else model
+                        )
+                        explanation = explanation_model.invoke(explanation_prompt.format_prompt().to_messages())
                         result["explanation"] = explanation.content
                     else:
                         result["explanation"] = current_completion
 
                     final_state = {**state.dict(), **result, "retry_count": retry_count}
-                    logging.debug(f"Classifier returning state: {final_state}")
+                    logging.debug(f"Classifier returning state: {truncate_dict_strings(final_state, max_length=80)}")
                     return final_state
 
                 # If we reach here, the classification was unknown, so we need to retry

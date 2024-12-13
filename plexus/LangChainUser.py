@@ -89,59 +89,61 @@ class LangChainUser:
         self.openai_callback = None
         self.model = self._initialize_model()
 
-    def _initialize_model(self) -> BaseLanguageModel:
+    def _initialize_model(self, custom_params: Optional[dict] = None) -> BaseLanguageModel:
         """
         Initialize and return the appropriate language model based on the configured provider.
 
-        This method sets up the specified language model with retry logic and callbacks
-        for token counting. It supports various model providers including OpenAI, Azure,
-        Amazon Bedrock, and Google Vertex AI.
+        Args:
+            custom_params (Optional[dict]): Optional dictionary of parameters to override the default ones
 
-        :return: An initialized BaseLanguageModel with retry logic and callbacks.
-        :raises ValueError: If an unsupported model provider is specified.
+        Returns:
+            BaseLanguageModel: An initialized model with retry logic and callbacks.
         """
-        max_tokens = self.parameters.max_tokens
+        # If custom parameters are provided, create a temporary combined parameters object
+        params = self.Parameters(**(custom_params or {})) if custom_params else self.parameters
+        max_tokens = params.max_tokens
 
-        if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
+        if params.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
             self.openai_callback = OpenAICallbackHandler()
             callbacks = [self.openai_callback, self.token_counter]
             
-            if self.parameters.model_provider == "AzureChatOpenAI":
+            if params.model_provider == "AzureChatOpenAI":
                 base_model = AzureChatOpenAI(
                     azure_endpoint=os.environ.get("AZURE_API_BASE"),
                     api_version=os.environ.get("AZURE_API_VERSION"),
                     api_key=os.environ.get("AZURE_API_KEY"),
-                    model=self.parameters.model_name,
-                    temperature=self.parameters.temperature,
+                    model=params.model_name,
+                    temperature=params.temperature,
                     max_tokens=max_tokens
                 )
             else:  # ChatOpenAI
                 base_model = ChatOpenAI(
-                    model=self.parameters.model_name,
+                    model=params.model_name,
                     api_key=os.environ.get("OPENAI_API_KEY"),
                     max_tokens=max_tokens,
-                    model_kwargs={"top_p": self.parameters.top_p},
-                    temperature=self.parameters.temperature
+                    model_kwargs={"top_p": params.top_p},
+                    temperature=params.temperature
                 )
-        elif self.parameters.model_provider == "BedrockChat":
+        elif params.model_provider == "BedrockChat":
             base_model = ChatBedrock(
-                model_id=self.parameters.model_name or "anthropic.claude-3-haiku-20240307-v1:0",
+                model_id=params.model_name or "anthropic.claude-3-haiku-20240307-v1:0",
                 model_kwargs={
-                    "temperature": self.parameters.temperature,
+                    "temperature": params.temperature,
                     "max_tokens": max_tokens
                 },
-                region_name=self.parameters.model_region or "us-east-1"
+                region_name=params.model_region or "us-east-1",
+                provider="anthropic"
             )
             callbacks = [self.token_counter]
-        elif self.parameters.model_provider == "ChatVertexAI":
+        elif params.model_provider == "ChatVertexAI":
             base_model = ChatVertexAI(
-                model=self.parameters.model_name or "gemini-1.5-flash-001",
-                temperature=self.parameters.temperature,
+                model=params.model_name or "gemini-1.5-flash-001",
+                temperature=params.temperature,
                 max_output_tokens=max_tokens
             )
             callbacks = [self.token_counter]
         else:
-            raise ValueError(f"Unsupported model provider: {self.parameters.model_provider}")
+            raise ValueError(f"Unsupported model provider: {params.model_provider}")
 
         return base_model.with_retry(
             retry_if_exception_type=(Exception,),
