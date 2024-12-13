@@ -334,7 +334,7 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
                 raise ValueError("PLEXUS_ACCOUNT_KEY not found in environment")
             metadata.update({
                 'account_key': account_key,
-                'scorecard_key': scorecard_class.name,
+                'scorecard_key': scorecard_class.key,
                 'score_name': score_name
             })
         prediction_result = score_instance.predict(
