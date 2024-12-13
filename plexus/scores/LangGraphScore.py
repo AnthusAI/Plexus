@@ -6,7 +6,6 @@ from types import FunctionType
 from typing import Type, Tuple, Literal, Optional, Any, TypedDict, List, Dict, Union
 from pydantic import BaseModel, ConfigDict, create_model, Field
 import concurrent.futures
-import aiosqlite
 import importlib
 import asyncio
 from os import getenv

@@ -60,8 +60,7 @@ setup(
         'datasets',
         'gensim',
         'watchtower',
-        'pyairtable',
-        'aiosqlite',
+        'pyairtable'
     ],
     dependency_links=[
         'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator',
