@@ -38,6 +38,7 @@ class YesOrNoClassifier(BaseNode):
 
     class Parameters(BaseNode.Parameters):
         explanation_message: Optional[str] = None
+        explanation_model: Optional[Dict[str, Any]] = None
         parse_from_start: Optional[bool] = False
         maximum_retry_count: int = Field(default=3, description="Maximum number of retries for classification")
 
@@ -104,7 +105,6 @@ class YesOrNoClassifier(BaseNode):
             result = executor.submit(run_chain).result()
 
             if result["classification"] != "unknown":
-                # Add the entire LLM response as explanation
                 explanation = result["explanation"]
 
                 if self.parameters.explanation_message:
@@ -115,11 +115,16 @@ class YesOrNoClassifier(BaseNode):
                             HumanMessage(content=self.parameters.explanation_message)
                         ]
                     )
-                    explanation_chain = explanation_messages | model
+                    explanation_model = (
+                        self._initialize_model(self.parameters.explanation_model)
+                        if self.parameters.explanation_model
+                        else model
+                    )
+                    explanation_chain = explanation_messages | explanation_model
                     detailed_explanation = explanation_chain.invoke({})
-                    explanation = detailed_explanation.content  # Overwrite with detailed explanation
+                    explanation = detailed_explanation.content
 
-                result["explanation"] = explanation  # Update the explanation in the result
+                result["explanation"] = explanation
 
             return {**state.dict(), **result, "retry_count": retry_count}
 

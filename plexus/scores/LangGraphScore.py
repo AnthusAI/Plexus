@@ -14,6 +14,7 @@ import json
 
 from plexus.LangChainUser import LangChainUser
 from plexus.scores.Score import Score
+from plexus.utils.dict_utils import truncate_dict_strings
 
 from langchain_community.callbacks import OpenAICallbackHandler
 
@@ -566,7 +567,7 @@ class LangGraphScore(Score, LangChainUser):
             logging.info("=== Output Aliasing Node Start ===")
             logging.info(f"Input state type: {type(state)}")
             logging.info(f"Input state fields: {state.model_fields.keys()}")
-            logging.info(f"Input state values: {state.model_dump()}")
+            logging.info(f"Input state values: {truncate_dict_strings(state.model_dump(), max_length=80)}")
             
             # Create a new dict with all current state values
             new_state = state.model_dump()
@@ -583,7 +584,7 @@ class LangGraphScore(Score, LangChainUser):
             combined_state = state.__class__(**new_state)
             logging.info(f"Output state type: {type(combined_state)}")
             logging.info(f"Output state fields: {combined_state.model_fields.keys()}")
-            logging.info(f"Output state values: {combined_state.model_dump()}")
+            logging.info(f"Output state values: {truncate_dict_strings(combined_state.model_dump(), max_length=80)}")
             logging.info("=== Output Aliasing Node End ===")
             return combined_state
             
@@ -812,7 +813,7 @@ class LangGraphScore(Score, LangChainUser):
                     config=thread
                 )
                 
-                logging.info(f"Final workflow result: {final_result}")
+                logging.info(f"Final workflow result: {truncate_dict_strings(final_result, max_length=80)}")
                 
                 # Create Score.Result from final state
                 if final_result:
