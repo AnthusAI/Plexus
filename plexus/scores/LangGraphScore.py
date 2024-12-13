@@ -55,12 +55,12 @@ class LangGraphScore(Score, LangChainUser):
 
     class GraphState(BaseModel):
         text: str
-        metadata: Optional[dict]
-        results: Optional[dict]
-        is_not_empty: Optional[bool]
-        value: Optional[str]
-        explanation: Optional[str]
-        reasoning: Optional[str]
+        metadata: Optional[dict] = None
+        results: Optional[dict] = None
+        is_not_empty: Optional[bool] = None
+        value: Optional[str] = None
+        explanation: Optional[str] = None
+        reasoning: Optional[str] = None
 
     def __init__(self, **parameters):
         """

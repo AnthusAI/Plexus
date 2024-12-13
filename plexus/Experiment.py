@@ -564,9 +564,18 @@ Total cost:       ${expenses['total_cost']:.6f}
             try:
                 score_result = scorecard_results[score_identifier]
 
-                # Use score_name instead of column_name/score_identifier
-                column_name = score_identifier
+                # Get the initial human label
+                score_name = score_result.parameters.name
                 human_label = str(human_labels.get(score_name, 'N/A')).lower().rstrip('.!?')
+                
+                # Apply overrides if available
+                if form_id in self.override_data:
+                    for override_question_name, correct_value in self.override_data[form_id].items():
+                        if str(override_question_name) in human_labels:
+                            logging.info(f"OVERRIDING human label for question '{override_question_name}' in form '{form_id}' from '{human_label}' to '{correct_value}'")
+                            human_label = str(correct_value).lower().rstrip('.!?')
+                            human_labels[str(override_question_name)] = correct_value
+
                 if human_label == 'nan':
                     human_label = ''
                 if human_label == 'n/a':
@@ -578,13 +587,6 @@ Total cost:       ${expenses['total_cost']:.6f}
                 human_label = ' '.join(human_label.strip().split())
                 if not score_result_value:
                     score_result_value = 'na'
-
-                # Apply overrides if available
-                if form_id in self.override_data:
-                    for override_question_name, correct_value in self.override_data[form_id].items():
-                        if str(override_question_name) in human_labels:
-                            logging.info(f"OVERRIDING human label for question '{override_question_name}' in form '{form_id}' from '{human_labels[str(override_question_name)]}' to '{correct_value}'")
-                            human_labels[str(override_question_name)] = correct_value
 
                 score_result.metadata['human_label'] = human_label
                 score_result.metadata['human_explanation'] = human_explanation
@@ -655,6 +657,10 @@ Total cost:       ${expenses['total_cost']:.6f}
 
     def generate_and_log_confusion_matrix(self, results, report_folder_path):
         for question in self.score_names():
+            # Sanitize the question name for use in filename
+            safe_question = question.replace('/', '_').replace('\\', '_').replace(':', '_')
+            safe_question = "".join(c for c in safe_question if c.isalnum() or c in "_- ")
+            
             y_true = []
             y_pred = []
             class_names = set()
@@ -690,13 +696,16 @@ Total cost:       ${expenses['total_cost']:.6f}
             plt.ylabel('True', fontsize=10)
             plt.tick_params(axis='both', which='major', labelsize=16)
 
-            cm_path = f"{report_folder_path}/confusion_matrix_{question.replace(' ', '_')}.png"
+            cm_path = f"{report_folder_path}/confusion_matrix_{safe_question}.png"
             plt.savefig(cm_path, bbox_inches='tight', dpi=600)
             plt.close()
 
             mlflow.log_artifact(cm_path)
 
     def create_performance_visualization(self, results, question, report_folder_path):
+        # Sanitize the question name for use in filename
+        safe_question = question.replace('/', '_').replace('\\', '_').replace(':', '_')
+        safe_question = "".join(c for c in safe_question if c.isalnum() or c in "_- ")
         
         true_labels = []
         pred_labels = []
@@ -743,10 +752,11 @@ Total cost:       ${expenses['total_cost']:.6f}
         plt.xticks(x, unique_labels, rotation=45, ha='right', fontsize=16)
         plt.tight_layout()
         
-        plt.savefig(f"{report_folder_path}/performance_{question.replace(' ', '_')}.png", bbox_inches='tight', dpi=600)
+        # Use the sanitized question name in the file path
+        plt.savefig(f"{report_folder_path}/performance_{safe_question}.png", bbox_inches='tight', dpi=600)
         plt.close()
         
-        mlflow.log_artifact(f"{report_folder_path}/performance_{question.replace(' ', '_')}.png")
+        mlflow.log_artifact(f"{report_folder_path}/performance_{safe_question}.png")
         
 class ConsistencyExperiment(Experiment):
     def __init__(self, *, number_of_times_to_sample_each_text, **kwargs):
