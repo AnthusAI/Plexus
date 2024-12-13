@@ -5,3 +5,4 @@ from .AgenticExtractor import AgenticExtractor
 from .MultiClassClassifier import MultiClassClassifier
 from .NumericClassifier import NumericClassifier
 from .Extractor import Extractor
+from .Classifier import Classifier

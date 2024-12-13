@@ -32,10 +32,12 @@ class Extractor(BaseNode, LangChainUser):
 
     class Parameters(BaseNode.Parameters):
         fuzzy_match_score_cutoff: int = Field(default=50, description="Cutoff score for fuzzy matching")
+        use_exact_matching: bool = Field(default=False, description="Use exact matching instead of sliding window approach")
 
     class ExtractionOutputParser(BaseOutputParser[dict]):
         FUZZY_MATCH_SCORE_CUTOFF: int = Field(...)
         text: str = Field(...)
+        use_exact_matching: bool = Field(default=False)
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
@@ -58,28 +60,50 @@ class Extractor(BaseNode, LangChainUser):
             
             if "No clear example" in output:
                 return {"extracted_text": output}
-            
-            # Use a sliding window approach to match longer sequences
-            window_size = len(output.split())
-            best_match = None
-            best_score = 0
-            
-            for i in range(len(self.text) - window_size + 1):
-                window = self.text[i:i+len(output)]
-                score = fuzz.ratio(output, window)
-                if score > best_score:
-                    best_score = score
-                    best_match = window
 
-            if best_match and best_score >= self.FUZZY_MATCH_SCORE_CUTOFF:
-                logging.info(f"Best match found with score {best_score}")
-                extracted_text = best_match
+            if self.use_exact_matching:
+                # Exact matching approach
+                if output in self.text:
+                    return {"extracted_text": output}
+                    
+                result = process.extractOne(
+                    output,
+                    [self.text],
+                    scorer=fuzz.partial_ratio,
+                    score_cutoff=self.FUZZY_MATCH_SCORE_CUTOFF
+                )
+                
+                if result:
+                    _, score, _ = result
+                    if score >= self.FUZZY_MATCH_SCORE_CUTOFF:
+                        extracted_text = output
+                    else:
+                        logging.warning(f"Low confidence match (score: {score}). Using original output.")
+                        extracted_text = output
+                else:
+                    logging.warning("No match found. Using original output.")
+                    extracted_text = output
             else:
-                logging.warning(f"No match found for output: '{output}'. Using the entire output.")
-                extracted_text = output
+                # Sliding window approach (default)
+                window_size = len(output.split())
+                best_match = None
+                best_score = 0
+                
+                for i in range(len(self.text) - window_size + 1):
+                    window = self.text[i:i+len(output)]
+                    score = fuzz.ratio(output, window)
+                    if score > best_score:
+                        best_score = score
+                        best_match = window
+
+                if best_match and best_score >= self.FUZZY_MATCH_SCORE_CUTOFF:
+                    logging.info(f"Best match found with score {best_score}")
+                    extracted_text = best_match
+                else:
+                    logging.warning(f"No match found for output: '{output}'. Using the entire output.")
+                    extracted_text = output
 
             logging.info(f"Extracted text: {extracted_text}")
-
             return {"extracted_text": extracted_text}
 
     def get_extractor_node(self) -> FunctionType:
@@ -94,7 +118,8 @@ class Extractor(BaseNode, LangChainUser):
             
             chain = prompt | model | self.ExtractionOutputParser(
                 FUZZY_MATCH_SCORE_CUTOFF=self.parameters.fuzzy_match_score_cutoff,
-                text=state.text
+                text=state.text,
+                use_exact_matching=self.parameters.use_exact_matching
             )
             return chain.invoke({
                 **state.dict()

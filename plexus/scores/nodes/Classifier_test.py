@@ -35,7 +35,8 @@ def turnip_classifier_config():
 @pytest.mark.asyncio
 async def test_classifier_detects_turnip_present(turnip_classifier_config):
     mock_model = AsyncMock()
-    mock_model.invoke = AsyncMock(return_value=AIMessage(content="yes"))
+    mock_response = AIMessage(content="yes")
+    mock_model.ainvoke = AsyncMock(return_value=mock_response)
     
     with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
                return_value=mock_model):
@@ -68,7 +69,8 @@ async def test_classifier_detects_turnip_present(turnip_classifier_config):
 @pytest.mark.asyncio
 async def test_classifier_detects_turnip_absent(turnip_classifier_config):
     mock_model = AsyncMock()
-    mock_model.invoke = AsyncMock(return_value=AIMessage(content="no"))
+    mock_response = AIMessage(content="no")
+    mock_model.ainvoke = AsyncMock(return_value=mock_response)
     
     with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
                return_value=mock_model):
@@ -101,11 +103,11 @@ async def test_classifier_detects_turnip_absent(turnip_classifier_config):
 @pytest.mark.asyncio
 async def test_classifier_succeeds_after_retry(turnip_classifier_config):
     mock_model = AsyncMock()
-    mock_model.invoke = AsyncMock()
-    mock_model.invoke.side_effect = [
+    responses = [
         AIMessage(content="Well, let me analyze this carefully..."),
         AIMessage(content="yes")
     ]
+    mock_model.ainvoke = AsyncMock(side_effect=responses)
     
     with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
                return_value=mock_model):
@@ -147,12 +149,12 @@ async def test_classifier_succeeds_after_retry(turnip_classifier_config):
 @pytest.mark.asyncio
 async def test_classifier_maximum_retries(turnip_classifier_config):
     mock_model = AsyncMock()
-    mock_model.invoke = AsyncMock()
-    mock_model.invoke.side_effect = [
+    responses = [
         AIMessage(content="Let me think about it..."),
         AIMessage(content="I need to analyze this further..."),
         AIMessage(content="Well, considering the text...")
     ]
+    mock_model.ainvoke = AsyncMock(side_effect=responses)
     
     with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
                return_value=mock_model):
@@ -190,13 +192,15 @@ async def test_classifier_maximum_retries(turnip_classifier_config):
         assert final_state["classification"] == "unknown"
         assert final_state["explanation"] == "Maximum retries reached"
         assert final_state["retry_count"] == 3
-        assert mock_model.invoke.call_count == 3
+        assert mock_model.ainvoke.call_count == 3
 
 @pytest.mark.asyncio
 async def test_classifier_parse_from_end_default(turnip_classifier_config):
     mock_model = AsyncMock()
-    # Response contains both 'yes' and 'no', with 'no' at the end
-    mock_model.invoke = AsyncMock(return_value=AIMessage(content="Yes I see it here, but no is my final answer"))
+    mock_response = AIMessage(
+        content="Yes I see it here, but no is my final answer"
+    )
+    mock_model.ainvoke = AsyncMock(return_value=mock_response)
     
     with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
                return_value=mock_model):
@@ -228,11 +232,11 @@ async def test_classifier_parse_from_end_default(turnip_classifier_config):
 @pytest.mark.asyncio
 async def test_classifier_parse_from_start_explicit(turnip_classifier_config):
     mock_model = AsyncMock()
-    # Response contains both 'yes' and 'no', with 'yes' at the start
-    mock_model.invoke = AsyncMock(return_value=AIMessage(
+    mock_response = AIMessage(
         content="Yes is my answer, even though you might think no when you first look"
-    ))
-
+    )
+    mock_model.ainvoke = AsyncMock(return_value=mock_response)
+    
     with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
                return_value=mock_model):
         # Explicitly set parse_from_start to True
