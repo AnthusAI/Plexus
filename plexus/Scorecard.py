@@ -316,7 +316,7 @@ class Scorecard:
                     ),
                     timeout=1200
                 )
-                results_by_score_id[score_id] = score_result[0]  # Store result by score ID
+                results_by_score_id[score_id] = score_result[0]
                 results.append({
                     'id': score_id,
                     'name': score_name,
@@ -325,10 +325,12 @@ class Scorecard:
                 logging.info(f"Processed score: {score_name} (ID: {score_id})")
 
                 # Check if any waiting scores can now be processed
+                # Only check scores that directly depend on this score
                 for waiting_score_id, waiting_score_info in dependency_graph.items():
-                    if waiting_score_id not in results_by_score_id and all(dep in results_by_score_id for dep in waiting_score_info['deps']):
-                        await processing_queue.put(waiting_score_id)
-                        logging.info(f"Added score to queue as dependencies are met: {waiting_score_info['name']} (ID: {waiting_score_id})")
+                    if score_id in waiting_score_info['deps']:  # Only check if this score is a dependency
+                        if waiting_score_id not in results_by_score_id and \
+                           all(dep in results_by_score_id for dep in waiting_score_info['deps']):
+                            await processing_queue.put(waiting_score_id)
 
             except asyncio.TimeoutError:
                 logging.error(f"Timeout processing score: {score_name} (ID: {score_id})")
