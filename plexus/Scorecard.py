@@ -213,7 +213,7 @@ class Scorecard:
                 metadata = metadata or {}
                 metadata.update({
                     'account_key': account_key,
-                    'scorecard_key': self.name,
+                    'scorecard_key': scorecard,
                     'score_name': score
                 })
 
