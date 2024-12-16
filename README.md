@@ -297,3 +297,33 @@ When you make changes to the Amplify schema, you will usually need to update the
 ## TypeScript Type Checking
 
     npx tsc --noEmit --pretty --diagnostics
+
+## Testing
+
+### Frontend Tests
+Run Jest tests:
+```bash
+npm test
+```
+
+For development with watch mode:
+```bash
+npm run test:watch
+```
+
+For test coverage report:
+```bash
+npm run test:coverage
+```
+
+### Component Tests
+Run Storybook tests:
+```bash
+npm run test:storybook
+```
+
+### Python Tests
+Run pytest:
+```bash
+pytest plexus_dashboard/
+```
