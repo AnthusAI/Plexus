@@ -9,7 +9,11 @@
     "lint": "next lint",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "test-storybook": "test-storybook"
+    "test-storybook": "test-storybook",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:storybook": "test-storybook"
   },
   "dependencies": {
     "@aws-amplify/ui-react": "^6.1.13",
@@ -64,6 +68,10 @@
   "devDependencies": {
     "@aws-amplify/backend": "^1.8.0",
     "@aws-amplify/backend-cli": "^1.2.6",
+    "@babel/core": "^7.26.0",
+    "@babel/preset-env": "^7.26.0",
+    "@babel/preset-react": "^7.26.3",
+    "@babel/preset-typescript": "^7.26.0",
     "@chromatic-com/storybook": "^1.9.0",
     "@jest/globals": "^29.7.0",
     "@next/eslint-plugin-next": "^15.0.3",
@@ -77,6 +85,7 @@
     "@storybook/react": "^8.3.5",
     "@storybook/test": "^8.3.6",
     "@storybook/test-runner": "^0.19.1",
+    "@swc/jest": "^0.2.37",
     "@testing-library/jest-dom": "^6.6.2",
     "@testing-library/react": "^14.3.1",
     "@types/jest": "^29.5.14",
@@ -93,6 +102,7 @@
     "eslint": "^9.14.0",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^5.0.0",
+    "jest-environment-jsdom": "^29.7.0",
     "postcss": "^8.4.47",
     "storybook": "^8.3.5",
     "storybook-dark-mode": "^4.0.2",
