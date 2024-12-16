@@ -103,4 +103,42 @@ class Scorecard(BaseModel):
         if not items:
             raise ValueError(f"No scorecard found with name: {name}")
         logger.debug(f"Found scorecard: {items[0]['name']} ({items[0]['id']})")
-        return cls.from_dict(items[0], client) 
+        return cls.from_dict(items[0], client)
+
+    @classmethod
+    def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'Scorecard':
+        logger.debug(f"Looking up scorecard by ID: {id}")
+        query = """
+        query GetScorecardById($id: ID!) {
+            getScorecard(id: $id) {
+                %s
+            }
+        }
+        """ % cls.fields()
+
+        result = client.execute(query, {'id': id})
+        if not result.get('getScorecard'):
+            raise ValueError(f"No scorecard found with ID: {id}")
+        logger.debug(f"Found scorecard: {result['getScorecard']['name']}")
+        return cls.from_dict(result['getScorecard'], client)
+
+    @classmethod
+    def get_by_external_id(cls, external_id: str, client: _BaseAPIClient) -> 'Scorecard':
+        logger.debug(f"Looking up scorecard by external ID: {external_id}")
+        query = """
+        query GetScorecardByExternalId($externalId: String!) {
+            listScorecards(filter: {externalId: {eq: $externalId}}) {
+                items {
+                    %s
+                }
+            }
+        }
+        """ % cls.fields()
+
+        result = client.execute(query, {'externalId': external_id})
+        items = result['listScorecards']['items']
+        if not items:
+            raise ValueError(f"No scorecard found with external ID: {external_id}")
+        logger.debug(f"Found scorecard: {items[0]['name']} ({items[0]['id']})")
+        return cls.from_dict(items[0], client)
+  
