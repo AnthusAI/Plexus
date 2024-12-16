@@ -38,6 +38,7 @@ from plexus_dashboard.api.client import PlexusDashboardClient
 from plexus_dashboard.api.models.account import Account
 from plexus_dashboard.api.models.scoring_job import ScoringJob
 
+from plexus.utils.dict_utils import truncate_dict_strings
 class BatchProcessingPause(Exception):
     """Exception raised when execution should pause for batch processing."""
     def __init__(self, thread_id, state, batch_job_id=None, message=None):
@@ -823,7 +824,7 @@ class LangGraphScore(Score, LangChainUser):
                         value=final_result.get('value', None),
                         metadata=model_input.metadata
                     )
-                    logging.info(f"Returning result: {result}")
+                    logging.info(f"Returning result: {truncate_dict_strings(result, max_length=80)}")
                     return [result]  # Return as single-item list
                 else:
                     logging.warning("No final result from workflow")
