@@ -488,8 +488,8 @@ export default function EvaluationsDashboard(): JSX.Element {
                 JSON.stringify(Evaluation.errorDetails) : 
             undefined,
         data: {
-            accuracy: Evaluation.accuracy ?? 0,
-            metrics: metrics,  // Use the parsed metrics array
+            accuracy: typeof Evaluation.accuracy === 'number' ? Evaluation.accuracy : null,
+            metrics: metrics,
             processedItems: Evaluation.processedItems || 0,
             totalItems: Evaluation.totalItems || 0,
             progress,
