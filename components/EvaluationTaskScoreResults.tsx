@@ -20,7 +20,7 @@ interface FilterState {
 
 export interface EvaluationTaskScoreResultsProps {
   results: Schema['ScoreResult']['type'][]
-  accuracy: number
+  accuracy: number | null
   selectedPredictedValue?: string | null
   selectedActualValue?: string | null
   onResultSelect?: (result: Schema['ScoreResult']['type']) => void
@@ -130,7 +130,6 @@ export function EvaluationTaskScoreResults({
     setFilters(prev => ({
       ...prev,
       showCorrect: prev.showCorrect === isCorrect ? null : isCorrect,
-      // Clear other filters when selecting correct/incorrect
       predictedValue: null,
       actualValue: null
     }))
@@ -217,7 +216,7 @@ export function EvaluationTaskScoreResults({
       </div>
       <div className="flex-none mb-4">
         <AccuracyBar 
-          accuracy={filteredAccuracy} 
+          accuracy={filters.showCorrect !== null ? filteredAccuracy : accuracy} 
           onSegmentClick={handleAccuracySegmentClick}
         />
       </div>
