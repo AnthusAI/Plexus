@@ -221,21 +221,34 @@ class _BaseAPIClient:
         return account.id
     
     def _resolve_scorecard_id(self, override_key: Optional[str] = None) -> Optional[str]:
-        """Get scorecard ID, resolving from key if needed"""
-        key = override_key or self.context.scorecard_key
-        if not key:
+        """Get scorecard ID, trying key, external ID, and name lookup"""
+        identifier = override_key or self.context.scorecard_key
+        if not identifier:
             return None
-            
-        cache_key = f"scorecard:{key}"
+        
+        # Check cache first
+        cache_key = f"scorecard:{identifier}"
         if cache_key in self._cache:
             return self._cache[cache_key]
-            
+        
         from .models.scorecard import Scorecard
-        scorecard = Scorecard.get_by_key(key, self)
-        self._cache[cache_key] = scorecard.id
-        if not override_key:
-            self.context.scorecard_id = scorecard.id
-        return scorecard.id
+        
+        # Try each lookup method in sequence
+        for lookup_method in [
+            lambda: Scorecard.get_by_key(identifier, self),
+            lambda: Scorecard.get_by_external_id(identifier, self),
+            lambda: Scorecard.get_by_name(identifier, self)
+        ]:
+            try:
+                scorecard = lookup_method()
+                self._cache[cache_key] = scorecard.id
+                if not override_key:
+                    self.context.scorecard_id = scorecard.id
+                return scorecard.id
+            except (ValueError, Exception):
+                continue
+            
+        raise ValueError(f"Could not find scorecard with identifier: {identifier}")
     
     def _resolve_score_id(self) -> Optional[str]:
         """Get score ID, resolving from name if needed"""
@@ -393,7 +406,7 @@ class _BaseAPIClient:
         scoreId: Optional[str] = None,
         parameters: Optional[Dict] = None,
         metadata: Optional[Dict] = None,
-        max_batch_size: int = 3,
+        max_batch_size: int = 20,
         **kwargs
     ) -> Tuple['ScoringJob', 'BatchJob']:
         """Create or add to a batch scoring job."""
