@@ -48,7 +48,6 @@ class YesOrNoClassifier(BaseNode):
         def parse(self, output: str) -> Dict[str, Any]:
             cleaned_output = ''.join(char.lower() for char in output if char.isalnum() or char.isspace())
             words = cleaned_output.split()
-            logging.info(f"Words: {words}")
             classification = "unknown"
             
             word_iterator = words if self.parse_from_start else reversed(words)
