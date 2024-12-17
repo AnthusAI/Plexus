@@ -14,7 +14,13 @@ def truncate_dict_strings_inner(
             return [truncate_value(item) for item in value]
         return value
 
-    return {key: truncate_value(value) for key, value in data.items()}
+    if isinstance(data, dict):
+        return {key: truncate_value(value) for key, value in data.items()}
+    try:
+        dict_data = dict(data)
+        return {key: truncate_value(value) for key, value in dict_data.items()}
+    except (TypeError, ValueError):
+        return f"<Non-dictionary value of type {type(data).__name__}>"
 
 def truncate_dict_strings(
     data: Union[Dict[str, Any], List[Dict[str, Any]]],
