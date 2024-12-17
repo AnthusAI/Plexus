@@ -366,13 +366,16 @@ class Classifier(BaseNode):
                     }
                 )
 
-                logging.info(f"Created batch job with ID: {batch_job.id}")
+                if batch_job:
+                    logging.info(f"Created batch job with ID: {batch_job.id}")
+                else:
+                    logging.info(f"Using existing scoring job with ID: {scoring_job.id}")
 
                 raise BatchProcessingPause(
                     thread_id=thread_id,
                     state=state,
-                    batch_job_id=batch_job.id,
-                    message=f"Execution paused for batch processing. Batch job ID: {batch_job.id}"
+                    batch_job_id=batch_job.id if batch_job else None,
+                    message=f"Execution paused for batch processing. Scoring job ID: {scoring_job.id}"
                 )
             
             try:
