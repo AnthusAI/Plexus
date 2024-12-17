@@ -21,6 +21,7 @@ class ScoringJob(BaseModel):
     metadata: Optional[Dict] = None
     evaluationId: Optional[str] = None
     scoreId: Optional[str] = None
+    batchId: Optional[str] = None
 
     def __init__(
         self,
@@ -38,6 +39,7 @@ class ScoringJob(BaseModel):
         metadata: Optional[Dict] = None,
         evaluationId: Optional[str] = None,
         scoreId: Optional[str] = None,
+        batchId: Optional[str] = None,
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
@@ -54,6 +56,7 @@ class ScoringJob(BaseModel):
         self.metadata = metadata
         self.evaluationId = evaluationId
         self.scoreId = scoreId
+        self.batchId = batchId
 
     @classmethod
     def fields(cls) -> str:
@@ -199,3 +202,35 @@ class ScoringJob(BaseModel):
             raise Exception(f"Failed to get ScoringJob {id}")
             
         return cls.from_dict(result['getScoringJob'], client) 
+
+    @classmethod
+    def find_by_item_id(cls, item_id: str, client: _BaseAPIClient) -> Optional['ScoringJob']:
+        query = """
+        query FindScoringJobByItemId($itemId: String!) {
+            listScoringJobByItemId(itemId: $itemId) {
+                items {
+                    id
+                    accountId
+                    status
+                    createdAt
+                    updatedAt
+                    scorecardId
+                    itemId
+                    startedAt
+                    completedAt
+                    errorMessage
+                    errorDetails
+                    metadata
+                    evaluationId
+                    scoreId
+                }
+            }
+        }
+        """
+        
+        result = client.execute(query, {'itemId': item_id})
+        items = result.get('listScoringJobByItemId', {}).get('items', [])
+        
+        if items:
+            return cls.from_dict(items[0], client)
+        return None
