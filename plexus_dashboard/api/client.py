@@ -419,45 +419,11 @@ class _BaseAPIClient:
         if metadata:
             logging.info(f"Received metadata: {metadata}")
 
-        # First check all batch jobs to help debug
-        all_jobs_query = """
-        query GetAllBatchJobs(
-            $accountId: String!,
-            $scorecardId: String!,
-            $modelProvider: String!,
-            $modelName: String!
-        ) {
-            listBatchJobs(
-                filter: {
-                    accountId: { eq: $accountId },
-                    scorecardId: { eq: $scorecardId },
-                    modelProvider: { eq: $modelProvider },
-                    modelName: { eq: $modelName }
-                }
-            ) {
-                items {
-                    id
-                    accountId
-                    type
-                    batchId
-                    status
-                    modelProvider
-                    modelName
-                    totalRequests
-                    completedRequests
-                    failedRequests
-                    scoringJobCountCache
-                }
-            }
-        }
-        """
-
-        all_jobs_result = self.execute(all_jobs_query, {
-            'accountId': accountId,
-            'scorecardId': scorecardId,
-            'modelProvider': model_provider,
-            'modelName': model_name
-        })
+        # First check if a scoring job already exists for this item
+        existing_job = ScoringJob.find_by_item_id(itemId, self)
+        if existing_job:
+            logging.info(f"Found existing scoring job {existing_job.id} for item {itemId}")
+            return existing_job, None
 
         # Look for an existing open batch job
         query = """
