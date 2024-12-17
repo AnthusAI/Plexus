@@ -66,6 +66,7 @@ class LangGraphScore(Score, LangChainUser):
         graph: Optional[list[dict]] = None
         input: Optional[dict] = None
         output: Optional[dict] = None
+        depends_on: Optional[List[str]] = None
         single_line_messages: bool = False
         checkpoint_db_path: Optional[str] = Field(
             default="./.plexus/checkpoints/langgraph.db",
@@ -792,6 +793,11 @@ class LangGraphScore(Score, LangChainUser):
                 # Normal execution path - start from beginning
                 logging.info("Starting normal execution path")
                 
+                # Enhanced debugging for input
+                logging.info(f"Model input type: {type(model_input)}")
+                logging.info(f"Model input attributes: {dir(model_input)}")
+                logging.info(f"Model input results: {model_input.results if hasattr(model_input, 'results') else 'No results attribute'}")
+                
                 # Ensure required metadata fields are present
                 metadata = model_input.metadata or {}
                 if not metadata.get('account_key'):
@@ -801,13 +807,49 @@ class LangGraphScore(Score, LangChainUser):
                 if not metadata.get('score_name'):
                     metadata['score_name'] = self.parameters.name
                 
+                # Initialize results dictionary with dependencies
+                initial_results = {}
+                if hasattr(self.parameters, 'depends_on') and self.parameters.depends_on:
+                    logging.info(f"Dependencies found: {self.parameters.depends_on}")
+                    logging.info(f"Model input type: {type(model_input)}")
+                    logging.info(f"Model input dir: {dir(model_input)}")
+                    if hasattr(model_input, 'results'):
+                        logging.info(f"Raw results from model input: {model_input.results}")
+                        if isinstance(model_input.results, list):
+                            for result_entry in model_input.results:
+                                if isinstance(result_entry, dict) and 'name' in result_entry:
+                                    dependency_name = result_entry['name']
+                                    logging.info(f"Found dependency result for: {dependency_name}")
+                                    if dependency_name in self.parameters.depends_on:
+                                        initial_results[dependency_name] = result_entry.get('result')
+                                        logging.info(f"Added dependency {dependency_name} with value: {initial_results[dependency_name]}")
+                                else:
+                                    logging.warning(f"Invalid result entry format: {result_entry}")
+                        else:
+                            logging.warning(f"Results is not a list: {type(model_input.results)}")
+                    else:
+                        logging.error("Model input has no results attribute")
+                else:
+                    logging.info(f"No dependencies found in parameters: {self.parameters}")
+                    logging.info(f"Parameters type: {type(self.parameters)}")
+                    logging.info(f"Parameters attributes: {dir(self.parameters)}")
+                
+                # Convert initial_results to a dict that can be accessed via template
                 initial_state = self.GraphState(
                     text=self.preprocess_text(model_input.text),
                     metadata=metadata,
-                    messages=None
+                    messages=None,
+                    results=initial_results  # Add results dictionary to state
                 ).model_dump()
                 
+                # Ensure results can be accessed via dictionary notation in templates
+                if 'results' in initial_state:
+                    initial_state['results'] = dict(initial_state['results'])
+                    logging.info(f"Final results dictionary: {initial_state['results']}")
+                
                 logging.info(f"Initial state metadata: {metadata}")
+                logging.info(f"Initial state results: {initial_results}")
+                logging.info(f"Full initial state: {initial_state}")
                 
                 final_result = await self.workflow.ainvoke(
                     initial_state,
