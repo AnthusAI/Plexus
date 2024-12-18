@@ -68,6 +68,7 @@ class Evaluation:
         self.scorecard = scorecard
         self.labeled_samples_filename = labeled_samples_filename
         self.labeled_samples = labeled_samples
+        self.requested_sample_size = number_of_texts_to_sample
         self.number_of_texts_to_sample = number_of_texts_to_sample
         self.sampling_method = sampling_method
         self.random_seed = random_seed
@@ -302,6 +303,7 @@ class Evaluation:
             "type": "accuracy",
             "metrics": json.dumps(metrics_list),
             "processedItems": self.processed_items,
+            "totalItems": min(self.number_of_texts_to_sample, self.requested_sample_size),
             "elapsedSeconds": elapsed_seconds,
             "estimatedRemainingSeconds": int(elapsed_seconds * (self.number_of_texts_to_sample - self.processed_items) / self.processed_items) if self.processed_items > 0 else self.number_of_texts_to_sample,
             "accuracy": metrics["accuracy"] * 100,
@@ -356,31 +358,24 @@ class Evaluation:
         
 
     def calculate_metrics(self, results):
-        """Calculate classification metrics, predicted distribution, and confusion matrices"""
-        tp = fp = tn = fn = 0
-        predicted_distributions = {}  # Track counts for predicted values
-        actual_distributions = {}    # Track counts for actual labels (with overrides)
-        confusion_matrices = {}  # Track confusion matrices per score
+        logging.info(f"\nStarting metrics calculation with {len(results)} results")
+        predicted_distributions = {}
+        actual_distributions = {}
+        confusion_matrices = {}
         
-        logging.info("Starting metrics calculation...")
-        logging.info(f"Number of results to process: {len(results)}")
-        logging.info(f"Override data available: {list(self.override_data.keys())}")
-        
+        # First pass: build distributions and confusion matrices
         for result in results:
-            form_id = result['form_id']
-            logging.info(f"\nProcessing form_id: {form_id}")
+            logging.info(f"\nProcessing result for form_id: {result['form_id']}")
             
             for score_identifier, score_result in result['results'].items():
                 predicted = str(score_result.value).lower()
                 score_name = score_result.parameters.name
+                actual = str(score_result.metadata['human_label']).lower()
                 
-                # Get actual label, checking overrides first
-                if form_id in self.override_data and score_name in self.override_data[form_id]:
-                    actual = str(self.override_data[form_id][score_name]).lower()
-                    logging.info(f"Using override for {score_name}: {actual} (original was {score_result.metadata['human_label']})")
-                else:
-                    actual = str(score_result.metadata['human_label']).lower()
-                    logging.info(f"Using original label for {score_name}: {actual}")
+                logging.info(f"Score: {score_name}")
+                logging.info(f"Predicted: '{predicted}'")
+                logging.info(f"Actual: '{actual}'")
+                logging.info(f"Correct: {score_result.metadata['correct']}")
                 
                 # Update actual label distribution
                 if score_name not in actual_distributions:
@@ -388,7 +383,6 @@ class Evaluation:
                 if actual not in actual_distributions[score_name]:
                     actual_distributions[score_name][actual] = 0
                 actual_distributions[score_name][actual] += 1
-                logging.info(f"Updated actual distribution for {score_name}: {actual_distributions[score_name]}")
                 
                 # Update predicted distribution
                 if score_name not in predicted_distributions:
@@ -396,7 +390,6 @@ class Evaluation:
                 if predicted not in predicted_distributions[score_name]:
                     predicted_distributions[score_name][predicted] = 0
                 predicted_distributions[score_name][predicted] += 1
-                logging.info(f"Updated predicted distribution for {score_name}: {predicted_distributions[score_name]}")
                 
                 # Initialize confusion matrix for this score if needed
                 if score_name not in confusion_matrices:
@@ -417,17 +410,66 @@ class Evaluation:
                 
                 # Update confusion matrix
                 confusion_matrices[score_name]['matrix'][actual][predicted] += 1
-                
-                # Calculate standard metrics for binary classification
-                if len(confusion_matrices[score_name]['labels']) == 2:
-                    if actual == predicted == "yes":
-                        tp += 1
-                    elif actual == predicted == "no":
-                        tn += 1
-                    elif predicted == "yes" and actual == "no":
-                        fp += 1
-                    elif predicted == "no" and actual == "yes":
-                        fn += 1
+
+        # Second pass: calculate metrics
+        total_correct = 0
+        total_predictions = 0
+        
+        # We'll calculate these for binary classification if applicable
+        tp = fp = tn = fn = 0
+        
+        for score_name, matrix_data in confusion_matrices.items():
+            labels = sorted(list(matrix_data['labels']))
+            is_binary = len(labels) == 2 and 'yes' in labels and 'no' in labels
+            
+            # Calculate correct predictions and total for this score
+            for actual_label in labels:
+                for predicted_label in labels:
+                    count = matrix_data['matrix'].get(actual_label, {}).get(predicted_label, 0)
+                    if actual_label == predicted_label:
+                        total_correct += count
+                    total_predictions += count
+                    
+                    # For binary classification, also update TP/TN/FP/FN
+                    if is_binary:
+                        if actual_label == predicted_label == "yes":
+                            tp += count
+                        elif actual_label == predicted_label == "no":
+                            tn += count
+                        elif predicted_label == "yes" and actual_label == "no":
+                            fp += count
+                        elif predicted_label == "no" and actual_label == "yes":
+                            fn += count
+
+        # Calculate overall accuracy
+        accuracy = total_correct / total_predictions if total_predictions > 0 else 0
+        
+        # For binary classification, also calculate precision, sensitivity, specificity
+        if tp + fp + tn + fn > 0:  # If we have binary classification data
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+            sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
+            specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+        else:  # For multi-class, these metrics don't apply
+            precision = accuracy  # Use accuracy as a stand-in
+            sensitivity = accuracy
+            specificity = accuracy
+        
+        logging.info("\nCalculated metrics:")
+        logging.info(f"Accuracy: {accuracy}")
+        if tp + fp + tn + fn > 0:
+            logging.info(f"Binary classification metrics:")
+            logging.info(f"True Positives (TP): {tp}")
+            logging.info(f"True Negatives (TN): {tn}")
+            logging.info(f"False Positives (FP): {fp}")
+            logging.info(f"False Negatives (FN): {fn}")
+            logging.info(f"Precision: {precision}")
+            logging.info(f"Sensitivity (Recall): {sensitivity}")
+            logging.info(f"Specificity: {specificity}")
+        
+        logging.info("\nDistributions:")
+        logging.info(f"Actual distributions: {actual_distributions}")
+        logging.info(f"Predicted distributions: {predicted_distributions}")
+        logging.info(f"Confusion matrices: {confusion_matrices}")
 
         # Format confusion matrices for API
         formatted_confusion_matrices = []
@@ -536,6 +578,10 @@ class Evaluation:
         else:
             df = pd.read_csv(self.labeled_samples_filename)
         
+        # Update number_of_texts_to_sample if dataframe is smaller
+        self.number_of_texts_to_sample = min(len(df), self.requested_sample_size)
+        logging.info(f"Adjusted sample size from {self.requested_sample_size} to {self.number_of_texts_to_sample} based on available data")
+
         # Calculate original label distribution before sampling
         label_distributions = []
         is_dataset_balanced = True  # Track overall dataset balance
@@ -833,7 +879,7 @@ class Evaluation:
         self.generate_metrics_json(report_folder_path, len(selected_sample_rows), expenses)
 
         # Log final metrics
-        final_metrics = self.calculate_metrics(results)
+        final_metrics = self.calculate_metrics(self.all_results)
         self.log_to_dashboard(final_metrics, status="COMPLETED")
 
     def generate_report(self, score_instance, overall_accuracy, expenses, sample_size):
