@@ -17,6 +17,10 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   
   useEffect(() => {
+    if (authStatus === 'configuring' || authStatus === 'loading') {
+      return;  // Don't redirect while auth is still loading
+    }
+    
     if (authStatus === 'unauthenticated' && pathname !== '/') {
       router.push('/');
     }
@@ -28,6 +32,10 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
   }
 
   // For other pages, require authentication
+  if (authStatus === 'configuring' || authStatus === 'loading') {
+    return null;  // Or return a loading spinner
+  }
+
   if (authStatus !== 'authenticated') {
     router.push('/');
     return null;
