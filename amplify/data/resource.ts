@@ -22,6 +22,7 @@ type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" |
     "evaluationId" | "scoreId";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
     "evaluationId" | "scoringJobId";
+type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 
 const schema = a.schema({
     Account: a
@@ -287,7 +288,10 @@ const schema = a.schema({
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
             allow.authenticated()
-        ]),
+        ])
+        .secondaryIndexes((idx) => [
+            idx("batchJobId" as BatchJobScoringJobIndexFields)
+        ])
 });
 
 export type Schema = ClientSchema<typeof schema>;
