@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Score(BaseModel):
     name: str
+    key: str
+    externalId: str
     type: str
     order: int
     sectionId: str
@@ -35,6 +37,8 @@ class Score(BaseModel):
         self,
         id: str,
         name: str,
+        key: str,
+        externalId: str,
         type: str,
         order: int,
         sectionId: str,
@@ -50,6 +54,8 @@ class Score(BaseModel):
     ):
         super().__init__(id, client)
         self.name = name
+        self.key = key
+        self.externalId = externalId
         self.type = type
         self.order = order
         self.sectionId = sectionId
@@ -67,6 +73,8 @@ class Score(BaseModel):
         return """
             id
             name
+            key
+            externalId
             type
             order
             sectionId
@@ -85,6 +93,8 @@ class Score(BaseModel):
         return cls(
             id=data['id'],
             name=data['name'],
+            key=data['key'],
+            externalId=data['externalId'],
             type=data['type'],
             order=data['order'],
             sectionId=data['sectionId'],
@@ -145,4 +155,63 @@ class Score(BaseModel):
                     if score.get('name') == name:
                         return cls.from_dict(score, client)
         
+        return None
+
+    @classmethod
+    def get_by_key(cls, key: str, scorecard_id: str, client: _BaseAPIClient) -> Optional['Score']:
+        """Get a score by its key within a scorecard"""
+        sections_query = """
+        query GetScorecardSections($scorecardId: String!) {
+            listScorecardSections(filter: { scorecardId: { eq: $scorecardId } }) {
+                items {
+                    id
+                    scores {
+                        items {
+                            %s
+                        }
+                    }
+                }
+            }
+        }
+        """ % cls.fields()
+        
+        sections_result = client.execute(sections_query, {'scorecardId': scorecard_id})
+        if not sections_result or 'listScorecardSections' not in sections_result:
+            return None
+            
+        for section in sections_result['listScorecardSections']['items']:
+            if section.get('scores', {}).get('items'):
+                for score in section['scores']['items']:
+                    if score.get('key') == key:
+                        return cls.from_dict(score, client)
+        return None
+
+    @classmethod
+    def get_by_external_id(cls, external_id: str, scorecard_id: str, 
+                          client: _BaseAPIClient) -> Optional['Score']:
+        """Get a score by its external ID within a scorecard"""
+        sections_query = """
+        query GetScorecardSections($scorecardId: String!) {
+            listScorecardSections(filter: { scorecardId: { eq: $scorecardId } }) {
+                items {
+                    id
+                    scores {
+                        items {
+                            %s
+                        }
+                    }
+                }
+            }
+        }
+        """ % cls.fields()
+        
+        sections_result = client.execute(sections_query, {'scorecardId': scorecard_id})
+        if not sections_result or 'listScorecardSections' not in sections_result:
+            return None
+            
+        for section in sections_result['listScorecardSections']['items']:
+            if section.get('scores', {}).get('items'):
+                for score in section['scores']['items']:
+                    if score.get('externalId') == external_id:
+                        return cls.from_dict(score, client)
         return None
