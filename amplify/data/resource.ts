@@ -89,8 +89,8 @@ const schema = a.schema({
     Score: a
         .model({
             name: a.string().required(),
-            key: a.string().required(),
-            externalId: a.string().required(),
+            key: a.string(),
+            externalId: a.string(),
             type: a.string().required(),
             order: a.integer().required(),
             accuracy: a.float(),
