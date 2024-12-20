@@ -282,7 +282,7 @@ class Evaluation:
         
         elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
         
-        # Convert metrics to the expected format
+        # Convert metrics to percentages for the dashboard
         metrics_list = [
             {"name": "Accuracy", "value": metrics["accuracy"] * 100},
             {"name": "Precision", "value": metrics["precision"] * 100},
@@ -306,7 +306,7 @@ class Evaluation:
             "totalItems": min(self.number_of_texts_to_sample, self.requested_sample_size),
             "elapsedSeconds": elapsed_seconds,
             "estimatedRemainingSeconds": int(elapsed_seconds * (self.number_of_texts_to_sample - self.processed_items) / self.processed_items) if self.processed_items > 0 else self.number_of_texts_to_sample,
-            "accuracy": metrics["accuracy"] * 100,
+            "accuracy": metrics["accuracy"] * 100,  # Convert to percentage
             "updatedAt": current_time.isoformat().replace('+00:00', 'Z'),
             "status": status,
             "predictedClassDistribution": json.dumps(metrics["predicted_distribution"]),
@@ -363,6 +363,9 @@ class Evaluation:
         actual_distributions = {}
         confusion_matrices = {}
         
+        total_correct = 0
+        total_predictions = 0
+        
         # First pass: build distributions and confusion matrices
         for result in results:
             logging.info(f"\nProcessing result for form_id: {result['form_id']}")
@@ -376,6 +379,11 @@ class Evaluation:
                 logging.info(f"Predicted: '{predicted}'")
                 logging.info(f"Actual: '{actual}'")
                 logging.info(f"Correct: {score_result.metadata['correct']}")
+                
+                # Update total correct and predictions
+                if score_result.metadata['correct']:
+                    total_correct += 1
+                total_predictions += 1
                 
                 # Update actual label distribution
                 if score_name not in actual_distributions:
@@ -411,65 +419,27 @@ class Evaluation:
                 # Update confusion matrix
                 confusion_matrices[score_name]['matrix'][actual][predicted] += 1
 
-        # Second pass: calculate metrics
-        total_correct = 0
-        total_predictions = 0
-        
-        # We'll calculate these for binary classification if applicable
-        tp = fp = tn = fn = 0
-        
-        for score_name, matrix_data in confusion_matrices.items():
-            labels = sorted(list(matrix_data['labels']))
-            is_binary = len(labels) == 2 and 'yes' in labels and 'no' in labels
-            
-            # Calculate correct predictions and total for this score
-            for actual_label in labels:
-                for predicted_label in labels:
-                    count = matrix_data['matrix'].get(actual_label, {}).get(predicted_label, 0)
-                    if actual_label == predicted_label:
-                        total_correct += count
-                    total_predictions += count
-                    
-                    # For binary classification, also update TP/TN/FP/FN
-                    if is_binary:
-                        if actual_label == predicted_label == "yes":
-                            tp += count
-                        elif actual_label == predicted_label == "no":
-                            tn += count
-                        elif predicted_label == "yes" and actual_label == "no":
-                            fp += count
-                        elif predicted_label == "no" and actual_label == "yes":
-                            fn += count
-
         # Calculate overall accuracy
         accuracy = total_correct / total_predictions if total_predictions > 0 else 0
         
-        # For binary classification, also calculate precision, sensitivity, specificity
-        if tp + fp + tn + fn > 0:  # If we have binary classification data
-            precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-            sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
-            specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
-        else:  # For multi-class, these metrics don't apply
-            precision = accuracy  # Use accuracy as a stand-in
-            sensitivity = accuracy
-            specificity = accuracy
+        # For binary classification scores, calculate additional metrics
+        precision = accuracy
+        sensitivity = accuracy
+        specificity = accuracy
         
-        logging.info("\nCalculated metrics:")
-        logging.info(f"Accuracy: {accuracy}")
-        if tp + fp + tn + fn > 0:
-            logging.info(f"Binary classification metrics:")
-            logging.info(f"True Positives (TP): {tp}")
-            logging.info(f"True Negatives (TN): {tn}")
-            logging.info(f"False Positives (FP): {fp}")
-            logging.info(f"False Negatives (FN): {fn}")
-            logging.info(f"Precision: {precision}")
-            logging.info(f"Sensitivity (Recall): {sensitivity}")
-            logging.info(f"Specificity: {specificity}")
-        
-        logging.info("\nDistributions:")
-        logging.info(f"Actual distributions: {actual_distributions}")
-        logging.info(f"Predicted distributions: {predicted_distributions}")
-        logging.info(f"Confusion matrices: {confusion_matrices}")
+        # If we have binary classification data (yes/no), calculate detailed metrics
+        for score_name, matrix_data in confusion_matrices.items():
+            labels = sorted(list(matrix_data['labels']))
+            if len(labels) == 2 and 'yes' in labels and 'no' in labels:
+                tp = matrix_data['matrix'].get('yes', {}).get('yes', 0)
+                tn = matrix_data['matrix'].get('no', {}).get('no', 0)
+                fp = matrix_data['matrix'].get('no', {}).get('yes', 0)
+                fn = matrix_data['matrix'].get('yes', {}).get('no', 0)
+                
+                precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+                sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
+                specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+                break  # Use the first binary score found for these metrics
 
         # Format confusion matrices for API
         formatted_confusion_matrices = []
@@ -477,8 +447,7 @@ class Evaluation:
             labels = sorted(list(matrix_data['labels']))
             matrix = []
             
-            # Create the matrix in the correct order
-            for i, actual_label in enumerate(labels):
+            for actual_label in labels:
                 row = []
                 for predicted_label in labels:
                     count = matrix_data['matrix'].get(actual_label, {}).get(predicted_label, 0)
@@ -491,18 +460,7 @@ class Evaluation:
                 "labels": labels
             })
 
-        # Ensure we have at least one confusion matrix
-        if not formatted_confusion_matrices:
-            # Create a default binary confusion matrix if none exists
-            default_labels = ['yes', 'no']
-            default_matrix = [[0, 0], [0, 0]]
-            formatted_confusion_matrices.append({
-                "score_name": self.score_names()[0] if self.score_names() else "default",
-                "matrix": default_matrix,
-                "labels": default_labels
-            })
-
-        # Format predicted distributions for API
+        # Format distributions for API
         predicted_label_distributions = []
         for score_name, distribution in predicted_distributions.items():
             for label, count in distribution.items():
@@ -511,14 +469,6 @@ class Evaluation:
                     "count": count
                 })
 
-        # Ensure we have at least one distribution entry
-        if not predicted_label_distributions:
-            predicted_label_distributions.append({
-                "label": "no_data",
-                "count": 0
-            })
-
-        # Format actual distributions for API
         actual_label_distributions = []
         for score_name, distribution in actual_distributions.items():
             for label, count in distribution.items():
@@ -527,23 +477,31 @@ class Evaluation:
                     "count": count
                 })
 
-        # Ensure we have at least one distribution entry
+        # Ensure we have at least one entry in each required field
+        if not formatted_confusion_matrices:
+            formatted_confusion_matrices.append({
+                "score_name": self.score_names()[0] if self.score_names() else "default",
+                "matrix": [[0, 0], [0, 0]],
+                "labels": ['yes', 'no']
+            })
+        
+        if not predicted_label_distributions:
+            predicted_label_distributions.append({
+                "label": "no_data",
+                "count": 0
+            })
+            
         if not actual_label_distributions:
             actual_label_distributions.append({
                 "label": "no_data",
                 "count": 0
             })
 
-        # Calculate standard metrics for binary classification
-        total = tp + tn + fp + fn
-        accuracy = (tp + tn) / total if total > 0 else 0
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-        sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
-        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
-
-        logging.info("\nFinal actual (ground truth) distributions:")
-        for score_name, dist in actual_distributions.items():
-            logging.info(f"{score_name}: {dist}")
+        logging.info("\nCalculated metrics:")
+        logging.info(f"Accuracy: {accuracy}")
+        logging.info(f"Precision: {precision}")
+        logging.info(f"Sensitivity: {sensitivity}")
+        logging.info(f"Specificity: {specificity}")
 
         return {
             "accuracy": accuracy,
@@ -1262,39 +1220,16 @@ class AccuracyEvaluation(Evaluation):
                 score_result.metadata['correct'] = score_result_value == human_label
                 score_result.metadata['text'] = text
 
-                ScoreResult.create(
-                    client=self.dashboard_client,
-                    value=1.0 if score_result.metadata['correct'] else 0.0,
-                    confidence=None,
-                    correct=score_result.metadata['correct'],
-                    itemId=content_id,
-                    accountId=self.account_id,
-                    evaluationId=self.experiment_id,
-                    scorecardId=self.scorecard_id,
-                    scoringJobId=None,
-                    metadata=json.dumps({
-                        'item_id': result['form_id'],
-                        'session_id': result['session_id'],
-                        'form_id': result['form_id'],
-                        'results': {
-                            k: {
-                                'value': v.value,
-                                'explanation': v.explanation,
-                                'metadata': v.metadata,
-                                'parameters': {
-                                    'name': v.parameters.name,
-                                    'scorecard_name': v.parameters.scorecard_name
-                                }
-                            } for k, v in result['results'].items()
-                        }
-                    })
-                )
+                # Create ScoreResult in a non-blocking way
+                if self.dashboard_client and self.experiment_id:
+                    asyncio.create_task(self._create_score_result(
+                        score_result=score_result,
+                        content_id=content_id,
+                        result=result
+                    ))
 
             except Exception as e:
                 logging.exception(f"Error processing {score_identifier}: {e}")
-                if isinstance(e, requests.exceptions.HTTPError):
-                    logging.error(f"HTTPError: {e.response.text}")
-
                 # Create Score.Result with required parameters
                 score_result = Score.Result(
                     value="Error", 
@@ -1309,11 +1244,53 @@ class AccuracyEvaluation(Evaluation):
         self.all_results.append(result)
         self.processed_items += 1
 
-        # Calculate metrics based on all results so far
-        metrics = self.calculate_metrics(self.all_results)
-        self.log_to_dashboard(metrics)
+        # Calculate and log metrics asynchronously
+        if self.dashboard_client and self.experiment_id:
+            asyncio.create_task(self._update_dashboard_metrics())
 
         return result
+
+    async def _create_score_result(self, score_result, content_id, result):
+        """Helper method to create score result asynchronously"""
+        try:
+            await asyncio.to_thread(
+                ScoreResult.create,
+                client=self.dashboard_client,
+                value=1.0 if score_result.metadata['correct'] else 0.0,
+                confidence=None,
+                correct=score_result.metadata['correct'],
+                itemId=content_id,
+                accountId=self.account_id,
+                evaluationId=self.experiment_id,
+                scorecardId=self.scorecard_id,
+                scoringJobId=None,
+                metadata=json.dumps({
+                    'item_id': result['form_id'],
+                    'session_id': result['session_id'],
+                    'form_id': result['form_id'],
+                    'results': {
+                        k: {
+                            'value': v.value,
+                            'explanation': v.explanation,
+                            'metadata': v.metadata,
+                            'parameters': {
+                                'name': v.parameters.name,
+                                'scorecard_name': v.parameters.scorecard_name
+                            }
+                        } for k, v in result['results'].items()
+                    }
+                })
+            )
+        except Exception as e:
+            logging.error(f"Error creating score result: {e}")
+
+    async def _update_dashboard_metrics(self):
+        """Helper method to update dashboard metrics asynchronously"""
+        try:
+            metrics = self.calculate_metrics(self.all_results)
+            await asyncio.to_thread(self.log_to_dashboard, metrics)
+        except Exception as e:
+            logging.error(f"Error updating dashboard metrics: {e}")
 
     async def cleanup(self):
         """Clean up all resources."""
