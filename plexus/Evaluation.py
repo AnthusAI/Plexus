@@ -72,7 +72,7 @@ class Evaluation:
         self.number_of_texts_to_sample = number_of_texts_to_sample
         self.sampling_method = sampling_method
         self.random_seed = random_seed
-        self.score_id = score_id  # Store score_id
+        self.score_id = score_id
         
         # Parse lists, if available.
         self.session_ids_to_sample = session_ids_to_sample
@@ -80,9 +80,19 @@ class Evaluation:
 
         self.experiment_label = experiment_label
         self.max_mismatches_to_report = max_mismatches_to_report
+
+        # Results tracking
+        self.all_results = []
+        self.processed_items = 0
         self.mismatches = []
         self.total_correct = 0
         self.total_questions = 0
+
+        # Connection pool configuration
+        self.max_pool_size = 50
+        self.batch_size = self.max_pool_size
+        self.client_pool = []
+        self.client_pool_lock = asyncio.Lock()
 
         # Initialize dashboard client and experiment ID
         try:
@@ -191,9 +201,6 @@ class Evaluation:
             logging.error(f"Failed to initialize dashboard client or create experiment: {str(e)}", exc_info=True)
             self.dashboard_client = None
             self.experiment_id = None
-            
-        self.all_results = []  # Add this to track all results
-        self.processed_items = 0  # Add this to track processed items
 
     def __enter__(self):
         self.start_mlflow_run()
@@ -271,91 +278,92 @@ class Evaluation:
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10)
     )
-    def log_to_dashboard(self, metrics, status="RUNNING"):
+    async def log_to_dashboard(self, metrics, status="RUNNING"):
         """Log metrics to Plexus Dashboard with retry logic"""
-        
-        if not self.dashboard_client or not self.experiment_id:
-            logging.warning("Dashboard client or experiment ID not available - skipping metrics update")
+        if not self.experiment_id:
+            logging.warning("Experiment ID not available - skipping metrics update")
             return
-            
+        
         logging.info(f"Updating dashboard experiment {self.experiment_id} with metrics: {metrics}")
         
-        elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
-        
-        # Convert metrics to percentages for the dashboard
-        metrics_list = [
-            {"name": "Accuracy", "value": metrics["accuracy"] * 100},
-            {"name": "Precision", "value": metrics["precision"] * 100},
-            {"name": "Sensitivity", "value": metrics["sensitivity"] * 100},
-            {"name": "Specificity", "value": metrics["specificity"] * 100}
-        ]
-        
-        # Format confusion matrix data for the API
-        confusion_matrix_data = metrics["confusion_matrices"][0]  # Get first score's matrix
-        matrix_data = {
-            "matrix": confusion_matrix_data["matrix"],
-            "labels": confusion_matrix_data["labels"]
-        }
-        
-        current_time = datetime.now(timezone.utc)
-        update_params = {
-            "id": self.experiment_id,
-            "type": "accuracy",
-            "metrics": json.dumps(metrics_list),
-            "processedItems": self.processed_items,
-            "totalItems": min(self.number_of_texts_to_sample, self.requested_sample_size),
-            "elapsedSeconds": elapsed_seconds,
-            "estimatedRemainingSeconds": int(elapsed_seconds * (self.number_of_texts_to_sample - self.processed_items) / self.processed_items) if self.processed_items > 0 else self.number_of_texts_to_sample,
-            "accuracy": metrics["accuracy"] * 100,  # Convert to percentage
-            "updatedAt": current_time.isoformat().replace('+00:00', 'Z'),
-            "status": status,
-            "predictedClassDistribution": json.dumps(metrics["predicted_distribution"]),
-            "datasetClassDistribution": json.dumps(metrics["actual_distribution"]),
-            "confusionMatrix": json.dumps(matrix_data)
-        }
-        logging.info(f"Update parameters: {update_params}")
-        
-        # Use direct mutation instead of model classes
-        mutation = """
-        mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-            updateEvaluation(input: $input) {
-                id
-                type
-                accountId
-                status
-                createdAt
-                updatedAt
-                parameters
-                metrics
-                inferences
-                accuracy
-                cost
-                startedAt
-                elapsedSeconds
-                estimatedRemainingSeconds
-                totalItems
-                processedItems
-                errorMessage
-                errorDetails
-                scorecardId
-                scoreId
-                confusionMatrix
-                scoreGoal
-                datasetClassDistribution
-                isDatasetClassDistributionBalanced
-                predictedClassDistribution
-                isPredictedClassDistributionBalanced
+        client = await self.get_client_from_pool()
+        try:
+            elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
+            
+            # Convert metrics to percentages for the dashboard
+            metrics_list = [
+                {"name": "Accuracy", "value": metrics["accuracy"] * 100},
+                {"name": "Precision", "value": metrics["precision"] * 100},
+                {"name": "Sensitivity", "value": metrics["sensitivity"] * 100},
+                {"name": "Specificity", "value": metrics["specificity"] * 100}
+            ]
+            
+            # Format confusion matrix data for the API
+            confusion_matrix_data = metrics["confusion_matrices"][0]  # Get first score's matrix
+            matrix_data = {
+                "matrix": confusion_matrix_data["matrix"],
+                "labels": confusion_matrix_data["labels"]
             }
-        }
-        """
-        
-        variables = {
-            "input": update_params
-        }
-        
-        result = self.dashboard_client.execute(mutation, variables)
-        logging.info("Successfully updated dashboard experiment")
-        
+            
+            current_time = datetime.now(timezone.utc)
+            update_params = {
+                "id": self.experiment_id,
+                "type": "accuracy",
+                "metrics": json.dumps(metrics_list),
+                "processedItems": self.processed_items,
+                "totalItems": min(self.number_of_texts_to_sample, self.requested_sample_size),
+                "elapsedSeconds": elapsed_seconds,
+                "estimatedRemainingSeconds": int(elapsed_seconds * (self.number_of_texts_to_sample - self.processed_items) / self.processed_items) if self.processed_items > 0 else self.number_of_texts_to_sample,
+                "accuracy": metrics["accuracy"] * 100,  # Convert to percentage
+                "updatedAt": current_time.isoformat().replace('+00:00', 'Z'),
+                "status": status,
+                "predictedClassDistribution": json.dumps(metrics["predicted_distribution"]),
+                "datasetClassDistribution": json.dumps(metrics["actual_distribution"]),
+                "confusionMatrix": json.dumps(matrix_data)
+            }
+            
+            mutation = """
+            mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                updateEvaluation(input: $input) {
+                    id
+                    type
+                    accountId
+                    status
+                    createdAt
+                    updatedAt
+                    parameters
+                    metrics
+                    inferences
+                    accuracy
+                    cost
+                    startedAt
+                    elapsedSeconds
+                    estimatedRemainingSeconds
+                    totalItems
+                    processedItems
+                    errorMessage
+                    errorDetails
+                    scorecardId
+                    scoreId
+                    confusionMatrix
+                    scoreGoal
+                    datasetClassDistribution
+                    isDatasetClassDistributionBalanced
+                    predictedClassDistribution
+                    isPredictedClassDistributionBalanced
+                }
+            }
+            """
+            
+            variables = {
+                "input": update_params
+            }
+            
+            await asyncio.to_thread(client.execute, mutation, variables)
+            logging.info("Successfully updated dashboard experiment")
+            
+        finally:
+            await self.return_client_to_pool(client)
 
     def calculate_metrics(self, results):
         logging.info(f"\nStarting metrics calculation with {len(results)} results")
@@ -687,10 +695,9 @@ class Evaluation:
             )
 
         # Process results in batches but don't wait to update metrics
-        batch_size = 10
         results = []
-        for i in range(0, len(selected_sample_rows), batch_size):
-            batch = selected_sample_rows[i:i+batch_size]
+        for i in range(0, len(selected_sample_rows), self.batch_size):
+            batch = selected_sample_rows[i:i+self.batch_size]
             batch_results = await self.score_all_texts(batch)
             logging.info(f"Batch results: {len(batch_results)} results processed.")
             results.extend(batch_results)
@@ -827,7 +834,7 @@ class Evaluation:
         logging.info(f"cost: ${expenses['cost_per_text']:.6f} per call / ${expenses['total_cost']:.6f} total")
 
         report = self.generate_report(score_instance, overall_accuracy, expenses, len(selected_sample_rows))
-        logging.info(report)
+        logging.warning(report)
 
         await asyncio.to_thread(self.generate_and_log_confusion_matrix, results, report_folder_path)
         
@@ -838,7 +845,7 @@ class Evaluation:
 
         # Log final metrics
         final_metrics = self.calculate_metrics(self.all_results)
-        self.log_to_dashboard(final_metrics, status="COMPLETED")
+        await self.log_to_dashboard(final_metrics, status="COMPLETED")
 
     def generate_report(self, score_instance, overall_accuracy, expenses, sample_size):
         score_config = score_instance.parameters
@@ -1250,37 +1257,56 @@ class AccuracyEvaluation(Evaluation):
 
         return result
 
+    async def get_client_from_pool(self):
+        """Get a client from the pool or create a new one if needed"""
+        async with self.client_pool_lock:
+            if self.client_pool:
+                return self.client_pool.pop()
+            else:
+                return PlexusDashboardClient.for_account('call-criteria')
+
+    async def return_client_to_pool(self, client):
+        """Return a client to the pool if there's room"""
+        async with self.client_pool_lock:
+            if len(self.client_pool) < self.max_pool_size:
+                self.client_pool.append(client)
+
     async def _create_score_result(self, score_result, content_id, result):
-        """Helper method to create score result asynchronously"""
+        """Helper method to create score result asynchronously using connection pool"""
         try:
-            await asyncio.to_thread(
-                ScoreResult.create,
-                client=self.dashboard_client,
-                value=1.0 if score_result.metadata['correct'] else 0.0,
-                confidence=None,
-                correct=score_result.metadata['correct'],
-                itemId=content_id,
-                accountId=self.account_id,
-                evaluationId=self.experiment_id,
-                scorecardId=self.scorecard_id,
-                scoringJobId=None,
-                metadata=json.dumps({
-                    'item_id': result['form_id'],
-                    'session_id': result['session_id'],
-                    'form_id': result['form_id'],
-                    'results': {
-                        k: {
-                            'value': v.value,
-                            'explanation': v.explanation,
-                            'metadata': v.metadata,
-                            'parameters': {
-                                'name': v.parameters.name,
-                                'scorecard_name': v.parameters.scorecard_name
-                            }
-                        } for k, v in result['results'].items()
-                    }
-                })
-            )
+            client = await self.get_client_from_pool()
+            try:
+                await asyncio.to_thread(
+                    ScoreResult.create,
+                    client=client,
+                    value=1.0 if score_result.metadata['correct'] else 0.0,
+                    confidence=None,
+                    correct=score_result.metadata['correct'],
+                    itemId=content_id,
+                    accountId=self.account_id,
+                    evaluationId=self.experiment_id,
+                    scorecardId=self.scorecard_id,
+                    scoringJobId=None,
+                    metadata=json.dumps({
+                        'item_id': result['form_id'],
+                        'session_id': result['session_id'],
+                        'form_id': result['form_id'],
+                        'results': {
+                            k: {
+                                'value': v.value,
+                                'explanation': v.explanation,
+                                'metadata': v.metadata,
+                                'parameters': {
+                                    'name': v.parameters.name,
+                                    'scorecard_name': v.parameters.scorecard_name
+                                }
+                            } for k, v in result['results'].items()
+                        }
+                    })
+                )
+            finally:
+                # Return the client to the pool regardless of success/failure
+                await self.return_client_to_pool(client)
         except Exception as e:
             logging.error(f"Error creating score result: {e}")
 
@@ -1288,13 +1314,17 @@ class AccuracyEvaluation(Evaluation):
         """Helper method to update dashboard metrics asynchronously"""
         try:
             metrics = self.calculate_metrics(self.all_results)
-            await asyncio.to_thread(self.log_to_dashboard, metrics)
+            await self.log_to_dashboard(metrics)
         except Exception as e:
             logging.error(f"Error updating dashboard metrics: {e}")
 
     async def cleanup(self):
-        """Clean up all resources."""
+        """Clean up all resources including the client pool"""
         try:
+            # Clean up client pool
+            async with self.client_pool_lock:
+                self.client_pool.clear()
+            
             # Clean up scorecard first
             if hasattr(self, 'scorecard'):
                 if isinstance(self.scorecard, LangGraphScore):
