@@ -284,10 +284,7 @@
             <div style="display: flex; flex-direction: column; gap: 1em;">
                 <div style="display: flex; justify-content: space-between; gap: 2em;">
                     <div style="flex: 3; display: flex; flex-direction: column; gap: 1em;">
-                        <div><h2>Score: {{ result.name }}</h2></div>
-                        {% if result.metadata and include_evaluation %}
-                            <div><b>Overall question:</b> {{ result.metadata['overall_question'] }}</div>
-                        {% endif %}
+                        <div><h2>Score: {{ result['parameters'].name }}</h2></div>
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); font-weight: bold; margin: 0 10%; gap: 3em;">
                             <div>AI Answer</div>
                             {% if include_evaluation %}
@@ -302,7 +299,9 @@
                             <div class="label {{ 'correct' if result.metadata['correct'] else 'incorrect' }}">{{ 'YES' if result.metadata['correct'] else 'NO' }}</div>
                             {% endif %}
                         </div>
-                        <div><b>Explanation:</b> {{ result.explanation|replace("\n", "<br/>") }}</div>
+                        <div><b>Explanation:</b> 
+                            <div>{{ result.explanation|replace("\n", "<br/>") }}</div>
+                        </div>
                         {% if result.quote|trim %}
                         <div><b>Quote:</b> <i>"{{ result.quote }}"</i></div>
                         {% endif %}
@@ -360,66 +359,59 @@
                         </div>
                     </div>
                 </div>
-                {% if result.element_results %}
+                {% if result.metadata.node_results %}
                 <div>
-                    <b>Decision Elements:</b>
+                    <b>Graph Nodes:</b>
                     <div class="collapsible_section">
                         <label for="collapsible">Click to expand</label>
                         <input type="checkbox" class="collapsible_toggle">
                         <div class="collapsible_content">
                             <elements class="collapsible_content">
-                                {% for element in result.element_results %}
+                                {% for node in result.metadata.node_results %}
                                     <element>
-                                        <i class="{{ 'fa-solid fa-circle-question icon' if 'clarification_reasoning' in element.metadata else 'fa-circle-question fa-regular icon' }}"></i>
+                                        <i class="fa-solid fa-diagram-project icon"></i>
                                         <div style="display: flex; flex-direction: column; gap: 1em;">
-
                                             <div class="question">
-                                                <h2>Decision Element: <span class="fixed">{{ element.metadata['element_name'] }}</span></h2>
+                                                <h2>Node: <span class="fixed">{{ node.node_name }}</span></h2>
                                             </div>
-                                            <div class="result_value">
-                                                <div class="label {{ 'correct' if element.metadata['value'].lower() == 'yes' else 'incorrect' }}">{{ element.metadata['value']|upper }}</div>
-                                            </div>
-                                            <div class="reasoning">
-                                                <b>Reasoning</b> <span>{{ element.metadata['reasoning']|replace("\n", "<br/>") }}</span>
-                                            </div>
-                                            {% if 'clarification_reasoning' in element.metadata %}
-                                                <div class="reasoning"><b>Reasoning about rules</b> <span>{{ element.metadata['clarification_reasoning']|replace("\n", "<br/>") }}</span></div>
-                                            {% endif %}
-                                            <div class="prompt"><b>Prompt</b>
+                                            
+                                            <div class="input">
+                                                <b>Input State</b>
                                                 <div class="collapsible_section">
                                                     <label for="collapsible">Click to expand</label>
                                                     <input type="checkbox" class="collapsible_toggle">
                                                     <div class="collapsible_content">
                                                         <br/>
-                                                        {{ element.metadata['prompt']|replace("\n", "<br/>") }}
+                                                        {{ node.input|tojson(indent=2)|replace("\n", "<br/>")|safe }}
                                                     </div>
                                                 </div>
                                             </div>
-                                            {% if 'transcript' in element.metadata %}
-                                                <div class="transcript"><b>Transcript Chunk</b>
-                                                    <div class="collapsible_section">
-                                                        <label for="collapsible">Click to expand</label>
-                                                        <input type="checkbox" class="collapsible_toggle">
-                                                        <div class="collapsible_content">
-                                                            <br/>
-                                                            {{ element.metadata['transcript']|replace("\\n", "\n")|replace("\n", "<br/>") }}
-                                                        </div>
+
+                                            <div class="output">
+                                                <b>Output State</b>
+                                                <div class="collapsible_section">
+                                                    <label for="collapsible">Click to expand</label>
+                                                    <input type="checkbox" class="collapsible_toggle">
+                                                    <div class="collapsible_content">
+                                                        <br/>
+                                                        {{ node.output|tojson(indent=2)|replace("\n", "<br/>")|safe }}
                                                     </div>
                                                 </div>
+                                            </div>
+
+                                            {% if node.output.value %}
+                                            <div class="result_value">
+                                                <div class="label {{ 'correct' if node.output.value|lower == 'yes' else 'incorrect' }}">
+                                                    {{ node.output.value|upper }}
+                                                </div>
+                                            </div>
                                             {% endif %}
-                                            {% if 'chat_history' in element.metadata %}
-                                                <div class="transcript"><b>Chat History</b>
-                                                    <div class="collapsible_section">
-                                                        <label for="collapsible">Click to expand</label>
-                                                        <input type="checkbox" class="collapsible_toggle">
-                                                        <div class="collapsible_content">
-                                                            <br/>
-                                                            {% for message in element.metadata['chat_history'] %}
-                                                                <p><b>{{ message['role'] }}:</b> {{ message['content']|replace("\n", "<br/>") }}</p>
-                                                            {% endfor %}
-                                                        </div>
-                                                    </div>
-                                                </div>
+
+                                            {% if node.output.explanation %}
+                                            <div class="reasoning">
+                                                <b>Explanation</b>
+                                                <span>{{ node.output.explanation|replace("\n", "<br/>") }}</span>
+                                            </div>
                                             {% endif %}
                                         </div>
                                     </element>

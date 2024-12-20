@@ -72,7 +72,7 @@ class Evaluation:
         self.number_of_texts_to_sample = number_of_texts_to_sample
         self.sampling_method = sampling_method
         self.random_seed = random_seed
-        self.score_id = score_id  # Store score_id
+        self.score_id = score_id
         
         # Parse lists, if available.
         self.session_ids_to_sample = session_ids_to_sample
@@ -80,9 +80,19 @@ class Evaluation:
 
         self.experiment_label = experiment_label
         self.max_mismatches_to_report = max_mismatches_to_report
+
+        # Results tracking
+        self.all_results = []
+        self.processed_items = 0
         self.mismatches = []
         self.total_correct = 0
         self.total_questions = 0
+
+        # Connection pool configuration
+        self.max_pool_size = 50
+        self.batch_size = self.max_pool_size
+        self.client_pool = []
+        self.client_pool_lock = asyncio.Lock()
 
         # Initialize dashboard client and experiment ID
         try:
@@ -191,9 +201,6 @@ class Evaluation:
             logging.error(f"Failed to initialize dashboard client or create experiment: {str(e)}", exc_info=True)
             self.dashboard_client = None
             self.experiment_id = None
-            
-        self.all_results = []  # Add this to track all results
-        self.processed_items = 0  # Add this to track processed items
 
     def __enter__(self):
         self.start_mlflow_run()
@@ -271,97 +278,101 @@ class Evaluation:
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10)
     )
-    def log_to_dashboard(self, metrics, status="RUNNING"):
+    async def log_to_dashboard(self, metrics, status="RUNNING"):
         """Log metrics to Plexus Dashboard with retry logic"""
-        
-        if not self.dashboard_client or not self.experiment_id:
-            logging.warning("Dashboard client or experiment ID not available - skipping metrics update")
+        if not self.experiment_id:
+            logging.warning("Experiment ID not available - skipping metrics update")
             return
-            
+        
         logging.info(f"Updating dashboard experiment {self.experiment_id} with metrics: {metrics}")
         
-        elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
-        
-        # Convert metrics to the expected format
-        metrics_list = [
-            {"name": "Accuracy", "value": metrics["accuracy"] * 100},
-            {"name": "Precision", "value": metrics["precision"] * 100},
-            {"name": "Sensitivity", "value": metrics["sensitivity"] * 100},
-            {"name": "Specificity", "value": metrics["specificity"] * 100}
-        ]
-        
-        # Format confusion matrix data for the API
-        confusion_matrix_data = metrics["confusion_matrices"][0]  # Get first score's matrix
-        matrix_data = {
-            "matrix": confusion_matrix_data["matrix"],
-            "labels": confusion_matrix_data["labels"]
-        }
-        
-        current_time = datetime.now(timezone.utc)
-        update_params = {
-            "id": self.experiment_id,
-            "type": "accuracy",
-            "metrics": json.dumps(metrics_list),
-            "processedItems": self.processed_items,
-            "totalItems": min(self.number_of_texts_to_sample, self.requested_sample_size),
-            "elapsedSeconds": elapsed_seconds,
-            "estimatedRemainingSeconds": int(elapsed_seconds * (self.number_of_texts_to_sample - self.processed_items) / self.processed_items) if self.processed_items > 0 else self.number_of_texts_to_sample,
-            "accuracy": metrics["accuracy"] * 100,
-            "updatedAt": current_time.isoformat().replace('+00:00', 'Z'),
-            "status": status,
-            "predictedClassDistribution": json.dumps(metrics["predicted_distribution"]),
-            "datasetClassDistribution": json.dumps(metrics["actual_distribution"]),
-            "confusionMatrix": json.dumps(matrix_data)
-        }
-        logging.info(f"Update parameters: {update_params}")
-        
-        # Use direct mutation instead of model classes
-        mutation = """
-        mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-            updateEvaluation(input: $input) {
-                id
-                type
-                accountId
-                status
-                createdAt
-                updatedAt
-                parameters
-                metrics
-                inferences
-                accuracy
-                cost
-                startedAt
-                elapsedSeconds
-                estimatedRemainingSeconds
-                totalItems
-                processedItems
-                errorMessage
-                errorDetails
-                scorecardId
-                scoreId
-                confusionMatrix
-                scoreGoal
-                datasetClassDistribution
-                isDatasetClassDistributionBalanced
-                predictedClassDistribution
-                isPredictedClassDistributionBalanced
+        client = await self.get_client_from_pool()
+        try:
+            elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
+            
+            # Convert metrics to percentages for the dashboard
+            metrics_list = [
+                {"name": "Accuracy", "value": metrics["accuracy"] * 100},
+                {"name": "Precision", "value": metrics["precision"] * 100},
+                {"name": "Sensitivity", "value": metrics["sensitivity"] * 100},
+                {"name": "Specificity", "value": metrics["specificity"] * 100}
+            ]
+            
+            # Format confusion matrix data for the API
+            confusion_matrix_data = metrics["confusion_matrices"][0]  # Get first score's matrix
+            matrix_data = {
+                "matrix": confusion_matrix_data["matrix"],
+                "labels": confusion_matrix_data["labels"]
             }
-        }
-        """
-        
-        variables = {
-            "input": update_params
-        }
-        
-        result = self.dashboard_client.execute(mutation, variables)
-        logging.info("Successfully updated dashboard experiment")
-        
+            
+            current_time = datetime.now(timezone.utc)
+            update_params = {
+                "id": self.experiment_id,
+                "type": "accuracy",
+                "metrics": json.dumps(metrics_list),
+                "processedItems": self.processed_items,
+                "totalItems": min(self.number_of_texts_to_sample, self.requested_sample_size),
+                "elapsedSeconds": elapsed_seconds,
+                "estimatedRemainingSeconds": int(elapsed_seconds * (self.number_of_texts_to_sample - self.processed_items) / self.processed_items) if self.processed_items > 0 else self.number_of_texts_to_sample,
+                "accuracy": metrics["accuracy"] * 100,  # Convert to percentage
+                "updatedAt": current_time.isoformat().replace('+00:00', 'Z'),
+                "status": status,
+                "predictedClassDistribution": json.dumps(metrics["predicted_distribution"]),
+                "datasetClassDistribution": json.dumps(metrics["actual_distribution"]),
+                "confusionMatrix": json.dumps(matrix_data)
+            }
+            
+            mutation = """
+            mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                updateEvaluation(input: $input) {
+                    id
+                    type
+                    accountId
+                    status
+                    createdAt
+                    updatedAt
+                    parameters
+                    metrics
+                    inferences
+                    accuracy
+                    cost
+                    startedAt
+                    elapsedSeconds
+                    estimatedRemainingSeconds
+                    totalItems
+                    processedItems
+                    errorMessage
+                    errorDetails
+                    scorecardId
+                    scoreId
+                    confusionMatrix
+                    scoreGoal
+                    datasetClassDistribution
+                    isDatasetClassDistributionBalanced
+                    predictedClassDistribution
+                    isPredictedClassDistributionBalanced
+                }
+            }
+            """
+            
+            variables = {
+                "input": update_params
+            }
+            
+            await asyncio.to_thread(client.execute, mutation, variables)
+            logging.info("Successfully updated dashboard experiment")
+            
+        finally:
+            await self.return_client_to_pool(client)
 
     def calculate_metrics(self, results):
         logging.info(f"\nStarting metrics calculation with {len(results)} results")
         predicted_distributions = {}
         actual_distributions = {}
         confusion_matrices = {}
+        
+        total_correct = 0
+        total_predictions = 0
         
         # First pass: build distributions and confusion matrices
         for result in results:
@@ -376,6 +387,11 @@ class Evaluation:
                 logging.info(f"Predicted: '{predicted}'")
                 logging.info(f"Actual: '{actual}'")
                 logging.info(f"Correct: {score_result.metadata['correct']}")
+                
+                # Update total correct and predictions
+                if score_result.metadata['correct']:
+                    total_correct += 1
+                total_predictions += 1
                 
                 # Update actual label distribution
                 if score_name not in actual_distributions:
@@ -411,65 +427,27 @@ class Evaluation:
                 # Update confusion matrix
                 confusion_matrices[score_name]['matrix'][actual][predicted] += 1
 
-        # Second pass: calculate metrics
-        total_correct = 0
-        total_predictions = 0
-        
-        # We'll calculate these for binary classification if applicable
-        tp = fp = tn = fn = 0
-        
-        for score_name, matrix_data in confusion_matrices.items():
-            labels = sorted(list(matrix_data['labels']))
-            is_binary = len(labels) == 2 and 'yes' in labels and 'no' in labels
-            
-            # Calculate correct predictions and total for this score
-            for actual_label in labels:
-                for predicted_label in labels:
-                    count = matrix_data['matrix'].get(actual_label, {}).get(predicted_label, 0)
-                    if actual_label == predicted_label:
-                        total_correct += count
-                    total_predictions += count
-                    
-                    # For binary classification, also update TP/TN/FP/FN
-                    if is_binary:
-                        if actual_label == predicted_label == "yes":
-                            tp += count
-                        elif actual_label == predicted_label == "no":
-                            tn += count
-                        elif predicted_label == "yes" and actual_label == "no":
-                            fp += count
-                        elif predicted_label == "no" and actual_label == "yes":
-                            fn += count
-
         # Calculate overall accuracy
         accuracy = total_correct / total_predictions if total_predictions > 0 else 0
         
-        # For binary classification, also calculate precision, sensitivity, specificity
-        if tp + fp + tn + fn > 0:  # If we have binary classification data
-            precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-            sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
-            specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
-        else:  # For multi-class, these metrics don't apply
-            precision = accuracy  # Use accuracy as a stand-in
-            sensitivity = accuracy
-            specificity = accuracy
+        # For binary classification scores, calculate additional metrics
+        precision = accuracy
+        sensitivity = accuracy
+        specificity = accuracy
         
-        logging.info("\nCalculated metrics:")
-        logging.info(f"Accuracy: {accuracy}")
-        if tp + fp + tn + fn > 0:
-            logging.info(f"Binary classification metrics:")
-            logging.info(f"True Positives (TP): {tp}")
-            logging.info(f"True Negatives (TN): {tn}")
-            logging.info(f"False Positives (FP): {fp}")
-            logging.info(f"False Negatives (FN): {fn}")
-            logging.info(f"Precision: {precision}")
-            logging.info(f"Sensitivity (Recall): {sensitivity}")
-            logging.info(f"Specificity: {specificity}")
-        
-        logging.info("\nDistributions:")
-        logging.info(f"Actual distributions: {actual_distributions}")
-        logging.info(f"Predicted distributions: {predicted_distributions}")
-        logging.info(f"Confusion matrices: {confusion_matrices}")
+        # If we have binary classification data (yes/no), calculate detailed metrics
+        for score_name, matrix_data in confusion_matrices.items():
+            labels = sorted(list(matrix_data['labels']))
+            if len(labels) == 2 and 'yes' in labels and 'no' in labels:
+                tp = matrix_data['matrix'].get('yes', {}).get('yes', 0)
+                tn = matrix_data['matrix'].get('no', {}).get('no', 0)
+                fp = matrix_data['matrix'].get('no', {}).get('yes', 0)
+                fn = matrix_data['matrix'].get('yes', {}).get('no', 0)
+                
+                precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+                sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
+                specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+                break  # Use the first binary score found for these metrics
 
         # Format confusion matrices for API
         formatted_confusion_matrices = []
@@ -477,8 +455,7 @@ class Evaluation:
             labels = sorted(list(matrix_data['labels']))
             matrix = []
             
-            # Create the matrix in the correct order
-            for i, actual_label in enumerate(labels):
+            for actual_label in labels:
                 row = []
                 for predicted_label in labels:
                     count = matrix_data['matrix'].get(actual_label, {}).get(predicted_label, 0)
@@ -491,18 +468,7 @@ class Evaluation:
                 "labels": labels
             })
 
-        # Ensure we have at least one confusion matrix
-        if not formatted_confusion_matrices:
-            # Create a default binary confusion matrix if none exists
-            default_labels = ['yes', 'no']
-            default_matrix = [[0, 0], [0, 0]]
-            formatted_confusion_matrices.append({
-                "score_name": self.score_names()[0] if self.score_names() else "default",
-                "matrix": default_matrix,
-                "labels": default_labels
-            })
-
-        # Format predicted distributions for API
+        # Format distributions for API
         predicted_label_distributions = []
         for score_name, distribution in predicted_distributions.items():
             for label, count in distribution.items():
@@ -511,14 +477,6 @@ class Evaluation:
                     "count": count
                 })
 
-        # Ensure we have at least one distribution entry
-        if not predicted_label_distributions:
-            predicted_label_distributions.append({
-                "label": "no_data",
-                "count": 0
-            })
-
-        # Format actual distributions for API
         actual_label_distributions = []
         for score_name, distribution in actual_distributions.items():
             for label, count in distribution.items():
@@ -527,23 +485,31 @@ class Evaluation:
                     "count": count
                 })
 
-        # Ensure we have at least one distribution entry
+        # Ensure we have at least one entry in each required field
+        if not formatted_confusion_matrices:
+            formatted_confusion_matrices.append({
+                "score_name": self.score_names()[0] if self.score_names() else "default",
+                "matrix": [[0, 0], [0, 0]],
+                "labels": ['yes', 'no']
+            })
+        
+        if not predicted_label_distributions:
+            predicted_label_distributions.append({
+                "label": "no_data",
+                "count": 0
+            })
+            
         if not actual_label_distributions:
             actual_label_distributions.append({
                 "label": "no_data",
                 "count": 0
             })
 
-        # Calculate standard metrics for binary classification
-        total = tp + tn + fp + fn
-        accuracy = (tp + tn) / total if total > 0 else 0
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-        sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
-        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
-
-        logging.info("\nFinal actual (ground truth) distributions:")
-        for score_name, dist in actual_distributions.items():
-            logging.info(f"{score_name}: {dist}")
+        logging.info("\nCalculated metrics:")
+        logging.info(f"Accuracy: {accuracy}")
+        logging.info(f"Precision: {precision}")
+        logging.info(f"Sensitivity: {sensitivity}")
+        logging.info(f"Specificity: {specificity}")
 
         return {
             "accuracy": accuracy,
@@ -729,10 +695,9 @@ class Evaluation:
             )
 
         # Process results in batches but don't wait to update metrics
-        batch_size = 10
         results = []
-        for i in range(0, len(selected_sample_rows), batch_size):
-            batch = selected_sample_rows[i:i+batch_size]
+        for i in range(0, len(selected_sample_rows), self.batch_size):
+            batch = selected_sample_rows[i:i+self.batch_size]
             batch_results = await self.score_all_texts(batch)
             logging.info(f"Batch results: {len(batch_results)} results processed.")
             results.extend(batch_results)
@@ -869,7 +834,7 @@ class Evaluation:
         logging.info(f"cost: ${expenses['cost_per_text']:.6f} per call / ${expenses['total_cost']:.6f} total")
 
         report = self.generate_report(score_instance, overall_accuracy, expenses, len(selected_sample_rows))
-        logging.info(report)
+        logging.warning(report)
 
         await asyncio.to_thread(self.generate_and_log_confusion_matrix, results, report_folder_path)
         
@@ -880,7 +845,7 @@ class Evaluation:
 
         # Log final metrics
         final_metrics = self.calculate_metrics(self.all_results)
-        self.log_to_dashboard(final_metrics, status="COMPLETED")
+        await self.log_to_dashboard(final_metrics, status="COMPLETED")
 
     def generate_report(self, score_instance, overall_accuracy, expenses, sample_size):
         score_config = score_instance.parameters
@@ -1262,8 +1227,58 @@ class AccuracyEvaluation(Evaluation):
                 score_result.metadata['correct'] = score_result_value == human_label
                 score_result.metadata['text'] = text
 
-                ScoreResult.create(
-                    client=self.dashboard_client,
+                # Create ScoreResult in a non-blocking way
+                if self.dashboard_client and self.experiment_id:
+                    asyncio.create_task(self._create_score_result(
+                        score_result=score_result,
+                        content_id=content_id,
+                        result=result
+                    ))
+
+            except Exception as e:
+                logging.exception(f"Error processing {score_identifier}: {e}")
+                # Create Score.Result with required parameters
+                score_result = Score.Result(
+                    value="Error", 
+                    error=str(e),
+                    parameters=Score.Parameters(
+                        name=score_identifier,
+                        scorecard=self.scorecard_name
+                    )
+                )
+
+        # Add result to all_results and increment processed_items
+        self.all_results.append(result)
+        self.processed_items += 1
+
+        # Calculate and log metrics asynchronously
+        if self.dashboard_client and self.experiment_id:
+            asyncio.create_task(self._update_dashboard_metrics())
+
+        return result
+
+    async def get_client_from_pool(self):
+        """Get a client from the pool or create a new one if needed"""
+        async with self.client_pool_lock:
+            if self.client_pool:
+                return self.client_pool.pop()
+            else:
+                return PlexusDashboardClient.for_account('call-criteria')
+
+    async def return_client_to_pool(self, client):
+        """Return a client to the pool if there's room"""
+        async with self.client_pool_lock:
+            if len(self.client_pool) < self.max_pool_size:
+                self.client_pool.append(client)
+
+    async def _create_score_result(self, score_result, content_id, result):
+        """Helper method to create score result asynchronously using connection pool"""
+        try:
+            client = await self.get_client_from_pool()
+            try:
+                await asyncio.to_thread(
+                    ScoreResult.create,
+                    client=client,
                     value=1.0 if score_result.metadata['correct'] else 0.0,
                     confidence=None,
                     correct=score_result.metadata['correct'],
@@ -1289,35 +1304,27 @@ class AccuracyEvaluation(Evaluation):
                         }
                     })
                 )
+            finally:
+                # Return the client to the pool regardless of success/failure
+                await self.return_client_to_pool(client)
+        except Exception as e:
+            logging.error(f"Error creating score result: {e}")
 
-            except Exception as e:
-                logging.exception(f"Error processing {score_identifier}: {e}")
-                if isinstance(e, requests.exceptions.HTTPError):
-                    logging.error(f"HTTPError: {e.response.text}")
-
-                # Create Score.Result with required parameters
-                score_result = Score.Result(
-                    value="Error", 
-                    error=str(e),
-                    parameters=Score.Parameters(
-                        name=score_identifier,
-                        scorecard=self.scorecard_name
-                    )
-                )
-
-        # Add result to all_results and increment processed_items
-        self.all_results.append(result)
-        self.processed_items += 1
-
-        # Calculate metrics based on all results so far
-        metrics = self.calculate_metrics(self.all_results)
-        self.log_to_dashboard(metrics)
-
-        return result
+    async def _update_dashboard_metrics(self):
+        """Helper method to update dashboard metrics asynchronously"""
+        try:
+            metrics = self.calculate_metrics(self.all_results)
+            await self.log_to_dashboard(metrics)
+        except Exception as e:
+            logging.error(f"Error updating dashboard metrics: {e}")
 
     async def cleanup(self):
-        """Clean up all resources."""
+        """Clean up all resources including the client pool"""
         try:
+            # Clean up client pool
+            async with self.client_pool_lock:
+                self.client_pool.clear()
+            
             # Clean up scorecard first
             if hasattr(self, 'scorecard'):
                 if isinstance(self.scorecard, LangGraphScore):
