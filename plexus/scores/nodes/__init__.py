@@ -6,3 +6,4 @@ from .MultiClassClassifier import MultiClassClassifier
 from .NumericClassifier import NumericClassifier
 from .Extractor import Extractor
 from .Classifier import Classifier
+from .ContextExtractor import ContextExtractor
