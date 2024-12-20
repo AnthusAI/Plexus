@@ -104,7 +104,7 @@ def generate_examples(scorecard_name, score_name,
         score_instance.load_data(data=score_configuration['data'], fresh=fresh)
         score_instance.process_data()
 
-        num_training_samples = maximum_number
+        num_training_samples = round(maximum_number * train_ratio)
         num_validation_samples = round(maximum_number * (1 - train_ratio))
 
         logging.info(f"Aiming for {num_training_samples} training samples and {num_validation_samples} validation samples.")
