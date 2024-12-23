@@ -20,6 +20,7 @@ from tenacity import retry, wait_fixed, stop_after_attempt, before_log, retry_if
 from requests.exceptions import Timeout, RequestException
 import mlflow
 from concurrent.futures import ThreadPoolExecutor
+from asyncio import Queue
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -61,8 +62,8 @@ class Evaluation:
         subset_of_score_names = None,
         experiment_label = None,
         max_mismatches_to_report=5,
-        account_key: str = 'call-criteria',  # Default account key
-        score_id: str = None  # Add score_id parameter
+        account_key: str = 'call-criteria',
+        score_id: str = None
     ):
         self.scorecard_name = scorecard_name
         self.scorecard = scorecard
@@ -73,6 +74,7 @@ class Evaluation:
         self.sampling_method = sampling_method
         self.random_seed = random_seed
         self.score_id = score_id
+        self.account_key = account_key  # Store the account key
         
         # Parse lists, if available.
         self.session_ids_to_sample = session_ids_to_sample
@@ -88,16 +90,9 @@ class Evaluation:
         self.total_correct = 0
         self.total_questions = 0
 
-        # Connection pool configuration
-        self.max_pool_size = 50
-        self.batch_size = self.max_pool_size
-        self.client_pool = []
-        self.client_pool_lock = asyncio.Lock()
-
         # Initialize dashboard client and experiment ID
         try:
             logging.info("Initializing Plexus Dashboard client...")
-            account_key = 'call-criteria'
             self.dashboard_client = PlexusDashboardClient.for_account(account_key)
             
             # Look up account using default key
@@ -123,7 +118,7 @@ class Evaluation:
             
             # Store the scorecard ID
             self.scorecard_id = scorecard.id
-            
+
             # Create initial experiment params
             started_at = datetime.now(timezone.utc)
             experiment_params = {
@@ -165,7 +160,6 @@ class Evaluation:
                     result = self.dashboard_client.execute(query, variables)
                     logging.info(f"Raw API response: {result}")
                     
-                    # Remove the 'data' key from the path
                     items = result.get('listScores', {}).get('items', [])
                     logging.info(f"Extracted items: {items}")
                     
@@ -180,7 +174,7 @@ class Evaluation:
                         self.score_id = None
                 except Exception as e:
                     logging.error(f"Error looking up score: {e}")
-                    logging.error(f"Exception details: {type(e)}")  # Debug exception details
+                    logging.error(f"Exception details: {type(e)}")
                     self.score_id = None
             else:
                 self.score_id = score_id
@@ -286,7 +280,6 @@ class Evaluation:
         
         logging.info(f"Updating dashboard experiment {self.experiment_id} with metrics: {metrics}")
         
-        client = await self.get_client_from_pool()
         try:
             elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
             
@@ -359,11 +352,12 @@ class Evaluation:
                 "input": update_params
             }
             
-            await asyncio.to_thread(client.execute, mutation, variables)
+            await asyncio.to_thread(self.dashboard_client.execute, mutation, variables)
             logging.info("Successfully updated dashboard experiment")
             
-        finally:
-            await self.return_client_to_pool(client)
+        except Exception as e:
+            logging.error(f"Error updating dashboard experiment: {e}")
+            raise
 
     def calculate_metrics(self, results):
         logging.info(f"\nStarting metrics calculation with {len(results)} results")
@@ -379,9 +373,18 @@ class Evaluation:
             logging.info(f"\nProcessing result for form_id: {result['form_id']}")
             
             for score_identifier, score_result in result['results'].items():
-                predicted = str(score_result.value).lower()
+                # Skip if the score result is an error
+                if isinstance(score_result.value, str) and score_result.value == "Error":
+                    continue
+
+                predicted = str(score_result.value).lower().strip()
                 score_name = score_result.parameters.name
-                actual = str(score_result.metadata['human_label']).lower()
+                actual = str(score_result.metadata['human_label']).lower().strip()
+                
+                # Standardize empty or NA values
+                for value in [predicted, actual]:
+                    if value in ['', 'nan', 'n/a', 'none', 'null']:
+                        value = 'na'
                 
                 logging.info(f"Score: {score_name}")
                 logging.info(f"Predicted: '{predicted}'")
@@ -468,21 +471,27 @@ class Evaluation:
                 "labels": labels
             })
 
-        # Format distributions for API
+        # Format distributions for API - now including score names in the distribution
         predicted_label_distributions = []
         for score_name, distribution in predicted_distributions.items():
+            total_score_predictions = sum(distribution.values())
             for label, count in distribution.items():
                 predicted_label_distributions.append({
+                    "score": score_name,
                     "label": label,
-                    "count": count
+                    "count": count,
+                    "percentage": (count / total_score_predictions * 100) if total_score_predictions > 0 else 0
                 })
 
         actual_label_distributions = []
         for score_name, distribution in actual_distributions.items():
+            total_score_actuals = sum(distribution.values())
             for label, count in distribution.items():
                 actual_label_distributions.append({
+                    "score": score_name,
                     "label": label,
-                    "count": count
+                    "count": count,
+                    "percentage": (count / total_score_actuals * 100) if total_score_actuals > 0 else 0
                 })
 
         # Ensure we have at least one entry in each required field
@@ -495,21 +504,29 @@ class Evaluation:
         
         if not predicted_label_distributions:
             predicted_label_distributions.append({
+                "score": self.score_names()[0] if self.score_names() else "default",
                 "label": "no_data",
-                "count": 0
+                "count": 0,
+                "percentage": 0
             })
             
         if not actual_label_distributions:
             actual_label_distributions.append({
+                "score": self.score_names()[0] if self.score_names() else "default",
                 "label": "no_data",
-                "count": 0
+                "count": 0,
+                "percentage": 0
             })
 
         logging.info("\nCalculated metrics:")
+        logging.info(f"Total predictions: {total_predictions}")
+        logging.info(f"Total correct: {total_correct}")
         logging.info(f"Accuracy: {accuracy}")
         logging.info(f"Precision: {precision}")
         logging.info(f"Sensitivity: {sensitivity}")
         logging.info(f"Specificity: {specificity}")
+        logging.info(f"Predicted distributions: {predicted_label_distributions}")
+        logging.info(f"Actual distributions: {actual_label_distributions}")
 
         return {
             "accuracy": accuracy,
@@ -694,13 +711,8 @@ class Evaluation:
                 random_state=self.random_seed
             )
 
-        # Process results in batches but don't wait to update metrics
-        results = []
-        for i in range(0, len(selected_sample_rows), self.batch_size):
-            batch = selected_sample_rows[i:i+self.batch_size]
-            batch_results = await self.score_all_texts(batch)
-            logging.info(f"Batch results: {len(batch_results)} results processed.")
-            results.extend(batch_results)
+        # Process all results concurrently
+        results = await self.score_all_texts(selected_sample_rows)
             
         if not os.path.exists(report_folder_path):
             os.makedirs(report_folder_path)
@@ -834,7 +846,7 @@ class Evaluation:
         logging.info(f"cost: ${expenses['cost_per_text']:.6f} per call / ${expenses['total_cost']:.6f} total")
 
         report = self.generate_report(score_instance, overall_accuracy, expenses, len(selected_sample_rows))
-        logging.warning(report)
+        logging.info(report)
 
         await asyncio.to_thread(self.generate_and_log_confusion_matrix, results, report_folder_path)
         
@@ -918,8 +930,20 @@ Total cost:       ${expenses['total_cost']:.6f}
                 mlflow.log_metric(key, value)
 
     async def score_all_texts(self, selected_sample_rows):
-        tasks = [self.score_text(row) for _, row in selected_sample_rows.iterrows()]
-        results = await asyncio.gather(*tasks)
+        """Score all texts concurrently"""
+        tasks = []
+        for _, row in selected_sample_rows.iterrows():
+            task = asyncio.create_task(self.score_text(row))
+            tasks.append(task)
+        
+        results = []
+        for task in asyncio.as_completed(tasks):
+            try:
+                result = await task
+                results.append(result)
+            except Exception as e:
+                logging.error(f"Error scoring text: {e}")
+        
         return results
 
     def generate_csv_scorecard_report(self, *, results):
@@ -1080,7 +1104,10 @@ class AccuracyEvaluation(Evaluation):
         self.override_data = self.load_override_data() if self.override_folder else {}
         self.labeled_samples = labeled_samples
         self.labeled_samples_filename = labeled_samples_filename
-        self.score_id = score_id  # Store the score_id
+        self.score_id = score_id
+        self.results_queue = Queue()
+        self.metrics_task = None
+        self.should_stop = False
 
     def load_override_data(self):
         override_data = {}
@@ -1126,14 +1153,49 @@ class AccuracyEvaluation(Evaluation):
             logging.info(f"No override folder found at {self.override_folder}")
         return override_data
 
+    async def continuous_metrics_computation(self):
+        """Background task that continuously computes and posts metrics as new results arrive"""
+        while not self.should_stop:
+            try:
+                # Check if we have any new results
+                if len(self.all_results) > 0:
+                    metrics = self.calculate_metrics(self.all_results)
+                    await self.log_to_dashboard(metrics)
+                
+                # Wait a bit before checking again
+                await asyncio.sleep(2)
+            except Exception as e:
+                logging.error(f"Error in continuous metrics computation: {e}")
+                await asyncio.sleep(5)  # Wait longer on error
+
     @Evaluation.time_execution
     async def run(self):
         """Now this is an async function that just runs _async_run directly"""
-        return await self._async_run()
+        # Start the continuous metrics computation task
+        self.metrics_task = asyncio.create_task(self.continuous_metrics_computation())
+        try:
+            return await self._async_run()
+        finally:
+            # Stop the metrics computation task
+            self.should_stop = True
+            if self.metrics_task:
+                await self.metrics_task
 
     async def score_all_texts(self, selected_sample_rows):
-        tasks = [self.score_text(row) for _, row in selected_sample_rows.iterrows()]
-        results = await asyncio.gather(*tasks)
+        """Score all texts concurrently"""
+        tasks = []
+        for _, row in selected_sample_rows.iterrows():
+            task = asyncio.create_task(self.score_text(row))
+            tasks.append(task)
+        
+        results = []
+        for task in asyncio.as_completed(tasks):
+            try:
+                result = await task
+                results.append(result)
+            except Exception as e:
+                logging.error(f"Error scoring text: {e}")
+        
         return results
 
     @retry(
@@ -1237,7 +1299,6 @@ class AccuracyEvaluation(Evaluation):
 
             except Exception as e:
                 logging.exception(f"Error processing {score_identifier}: {e}")
-                # Create Score.Result with required parameters
                 score_result = Score.Result(
                     value="Error", 
                     error=str(e),
@@ -1251,34 +1312,25 @@ class AccuracyEvaluation(Evaluation):
         self.all_results.append(result)
         self.processed_items += 1
 
-        # Calculate and log metrics asynchronously
-        if self.dashboard_client and self.experiment_id:
-            asyncio.create_task(self._update_dashboard_metrics())
-
         return result
 
-    async def get_client_from_pool(self):
-        """Get a client from the pool or create a new one if needed"""
-        async with self.client_pool_lock:
-            if self.client_pool:
-                return self.client_pool.pop()
-            else:
-                return PlexusDashboardClient.for_account('call-criteria')
-
-    async def return_client_to_pool(self, client):
-        """Return a client to the pool if there's room"""
-        async with self.client_pool_lock:
-            if len(self.client_pool) < self.max_pool_size:
-                self.client_pool.append(client)
-
     async def _create_score_result(self, score_result, content_id, result):
-        """Helper method to create score result asynchronously using connection pool"""
-        try:
-            client = await self.get_client_from_pool()
+        """Helper method to create score result asynchronously"""
+        max_retries = 3
+        retry_delay = 1  # seconds
+        
+        for attempt in range(max_retries):
             try:
+                # Store the account key when initializing the evaluation
+                if not hasattr(self, 'account_key'):
+                    self.account_key = 'call-criteria'  # default value
+                
+                # Create a new client instance for each request to avoid connection reuse issues
+                temp_client = PlexusDashboardClient.for_account(self.account_key)
+                
                 await asyncio.to_thread(
                     ScoreResult.create,
-                    client=client,
+                    client=temp_client,
                     value=1.0 if score_result.metadata['correct'] else 0.0,
                     confidence=None,
                     correct=score_result.metadata['correct'],
@@ -1304,28 +1356,27 @@ class AccuracyEvaluation(Evaluation):
                         }
                     })
                 )
-            finally:
-                # Return the client to the pool regardless of success/failure
-                await self.return_client_to_pool(client)
-        except Exception as e:
-            logging.error(f"Error creating score result: {e}")
-
-    async def _update_dashboard_metrics(self):
-        """Helper method to update dashboard metrics asynchronously"""
-        try:
-            metrics = self.calculate_metrics(self.all_results)
-            await self.log_to_dashboard(metrics)
-        except Exception as e:
-            logging.error(f"Error updating dashboard metrics: {e}")
+                break  # If successful, break out of retry loop
+                
+            except Exception as e:
+                if "Transport is already connected" in str(e):
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay)
+                        continue
+                logging.error(f"Error creating score result (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt == max_retries - 1:
+                    # Log final attempt failure but don't raise to avoid breaking the main flow
+                    logging.error(f"Failed to create score result after {max_retries} attempts")
 
     async def cleanup(self):
-        """Clean up all resources including the client pool"""
+        """Clean up all resources"""
         try:
-            # Clean up client pool
-            async with self.client_pool_lock:
-                self.client_pool.clear()
+            # Stop the metrics computation task
+            self.should_stop = True
+            if self.metrics_task:
+                await self.metrics_task
             
-            # Clean up scorecard first
+            # Clean up scorecard
             if hasattr(self, 'scorecard'):
                 if isinstance(self.scorecard, LangGraphScore):
                     await self.scorecard.cleanup()
