@@ -382,9 +382,8 @@ class Evaluation:
                 actual = str(score_result.metadata['human_label']).lower().strip()
                 
                 # Standardize empty or NA values
-                for value in [predicted, actual]:
-                    if value in ['', 'nan', 'n/a', 'none', 'null']:
-                        value = 'na'
+                predicted = 'na' if predicted in ['', 'nan', 'n/a', 'none', 'null'] else predicted
+                actual = 'na' if actual in ['', 'nan', 'n/a', 'none', 'null'] else actual
                 
                 logging.info(f"Score: {score_name}")
                 logging.info(f"Predicted: '{predicted}'")
@@ -458,18 +457,26 @@ class Evaluation:
             labels = sorted(list(matrix_data['labels']))
             matrix = []
             
-            for actual_label in labels:
-                row = []
-                for predicted_label in labels:
-                    count = matrix_data['matrix'].get(actual_label, {}).get(predicted_label, 0)
-                    row.append(count)
-                matrix.append(row)
+            # Initialize the matrix with zeros
+            for _ in range(len(labels)):
+                matrix.append([0] * len(labels))
+            
+            # Fill in the matrix values
+            for i, actual_label in enumerate(labels):
+                for j, predicted_label in enumerate(labels):
+                    matrix[i][j] = matrix_data['matrix'].get(actual_label, {}).get(predicted_label, 0)
             
             formatted_confusion_matrices.append({
                 "score_name": score_name,
                 "matrix": matrix,
                 "labels": labels
             })
+            
+            # Log the confusion matrix for debugging
+            logging.info(f"\nConfusion Matrix for {score_name}:")
+            logging.info(f"Labels: {labels}")
+            for i, row in enumerate(matrix):
+                logging.info(f"{labels[i]}: {row}")
 
         # Format distributions for API - now including score names in the distribution
         predicted_label_distributions = []
