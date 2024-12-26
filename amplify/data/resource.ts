@@ -22,6 +22,7 @@ type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" |
     "evaluationId" | "scoreId";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
     "evaluationId" | "scoringJobId";
+type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 
 const schema = a.schema({
     Account: a
@@ -40,8 +41,8 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx) => [
-            idx("key" as AccountIndexFields)
+        .secondaryIndexes((idx: (field: AccountIndexFields) => any) => [
+            idx("key")
         ]),
 
     Scorecard: a
@@ -64,10 +65,10 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx) => [
-            idx("accountId" as ScorecardIndexFields),
-            idx("key" as ScorecardIndexFields),
-            idx("externalId" as ScorecardIndexFields)
+        .secondaryIndexes((idx: (field: ScorecardIndexFields) => any) => [
+            idx("accountId"),
+            idx("key"),
+            idx("externalId")
         ]),
 
     ScorecardSection: a
@@ -82,8 +83,8 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx) => [
-            idx("scorecardId" as ScorecardSectionIndexFields)
+        .secondaryIndexes((idx: (field: ScorecardSectionIndexFields) => any) => [
+            idx("scorecardId")
         ]),
 
     Score: a
@@ -109,8 +110,8 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx) => [
-            idx("sectionId" as ScoreIndexFields)
+        .secondaryIndexes((idx: (field: ScoreIndexFields) => any) => [
+            idx("sectionId")
         ]),
 
     Evaluation: a
@@ -267,12 +268,12 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx) => [
-            idx("accountId" as ScoreResultIndexFields),
-            idx("itemId" as ScoreResultIndexFields),
-            idx("scoringJobId" as ScoreResultIndexFields),
-            idx("evaluationId" as ScoreResultIndexFields),
-            idx("scorecardId" as ScoreResultIndexFields)
+        .secondaryIndexes((idx: (field: ScoreResultIndexFields) => any) => [
+            idx("accountId"),
+            idx("itemId"),
+            idx("scoringJobId"),
+            idx("evaluationId"),
+            idx("scorecardId")
         ]),
 
     BatchJobScoringJob: a
@@ -285,7 +286,11 @@ const schema = a.schema({
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
             allow.authenticated()
-        ]),
+        ])
+        .secondaryIndexes((idx: (field: BatchJobScoringJobIndexFields) => any) => [
+            idx("batchJobId"),
+            idx("scoringJobId")
+        ])
 });
 
 export type Schema = ClientSchema<typeof schema>;
