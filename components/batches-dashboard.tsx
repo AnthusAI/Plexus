@@ -35,6 +35,7 @@ import { ProgressBar } from "@/components/ui/progress-bar"
 import { Badge } from "@/components/ui/badge"
 import { SegmentedProgressBar } from "@/components/ui/segmented-progress-bar"
 import { BatchJobProgressBar, BatchJobStatus } from "@/components/ui/batch-job-progress-bar"
+import { DualPhaseProgressBar } from "@/components/ui/dual-phase-progress-bar"
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -395,6 +396,12 @@ function handleError(error: unknown) {
   console.error('An error occurred:', error);
 }
 
+const BATCH_JOB_CONFIG = {
+  MAX_SCORING_JOBS: 20
+} as const;
+
+const FIRST_PHASE_STATES = ['OPEN', 'CLOSED'] as const;
+
 export default function BatchesDashboard() {
   const [batchJobs, setBatchJobs] = useState<BatchJobWithCount[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -404,7 +411,7 @@ export default function BatchesDashboard() {
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(50)
   const isNarrowViewport = useMediaQuery('(max-width: 768px)')
-  const [subscription, setSubscription] = useState<{ unsubscribe: () => void } | null>(null)
+  const subscriptionsRef = useRef<{ unsubscribe: () => void }[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
   const dragStateRef = useRef<{
     isDragging: boolean
@@ -415,7 +422,6 @@ export default function BatchesDashboard() {
     startX: 0,
     startWidth: 50
   })
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
 
   const handleDragStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -466,8 +472,6 @@ export default function BatchesDashboard() {
   useEffect(() => {
     if (!accountId) return;
 
-    const subscriptions: { unsubscribe: () => void }[] = [];
-
     try {
       if (dataClient.models.BatchJob) {
         const handleBatchUpdate = async (data: Schema['BatchJob']['type']) => {
@@ -483,6 +487,14 @@ export default function BatchesDashboard() {
           
           const transformedJobs = await loadRelatedData(transformedBatchJobs);
           setBatchJobs(transformedJobs);
+
+          // Update selectedBatchJob if it matches the updated job
+          if (selectedBatchJob && data.id === selectedBatchJob.id) {
+            const updatedJob = transformedJobs.find(job => job.id === selectedBatchJob.id);
+            if (updatedJob) {
+              setSelectedBatchJob(updatedJob);
+            }
+          }
         };
 
         const handleError = (error: unknown) => {
@@ -502,16 +514,17 @@ export default function BatchesDashboard() {
           error: handleError
         });
 
-        setSubscriptions([createSub, updateSub]);
+        subscriptionsRef.current = [createSub, updateSub];
       }
     } catch (error) {
       handleError(error);
     }
 
     return () => {
-      subscriptions.forEach(sub => sub.unsubscribe());
+      subscriptionsRef.current.forEach(sub => sub.unsubscribe());
+      subscriptionsRef.current = [];
     };
-  }, [accountId]);
+  }, [accountId]); // Keep only accountId in dependencies
 
   const handleBatchJobClick = (job: BatchJobWithCount) => {
     setSelectedBatchJob(job)
@@ -559,6 +572,15 @@ export default function BatchesDashboard() {
 
     loadInitialData();
   }, []); // Run once on mount
+
+  useEffect(() => {
+    if (selectedBatchJob) {
+      const updatedJob = batchJobs.find(job => job.id === selectedBatchJob.id);
+      if (updatedJob && JSON.stringify(updatedJob) !== JSON.stringify(selectedBatchJob)) {
+        setSelectedBatchJob(updatedJob);
+      }
+    }
+  }, [batchJobs, selectedBatchJob]);
 
   if (isLoading) {
     return <div>Loading...</div>
@@ -627,11 +649,14 @@ export default function BatchesDashboard() {
                                 <BatchJobProgressBar 
                                   status={job.status as BatchJobStatus}
                                 />
-                                <ProgressBar 
-                                  progress={getProgressPercentage(job)}
-                                  processedItems={job.completedRequests ?? 0}
-                                  totalItems={job.scoringJobCountCache ?? 0}
-                                  color="secondary"
+                                <DualPhaseProgressBar 
+                                  isFirstPhase={FIRST_PHASE_STATES.includes(job.status as typeof FIRST_PHASE_STATES[number])}
+                                  firstPhaseProgress={Math.round((job.scoringJobsCount / BATCH_JOB_CONFIG.MAX_SCORING_JOBS) * 100)}
+                                  firstPhaseProcessedItems={job.scoringJobsCount}
+                                  firstPhaseTotalItems={BATCH_JOB_CONFIG.MAX_SCORING_JOBS}
+                                  secondPhaseProgress={getProgressPercentage(job)}
+                                  secondPhaseProcessedItems={job.completedRequests}
+                                  secondPhaseTotalItems={job.scoringJobCountCache || 0}
                                   isFocused={job.id === selectedBatchJob?.id}
                                 />
                               </div>
@@ -689,11 +714,14 @@ export default function BatchesDashboard() {
                             <BatchJobProgressBar 
                               status={job.status as BatchJobStatus}
                             />
-                            <ProgressBar 
-                              progress={getProgressPercentage(job)}
-                              processedItems={job.completedRequests ?? 0}
-                              totalItems={job.scoringJobCountCache ?? 0}
-                              color="secondary"
+                            <DualPhaseProgressBar 
+                              isFirstPhase={FIRST_PHASE_STATES.includes(job.status as typeof FIRST_PHASE_STATES[number])}
+                              firstPhaseProgress={Math.round((job.scoringJobsCount / BATCH_JOB_CONFIG.MAX_SCORING_JOBS) * 100)}
+                              firstPhaseProcessedItems={job.scoringJobsCount}
+                              firstPhaseTotalItems={BATCH_JOB_CONFIG.MAX_SCORING_JOBS}
+                              secondPhaseProgress={getProgressPercentage(job)}
+                              secondPhaseProcessedItems={job.completedRequests}
+                              secondPhaseTotalItems={job.scoringJobCountCache || 0}
                               isFocused={job.id === selectedBatchJob?.id}
                             />
                           </div>
@@ -750,7 +778,8 @@ export default function BatchesDashboard() {
                   completedAt: selectedBatchJob.completedAt || null,
                   errorMessage: selectedBatchJob.errorMessage || null,
                   errorDetails: selectedBatchJob.errorDetails as Record<string, unknown> || {},
-                  scoringJobs: []
+                  scoringJobs: [],
+                  scoringJobCountCache: selectedBatchJob.scoringJobCountCache || 0
                 }
               }}
               isFullWidth={isFullWidth}

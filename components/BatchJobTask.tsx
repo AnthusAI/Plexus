@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { Package, Square, X } from 'lucide-react'
-import { ProgressBar } from "@/components/ui/progress-bar"
+import { DualPhaseProgressBar } from "@/components/ui/dual-phase-progress-bar"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { CardButton } from '@/components/CardButton'
@@ -17,6 +17,13 @@ import {
   BatchJobScoringJobSubscriptionData,
   ScoringJobSubscriptionData
 } from '@/utils/subscriptions'
+import { BatchJobModel } from '../models/BatchJobModel';
+import { ScoringJobModel } from '../models/ScoringJobModel';
+
+interface BatchJobScoringJobModel {
+  batchJobId: string;
+  scoringJobId: string;
+}
 
 interface ScoringJobData {
   id: string
@@ -48,6 +55,7 @@ export interface BatchJobTaskData {
   errorMessage: string | null
   errorDetails: Record<string, unknown>
   scoringJobs?: ScoringJobData[]
+  scoringJobCountCache?: number
 }
 
 export interface BatchJobTaskProps extends BaseTaskProps<BatchJobTaskData> {
@@ -82,6 +90,14 @@ type ScoringJobResult = {
   data: ScoringJobModel | null;
 };
 
+// Configuration constants
+const BATCH_JOB_CONFIG = {
+  MAX_SCORING_JOBS: 20
+} as const;
+
+// First phase includes both OPEN and CLOSED states
+const FIRST_PHASE_STATES = ['OPEN', 'CLOSED'] as const;
+
 export default function BatchJobTask({
   task,
   variant = 'grid',
@@ -91,12 +107,10 @@ export default function BatchJobTask({
   const [scoringJobs, setScoringJobs] = useState<ScoringJobData[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // Ensure task.data is valid before using it
   if (!task.data || !isValidTaskData(task.data)) {
     return null;
   }
 
-  // Store task.data in a variable to avoid undefined checks
   const taskData = task.data;
 
   useEffect(() => {
@@ -106,33 +120,84 @@ export default function BatchJobTask({
       try {
         console.log('Loading scoring jobs for batch:', taskData.id);
         
-        // First get the links from BatchJobScoringJob
-        const linksResult = await listFromModel(
-          'BatchJobScoringJob',
-          { 
-            filter: {
-              batchJobId: { eq: taskData.id }
-            },
-            limit: 1000
-          }
-        );
+        // First get all the links from BatchJobScoringJob with pagination
+        let allLinks: BatchJobScoringJobModel[] = [];
+        let nextToken: string | undefined = undefined;
+        let pageCount = 0;
         
-        console.log('BatchJobScoringJob links:', linksResult);
-        
-        if (linksResult.data) {
-          // Get all scoring job IDs
-          const scoringJobIds = linksResult.data.map(link => link.scoringJobId);
+        do {
+          pageCount++;
+          console.log(`Fetching BatchJobScoringJob links page ${pageCount}...`);
           
-          // Then update the Promise.all section
-          const jobsResult = await Promise.all(
-            scoringJobIds.map(async id => {
-              const result = await getFromModel('ScoringJob', id);
-              return result as ScoringJobResult;
+          const linksResult: { data: BatchJobScoringJobModel[] | null; nextToken?: string } = await listFromModel(
+            'BatchJobScoringJob',
+            { 
+              filter: {
+                batchJobId: { eq: taskData.id }
+              },
+              limit: 1000,
+              nextToken: nextToken || undefined
+            }
+          );
+          
+          console.log('BatchJobScoringJob page result:', {
+            pageNumber: pageCount,
+            itemCount: linksResult.data?.length || 0,
+            hasNextToken: !!linksResult.nextToken,
+            sampleLinks: linksResult.data?.slice(0, 3).map(link => ({
+              batchJobId: link.batchJobId,
+              scoringJobId: link.scoringJobId
+            }))
+          });
+          
+          if (linksResult.data) {
+            allLinks = [...allLinks, ...linksResult.data];
+          }
+          
+          nextToken = linksResult.nextToken;
+        } while (nextToken);
+        
+        console.log('All BatchJobScoringJob links:', { 
+          totalCount: allLinks.length,
+          expectedCount: taskData.scoringJobCountCache,
+          allLinks: allLinks.map(link => ({
+            batchJobId: link.batchJobId,
+            scoringJobId: link.scoringJobId
+          }))
+        });
+        
+        // Get all scoring job IDs
+        const scoringJobIds = allLinks.map(link => link.scoringJobId);
+        
+        // Process scoring jobs in batches of 10 to avoid rate limiting
+        const batchSize = 10;
+        const allJobs: ScoringJobData[] = [];
+        
+        for (let i = 0; i < scoringJobIds.length; i += batchSize) {
+          const batchIds = scoringJobIds.slice(i, i + batchSize);
+          console.log(`Processing scoring jobs batch ${i / batchSize + 1}/${Math.ceil(scoringJobIds.length / batchSize)}:`, {
+            batchIds
+          });
+          
+          const batchResults = await Promise.all(
+            batchIds.map(async id => {
+              try {
+                const result = await getFromModel('ScoringJob', id);
+                console.log('Fetched scoring job:', {
+                  id,
+                  found: !!result.data,
+                  status: result.data?.status,
+                  itemId: result.data?.itemId
+                });
+                return result as ScoringJobResult;
+              } catch (error) {
+                console.error(`Error fetching scoring job ${id}:`, error);
+                return { data: null };
+              }
             })
           );
           
-          // Filter out nulls and map to our format
-          const validJobs = jobsResult
+          const validBatchJobs = batchResults
             .filter(result => result.data)
             .map(result => {
               const job = result.data!;
@@ -152,8 +217,27 @@ export default function BatchJobTask({
               };
             });
           
-          setScoringJobs(validJobs);
+          console.log('Processed batch results:', {
+            batchNumber: i / batchSize + 1,
+            validJobsInBatch: validBatchJobs.length,
+            validJobIds: validBatchJobs.map(job => job.id)
+          });
+          
+          allJobs.push(...validBatchJobs);
+          
+          // Add a small delay between batches to avoid rate limiting
+          if (i + batchSize < scoringJobIds.length) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
         }
+        
+        console.log('Final scoring jobs loaded:', {
+          expectedCount: taskData.scoringJobCountCache,
+          actualCount: allJobs.length,
+          allJobIds: allJobs.map(job => job.id)
+        });
+        
+        setScoringJobs(allJobs);
         
         // Set up subscriptions with proper types
         if (dataClient.models.BatchJobScoringJob) {
@@ -236,17 +320,25 @@ export default function BatchJobTask({
       }
     };
 
-    loadScoringJobs();
+    // Only load scoring jobs if we're in detail view
+    if (variant === 'detail') {
+      loadScoringJobs();
+    } else {
+      setIsLoading(false);
+    }
 
     return () => {
       subscriptions.forEach(sub => sub.unsubscribe());
     };
-  }, [taskData.id]);
+  }, [taskData.id, variant, task.data]);
 
-  const progress = taskData.totalRequests ? 
+  const isFirstPhase = FIRST_PHASE_STATES.includes(taskData.status as typeof FIRST_PHASE_STATES[number]);
+  const firstPhaseProgress = Math.round((taskData.scoringJobCountCache || 0) / BATCH_JOB_CONFIG.MAX_SCORING_JOBS * 100);
+
+  const secondPhaseProgress = taskData.totalRequests ? 
     Math.round((taskData.completedRequests / taskData.totalRequests) * 100) : 0;
 
-  const showScoringJobs = variant === 'detail' && scoringJobs.length > 0;
+  const showScoringJobs = variant === 'detail' && (taskData.scoringJobCountCache || 0) > 0;
 
   const taskWithTime = {
     ...task,
@@ -312,11 +404,14 @@ export default function BatchJobTask({
                 <BatchJobProgressBar 
                   status={taskData.status as BatchJobStatus}
                 />
-                <ProgressBar 
-                  progress={progress}
-                  processedItems={taskData.completedRequests}
-                  totalItems={taskData.totalRequests}
-                  color="secondary"
+                <DualPhaseProgressBar 
+                  isFirstPhase={isFirstPhase}
+                  firstPhaseProgress={firstPhaseProgress}
+                  firstPhaseProcessedItems={taskData.scoringJobCountCache || 0}
+                  firstPhaseTotalItems={BATCH_JOB_CONFIG.MAX_SCORING_JOBS}
+                  secondPhaseProgress={secondPhaseProgress}
+                  secondPhaseProcessedItems={taskData.completedRequests}
+                  secondPhaseTotalItems={taskData.totalRequests}
                 />
               </div>
 
@@ -330,39 +425,49 @@ export default function BatchJobTask({
             {showScoringJobs && (
               <div className="mt-8">
                 <div className="text-sm text-muted-foreground tracking-wider mb-2">
-                  Scoring Jobs ({scoringJobs.length})
+                  Scoring Jobs ({taskData.scoringJobCountCache || 0})
                 </div>
                 <hr className="mb-4 border-border" />
                 <div className="space-y-2">
-                  {scoringJobs.map((job) => (
-                    <div 
-                      key={job.id} 
-                      className="p-4 bg-card-light rounded-lg"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="space-y-1">
-                          <div className="text-sm text-muted-foreground">
-                            Item: {job.itemId}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {formatTimeAgo(job.createdAt)}
-                          </div>
-                        </div>
-                        <Badge 
-                          variant={getStatusDisplay(job.status).variant as any}
-                          className={cn(
-                            "capitalize",
-                            job.status.toUpperCase() === 'COMPLETED' && "bg-true",
-                            job.status.toUpperCase() === 'FAILED' && "bg-false",
-                            !['COMPLETED', 'FAILED'].includes(job.status.toUpperCase()) && 
-                              "bg-neutral-600"
-                          )}
-                        >
-                          {getStatusDisplay(job.status).text}
-                        </Badge>
-                      </div>
+                  {isLoading ? (
+                    <div className="text-sm text-muted-foreground">
+                      Loading scoring jobs...
                     </div>
-                  ))}
+                  ) : scoringJobs.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">
+                      No scoring jobs loaded yet
+                    </div>
+                  ) : (
+                    scoringJobs.map((job) => (
+                      <div 
+                        key={job.id} 
+                        className="p-4 bg-card-light rounded-lg"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="space-y-1">
+                            <div className="text-sm text-muted-foreground">
+                              Item: {job.itemId}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {formatTimeAgo(job.createdAt)}
+                            </div>
+                          </div>
+                          <Badge 
+                            variant={getStatusDisplay(job.status).variant as any}
+                            className={cn(
+                              "capitalize",
+                              job.status.toUpperCase() === 'COMPLETED' && "bg-true",
+                              job.status.toUpperCase() === 'FAILED' && "bg-false",
+                              !['COMPLETED', 'FAILED'].includes(job.status.toUpperCase()) && 
+                                "bg-neutral-600"
+                            )}
+                          >
+                            {getStatusDisplay(job.status).text}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
