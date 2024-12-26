@@ -16,6 +16,7 @@ const statusToProgressState = (status: BatchJobStatus) => {
     case 'closed':
       return 'closed'
     case 'processing':
+    case 'processed':
     case 'created':
       return 'processing'
     case 'completed':
