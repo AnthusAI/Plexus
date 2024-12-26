@@ -221,46 +221,71 @@ class _BaseAPIClient:
         return account.id
     
     def _resolve_scorecard_id(self, override_key: Optional[str] = None) -> Optional[str]:
-        """Get scorecard ID, resolving from key if needed"""
-        key = override_key or self.context.scorecard_key
-        if not key:
+        """Get scorecard ID, trying key, external ID, and name lookup"""
+        identifier = override_key or self.context.scorecard_key
+        if not identifier:
             return None
-            
-        cache_key = f"scorecard:{key}"
+        
+        # Check cache first
+        cache_key = f"scorecard:{identifier}"
         if cache_key in self._cache:
             return self._cache[cache_key]
-            
+        
         from .models.scorecard import Scorecard
-        scorecard = Scorecard.get_by_key(key, self)
-        self._cache[cache_key] = scorecard.id
-        if not override_key:
-            self.context.scorecard_id = scorecard.id
-        return scorecard.id
+        
+        # Try each lookup method in sequence
+        for lookup_method in [
+            lambda: Scorecard.get_by_key(identifier, self),
+            lambda: Scorecard.get_by_external_id(identifier, self),
+            lambda: Scorecard.get_by_name(identifier, self)
+        ]:
+            try:
+                scorecard = lookup_method()
+                self._cache[cache_key] = scorecard.id
+                if not override_key:
+                    self.context.scorecard_id = scorecard.id
+                return scorecard.id
+            except (ValueError, Exception):
+                continue
+            
+        raise ValueError(f"Could not find scorecard with identifier: {identifier}")
     
     def _resolve_score_id(self) -> Optional[str]:
-        """Get score ID, resolving from name if needed"""
+        """Get score ID, resolving from key, external ID, or name if needed"""
         if self.context.score_id:
             return self.context.score_id
-            
-        if not self.context.score_name:
+        
+        identifier = self.context.score_name
+        if not identifier:
             return None
-            
-        cache_key = f"score:{self.context.score_name}:{self.context.scorecard_key}"
-        if cache_key in self._cache:
-            return self._cache[cache_key]
-            
+        
         scorecard_id = self._resolve_scorecard_id()
         if not scorecard_id:
             return None
-            
+        
+        # Check cache first
+        cache_key = f"score:{identifier}:{self.context.scorecard_key}"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
         from .models.score import Score
-        score = Score.get_by_name(self.context.score_name, scorecard_id, self)
-        if not score:
-            return None
+        
+        # Try each lookup method in sequence
+        for lookup_method in [
+            lambda: Score.get_by_key(identifier, scorecard_id, self),
+            lambda: Score.get_by_external_id(identifier, scorecard_id, self),
+            lambda: Score.get_by_name(identifier, scorecard_id, self)
+        ]:
+            try:
+                score = lookup_method()
+                if score:
+                    self._cache[cache_key] = score.id
+                    self.context.score_id = score.id
+                    return score.id
+            except Exception:
+                continue
             
-        self._cache[cache_key] = score.id
-        self.context.score_id = score.id
-        return score.id
+        return None
 
     def log_score(
         self, 
@@ -393,7 +418,7 @@ class _BaseAPIClient:
         scoreId: Optional[str] = None,
         parameters: Optional[Dict] = None,
         metadata: Optional[Dict] = None,
-        max_batch_size: int = 3,
+        max_batch_size: int = 20,
         **kwargs
     ) -> Tuple['ScoringJob', 'BatchJob']:
         """Create or add to a batch scoring job."""
@@ -406,45 +431,11 @@ class _BaseAPIClient:
         if metadata:
             logging.info(f"Received metadata: {metadata}")
 
-        # First check all batch jobs to help debug
-        all_jobs_query = """
-        query GetAllBatchJobs(
-            $accountId: String!,
-            $scorecardId: String!,
-            $modelProvider: String!,
-            $modelName: String!
-        ) {
-            listBatchJobs(
-                filter: {
-                    accountId: { eq: $accountId },
-                    scorecardId: { eq: $scorecardId },
-                    modelProvider: { eq: $modelProvider },
-                    modelName: { eq: $modelName }
-                }
-            ) {
-                items {
-                    id
-                    accountId
-                    type
-                    batchId
-                    status
-                    modelProvider
-                    modelName
-                    totalRequests
-                    completedRequests
-                    failedRequests
-                    scoringJobCountCache
-                }
-            }
-        }
-        """
-
-        all_jobs_result = self.execute(all_jobs_query, {
-            'accountId': accountId,
-            'scorecardId': scorecardId,
-            'modelProvider': model_provider,
-            'modelName': model_name
-        })
+        # First check if a scoring job already exists for this item
+        existing_job = ScoringJob.find_by_item_id(itemId, self)
+        if existing_job:
+            logging.info(f"Found existing scoring job {existing_job.id} for item {itemId}")
+            return existing_job, None
 
         # Look for an existing open batch job
         query = """
