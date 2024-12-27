@@ -103,12 +103,11 @@ export default function BatchJobTask({
       try {
         console.log('Loading scoring jobs for batch:', taskData.id);
         
-        // Use the new index to get all BatchJobScoringJob links with ScoringJob data
-        const linksResult = await dataClient.models.BatchJobScoringJob.list({
+        // Use listFromModel helper instead of direct dataClient access
+        const linksResult = await listFromModel('BatchJobScoringJob', {
           filter: {
             batchJobId: { eq: taskData.id }
-          },
-          indexName: 'byBatchJobId'
+          }
         });
         
         console.log('BatchJobScoringJob links loaded:', {
@@ -134,35 +133,39 @@ export default function BatchJobTask({
           ids: scoringJobIds
         });
 
-        // Fetch each scoring job individually since IN filter isn't working
+        // Fetch each scoring job individually
         const jobResults = await Promise.all(
           scoringJobIds.map(id => getFromModel('ScoringJob', id))
         );
 
+        type ScoringJobResult = Awaited<ReturnType<typeof getFromModel<'ScoringJob'>>>;
+        
         const validJobs = jobResults
-          .filter(result => result.data)
-          .map(result => {
-            const job = result.data!;
+          .filter((result: ScoringJobResult): result is ScoringJobResult & { data: NonNullable<ScoringJobResult['data']> } => 
+            result.data !== null
+          )
+          .map((result: ScoringJobResult & { data: NonNullable<ScoringJobResult['data']> }) => {
+            const job = result.data;
             return {
-              id: job.id,
-              status: job.status,
-              startedAt: job.startedAt || null,
-              completedAt: job.completedAt || null,
-              errorMessage: job.errorMessage || null,
-              itemId: job.itemId,
-              accountId: job.accountId,
-              scorecardId: job.scorecardId,
-              evaluationId: job.evaluationId || null,
-              scoreId: job.scoreId || null,
+              id: job.id as string,
+              status: job.status as string,
+              startedAt: (job.startedAt as string) || null,
+              completedAt: (job.completedAt as string) || null,
+              errorMessage: (job.errorMessage as string) || null,
+              itemId: job.itemId as string,
+              accountId: job.accountId as string,
+              scorecardId: job.scorecardId as string,
+              evaluationId: (job.evaluationId as string) || null,
+              scoreId: (job.scoreId as string) || null,
               batchJobId: taskData.id,
-              createdAt: job.createdAt
-            };
+              createdAt: job.createdAt as string
+            } satisfies ScoringJobData;
           });
 
         console.log('ScoringJobs loaded:', {
           count: validJobs.length,
           expectedCount: scoringJobIds.length,
-          sampleJobs: validJobs.slice(0, 3).map(job => ({
+          sampleJobs: validJobs.slice(0, 3).map((job: ScoringJobData) => ({
             id: job.id,
             status: job.status,
             itemId: job.itemId
