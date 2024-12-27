@@ -17,13 +17,6 @@ import {
   BatchJobScoringJobSubscriptionData,
   ScoringJobSubscriptionData
 } from '@/utils/subscriptions'
-import { BatchJobModel } from '../models/BatchJobModel';
-import { ScoringJobModel } from '../models/ScoringJobModel';
-
-interface BatchJobScoringJobModel {
-  batchJobId: string;
-  scoringJobId: string;
-}
 
 interface ScoringJobData {
   id: string
@@ -76,19 +69,9 @@ function getStatusDisplay(status: string): { text: string; variant: string } {
   return statusMap[normalizedStatus] || { text: status, variant: 'secondary' }
 }
 
-// Update the type guard to be more specific
 function isValidTaskData(data: unknown): data is Required<BatchJobTaskData> {
   return data !== undefined && data !== null && typeof (data as any).id === 'string';
 }
-
-// First, let's add some type helpers
-type ScoringJobModel = Schema['ScoringJob']['type'];
-type BatchJobScoringJobModel = Schema['BatchJobScoringJob']['type'];
-
-// First, add a type for the job result
-type ScoringJobResult = {
-  data: ScoringJobModel | null;
-};
 
 // Configuration constants
 const BATCH_JOB_CONFIG = {
@@ -120,124 +103,76 @@ export default function BatchJobTask({
       try {
         console.log('Loading scoring jobs for batch:', taskData.id);
         
-        // First get all the links from BatchJobScoringJob with pagination
-        let allLinks: BatchJobScoringJobModel[] = [];
-        let nextToken: string | undefined = undefined;
-        let pageCount = 0;
-        
-        do {
-          pageCount++;
-          console.log(`Fetching BatchJobScoringJob links page ${pageCount}...`);
-          
-          const linksResult: { data: BatchJobScoringJobModel[] | null; nextToken?: string } = await listFromModel(
-            'BatchJobScoringJob',
-            { 
-              filter: {
-                batchJobId: { eq: taskData.id }
-              },
-              limit: 1000,
-              nextToken: nextToken || undefined
-            }
-          );
-          
-          console.log('BatchJobScoringJob page result:', {
-            pageNumber: pageCount,
-            itemCount: linksResult.data?.length || 0,
-            hasNextToken: !!linksResult.nextToken,
-            sampleLinks: linksResult.data?.slice(0, 3).map(link => ({
-              batchJobId: link.batchJobId,
-              scoringJobId: link.scoringJobId
-            }))
-          });
-          
-          if (linksResult.data) {
-            allLinks = [...allLinks, ...linksResult.data];
+        // Use listFromModel helper instead of direct dataClient access
+        const linksResult = await listFromModel('BatchJobScoringJob', {
+          filter: {
+            batchJobId: { eq: taskData.id }
           }
-          
-          nextToken = linksResult.nextToken;
-        } while (nextToken);
+        });
         
-        console.log('All BatchJobScoringJob links:', { 
-          totalCount: allLinks.length,
+        console.log('BatchJobScoringJob links loaded:', {
+          count: linksResult.data?.length || 0,
           expectedCount: taskData.scoringJobCountCache,
-          allLinks: allLinks.map(link => ({
+          sampleLinks: linksResult.data?.slice(0, 3).map(link => ({
             batchJobId: link.batchJobId,
             scoringJobId: link.scoringJobId
           }))
         });
-        
-        // Get all scoring job IDs
-        const scoringJobIds = allLinks.map(link => link.scoringJobId);
-        
-        // Process scoring jobs in batches of 10 to avoid rate limiting
-        const batchSize = 10;
-        const allJobs: ScoringJobData[] = [];
-        
-        for (let i = 0; i < scoringJobIds.length; i += batchSize) {
-          const batchIds = scoringJobIds.slice(i, i + batchSize);
-          console.log(`Processing scoring jobs batch ${i / batchSize + 1}/${Math.ceil(scoringJobIds.length / batchSize)}:`, {
-            batchIds
-          });
-          
-          const batchResults = await Promise.all(
-            batchIds.map(async id => {
-              try {
-                const result = await getFromModel('ScoringJob', id);
-                console.log('Fetched scoring job:', {
-                  id,
-                  found: !!result.data,
-                  status: result.data?.status,
-                  itemId: result.data?.itemId
-                });
-                return result as ScoringJobResult;
-              } catch (error) {
-                console.error(`Error fetching scoring job ${id}:`, error);
-                return { data: null };
-              }
-            })
-          );
-          
-          const validBatchJobs = batchResults
-            .filter(result => result.data)
-            .map(result => {
-              const job = result.data!;
-              return {
-                id: job.id,
-                status: job.status,
-                startedAt: job.startedAt || null,
-                completedAt: job.completedAt || null,
-                errorMessage: job.errorMessage || null,
-                itemId: job.itemId,
-                accountId: job.accountId,
-                scorecardId: job.scorecardId,
-                evaluationId: job.evaluationId || null,
-                scoreId: job.scoreId || null,
-                batchJobId: taskData.id,
-                createdAt: job.createdAt
-              };
-            });
-          
-          console.log('Processed batch results:', {
-            batchNumber: i / batchSize + 1,
-            validJobsInBatch: validBatchJobs.length,
-            validJobIds: validBatchJobs.map(job => job.id)
-          });
-          
-          allJobs.push(...validBatchJobs);
-          
-          // Add a small delay between batches to avoid rate limiting
-          if (i + batchSize < scoringJobIds.length) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
+
+        if (!linksResult.data) {
+          console.log('No BatchJobScoringJob links found');
+          setScoringJobs([]);
+          setIsLoading(false);
+          return;
         }
+
+        // Get all scoring jobs in one query using IN filter
+        const scoringJobIds = linksResult.data.map(link => link.scoringJobId);
         
-        console.log('Final scoring jobs loaded:', {
-          expectedCount: taskData.scoringJobCountCache,
-          actualCount: allJobs.length,
-          allJobIds: allJobs.map(job => job.id)
+        console.log('Fetching scoring jobs:', {
+          ids: scoringJobIds
         });
+
+        // Fetch each scoring job individually
+        const jobResults = await Promise.all(
+          scoringJobIds.map(id => getFromModel('ScoringJob', id))
+        );
+
+        type ScoringJobResult = Awaited<ReturnType<typeof getFromModel<'ScoringJob'>>>;
         
-        setScoringJobs(allJobs);
+        const validJobs = jobResults
+          .filter((result: ScoringJobResult): result is ScoringJobResult & { data: NonNullable<ScoringJobResult['data']> } => 
+            result.data !== null
+          )
+          .map((result: ScoringJobResult & { data: NonNullable<ScoringJobResult['data']> }) => {
+            const job = result.data;
+            return {
+              id: job.id as string,
+              status: job.status as string,
+              startedAt: (job.startedAt as string) || null,
+              completedAt: (job.completedAt as string) || null,
+              errorMessage: (job.errorMessage as string) || null,
+              itemId: job.itemId as string,
+              accountId: job.accountId as string,
+              scorecardId: job.scorecardId as string,
+              evaluationId: (job.evaluationId as string) || null,
+              scoreId: (job.scoreId as string) || null,
+              batchJobId: taskData.id,
+              createdAt: job.createdAt as string
+            } satisfies ScoringJobData;
+          });
+
+        console.log('ScoringJobs loaded:', {
+          count: validJobs.length,
+          expectedCount: scoringJobIds.length,
+          sampleJobs: validJobs.slice(0, 3).map((job: ScoringJobData) => ({
+            id: job.id,
+            status: job.status,
+            itemId: job.itemId
+          }))
+        });
+
+        setScoringJobs(validJobs);
         
         // Set up subscriptions with proper types
         if (dataClient.models.BatchJobScoringJob) {
