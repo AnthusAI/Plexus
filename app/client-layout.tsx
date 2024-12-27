@@ -17,7 +17,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   
   useEffect(() => {
-    if (authStatus === 'configuring' || authStatus === 'loading') {
+    if (!authStatus) {
       return;  // Don't redirect while auth is still loading
     }
     
@@ -32,7 +32,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
   }
 
   // For other pages, require authentication
-  if (authStatus === 'configuring' || authStatus === 'loading') {
+  if (!authStatus) {
     return null;  // Or return a loading spinner
   }
 
