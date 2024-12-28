@@ -6,14 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "next lint --no-cache",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "test-storybook": "test-storybook",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:storybook": "test-storybook"
+    "test:storybook": "test-storybook",
+    "typecheck": "tsc --noEmit --pretty --diagnostics",
+    "ci": "npm run typecheck && npm run build && npm run lint && npm run test:coverage && npm run build-storybook && npm run test-storybook"
   },
   "dependencies": {
     "@aws-amplify/ui-react": "^6.1.13",
