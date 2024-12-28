@@ -5,11 +5,18 @@ import { SidebarProvider } from "@/app/contexts/SidebarContext";
 import { Authenticator, useAuthenticator } from '@aws-amplify/ui-react';
 import '@aws-amplify/ui-react/styles.css';
 import { Amplify } from "aws-amplify";
-import outputs from "@/amplify_outputs.json";
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
-Amplify.configure(outputs);
+// Only configure Amplify if we're not in a CI environment
+if (process.env.NODE_ENV !== 'test') {
+  try {
+    const outputs = require('@/amplify_outputs.json');
+    Amplify.configure(outputs);
+  } catch (error) {
+    console.warn('Amplify outputs not found - skipping configuration');
+  }
+}
 
 function AuthWrapper({ children }: { children: React.ReactNode }) {
   const { authStatus, user } = useAuthenticator(context => [context.authStatus]);
