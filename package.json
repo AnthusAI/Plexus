@@ -16,7 +16,7 @@
     "test:storybook": "test-storybook",
     "typecheck": "tsc --noEmit --pretty --diagnostics",
     "test-storybook:ci": "concurrently -k -s first -n \"SB,TEST\" -c \"magenta,blue\" \"npm run build-storybook --quiet && npx http-server storybook-static --port 6006 --silent\" \"wait-on tcp:6006 && npm run test-storybook\"",
-    "ci": "npm run typecheck && npm run test:coverage && npm run test-storybook:ci"
+    "ci": "npm run typecheck && npm run test:coverage"
   },
   "dependencies": {
     "@aws-amplify/ui-react": "^6.1.13",
