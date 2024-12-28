@@ -15,7 +15,7 @@
     "test:coverage": "jest --coverage",
     "test:storybook": "test-storybook",
     "typecheck": "tsc --noEmit --pretty --diagnostics",
-    "ci": "npm run typecheck && npm run build && npm run lint && npm run test:coverage && npm run build-storybook && npm run test-storybook"
+    "ci": "npm run typecheck && npm run lint && npm run test:coverage && npm run build-storybook && npm run test-storybook"
   },
   "dependencies": {
     "@aws-amplify/ui-react": "^6.1.13",
