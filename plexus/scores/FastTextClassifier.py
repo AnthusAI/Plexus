@@ -278,9 +278,9 @@ class FastTextClassifier(Score):
         local_model_path = mlflow.pyfunc.get_model_uri(model_uri)
         return local_model_path
 
-    def predict(self, model_input):
-        if isinstance(model_input, pd.DataFrame) and text in model_input.columns:
-            texts = model_input[text].tolist()
+    def predict(self, model_input, text_column='text'):
+        if isinstance(model_input, pd.DataFrame) and text_column in model_input.columns:
+            texts = model_input[text_column].tolist()
             logging.debug(f"Running inference on texts: {texts}")
         else:
             logging.error("Model input should be a DataFrame with a text column.")
