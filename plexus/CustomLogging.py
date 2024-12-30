@@ -30,13 +30,24 @@ def setup_logging(log_group=DEFAULT_LOG_GROUP):
     if cloudwatch_handler:
         logging.getLogger().removeHandler(cloudwatch_handler)
     
-    # Create new CloudWatch handler
-    stream_name = f"plexus-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
-    cloudwatch_handler = watchtower.CloudWatchLogHandler(
-        log_group=log_group,
-        stream_name=stream_name
-    )
-    current_log_group = log_group
+    handlers = [
+        RichHandler(console=console, markup=True, rich_tracebacks=True, 
+                   show_time=False, show_path=False)
+    ]
+
+    # Only add CloudWatch handler if AWS credentials are available
+    if os.getenv('AWS_ACCESS_KEY_ID') and os.getenv('AWS_SECRET_ACCESS_KEY') \
+            and os.getenv('AWS_DEFAULT_REGION'):
+        stream_name = f"plexus-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
+        cloudwatch_handler = watchtower.CloudWatchLogHandler(
+            log_group=log_group,
+            stream_name=stream_name
+        )
+        handlers.append(cloudwatch_handler)
+        current_log_group = log_group
+    else:
+        cloudwatch_handler = None
+        current_log_group = None
 
     # Configure logging
     logging.basicConfig(
@@ -44,10 +55,7 @@ def setup_logging(log_group=DEFAULT_LOG_GROUP):
         level=logging.DEBUG if os.getenv('DEBUG') else logging.INFO,
         format="%(message)s",
         datefmt="[%X]",
-        handlers=[
-            RichHandler(console=console, markup=True, rich_tracebacks=True, show_time=False, show_path=False),
-            cloudwatch_handler
-        ]
+        handlers=handlers
     )
 
     # Ensure that logging output goes to sys.stdout
@@ -62,6 +70,12 @@ def set_log_group(new_log_group):
     
     :param new_log_group: The name of the new log group to use
     """
+    # Skip if CloudWatch logging is not configured
+    if not os.getenv('AWS_ACCESS_KEY_ID') or not os.getenv('AWS_SECRET_ACCESS_KEY') \
+            or not os.getenv('AWS_DEFAULT_REGION'):
+        logging.debug(f"CloudWatch logging not configured, skipping group change: {new_log_group}")
+        return
+    
     global current_log_group
     environment = os.getenv("environment")
     if environment:
@@ -78,8 +92,11 @@ def add_log_stream(stream_name):
     :param stream_name: The name of the new log stream
     """
     global cloudwatch_handler, current_log_group
-    if not cloudwatch_handler:
-        raise ValueError("CloudWatch handler has not been set up. Call setup_logging() first.")
+    
+    # Skip if CloudWatch logging is not configured
+    if not current_log_group:
+        logging.debug(f"CloudWatch logging not configured, skipping stream: {stream_name}")
+        return None
     
     # Create a new handler for the specific stream
     new_handler = watchtower.CloudWatchLogHandler(
