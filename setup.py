@@ -64,7 +64,9 @@ setup(
         'gensim',
         'watchtower',
         'pyairtable',
-        'azure-identity>=1.15.0'
+        'azure-identity>=1.15.0',
+        'rich>=13.7.1',
+        'gql[requests]>=3.0.0'
     ],
     dependency_links=[
         'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator',
