@@ -90,13 +90,12 @@ export default function BatchJobTask({
   const [scoringJobs, setScoringJobs] = useState<ScoringJobData[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  if (!task.data || !isValidTaskData(task.data)) {
-    return null;
-  }
-
-  const taskData = task.data;
-
   useEffect(() => {
+    if (!task.data || !isValidTaskData(task.data)) {
+      return;
+    }
+
+    const taskData = task.data;
     let subscriptions: { unsubscribe: () => void }[] = []
 
     const loadScoringJobs = async () => {
@@ -265,7 +264,13 @@ export default function BatchJobTask({
     return () => {
       subscriptions.forEach(sub => sub.unsubscribe());
     };
-  }, [taskData.id, variant, task.data]);
+  }, [task.data, variant, task.data?.scoringJobCountCache]);
+
+  if (!task.data || !isValidTaskData(task.data)) {
+    return null;
+  }
+
+  const taskData = task.data;
 
   const isFirstPhase = FIRST_PHASE_STATES.includes(taskData.status as typeof FIRST_PHASE_STATES[number]);
   const firstPhaseProgress = Math.round((taskData.scoringJobCountCache || 0) / BATCH_JOB_CONFIG.MAX_SCORING_JOBS * 100);
