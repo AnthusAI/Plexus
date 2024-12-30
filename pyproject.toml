@@ -1,6 +1,6 @@
 [tool.semantic_release]
 version_variable = [
-    "setup.py:version",
+    "setup.py:version='0.0.0'",
     "plexus/__init__.py:__version__"
 ]
 version_toml = []
@@ -8,4 +8,6 @@ version_pattern = []
 commit_message = "chore: release {version}"
 branch = "main"
 major_on_zero = false
-tag_format = "v{version}" 
+tag_format = "v{version}"
+changelog_file = "CHANGELOG.md"
+build_command = ""  # We can add a build command if needed 
