@@ -18,6 +18,7 @@ setup(
         'pytest-cov==5.0.0',
         'python-dotenv==1.0.0',
         'pytest-watch==4.2.0',
+        'pytest-asyncio==0.23.5',
         'pandas==2.1.4',
         'openai>=1.35.10',
         'tenacity==8.2.3',
@@ -55,13 +56,15 @@ setup(
         'langchain-aws>=0.1.9',
         'langchain-openai>=0.1.14',
         'langchain-google-vertexai>=1.0.6',
-        'langgraph-checkpoint-postgres==2.0.3',
+        'langgraph-checkpoint-postgres==2.0.9',
+        'psycopg[binary]>=3.2.0,<4.0.0',
         'openpyxl==3.1.5',
         'rapidfuzz==3.9.4',
         'datasets',
         'gensim',
         'watchtower',
-        'pyairtable'
+        'pyairtable',
+        'azure-identity>=1.15.0'
     ],
     dependency_links=[
         'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator',

@@ -14,7 +14,6 @@ def sample_batch_job(mock_client):
         accountId="acc-123",
         status="PENDING",
         type="inference",
-        provider="OPENAI",
         batchId="batch-123",
         modelProvider="openai",
         modelName="gpt-4",
@@ -29,7 +28,6 @@ def test_create_batch_job(mock_client):
             'accountId': 'acc-123',
             'status': 'PENDING',
             'type': 'inference',
-            'provider': 'OPENAI',
             'batchId': 'batch-123',
             'modelProvider': 'openai',
             'modelName': 'gpt-4'
@@ -53,20 +51,32 @@ def test_create_batch_job(mock_client):
 
 def test_update_batch_job(sample_batch_job):
     now = datetime.now(timezone.utc)
-    sample_batch_job._client.execute.return_value = {
-        'updateBatchJob': {
-            'id': sample_batch_job.id,
-            'accountId': sample_batch_job.accountId,
-            'status': 'RUNNING',
-            'type': sample_batch_job.type,
-            'provider': sample_batch_job.provider,
-            'batchId': sample_batch_job.batchId,
-            'modelProvider': sample_batch_job.modelProvider,
-            'modelName': sample_batch_job.modelName,
-            'totalRequests': 100,
-            'completedRequests': 50
+    # Mock both the query and mutation responses
+    sample_batch_job._client.execute.side_effect = [
+        {
+            'getBatchJob': {
+                'accountId': 'acc-123',
+                'status': 'PENDING',
+                'type': 'inference',
+                'batchId': 'batch-123',
+                'modelProvider': 'openai',
+                'modelName': 'gpt-4'
+            }
+        },
+        {
+            'updateBatchJob': {
+                'id': sample_batch_job.id,
+                'accountId': sample_batch_job.accountId,
+                'status': 'RUNNING',
+                'type': sample_batch_job.type,
+                'batchId': sample_batch_job.batchId,
+                'modelProvider': sample_batch_job.modelProvider,
+                'modelName': sample_batch_job.modelName,
+                'totalRequests': 100,
+                'completedRequests': 50
+            }
         }
-    }
+    ]
     
     updated = sample_batch_job.update(
         status='RUNNING',
@@ -86,7 +96,6 @@ def test_get_by_id(mock_client):
             'accountId': 'acc-123',
             'status': 'COMPLETED',
             'type': 'inference',
-            'provider': 'OPENAI',
             'batchId': 'batch-123',
             'modelProvider': 'openai',
             'modelName': 'gpt-4',
@@ -100,6 +109,30 @@ def test_get_by_id(mock_client):
     assert isinstance(job.completedAt, datetime)
 
 def test_update_prevents_modifying_created_at(sample_batch_job):
+    # Mock both the query and mutation responses
+    sample_batch_job._client.execute.side_effect = [
+        {
+            'getBatchJob': {
+                'accountId': 'acc-123',
+                'status': 'PENDING',
+                'type': 'inference',
+                'batchId': 'batch-123',
+                'modelProvider': 'openai',
+                'modelName': 'gpt-4'
+            }
+        },
+        {
+            'updateBatchJob': {
+                'id': sample_batch_job.id,
+                'accountId': sample_batch_job.accountId,
+                'status': 'PENDING',
+                'type': sample_batch_job.type,
+                'batchId': sample_batch_job.batchId,
+                'modelProvider': sample_batch_job.modelProvider,
+                'modelName': sample_batch_job.modelName
+            }
+        }
+    ]
     with pytest.raises(ValueError, match="createdAt cannot be modified"):
         sample_batch_job.update(createdAt=datetime.now(timezone.utc))
 
@@ -110,7 +143,6 @@ def test_from_dict_handles_datetime_fields():
         'accountId': 'acc-123',
         'status': 'RUNNING',
         'type': 'inference',
-        'provider': 'OPENAI',
         'batchId': 'batch-123',
         'modelProvider': 'openai',
         'modelName': 'gpt-4',

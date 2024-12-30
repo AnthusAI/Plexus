@@ -10,7 +10,7 @@ from typing import Optional, Union, List, Any
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
 import seaborn as sns
-from tensorflow.keras.utils import plot_model
+# from tensorflow.keras.utils import plot_model
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import roc_curve, auc, precision_recall_curve
 from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
@@ -351,10 +351,9 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
     def _generate_model_diagram(self):
         """
         Generate and save a diagram of the model architecture.
+        This is currently disabled to avoid tensorflow dependency.
         """
-        file_name = self.report_file_name("model_diagram.png")
-        plot_model(self.model, to_file=file_name, show_shapes=True, show_layer_names=True, rankdir='TB')
-        mlflow.log_artifact(file_name)
+        logging.info("Model diagram generation is disabled to avoid tensorflow dependency")
 
     def setup_label_map(self, labels):
         """
