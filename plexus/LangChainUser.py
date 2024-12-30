@@ -15,6 +15,9 @@ from plexus.scores.Score import Score
 
 from langchain_community.chat_models import BedrockChat, ChatVertexAI
 
+import threading
+from azure.identity import ChainedTokenCredential, AzureCliCredential, DefaultAzureCredential
+
 class LangChainUser:
 
     class Parameters(BaseModel):
@@ -26,7 +29,7 @@ class LangChainUser:
         model_name: Optional[str] = None
         base_model_name: Optional[str] = None
         model_region: Optional[str] = None
-        temperature: Optional[float] = 0.1
+        temperature: Optional[float] = 0
         top_p: Optional[float] = 0.03
         max_tokens: Optional[int] = 500
 
@@ -48,39 +51,35 @@ class LangChainUser:
                 self.completion_tokens = 0
                 self.total_tokens = 0
                 self.llm_calls = 0
+                self.cached_tokens = 0  # New attribute to track cached tokens
 
             def on_llm_start(self, serialized, prompts, **kwargs):
                 self.llm_calls += 1
 
             def on_llm_end(self, response: LLMResult, **kwargs):
-
                 usage = {}
                 if isinstance(response, LLMResult):
                     if response.llm_output:
-                        usage = response.llm_output.get("usage", {})
-                        logging.debug(f"Token usage from llm_output: {usage}")
-                        
-                    if response.generations and response.generations[0]:
-                        generation = response.generations[0][0]
-                        if hasattr(generation, 'generation_info') and generation.generation_info:
-                            usage = generation.generation_info.get("token_usage", {})
-                            logging.debug(f"Token usage from generation_info: {usage}")
-                        elif hasattr(generation, 'message') and hasattr(generation.message, 'usage_metadata'):
-                            usage = generation.message.usage_metadata
-                            logging.debug(f"Token usage from usage_metadata: {usage}")
-                        else:
-                            logging.info("No token usage information found in generation")
-                    else:
-                        logging.debug("No generations in response")
+                        logging.info(f"LLM output: {response.llm_output}")
+                        usage = response.llm_output.get("token_usage", response.llm_output.get("usage", {}))
+                        logging.debug(f"Token usage: {usage}")
 
-                self.prompt_tokens += usage.get("input_tokens", 0) or usage.get("prompt_tokens", 0)
-                self.completion_tokens += usage.get("output_tokens", 0) or usage.get("completion_tokens", 0)
-                self.total_tokens += usage.get("total_tokens", 0) or (self.prompt_tokens + self.completion_tokens)
+                    # Handle the nested structure
+                    if "token_usage" in usage:
+                        usage = usage["token_usage"]
 
-                logging.debug(f"Current cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}")
+                    self.prompt_tokens += usage.get("prompt_tokens", 0)
+                    self.completion_tokens += usage.get("completion_tokens", 0)
+                    self.total_tokens += usage.get("total_tokens", 0)
+                    
+                    # Track cached tokens if available
+                    prompt_tokens_details = usage.get("prompt_tokens_details", {})
+                    self.cached_tokens += prompt_tokens_details.get("cached_tokens", 0)
+
+                    logging.info(f"Current cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}, Cached: {self.cached_tokens}")
 
             def on_chain_end(self, outputs, **kwargs):
-                logging.debug(f"Chain ended. Cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}")
+                logging.info(f"Chain ended. Cumulative token usage - Prompt: {self.prompt_tokens}, Completion: {self.completion_tokens}, Total: {self.total_tokens}, Cached: {self.cached_tokens}")
 
         return TokenCounterCallback()
 
@@ -90,58 +89,61 @@ class LangChainUser:
         self.openai_callback = None
         self.model = self._initialize_model()
 
-    def _initialize_model(self) -> BaseLanguageModel:
+    def _initialize_model(self, custom_params: Optional[dict] = None) -> BaseLanguageModel:
         """
         Initialize and return the appropriate language model based on the configured provider.
 
-        This method sets up the specified language model with retry logic and callbacks
-        for token counting. It supports various model providers including OpenAI, Azure,
-        Amazon Bedrock, and Google Vertex AI.
+        Args:
+            custom_params (Optional[dict]): Optional dictionary of parameters to override the default ones
 
-        :return: An initialized BaseLanguageModel with retry logic and callbacks.
-        :raises ValueError: If an unsupported model provider is specified.
+        Returns:
+            BaseLanguageModel: An initialized model with retry logic and callbacks.
         """
-        max_tokens = self.parameters.max_tokens
+        # If custom parameters are provided, create a temporary combined parameters object
+        params = self.Parameters(**(custom_params or {})) if custom_params else self.parameters
+        max_tokens = params.max_tokens
 
-        if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
+        if params.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
             self.openai_callback = OpenAICallbackHandler()
             callbacks = [self.openai_callback, self.token_counter]
             
-            if self.parameters.model_provider == "AzureChatOpenAI":
+            if params.model_provider == "AzureChatOpenAI":
                 base_model = AzureChatOpenAI(
                     azure_endpoint=os.environ.get("AZURE_API_BASE"),
                     api_version=os.environ.get("AZURE_API_VERSION"),
                     api_key=os.environ.get("AZURE_API_KEY"),
-                    model=self.parameters.model_name,
-                    temperature=self.parameters.temperature,
+                    model=params.model_name,
+                    temperature=params.temperature,
                     max_tokens=max_tokens
                 )
             else:  # ChatOpenAI
                 base_model = ChatOpenAI(
-                    model=self.parameters.model_name,
+                    model=params.model_name,
                     api_key=os.environ.get("OPENAI_API_KEY"),
                     max_tokens=max_tokens,
-                    model_kwargs={"top_p": self.parameters.top_p}
+                    model_kwargs={"top_p": params.top_p},
+                    temperature=params.temperature
                 )
-        elif self.parameters.model_provider == "BedrockChat":
+        elif params.model_provider == "BedrockChat":
             base_model = ChatBedrock(
-                model_id=self.parameters.model_name or "anthropic.claude-3-5-sonnet-20240620-v1:0",
+                model_id=params.model_name or "anthropic.claude-3-haiku-20240307-v1:0",
                 model_kwargs={
-                    "temperature": self.parameters.temperature,
+                    "temperature": params.temperature,
                     "max_tokens": max_tokens
                 },
-                region_name=self.parameters.model_region or "us-east-1"
+                region_name=params.model_region or "us-east-1",
+                provider="anthropic"
             )
             callbacks = [self.token_counter]
-        elif self.parameters.model_provider == "ChatVertexAI":
+        elif params.model_provider == "ChatVertexAI":
             base_model = ChatVertexAI(
-                model=self.parameters.model_name or "gemini-1.5-flash-001",
-                temperature=self.parameters.temperature,
+                model=params.model_name or "gemini-1.5-flash-001",
+                temperature=params.temperature,
                 max_output_tokens=max_tokens
             )
             callbacks = [self.token_counter]
         else:
-            raise ValueError(f"Unsupported model provider: {self.parameters.model_provider}")
+            raise ValueError(f"Unsupported model provider: {params.model_provider}")
 
         return base_model.with_retry(
             retry_if_exception_type=(Exception,),
@@ -175,17 +177,51 @@ class LangChainUser:
         # ... other model providers ...
 
     def get_token_usage(self):
-        if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
-            return {
-                "prompt_tokens": self.openai_callback.prompt_tokens,
-                "completion_tokens": self.openai_callback.completion_tokens,
-                "total_tokens": self.openai_callback.total_tokens,
-                "successful_requests": self.openai_callback.successful_requests
-            }
-        else:
+        # if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
+        #     return {
+        #         "prompt_tokens": self.openai_callback.prompt_tokens,
+        #         "completion_tokens": self.openai_callback.completion_tokens,
+        #         "total_tokens": self.openai_callback.total_tokens,
+        #         "successful_requests": self.openai_callback.successful_requests
+        #     }
+        # else:
             return {
                 "prompt_tokens": self.token_counter.prompt_tokens,
                 "completion_tokens": self.token_counter.completion_tokens,
                 "total_tokens": self.token_counter.total_tokens,
-                "successful_requests": self.token_counter.llm_calls
+                "successful_requests": self.token_counter.llm_calls,
+                "cached_tokens": self.token_counter.cached_tokens
             }
+
+    def get_azure_credential(self):
+        """Get Azure credential for authentication."""
+        if not hasattr(self, '_credential'):
+            self._credential = ChainedTokenCredential(
+                AzureCliCredential(process_timeout=10),
+                DefaultAzureCredential(process_timeout=10),
+            )
+            # Name the credential refresh threads
+            for thread in threading.enumerate():
+                if thread.name.startswith('Thread-'):
+                    if 'azure' in str(thread._target).lower():
+                        thread.name = f"AzureCredential-{thread.ident}"
+        return self._credential
+
+    async def cleanup(self):
+        """Clean up Azure credentials and any associated threads."""
+        if hasattr(self, '_credential'):
+            try:
+                logging.info("Force closing Azure credential...")
+                # Force close any underlying sessions
+                if hasattr(self._credential, '_client'):
+                    if hasattr(self._credential._client, '_pipeline'):
+                        pipeline = self._credential._client._pipeline
+                        if hasattr(pipeline, '_transport'):
+                            transport = pipeline._transport
+                            if hasattr(transport, '_session'):
+                                transport._session.close()
+                await self._credential.close()
+                self._credential = None
+                logging.info("Azure credential force closed")
+            except Exception as e:
+                logging.error(f"Error closing Azure credential: {e}")

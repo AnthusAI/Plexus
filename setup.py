@@ -29,7 +29,6 @@ setup(
         'pydot==2.0.0',
         'pydotplus==2.0.2',
         'graphviz==0.20.3',
-        'litellm',
         'boto3',
         'graphviz',
         'mistune',
@@ -48,20 +47,23 @@ setup(
         'imblearn==0.0',
         'shap==0.45.1',
         'contractions==0.1.73',
-        'langchain==0.2.11',
-        'langchain-core==0.2.23',
-        'langchain-community==0.2.6',
-        'langgraph==0.1.5',
-        'langchain-aws==0.1.9',
-        'langchain-openai==0.1.14',
-        'langchain-google-vertexai==1.0.6',
+        'langchain>=0.2.11',
+        'langchain-core>=0.2.38',
+        'langchain-community>=0.2.6',
+        'langgraph>=0.2.53',
+        'langchain-aws>=0.1.9',
+        'langchain-openai>=0.1.14',
+        'langchain-google-vertexai>=1.0.6',
+        'langgraph-checkpoint-postgres==2.0.3',
         'openpyxl==3.1.5',
         'rapidfuzz==3.9.4',
         'datasets',
         'gensim',
-        'watchtower'
+        'watchtower',
+        'pyairtable'
     ],
     dependency_links=[
-        'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator'
+        'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator',
+        'git+https://github.com/AnthusAI/Plexus-Dashboard.git@main#egg=plexus-dashboard',
     ]
 )

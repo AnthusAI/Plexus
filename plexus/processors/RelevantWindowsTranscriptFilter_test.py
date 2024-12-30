@@ -17,10 +17,15 @@ class MockClassifier(Score):
     def load_context(self, context):
         pass
     def predict(self, model_input: Score.Input):
-        # Use word boundaries to ensure 'relevant' is a whole word
+        score_value = bool(re.search(r'\brelevant\b', model_input.text, re.IGNORECASE))
         return Score.Result(
-            score_name = "Test score",
-            score =      bool(re.search(r'\brelevant\b', model_input.transcript, re.IGNORECASE))
+            score_name="Test score",
+            score=score_value,
+            parameters=Score.Parameters(
+                scorecard_name="Test scorecard",
+                name="Test score"
+            ),
+            value=score_value
         )
 
 class TestTranscriptFilter(unittest.TestCase):
@@ -131,11 +136,17 @@ Customer: Relevant end."""
 class TestKeywordTranscriptFilter(unittest.TestCase):
 
     def setUp(self):
-        keywords = ["child", "children", "kid", "kids", "dependent", "dependents", "son", "daughter"]
-        self.classifier = KeywordClassifier(
-            keywords = keywords,
+        keywords = ["child", "children", "kid", "kids", "dependent", 
+                    "dependents", "son", "daughter"]
+        parameters = Score.Parameters(
             scorecard_name="Test scorecard",
-            score_name="Test score"
+            name="Test score"
+        )
+        self.classifier = KeywordClassifier(
+            keywords=keywords,
+            scorecard_name="Test scorecard",
+            score_name="Test score",
+            parameters=parameters
         )
         self.transcript_filter = RelevantWindowsTranscriptFilter(
             classifier=self.classifier
