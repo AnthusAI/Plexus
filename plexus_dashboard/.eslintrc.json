@@ -1,0 +1,11 @@
+{
+  "root": true,
+  "extends": ["next"],
+  "rules": {
+    "react/no-unescaped-entities": "off",
+    "react/display-name": "warn",
+    "@next/next/no-page-custom-font": "warn",
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn"
+  }
+} 

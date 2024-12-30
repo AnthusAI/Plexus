@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Preview } from "@storybook/react";
 import '../app/globals.css';
-import { ThemeProvider } from '@/components/theme-provider';
+import { ThemeProvider } from '../components/theme-provider';
 import { withThemeByClassName } from "@storybook/addon-themes";
 
 const preview: Preview = {
@@ -30,10 +30,8 @@ const preview: Preview = {
         enableSystem
         disableTransitionOnChange
       >
-        <div className="p-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <Story />
-          </div>
+        <div className="min-h-screen bg-background p-4">
+          <Story />
         </div>
       </ThemeProvider>
     ),

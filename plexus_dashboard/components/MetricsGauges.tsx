@@ -48,7 +48,8 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
       )}>
         {gauges.map((gauge, index) => (
           <div 
-            key={index} 
+            key={index}
+            data-testid="gauge-container"
             className={cn(
               "flex justify-center rounded-lg p-2",
               gauge.priority && variant === 'detail' ? "bg-card-light" : "bg-card"

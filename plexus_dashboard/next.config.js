@@ -4,6 +4,10 @@ const { withHydrationOverlay } = require("@builder.io/react-hydration-overlay/ne
 const nextConfig = {
     experimental: {
         serverComponentsExternalPackages: ['@aws-crypto'],
+    },
+    eslint: {
+        ignoreDuringBuilds: false,
+        dirs: ['app', 'components', 'utils', 'stories']
     }
 }
 
