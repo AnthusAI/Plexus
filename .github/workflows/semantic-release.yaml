@@ -52,6 +52,8 @@ jobs:
 
       - name: Initialize Version Tag (if needed)
         run: |
+          git config --global user.email "semantic-release@github.actions"
+          git config --global user.name "Semantic Release Bot"
           if ! git tag | grep -q "v0.0.0"; then
             git tag -a v0.0.0 -m "Initial version"
             git push origin v0.0.0
