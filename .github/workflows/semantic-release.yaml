@@ -50,12 +50,18 @@ jobs:
           npm run typecheck
           npm run test:coverage
 
+      - name: Initialize Version Tag (if needed)
+        run: |
+          if ! git tag | grep -q "v0.0.0"; then
+            git tag -a v0.0.0 -m "Initial version"
+            git push origin v0.0.0
+          fi
+        
       - name: Test Semantic Release Configuration
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           semantic-release --noop version
-          semantic-release --noop publish
 
       - name: Semantic Release
         env:

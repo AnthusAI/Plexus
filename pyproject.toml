@@ -1,6 +1,6 @@
 [tool.semantic_release]
 version_variable = [
-    "setup.py:version='0.0.0'",
+    "setup.py:version",
     "plexus/__init__.py:__version__"
 ]
 version_toml = []
@@ -12,4 +12,4 @@ tag_format = "v{version}"
 changelog_file = "CHANGELOG.md"
 build_command = ""
 starting_version = "0.0.0"
-version_source = "committed" 
+version_source = "tag" 
