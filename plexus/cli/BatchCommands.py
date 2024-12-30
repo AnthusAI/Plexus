@@ -596,7 +596,7 @@ async def _generate_batch(account_key, scorecard_key, score_name, clean_existing
                     logging.info(f"Updated batch job count: {update_result}")
                     
                     # If we've reached or exceeded max_batch_size and batch is still open, close it
-                    if entries_written >= MAX_BATCH_SIZE and current_status == 'OPEN':
+                    if entries_written >= MAX_BATCH_SIZE and batch_job.status == 'OPEN':
                         logging.info(
                             f"Batch job {batch_job.id} has reached max size "
                             f"({entries_written}/{MAX_BATCH_SIZE}). Closing batch."
@@ -610,7 +610,7 @@ async def _generate_batch(account_key, scorecard_key, score_name, clean_existing
                             }
                         }
                         """
-                        close_result = self.execute(
+                        close_result = client.execute(
                             close_mutation, 
                             {
                                 'input': {
