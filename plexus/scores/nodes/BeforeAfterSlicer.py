@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, Type
+from typing import Dict, Any, Optional, Type, ClassVar
 import nltk
 from types import FunctionType
 import pydantic
@@ -33,7 +33,7 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
         after: Optional[str]
 
     class SlicingOutputParser(BaseOutputParser[dict]):
-        FUZZY_MATCH_SCORE_CUTOFF = 70
+        FUZZY_MATCH_SCORE_CUTOFF: ClassVar[int] = 70
         text: str = Field(...)
 
         def __init__(self, *args, **kwargs):
@@ -101,8 +101,8 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
             if not isinstance(prompt, ChatPromptTemplate):
                 prompt = ChatPromptTemplate.from_template(prompt)
             
-            chain = prompt | model | self.SlicingOutputParser(text=state.text)
-            return chain.invoke({"text": state.text})
+            chain = prompt | model | self.SlicingOutputParser(**state.dict())
+            return chain.invoke({**state.dict()})
 
         return slicer_node
 

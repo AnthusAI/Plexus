@@ -14,11 +14,15 @@ from typing import Optional, List, Dict
 import asyncio
 import boto3
 from botocore.exceptions import ClientError
+import tiktoken
+from os import getenv
 
 from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
 import plexus.scores
 from plexus.scores.Score import Score
+from plexus.logging.Cloudwatch import CloudWatchLogger
+from plexus.scores.LangGraphScore import BatchProcessingPause, LangGraphScore
 
 class Scorecard:
     """
@@ -49,12 +53,14 @@ class Scorecard:
         # Accumulators for tracking the total expenses.
         self.prompt_tokens = 0
         self.completion_tokens = 0
+        self.cached_tokens = 0
+        self.llm_calls = 0
         self.input_cost =  Decimal('0.0')
         self.output_cost = Decimal('0.0')
         self.total_cost =  Decimal('0.0')
         self.scorecard_total_cost = Decimal('0.0')
 
-        self.cloudwatch_client = boto3.client('cloudwatch')
+        self.cloudwatch_logger = CloudWatchLogger()
 
     @classmethod
     def name(cls):
@@ -68,14 +74,7 @@ class Scorecard:
 
     @classmethod
     def score_names(cls):
-        """
-        Retrieves a list of all score names registered in the scorecard.
-        Incuding scores that are computed implicitly by other scores.
-
-        Returns:
-            list of str: The names of all registered scores.
-        """
-        return cls.scores.keys()
+        return [score['name'] for score in cls.scores]
 
     @classmethod
     def score_names_to_process(cls):
@@ -117,7 +116,7 @@ class Scorecard:
         """
         logging.info(f"Loading scorecard from YAML file: {yaml_file_path}")
         with open(yaml_file_path, 'r') as file:
-            scorecard_properties = yaml.safe_load(file)
+                scorecard_properties = yaml.safe_load(file)
 
         scorecard_name = scorecard_properties['name']
 
@@ -168,7 +167,7 @@ class Scorecard:
                 yaml_file_path = os.path.join(directory_path, file_name)
                 cls.create_from_yaml(yaml_file_path)
 
-    async def get_score_result(self, *, scorecard, score, text, metadata, modality):
+    async def get_score_result(self, *, scorecard, score, text, metadata, modality, results):
         """
         Get a result for a score by looking up a Score instance for that question name and calling its
         compute_score_result method with the provided transcript.
@@ -178,18 +177,23 @@ class Scorecard:
         :param metadata: The metadata.
         :param modality: The modality.
         :return: The score result.
+        :raises BatchProcessingPause: When scoring needs to be suspended for batch processing
         """
+        logging.info(f"Getting score result for: {score}")
         
         score_class = self.score_registry.get(score)
         if score_class is None:
             logging.error(f"Score with name '{score}' not found.")
             return
 
-        score_instance = score_class()
         score_configuration = self.score_registry.get_properties(score)
-        
         if (score_class is not None):
-            logging.info("Found score for question: " + score)
+            logging.info(f"Found score class for: {score}")
+
+            # Calculate content item length in tokens using a general-purpose encoding
+            encoding = tiktoken.get_encoding("cl100k_base")
+            item_tokens = len(encoding.encode(text))
+            logging.info(f"Item tokens for {score}: {item_tokens}")
 
             score_configuration.update({
                 'scorecard_name': self.name,
@@ -201,76 +205,187 @@ class Scorecard:
                 logging.error(f"Score with name '{score}' not found in scorecard '{self.name}'.")
                 return
 
+            # Add required metadata for LangGraphScore
+            if isinstance(score_instance, LangGraphScore):
+                account_key = getenv('PLEXUS_ACCOUNT_KEY')
+                if not account_key:
+                    raise ValueError("PLEXUS_ACCOUNT_KEY not found in environment")
+                metadata = metadata or {}
+                metadata.update({
+                    'account_key': account_key,
+                    'scorecard_key': scorecard,
+                    'score_name': score
+                })
+
+            logging.info(f"Predicting score for: {score}")
+            # Let BatchProcessingPause propagate up
             score_result = await score_instance.predict(
                 context=None,
                 model_input=plexus.scores.Score.Input(
                     text=text,
-                    metadata=metadata
+                    metadata=metadata,
+                    results=results
                 )
             )
-            logging.debug(f"Score result: {score_result}")
+            logging.info(f"Prediction complete for: {score}")
+            logging.debug(f"Score result for {score}: {score_result}")
 
             if hasattr(score_instance, 'get_accumulated_costs'):
                 score_total_cost = score_instance.get_accumulated_costs()
-                logging.info(f"Total cost: {score_total_cost}")
+                logging.info(f"Total cost for {score}: {score_total_cost}")
 
                 self.prompt_tokens       += score_total_cost.get('prompt_tokens', 0)
                 self.completion_tokens   += score_total_cost.get('completion_tokens', 0)
+                self.cached_tokens       += score_total_cost.get('cached_tokens', 0)
+                self.llm_calls           += score_total_cost.get('llm_calls', 0)
                 self.input_cost          += score_total_cost.get('input_cost', 0)
                 self.output_cost         += score_total_cost.get('output_cost', 0)
                 self.total_cost          += score_total_cost.get('total_cost', 0)
                 self.scorecard_total_cost += score_total_cost.get('total_cost', Decimal('0.0'))
+
+                total_tokens = self.prompt_tokens + self.completion_tokens
 
                 # TODO: Find a different way of passing the costs with the score result.
                 # Maybe add support for `costs` and `metadata` in Score.Result?
                 # score_result[0].metadata.update(score_total_cost)
                 
                 # Log the cost for this individual score
-                self.log_metric_to_cloudwatch('Cost', score_total_cost.get('total_cost', 0), self.scorecard_identifier, score_name=score, modality=modality)
+                dimensions = {
+                    'ScoreCardID': str(self.properties['id']),
+                    'ScoreCardName': str(self.properties['name']),
+                    'Score': str(score_configuration.get('name')),
+                    'ScoreID': str(score_configuration.get('id')),
+                    'Modality': modality or 'Development',
+                    'Environment': os.getenv('environment') or 'Unknown'
+                }
+                
+                self.cloudwatch_logger.log_metric('Cost', score_total_cost.get('total_cost', 0), dimensions)
+                self.cloudwatch_logger.log_metric('PromptTokens', score_total_cost.get('prompt_tokens', 0), dimensions)
+                self.cloudwatch_logger.log_metric('CompletionTokens', score_total_cost.get('completion_tokens', 0), dimensions)
+                self.cloudwatch_logger.log_metric('TotalTokens', total_tokens, dimensions)
+                self.cloudwatch_logger.log_metric('CachedTokens', score_total_cost.get('cached_tokens', 0), dimensions)
+                self.cloudwatch_logger.log_metric('ExternalAIRequests', score_total_cost.get('llm_calls', 0), dimensions)
+                self.cloudwatch_logger.log_metric('ItemTokens', item_tokens, dimensions)
+
+                scorecard_dimensions = {
+                    'ScoreCardName': str(self.properties['name']),
+                    'Environment': os.getenv('environment') or 'Unknown'
+                }
+
+                self.cloudwatch_logger.log_metric('CostByScorecard', score_total_cost.get('total_cost', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('PromptTokensByScorecard', score_total_cost.get('prompt_tokens', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('CompletionTokensByScorecard', score_total_cost.get('completion_tokens', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('TotalTokensByScorecard', total_tokens, scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('CachedTokensByScorecard', score_total_cost.get('cached_tokens', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('ExternalAIRequestsByScorecard', score_total_cost.get('llm_calls', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('ItemTokensByScorecard', item_tokens, scorecard_dimensions)
 
             return score_result
 
         else:
             error_string = f"No score found for question: \"{score}\""
-            logging.info(error_string)
+            logging.error(error_string)
             return plexus.scores.Score.Result(value="Error", error=error_string)
 
     async def score_entire_text(self, *, text: str, metadata: dict, modality: Optional[str] = None, subset_of_score_names: Optional[List[str]] = None) -> Dict[str, Score.Result]:
         if subset_of_score_names is None:
             subset_of_score_names = self.score_names_to_process()
+        
+        logging.info(f"Starting to process scores: {subset_of_score_names}")
 
-        async def process_score(score: str) -> List[Score.Result]:
+        # Add dependend scores to the subset of score names.
+        dependent_scores_added = []
+        for score_name in subset_of_score_names:
+            score_info = self.score_registry.get_properties(score_name)
+            if 'depends_on' in score_info:
+                for dependency in score_info['depends_on']:
+                    if dependency not in subset_of_score_names:
+                        dependent_scores_added.append(dependency)
+                        subset_of_score_names.append(dependency)
+        logging.info(f"Added dependent scores: {dependent_scores_added}")
+
+        dependency_graph, name_to_id = self.build_dependency_graph(subset_of_score_names)
+        logging.info(f"Built dependency graph: {dependency_graph}")
+
+        results_by_score_id = {}
+        results = []
+        processing_queue = asyncio.Queue()
+
+        # Initialize queue with scores that have no dependencies
+        for score_id, score_info in dependency_graph.items():
+            if not score_info['deps']:
+                await processing_queue.put(score_id)
+                logging.info(f"Added score with no dependencies to queue: {score_info['name']} (ID: {score_id})")
+
+        async def process_score(score_id: str):
+            score_name = dependency_graph[score_id]['name']
+            logging.info(f"Starting to process score: {score_name} (ID: {score_id})")
             try:
-                return await asyncio.wait_for(
-                    self.get_score_result(scorecard=self.scorecard_identifier, score=score, text=text, metadata=metadata, modality=modality),
-                    timeout=1200
+                logging.info(f"About to predict score {score_name} at {pd.Timestamp.now()}")
+                score_result = await asyncio.wait_for(
+                    self.get_score_result(
+                        scorecard=self.scorecard_identifier,
+                        score=score_name,
+                        text=text,
+                        metadata=metadata,
+                        modality=modality,
+                        results=results
+                    ),
+                    timeout=3600  # Increase to 1 hour for debugging
                 )
-            except asyncio.TimeoutError:
-                logging.error(f"Timeout processing score: {score}")
-                return []
-            except Exception as e:
-                logging.error(f"Error processing score {score}: {str(e)}")
-                return []
+                
+                if score_result is None:
+                    logging.info(f"Score {score_name} returned None (possibly paused for batch processing)")
+                    return
+                
+                results_by_score_id[score_id] = score_result[0]
+                results.append({
+                    'id': score_id,
+                    'name': score_name,
+                    'result': score_result[0]
+                })
+                logging.info(f"Processed score: {score_name} (ID: {score_id})")
 
-        score_results_dict = {}
+                # Check if any waiting scores can now be processed
+                # Only check scores that directly depend on this score
+                for waiting_score_id, waiting_score_info in dependency_graph.items():
+                    if score_id in waiting_score_info['deps']:  # Only check if this score is a dependency
+                        if waiting_score_id not in results_by_score_id and \
+                           all(dep in results_by_score_id for dep in waiting_score_info['deps']):
+                            await processing_queue.put(waiting_score_id)
 
-        async def bounded_process_score(score_name: str) -> None:
-            results_list = await process_score(score_name)
-            for result in results_list:
-                score_results_dict[result.parameters.id] = result
+            except BatchProcessingPause as e:
+                logging.info(f"Score {score_name} paused for batch processing (thread_id: {e.thread_id})")
+                # Mark this score as paused and store its state
+                results_by_score_id[score_id] = "PAUSED"
+                raise  # Re-raise to be handled by higher-level code
 
-        await asyncio.gather(*(bounded_process_score(score_name) for score_name in subset_of_score_names))
+        remaining_scores = set(dependency_graph.keys())
+        while remaining_scores:
+            try:
+                score_id_to_process = await processing_queue.get()
+                if score_id_to_process not in remaining_scores:
+                    continue
+                
+                logging.info(f"Processing score: {dependency_graph[score_id_to_process]['name']}")
+                await process_score(score_id_to_process)
+                remaining_scores.remove(score_id_to_process)
+                
+            except BatchProcessingPause as e:
+                # Remove the paused score from remaining scores
+                remaining_scores.remove(score_id_to_process)
+                # Re-raise to be handled by caller
+                raise
 
-        # Log the total cost for the entire scorecard
-        self.log_metric_to_cloudwatch('Cost', self.scorecard_total_cost, self.scorecard_identifier, modality=modality)
-
-        logging.info(f"Scorecard total cost: {self.scorecard_total_cost}")
-        return score_results_dict
+        logging.info(f"All scores processed. Total scores: {len(results_by_score_id)}")
+        return results_by_score_id
 
     def get_accumulated_costs(self):
         return {
             'prompt_tokens': self.prompt_tokens,
             'completion_tokens': self.completion_tokens,
+            'cached_tokens': self.cached_tokens,
+            'llm_calls': self.llm_calls,
             'input_cost': self.input_cost,
             'output_cost': self.output_cost,
             'total_cost': self.total_cost
@@ -289,41 +404,21 @@ class Scorecard:
                self.properties.get('parameters', {}).get('model_name') or \
                'Unknown'
 
-    def log_metric_to_cloudwatch(self, metric_name, metric_value, scorecard_name, score_name=None, modality=None):
-        try:
-            dimensions = [
-                {
-                    'Name': 'ScoreCardID',
-                    'Value': str(self.properties['id'])
-                },
-                {
-                    'Name': 'ScoreCardName',
-                    'Value': scorecard_name
-                },
-                {
-                    'Name': 'Modality',
-                    'Value': modality or 'Unknown'
+    def build_dependency_graph(self, subset_of_score_names):
+        graph = {}
+        name_to_id = {}
+        for score in self.scores:
+            if score['name'] in subset_of_score_names:
+                score_id = str(score['id'])
+                score_name = score['name']
+                name_to_id[score_name] = score_id
+                dependencies = score.get('depends_on', [])
+                graph[score_id] = {
+                    'name': score_name,
+                    'deps': [name_to_id.get(dep, dep) for dep in dependencies if dep in subset_of_score_names]
                 }
-            ]
-            
-            if score_name:
-                dimensions.append({
-                    'Name': 'Score',
-                    'Value': score_name
-                })
+        return graph, name_to_id
 
-            metric_data = {
-                'MetricName': metric_name,
-                'Value': float(metric_value),
-                'Unit': 'None',
-                'Dimensions': dimensions
-            }
 
-            self.cloudwatch_client.put_metric_data(
-                Namespace='Plexus/Scorecard',
-                MetricData=[metric_data]
-            )
-            logging.info(f"Successfully logged {metric_name} to CloudWatch for scorecard ID {self.properties['id']}, name {scorecard_name}, modality {modality}" + 
-                         (f", and score {score_name}" if score_name else ""))
-        except ClientError as e:
-            logging.error(f"Failed to log metric to CloudWatch: {e}")
+
+

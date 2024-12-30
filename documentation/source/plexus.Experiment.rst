@@ -1,7 +1,7 @@
-plexus.Experiment module
+plexus.Evaluation module
 ========================
 
-.. automodule:: plexus.Experiment
+.. automodule:: plexus.Evaluation
    :members:
    :undoc-members:
    :show-inheritance:

@@ -6,7 +6,7 @@ import numpy as np
 import inspect
 import functools
 from pydantic import BaseModel, ValidationError, field_validator
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Any
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -67,6 +67,8 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         dependencies: Optional[List[dict]] = None
         data: Optional[dict] = None
         number_of_classes: Optional[int] = None
+        label_score_name: Optional[str] = None
+        label_field: Optional[str] = None
 
         @field_validator('data')
         def convert_data_percentage(cls, value):
@@ -100,6 +102,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         """
         text:     str
         metadata: dict = {}
+        results: Optional[List[Any]] = None
 
     class Result(BaseModel):
         """
@@ -462,6 +465,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         score_name = self.parameters.name
         if hasattr(self.parameters, 'label_score_name') and self.parameters.label_score_name:
             score_name = self.parameters.label_score_name
+            logging.info(f"Using label_score_name: {score_name}")
         if hasattr(self.parameters, 'label_field') and self.parameters.label_field:
             score_name = f"{score_name} {self.parameters.label_field}"
         return score_name

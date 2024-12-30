@@ -10,6 +10,10 @@ class Registry:
         self._properties_by_name = {}
         self.logger = logging.getLogger(self.__class__.__name__)
 
+    def items(self):
+        """Return all registered items by key."""
+        return self._classes_by_key.items()
+
     def register(self, cls, properties, id=None, key=None, name=None):
         if not any([id, key, name]):
             raise ValueError("At least one of id, key, or name must be provided")
@@ -30,6 +34,13 @@ class Registry:
         class_name = cls.__name__ if hasattr(cls, '__name__') else str(cls)
         identifiers = [f"{k}={v}" for k, v in {'id': id, 'key': key, 'name': name}.items() if v is not None]
         self.logger.debug(f"Registered {class_name} with {', '.join(identifiers)}")
+
+    def get_by_id(self, id_value: str):
+        """Look up a class by its ID attribute."""
+        for cls in self._classes_by_key.values():
+            if hasattr(cls, 'id') and cls.id == id_value:
+                return cls
+        return None
 
     def get(self, identifier):
         identifier = str(identifier).lower() if identifier is not None else None

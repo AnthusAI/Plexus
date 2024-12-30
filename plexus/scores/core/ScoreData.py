@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import importlib
+import builtins
 import rich
 from rich.console import Console
 from rich.table import Table
@@ -27,7 +28,7 @@ class ScoreData:
 
         self.dataframe = data_cache.load_dataframe(data=data, fresh=fresh)
 
-        logging.info("Loaded dataframe from training data lake.")
+        logging.debug(f"Loaded dataframe: {self.dataframe.head().to_string()}")
         
         # Apply dependency filters if they exist
         if self.parameters.dependencies:
@@ -47,14 +48,34 @@ class ScoreData:
 
         self.analyze_dataset()
 
+        return self.dataframe
+
     def _load_data_cache(self):
-        data_cache_class_name = self.parameters.data['class']
+        data_cache_class_path = self.parameters.data['class']
+        
+        # Check if the provided class path includes a module or is just the class name
+        if '.' in data_cache_class_path:
+            # Full module path specified, split it into module and class name
+            module_name, class_name = data_cache_class_path.rsplit('.', 1)
+        else:
+            # Only class name provided, default to 'plexus.data'
+            module_name = 'plexus.data'
+            class_name = data_cache_class_path
+        
         try:
-            # Try to import the class from the plexus.data module
-            module = importlib.import_module('plexus.data')
-            data_cache_class = getattr(module, data_cache_class_name)
-        except AttributeError:
-            raise ImportError(f"Cannot find class {data_cache_class_name} in module plexus.data")
+            # First, attempt to import the specified module and retrieve the class
+            module = importlib.import_module(module_name)
+            data_cache_class = getattr(module, class_name)
+        except (ImportError, AttributeError):
+            # Fallback to check in `builtins`
+            if hasattr(builtins, class_name):
+                data_cache_class = getattr(builtins, class_name)
+                print(f"Loaded {class_name} from builtins namespace")
+            else:
+                # Raise an error if the class is not found anywhere
+                raise ImportError(f"Cannot find class {class_name} in module {module_name} or builtins namespace")
+        
+        # Return an instance of the loaded class
         return data_cache_class(**self.parameters.data)
 
     def analyze_dataset(self):
