@@ -1,0 +1,11 @@
+[tool.semantic_release]
+version_variable = [
+    "setup.py:version",
+    "plexus/__init__.py:__version__"
+]
+version_toml = []
+version_pattern = []
+commit_message = "chore: release {version}"
+branch = "main"
+major_on_zero = false
+tag_format = "v{version}" 
