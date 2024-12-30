@@ -57,8 +57,7 @@ export function EvaluationTaskScoreResults({
     
     results.forEach(result => {
       const parsedMetadata = typeof result.metadata === 'string' ? 
-        JSON.parse(JSON.parse(result.metadata)) : 
-        result.metadata
+        JSON.parse(result.metadata) : result.metadata
 
       const firstResultKey = parsedMetadata?.results ? 
         Object.keys(parsedMetadata.results)[0] : null
@@ -78,8 +77,7 @@ export function EvaluationTaskScoreResults({
   const filteredResults = useMemo(() => {
     return results.filter(result => {
       const parsedMetadata = typeof result.metadata === 'string' ? 
-        JSON.parse(JSON.parse(result.metadata)) : 
-        result.metadata
+        JSON.parse(result.metadata) : result.metadata
 
       const firstResultKey = parsedMetadata?.results ? 
         Object.keys(parsedMetadata.results)[0] : null
@@ -110,8 +108,7 @@ export function EvaluationTaskScoreResults({
     if (filteredResults.length === 0) return null
     const correctCount = filteredResults.filter(r => {
       const parsedMetadata = typeof r.metadata === 'string' ? 
-        JSON.parse(JSON.parse(r.metadata)) : 
-        r.metadata
+        JSON.parse(r.metadata) : r.metadata
 
       const firstResultKey = parsedMetadata?.results ? 
         Object.keys(parsedMetadata.results)[0] : null

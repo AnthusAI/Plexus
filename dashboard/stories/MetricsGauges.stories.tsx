@@ -95,14 +95,24 @@ export const Detail: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     
+    // First verify all labels are present
     await expect(canvas.getByText('Accuracy')).toBeInTheDocument()
     await expect(canvas.getByText('Sensitivity')).toBeInTheDocument()
     await expect(canvas.getByText('Specificity')).toBeInTheDocument()
     await expect(canvas.getByText('Precision')).toBeInTheDocument()
+
+    // Get all gauge containers
+    const gauges = canvas.getAllByTestId('gauge-container')
     
-    await expect(canvas.getByText('92%')).toBeInTheDocument()
-    await expect(canvas.getByText('89%')).toBeInTheDocument()
-    await expect(canvas.getByText('95%')).toBeInTheDocument()
-    await expect(canvas.getByText('91%')).toBeInTheDocument()
+    // Check each gauge has correct value
+    const accuracyGauge = gauges.find(g => within(g).queryByText('Accuracy'))
+    const sensitivityGauge = gauges.find(g => within(g).queryByText('Sensitivity'))
+    const specificityGauge = gauges.find(g => within(g).queryByText('Specificity'))
+    const precisionGauge = gauges.find(g => within(g).queryByText('Precision'))
+
+    await expect(within(accuracyGauge!).getByText('92%', { selector: '.text-\\[2\\.25rem\\]' })).toBeInTheDocument()
+    await expect(within(sensitivityGauge!).getByText('89%', { selector: '.text-\\[2\\.25rem\\]' })).toBeInTheDocument()
+    await expect(within(specificityGauge!).getByText('95%', { selector: '.text-\\[2\\.25rem\\]' })).toBeInTheDocument()
+    await expect(within(precisionGauge!).getByText('91%', { selector: '.text-\\[2\\.25rem\\]' })).toBeInTheDocument()
   }
 }
