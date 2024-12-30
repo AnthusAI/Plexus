@@ -153,6 +153,9 @@ class BatchJob(BaseModel):
 
     def update(self, **kwargs) -> 'BatchJob':
         """Update batch job fields."""
+        if 'createdAt' in kwargs:
+            raise ValueError("createdAt cannot be modified")
+        
         mutation = """
         mutation UpdateBatchJob($input: UpdateBatchJobInput!) {
             updateBatchJob(input: $input) {

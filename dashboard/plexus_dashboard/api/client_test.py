@@ -238,6 +238,7 @@ def test_batch_scoring_job_creates_new_batch(mock_client):
          patch('plexus_dashboard.api.models.batch_job.BatchJob') as mock_batch_job:
 
         # Configure the mocks to return objects with IDs
+        mock_scoring_job.find_by_item_id.return_value = None
         mock_scoring_job.create.return_value = Mock(id='job-1')
         mock_batch_job.create.return_value = Mock(id='batch-1')
 
@@ -305,10 +306,11 @@ def test_batch_scoring_job_uses_existing_batch(mock_client):
 
     with patch('plexus_dashboard.api.models.scoring_job.ScoringJob') as mock_scoring_job, \
          patch('plexus_dashboard.api.models.batch_job.BatchJob') as mock_batch_job:
-        
+
+        mock_scoring_job.find_by_item_id.return_value = None
         mock_scoring_job.create.return_value = Mock(id='job-1')
         mock_batch_job.get_by_id.return_value = Mock(id='batch-1')
-        
+
         scoring_job, batch_job = mock_client.batch_scoring_job(
             itemId='item-1',
             scorecardId='card-1',
