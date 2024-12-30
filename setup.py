@@ -66,10 +66,7 @@ setup(
         'pyairtable',
         'azure-identity>=1.15.0',
         'rich>=13.7.1',
-        'gql[requests]>=3.0.0'
+        'gql[requests]>=3.0.0',
+        'openai-cost-calculator @ git+https://github.com/Anth-us/openai_cost_calculator.git@main'
     ],
-    dependency_links=[
-        'git+https://github.com/Anth-us/openai_cost_calculator.git@main#egg=openai-cost-calculator',
-        'git+https://github.com/AnthusAI/Plexus-Dashboard.git@main#egg=plexus-dashboard',
-    ]
 )
