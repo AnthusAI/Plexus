@@ -20,7 +20,7 @@ export function EvaluationTaskScoreResult({
   isFocused
 }: EvaluationTaskScoreResultProps) {
   const parsedMetadata = typeof metadata === 'string' ? 
-    JSON.parse(JSON.parse(metadata)) : metadata
+    JSON.parse(metadata) : metadata
 
   const firstResultKey = parsedMetadata?.results ? 
     Object.keys(parsedMetadata.results)[0] : null

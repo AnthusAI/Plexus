@@ -16,7 +16,7 @@ export function EvaluationTaskScoreResultDetail({
   navigationControls 
 }: EvaluationTaskScoreResultDetailProps) {
   const parsedMetadata = typeof result.metadata === 'string' ? 
-    JSON.parse(JSON.parse(result.metadata)) : result.metadata
+    JSON.parse(result.metadata) : result.metadata
 
   const firstResultKey = parsedMetadata?.results ? 
     Object.keys(parsedMetadata.results)[0] : null
