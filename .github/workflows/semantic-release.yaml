@@ -41,9 +41,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18.x'
-      - name: Install dependencies
+      - name: Install Node dependencies
+        working-directory: ./dashboard
         run: npm ci
       - name: Type Check and Run Unit Tests
+        working-directory: ./dashboard
         run: |
           npm run typecheck
           npm run test:coverage
