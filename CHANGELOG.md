@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.2.0-alpha.1 (2024-12-31)
+
+### Features
+
+- **python**: Moved from setup.py to pyproject.toml
+  ([`50bdc88`](https://github.com/AnthusAI/Plexus/commit/50bdc888254ce84f3aa87add22cb4fa20215906f))
+
+
 ## v0.1.0 (2024-12-31)
 
 
@@ -15,6 +23,9 @@
   distribution entries for better tracking - Improve value standardization for predictions and
   actual labels - Add detailed logging for confusion matrices and distributions - Fix empty/NA value
   handling to be more consistent - Add percentage calculations to distribution metrics
+
+- **build**: Batchjobtask stuff.
+  ([`df2caa8`](https://github.com/AnthusAI/Plexus/commit/df2caa87f70355a7da533e1b03d2d890a1d3debb))
 
 ### Chores
 
@@ -34,6 +45,27 @@
 
 - Set up multi-branch releases.
   ([`c48d3b6`](https://github.com/AnthusAI/Plexus/commit/c48d3b68841e78439f57a78644b504d41f590cc1))
+
+- **github**: Another attempt to fix Storybook CI tests.
+  ([`46a7fcb`](https://github.com/AnthusAI/Plexus/commit/46a7fcb5a1f2e965e13fb3b817ca6f730ddaedfd))
+
+- **github**: Conditional load for CI.
+  ([`9b8b996`](https://github.com/AnthusAI/Plexus/commit/9b8b9964213b02a5bc8f03c711ded3cb9e4c63dd))
+
+- **github**: Fix Storybook testing.
+  ([`83f8881`](https://github.com/AnthusAI/Plexus/commit/83f888110cdf99fd707b4daed7047a1fbd59cb6d))
+
+- **github**: Python Semantic Release.
+  ([`530dba9`](https://github.com/AnthusAI/Plexus/commit/530dba9454fd39e2f55bf9dfc2b165a6e59b5c71))
+
+- **github**: Run CI tests before releasing.
+  ([`5a5b3cc`](https://github.com/AnthusAI/Plexus/commit/5a5b3cc8a0023ff7e1a4ab3d4389c822673e77e7))
+
+- **github**: Type check instead of build in CI.
+  ([`6736d0f`](https://github.com/AnthusAI/Plexus/commit/6736d0f17c58373c0893dfa3f217b523369130ac))
+
+- **storybook**: Got Storybook interaction tests working.
+  ([`caf1770`](https://github.com/AnthusAI/Plexus/commit/caf1770184008d174b7ad0eaa3a09a64385263f8))
 
 ### Features
 
