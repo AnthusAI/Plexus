@@ -56,11 +56,14 @@ async def test_classifier_detects_turnip_present(turnip_classifier_config):
             completion=None
         )
         
-        llm_node = classifier.get_llm_node()
+        llm_prompt_node = classifier.get_llm_prompt_node()
+        llm_call_node = classifier.get_llm_call_node()
         parse_node = classifier.get_parser_node()
         
-        # Run LLM node
-        state_after_llm = await llm_node(state)
+        # Run prompt node
+        state_after_prompt = await llm_prompt_node(state)
+        # Run LLM call node
+        state_after_llm = await llm_call_node(state_after_prompt)
         # Run parser node
         final_state = await parse_node(state_after_llm)
         
@@ -90,11 +93,14 @@ async def test_classifier_detects_turnip_absent(turnip_classifier_config):
             completion=None
         )
         
-        llm_node = classifier.get_llm_node()
+        llm_prompt_node = classifier.get_llm_prompt_node()
+        llm_call_node = classifier.get_llm_call_node()
         parse_node = classifier.get_parser_node()
         
-        # Run LLM node
-        state_after_llm = await llm_node(state)
+        # Run prompt node
+        state_after_prompt = await llm_prompt_node(state)
+        # Run LLM call node
+        state_after_llm = await llm_call_node(state_after_prompt)
         # Run parser node
         final_state = await parse_node(state_after_llm)
         
@@ -127,20 +133,24 @@ async def test_classifier_succeeds_after_retry(turnip_classifier_config):
             completion=None
         )
         
-        llm_node = classifier.get_llm_node()
+        llm_prompt_node = classifier.get_llm_prompt_node()
+        llm_call_node = classifier.get_llm_call_node()
         parse_node = classifier.get_parser_node()
         retry_node = classifier.get_retry_node()
         
         # First attempt
-        state_after_llm = await llm_node(state)
+        state_after_prompt = await llm_prompt_node(state)
+        state_after_llm = await llm_call_node(state_after_prompt)
         state_after_parse = await parse_node(state_after_llm)
         
         # Should need retry
         assert state_after_parse["classification"] is None
         
-        # Retry attempt
+        # Retry attempt - clear completion to force new LLM call
         state_after_retry = await retry_node(state_after_parse)
-        state_after_llm2 = await llm_node(state_after_retry)
+        state_after_retry["completion"] = None
+        state_after_prompt2 = await llm_prompt_node(state_after_retry)
+        state_after_llm2 = await llm_call_node(state_after_prompt2)
         final_state = await parse_node(state_after_llm2)
         
         assert final_state["classification"] == "yes"
@@ -162,7 +172,7 @@ async def test_classifier_maximum_retries(turnip_classifier_config):
         classifier.model = mock_model
         classifier.parameters.maximum_retry_count = 3
         
-        state = classifier.GraphState(
+        initial_state = classifier.GraphState(
             text="I love eating turnip soup.",
             metadata={},
             results={},
@@ -175,14 +185,20 @@ async def test_classifier_maximum_retries(turnip_classifier_config):
             completion=None
         )
         
-        llm_node = classifier.get_llm_node()
+        llm_prompt_node = classifier.get_llm_prompt_node()
+        llm_call_node = classifier.get_llm_call_node()
         parse_node = classifier.get_parser_node()
         retry_node = classifier.get_retry_node()
         max_retries_node = classifier.get_max_retries_node()
         
-        current_state = state
+        current_state = initial_state.model_dump()
         for _ in range(3):
-            current_state = await llm_node(current_state)
+            # Clear chat history and completion before each attempt
+            current_state["chat_history"] = []
+            current_state["completion"] = None
+            
+            current_state = await llm_prompt_node(current_state)
+            current_state = await llm_call_node(current_state)
             current_state = await parse_node(current_state)
             if current_state["classification"] is None:
                 current_state = await retry_node(current_state)
@@ -220,10 +236,12 @@ async def test_classifier_parse_from_end_default(turnip_classifier_config):
             completion=None
         )
 
-        llm_node = classifier.get_llm_node()
+        llm_prompt_node = classifier.get_llm_prompt_node()
+        llm_call_node = classifier.get_llm_call_node()
         parse_node = classifier.get_parser_node()
 
-        state_after_llm = await llm_node(state)
+        state_after_prompt = await llm_prompt_node(state)
+        state_after_llm = await llm_call_node(state_after_prompt)
         final_state = await parse_node(state_after_llm)
 
         assert final_state["classification"] == "no"
@@ -257,10 +275,12 @@ async def test_classifier_parse_from_start_explicit(turnip_classifier_config):
             completion=None
         )
 
-        llm_node = classifier.get_llm_node()
+        llm_prompt_node = classifier.get_llm_prompt_node()
+        llm_call_node = classifier.get_llm_call_node()
         parse_node = classifier.get_parser_node()
 
-        state_after_llm = await llm_node(state)
+        state_after_prompt = await llm_prompt_node(state)
+        state_after_llm = await llm_call_node(state_after_prompt)
         final_state = await parse_node(state_after_llm)
 
         assert final_state["classification"] == "yes"
