@@ -40,12 +40,12 @@ from .ScorecardResultsAnalysis import ScorecardResultsAnalysis
 
 from sklearn.metrics import confusion_matrix
 
-from plexus_dashboard.api.client import PlexusDashboardClient
-from plexus_dashboard.api.models.account import Account
-from plexus_dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
-from plexus_dashboard.api.models.scorecard import Scorecard as DashboardScorecard
-from plexus_dashboard.api.models.score import Score as DashboardScore
-from plexus_dashboard.api.models.score_result import ScoreResult
+from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.models.account import Account
+from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
+from plexus.dashboard.api.models.score import Score as DashboardScore
+from plexus.dashboard.api.models.score_result import ScoreResult
 
 from plexus.scores.LangGraphScore import LangGraphScore, BatchProcessingPause
 

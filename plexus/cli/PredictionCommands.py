@@ -15,7 +15,7 @@ from langgraph.errors import NodeInterrupt
 from plexus.scores.LangGraphScore import BatchProcessingPause
 from plexus.Scorecard import Scorecard
 from plexus.scores.Score import Score
-from plexus_dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.cli.shared import get_scoring_jobs_for_batch
 
 

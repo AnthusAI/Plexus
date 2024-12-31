@@ -34,9 +34,9 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from pathlib import Path
 import uuid
 from langgraph.errors import NodeInterrupt
-from plexus_dashboard.api.client import PlexusDashboardClient
-from plexus_dashboard.api.models.account import Account
-from plexus_dashboard.api.models.scoring_job import ScoringJob
+from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.models.account import Account
+from plexus.dashboard.api.models.scoring_job import ScoringJob
 
 from plexus.utils.dict_utils import truncate_dict_strings
 class BatchProcessingPause(Exception):

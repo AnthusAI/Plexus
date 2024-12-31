@@ -24,8 +24,8 @@ from plexus.CustomLogging import logging
 from plexus.Registries import scorecard_registry
 from plexus.scores.Score import Score
 from plexus.Scorecard import Scorecard
-from plexus_dashboard.api.client import PlexusDashboardClient
-from plexus_dashboard.api.models.batch_job import BatchJob
+from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.models.batch_job import BatchJob
 from plexus.cli.PredictionCommands import select_sample_data_driven, select_sample_csv
 
 # Maximum number of requests per batch
