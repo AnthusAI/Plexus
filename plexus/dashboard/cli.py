@@ -20,12 +20,12 @@ import click
 import logging
 from dotenv import load_dotenv
 from typing import Optional
-from plexus_dashboard.api.client import PlexusDashboardClient
-from plexus_dashboard.api.models.account import Account
-from plexus_dashboard.api.models.evaluation import Evaluation
-from plexus_dashboard.api.models.scorecard import Scorecard
-from plexus_dashboard.api.models.score import Score
-from plexus_dashboard.api.models.score_result import ScoreResult
+from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.models.account import Account
+from plexus.dashboard.api.models.evaluation import Evaluation
+from plexus.dashboard.api.models.scorecard import Scorecard
+from plexus.dashboard.api.models.score import Score
+from plexus.dashboard.api.models.score_result import ScoreResult
 import json
 import random
 import time
@@ -36,7 +36,7 @@ from sklearn.metrics import (
     confusion_matrix,
     accuracy_score
 )
-from plexus_dashboard.commands.simulate import (
+from dashboard.commands.simulate import (
     generate_class_distribution,
     simulate_prediction,
     select_metrics_and_explanation,

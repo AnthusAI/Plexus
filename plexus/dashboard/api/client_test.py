@@ -12,17 +12,17 @@ def mock_env(monkeypatch):
 
 @pytest.fixture
 def mock_transport():
-    with patch('plexus_dashboard.api.client.RequestsHTTPTransport') as mock:
+    with patch('plexus.dashboard.api.client.RequestsHTTPTransport') as mock:
         yield mock
 
 @pytest.fixture
 def mock_gql_client():
-    with patch('plexus_dashboard.api.client.Client') as mock:
+    with patch('plexus.dashboard.api.client.Client') as mock:
         yield mock
 
 @pytest.fixture
 def mock_score_result():
-    with patch('plexus_dashboard.api.models.score_result.ScoreResult') as mock:
+    with patch('plexus.dashboard.api.models.score_result.ScoreResult') as mock:
         yield mock
 
 @pytest.fixture
@@ -209,7 +209,12 @@ def test_batch_scoring_job_creates_new_batch(mock_client):
         # Fourth - create batch job
         {'createBatchJob': {
             'id': 'batch-1',
-            'status': 'OPEN'
+            'accountId': 'acc-1',
+            'status': 'OPEN',
+            'type': 'MultiStepScore',
+            'batchId': 'batch-1',
+            'modelProvider': 'openai',
+            'modelName': 'gpt-4'
         }},
         # Fifth - link batch job to scoring job
         {'createBatchJobScoringJob': {
@@ -223,19 +228,29 @@ def test_batch_scoring_job_creates_new_batch(mock_client):
         # Seventh - get batch status
         {'getBatchJob': {
             'id': 'batch-1',
+            'accountId': 'acc-1',
             'status': 'OPEN',
+            'type': 'MultiStepScore',
+            'batchId': 'batch-1',
+            'modelProvider': 'openai',
+            'modelName': 'gpt-4',
             'totalRequests': 1
         }},
         # Eighth - update batch count
         {'updateBatchJob': {
             'id': 'batch-1',
-            'totalRequests': 1,
-            'status': 'OPEN'
+            'accountId': 'acc-1',
+            'status': 'OPEN',
+            'type': 'MultiStepScore',
+            'batchId': 'batch-1',
+            'modelProvider': 'openai',
+            'modelName': 'gpt-4',
+            'totalRequests': 1
         }}
     ]
 
-    with patch('plexus_dashboard.api.models.scoring_job.ScoringJob') as mock_scoring_job, \
-         patch('plexus_dashboard.api.models.batch_job.BatchJob') as mock_batch_job:
+    with patch('plexus.dashboard.api.models.scoring_job.ScoringJob') as mock_scoring_job, \
+         patch('plexus.dashboard.api.models.batch_job.BatchJob') as mock_batch_job:
 
         # Configure the mocks to return objects with IDs
         mock_scoring_job.find_by_item_id.return_value = None
@@ -260,18 +275,24 @@ def test_batch_scoring_job_uses_existing_batch(mock_client):
         # First query - all batch jobs
         {'listBatchJobs': {'items': [{
             'id': 'batch-1',
-            'totalRequests': 1,
+            'accountId': 'acc-1',
             'status': 'OPEN',
+            'type': 'MultiStepScore',
+            'batchId': 'batch-1',
             'modelProvider': 'openai',
-            'modelName': 'gpt-4'
+            'modelName': 'gpt-4',
+            'totalRequests': 1
         }]}},
         # Second query - open batch jobs
         {'listBatchJobs': {'items': [{
             'id': 'batch-1',
-            'totalRequests': 1,
+            'accountId': 'acc-1',
             'status': 'OPEN',
+            'type': 'MultiStepScore',
+            'batchId': 'batch-1',
             'modelProvider': 'openai',
-            'modelName': 'gpt-4'
+            'modelName': 'gpt-4',
+            'totalRequests': 1
         }]}},
         # Third - create scoring job
         {'createScoringJob': {
@@ -293,19 +314,29 @@ def test_batch_scoring_job_uses_existing_batch(mock_client):
         # Sixth - get batch status
         {'getBatchJob': {
             'id': 'batch-1',
+            'accountId': 'acc-1',
             'status': 'OPEN',
+            'type': 'MultiStepScore',
+            'batchId': 'batch-1',
+            'modelProvider': 'openai',
+            'modelName': 'gpt-4',
             'totalRequests': 2
         }},
         # Seventh - update batch count
         {'updateBatchJob': {
             'id': 'batch-1',
-            'totalRequests': 2,
-            'status': 'OPEN'
+            'accountId': 'acc-1',
+            'status': 'OPEN',
+            'type': 'MultiStepScore',
+            'batchId': 'batch-1',
+            'modelProvider': 'openai',
+            'modelName': 'gpt-4',
+            'totalRequests': 2
         }}
     ]
 
-    with patch('plexus_dashboard.api.models.scoring_job.ScoringJob') as mock_scoring_job, \
-         patch('plexus_dashboard.api.models.batch_job.BatchJob') as mock_batch_job:
+    with patch('plexus.dashboard.api.models.scoring_job.ScoringJob') as mock_scoring_job, \
+         patch('plexus.dashboard.api.models.batch_job.BatchJob') as mock_batch_job:
 
         mock_scoring_job.find_by_item_id.return_value = None
         mock_scoring_job.create.return_value = Mock(id='job-1')
