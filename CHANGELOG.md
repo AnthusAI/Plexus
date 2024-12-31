@@ -1,10 +1,10 @@
 # CHANGELOG
 
 
-## v0.1.0 (2024-12-30)
+## v0.1.0-alpha.1 (2024-12-31)
 
 
-## v0.0.0 (2024-12-30)
+## v0.0.0 (2024-12-31)
 
 ### Bug Fixes
 
@@ -25,6 +25,9 @@
   ([`e7a6ccc`](https://github.com/AnthusAI/Plexus/commit/e7a6cccdaed3ef0af30f413e409828a1a153fbb0))
 
 ### Continuous Integration
+
+- Set up multi-branch releases.
+  ([`c48d3b6`](https://github.com/AnthusAI/Plexus/commit/c48d3b68841e78439f57a78644b504d41f590cc1))
 
 - **github**: Another attempt to fix Storybook CI tests.
   ([`46a7fcb`](https://github.com/AnthusAI/Plexus/commit/46a7fcb5a1f2e965e13fb3b817ca6f730ddaedfd))
