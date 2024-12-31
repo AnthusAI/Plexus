@@ -10,7 +10,7 @@ from plexus.CustomLogging import logging
 from plexus.scores.LangGraphScore import BatchProcessingPause
 import traceback
 import os
-from plexus_dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.client import PlexusDashboardClient
 
 class Classifier(BaseNode):
     """
