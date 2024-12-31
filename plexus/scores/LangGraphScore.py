@@ -66,7 +66,7 @@ class LangGraphScore(Score, LangChainUser):
         graph: Optional[list[dict]] = None
         input: Optional[dict] = None
         output: Optional[dict] = None
-        depends_on: Optional[List[str]] = None
+        depends_on: Optional[Union[List[str], Dict[str, Union[str, Dict[str, Any]]]]] = None
         single_line_messages: bool = False
         checkpoint_db_path: Optional[str] = Field(
             default="./.plexus/checkpoints/langgraph.db",

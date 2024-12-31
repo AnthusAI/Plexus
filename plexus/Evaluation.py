@@ -368,6 +368,11 @@ class Evaluation:
         total_correct = 0
         total_predictions = 0
         
+        # Get the primary score name - if we're evaluating a specific score, use that
+        primary_score_name = None
+        if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
+            primary_score_name = self.subset_of_score_names[0]
+        
         # First pass: build distributions and confusion matrices
         for result in results:
             logging.info(f"\nProcessing result for form_id: {result['form_id']}")
@@ -377,8 +382,13 @@ class Evaluation:
                 if isinstance(score_result.value, str) and score_result.value == "Error":
                     continue
 
-                predicted = str(score_result.value).lower().strip()
+                # Skip if this is a dependency score and not our primary score
                 score_name = score_result.parameters.name
+                if primary_score_name and score_name != primary_score_name:
+                    logging.info(f"Skipping metrics for dependency score: {score_name}")
+                    continue
+
+                predicted = str(score_result.value).lower().strip()
                 actual = str(score_result.metadata['human_label']).lower().strip()
                 
                 # Standardize empty or NA values
@@ -390,7 +400,7 @@ class Evaluation:
                 logging.info(f"Actual: '{actual}'")
                 logging.info(f"Correct: {score_result.metadata['correct']}")
                 
-                # Update total correct and predictions
+                # Update total correct and predictions - only for the primary score
                 if score_result.metadata['correct']:
                     total_correct += 1
                 total_predictions += 1
@@ -504,14 +514,14 @@ class Evaluation:
         # Ensure we have at least one entry in each required field
         if not formatted_confusion_matrices:
             formatted_confusion_matrices.append({
-                "score_name": self.score_names()[0] if self.score_names() else "default",
+                "score_name": primary_score_name or self.score_names()[0],
                 "matrix": [[0, 0], [0, 0]],
                 "labels": ['yes', 'no']
             })
         
         if not predicted_label_distributions:
             predicted_label_distributions.append({
-                "score": self.score_names()[0] if self.score_names() else "default",
+                "score": primary_score_name or self.score_names()[0],
                 "label": "no_data",
                 "count": 0,
                 "percentage": 0
@@ -519,7 +529,7 @@ class Evaluation:
             
         if not actual_label_distributions:
             actual_label_distributions.append({
-                "score": self.score_names()[0] if self.score_names() else "default",
+                "score": primary_score_name or self.score_names()[0],
                 "label": "no_data",
                 "count": 0,
                 "percentage": 0
@@ -1249,12 +1259,22 @@ class AccuracyEvaluation(Evaluation):
             'human_labels': human_labels
         }
 
+        # Get the primary score name if we're evaluating a specific score
+        primary_score_name = None
+        if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
+            primary_score_name = self.subset_of_score_names[0]
+
         for score_identifier in scorecard_results.keys():
             try:
                 score_result = scorecard_results[score_identifier]
                 score_instance = Score.from_name(self.scorecard.name, score_identifier)
                 label_score_name = score_instance.get_label_score_name()
                 score_name = score_instance.parameters.name
+
+                # Skip if this is a dependency score and not our primary score
+                if primary_score_name and score_name != primary_score_name:
+                    logging.info(f"Skipping result creation for dependency score: {score_name}")
+                    continue
 
                 # First check for override
                 human_label = None
@@ -1296,7 +1316,7 @@ class AccuracyEvaluation(Evaluation):
                 score_result.metadata['correct'] = score_result_value == human_label
                 score_result.metadata['text'] = text
 
-                # Create ScoreResult in a non-blocking way
+                # Create ScoreResult in a non-blocking way only for the primary score
                 if self.dashboard_client and self.experiment_id:
                     asyncio.create_task(self._create_score_result(
                         score_result=score_result,
