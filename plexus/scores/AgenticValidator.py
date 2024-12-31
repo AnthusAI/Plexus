@@ -194,7 +194,7 @@ class AgenticValidator(LangGraphScore):
         workflow = StateGraph(ValidationState)
 
         # Define custom start node
-        BEGIN_VALIDATION = self.parameters.score_name
+        BEGIN_VALIDATION = self.parameters.name
 
         # Define new "Has Dependency?" node
         HAS_DEPENDENCY = "Has Dependency?"
@@ -594,9 +594,10 @@ class AgenticValidator(LangGraphScore):
 
         return [
             LangGraphScore.Result(
-                name =        self.parameters.score_name,
+                name =        self.parameters.name,
                 value =       validation_result,
-                explanation = explanation
+                explanation = explanation,
+                parameters = self.parameters
             )
         ]
 

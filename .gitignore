@@ -4,3 +4,4 @@ build/
 .coverage
 mlruns/
 reports/
+.DS_Store
