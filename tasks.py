@@ -17,24 +17,7 @@ def lint(context):
 def test(context):
     context.run("pytest")
 
-@task
-def dashboard_install(context):
-    with context.cd("./dashboard"):
-        context.run("npm ci")
-
-@task
-def dashboard_test(context):
-    with context.cd("./dashboard"):
-        context.run("npm run typecheck")
-        context.run("npm run test:coverage")
-
-@task
-def docs(context):
-    context.run("sphinx-apidoc --separate -o documentation/source plexus " \
-               "\"**/*_test*.*\" -f -M")
-    context.run("sphinx-build documentation/source documentation")
-
-@task(pre=[lint, test, docs])
+@task(pre=[lint, test])
 def ci(context):
-    """Run all validation tasks: lint, test, and build docs"""
+    """Run all Python validation tasks: lint and test"""
     pass 

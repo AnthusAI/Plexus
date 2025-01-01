@@ -28,6 +28,9 @@ jobs:
           pip install python-semantic-release invoke
           pip install -e .
           
+      - name: Run Python Tests
+        run: invoke ci
+          
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -37,10 +40,9 @@ jobs:
         working-directory: ./dashboard
         run: npm ci
           
-      - name: Run all tests
-        run: |
-          invoke ci
-          cd dashboard && npm run ci
+      - name: Run Node.js Tests
+        working-directory: ./dashboard
+        run: npm run ci
 
       - name: Initialize Version Tag (if needed)
         run: |
