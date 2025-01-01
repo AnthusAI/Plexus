@@ -59,19 +59,19 @@ export const Demo: Story = {
         <div className="grid grid-cols-2 gap-16">
           <div className="space-y-4">
             <h3 className="font-medium mb-2">Not Focused</h3>
-            <EvaluationListAccuracyBar progress={100} accuracy={100} />
+            <EvaluationListAccuracyBar progress={100} accuracy={99.7} />
+            <EvaluationListAccuracyBar progress={100} accuracy={98.2} />
+            <EvaluationListAccuracyBar progress={100} accuracy={97.8} />
             <EvaluationListAccuracyBar progress={100} accuracy={75} />
             <EvaluationListAccuracyBar progress={100} accuracy={50} />
-            <EvaluationListAccuracyBar progress={100} accuracy={25} />
-            <EvaluationListAccuracyBar progress={100} accuracy={0} />
           </div>
           <div className="space-y-4">
             <h3 className="font-medium mb-2">Focused</h3>
-            <EvaluationListAccuracyBar progress={100} accuracy={100} isFocused />
+            <EvaluationListAccuracyBar progress={100} accuracy={99.7} isFocused />
+            <EvaluationListAccuracyBar progress={100} accuracy={98.2} isFocused />
+            <EvaluationListAccuracyBar progress={100} accuracy={97.8} isFocused />
             <EvaluationListAccuracyBar progress={100} accuracy={75} isFocused />
             <EvaluationListAccuracyBar progress={100} accuracy={50} isFocused />
-            <EvaluationListAccuracyBar progress={100} accuracy={25} isFocused />
-            <EvaluationListAccuracyBar progress={100} accuracy={0} isFocused />
           </div>
         </div>
       </div>
