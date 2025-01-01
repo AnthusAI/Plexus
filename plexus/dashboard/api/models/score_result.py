@@ -6,6 +6,59 @@ import json
 
 @dataclass
 class ScoreResult(BaseModel):
+    """
+    Represents a single classification or scoring result in the Plexus dashboard.
+
+    ScoreResult is the core data structure for tracking individual scoring operations,
+    used both for real-time scoring and evaluation. It integrates with the GraphQL API
+    to provide:
+
+    - Score value tracking with confidence
+    - Metadata storage for debugging and analysis
+    - Links to related entities (items, accounts, scorecards)
+    - Evaluation result tracking
+    - Batch processing support
+
+    Common usage patterns:
+    1. Creating a single score result:
+        result = ScoreResult.create(
+            client=client,
+            value=0.95,
+            itemId="item-123",
+            accountId="acc-456",
+            scorecardId="card-789",
+            metadata={"source": "phone_call"}
+        )
+
+    2. Batch creation for efficiency:
+        results = ScoreResult.batch_create(client, [
+            {
+                "value": 0.95,
+                "itemId": "item-123",
+                "accountId": "acc-456",
+                "scorecardId": "card-789"
+            },
+            {
+                "value": 0.82,
+                "itemId": "item-124",
+                "accountId": "acc-456",
+                "scorecardId": "card-789"
+            }
+        ])
+
+    3. Updating with evaluation results:
+        result.update(
+            correct=True,
+            evaluationId="eval-123",
+            metadata={"human_label": "Yes"}
+        )
+
+    ScoreResult is commonly used with:
+    - Evaluation for accuracy testing
+    - ScoringJob for batch processing
+    - LangGraphScore for LLM-based classification
+    """
+
     value: float
     itemId: str
     accountId: str

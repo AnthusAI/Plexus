@@ -28,8 +28,42 @@ class Scorecard:
     """
     Represents a collection of scores and manages the computation of these scores for given inputs.
 
-    This class provides functionality to load scores from a YAML configuration, compute individual and total scores,
-    and manage the costs associated with score computations.
+    A Scorecard is the primary way to organize and run classifications in Plexus. Each scorecard
+    is typically defined in a YAML file and contains multiple Score instances that work together
+    to analyze content. Scorecards support:
+
+    - Hierarchical organization of scores with dependencies
+    - Parallel execution of independent scores
+    - Cost tracking for API-based scores
+    - Integration with MLFlow for experiment tracking
+    - Integration with the Plexus dashboard for monitoring
+
+    Common usage patterns:
+    1. Loading from YAML:
+        scorecard = Scorecard.create_from_yaml('scorecards/qa.yaml')
+
+    2. Scoring content:
+        results = await scorecard.score_entire_text(
+            text="content to analyze",
+            metadata={"source": "phone_call"}
+        )
+
+    3. Batch processing:
+        for text in texts:
+            results = await scorecard.score_entire_text(
+                text=text,
+                metadata={"batch_id": "123"}
+            )
+            costs = scorecard.get_accumulated_costs()
+
+    4. Subset scoring:
+        results = await scorecard.score_entire_text(
+            text="content to analyze",
+            subset_of_score_names=["IVR_Score", "Compliance_Score"]
+        )
+
+    The Scorecard class is commonly used with Evaluation for measuring accuracy
+    and with the dashboard for monitoring production deployments.
     """
 
     score_registry = None
@@ -298,10 +332,17 @@ class Scorecard:
         for score_name in subset_of_score_names:
             score_info = self.score_registry.get_properties(score_name)
             if 'depends_on' in score_info:
-                for dependency in score_info['depends_on']:
-                    if dependency not in subset_of_score_names:
-                        dependent_scores_added.append(dependency)
-                        subset_of_score_names.append(dependency)
+                deps = score_info['depends_on']
+                if isinstance(deps, list):
+                    for dependency in deps:
+                        if dependency not in subset_of_score_names:
+                            dependent_scores_added.append(dependency)
+                            subset_of_score_names.append(dependency)
+                elif isinstance(deps, dict):
+                    for dependency in deps.keys():
+                        if dependency not in subset_of_score_names:
+                            dependent_scores_added.append(dependency)
+                            subset_of_score_names.append(dependency)
         logging.info(f"Added dependent scores: {dependent_scores_added}")
 
         dependency_graph, name_to_id = self.build_dependency_graph(subset_of_score_names)
@@ -320,6 +361,13 @@ class Scorecard:
         async def process_score(score_id: str):
             score_name = dependency_graph[score_id]['name']
             logging.info(f"Starting to process score: {score_name} (ID: {score_id})")
+            
+            # Check if conditions are met
+            if not self.check_dependency_conditions(score_id, dependency_graph, results_by_score_id):
+                logging.info(f"Skipping score {score_name} as conditions are not met")
+                results_by_score_id[score_id] = plexus.scores.Score.Result(value="Skipped", error="Dependency conditions not met")
+                return
+                
             try:
                 logging.info(f"About to predict score {score_name} at {pd.Timestamp.now()}")
                 score_result = await asyncio.wait_for(
@@ -412,12 +460,90 @@ class Scorecard:
                 score_id = str(score['id'])
                 score_name = score['name']
                 name_to_id[score_name] = score_id
+                
+                # Handle both simple list and conditional dependencies
                 dependencies = score.get('depends_on', [])
-                graph[score_id] = {
-                    'name': score_name,
-                    'deps': [name_to_id.get(dep, dep) for dep in dependencies if dep in subset_of_score_names]
-                }
+                if isinstance(dependencies, list):
+                    # Simple list of dependencies
+                    graph[score_id] = {
+                        'name': score_name,
+                        'deps': [name_to_id.get(dep, dep) for dep in dependencies if dep in subset_of_score_names],
+                        'conditions': {}
+                    }
+                elif isinstance(dependencies, dict):
+                    # Dictionary with conditions
+                    deps = []
+                    conditions = {}
+                    for dep, condition in dependencies.items():
+                        if dep in subset_of_score_names:
+                            deps.append(name_to_id.get(dep, dep))
+                            if isinstance(condition, dict):
+                                conditions[name_to_id.get(dep, dep)] = condition
+                            elif isinstance(condition, str):
+                                conditions[name_to_id.get(dep, dep)] = {
+                                    'operator': '==',
+                                    'value': condition
+                                }
+                    graph[score_id] = {
+                        'name': score_name,
+                        'deps': deps,
+                        'conditions': conditions
+                    }
+                else:
+                    # Invalid dependency format
+                    logging.warning(f"Invalid dependency format for score {score_name}")
+                    graph[score_id] = {
+                        'name': score_name,
+                        'deps': [],
+                        'conditions': {}
+                    }
         return graph, name_to_id
+
+    def check_dependency_conditions(self, score_id: str, dependency_graph: dict, results_by_score_id: dict) -> bool:
+        """
+        Check if all conditions for a score's dependencies are met.
+        
+        Args:
+            score_id: The ID of the score to check
+            dependency_graph: The dependency graph containing conditions
+            results_by_score_id: Dictionary of score results
+            
+        Returns:
+            bool: True if all conditions are met, False otherwise
+        """
+        score_info = dependency_graph.get(score_id)
+        if not score_info or not score_info['conditions']:
+            return True
+            
+        for dep_id, condition in score_info['conditions'].items():
+            if dep_id not in results_by_score_id:
+                return False
+                
+            dep_result = results_by_score_id[dep_id]
+            if isinstance(dep_result, str) and dep_result == "PAUSED":
+                return False
+                
+            dep_value = dep_result.value if hasattr(dep_result, 'value') else dep_result
+            operator = condition.get('operator', '==')
+            expected_value = condition.get('value')
+            
+            if operator == '==':
+                if dep_value != expected_value:
+                    return False
+            elif operator == '!=':
+                if dep_value == expected_value:
+                    return False
+            elif operator == 'in':
+                if not isinstance(expected_value, list) or dep_value not in expected_value:
+                    return False
+            elif operator == 'not in':
+                if not isinstance(expected_value, list) or dep_value in expected_value:
+                    return False
+            else:
+                logging.warning(f"Unsupported operator {operator} for score {score_id}")
+                return False
+                
+        return True
 
 
 

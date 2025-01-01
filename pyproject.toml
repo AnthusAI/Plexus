@@ -1,8 +1,109 @@
-[tool.semantic_release]
-version_variable = [
-    "setup.py:version",
-    "plexus/__init__.py:__version__"
+[build-system]
+requires = ["setuptools>=64.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plexus"
+dynamic = ["version"]
+description = "A Python module for configuring and managing data scoring"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "Anthus AI Solutions" }
 ]
+dependencies = [
+    "pytest==8.2.2",
+    "flake8==7.1.1",
+    "pytest-cov==5.0.0",
+    "python-dotenv==1.0.0",
+    "pytest-watch==4.2.0",
+    "pytest-asyncio==0.23.5",
+    "pandas==2.1.4",
+    "openai>=1.35.10",
+    "tenacity==8.2.3",
+    "nltk",
+    "pybind11",
+    "fasttext",
+    "tiktoken==0.7.0",
+    "transformers",
+    "seaborn",
+    "pydot==2.0.0",
+    "pydotplus==2.0.2",
+    "graphviz==0.20.3",
+    "boto3",
+    "graphviz",
+    "mistune",
+    "pyyaml",
+    "sphinx",
+    "sphinx-rtd-theme",
+    "mlflow",
+    "scikit-learn==1.5.1",
+    "tables",
+    "xgboost==2.0.3",
+    "imbalanced-learn==0.12.3",
+    "imblearn==0.0",
+    "shap==0.45.1",
+    "contractions==0.1.73",
+    "langchain>=0.2.11",
+    "langchain-core>=0.2.38",
+    "langchain-community>=0.2.6",
+    "langgraph>=0.2.53",
+    "langchain-aws>=0.1.9",
+    "langchain-openai>=0.1.14",
+    "langchain-google-vertexai>=1.0.6",
+    "langgraph-checkpoint-postgres==2.0.9",
+    "psycopg[binary]>=3.2.0,<4.0.0",
+    "openpyxl==3.1.5",
+    "rapidfuzz==3.9.4",
+    "datasets",
+    "gensim",
+    "watchtower",
+    "pyairtable",
+    "azure-identity>=1.15.0",
+    "rich>=13.7.1",
+    "gql[requests]>=3.0.0",
+    "openai-cost-calculator @ git+https://github.com/Anth-us/openai_cost_calculator.git@main",
+    "invoke>=2.2.0"
+]
+
+[project.scripts]
+plexus = "plexus.cli.CommandLineInterface:main"
+
+[tool.setuptools]
+packages = ["plexus"]
+package-data = { plexus = ["templates/*", "__main__.py"] }
+
+[tool.setuptools.dynamic]
+version = {attr = "plexus.__version__"}
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning",
+    "ignore:Deprecated call to `pkg_resources.declare_namespace:DeprecationWarning"
+]
+markers = [
+    "integration: marks tests that make actual external LLM API calls"
+]
+addopts = "-m 'not integration'"
+
+[tool.coverage.run]
+omit = ["*_test.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "pass",
+    "except ImportError:",
+    "def main"
+]
+
+[tool.semantic_release]
+version_variable = ["plexus/__init__.py:__version__"]
 version_toml = []
 version_pattern = []
 commit_message = "chore: release {version}"
