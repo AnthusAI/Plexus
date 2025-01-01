@@ -50,6 +50,59 @@ from plexus.dashboard.api.models.score_result import ScoreResult
 from plexus.scores.LangGraphScore import LangGraphScore, BatchProcessingPause
 
 class Evaluation:
+    """
+    Base class for evaluating Scorecard performance through accuracy testing and consistency checking.
+
+    Evaluation is used to measure how well a Scorecard performs against labeled data or to check
+    consistency of results. It integrates with MLFlow for tracking experiments and the Plexus
+    dashboard for monitoring. The class supports:
+
+    - Accuracy testing against labeled data
+    - Consistency checking through repeated scoring
+    - Automatic metrics calculation and visualization
+    - Cost tracking and reporting
+    - Integration with MLFlow experiments
+    - Real-time progress tracking in the dashboard
+
+    There are two main subclasses:
+    1. AccuracyEvaluation: Tests scorecard results against labeled data
+    2. ConsistencyEvaluation: Checks if scores are consistent when run multiple times
+
+    Common usage patterns:
+    1. Running an accuracy evaluation:
+        evaluation = AccuracyEvaluation(
+            scorecard_name="qa",
+            scorecard=scorecard,
+            labeled_samples_filename="labeled_data.csv"
+        )
+        await evaluation.run()
+
+    2. Running a consistency check:
+        evaluation = ConsistencyEvaluation(
+            scorecard_name="qa",
+            scorecard=scorecard,
+            number_of_texts_to_sample=100,
+            number_of_times_to_sample_each_text=3
+        )
+        await evaluation.run()
+
+    3. Using with MLFlow tracking:
+        with evaluation:  # Automatically starts/ends MLFlow run
+            await evaluation.run()
+
+    4. Monitoring in dashboard:
+        evaluation = AccuracyEvaluation(
+            scorecard_name="qa",
+            scorecard=scorecard,
+            account_key="my-account",
+            score_id="score-123"
+        )
+        await evaluation.run()  # Progress visible in dashboard
+
+    The Evaluation class is commonly used during model development to measure performance
+    and during production to monitor for accuracy drift.
+    """
+
     def __init__(self, *,
         scorecard_name: str,
         scorecard: Scorecard,

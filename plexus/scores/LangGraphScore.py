@@ -49,10 +49,70 @@ class BatchProcessingPause(Exception):
 
 class LangGraphScore(Score, LangChainUser):
     """
-    A Score class that uses language models to perform text classification.
+    A Score implementation that uses LangGraph for orchestrating LLM-based classification.
 
-    This class initializes and manages a language model for processing text inputs,
-    tracks token usage, and provides methods for text classification and cost calculation.
+    LangGraphScore enables complex classification logic using a graph of LLM operations.
+    It provides:
+    - Declarative graph definition in YAML
+    - State management and checkpointing
+    - Cost tracking and optimization
+    - Batch processing support
+    - Integration with multiple LLM providers
+
+    The graph is defined in the scorecard YAML:
+    ```yaml
+    scores:
+      ComplexScore:
+        class: LangGraphScore
+        model_provider: AzureChatOpenAI
+        model_name: gpt-4
+        graph:
+          - name: extract_context
+            type: prompt
+            template: Extract relevant context...
+            output: context
+          - name: classify
+            type: prompt
+            template: Based on the context...
+            input: context
+            output: classification
+          - name: validate
+            type: condition
+            input: classification
+            conditions:
+              - value: Yes
+                goto: explain_yes
+              - value: No
+                goto: explain_no
+    ```
+
+    Common usage patterns:
+    1. Basic classification:
+        score = LangGraphScore(**config)
+        result = await score.predict(context, Score.Input(
+            text="content to classify"
+        ))
+
+    2. Batch processing:
+        async for result in score.batch_predict(texts):
+            # Process each result
+
+    3. Cost optimization:
+        score.reset_token_usage()
+        result = await score.predict(...)
+        costs = score.get_accumulated_costs()
+
+    Key features:
+    - Graph visualization for debugging
+    - Token usage tracking
+    - State persistence
+    - Error handling and retries
+    - Batch processing optimization
+
+    LangGraphScore is commonly used with:
+    - Complex classification tasks requiring multiple steps
+    - Tasks needing explanation or reasoning
+    - High-volume processing requiring cost optimization
     """
     
     class Parameters(Score.Parameters):
