@@ -13,6 +13,7 @@ An AI/ML orchestration system for managing classification, extraction and other 
    plexus.processors
    plexus.storage
    plexus.cli
+   plexus.dashboard
 
 Test
 ----

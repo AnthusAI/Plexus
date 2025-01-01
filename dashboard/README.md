@@ -1,6 +1,6 @@
 ## Plexus Dashboard
 
-This is a Next.js/Shadcn dashboard built on Amplify Gen2 for Plexus, with a Python API client code and a CLI tool.
+This is a Next.js/Shadcn dashboard built on Amplify Gen2 for Plexus, with a Python API client code and a CLI tool. This dashboard is part of the [Plexus classification system](../README.md), providing a visual interface for managing scorecards and monitoring classification performance.
 
 ## Installation
 

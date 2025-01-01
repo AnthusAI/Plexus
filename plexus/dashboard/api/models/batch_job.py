@@ -8,6 +8,30 @@ import logging
 
 @dataclass
 class BatchJob(BaseModel):
+    """Represents a batch processing job for scoring multiple items.
+    
+    A BatchJob manages the execution of scoring operations across multiple items,
+    tracking progress, handling errors, and maintaining state throughout the
+    batch processing lifecycle.
+    
+    :param accountId: Identifier for the account owning this batch job
+    :param status: Current status of the batch job (PENDING, RUNNING, etc.)
+    :param type: Type of batch operation being performed
+    :param batchId: Unique identifier for this batch of operations
+    :param modelProvider: Provider of the model being used
+    :param modelName: Name of the model being used
+    :param scoringJobCountCache: Number of scoring jobs in this batch
+    :param startedAt: Timestamp when the batch job started
+    :param estimatedEndAt: Estimated completion timestamp
+    :param completedAt: Timestamp when the batch job completed
+    :param totalRequests: Total number of requests in this batch
+    :param completedRequests: Number of completed requests
+    :param failedRequests: Number of failed requests
+    :param errorMessage: Error message if the batch job failed
+    :param errorDetails: Detailed error information
+    :param scorecardId: Associated scorecard identifier
+    :param scoreId: Associated score identifier
+    """
     accountId: str
     status: str
     type: str
@@ -101,6 +125,18 @@ class BatchJob(BaseModel):
         parameters: Dict,
         **kwargs
     ) -> 'BatchJob':
+        """Creates a new batch job.
+        
+        :param client: API client instance for making requests
+        :param accountId: Account identifier for the batch job
+        :param type: Type of batch operation
+        :param modelProvider: Provider of the model
+        :param modelName: Name of the model
+        :param parameters: Additional parameters for job creation
+        :param kwargs: Optional parameters (status, scorecardId, etc.)
+        :return: New BatchJob instance
+        :raises: Exception if creation fails
+        """
         input_data = {
             'accountId': accountId,
             'type': type,
@@ -135,6 +171,12 @@ class BatchJob(BaseModel):
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'BatchJob':
+        """Creates a BatchJob instance from dictionary data.
+        
+        :param data: Dictionary containing batch job data
+        :param client: API client instance
+        :return: BatchJob instance
+        """
         # Convert datetime fields
         for date_field in ['startedAt', 'estimatedEndAt', 'completedAt']:
             if data.get(date_field):
@@ -152,7 +194,12 @@ class BatchJob(BaseModel):
         )
 
     def update(self, **kwargs) -> 'BatchJob':
-        """Update batch job fields."""
+        """Updates batch job fields.
+        
+        :param kwargs: Fields to update and their new values
+        :return: Updated BatchJob instance
+        :raises: ValueError if attempting to modify createdAt
+        """
         if 'createdAt' in kwargs:
             raise ValueError("createdAt cannot be modified")
         
@@ -197,6 +244,13 @@ class BatchJob(BaseModel):
 
     @classmethod
     def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'BatchJob':
+        """Retrieves a batch job by its identifier.
+        
+        :param id: Batch job identifier
+        :param client: API client instance
+        :return: BatchJob instance
+        :raises: Exception if batch job not found
+        """
         query = """
         query GetBatchJob($id: ID!) {
             getBatchJob(id: $id) {
