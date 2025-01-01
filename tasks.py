@@ -17,6 +17,12 @@ def lint(context):
 def test(context):
     context.run("pytest")
 
+@task
+def docs(context):
+    context.run("sphinx-apidoc --separate -o documentation/source plexus " \
+               "\"**/*_test*.*\" -f -M")
+    context.run("sphinx-build documentation/source documentation")
+
 @task(pre=[lint, test])
 def ci(context):
     """Run all Python validation tasks: lint and test"""
