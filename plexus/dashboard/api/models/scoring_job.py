@@ -8,6 +8,26 @@ import logging
 
 @dataclass
 class ScoringJob(BaseModel):
+    """Represents an individual scoring operation job.
+    
+    A ScoringJob tracks the execution of a single scoring operation on an item,
+    managing its lifecycle from creation through completion or failure.
+    
+    :param accountId: Identifier for the account owning this job
+    :param status: Current status of the scoring job
+    :param createdAt: Timestamp when the job was created
+    :param updatedAt: Timestamp of the last update
+    :param scorecardId: Associated scorecard identifier
+    :param itemId: Identifier of the item being scored
+    :param startedAt: Timestamp when scoring started
+    :param completedAt: Timestamp when scoring completed
+    :param errorMessage: Error message if scoring failed
+    :param errorDetails: Detailed error information
+    :param metadata: Additional metadata about the scoring job
+    :param evaluationId: Associated evaluation identifier
+    :param scoreId: Associated score identifier
+    :param batchId: Identifier of the batch this job belongs to
+    """
     accountId: str
     status: str
     createdAt: datetime
@@ -87,6 +107,17 @@ class ScoringJob(BaseModel):
         parameters: Dict,
         **kwargs
     ) -> 'ScoringJob':
+        """Creates a new scoring job.
+        
+        :param client: API client instance for making requests
+        :param accountId: Account identifier for the job
+        :param scorecardId: Associated scorecard identifier
+        :param itemId: Item identifier to be scored
+        :param parameters: Additional parameters for job creation
+        :param kwargs: Optional parameters (status, metadata, etc.)
+        :return: New ScoringJob instance
+        :raises: Exception if creation fails
+        """
         # Build input data with only fields defined in the GraphQL schema
         input_data = {
             'accountId': accountId,
@@ -138,6 +169,12 @@ class ScoringJob(BaseModel):
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'ScoringJob':
+        """Creates a ScoringJob instance from dictionary data.
+        
+        :param data: Dictionary containing scoring job data
+        :param client: API client instance
+        :return: ScoringJob instance
+        """
         for date_field in ['createdAt', 'updatedAt', 'startedAt', 'completedAt']:
             if data.get(date_field):
                 data[date_field] = datetime.fromisoformat(
@@ -159,6 +196,12 @@ class ScoringJob(BaseModel):
         )
 
     def update(self, **kwargs) -> 'ScoringJob':
+        """Updates scoring job fields.
+        
+        :param kwargs: Fields to update and their new values
+        :return: Updated ScoringJob instance
+        :raises: ValueError if attempting to modify createdAt
+        """
         if 'createdAt' in kwargs:
             raise ValueError("createdAt cannot be modified after creation")
             
@@ -189,6 +232,13 @@ class ScoringJob(BaseModel):
 
     @classmethod
     def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'ScoringJob':
+        """Retrieves a scoring job by its identifier.
+        
+        :param id: Scoring job identifier
+        :param client: API client instance
+        :return: ScoringJob instance
+        :raises: Exception if scoring job not found
+        """
         query = """
         query GetScoringJob($id: ID!) {
             getScoringJob(id: $id) {
@@ -205,6 +255,12 @@ class ScoringJob(BaseModel):
 
     @classmethod
     def find_by_item_id(cls, item_id: str, client: _BaseAPIClient) -> Optional['ScoringJob']:
+        """Finds a scoring job by its associated item identifier.
+        
+        :param item_id: Item identifier to search for
+        :param client: API client instance
+        :return: ScoringJob instance if found, None otherwise
+        """
         query = """
         query FindScoringJobByItemId($itemId: String!) {
             listScoringJobByItemId(itemId: $itemId) {

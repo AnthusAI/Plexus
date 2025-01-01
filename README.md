@@ -201,6 +201,12 @@ Run tests with watch:
 
     ptw
 
+## Dashboard
+
+Plexus includes a modern web dashboard built with Next.js and Shadcn, providing a visual interface for managing scorecards, viewing evaluation results, and monitoring classification performance. The dashboard comes with a Python API client for programmatic access and a CLI tool for automation.
+
+For detailed information about the dashboard, its API client, and usage instructions, see the [dashboard documentation](dashboard/README.md).
+
 ## Documentation 
 
 We build the Sphinx documentation at [https://anthusai.github.io/Plexus/](https://anthusai.github.io/Plexus/) with the files in the `documentation/` folder.
