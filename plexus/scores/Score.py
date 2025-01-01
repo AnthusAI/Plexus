@@ -38,17 +38,56 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
     ScoreMLFlow
 ):
     """
-    Abstract base class for a score.
+    Abstract base class for implementing classification and scoring models in Plexus.
 
-    This class provides a framework for implementing different scoring models. 
-    It includes methods for parameter validation, report directory management, 
-    and configuration recording. Subclasses must implement the `load_context` 
-    and `predict` methods.
+    Score is the fundamental building block of classification in Plexus. Each Score
+    represents a specific classification task and can be implemented using various
+    approaches:
 
-    Attributes
-    ----------
-    parameters : Parameters
-        An instance of the Parameters class containing the scorecard and score names.
+    - Machine learning models (e.g., DeepLearningSemanticClassifier)
+    - LLM-based classification (e.g., LangGraphScore)
+    - Rule-based systems (e.g., KeywordClassifier)
+    - Custom logic (by subclassing Score)
+
+    The Score class provides:
+    - Standard input/output interfaces using Pydantic models
+    - MLFlow integration for experiment tracking
+    - Visualization tools for model performance
+    - Cost tracking for API-based models
+    - Metrics computation and logging
+
+    Common usage patterns:
+    1. Creating a custom classifier:
+        class MyClassifier(Score):
+            def predict(self, context, model_input: Score.Input) -> Score.Result:
+                text = model_input.text
+                # Custom classification logic here
+                return Score.Result(
+                    parameters=self.parameters,
+                    value="Yes" if is_positive(text) else "No"
+                )
+
+    2. Using in a Scorecard:
+        scores:
+          MyScore:
+            class: MyClassifier
+            parameters:
+              threshold: 0.8
+
+    3. Training a model:
+        classifier = MyClassifier()
+        classifier.train_model()
+        classifier.evaluate_model()
+        classifier.save_model()
+
+    4. Making predictions:
+        result = classifier.predict(context, Score.Input(
+            text="content to classify",
+            metadata={"source": "email"}
+        ))
+
+    The Score class is designed to be extended for different classification approaches
+    while maintaining a consistent interface for use in Scorecards and Evaluations.
     """
 
     class Parameters(BaseModel):
@@ -93,12 +132,39 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
 
     class Input(BaseModel):
         """
-        Model input data structure.
+        Standard input structure for all Score classifications in Plexus.
 
-        Attributes
-        ----------
-        text : str
-            The text to be classified.
+        The Input class standardizes how content is passed to Score classifiers,
+        supporting both the content itself and contextual metadata. It's used by:
+        - Individual Score predictions
+        - Batch processing jobs
+        - Evaluation runs
+        - Dashboard API integrations
+
+        Attributes:
+            text: The content to classify. Can be a transcript, document, etc.
+            metadata: Additional context like source, timestamps, or tracking IDs
+            results: Optional list of previous classification results, used for:
+                    - Composite scores that depend on other scores
+                    - Multi-step classification pipelines
+                    - Score dependency resolution
+
+        Common usage:
+        1. Basic classification:
+            input = Score.Input(
+                text="content to classify",
+                metadata={"source": "phone_call"}
+            )
+
+        2. With dependencies:
+            input = Score.Input(
+                text="content to classify",
+                metadata={"source": "phone_call"},
+                results=[{
+                    "name": "PriorScore",
+                    "result": prior_score_result
+                }]
+            )
         """
         text:     str
         metadata: dict = {}
@@ -106,12 +172,51 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
 
     class Result(BaseModel):
         """
-        Model output data structure.
+        Standard output structure for all Score classifications in Plexus.
 
-        Attributes
-        ----------
-        value : str
-            The predicted score value.
+        The Result class provides a consistent way to represent classification
+        outcomes, supporting both simple yes/no results and complex multi-class
+        classifications with explanations. It's used throughout Plexus for:
+        - Individual Score results
+        - Batch processing outputs
+        - Evaluation metrics
+        - Dashboard result tracking
+
+        Attributes:
+            parameters: Configuration used for this classification
+            value: The classification result (e.g., "Yes"/"No" or class label)
+            metadata: Additional context about the classification
+            error: Optional error message if classification failed
+
+        The Result class provides helper methods for common operations:
+        - is_yes(): Check if result is affirmative
+        - is_no(): Check if result is negative
+        - __eq__: Compare results (case-insensitive)
+
+        Common usage:
+        1. Basic classification:
+            result = Score.Result(
+                parameters=self.parameters,
+                value="Yes",
+                metadata={"confidence": 0.95}
+            )
+
+        2. With explanation:
+            result = Score.Result(
+                parameters=self.parameters,
+                value="No",
+                metadata={
+                    "confidence": 0.88,
+                    "explanation": "No greeting found in transcript"
+                }
+            )
+
+        3. Error case:
+            result = Score.Result(
+                parameters=self.parameters,
+                value="Error",
+                error="API timeout"
+            )
         """
         parameters: 'Score.Parameters'
         value:      Union[str, bool]

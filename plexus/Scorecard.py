@@ -28,8 +28,42 @@ class Scorecard:
     """
     Represents a collection of scores and manages the computation of these scores for given inputs.
 
-    This class provides functionality to load scores from a YAML configuration, compute individual and total scores,
-    and manage the costs associated with score computations.
+    A Scorecard is the primary way to organize and run classifications in Plexus. Each scorecard
+    is typically defined in a YAML file and contains multiple Score instances that work together
+    to analyze content. Scorecards support:
+
+    - Hierarchical organization of scores with dependencies
+    - Parallel execution of independent scores
+    - Cost tracking for API-based scores
+    - Integration with MLFlow for experiment tracking
+    - Integration with the Plexus dashboard for monitoring
+
+    Common usage patterns:
+    1. Loading from YAML:
+        scorecard = Scorecard.create_from_yaml('scorecards/qa.yaml')
+
+    2. Scoring content:
+        results = await scorecard.score_entire_text(
+            text="content to analyze",
+            metadata={"source": "phone_call"}
+        )
+
+    3. Batch processing:
+        for text in texts:
+            results = await scorecard.score_entire_text(
+                text=text,
+                metadata={"batch_id": "123"}
+            )
+            costs = scorecard.get_accumulated_costs()
+
+    4. Subset scoring:
+        results = await scorecard.score_entire_text(
+            text="content to analyze",
+            subset_of_score_names=["IVR_Score", "Compliance_Score"]
+        )
+
+    The Scorecard class is commonly used with Evaluation for measuring accuracy
+    and with the dashboard for monitoring production deployments.
     """
 
     score_registry = None
