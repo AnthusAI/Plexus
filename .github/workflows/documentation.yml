@@ -13,20 +13,13 @@ jobs:
       - uses: actions/setup-python@v3
         with:
           python-version: '3.9'
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
-      - name: Install pybind11
-        run: pip install pybind11
-      - name: Install wheel
-        run: pip install wheel setuptools pip --upgrade
-      - name: Install fasttext
-        run: pip install fasttext
       - name: Install dependencies
-        run: pip install .
-      - name: Sphinx build
         run: |
-          sphinx-apidoc --separate -o documentation/source plexus "**/*_test*.*" -f -M
-          sphinx-build documentation/source documentation
+          python -m pip install --upgrade pip
+          pip install invoke
+          invoke install
+      - name: Sphinx build
+        run: invoke docs
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

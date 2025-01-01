@@ -63,7 +63,8 @@ dependencies = [
     "azure-identity>=1.15.0",
     "rich>=13.7.1",
     "gql[requests]>=3.0.0",
-    "openai-cost-calculator @ git+https://github.com/Anth-us/openai_cost_calculator.git@main"
+    "openai-cost-calculator @ git+https://github.com/Anth-us/openai_cost_calculator.git@main",
+    "invoke>=2.2.0"
 ]
 
 [project.scripts]
