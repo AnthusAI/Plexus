@@ -22,7 +22,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install invoke
-        invoke install
+        pip install -e .
         
     - name: Setup Node.js
       uses: actions/setup-node@v4
@@ -30,7 +30,8 @@ jobs:
         node-version: '18.x'
         
     - name: Install Node dependencies
-      run: invoke dashboard_install
+      working-directory: ./dashboard
+      run: npm ci
         
     - name: Run all tests
       run: |
