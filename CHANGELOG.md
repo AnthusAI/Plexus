@@ -1,6 +1,9 @@
 # CHANGELOG
 
 
+## v0.2.0-rc.1 (2025-01-01)
+
+
 ## v0.2.0-alpha.2 (2024-12-31)
 
 ### Features
@@ -47,15 +50,12 @@
 
 ### Continuous Integration
 
-<<<<<<< HEAD
-=======
 - Fixed tests after moving dashboard client code.
   ([`c44099b`](https://github.com/AnthusAI/Plexus/commit/c44099b8f33f754424b96151e003546fb24ba97a))
 
 - Reset change log.
   ([`e5a74e6`](https://github.com/AnthusAI/Plexus/commit/e5a74e617f9787fb1e4d77cc19164158c7c78a75))
 
->>>>>>> origin/main
 - Reset change log.
   ([`fab0c3a`](https://github.com/AnthusAI/Plexus/commit/fab0c3a8dc185e1be4163483fa5940e895e5b94c))
 
