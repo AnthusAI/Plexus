@@ -1,6 +1,7 @@
 version: 1
 applications:
-  - frontend:
+  - appRoot: dashboard
+    frontend:
       phases:
         build:
           commands:
