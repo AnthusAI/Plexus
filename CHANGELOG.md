@@ -1,6 +1,30 @@
 # CHANGELOG
 
 
+## v0.2.0-rc.1 (2025-01-01)
+
+
+## v0.2.0-alpha.2 (2024-12-31)
+
+### Features
+
+- **dependencies**: Add conditional dependencies and primary score filtering
+  ([`27d0d34`](https://github.com/AnthusAI/Plexus/commit/27d0d34db2d878683d1ec12e6a34e12ba69b2c7a))
+
+- Add support for conditional dependencies in score configurations - Filter metrics and dashboard
+  reporting to only include primary score - Skip processing of dependency scores in evaluation
+  results - Support both simple list and dictionary formats for dependencies - Add validation for
+  dependency conditions before score execution
+
+
+## v0.2.0-alpha.1 (2024-12-31)
+
+### Features
+
+- **python**: Moved from setup.py to pyproject.toml
+  ([`50bdc88`](https://github.com/AnthusAI/Plexus/commit/50bdc888254ce84f3aa87add22cb4fa20215906f))
+
+
 ## v0.1.0 (2024-12-31)
 
 
