@@ -48,6 +48,10 @@ jobs:
       working-directory: ./dashboard
       run: npm run build-storybook --quiet
       
+    - name: Install Playwright Browsers
+      working-directory: ./dashboard
+      run: npx playwright install --with-deps chromium
+      
     - name: Run Storybook Tests
       working-directory: ./dashboard
       run: |
