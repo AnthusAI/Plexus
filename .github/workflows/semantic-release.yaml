@@ -40,9 +40,39 @@ jobs:
         working-directory: ./dashboard
         run: npm ci
           
-      - name: Run Node.js Tests
+      - name: Run TypeScript Type Check
         working-directory: ./dashboard
-        run: npm run ci
+        run: npm run ci:typecheck
+        
+      - name: Run Unit Tests
+        working-directory: ./dashboard
+        run: npm run ci:unit
+        
+      - name: Build Storybook
+        working-directory: ./dashboard
+        run: npm run build-storybook --quiet
+        
+      - name: Install Playwright Browsers
+        working-directory: ./dashboard
+        run: npx playwright install --with-deps chromium
+        
+      - name: Run Storybook Tests
+        working-directory: ./dashboard
+        run: |
+          echo "Starting Storybook test process..."
+          echo "Checking storybook-static directory..."
+          ls -la storybook-static
+          echo "Starting concurrent processes..."
+          npx concurrently \
+            --verbose \
+            -P \
+            -t \
+            -k \
+            -s first \
+            -n "SB,TEST" \
+            -c "magenta,blue" \
+            "npx http-server storybook-static --port 6006 --address 127.0.0.1" \
+            "npx wait-on --verbose --interval 1000 --timeout 30000 http-get://127.0.0.1:6006 && echo 'Server ready' && npm run test-storybook -- --url http://127.0.0.1:6006 --verbose"
 
       - name: Initialize Version Tag (if needed)
         run: |
