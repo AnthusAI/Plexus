@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.3.0-rc.1 (2025-01-02)
+
+### Continuous Integration
+
+- Added Storybook interaction tests to `npm run ci`. Added new tests.
+  ([`db24008`](https://github.com/AnthusAI/Plexus/commit/db240089f81d33f8978e105762db39283f9d8760))
+
+
 ## v0.2.0-alpha.3 (2025-01-01)
 
 ### Features
@@ -11,6 +19,12 @@
 
 - **dashboard**: Increase precision when accuracy is near 100%. resolves #18
   ([`09e2233`](https://github.com/AnthusAI/Plexus/commit/09e223315e0c4bc810a8df20f2a2bfbb7b1f8215))
+
+
+## v0.2.0 (2025-01-01)
+
+
+## v0.2.0-rc.1 (2025-01-01)
 
 
 ## v0.2.0-alpha.2 (2024-12-31)
