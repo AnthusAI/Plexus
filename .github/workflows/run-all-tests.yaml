@@ -44,6 +44,13 @@ jobs:
       working-directory: ./dashboard
       run: npm run ci:unit
       
+    - name: Build Storybook
+      working-directory: ./dashboard
+      run: npm run build-storybook --quiet
+      
     - name: Run Storybook Tests
       working-directory: ./dashboard
-      run: npm run ci:storybook 
+      run: |
+        npx concurrently -k -s first -n "SB,TEST" -c "magenta,blue" \
+          "npx http-server storybook-static --port 6006 --silent" \
+          "npx wait-on tcp:6006 && npm run test-storybook -- --url http://localhost:6006" 
