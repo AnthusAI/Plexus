@@ -1,6 +1,9 @@
 # CHANGELOG
 
 
+## v0.3.0 (2025-01-02)
+
+
 ## v0.3.0-rc.1 (2025-01-02)
 
 ### Continuous Integration
