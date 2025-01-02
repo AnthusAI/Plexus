@@ -51,6 +51,13 @@ jobs:
     - name: Run Storybook Tests
       working-directory: ./dashboard
       run: |
-        npx concurrently -k -s first -n "SB,TEST" -c "magenta,blue" \
+        npx concurrently \
+          --verbose \
+          -P \
+          -t \
+          -k \
+          -s first \
+          -n "SB,TEST" \
+          -c "magenta,blue" \
           "npx http-server storybook-static --port 6006 --silent" \
-          "npx wait-on tcp:6006 && npm run test-storybook -- --url http://localhost:6006" 
+          "npx wait-on tcp:6006 && npm run test-storybook -- --url http://localhost:6006 --verbose" 
