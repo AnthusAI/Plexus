@@ -1,5 +1,6 @@
 import React from "react"
 import type { Meta, StoryObj } from "@storybook/react"
+import { expect, within, userEvent } from "@storybook/test"
 import { ConfusionMatrix } from "../components/confusion-matrix"
 import { Card } from "@/components/ui/card"
 
@@ -39,6 +40,100 @@ export const Matrix2x2: Story = {
       labels: ["No", "Yes"],
     },
   },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    
+    // Check title and labels
+    await expect(canvas.getByText('Confusion matrix')).toBeInTheDocument()
+    await expect(canvas.getByText('Actual')).toBeInTheDocument()
+    await expect(canvas.getByText('Predicted')).toBeInTheDocument()
+    
+    // Check matrix values
+    await expect(canvas.getByText('50')).toBeInTheDocument()
+    await expect(canvas.getByText('10')).toBeInTheDocument()
+    await expect(canvas.getByText('5')).toBeInTheDocument()
+    await expect(canvas.getByText('35')).toBeInTheDocument()
+    
+    // Check class labels
+    const noLabels = canvas.getAllByText('No')
+    const yesLabels = canvas.getAllByText('Yes')
+    await expect(noLabels).toHaveLength(2) // Row and column
+    await expect(yesLabels).toHaveLength(2) // Row and column
+  }
+}
+
+export const InvalidData: Story = {
+  args: {
+    data: {
+      matrix: [[1]],
+      labels: ["No", "Yes"], // Mismatched dimensions
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByText('Error')).toBeInTheDocument()
+    await expect(canvas.getByText('Invalid confusion matrix data')).toBeInTheDocument()
+  }
+}
+
+export const Interactions: Story = {
+  args: {
+    data: {
+      matrix: [
+        [50, 10],
+        [5, 35],
+      ],
+      labels: ["No", "Yes"],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    
+    // Test cell interactions
+    const cell = canvas.getByText('50')
+    await userEvent.hover(cell)
+    
+    // Wait for tooltip to appear and verify its content
+    const tooltipContent = await canvas.findByRole('tooltip')
+    await expect(tooltipContent).toBeInTheDocument()
+    await expect(within(tooltipContent).getByText('Count: 50')).toBeInTheDocument()
+    await expect(within(tooltipContent).getByText('Predicted: No')).toBeInTheDocument()
+    await expect(within(tooltipContent).getByText('Actual: No')).toBeInTheDocument()
+    
+    // Test row label interaction
+    const rowLabel = canvas.getAllByText('No')[0]
+    await userEvent.hover(rowLabel)
+    
+    // Wait for row label tooltip
+    const rowTooltip = await canvas.findByRole('tooltip')
+    await expect(within(rowTooltip).getByText('View')).toBeInTheDocument()
+  }
+}
+
+export const ColorScaling: Story = {
+  args: {
+    data: {
+      matrix: [
+        [100, 1],
+        [1, 1],
+      ],
+      labels: ["A", "B"],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const maxValueCell = canvas.getByText('100')
+    const minValueCell = canvas.getAllByText('1')[0]
+    
+    // Check that max value cell has darker background
+    const maxBgColor = maxValueCell.closest('div')?.style.backgroundColor
+    const minBgColor = minValueCell.closest('div')?.style.backgroundColor
+    await expect(maxBgColor).not.toBe(minBgColor)
+    
+    // Check text color contrast
+    await expect(maxValueCell.closest('div')).toHaveClass('text-white')
+    await expect(minValueCell.closest('div')).toHaveClass('text-primary')
+  }
 }
 
 export const Matrix2x2WithLongNames: Story = {

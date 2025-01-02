@@ -1,10 +1,16 @@
 # CHANGELOG
 
 
-## v0.2.0 (2025-01-01)
+## v0.2.0-alpha.3 (2025-01-01)
 
+### Features
 
-## v0.2.0-rc.1 (2025-01-01)
+- **dashboard**: Increase precision when accuracy is near 100%. "99.4%" instead of rounding to
+  "100%".
+  ([`ab874c2`](https://github.com/AnthusAI/Plexus/commit/ab874c2d721e04e540eaaa332d774253a22d59e0))
+
+- **dashboard**: Increase precision when accuracy is near 100%. resolves #18
+  ([`09e2233`](https://github.com/AnthusAI/Plexus/commit/09e223315e0c4bc810a8df20f2a2bfbb7b1f8215))
 
 
 ## v0.2.0-alpha.2 (2024-12-31)
