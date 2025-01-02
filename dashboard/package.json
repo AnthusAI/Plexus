@@ -15,7 +15,7 @@
     "test:coverage": "jest --coverage",
     "test:storybook": "test-storybook",
     "typecheck": "tsc --noEmit --pretty --diagnostics",
-    "test-storybook:ci": "npm run build-storybook --quiet && (npx http-server storybook-static --port 6006 --silent & npx wait-on tcp:6006 && npm run test-storybook -- --url http://localhost:6006)",
+    "test-storybook:ci": "npm run build-storybook --quiet && npx concurrently -k -s first -n \"SB,TEST\" -c \"magenta,blue\" \"npx http-server storybook-static --port 6006 --silent\" \"npx wait-on tcp:6006 && npm run test-storybook -- --url http://localhost:6006\"",
     "ci:typecheck": "npm run typecheck",
     "ci:unit": "npm run test:coverage",
     "ci:storybook": "npm run test-storybook:ci",
