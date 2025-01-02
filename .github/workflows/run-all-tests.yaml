@@ -36,6 +36,14 @@ jobs:
       working-directory: ./dashboard
       run: npm ci
         
-    - name: Run Node.js Tests
+    - name: Run TypeScript Type Check
       working-directory: ./dashboard
-      run: npm run ci 
+      run: npm run ci:typecheck
+      
+    - name: Run Unit Tests
+      working-directory: ./dashboard
+      run: npm run ci:unit
+      
+    - name: Run Storybook Tests
+      working-directory: ./dashboard
+      run: npm run ci:storybook 
