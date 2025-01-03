@@ -352,14 +352,23 @@ class Evaluation:
             }
             
             current_time = datetime.now(timezone.utc)
+            
+            # Calculate actual total items from the distribution data
+            total_predictions = 0
+            if metrics["predicted_distribution"]:
+                # Sum up all counts for the first score (they should all be the same)
+                first_score = metrics["predicted_distribution"][0]["score"]
+                total_predictions = sum(item["count"] for item in metrics["predicted_distribution"] 
+                                     if item["score"] == first_score)
+            
             update_params = {
                 "id": self.experiment_id,
                 "type": "accuracy",
                 "metrics": json.dumps(metrics_list),
                 "processedItems": self.processed_items,
-                "totalItems": min(self.number_of_texts_to_sample, self.requested_sample_size),
+                "totalItems": total_predictions,  # Use actual number of predictions
                 "elapsedSeconds": elapsed_seconds,
-                "estimatedRemainingSeconds": int(elapsed_seconds * (self.number_of_texts_to_sample - self.processed_items) / self.processed_items) if self.processed_items > 0 else self.number_of_texts_to_sample,
+                "estimatedRemainingSeconds": int(elapsed_seconds * (total_predictions - self.processed_items) / self.processed_items) if self.processed_items > 0 else total_predictions,
                 "accuracy": metrics["accuracy"] * 100,  # Convert to percentage
                 "updatedAt": current_time.isoformat().replace('+00:00', 'Z'),
                 "status": status,
@@ -800,21 +809,24 @@ class Evaluation:
             for question in self.score_names():
                 score_result = next((result for result in result['results'].values() if result.parameters.name == question), None)
                 score_value = str(score_result.value).lower() if score_result else None
-                human_label = str(score_result.metadata['human_label']).lower() if score_result else None
+                human_label = str(score_result.metadata['human_label']).lower() if score_result and hasattr(score_result, 'metadata') and 'human_label' in score_result.metadata else None
                 logging.info(f"Question: {question}, score Label: {score_value}, Human Label: {human_label}")
-                is_match = 1 if score_result and score_result.metadata.get('correct', False) else 0
+                is_match = 1 if score_result and hasattr(score_result, 'metadata') and score_result.metadata.get('correct', False) else 0
                 self.total_correct += is_match
                 self.total_questions += 1
 
                 if not is_match and len(self.mismatches) < self.max_mismatches_to_report:
-                    self.mismatches.append({
+                    mismatch_data = {
                         'form_id': result['form_id'],
                         'question': question,
                         'predicted': score_value,
                         'ground_truth': human_label,
-                        'explanation': score_result.explanation if score_result else None,
-                        'transcript': score_result.metadata['text']
-                    })
+                        'explanation': score_result.explanation if score_result and hasattr(score_result, 'explanation') else None,
+                        'transcript': score_result.metadata['text'] if score_result and hasattr(score_result, 'metadata') and 'text' in score_result.metadata else None
+                    }
+                    # Only append if we have either a transcript or an explanation
+                    if mismatch_data['transcript'] is not None or mismatch_data['explanation'] is not None:
+                        self.mismatches.append(mismatch_data)
 
         analysis = ScorecardResultsAnalysis(
             scorecard_results=scorecard_results
@@ -1032,20 +1044,18 @@ Total cost:       ${expenses['total_cost']:.6f}
         for result in results:
             for question in score_names:
                 score_result = next((r for r in result['results'].values() if r.parameters.name == question), None)
-                human_label = score_result.metadata['human_label']
-                human_explanation = score_result.metadata['human_explanation']
-                match = score_result.metadata['correct']
-                records.append({
-                    'report_id': result['session_id'],
-                    'form_id': result['form_id'],
-                    'question_name': question,
-                    'human_label': human_label,
-                    'human_explanation': human_explanation,
-                    'predicted_answer': score_result.value,
-                    'match': match,
-                    'explanation': score_result.explanation,
-                    'original_text': score_result.metadata['text'],
-                })
+                if score_result:  # We know if it exists, it has metadata since we cleaned up score_text
+                    records.append({
+                        'report_id': result['session_id'],
+                        'form_id': result['form_id'],
+                        'question_name': question,
+                        'human_label': score_result.metadata['human_label'],
+                        'human_explanation': score_result.metadata['human_explanation'],
+                        'predicted_answer': score_result.value,
+                        'match': score_result.metadata['correct'],
+                        'explanation': score_result.explanation,
+                        'original_text': score_result.metadata['text'],
+                    })
 
         df_records = pd.DataFrame(records)
         excel_file_path = f"{report_folder_path}/Evaluation Report for {filename_safe_score_names}.xlsx"
@@ -1233,7 +1243,7 @@ class AccuracyEvaluation(Evaluation):
                     await self.log_to_dashboard(metrics)
                 
                 # Wait a bit before checking again
-                await asyncio.sleep(2)
+                await asyncio.sleep(.1)
             except Exception as e:
                 logging.error(f"Error in continuous metrics computation: {e}")
                 await asyncio.sleep(5)  # Wait longer on error
@@ -1304,13 +1314,19 @@ class AccuracyEvaluation(Evaluation):
             subset_of_score_names=self.score_names_to_process()
         )
 
+        # Create a new dictionary for filtered results
+        filtered_results = {}
+
         result = {
             'content_id': content_id,
             'session_id': session_id,
             'form_id': form_id,
-            'results': scorecard_results,
+            'results': filtered_results,  # Use the filtered results dictionary
             'human_labels': human_labels
         }
+
+        # Track if we've processed any scores for this text
+        has_processed_scores = False
 
         # Get the primary score name if we're evaluating a specific score
         primary_score_name = None
@@ -1343,7 +1359,7 @@ class AccuracyEvaluation(Evaluation):
                         human_label = row[label_score_name]
                     else:
                         logging.warning(f"Neither '{score_identifier}' nor '{label_score_name}' found in the row. Available columns: {row.index.tolist()}")
-                        human_label = 'N/A'
+                        continue
 
                 human_label = str(human_label).lower().rstrip('.!?')
                 if human_label == 'nan':
@@ -1354,9 +1370,6 @@ class AccuracyEvaluation(Evaluation):
                 human_explanation = columns.get(f"{label_score_name} comment", 'None')
 
                 score_result_value = ' '.join(str(score_result.value).lower().strip().split())
-                human_label = ' '.join(human_label.strip().split())
-                if not score_result_value:
-                    score_result_value = 'na'
 
                 if form_id in self.override_data:
                     for override_question_name, correct_value in self.override_data[form_id].items():
@@ -1368,6 +1381,10 @@ class AccuracyEvaluation(Evaluation):
                 score_result.metadata['human_explanation'] = human_explanation
                 score_result.metadata['correct'] = score_result_value == human_label
                 score_result.metadata['text'] = text
+
+                # Add to filtered results only if we get here (i.e., all conditions are met)
+                filtered_results[score_identifier] = score_result
+                has_processed_scores = True
 
                 # Create ScoreResult in a non-blocking way only for the primary score
                 if self.dashboard_client and self.experiment_id:
@@ -1388,9 +1405,10 @@ class AccuracyEvaluation(Evaluation):
                     )
                 )
 
-        # Add result to all_results and increment processed_items
-        self.all_results.append(result)
-        self.processed_items += 1
+        # Add result to all_results and increment processed_items only if we processed any scores
+        if has_processed_scores:
+            self.all_results.append(result)
+            self.processed_items += 1
 
         return result
 
