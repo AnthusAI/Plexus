@@ -51,6 +51,13 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         An instance of the Parameters class containing the scorecard and score names.
     """
 
+    class SkippedScoreException(Exception):
+        """Raised when a score is skipped due to dependency conditions not being met."""
+        def __init__(self, score_name: str, reason: str):
+            self.score_name = score_name
+            self.reason = reason
+            super().__init__(f"Score '{score_name}' was skipped: {reason}")
+
     class Parameters(BaseModel):
         """
         Parameters required for scoring.
