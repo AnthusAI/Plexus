@@ -332,6 +332,8 @@ class Scorecard:
                 # Check if conditions are met
                 if not self.check_dependency_conditions(score_id, dependency_graph, results_by_score_id):
                     logging.info(f"Skipping score {score_name} as conditions are not met")
+                    # Remove this score from remaining scores but don't add it to results
+                    remaining_scores.discard(score_id)
                     raise plexus.scores.Score.SkippedScoreException(
                         score_name=score_name,
                         reason="Dependency conditions not met"
@@ -372,8 +374,6 @@ class Scorecard:
 
             except plexus.scores.Score.SkippedScoreException as e:
                 logging.info(f"Score {score_name} was skipped: {e.reason}")
-                # Remove this score from remaining scores but don't add it to results
-                remaining_scores.discard(score_id)
                 return
 
             except BatchProcessingPause as e:
