@@ -67,16 +67,16 @@ from .ActionTasks import register_tasks
 register_tasks(celery_app)
 
 @click.group()
-def action():
-    """Commands for remote action dispatch and worker management."""
+def command():
+    """Commands for remote command dispatch and worker management."""
     pass
 
-@action.command()
+@command.command()
 @click.option('--concurrency', default=4, help='Number of worker processes')
 @click.option('--queue', default='celery', help='Queue to process')
 @click.option('--loglevel', default='INFO', help='Logging level')
 def worker(concurrency: int, queue: str, loglevel: str) -> None:
-    """Start a Celery worker for processing remote actions."""
+    """Start a Celery worker for processing remote commands."""
     logging.info("Starting worker initialization...")
     
     argv = [
@@ -88,16 +88,16 @@ def worker(concurrency: int, queue: str, loglevel: str) -> None:
     logging.info(f"Starting worker with arguments: {argv}")
     celery_app.worker_main(argv)
 
-@action.command()
+@command.command()
 @click.argument('command_string')
-@click.option('--async', 'is_async', is_flag=True, help='Run action asynchronously')
-@click.option('--timeout', default=3600, help='Action timeout in seconds')
+@click.option('--async', 'is_async', is_flag=True, help='Run command asynchronously')
+@click.option('--timeout', default=3600, help='Command timeout in seconds')
 @click.option('--loglevel', default='INFO', help='Logging level')
 def dispatch(command_string: str, is_async: bool, timeout: int, loglevel: str) -> None:
     """Execute a Plexus command remotely via Celery."""
     logging.getLogger().setLevel(loglevel)
     
-    logging.info(f"Dispatching action: {command_string}")
+    logging.info(f"Dispatching command: {command_string}")
     logging.debug("Celery app: %s", celery_app)
     logging.debug("Broker URL: %s", celery_app.conf.broker_url)
     logging.debug("Backend URL: %s", celery_app.conf.result_backend)
@@ -112,7 +112,8 @@ def dispatch(command_string: str, is_async: bool, timeout: int, loglevel: str) -
     logging.debug("Task ID: %s", task.id)
     
     if is_async:
-        logging.info(f"Task dispatched with ID: {task.id}")
+        print(f"Task ID: {task.id}")
+        logging.info("Use 'plexus command status <task-id>' to check status")
     else:
         # Wait for the result
         try:
@@ -139,29 +140,53 @@ def dispatch(command_string: str, is_async: bool, timeout: int, loglevel: str) -
         except Exception as e:
             logging.error(f"Error getting task result: {e}", exc_info=True)
 
-@action.command()
-@click.argument('action_id')
-def status(action_id: str) -> None:
-    """Check the status of a dispatched action."""
-    # Get the task by ID
-    task = celery_app.AsyncResult(action_id)
+@command.command()
+@click.argument('task_id')
+def status(task_id: str) -> None:
+    """Check the status of a dispatched command."""
+    task = celery_app.AsyncResult(task_id)
+    
+    print(f"\nTask {task_id}:")
+    print(f"State: {task.state}")
     
     if task.ready():
         if task.successful():
             result = task.get()
+            print("Status: " + ("Success" if result['status'] == 'success' else "Failed"))
             if result['status'] == 'success':
-                logging.info("Action completed successfully")
+                if result.get('stdout'):
+                    print("\nOutput:")
+                    print(result['stdout'], end='')
+                if result.get('stderr'):
+                    print("\nErrors:")
+                    print(result['stderr'], end='')
             else:
-                logging.error(f"Action failed: {result.get('error', 'Unknown error')}")
+                print(f"\nError: {result.get('error', 'Unknown error')}")
+                if result.get('stderr'):
+                    print("\nError Details:")
+                    print(result['stderr'], end='')
         else:
-            logging.error("Action failed with an exception")
+            print("Status: Failed with exception")
+            if task.info:
+                print(f"Error: {str(task.info)}")
     else:
-        logging.info("Action is still running")
+        print("Status: Running")
+        if task.info:
+            meta = task.info.get('meta', {})
+            if meta:
+                if 'current' in meta and 'total' in meta:
+                    print(f"Progress: {meta['current']}/{meta['total']} items")
+                if 'status' in meta:
+                    print(f"Current operation: {meta['status']}")
+                if 'elapsed_time' in meta:
+                    print(f"Elapsed time: {meta['elapsed_time']}")
+                if 'estimated_remaining' in meta:
+                    print(f"Estimated remaining: {meta['estimated_remaining']}")
 
-@action.command()
-@click.argument('action_id')
-def cancel(action_id: str) -> None:
-    """Cancel a running action."""
-    task = celery_app.AsyncResult(action_id)
+@command.command()
+@click.argument('task_id')
+def cancel(task_id: str) -> None:
+    """Cancel a running command."""
+    task = celery_app.AsyncResult(task_id)
     task.revoke(terminate=True)
-    logging.info(f"Cancelled action: {action_id}") 
+    logging.info(f"Cancelled command task: {task_id}") 
