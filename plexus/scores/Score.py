@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import inspect
 import functools
-from pydantic import BaseModel, ValidationError, field_validator
+from pydantic import BaseModel, ValidationError, field_validator, ConfigDict
 from typing import Optional, Union, List, Any
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
@@ -99,6 +99,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         data : dict
             Dictionary containing data-related parameters.
         """
+        model_config = ConfigDict(protected_namespaces=())
         scorecard_name: Optional[str] = None
         name: Optional[str] = None
         id: Optional[Union[str, int]] = None
@@ -166,6 +167,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
                 }]
             )
         """
+        model_config = ConfigDict(protected_namespaces=())
         text:     str
         metadata: dict = {}
         results: Optional[List[Any]] = None
@@ -218,6 +220,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
                 error="API timeout"
             )
         """
+        model_config = ConfigDict(protected_namespaces=())
         parameters: 'Score.Parameters'
         value:      Union[str, bool]
         metadata:   dict = {}

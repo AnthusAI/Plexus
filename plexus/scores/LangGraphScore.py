@@ -11,6 +11,8 @@ import asyncio
 from os import getenv
 from dotenv import load_dotenv
 import json
+import warnings
+from functools import partialmethod
 
 from plexus.LangChainUser import LangChainUser
 from plexus.scores.Score import Score
@@ -46,6 +48,10 @@ class BatchProcessingPause(Exception):
         self.state = state
         self.batch_job_id = batch_job_id
         super().__init__(message or f"Execution paused for batch processing. Thread ID: {thread_id}")
+
+# Temporarily suppress the specific Pydantic warning about protected namespaces
+warnings.filterwarnings("ignore", 
+    message="Field \"model_.*\" .* has conflict with protected namespace \"model_\".*")
 
 class LangGraphScore(Score, LangChainUser):
     """
