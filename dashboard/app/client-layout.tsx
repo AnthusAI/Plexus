@@ -56,20 +56,25 @@ export default function ClientLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const [isAmplifyConfigured, setIsAmplifyConfigured] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    if (process.env.NODE_ENV !== 'test' && !isAmplifyConfigured) {
+      try {
+        const outputs = require('@/amplify_outputs.json');
+        Amplify.configure(outputs);
+        setIsAmplifyConfigured(true);
+      } catch (error) {
+        console.warn('Amplify outputs not found - skipping configuration');
+        setIsAmplifyConfigured(true);  // Continue anyway if config fails
+      }
+    }
     setMounted(true);
-  }, []);
+  }, [isAmplifyConfigured]);
 
-  if (!mounted) {
-    return (
-      <Authenticator.Provider>
-        <SidebarProvider>
-          <div style={{ visibility: 'hidden' }}>{children}</div>
-        </SidebarProvider>
-      </Authenticator.Provider>
-    );
+  if (!mounted || !isAmplifyConfigured) {
+    return null;
   }
 
   return (
@@ -80,7 +85,6 @@ export default function ClientLayout({
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
-          forcedTheme={typeof window !== 'undefined' ? undefined : 'light'}
         >
           <AuthWrapper>{children}</AuthWrapper>
         </ThemeProvider>

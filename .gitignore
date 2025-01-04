@@ -5,3 +5,5 @@ build/
 mlruns/
 reports/
 .DS_Store
+node_modules/
+*/cypress/videos/

@@ -1,7 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+node_modules/
+.npm
 /.pnp
 .pnp.js
 .yarn/install-state.gz
@@ -97,3 +98,6 @@ amplify/backend/auth/generated/
 amplify/backend/function/generated/
 amplify/backend/storage/generated/
 amplify/#current-cloud-backend
+
+# Cypress
+cypress.env.json
