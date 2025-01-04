@@ -1,28 +1,33 @@
-# Plexus Remote CLI Execution Plan
+# Plexus Action Dispatch System
 
 ## Overview
 
-This document outlines the implementation plan for adding remote CLI command execution capabilities to Plexus using Celery. The goal is to enable any existing Plexus CLI command to be executed remotely while maintaining reliability, security, and observability.
+This document outlines the implementation of Plexus's two-level dispatch system:
+
+1. **Action Dispatch**: The high-level system connecting user applications (like the React dashboard) to the Python backend. This system uses an Amplify GraphQL Action model with realtime updates to manage long-running AI operations.
+
+2. **Command Dispatch**: The lower-level mechanism that dispatches CLI commands to Plexus worker nodes through Celery, handling the actual execution of AI operations.
 
 ## Core Architecture
 
-### Command Processing ✓
-- Commands are passed as strings and parsed using `shlex` to handle complex arguments properly ✓
-- Support both synchronous and asynchronous execution modes ✓
-- Maintain consistent environment and configuration across workers ✓
-- Preserve all existing CLI functionality and error handling ✓
+### Action Processing
+- Actions represent high-level AI operations requested by users
+- Each Action maps to one or more CLI commands
+- Support both synchronous and asynchronous execution modes
+- Maintain consistent environment and configuration across workers
+- Preserve all existing CLI functionality and error handling
 
-### Task System ✓
-- Celery tasks wrap CLI command execution ✓
+### Command System
+- Celery tasks wrap CLI command execution
 - Progress tracking for long-running operations (Partial)
-- Configurable timeouts and retry policies ✓
-- Result storage and retrieval ✓
-- Support for task cancellation (Pending)
+- Configurable timeouts and retry policies
+- Result storage and retrieval
+- Support for command cancellation (Pending)
 
-### Worker Infrastructure ✓
-- AWS SQS for message broker ✓
-- AWS DynamoDB for result backend ✓
-- Configurable worker pools ✓
+### Worker Infrastructure
+- AWS SQS for message broker
+- AWS DynamoDB for result backend
+- Configurable worker pools
 - Resource management and monitoring (Partial)
 - Health checks and automatic recovery (Partial)
 
@@ -33,7 +38,7 @@ This document outlines the implementation plan for adding remote CLI command exe
    - Configure AWS SQS connection ✓
    - Set up AWS DynamoDB result backend ✓
    - Basic worker management ✓
-2. Implement universal command execution task ✓
+2. Implement universal command execution ✓
    - Command string parsing ✓
    - Output capture ✓
    - Basic error handling ✓
@@ -50,7 +55,7 @@ This document outlines the implementation plan for adding remote CLI command exe
    - Click exit code handling ✓
    - Command validation ✓
 2. Progress tracking (Pending)
-   - Task state updates
+   - Action state updates
    - Progress reporting
    - Cancellation support (Pending)
 3. Result management ✓
@@ -74,33 +79,18 @@ This document outlines the implementation plan for adding remote CLI command exe
 
 ## Current Implementation Details
 
-### Command Execution Task
-The task system is implemented in `plexus/cli/ActionTasks.py` with the following features:
-- Command string parsing using `shlex`
-- Output capture for both stdout and stderr
-- Error handling with detailed status reporting
-- Support for Click's exit codes and error handling
-- Graceful handling of help/usage messages
-
-### Worker Configuration
-Worker management is implemented in `plexus/cli/ActionCommands.py` with:
-- Configurable concurrency
-- Queue selection (standardized on 'celery' queue)
-- Log level control
-- AWS SQS/DynamoDB integration
-
 ### Command Dispatch
-The dispatch system supports:
+The command system supports:
 - Synchronous and asynchronous execution
 - Timeout configuration
 - Output streaming to caller
-- Task ID tracking for async operations
+- Action ID tracking for async operations
 
 ### Result Format
-Tasks return results in a standardized format:
+Commands return results in a standardized format:
 ```python
 {
-    'status': 'success' | 'error',  # Task execution status
+    'status': 'success' | 'error',  # Command execution status
     'command': str,                 # Original command string
     'stdout': str,                  # Captured standard output
     'stderr': str,                  # Captured error output
@@ -112,8 +102,36 @@ Tasks return results in a standardized format:
 The system handles various error conditions:
 - Click usage/help messages are captured and returned as successful output
 - Command validation failures are captured in stderr
-- Task execution failures include error details in the result
+- Command execution failures include error details in the result
 - System exits are handled gracefully with appropriate status codes
+
+## Dashboard Integration
+
+### Architecture
+- Action model in Amplify schema represents both request and results
+- Lambda trigger on Action creation starts Celery commands
+- Celery worker updates Action records directly through AppSync
+- Frontend components use normal Amplify subscriptions for realtime updates
+
+### Action Model Integration
+- Action records include Celery command ID and status
+- Worker updates include required DataStore fields (_lastChangedAt, _version, _deleted)
+- Frontend subscribes to Action updates through standard Amplify patterns
+- Conflict resolution handled by Amplify DataStore
+
+### Implementation Requirements
+- AWS credentials and permissions for Celery worker AppSync access
+- Lambda function configuration in Amplify schema
+- Action model schema with appropriate fields and triggers
+- Worker code to perform AppSync mutations
+
+### Next Steps
+1. Define Action model schema with required fields
+2. Implement Lambda trigger for action creation
+3. Add AppSync mutation capability to Celery worker
+4. Create frontend components for action management
+5. Set up proper AWS permissions and credentials
+6. Test end-to-end action lifecycle
 
 ## Environment Configuration
 
@@ -125,8 +143,8 @@ The system handles various error conditions:
 
 ## Next Steps
 
-1. Implement and test task cancellation
-2. Implement progress tracking for long-running tasks
+1. Implement and test action cancellation
+2. Implement progress tracking for long-running actions
 3. Add resource monitoring and limits
 4. Enhance error handling with retry policies
 5. Add security measures
@@ -149,6 +167,6 @@ plexus action dispatch "evaluate accuracy --help"
 plexus action dispatch --async "evaluate accuracy --scorecard-name test"
 ```
 
-Check task status:
+Check action status:
 ```bash
-plexus action status <task-id>
+plexus action status <action-id>
