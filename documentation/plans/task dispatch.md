@@ -6,57 +6,59 @@ This document outlines the implementation plan for adding remote CLI command exe
 
 ## Core Architecture
 
-### Command Processing
-- Commands will be passed as strings and parsed using `shlex` to handle complex arguments properly
-- Support both synchronous and asynchronous execution modes
-- Maintain consistent environment and configuration across workers
-- Preserve all existing CLI functionality and error handling
+### Command Processing ✓
+- Commands are passed as strings and parsed using `shlex` to handle complex arguments properly ✓
+- Support both synchronous and asynchronous execution modes ✓
+- Maintain consistent environment and configuration across workers ✓
+- Preserve all existing CLI functionality and error handling ✓
 
-### Task System
-- Celery tasks will wrap CLI command execution
-- Progress tracking for long-running operations
-- Configurable timeouts and retry policies
-- Result storage and retrieval
-- Support for task cancellation
+### Task System ✓
+- Celery tasks wrap CLI command execution ✓
+- Progress tracking for long-running operations (Partial)
+- Configurable timeouts and retry policies ✓
+- Result storage and retrieval ✓
+- Support for task cancellation (Pending)
 
-### Worker Infrastructure
-- AWS SQS for message broker
-- AWS DynamoDB for result backend
-- Configurable worker pools
-- Resource management and monitoring
-- Health checks and automatic recovery
+### Worker Infrastructure ✓
+- AWS SQS for message broker ✓
+- AWS DynamoDB for result backend ✓
+- Configurable worker pools ✓
+- Resource management and monitoring (Partial)
+- Health checks and automatic recovery (Partial)
 
-## Implementation Phases
+## Implementation Status
 
-### Phase 1: Core Integration
-1. Set up basic Celery infrastructure
-   - Configure AWS SQS connection
-   - Set up AWS DynamoDB result backend
-   - Basic worker management
-2. Implement universal command execution task
-   - Command string parsing
-   - Output capture
-   - Basic error handling
-3. Add worker CLI command
-   - Basic configuration options
-   - Process management
-   - Logging setup
+### Phase 1: Core Integration ✓
+1. Set up basic Celery infrastructure ✓
+   - Configure AWS SQS connection ✓
+   - Set up AWS DynamoDB result backend ✓
+   - Basic worker management ✓
+2. Implement universal command execution task ✓
+   - Command string parsing ✓
+   - Output capture ✓
+   - Basic error handling ✓
+3. Add worker CLI command ✓
+   - Basic configuration options ✓
+   - Process management ✓
+   - Logging setup ✓
 
-### Phase 2: Reliability & Monitoring
-1. Enhanced error handling
+### Phase 2: Reliability & Monitoring (In Progress)
+1. Enhanced error handling (Partial)
    - Retry mechanisms
-   - Timeout handling
+   - Timeout handling ✓
    - Resource limits
-2. Progress tracking
+   - Click exit code handling ✓
+   - Command validation ✓
+2. Progress tracking (Pending)
    - Task state updates
    - Progress reporting
-   - Cancellation support
-3. Result management
-   - Persistent storage
-   - Result expiration
-   - Query interfaces
+   - Cancellation support (Pending)
+3. Result management ✓
+   - Persistent storage ✓
+   - Result expiration ✓
+   - Query interfaces ✓
 
-### Phase 3: Production Readiness
+### Phase 3: Production Readiness (Pending)
 1. Security enhancements
    - Input validation
    - Authentication/authorization
@@ -70,159 +72,48 @@ This document outlines the implementation plan for adding remote CLI command exe
    - Configuration guide
    - Usage examples
 
-## Technical Details
+## Current Implementation Details
 
 ### Command Execution Task
-See `plexus/cli/CeleryTasks.py` for the implementation of the `run_cli_command` task.
+The task system is implemented in `plexus/cli/ActionTasks.py` with the following features:
+- Command string parsing using `shlex`
+- Output capture for both stdout and stderr
+- Error handling with detailed status reporting
+- Support for Click's exit codes and error handling
+- Graceful handling of help/usage messages
 
 ### Worker Configuration
-See `plexus/cli/CeleryTasks.py` for the implementation of the worker command and its configuration options.
+Worker management is implemented in `plexus/cli/ActionCommands.py` with:
+- Configurable concurrency
+- Queue selection (standardized on 'celery' queue)
+- Log level control
+- AWS SQS/DynamoDB integration
 
-## Security Considerations
+### Command Dispatch
+The dispatch system supports:
+- Synchronous and asynchronous execution
+- Timeout configuration
+- Output streaming to caller
+- Task ID tracking for async operations
 
-### Input Validation
-- Sanitize all command inputs
-- Validate command structure
-- Check argument types and ranges
-- Prevent command injection
+### Result Format
+Tasks return results in a standardized format:
+```python
+{
+    'status': 'success' | 'error',  # Task execution status
+    'command': str,                 # Original command string
+    'stdout': str,                  # Captured standard output
+    'stderr': str,                  # Captured error output
+    'error': str,                   # Error message if status is 'error'
+}
+```
 
-### Authentication
-- Verify task origin
-- Validate user permissions
-- Track command attribution
-- Audit logging
-
-### Resource Protection
-- Rate limiting
-- Resource quotas
-- Timeout enforcement
-- Worker isolation
-
-## Monitoring & Observability
-
-### Health Metrics
-- Worker status
-- Queue depths
-- Processing times
-- Error rates
-- Resource usage
-
-### Logging
-- Structured log format
-- Command execution details
-- Error tracing
-- Audit events
-
-### Alerting
-- Worker failures
-- Queue backlog
-- Error thresholds
-- Resource exhaustion
-
-## Future Enhancements
-
-### Planned Features
-1. Task prioritization
-2. Command scheduling
-3. Batch processing
-4. Result caching
-5. Web dashboard
-
-### Potential Improvements
-1. Custom queue routing
-2. Enhanced progress reporting
-3. Resource optimization
-4. Distributed tracing
-5. Performance analytics
-
-## Development Guidelines
-
-### Code Organization
-- Keep task definitions centralized
-- Maintain clear separation of concerns
-- Use consistent error handling
-- Document all configurations
-
-### Testing Strategy
-1. Unit tests for task logic
-2. Integration tests with Celery
-3. End-to-end command testing
-4. Performance benchmarking
-5. Security testing
-
-### Deployment Considerations
-- Environment configuration
-- Worker scaling
-- Monitoring setup
-- Backup procedures
-- Update processes
-
-## Questions for Implementation
-
-1. How should we handle long-running tasks that exceed timeout limits?
-2. What's the best strategy for managing worker resources across different command types?
-3. How can we ensure consistent environment configuration across workers?
-4. What metrics are most important for monitoring system health?
-5. How should we handle task prioritization for different command types?
-
-## Success Criteria
-
-- All existing CLI commands work remotely
-- Reliable error handling and recovery
-- Clear monitoring and observability
-- Secure command execution
-- Scalable worker infrastructure
-- Comprehensive documentation
-
-## Key Implementation Details
-
-### Command String Parsing
-- Use `shlex` for robust command parsing to handle spaces, quotes, and special characters correctly:
-  ```python
-  command_args = shlex.split('evaluate accuracy --scorecard-name "My Complex Name"')
-  ```
-
-### Task Configuration
-- Configure tasks with specific timeouts and retry policies:
-  ```python
-  @celery_app.task(
-      bind=True,
-      time_limit=3600,  # 1 hour timeout
-      soft_time_limit=3300,  # Soft timeout 55 minutes
-      max_retries=3
-  )
-  ```
-
-### Progress Tracking
-- Use Celery's built-in state updates for tracking long-running tasks:
-  ```python
-  self.update_state(state='STARTED', meta={'status': 'Initializing'})
-  self.update_state(state='PROGRESS', meta={'status': 'Command completed'})
-  ```
-
-### Worker Configuration Options
-- Implement flexible worker configuration through CLI parameters:
-  ```python
-  @click.option('--concurrency', default=4, help='Number of worker processes')
-  @click.option('--queue', default='default', help='Queue to process')
-  @click.option('--loglevel', default='INFO', help='Logging level')
-  ```
-
-### Error Recovery
-- Implement retry logic with exponential backoff:
-  ```python
-  except Exception as exc:
-      logger.error(f"Task failed: {exc}")
-      self.retry(exc=exc, countdown=60)  # Retry after 1 minute
-  ```
-
-### Result Backend Configuration
-- Configure result storage with appropriate expiration:
-  ```python
-  result_backend='redis://localhost:6379/0',
-  result_expires=86400,  # Results expire after 24 hours
-  task_track_started=True
-  ```
+### Error Handling
+The system handles various error conditions:
+- Click usage/help messages are captured and returned as successful output
+- Command validation failures are captured in stderr
+- Task execution failures include error details in the result
+- System exits are handled gracefully with appropriate status codes
 
 ## Environment Configuration
 
@@ -230,86 +121,34 @@ See `plexus/cli/CeleryTasks.py` for the implementation of the worker command and
 - `CELERY_AWS_ACCESS_KEY_ID`: AWS access key for SQS
 - `CELERY_AWS_SECRET_ACCESS_KEY`: AWS secret key for SQS
 - `CELERY_AWS_REGION_NAME`: AWS region for SQS
-- `CELERY_BROKER_URL`: SQS broker URL template
-- `CELERY_RESULT_BACKEND`: Redis backend URL template
+- `CELERY_RESULT_BACKEND_TEMPLATE`: DynamoDB backend URL template
 
-### Broker URL Construction
-- Safely quote AWS credentials
-- Support both SQS and Redis URL formats
-- Handle region-specific configurations
+## Next Steps
 
-## Output Handling
+1. Implement and test task cancellation
+2. Implement progress tracking for long-running tasks
+3. Add resource monitoring and limits
+4. Enhance error handling with retry policies
+5. Add security measures
+6. Create monitoring dashboards
+7. Write comprehensive documentation
 
-### Command Output Capture
-- Use `StringIO` to capture stdout and stderr
-- Implement proper cleanup of file descriptors
-- Handle binary output when necessary
+## Usage Example
 
-### Result Structure
-```python
-{
-    "stdout": "captured standard output",
-    "stderr": "captured error output",
-    "status": "success/error",
-    "metadata": {
-        "duration": "execution time",
-        "exit_code": "command exit code",
-        "worker_id": "ID of worker that processed task"
-    }
-}
+Start a worker:
+```bash
+plexus action worker --concurrency=4 --loglevel=INFO
 ```
 
-## Infrastructure Setup
+Execute a command:
+```bash
+# Synchronous execution
+plexus action dispatch "evaluate accuracy --help"
 
-### AWS Resources
-The system requires several AWS resources that we'll provision using AWS CDK. Initial implementation will focus on:
-
-1. SQS Queue for Celery Message Broker
-2. DynamoDB Table for Result Backend (alternative to Redis)
-3. IAM Roles and Policies
-
-### CDK Implementation
-Example infrastructure code (to be integrated with Amplify Gen2):
-
-```typescript
-import * as sqs from 'aws-cdk-lib/aws-sqs';
-import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import * as cdk from 'aws-cdk-lib';
-
-const backend = defineBackend({
-  auth,
-  data
-});
-
-const actionManagementStack = backend.createStack('ActionManagementStack');
-
-// Message Broker Queue
-const queue = new sqs.Queue(actionManagementStack, 'ActionDispatchMessageBroker', {
-  queueName: 'action-dispatch-message-broker',
-  visibilityTimeout: cdk.Duration.seconds(30),
-  retentionPeriod: cdk.Duration.days(4)
-});
-
-// Results Table
-const table = new dynamodb.Table(actionManagementStack, 'Actions', {
-  partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
-  billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-  removalPolicy: cdk.RemovalPolicy.RETAIN,
-});
+# Asynchronous execution
+plexus action dispatch --async "evaluate accuracy --scorecard-name test"
 ```
 
-### Infrastructure TODOs
-1. Research Amplify Gen2 CDK extension integration
-2. Define IAM roles and permissions
-3. Configure VPC settings if needed
-4. Set up CloudWatch logging
-5. Define scaling policies
-6. Implement backup strategies
-
-### Infrastructure Considerations
-- Region-specific configurations
-- Development vs. production environments
-- Cost optimization
-- Security best practices
-- Monitoring and alerting setup
-- Backup and disaster recovery
+Check task status:
+```bash
+plexus action status <task-id>

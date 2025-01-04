@@ -14,6 +14,7 @@ from .TuningCommands import tuning
 from .AnalyzeCommands import analyze
 from .console import console
 from .BatchCommands import batch
+from .ActionCommands import action
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -49,6 +50,7 @@ main.add_command(predict)
 main.add_command(tuning)
 main.add_command(analyze)
 main.add_command(batch)
+main.add_command(action)
 
 def load_plexus_extensions():
     print("Loading Plexus extensions...")
