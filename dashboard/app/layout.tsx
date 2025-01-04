@@ -9,6 +9,15 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Plexus",
   description: "AI scoring at scale",
+  icons: {
+    icon: '/favicon.ico'
+  }
+};
+
+export const viewport = {
+  themeColor: 'white',
+  width: 'device-width',
+  initialScale: 1
 };
 
 export default function RootLayout({
@@ -19,46 +28,11 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link
-          rel="preconnect"
-          href="https://fonts.googleapis.com"
-        />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Jersey+20&display=swap"
-          rel="stylesheet"
-        />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                function getTheme() {
-                  try {
-                    const theme = localStorage.getItem('theme');
-                    if (theme === 'dark' || theme === 'light') return theme;
-                    if (theme === 'system' || !theme) {
-                      return window.matchMedia('(prefers-color-scheme: dark)').matches
-                        ? 'dark'
-                        : 'light';
-                    }
-                    return 'light'; // fallback
-                  } catch (e) {
-                    return 'light'; // fallback if localStorage is not available
-                  }
-                }
-                const theme = getTheme();
-                document.documentElement.classList.add(theme);
-                document.documentElement.style.colorScheme = theme;
-              })();
-            `,
-          }}
-        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link href="https://fonts.googleapis.com/css2?family=Jersey+20&display=swap" rel="stylesheet" />
       </head>
-      <body className={inter.className}>
+      <body suppressHydrationWarning className={inter.className}>
         <HydrationOverlay>
           <ClientLayout>{children}</ClientLayout>
         </HydrationOverlay>
