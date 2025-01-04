@@ -109,9 +109,26 @@ The system handles various error conditions:
 
 ### Architecture
 - Action model in Amplify schema represents both request and results
-- Lambda trigger on Action creation starts Celery commands
+- Lightweight Lambda function dispatches Celery commands on Action creation
 - Celery worker updates Action records directly through AppSync
 - Frontend components use normal Amplify subscriptions for realtime updates
+
+### Lambda Implementation
+- Minimal Python script with Celery as only dependency
+- Infrastructure defined in Amplify backend.ts using CDK:
+  - SQS queue for Celery broker
+  - DynamoDB table for Celery results
+  - IAM permissions for Lambda to access both
+- Configuration accessed through Amplify's injected `env` object
+- Dispatches command asynchronously and exits immediately
+- No need for full Plexus installation in Lambda environment
+
+### CDK Infrastructure
+- Define SQS queue and DynamoDB table in backend.ts
+- Create IAM policies for Lambda to access these resources
+- Export queue URL and table name through Lambda environment
+- Share same resources between Lambda and Celery workers
+- Ensure proper permissions for AppSync mutations
 
 ### Action Model Integration
 - Action records include Celery command ID and status
