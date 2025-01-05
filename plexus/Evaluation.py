@@ -37,6 +37,7 @@ from plexus.scores.Score import Score
 from .Scorecard import Scorecard
 from .ScorecardResults import ScorecardResults
 from .ScorecardResultsAnalysis import ScorecardResultsAnalysis
+from plexus.cli.CommandProgress import CommandProgress
 
 from sklearn.metrics import confusion_matrix
 
@@ -1391,6 +1392,13 @@ class AccuracyEvaluation(Evaluation):
         # Add result to all_results and increment processed_items
         self.all_results.append(result)
         self.processed_items += 1
+        
+        # Update progress tracking
+        CommandProgress.update(
+            current=self.processed_items,
+            total=self.number_of_texts_to_sample,
+            status=f"Evaluating accuracy ({self.processed_items}/{self.number_of_texts_to_sample})"
+        )
 
         return result
 
