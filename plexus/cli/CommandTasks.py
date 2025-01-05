@@ -4,6 +4,7 @@ import io
 from contextlib import redirect_stdout, redirect_stderr
 from celery import Task
 from plexus.CustomLogging import logging
+from .CommandProgress import CommandProgress, ProgressState
 
 def register_tasks(app):
     """Register Celery tasks with the application."""
@@ -21,6 +22,22 @@ def register_tasks(app):
             # Capture stdout and stderr
             stdout_capture = io.StringIO()
             stderr_capture = io.StringIO()
+            
+            def progress_callback(state: ProgressState):
+                """Update Celery task state with progress information."""
+                self.update_state(
+                    state='PROGRESS',
+                    meta={
+                        'current': state.current,
+                        'total': state.total,
+                        'status': state.status,
+                        'elapsed_time': state.elapsed_time,
+                        'estimated_remaining': state.estimated_remaining
+                    }
+                )
+            
+            # Set up progress reporting
+            CommandProgress.set_update_callback(progress_callback)
             
             try:
                 # Replace argv with our command
@@ -50,6 +67,8 @@ def register_tasks(app):
             finally:
                 # Restore the original argv
                 sys.argv = original_argv
+                # Clear progress callback
+                CommandProgress.set_update_callback(None)
                 
         except Exception as e:
             logging.error(f"Command failed: {str(e)}")

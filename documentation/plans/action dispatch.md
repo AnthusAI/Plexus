@@ -19,7 +19,7 @@ This document outlines the implementation of Plexus's two-level dispatch system:
 
 ### Command System
 - Celery tasks wrap CLI command execution
-- Progress tracking for long-running operations (Partial)
+- Progress tracking for long-running operations ✓
 - Configurable timeouts and retry policies
 - Result storage and retrieval
 - Support for command cancellation (Pending)
@@ -54,9 +54,10 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Resource limits
    - Click exit code handling ✓
    - Command validation ✓
-2. Progress tracking (Pending)
-   - Action state updates
-   - Progress reporting
+2. Progress tracking ✓
+   - Action state updates ✓
+   - Progress reporting ✓
+   - Status messages ✓
    - Cancellation support (Pending)
 3. Result management ✓
    - Persistent storage ✓
@@ -85,6 +86,24 @@ The command system supports:
 - Timeout configuration
 - Output streaming to caller
 - Action ID tracking for async operations
+- Rich progress display with status messages
+- Live progress updates for both sync and async operations
+
+### Progress Tracking
+The system provides detailed progress information:
+- Current item count and total items
+- Progress bar with percentage complete
+- Time elapsed and estimated time remaining
+- Dynamic status messages based on progress
+- Clean display using Rich library
+- Support for both local and remote progress updates
+
+Progress tracking has been integrated into:
+- The demo command (fully tested)
+- The evaluation command infrastructure (pending testing)
+  - Added progress reporting to evaluation process
+  - Supports remote tracking through Celery
+  - Needs testing with real evaluation runs
 
 ### Result Format
 Commands return results in a standardized format:
@@ -161,7 +180,10 @@ The system handles various error conditions:
 ## Next Steps
 
 1. Implement and test action cancellation
-2. Implement progress tracking for long-running actions
+2. Test progress tracking with real evaluation runs
+   - Requires whitelisted workstation with DB access
+   - Test both sync and async progress reporting
+   - Verify remote telemetry with real evaluations
 3. Add resource monitoring and limits
 4. Enhance error handling with retry policies
 5. Add security measures
@@ -172,18 +194,23 @@ The system handles various error conditions:
 
 Start a worker:
 ```bash
-plexus action worker --concurrency=4 --loglevel=INFO
+plexus command worker --concurrency=4 --loglevel=INFO
 ```
 
-Execute a command:
+Execute commands:
 ```bash
-# Synchronous execution
-plexus action dispatch "evaluate accuracy --help"
+# Run the demo task synchronously with progress display
+plexus command demo
 
-# Asynchronous execution
-plexus action dispatch --async "evaluate accuracy --scorecard-name test"
+# Run the demo task asynchronously
+plexus command dispatch --async "command demo"
+
+# Check the status of an async task
+plexus command status <task-id>
 ```
 
-Check action status:
-```bash
-plexus action status <action-id>
+The demo command processes 2000 items over 20 seconds, displaying:
+- Current progress and item count
+- Status messages that update based on progress
+- Time elapsed and estimated time remaining
+- A Rich progress bar with visual feedback
