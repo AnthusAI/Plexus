@@ -102,7 +102,7 @@ def accuracy(
             else:
                 # Fix: Get score names from the list of score dictionaries
                 score_names = [score['name'] for score in scorecard_instance.scores]
-            
+
             if not score_names:
                 logging.error("No score names specified")
                 return
@@ -189,7 +189,6 @@ def accuracy(
                 loop.run_until_complete(
                     asyncio.wait(tasks, timeout=2.0)
                 )
-            loop.close()
         except Exception as e:
             logging.error(f"Error during cleanup: {e}")
 

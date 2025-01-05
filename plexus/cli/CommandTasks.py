@@ -1,6 +1,7 @@
 import sys
 import shlex
 import io
+import asyncio
 from contextlib import redirect_stdout, redirect_stderr
 from celery import Task
 from plexus.CustomLogging import logging

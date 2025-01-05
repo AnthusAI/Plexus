@@ -20,8 +20,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class OrderCommands(click.Group):
-  def list_commands(self, ctx: click.Context) -> list[str]:
-    return list(self.commands)
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        return list(self.commands)
 
 @click.group(cls=OrderCommands)
 def main():

@@ -21,13 +21,13 @@ This document outlines the implementation of Plexus's two-level dispatch system:
 - Celery tasks wrap CLI command execution
 - Progress tracking for long-running operations ✓
 - Configurable timeouts and retry policies
-- Result storage and retrieval
+- Result storage and retrieval ✓
 - Support for command cancellation (Pending)
 
 ### Worker Infrastructure
-- AWS SQS for message broker
-- AWS DynamoDB for result backend
-- Configurable worker pools
+- AWS SQS for message broker ✓
+- AWS DynamoDB for result backend ✓
+- Configurable worker pools ✓
 - Resource management and monitoring (Partial)
 - Health checks and automatic recovery (Partial)
 
@@ -48,10 +48,10 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Logging setup ✓
 
 ### Phase 2: Reliability & Monitoring (In Progress)
-1. Enhanced error handling (Partial)
-   - Retry mechanisms
+1. Enhanced error handling ✓
+   - Retry mechanisms ✓
    - Timeout handling ✓
-   - Resource limits
+   - Resource limits (Pending)
    - Click exit code handling ✓
    - Command validation ✓
 2. Progress tracking ✓
@@ -82,28 +82,42 @@ This document outlines the implementation of Plexus's two-level dispatch system:
 
 ### Command Dispatch
 The command system supports:
-- Synchronous and asynchronous execution
-- Timeout configuration
-- Output streaming to caller
-- Action ID tracking for async operations
-- Rich progress display with status messages
-- Live progress updates for both sync and async operations
+- Synchronous and asynchronous execution ✓
+- Timeout configuration ✓
+- Output streaming to caller ✓
+- Action ID tracking for async operations ✓
+- Rich progress display with status messages ✓
+- Live progress updates for both sync and async operations ✓
 
 ### Progress Tracking
 The system provides detailed progress information:
-- Current item count and total items
-- Progress bar with percentage complete
-- Time elapsed and estimated time remaining
-- Dynamic status messages based on progress
-- Clean display using Rich library
-- Support for both local and remote progress updates
+- Current item count and total items ✓
+- Progress bar with percentage complete ✓
+- Time elapsed and estimated time remaining ✓
+- Dynamic status messages based on progress ✓
+- Clean display using Rich library ✓
+- Support for both local and remote progress updates ✓
 
 Progress tracking has been integrated into:
-- The demo command (fully tested)
-- The evaluation command infrastructure (pending testing)
-  - Added progress reporting to evaluation process
-  - Supports remote tracking through Celery
-  - Needs testing with real evaluation runs
+- The demo command (fully tested) ✓
+- The evaluation command (fully tested) ✓
+  - Added progress reporting to evaluation process ✓
+  - Supports remote tracking through Celery ✓
+  - Successfully tested with real evaluation runs ✓
+
+### Async Command Handling
+The system handles async commands in two ways:
+1. Command-level async:
+   - Commands like `evaluate accuracy` manage their own event loops
+   - Event loops are created and managed within the command
+   - Loops are not closed to allow reuse in worker processes
+   - Progress updates work seamlessly with async execution
+
+2. Dispatch-level async:
+   - Celery handles task dispatch asynchronously
+   - Commands can be run in background with progress tracking
+   - Results are stored in DynamoDB for retrieval
+   - Status updates flow through the Action model
 
 ### Result Format
 Commands return results in a standardized format:
@@ -119,10 +133,11 @@ Commands return results in a standardized format:
 
 ### Error Handling
 The system handles various error conditions:
-- Click usage/help messages are captured and returned as successful output
-- Command validation failures are captured in stderr
-- Command execution failures include error details in the result
-- System exits are handled gracefully with appropriate status codes
+- Click usage/help messages are captured and returned as successful output ✓
+- Command validation failures are captured in stderr ✓
+- Command execution failures include error details in the result ✓
+- System exits are handled gracefully with appropriate status codes ✓
+- Async command failures are properly propagated and logged ✓
 
 ## Dashboard Integration
 
@@ -180,20 +195,18 @@ The system handles various error conditions:
 ## Next Steps
 
 1. Implement and test action cancellation
-2. Test progress tracking with real evaluation runs
-   - Requires whitelisted workstation with DB access
-   - Test both sync and async progress reporting
-   - Verify remote telemetry with real evaluations
-3. Add resource monitoring and limits
-4. Enhance error handling with retry policies
-5. Add security measures
-6. Create monitoring dashboards
-7. Write comprehensive documentation
+2. Add resource monitoring and limits
+3. Enhance error handling with retry policies
+4. Add security measures
+5. Create monitoring dashboards
+6. Write comprehensive documentation
 
 ## Usage Example
 
 Start a worker:
 ```bash
+# Start worker in the correct directory for scorecard access
+cd path/to/call-criteria-python
 plexus command worker --concurrency=4 --loglevel=INFO
 ```
 
@@ -202,8 +215,8 @@ Execute commands:
 # Run the demo task synchronously with progress display
 plexus command demo
 
-# Run the demo task asynchronously
-plexus command dispatch --async "command demo"
+# Run an evaluation asynchronously
+plexus command dispatch "evaluate accuracy --scorecard-name agent-scorecard --number-of-samples 10"
 
 # Check the status of an async task
 plexus command status <task-id>
@@ -214,3 +227,9 @@ The demo command processes 2000 items over 20 seconds, displaying:
 - Status messages that update based on progress
 - Time elapsed and estimated time remaining
 - A Rich progress bar with visual feedback
+
+The evaluation command processes scorecard evaluations with:
+- Real-time progress updates
+- Proper async execution handling
+- Detailed status reporting
+- Error handling and cleanup
