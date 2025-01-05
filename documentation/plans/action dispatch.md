@@ -64,19 +64,30 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Result expiration ✓
    - Query interfaces ✓
 
-### Phase 3: Production Readiness (Pending)
-1. Security enhancements
-   - Input validation
-   - Authentication/authorization
-   - Audit logging
-2. Monitoring system
-   - Worker health checks
-   - Resource usage tracking
-   - Alert configuration
-3. Documentation and examples
-   - API documentation
-   - Configuration guide
-   - Usage examples
+### Phase 3: Action-Command Integration
+1. Action Model Implementation
+   - Define Action GraphQL model schema
+   - Add required fields for command tracking
+   - Configure real-time subscriptions
+   - Set up DynamoDB table and indexes
+
+2. Command Progress Integration
+   - Extend command dispatch to update Action records
+   - Add progress reporting to Action updates
+   - Implement status message propagation
+   - Handle command completion state
+
+3. React Dashboard Components
+   - Create ActionProgress component
+   - Implement real-time progress display
+   - Add command status visualization
+   - Handle command lifecycle events
+
+4. End-to-End Integration
+   - Connect React components to Action model
+   - Test long-running command updates
+   - Verify real-time progress display
+   - Validate error handling and recovery
 
 ## Current Implementation Details
 
