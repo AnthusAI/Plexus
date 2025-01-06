@@ -11,7 +11,7 @@ from pyairtable.formulas import match
 import dotenv
 import os
 
-dotenv.load_dotenv()
+dotenv.load_dotenv(override=True)
 
 @click.group()
 def analyze():
