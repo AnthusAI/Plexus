@@ -362,13 +362,17 @@ class Scorecard:
             score_name = dependency_graph[score_id]['name']
             logging.info(f"Starting to process score: {score_name} (ID: {score_id})")
             
-            # Check if conditions are met
-            if not self.check_dependency_conditions(score_id, dependency_graph, results_by_score_id):
-                logging.info(f"Skipping score {score_name} as conditions are not met")
-                results_by_score_id[score_id] = plexus.scores.Score.Result(value="Skipped", error="Dependency conditions not met")
-                return
-                
             try:
+                # Check if conditions are met
+                if not self.check_dependency_conditions(score_id, dependency_graph, results_by_score_id):
+                    logging.info(f"Skipping score {score_name} as conditions are not met")
+                    # Remove this score from remaining scores but don't add it to results
+                    remaining_scores.discard(score_id)
+                    raise plexus.scores.Score.SkippedScoreException(
+                        score_name=score_name,
+                        reason="Dependency conditions not met"
+                    )
+                    
                 logging.info(f"About to predict score {score_name} at {pd.Timestamp.now()}")
                 score_result = await asyncio.wait_for(
                     self.get_score_result(
@@ -402,6 +406,10 @@ class Scorecard:
                            all(dep in results_by_score_id for dep in waiting_score_info['deps']):
                             await processing_queue.put(waiting_score_id)
 
+            except plexus.scores.Score.SkippedScoreException as e:
+                logging.info(f"Score {score_name} was skipped: {e.reason}")
+                return
+
             except BatchProcessingPause as e:
                 logging.info(f"Score {score_name} paused for batch processing (thread_id: {e.thread_id})")
                 # Mark this score as paused and store its state
@@ -417,11 +425,11 @@ class Scorecard:
                 
                 logging.info(f"Processing score: {dependency_graph[score_id_to_process]['name']}")
                 await process_score(score_id_to_process)
-                remaining_scores.remove(score_id_to_process)
+                remaining_scores.discard(score_id_to_process)
                 
             except BatchProcessingPause as e:
                 # Remove the paused score from remaining scores
-                remaining_scores.remove(score_id_to_process)
+                remaining_scores.discard(score_id_to_process)
                 # Re-raise to be handled by caller
                 raise
 
@@ -523,28 +531,43 @@ class Scorecard:
             if isinstance(dep_result, str) and dep_result == "PAUSED":
                 return False
                 
-            dep_value = dep_result.value if hasattr(dep_result, 'value') else dep_result
+            # Extract value from result, handling both Score.Result objects and direct values
+            if hasattr(dep_result, 'value'):
+                dep_value = str(dep_result.value).lower().strip()
+            else:
+                dep_value = str(dep_result).lower().strip()
+
             operator = condition.get('operator', '==')
-            expected_value = condition.get('value')
+            expected_value = str(condition.get('value', '')).lower().strip()
+            
+            logging.info(f"Checking condition: {dep_value} {operator} {expected_value}")
             
             if operator == '==':
                 if dep_value != expected_value:
+                    logging.info(f"Condition not met: {dep_value} != {expected_value}")
                     return False
             elif operator == '!=':
                 if dep_value == expected_value:
+                    logging.info(f"Condition not met: {dep_value} == {expected_value}")
                     return False
             elif operator == 'in':
-                if not isinstance(expected_value, list) or dep_value not in expected_value:
+                if not isinstance(condition.get('value'), list):
+                    expected_values = [str(v).lower().strip() for v in [expected_value]]
+                else:
+                    expected_values = [str(v).lower().strip() for v in condition.get('value')]
+                if dep_value not in expected_values:
+                    logging.info(f"Condition not met: {dep_value} not in {expected_values}")
                     return False
             elif operator == 'not in':
-                if not isinstance(expected_value, list) or dep_value in expected_value:
+                if not isinstance(condition.get('value'), list):
+                    expected_values = [str(v).lower().strip() for v in [expected_value]]
+                else:
+                    expected_values = [str(v).lower().strip() for v in condition.get('value')]
+                if dep_value in expected_values:
+                    logging.info(f"Condition not met: {dep_value} in {expected_values}")
                     return False
             else:
                 logging.warning(f"Unsupported operator {operator} for score {score_id}")
                 return False
                 
         return True
-
-
-
-
