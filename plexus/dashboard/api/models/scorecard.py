@@ -86,6 +86,51 @@ class Scorecard(BaseModel):
         return cls.from_dict(items[0], client)
 
     @classmethod
+    def create(
+        cls,
+        client: _BaseAPIClient,
+        name: str,
+        key: str,
+        externalId: str,
+        accountId: str,
+        description: Optional[str] = None
+    ) -> 'Scorecard':
+        """Create a new scorecard.
+        
+        Args:
+            client: The API client
+            name: Name of the scorecard
+            key: Unique key identifier
+            externalId: External ID (usually from YAML)
+            accountId: ID of the account this scorecard belongs to
+            description: Optional description
+            
+        Returns:
+            The created Scorecard instance
+        """
+        logger.debug(f"Creating scorecard: {name} ({key})")
+        
+        input_data = {
+            'name': name,
+            'key': key,
+            'externalId': externalId,
+            'accountId': accountId
+        }
+        if description is not None:
+            input_data['description'] = description
+            
+        mutation = """
+        mutation CreateScorecard($input: CreateScorecardInput!) {
+            createScorecard(input: $input) {
+                %s
+            }
+        }
+        """ % cls.fields()
+        
+        result = client.execute(mutation, {'input': input_data})
+        return cls.from_dict(result['createScorecard'], client)
+
+    @classmethod
     def get_by_name(cls, name: str, client: _BaseAPIClient) -> 'Scorecard':
         logger.debug(f"Looking up scorecard by name: {name}")
         query = """
