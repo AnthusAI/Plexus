@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.3.1 (2025-01-06)
+
+### Bug Fixes
+
+- Update environment variable for AWS region in CloudWatch logger
+  ([`ac5f7ba`](https://github.com/AnthusAI/Plexus/commit/ac5f7bac82f5d8fb6d7a79ea52618b2eae2febf0))
+
+
 ## v0.3.0 (2025-01-02)
 
 
