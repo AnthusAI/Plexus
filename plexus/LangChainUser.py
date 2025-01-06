@@ -109,9 +109,9 @@ class LangChainUser:
             
             if params.model_provider == "AzureChatOpenAI":
                 base_model = AzureChatOpenAI(
-                    azure_endpoint=os.environ.get("AZURE_API_BASE"),
-                    api_version=os.environ.get("AZURE_API_VERSION"),
-                    api_key=os.environ.get("AZURE_API_KEY"),
+                    azure_endpoint=getenv("AZURE_API_BASE"),
+                    api_version=getenv("AZURE_API_VERSION"),
+                    api_key=getenv("AZURE_API_KEY"),
                     model=params.model_name,
                     temperature=params.temperature,
                     max_tokens=max_tokens
@@ -119,7 +119,7 @@ class LangChainUser:
             else:  # ChatOpenAI
                 base_model = ChatOpenAI(
                     model=params.model_name,
-                    api_key=os.environ.get("OPENAI_API_KEY"),
+                    api_key=getenv("OPENAI_API_KEY"),
                     max_tokens=max_tokens,
                     model_kwargs={"top_p": params.top_p},
                     temperature=params.temperature

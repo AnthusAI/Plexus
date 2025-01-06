@@ -89,8 +89,8 @@ class _BaseAPIClient:
         api_key: Optional[str] = None,
         context: Optional[ClientContext] = None
     ):
-        self.api_url = api_url or os.environ.get('PLEXUS_API_URL')
-        self.api_key = api_key or os.environ.get('PLEXUS_API_KEY')
+        self.api_url = api_url or getenv('PLEXUS_API_URL')
+        self.api_key = api_key or getenv('PLEXUS_API_KEY')
         self.context = context or ClientContext()
         self._cache = {}
         
@@ -201,7 +201,21 @@ class _BaseAPIClient:
 
     def execute(self, query: str, variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         try:
-            return self.client.execute(gql(query), variable_values=variables)
+            transport = RequestsHTTPTransport(
+                url=self.api_url,
+                headers={
+                    'x-api-key': self.api_key,
+                    'Content-Type': 'application/json',
+                },
+                verify=True,
+                retries=3,
+            )
+            client = Client(
+                transport=transport,
+                fetch_schema_from_transport=False
+            )
+            with client as session:
+                return session.execute(gql(query), variable_values=variables)
         except TransportQueryError as e:
             raise Exception(f"GraphQL query failed: {str(e)}")
 
