@@ -201,7 +201,7 @@ class LangGraphScore(Score, LangChainUser):
         self.model = await self._ainitialize_model()
         
         # Load environment variables
-        load_dotenv()
+        load_dotenv(override=True)
         
         # Get PostgreSQL URL from parameters or environment
         db_uri = self.parameters.postgres_url or \

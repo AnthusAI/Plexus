@@ -8,7 +8,7 @@ class CloudWatchLogger:
         self.namespace = namespace
         self.cloudwatch_client = None
         if os.getenv('AWS_ACCESS_KEY_ID') and os.getenv('AWS_SECRET_ACCESS_KEY') \
-                and os.getenv('AWS_DEFAULT_REGION'):
+                and os.getenv('AWS_REGION_NAME'):
             self.cloudwatch_client = boto3.client('cloudwatch')
 
     def log_metric(self, metric_name, metric_value, dimensions):

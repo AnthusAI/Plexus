@@ -22,7 +22,7 @@ import threading
 
 from dotenv import load_dotenv
 from os import getenv
-load_dotenv()
+load_dotenv(override=True)
 
 set_log_group('plexus/cli/evaluation')
 

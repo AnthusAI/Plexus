@@ -36,7 +36,7 @@ from sklearn.metrics import (
     confusion_matrix,
     accuracy_score
 )
-from dashboard.commands.simulate import (
+from plexus.dashboard.commands.simulate import (
     generate_class_distribution,
     simulate_prediction,
     select_metrics_and_explanation,
@@ -45,6 +45,7 @@ from dashboard.commands.simulate import (
     SCORE_GOALS,
     CLASS_SETS
 )
+import yaml
 
 # Configure logging with a more concise format
 logging.basicConfig(
@@ -61,12 +62,18 @@ DATA_BALANCES = ['balanced', 'unbalanced']
 @click.group()
 def cli():
     """Plexus Dashboard CLI"""
-    load_dotenv()
+    load_dotenv(override=True)
 
 @cli.group()
 def evaluation():
     """Manage evaluations"""
     pass
+
+def create_client() -> PlexusDashboardClient:
+    """Create a client and log its configuration"""
+    client = PlexusDashboardClient()
+    logger.info(f"Using API URL: {client.api_url}")
+    return client
 
 @evaluation.command()
 @click.option('--account-key', default='call-criteria', help='Account key identifier')
@@ -130,7 +137,7 @@ def create(
         plexus-dashboard evaluation create --type accuracy --accuracy 95.5 --status COMPLETED
         plexus-dashboard evaluation create --type consistency --scorecard-id abc123
     """
-    client = PlexusDashboardClient()
+    client = create_client()
     
     try:
         # First get the account
@@ -283,7 +290,7 @@ def update(
         plexus-dashboard evaluation update def456 --status COMPLETED
         plexus-dashboard evaluation update ghi789 --type consistency --status FAILED
     """
-    client = PlexusDashboardClient()
+    client = create_client()
     
     try:
         # First get the existing evaluation
@@ -874,6 +881,252 @@ def create(evaluation_id: str, value: str):
         
     except Exception as e:
         logger.error(f"Error creating result test: {str(e)}")
+        click.echo(f"Error: {str(e)}", err=True)
+
+@cli.group()
+def scorecard():
+    """Manage scorecards"""
+    pass
+
+@scorecard.command()
+@click.option('--account-key', help='Filter by account key')
+@click.option('--name', help='Filter by name')
+@click.option('--key', help='Filter by key')
+def list(account_key: Optional[str], name: Optional[str], key: Optional[str]):
+    """List scorecards with optional filtering.
+    
+    Examples:
+        plexus-dashboard scorecard list
+        plexus-dashboard scorecard list --account-key my-account
+        plexus-dashboard scorecard list --name "QA Scorecard"
+        plexus-dashboard scorecard list --key qa-v1
+    """
+    client = create_client()
+    
+    try:
+        # Build filter based on provided options
+        filter_parts = []
+        variables = {}
+        
+        if account_key:
+            # First get the account ID
+            account = Account.get_by_key(account_key, client)
+            filter_parts.append("accountId: {eq: $accountId}")
+            variables['accountId'] = account.id
+            
+        if name:
+            filter_parts.append("name: {eq: $name}")
+            variables['name'] = name
+            
+        if key:
+            filter_parts.append("key: {eq: $key}")
+            variables['key'] = key
+            
+        filter_str = ", ".join(filter_parts)
+        if filter_str:
+            filter_str = f"filter: {{{filter_str}}}"
+            
+        # Query scorecards
+        variables_str = ""
+        if variables:
+            variables_str = f"({', '.join(f'${k}: String!' for k in variables.keys())})"
+            
+        query = f"""
+            query ListScorecards{variables_str} {{
+                listScorecards{' ' + filter_str if filter_str else ''} {{
+                    items {{
+                        id
+                        name
+                        key
+                        externalId
+                        description
+                        account {{
+                            name
+                            key
+                        }}
+                        sections {{
+                            items {{
+                                scores {{
+                                    items {{
+                                        id
+                                        name
+                                    }}
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        """
+        
+        result = client.execute(query, variables)
+        scorecards = result['listScorecards']['items']
+        
+        if not scorecards:
+            click.echo("No scorecards found")
+            return
+            
+        # Display results
+        click.echo(f"\nFound {len(scorecards)} scorecard(s):\n")
+        for sc in scorecards:
+            # Count total scores across all sections
+            score_count = sum(
+                len(section['scores']['items'])
+                for section in sc['sections']['items']
+            )
+            
+            click.echo(f"ID: {sc['id']}")
+            click.echo(f"Name: {sc['name']}")
+            click.echo(f"Key: {sc['key']}")
+            click.echo(f"External ID: {sc['externalId']}")
+            if sc['description']:
+                click.echo(f"Description: {sc['description']}")
+            click.echo(f"Account: {sc['account']['name']} ({sc['account']['key']})")
+            click.echo(f"Total Scores: {score_count}")
+            click.echo("")
+        
+    except Exception as e:
+        logger.error(f"Error listing scorecards: {str(e)}")
+        click.echo(f"Error: {str(e)}", err=True)
+
+@scorecard.command()
+@click.option('--account-key', default='call-criteria', help='Account key identifier')
+@click.option('--directory', default='scorecards', help='Directory containing YAML scorecard files')
+def sync(account_key: str, directory: str):
+    """Sync YAML scorecards to the API.
+    
+    Examples:
+        plexus-dashboard scorecard sync
+        plexus-dashboard scorecard sync --account-key my-account
+        plexus-dashboard scorecard sync --directory path/to/scorecards
+    """
+    client = create_client()
+    
+    try:
+        # Get account
+        logger.info(f"Looking up account with key: {account_key}")
+        account = Account.get_by_key(account_key, client)
+        logger.info(f"Found account: {account.name} ({account.id})")
+        
+        # Load all YAML files from directory
+        logger.info(f"Loading scorecards from {directory}")
+        for filename in os.listdir(directory):
+            if not filename.endswith('.yaml'):
+                continue
+                
+            filepath = os.path.join(directory, filename)
+            logger.info(f"Processing {filepath}")
+            
+            with open(filepath, 'r') as f:
+                yaml_data = yaml.safe_load(f)
+                
+            # Get or create scorecard
+            try:
+                scorecard = Scorecard.get_by_key(yaml_data['key'], client)
+                logger.info(f"Found existing scorecard: {scorecard.name}")
+            except ValueError:
+                logger.info("Creating new scorecard")
+                scorecard = Scorecard.create(
+                    client=client,
+                    name=yaml_data['name'],
+                    key=yaml_data['key'],
+                    externalId=str(yaml_data['id']),
+                    accountId=account.id,
+                    description=yaml_data.get('description')
+                )
+                logger.info(f"Created scorecard: {scorecard.name}")
+            
+            # Create default section if none exists
+            sections = client.execute("""
+                query GetSections($scorecardId: String!) {
+                    listScorecardSections(filter: {scorecardId: {eq: $scorecardId}}) {
+                        items {
+                            id
+                            name
+                            order
+                        }
+                    }
+                }
+            """, {'scorecardId': scorecard.id})
+            
+            if not sections['listScorecardSections']['items']:
+                logger.info("Creating default section")
+                section = client.execute("""
+                    mutation CreateSection($input: CreateScorecardSectionInput!) {
+                        createScorecardSection(input: $input) {
+                            id
+                            name
+                            order
+                        }
+                    }
+                """, {
+                    'input': {
+                        'name': 'Default',
+                        'order': 1,
+                        'scorecardId': scorecard.id
+                    }
+                })
+                section_id = section['createScorecardSection']['id']
+            else:
+                section_id = sections['listScorecardSections']['items'][0]['id']
+            
+            # Process each score
+            for score_data in yaml_data['scores']:
+                # Try to find existing score
+                existing_scores = client.execute("""
+                    query GetScores($sectionId: String!, $name: String!) {
+                        listScores(filter: {
+                            sectionId: {eq: $sectionId},
+                            name: {eq: $name}
+                        }) {
+                            items {
+                                id
+                                name
+                                type
+                                order
+                                aiProvider
+                                aiModel
+                                configuration
+                            }
+                        }
+                    }
+                """, {
+                    'sectionId': section_id,
+                    'name': score_data['name']
+                })
+                
+                if existing_scores['listScores']['items']:
+                    logger.info(f"Score {score_data['name']} already exists")
+                    continue
+                
+                # Create new score
+                logger.info(f"Creating score: {score_data['name']}")
+                score = client.execute("""
+                    mutation CreateScore($input: CreateScoreInput!) {
+                        createScore(input: $input) {
+                            id
+                            name
+                            type
+                            order
+                        }
+                    }
+                """, {
+                    'input': {
+                        'name': score_data['name'],
+                        'type': score_data.get('class', 'LangGraphScore'),
+                        'order': score_data.get('order', 1),
+                        'sectionId': section_id,
+                        'aiProvider': score_data.get('model_provider'),
+                        'aiModel': score_data.get('model_name'),
+                        'configuration': json.dumps(score_data)
+                    }
+                })
+                logger.info(f"Created score: {score['createScore']['name']}")
+        
+        logger.info("Sync completed successfully")
+        
+    except Exception as e:
+        logger.error(f"Error syncing scorecards: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
 if __name__ == '__main__':
