@@ -22,7 +22,7 @@ This document outlines the implementation of Plexus's two-level dispatch system:
 - Progress tracking for long-running operations ✓
 - Configurable timeouts and retry policies
 - Result storage and retrieval ✓
-- Support for command cancellation (Pending)
+- Task cancellation removed (YAGNI - complexity outweighed benefits)
 
 ### Worker Infrastructure
 - AWS SQS for message broker ✓
@@ -58,7 +58,7 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Action state updates ✓
    - Progress reporting ✓
    - Status messages ✓
-   - Cancellation support (Pending)
+   - Task cancellation removed (SQS limitations make this impractical)
 3. Result management ✓
    - Persistent storage ✓
    - Result expiration ✓
@@ -205,12 +205,11 @@ The system handles various error conditions:
 
 ## Next Steps
 
-1. Implement and test action cancellation
-2. Add resource monitoring and limits
-3. Enhance error handling with retry policies
-4. Add security measures
-5. Create monitoring dashboards
-6. Write comprehensive documentation
+1. Add resource monitoring and limits
+2. Enhance error handling with retry policies
+3. Add security measures
+4. Create monitoring dashboards
+5. Write comprehensive documentation
 
 ## Usage Example
 
