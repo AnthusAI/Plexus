@@ -215,6 +215,14 @@ We build the Sphinx documentation at [https://anthusai.github.io/Plexus/](https:
 
 TODO: Instructions for contributing to the project.
 
+## Project Management and Issue Tracking
+
+Our project management is centralized on GitHub:
+- [Project Kanban Board](https://github.com/orgs/AnthusAI/projects/1): Track our development progress, roadmap, and upcoming features.
+- [Issue Tracker](https://github.com/AnthusAI/Plexus/issues): Report bugs, request features, or discuss improvements.
+
+We welcome community input and collaboration through our GitHub project management tools.
+
 ## License
 
 Plexus is open-source under the MIT license.
