@@ -31,7 +31,7 @@ class OpenAIEmbeddingsClassifier(Score):
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
-        self.client = OpenAI(api_key=getenv('OPENAI_API_KEY'))
+        self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         self.model = LogisticRegression(
             C=1/self.parameters.l2_regularization_strength,
             max_iter=self.parameters.number_of_epochs * 100  # Adjust as needed
