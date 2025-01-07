@@ -6,6 +6,11 @@ from langchain_core.messages import AIMessage
 pytest.asyncio_fixture_scope = "function"
 pytest_plugins = ('pytest_asyncio',)
 
+@pytest.fixture(autouse=True)
+def disable_batch_mode(monkeypatch):
+    monkeypatch.setenv('PLEXUS_ENABLE_BATCH_MODE', 'false')
+    monkeypatch.setenv('PLEXUS_ENABLE_LLM_BREAKPOINTS', 'false')
+
 @pytest.fixture
 def basic_config():
     return {
@@ -254,8 +259,8 @@ async def test_classifier_parse_from_start_explicit(turnip_classifier_config):
         content="Yes is my answer, even though you might think no when you first look"
     )
     mock_model.ainvoke = AsyncMock(return_value=mock_response)
-    
-    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
+
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model',
                return_value=mock_model):
         # Explicitly set parse_from_start to True
         turnip_classifier_config["parse_from_start"] = True

@@ -8,7 +8,7 @@ from datetime import datetime
 import time
 
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv('.env', override=True)
 
 # Create a Rich console specifically for output
 console = Console()

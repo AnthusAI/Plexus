@@ -195,11 +195,11 @@ class LangGraphScore(Score, LangChainUser):
         self.model = await self._ainitialize_model()
         
         # Load environment variables
-        load_dotenv()
+        load_dotenv('.env', override=True)
         
         # Get PostgreSQL URL from parameters or environment
         db_uri = self.parameters.postgres_url or \
-                 getenv('PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI')
+                 os.getenv('PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI')
         
         if db_uri:
             logging.info("Using PostgreSQL checkpoint database")
