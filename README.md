@@ -226,3 +226,66 @@ We welcome community input and collaboration through our GitHub project manageme
 ## License
 
 Plexus is open-source under the MIT license.
+
+## Scorecard Sync
+
+The `plexus-dashboard` CLI provides a way to synchronize scorecard definitions from YAML files to the API. This ensures that your API scorecards match your source-controlled YAML definitions.
+
+### Usage
+
+Basic usage with default settings:
+```bash
+plexus-dashboard scorecard sync
+```
+
+This will:
+1. Look for YAML files in the `scorecards/` directory
+2. Use the `call-criteria` account key
+3. Create or update scorecards in the API to match the YAML files
+
+Custom directory and account:
+```bash
+plexus-dashboard scorecard sync --directory path/to/scorecards --account-key my-account
+```
+
+### YAML Format
+
+Scorecards are defined in YAML files with this structure:
+```yaml
+name: QA Scorecard
+key: qa-v1
+id: 123
+description: Quality assurance scorecard
+scores:
+  - name: Greeting Score
+    class: LangGraphScore
+    order: 1
+    model_provider: openai
+    model_name: gpt-4
+  - name: Compliance Score
+    class: LangGraphScore
+    order: 2
+    model_provider: anthropic
+    model_name: claude-2
+```
+
+### Sync Process
+
+The sync command:
+1. Loads each YAML file in the specified directory
+2. For each scorecard:
+   - Creates it if it doesn't exist (matching by key)
+   - Creates a default section if none exists
+   - Creates any scores that don't exist
+3. Maintains idempotency (won't recreate existing items)
+4. Preserves existing data in the API
+
+### Environment Setup
+
+Requires these environment variables:
+```bash
+PLEXUS_API_URL=https://your-api-url
+PLEXUS_API_KEY=your-api-key
+```
+
+You can set these in a `.env` file or export them in your shell.

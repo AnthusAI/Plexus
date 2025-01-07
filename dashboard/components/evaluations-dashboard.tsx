@@ -38,6 +38,7 @@ import { listFromModel, observeQueryFromModel, getFromModel, observeScoreResults
 import type { EvaluationTaskData } from '@/components/EvaluationTask'
 import { useAuthenticator } from '@aws-amplify/ui-react';
 import { useRouter } from 'next/navigation';
+import { Observable } from 'rxjs';
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -484,6 +485,19 @@ function parseScoreResult(result: Schema['ScoreResult']['type']): ParsedScoreRes
   }
 }
 
+// Add sorting helper at the top
+const sortByCreatedAt = (evaluations: Schema['Evaluation']['type'][]) => {
+  return [...evaluations].sort((a, b) => {
+    const aTime = new Date(a.createdAt).getTime();
+    const bTime = new Date(b.createdAt).getTime();
+    console.log('Comparing dates:', {
+      a: { id: a.id, time: a.createdAt, timestamp: aTime },
+      b: { id: b.id, time: b.createdAt, timestamp: bTime }
+    });
+    return bTime - aTime;
+  });
+};
+
 export default function EvaluationsDashboard(): JSX.Element {
   const { authStatus, user } = useAuthenticator(context => [context.authStatus]);
   const router = useRouter();
@@ -848,13 +862,140 @@ export default function EvaluationsDashboard(): JSX.Element {
           return;
         }
 
+        console.log('Raw evaluations from listEvaluations:', evaluations.map(e => ({
+          id: e.id,
+          createdAt: e.createdAt,
+          type: e.type
+        })));
+
         const transformedEvaluations = await loadRelatedData(
           evaluations,
           setScorecardNames,
           setScoreNames
         );
-        setEvaluations(transformedEvaluations);
+
+        console.log('Transformed evaluations before sort:', transformedEvaluations.map(e => ({
+          id: e.id,
+          createdAt: e.createdAt,
+          type: e.type
+        })));
+
+        const sortedEvaluations = sortByCreatedAt(transformedEvaluations);
+
+        console.log('Transformed evaluations after sort:', sortedEvaluations.map(e => ({
+          id: e.id,
+          createdAt: e.createdAt,
+          type: e.type
+        })));
+
+        setEvaluations(sortedEvaluations);
         setIsLoading(false);
+
+        // Set up subscriptions for real-time updates
+        const handleEvaluationUpdate = async (data: Schema['Evaluation']['type']) => {
+          console.log('Evaluation update received:', {
+            id: data.id,
+            type: data.type,
+            status: data.status,
+            processedItems: data.processedItems,
+            totalItems: data.totalItems,
+            accuracy: data.accuracy,
+            createdAt: data.createdAt
+          });
+
+          if (!foundAccountId) return;
+          
+          // For onCreate, we can just add the new evaluation to the list
+          const isCreate = !Evaluations.some(e => e.id === data.id);
+          if (isCreate) {
+            console.log('Handling onCreate for evaluation:', {
+              id: data.id,
+              createdAt: data.createdAt,
+              existingIds: Evaluations.map(e => e.id)
+            });
+
+            // Transform the evaluation before setState to avoid async issues
+            const transformedEvaluation = await loadRelatedData(
+              [data],
+              setScorecardNames,
+              setScoreNames
+            );
+
+            setEvaluations(prev => {
+              // Double-check we haven't already added this evaluation
+              if (prev.some(e => e.id === data.id)) {
+                console.log('Evaluation already exists in list, skipping:', data.id);
+                return prev;
+              }
+
+              const newList = sortByCreatedAt([transformedEvaluation[0], ...prev]);
+              console.log('New evaluation list order:', newList.map(e => ({
+                id: e.id,
+                createdAt: e.createdAt,
+                type: e.type
+              })));
+              return newList;
+            });
+          } else {
+            // For updates, we'll update the specific evaluation in place
+            setEvaluations(prev => {
+              const updatedList = prev.map(e => e.id === data.id ? {
+                ...e,
+                ...data,
+                // Preserve the async functions
+                account: e.account,
+                scorecard: e.scorecard,
+                score: e.score
+              } : e);
+
+              // Re-sort after update in case createdAt changed
+              const sortedList = sortByCreatedAt(updatedList);
+              console.log('Updated evaluation list order:', sortedList.map(e => ({
+                id: e.id,
+                createdAt: e.createdAt,
+                type: e.type
+              })));
+
+              return sortedList;
+            });
+          }
+
+          // Update selectedEvaluation if it matches
+          if (selectedEvaluation && data.id === selectedEvaluation.id) {
+            setSelectedEvaluation(prev => ({
+              ...prev!,
+              ...data,
+              // Preserve the async functions
+              account: prev!.account,
+              scorecard: prev!.scorecard,
+              score: prev!.score
+            }));
+          }
+        };
+
+        const handleError = (error: unknown) => {
+          console.error('Subscription error:', error);
+          setError(error instanceof Error ? error : new Error(String(error)));
+        };
+
+        type EvaluationObservable = Observable<Schema['Evaluation']['type']>;
+        
+        // Subscribe to create events
+        const createSub = (client.models.Evaluation as any).onCreate().subscribe({
+          next: handleEvaluationUpdate,
+          error: handleError
+        });
+
+        // Subscribe to update events
+        const updateSub = (client.models.Evaluation as any).onUpdate().subscribe({
+          next: handleEvaluationUpdate,
+          error: handleError
+        });
+
+        return () => {
+          createSub.unsubscribe();
+          updateSub.unsubscribe();
+        };
 
       } catch (error) {
         console.error('Error loading initial data:', error);
@@ -864,7 +1005,10 @@ export default function EvaluationsDashboard(): JSX.Element {
     };
 
     loadInitialData();
-  }, []);
+
+    // No cleanup needed here as it's handled in the async function
+    return undefined;
+  }, [selectedEvaluation]); // Add selectedEvaluation to dependencies since we use it in handleEvaluationUpdate
 
   // Early return for unauthenticated state
   if (authStatus !== 'authenticated') {
