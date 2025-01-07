@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+load_dotenv('.env', override=True)
+
 import sys
 import click
 import importlib
@@ -14,9 +17,6 @@ from .TuningCommands import tuning
 from .AnalyzeCommands import analyze
 from .console import console
 from .BatchCommands import batch
-
-from dotenv import load_dotenv
-load_dotenv(override=True)
 
 class OrderCommands(click.Group):
   def list_commands(self, ctx: click.Context) -> list[str]:
