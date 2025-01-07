@@ -58,7 +58,7 @@ interface GaugeConfig {
 }
 
 // Update the getMetricsForVersion function with the proper type
-function getMetricsForVersion(version: Version | null): GaugeConfig[] {
+function getMetricsForVersion(version: Version | null): { value: number; label: string }[] {
   if (!version) return []
   
   return [
@@ -118,7 +118,7 @@ export function ScoreItem({ score, scorecardId, onEdit }: ScoreItemProps) {
             onChange={(newName) => {
               onEdit({ ...score, name: newName })
             }}
-            className="text-xl font-semibold" // H3 styling
+            className="text-xl font-semibold"
           />
           <div className="text-xs text-muted-foreground mt-1 space-y-1">
             <div className="font-mono">LangGraphScore</div>
@@ -140,9 +140,6 @@ export function ScoreItem({ score, scorecardId, onEdit }: ScoreItemProps) {
             onClick={() => router.push(`/scorecards/${scorecardId}/scores/${score.id}/edit`)}
           />
         </div>
-      </div>
-      <div className="mt-4">
-        <MetricsGauges gauges={getMetricsForVersion(latestVersion)} />
       </div>
       <Collapsible className="w-full mt-2">
         <CollapsibleTrigger className="flex items-center text-sm text-muted-foreground">
@@ -182,15 +179,6 @@ export function ScoreItem({ score, scorecardId, onEdit }: ScoreItemProps) {
                       )}
                       <Button variant="outline" size="sm">Edit</Button>
                     </div>
-                  </div>
-                  <div className="mt-4">
-                    {getMetricsForVersion(version) ? (
-                      <MetricsGauges gauges={getMetricsForVersion(version)!} />
-                    ) : (
-                      <div className="text-sm text-muted-foreground italic">
-                        No metrics available for this version
-                      </div>
-                    )}
                   </div>
                 </div>
               ))}
