@@ -11,7 +11,7 @@ from pyairtable.formulas import match
 import dotenv
 import os
 
-dotenv.load_dotenv()
+dotenv.load_dotenv('.env', override=True)
 
 @click.group()
 def analyze():
@@ -46,7 +46,7 @@ def feedback(
     # Initialize LLM and Airtable
     llm = ChatOpenAI(
         model="gpt-4o-mini-2024-07-18",
-        api_key=os.environ.get("OPENAI_API_KEY"),
+        api_key=os.getenv("OPENAI_API_KEY"),
         max_tokens=500,
         temperature=0.3,
     )
@@ -54,7 +54,7 @@ def feedback(
     # Initialize the PromptAnalyzer
     prompt_analyzer = PromptAnalyzer(llm)
     
-    airtable = Api(os.environ.get("AIRTABLE_API_KEY"))
+    airtable = Api(os.getenv("AIRTABLE_API_KEY"))
     table = airtable.table(base_id, table_name)
     
     try:

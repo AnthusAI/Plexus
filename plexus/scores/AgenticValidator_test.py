@@ -46,7 +46,7 @@ class MockLLM(MagicMock):
 def setup_environment():
     # This fixture will run once for the module and set up the environment
     original_env = dict(os.environ)
-    load_dotenv()
+    load_dotenv('.env', override=True)
     yield
     # Restore original environment after tests
     os.environ.clear()

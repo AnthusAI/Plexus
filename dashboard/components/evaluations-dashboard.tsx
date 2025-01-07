@@ -322,7 +322,11 @@ interface DragState {
 }
 
 // Add this new function near the top with other helper functions
-async function loadRelatedData(evaluations: Schema['Evaluation']['type'][]): Promise<Schema['Evaluation']['type'][]> {
+async function loadRelatedData(
+  evaluations: Schema['Evaluation']['type'][],
+  setScorecardNames: (names: Record<string, string>) => void,
+  setScoreNames: (names: Record<string, string>) => void
+): Promise<Schema['Evaluation']['type'][]> {
   // Get unique IDs
   const scorecardIds = [...new Set(evaluations
     .filter(e => e.scorecardId)
@@ -357,6 +361,25 @@ async function loadRelatedData(evaluations: Schema['Evaluation']['type'][]): Pro
     scores.map(result => [result.data?.id, result.data])
   )
 
+  // Create name mappings
+  const newScorecardNames: Record<string, string> = {}
+  const newScoreNames: Record<string, string> = {}
+
+  evaluations.forEach(evaluation => {
+    const scorecard = scorecardMap.get(evaluation.scorecardId || '')
+    const score = scoreMap.get(evaluation.scoreId || '')
+    if (scorecard) {
+      newScorecardNames[evaluation.id] = scorecard.name
+    }
+    if (score) {
+      newScoreNames[evaluation.id] = score.name
+    }
+  })
+
+  // Update the state with the new names
+  setScorecardNames(newScorecardNames)
+  setScoreNames(newScoreNames)
+
   // Transform evaluations with pre-loaded data and explicitly return the result
   return evaluations.map(evaluation => ({
     ...evaluation,
@@ -367,6 +390,98 @@ async function loadRelatedData(evaluations: Schema['Evaluation']['type'][]): Pro
       data: scoreMap.get(evaluation.scoreId || '') || null
     })
   }))
+}
+
+interface EvaluationMetric {
+  name?: string;
+  value?: number;
+  unit?: string;
+  maximum?: number;
+  priority?: boolean;
+}
+
+interface ParsedScoreResult {
+  id: string
+  value: string
+  confidence: number | null
+  explanation: string | null
+  metadata: {
+    human_label: string | null
+    correct: boolean
+    human_explanation?: string | null
+    text?: string | null
+  }
+  itemId: string | null
+}
+
+interface ScoreResultMetadata {
+  item_id?: number | string
+  results?: {
+    [key: string]: {
+      value?: string | number
+      confidence?: number
+      explanation?: string
+      metadata?: {
+        human_label?: string
+        correct?: boolean
+        human_explanation?: string
+        text?: string
+      }
+    }
+  }
+}
+
+function parseScoreResult(result: Schema['ScoreResult']['type']): ParsedScoreResult {
+  // Handle double-stringified JSON
+  const parsedMetadata = (() => {
+    try {
+      let metadata = result.metadata
+      if (typeof metadata === 'string') {
+        metadata = JSON.parse(metadata)
+        if (typeof metadata === 'string') {
+          metadata = JSON.parse(metadata)
+        }
+      }
+      return metadata as ScoreResultMetadata
+    } catch (e) {
+      console.error('Error parsing metadata:', e)
+      return {} as ScoreResultMetadata
+    }
+  })()
+
+  console.log('Raw score result:', {
+    id: result.id,
+    metadata: result.metadata,
+    parsedMetadata
+  })
+
+  const firstResultKey = parsedMetadata?.results ? 
+    Object.keys(parsedMetadata.results)[0] : null
+  const scoreResult = firstResultKey && parsedMetadata.results ? 
+    parsedMetadata.results[firstResultKey] : null
+
+  console.log('Parsed score result:', {
+    firstResultKey,
+    scoreResult,
+    value: scoreResult?.value,
+    confidence: scoreResult?.confidence,
+    explanation: scoreResult?.explanation,
+    metadata: scoreResult?.metadata
+  })
+
+  return {
+    id: result.id,
+    value: String(scoreResult?.value ?? ''),
+    confidence: result.confidence ?? scoreResult?.confidence ?? null,
+    explanation: scoreResult?.explanation ?? null,
+    metadata: {
+      human_label: scoreResult?.metadata?.human_label ?? null,
+      correct: Boolean(scoreResult?.metadata?.correct),
+      human_explanation: scoreResult?.metadata?.human_explanation ?? null,
+      text: scoreResult?.metadata?.text ?? null
+    },
+    itemId: parsedMetadata?.item_id?.toString() ?? null
+  }
 }
 
 export default function EvaluationsDashboard(): JSX.Element {
@@ -561,7 +676,195 @@ export default function EvaluationsDashboard(): JSX.Element {
 
   useEffect(() => {
     selectedEvaluationRef.current = selectedEvaluation;
-  }, [selectedEvaluation]);
+
+    if (selectedEvaluation) {
+      const subscription = observeScoreResults(client, selectedEvaluation.id).subscribe({
+        next: (data) => {
+          const parsedResults = data.items.map(parseScoreResult)
+          setScoreResults(parsedResults)
+        },
+        error: (error) => {
+          console.error('Error observing score results:', error)
+        }
+      })
+
+      return () => {
+        subscription.unsubscribe()
+      }
+    }
+  }, [selectedEvaluation])
+
+  // Add effect to update EvaluationTaskProps when selectedEvaluation changes
+  useEffect(() => {
+    if (!selectedEvaluation) {
+      setEvaluationTaskProps(null);
+      return;
+    }
+
+    console.log('Selected evaluation data:', {
+      id: selectedEvaluation.id,
+      rawConfusionMatrix: selectedEvaluation.confusionMatrix,
+      confusionMatrixType: typeof selectedEvaluation.confusionMatrix,
+      isObject: selectedEvaluation.confusionMatrix && typeof selectedEvaluation.confusionMatrix === 'object',
+      hasMatrixProp: selectedEvaluation.confusionMatrix && 
+        typeof selectedEvaluation.confusionMatrix === 'object' && 
+        'matrix' in selectedEvaluation.confusionMatrix,
+      hasLabelsProp: selectedEvaluation.confusionMatrix && 
+        typeof selectedEvaluation.confusionMatrix === 'object' && 
+        'labels' in selectedEvaluation.confusionMatrix
+    });
+
+    const rawMetrics = (() => {
+      try {
+        if (typeof selectedEvaluation.metrics === 'string') {
+          return JSON.parse(selectedEvaluation.metrics);
+        }
+        if (Array.isArray(selectedEvaluation.metrics)) {
+          return selectedEvaluation.metrics;
+        }
+        return [];
+      } catch (e) {
+        console.error('Error parsing metrics:', e);
+        return [];
+      }
+    })();
+
+    const metrics = rawMetrics.map((metric: EvaluationMetric) => ({
+      name: String(metric?.name || ''),
+      value: Number(metric?.value || 0),
+      unit: String(metric?.unit || '%'),
+      maximum: Number(metric?.maximum || 100),
+      priority: Boolean(metric?.priority)
+    }));
+
+    const confusionMatrix = (() => {
+      try {
+        const rawMatrix = typeof selectedEvaluation.confusionMatrix === 'string' 
+          ? JSON.parse(selectedEvaluation.confusionMatrix)
+          : selectedEvaluation.confusionMatrix;
+
+        if (rawMatrix && typeof rawMatrix === 'object' &&
+            Array.isArray(rawMatrix.matrix) && Array.isArray(rawMatrix.labels)) {
+          return {
+            matrix: rawMatrix.matrix,
+            labels: rawMatrix.labels
+          };
+        }
+        return null;
+      } catch (e) {
+        console.error('Error parsing confusion matrix:', e);
+        return null;
+      }
+    })();
+
+    const datasetClassDistribution = (() => {
+      try {
+        const rawDist = typeof selectedEvaluation.datasetClassDistribution === 'string' 
+          ? JSON.parse(selectedEvaluation.datasetClassDistribution)
+          : selectedEvaluation.datasetClassDistribution;
+
+        if (Array.isArray(rawDist)) {
+          return rawDist.map(item => ({
+            label: String(item?.label || ''),
+            count: Number(item?.count || 0)
+          }));
+        }
+        return undefined;
+      } catch (e) {
+        console.error('Error parsing dataset distribution:', e);
+        return undefined;
+      }
+    })();
+
+    const predictedClassDistribution = (() => {
+      try {
+        const rawDist = typeof selectedEvaluation.predictedClassDistribution === 'string' 
+          ? JSON.parse(selectedEvaluation.predictedClassDistribution)
+          : selectedEvaluation.predictedClassDistribution;
+
+        if (Array.isArray(rawDist)) {
+          return rawDist.map(item => ({
+            label: String(item?.label || ''),
+            count: Number(item?.count || 0)
+          }));
+        }
+        return undefined;
+      } catch (e) {
+        console.error('Error parsing predicted distribution:', e);
+        return undefined;
+      }
+    })();
+
+    const taskProps = {
+      id: selectedEvaluation.id,
+      type: selectedEvaluation.type,
+      scorecard: scorecardNames[selectedEvaluation.id] || 'Unknown Scorecard',
+      score: scoreNames[selectedEvaluation.id] || 'Unknown Score',
+      time: selectedEvaluation.createdAt,
+      data: {
+        accuracy: selectedEvaluation.accuracy ?? null,
+        metrics,
+        metricsExplanation: selectedEvaluation.metricsExplanation ?? null,
+        processedItems: selectedEvaluation.processedItems ?? 0,
+        totalItems: selectedEvaluation.totalItems ?? 0,
+        progress: calculateProgress(selectedEvaluation.processedItems, selectedEvaluation.totalItems),
+        inferences: selectedEvaluation.inferences ?? 0,
+        cost: selectedEvaluation.cost ?? null,
+        status: selectedEvaluation.status || '',
+        elapsedSeconds: selectedEvaluation.elapsedSeconds ?? null,
+        estimatedRemainingSeconds: selectedEvaluation.estimatedRemainingSeconds ?? null,
+        startedAt: selectedEvaluation.startedAt ?? null,
+        errorMessage: selectedEvaluation.errorMessage ?? null,
+        errorDetails: selectedEvaluation.errorDetails ?? null,
+        confusionMatrix,
+        scoreGoal: selectedEvaluation.scoreGoal ?? null,
+        datasetClassDistribution,
+        isDatasetClassDistributionBalanced: selectedEvaluation.isDatasetClassDistributionBalanced ?? null,
+        predictedClassDistribution,
+        isPredictedClassDistributionBalanced: selectedEvaluation.isPredictedClassDistributionBalanced ?? null,
+        scoreResults: scoreResults
+      }
+    };
+
+    setEvaluationTaskProps(taskProps);
+  }, [selectedEvaluation, scorecardNames, scoreNames, scoreResults]);
+
+  // Add initial data loading effect
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const { data: accounts } = await listAccounts();
+        if (!accounts?.length) {
+          setIsLoading(false);
+          return;
+        }
+
+        const foundAccountId = accounts[0].id;
+        setAccountId(foundAccountId);
+
+        const { data: evaluations } = await listEvaluations(foundAccountId);
+        if (!evaluations) {
+          setIsLoading(false);
+          return;
+        }
+
+        const transformedEvaluations = await loadRelatedData(
+          evaluations,
+          setScorecardNames,
+          setScoreNames
+        );
+        setEvaluations(transformedEvaluations);
+        setIsLoading(false);
+
+      } catch (error) {
+        console.error('Error loading initial data:', error);
+        setError(error instanceof Error ? error : new Error('Failed to load initial data'));
+        setIsLoading(false);
+      }
+    };
+
+    loadInitialData();
+  }, []);
 
   // Early return for unauthenticated state
   if (authStatus !== 'authenticated') {

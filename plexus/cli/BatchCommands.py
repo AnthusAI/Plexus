@@ -280,7 +280,7 @@ async def _generate_batch(account_key, scorecard_key, score_name, clean_existing
     from dotenv import load_dotenv
     
     # Load environment variables and initialize DB
-    load_dotenv()
+    load_dotenv('.env', override=True)
     DB.initialize(
         os.getenv('DB_SERVER'),
         os.getenv('DB_NAME'),
