@@ -143,30 +143,13 @@ interface ParsedScoreResult {
   metadata: {
     human_label: string | null
     correct: boolean
-    human_explanation?: string | null
-    text?: string | null
+    human_explanation: string | null
+    text: string | null
   }
   itemId: string | null
 }
 
-interface ScoreResultMetadata {
-  item_id?: number | string
-  results?: {
-    [key: string]: {
-      value?: string | number
-      confidence?: number
-      explanation?: string
-      metadata?: {
-        human_label?: string
-        correct?: boolean
-        human_explanation?: string
-        text?: string
-      }
-    }
-  }
-}
-
-function parseScoreResult(result: Schema['ScoreResult']['type']): ParsedScoreResult {
+function parseScoreResult(result: any): ParsedScoreResult {
   const parsedMetadata = (() => {
     try {
       let metadata = result.metadata
@@ -176,30 +159,25 @@ function parseScoreResult(result: Schema['ScoreResult']['type']): ParsedScoreRes
           metadata = JSON.parse(metadata)
         }
       }
-      return metadata as ScoreResultMetadata
+      return metadata || {}
     } catch (e) {
       console.error('Error parsing metadata:', e)
-      return {} as ScoreResultMetadata
+      return {}
     }
   })()
 
-  const firstResultKey = parsedMetadata?.results ? 
-    Object.keys(parsedMetadata.results)[0] : null
-  const scoreResult = firstResultKey && parsedMetadata.results ? 
-    parsedMetadata.results[firstResultKey] : null
-
   return {
-    id: result.id,
-    value: String(scoreResult?.value ?? ''),
-    confidence: result.confidence ?? scoreResult?.confidence ?? null,
-    explanation: scoreResult?.explanation ?? null,
+    id: result.id || '',
+    value: String(result.value || ''),
+    confidence: result.confidence || null,
+    explanation: result.explanation || null,
     metadata: {
-      human_label: scoreResult?.metadata?.human_label ?? null,
-      correct: Boolean(scoreResult?.metadata?.correct),
-      human_explanation: scoreResult?.metadata?.human_explanation ?? null,
-      text: scoreResult?.metadata?.text ?? null
+      human_label: parsedMetadata.human_label || null,
+      correct: Boolean(parsedMetadata.correct),
+      human_explanation: parsedMetadata.human_explanation || null,
+      text: parsedMetadata.text || null
     },
-    itemId: parsedMetadata?.item_id?.toString() ?? null
+    itemId: result.itemId || null
   }
 }
 
