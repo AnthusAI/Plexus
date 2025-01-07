@@ -89,8 +89,8 @@ class _BaseAPIClient:
         api_key: Optional[str] = None,
         context: Optional[ClientContext] = None
     ):
-        self.api_url = api_url or getenv('PLEXUS_API_URL')
-        self.api_key = api_key or getenv('PLEXUS_API_KEY')
+        self.api_url = api_url or os.getenv('PLEXUS_API_URL')
+        self.api_key = api_key or os.getenv('PLEXUS_API_KEY')
         self.context = context or ClientContext()
         self._cache = {}
         
@@ -217,7 +217,12 @@ class _BaseAPIClient:
             with client as session:
                 return session.execute(gql(query), variable_values=variables)
         except TransportQueryError as e:
-            raise Exception(f"GraphQL query failed: {str(e)}")
+            # The error object contains a list of error dictionaries
+            if hasattr(e, 'errors') and e.errors:
+                error_message = e.errors[0]['message']
+            else:
+                error_message = str(e)
+            raise Exception(f"GraphQL query failed: {error_message}")
 
     def _resolve_account_id(self) -> str:
         """Get account ID, resolving from key if needed"""
