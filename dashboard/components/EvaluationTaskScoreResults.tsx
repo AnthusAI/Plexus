@@ -19,12 +19,22 @@ interface FilterState {
 }
 
 export interface EvaluationTaskScoreResultsProps {
-  results: Schema['ScoreResult']['type'][]
+  results: {
+    id: string
+    value: string
+    confidence: number | null
+    explanation: string | null
+    metadata: {
+      human_label: string | null
+      correct: boolean
+    }
+    itemId: string | null
+  }[]
   accuracy: number | null
   selectedPredictedValue?: string | null
   selectedActualValue?: string | null
-  onResultSelect?: (result: Schema['ScoreResult']['type']) => void
-  selectedScoreResult?: Schema['ScoreResult']['type'] | null
+  onResultSelect?: (result: any) => void
+  selectedScoreResult?: any | null
   navigationControls?: React.ReactNode
 }
 
@@ -56,16 +66,8 @@ export function EvaluationTaskScoreResults({
     const actual = new Set<string>()
     
     results.forEach(result => {
-      const parsedMetadata = typeof result.metadata === 'string' ? 
-        JSON.parse(result.metadata) : result.metadata
-
-      const firstResultKey = parsedMetadata?.results ? 
-        Object.keys(parsedMetadata.results)[0] : null
-      const scoreResult = firstResultKey ? 
-        parsedMetadata.results[firstResultKey] : null
-
-      if (scoreResult?.value) predicted.add(scoreResult.value)
-      if (scoreResult?.metadata?.human_label) actual.add(scoreResult.metadata.human_label)
+      if (result.value) predicted.add(result.value)
+      if (result.metadata.human_label) actual.add(result.metadata.human_label)
     })
     
     return {
@@ -76,27 +78,15 @@ export function EvaluationTaskScoreResults({
 
   const filteredResults = useMemo(() => {
     return results.filter(result => {
-      const parsedMetadata = typeof result.metadata === 'string' ? 
-        JSON.parse(result.metadata) : result.metadata
-
-      const firstResultKey = parsedMetadata?.results ? 
-        Object.keys(parsedMetadata.results)[0] : null
-      const scoreResult = firstResultKey ? 
-        parsedMetadata.results[firstResultKey] : null
-      
-      const isCorrect = scoreResult?.metadata?.correct ?? false
-      
-      if (filters.showCorrect !== null && isCorrect !== filters.showCorrect) {
+      if (filters.showCorrect !== null && result.metadata.correct !== filters.showCorrect) {
         return false
       }
       
-      if (filters.predictedValue && 
-          scoreResult?.value !== filters.predictedValue) {
+      if (filters.predictedValue && result.value !== filters.predictedValue) {
         return false
       }
 
-      if (filters.actualValue && 
-          scoreResult?.metadata?.human_label !== filters.actualValue) {
+      if (filters.actualValue && result.metadata.human_label !== filters.actualValue) {
         return false
       }
       
@@ -106,20 +96,7 @@ export function EvaluationTaskScoreResults({
 
   const filteredAccuracy = useMemo(() => {
     if (filteredResults.length === 0) return null
-    const correctCount = filteredResults.filter(r => {
-      const parsedMetadata = typeof r.metadata === 'string' ? 
-        JSON.parse(r.metadata) : r.metadata
-
-      const firstResultKey = parsedMetadata?.results ? 
-        Object.keys(parsedMetadata.results)[0] : null
-      const scoreResult = firstResultKey ? 
-        parsedMetadata.results[firstResultKey] : null
-
-      if (typeof scoreResult?.value === 'number') {
-        return scoreResult.value === 1
-      }
-      return scoreResult?.value === 'Yes' || scoreResult?.value === 'Present'
-    }).length
+    const correctCount = filteredResults.filter(r => r.metadata.correct).length
     return (correctCount / filteredResults.length) * 100
   }, [filteredResults])
 
@@ -220,21 +197,13 @@ export function EvaluationTaskScoreResults({
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="space-y-2">
           {filteredResults.map((result) => (
-            <div 
+            <div
               key={result.id}
               onClick={() => onResultSelect?.(result)}
               className="cursor-pointer"
             >
               <EvaluationTaskScoreResult
-                id={result.id}
-                value={result.value}
-                confidence={result.confidence}
-                metadata={result.metadata}
-                correct={
-                  typeof result.value === 'number' 
-                    ? result.value === 1 
-                    : result.value === 'Yes' || result.value === 'Present'
-                }
+                {...result}
                 isFocused={selectedScoreResult?.id === result.id}
               />
             </div>
