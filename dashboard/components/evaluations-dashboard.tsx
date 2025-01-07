@@ -38,6 +38,7 @@ import { listFromModel, observeQueryFromModel, getFromModel, observeScoreResults
 import type { EvaluationTaskData } from '@/components/EvaluationTask'
 import { useAuthenticator } from '@aws-amplify/ui-react';
 import { useRouter } from 'next/navigation';
+import { Observable } from 'rxjs';
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -977,14 +978,16 @@ export default function EvaluationsDashboard(): JSX.Element {
           setError(error instanceof Error ? error : new Error(String(error)));
         };
 
+        type EvaluationObservable = Observable<Schema['Evaluation']['type']>;
+        
         // Subscribe to create events
-        const createSub = client.models.Evaluation.onCreate().subscribe({
+        const createSub = (client.models.Evaluation as any).onCreate().subscribe({
           next: handleEvaluationUpdate,
           error: handleError
         });
 
         // Subscribe to update events
-        const updateSub = client.models.Evaluation.onUpdate().subscribe({
+        const updateSub = (client.models.Evaluation as any).onUpdate().subscribe({
           next: handleEvaluationUpdate,
           error: handleError
         });
