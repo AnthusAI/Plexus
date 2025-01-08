@@ -937,10 +937,6 @@ class Evaluation:
 
         self.generate_metrics_json(report_folder_path, len(selected_sample_rows), expenses)
 
-        # Log final metrics
-        final_metrics = self.calculate_metrics(self.all_results)
-        await self.log_to_dashboard(final_metrics, status="COMPLETED")
-
     def generate_report(self, score_instance, overall_accuracy, expenses, sample_size):
         score_config = score_instance.parameters
 
@@ -1235,12 +1231,17 @@ class AccuracyEvaluation(Evaluation):
 
     async def continuous_metrics_computation(self):
         """Background task that continuously computes and posts metrics as new results arrive"""
+        last_processed_count = 0
         while not self.should_stop:
             try:
                 # Check if we have any new results
-                if len(self.all_results) > 0:
+                current_count = len(self.all_results)
+                if current_count > 0 and current_count != last_processed_count:
                     metrics = self.calculate_metrics(self.all_results)
-                    await self.log_to_dashboard(metrics)
+                    # If this is the final update (should_stop is True), mark it as completed
+                    status = "COMPLETED" if self.should_stop else "RUNNING"
+                    await self.log_to_dashboard(metrics, status=status)
+                    last_processed_count = current_count
                 
                 # Wait a bit before checking again
                 await asyncio.sleep(.1)
@@ -1256,9 +1257,11 @@ class AccuracyEvaluation(Evaluation):
         try:
             return await self._async_run()
         finally:
-            # Stop the metrics computation task
+            # Set should_stop to True to trigger final metrics update
             self.should_stop = True
             if self.metrics_task:
+                # Wait a short time to allow final metrics update to complete
+                await asyncio.sleep(0.2)
                 await self.metrics_task
 
     async def score_all_texts(self, selected_sample_rows):
@@ -1411,7 +1414,6 @@ class AccuracyEvaluation(Evaluation):
             self.processed_items += 1
 
         return result
-
     async def _create_score_result(self, score_result, content_id, result):
         """Helper method to create score result asynchronously"""
         max_retries = 3
@@ -1508,3 +1510,4 @@ class AccuracyEvaluation(Evaluation):
     def __exit__(self, exc_type, exc_val, exc_tb):
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.__aexit__(exc_type, exc_val, exc_tb))
+
