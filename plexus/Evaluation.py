@@ -198,32 +198,51 @@ class Evaluation:
                 logging.info(f"Looking up score with name: {score_name}")
                 try:
                     query = """
-                    query GetScoreByName($name: String!) {
-                        listScores(filter: {name: {eq: $name}}) {
-                            items {
-                                id
-                                name
+                    query GetScoreFromScorecard($scorecardId: ID!, $name: String!) {
+                        getScorecard(id: $scorecardId) {
+                            sections {
+                                items {
+                                    scores(filter: {name: {eq: $name}}) {
+                                        items {
+                                            id
+                                            name
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                     """
                     variables = {
+                        "scorecardId": scorecard.id,
                         "name": score_name
                     }
                     result = self.dashboard_client.execute(query, variables)
                     logging.info(f"Raw API response: {result}")
                     
-                    items = result.get('listScores', {}).get('items', [])
-                    logging.info(f"Extracted items: {items}")
+                    # Find the first score with matching name
+                    matching_score = None
+                    scorecard_data = result.get('getScorecard', {})
+                    logging.info(f"Scorecard data: {scorecard_data}")
+                    sections = scorecard_data.get('sections', {}).get('items', [])
+                    logging.info(f"Sections: {sections}")
                     
-                    if items:
-                        score = items[0]
-                        self.score_id = score['id']
-                        logging.info(f"Found score: {score['name']} ({self.score_id})")
+                    for section in sections:
+                        logging.info(f"Processing section: {section}")
+                        scores = section.get('scores', {}).get('items', [])
+                        logging.info(f"Found scores: {scores}")
+                        if scores:  # If we have any scores
+                            matching_score = scores[0]  # Take the first one since GraphQL already filtered
+                            logging.info(f"Found matching score: {matching_score}")
+                            break
+                    
+                    if matching_score:
+                        self.score_id = matching_score['id']
+                        logging.info(f"Found score: {matching_score['name']} ({self.score_id})")
                         experiment_params["scoreId"] = self.score_id
                         logging.info(f"Updated experiment_params with scoreId: {experiment_params}")
                     else:
-                        logging.warning(f"Could not find score with name: {score_name}")
+                        logging.warning(f"Could not find score with name: {score_name} in scorecard: {scorecard.id}")
                         self.score_id = None
                 except Exception as e:
                     logging.error(f"Error looking up score: {e}")
