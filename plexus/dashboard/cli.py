@@ -1071,7 +1071,7 @@ def sync(account_key: str, directory: str):
                 section_id = sections['listScorecardSections']['items'][0]['id']
             
             # Process each score
-            for score_data in yaml_data['scores']:
+            for index, score_data in enumerate(yaml_data['scores'], start=1):
                 # Try to find existing score
                 existing_scores = client.execute("""
                     query GetScores($sectionId: String!, $name: String!) {
@@ -1114,7 +1114,7 @@ def sync(account_key: str, directory: str):
                     'input': {
                         'name': score_data['name'],
                         'type': score_data.get('class', 'LangGraphScore'),
-                        'order': score_data.get('order', 1),
+                        'order': score_data.get('order', index),
                         'sectionId': section_id,
                         'aiProvider': score_data.get('model_provider'),
                         'aiModel': score_data.get('model_name'),
