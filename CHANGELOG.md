@@ -1,7 +1,54 @@
 # CHANGELOG
 
 
+## v0.3.2-alpha.2 (2025-01-09)
+
+### Bug Fixes
+
+- **dashboard**: Stay on the same page when reloading.
+  ([`69874dd`](https://github.com/AnthusAI/Plexus/commit/69874dd93b3f4ffc50dd68b3ad79e67661c52b70))
+
+- **evaluations-dashboard**: Confusion matrix filtering -- now case-insensitive.
+  ([`bf68cae`](https://github.com/AnthusAI/Plexus/commit/bf68cae9d1d3f85d788fbf47c3aaa185768efd61))
+
+### Refactoring
+
+- **Evaluation**: Adjust total predictions calculation based on evaluation status
+  ([`f83c1c0`](https://github.com/AnthusAI/Plexus/commit/f83c1c04d3a80519f2bcb53718275637e6b72abc))
+
+- Updated the logic to calculate total predictions based on the evaluation status. - For completed
+  evaluations, the total is derived from the predicted distribution data. - For ongoing evaluations,
+  the initial sample size is used instead. - Ensured that the totalItems parameter reflects the
+  correct count in the update parameters.
+
+### Testing
+
+- Add CloudWatchLogger unit tests
+  ([`db19395`](https://github.com/AnthusAI/Plexus/commit/db1939576b7ccb02926c63625a0b11cacd142c2b))
+
+Tests cover AWS credential handling, metric logging, and error cases.
+
+
+## v0.3.2-alpha.1 (2025-01-08)
+
+### Bug Fixes
+
+- **evaluations-dashboard**: "unknown Score" bug.
+  ([`c0c4506`](https://github.com/AnthusAI/Plexus/commit/c0c4506bd8efc7e9843a7adc155ffbc726d3f3a1))
+
+### Refactoring
+
+- **metrics**: Streamline final metrics logging and enhance continuous metrics computation
+  ([`b74166a`](https://github.com/AnthusAI/Plexus/commit/b74166a00fb620c3b67ee5570e53b49b0115891f))
+
+- **sync**: Update score processing to include index for order assignment
+  ([`e5852bf`](https://github.com/AnthusAI/Plexus/commit/e5852bf4cf8d93ded84fb6dfdff42395200b5233))
+
+
 ## v0.3.1-alpha.1 (2025-01-06)
+
+
+## v0.3.1 (2025-01-06)
 
 ### Bug Fixes
 
