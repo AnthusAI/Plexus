@@ -198,32 +198,51 @@ class Evaluation:
                 logging.info(f"Looking up score with name: {score_name}")
                 try:
                     query = """
-                    query GetScoreByName($name: String!) {
-                        listScores(filter: {name: {eq: $name}}) {
-                            items {
-                                id
-                                name
+                    query GetScoreFromScorecard($scorecardId: ID!, $name: String!) {
+                        getScorecard(id: $scorecardId) {
+                            sections {
+                                items {
+                                    scores(filter: {name: {eq: $name}}) {
+                                        items {
+                                            id
+                                            name
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                     """
                     variables = {
+                        "scorecardId": scorecard.id,
                         "name": score_name
                     }
                     result = self.dashboard_client.execute(query, variables)
                     logging.info(f"Raw API response: {result}")
                     
-                    items = result.get('listScores', {}).get('items', [])
-                    logging.info(f"Extracted items: {items}")
+                    # Find the first score with matching name
+                    matching_score = None
+                    scorecard_data = result.get('getScorecard', {})
+                    logging.info(f"Scorecard data: {scorecard_data}")
+                    sections = scorecard_data.get('sections', {}).get('items', [])
+                    logging.info(f"Sections: {sections}")
                     
-                    if items:
-                        score = items[0]
-                        self.score_id = score['id']
-                        logging.info(f"Found score: {score['name']} ({self.score_id})")
+                    for section in sections:
+                        logging.info(f"Processing section: {section}")
+                        scores = section.get('scores', {}).get('items', [])
+                        logging.info(f"Found scores: {scores}")
+                        if scores:  # If we have any scores
+                            matching_score = scores[0]  # Take the first one since GraphQL already filtered
+                            logging.info(f"Found matching score: {matching_score}")
+                            break
+                    
+                    if matching_score:
+                        self.score_id = matching_score['id']
+                        logging.info(f"Found score: {matching_score['name']} ({self.score_id})")
                         experiment_params["scoreId"] = self.score_id
                         logging.info(f"Updated experiment_params with scoreId: {experiment_params}")
                     else:
-                        logging.warning(f"Could not find score with name: {score_name}")
+                        logging.warning(f"Could not find score with name: {score_name} in scorecard: {scorecard.id}")
                         self.score_id = None
                 except Exception as e:
                     logging.error(f"Error looking up score: {e}")
@@ -353,23 +372,27 @@ class Evaluation:
             
             current_time = datetime.now(timezone.utc)
             
-            # Calculate actual total items from the distribution data
-            total_predictions = 0
-            if metrics["predicted_distribution"]:
-                # Sum up all counts for the first score (they should all be the same)
-                first_score = metrics["predicted_distribution"][0]["score"]
-                total_predictions = sum(item["count"] for item in metrics["predicted_distribution"] 
-                                     if item["score"] == first_score)
+            # Calculate total items based on status
+            if status == "COMPLETED":
+                # For final update, use actual total from distribution data
+                total_predictions = 0
+                if metrics["predicted_distribution"]:
+                    first_score = metrics["predicted_distribution"][0]["score"]
+                    total_predictions = sum(item["count"] for item in metrics["predicted_distribution"] 
+                                         if item["score"] == first_score)
+            else:
+                # During evaluation, use the initial sample size
+                total_predictions = self.number_of_texts_to_sample
             
             update_params = {
                 "id": self.experiment_id,
                 "type": "accuracy",
                 "metrics": json.dumps(metrics_list),
                 "processedItems": self.processed_items,
-                "totalItems": total_predictions,  # Use actual number of predictions
+                "totalItems": total_predictions,
                 "elapsedSeconds": elapsed_seconds,
                 "estimatedRemainingSeconds": int(elapsed_seconds * (total_predictions - self.processed_items) / self.processed_items) if self.processed_items > 0 else total_predictions,
-                "accuracy": metrics["accuracy"] * 100,  # Convert to percentage
+                "accuracy": metrics["accuracy"] * 100,
                 "updatedAt": current_time.isoformat().replace('+00:00', 'Z'),
                 "status": status,
                 "predictedClassDistribution": json.dumps(metrics["predicted_distribution"]),
@@ -937,10 +960,6 @@ class Evaluation:
 
         self.generate_metrics_json(report_folder_path, len(selected_sample_rows), expenses)
 
-        # Log final metrics
-        final_metrics = self.calculate_metrics(self.all_results)
-        await self.log_to_dashboard(final_metrics, status="COMPLETED")
-
     def generate_report(self, score_instance, overall_accuracy, expenses, sample_size):
         score_config = score_instance.parameters
 
@@ -1235,12 +1254,17 @@ class AccuracyEvaluation(Evaluation):
 
     async def continuous_metrics_computation(self):
         """Background task that continuously computes and posts metrics as new results arrive"""
+        last_processed_count = 0
         while not self.should_stop:
             try:
                 # Check if we have any new results
-                if len(self.all_results) > 0:
+                current_count = len(self.all_results)
+                if current_count > 0 and current_count != last_processed_count:
                     metrics = self.calculate_metrics(self.all_results)
-                    await self.log_to_dashboard(metrics)
+                    # If this is the final update (should_stop is True), mark it as completed
+                    status = "COMPLETED" if self.should_stop else "RUNNING"
+                    await self.log_to_dashboard(metrics, status=status)
+                    last_processed_count = current_count
                 
                 # Wait a bit before checking again
                 await asyncio.sleep(.1)
@@ -1256,9 +1280,11 @@ class AccuracyEvaluation(Evaluation):
         try:
             return await self._async_run()
         finally:
-            # Stop the metrics computation task
+            # Set should_stop to True to trigger final metrics update
             self.should_stop = True
             if self.metrics_task:
+                # Wait a short time to allow final metrics update to complete
+                await asyncio.sleep(0.2)
                 await self.metrics_task
 
     async def score_all_texts(self, selected_sample_rows):
@@ -1411,7 +1437,6 @@ class AccuracyEvaluation(Evaluation):
             self.processed_items += 1
 
         return result
-
     async def _create_score_result(self, score_result, content_id, result):
         """Helper method to create score result asynchronously"""
         max_retries = 3
@@ -1508,3 +1533,4 @@ class AccuracyEvaluation(Evaluation):
     def __exit__(self, exc_type, exc_val, exc_tb):
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.__aexit__(exc_type, exc_val, exc_tb))
+

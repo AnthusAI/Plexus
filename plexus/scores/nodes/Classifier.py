@@ -18,6 +18,8 @@ class Classifier(BaseNode):
     LLM calls from parsing and retry logic.
     """
     
+    batch: bool = False  # Class-level attribute for batch configuration
+    
     class Parameters(BaseNode.Parameters):
         positive_class: str = Field(description="The label for the positive class")
         negative_class: str = Field(description="The label for the negative class")
@@ -32,6 +34,8 @@ class Classifier(BaseNode):
         pass
 
     def __init__(self, **parameters):
+        # Extract batch parameter before passing to super
+        self.batch = parameters.pop('batch', False)
         super().__init__(**parameters)
         self.parameters = Classifier.Parameters(**parameters)
         self.model = self._initialize_model()
@@ -236,11 +240,11 @@ class Classifier(BaseNode):
                     'at_llm_breakpoint': False
                 }
 
-            # Check if we should break before making the API call
-            batch_mode = os.getenv('PLEXUS_ENABLE_BATCH_MODE', '').lower() == 'true'
-            breakpoints_enabled = os.getenv('PLEXUS_ENABLE_LLM_BREAKPOINTS', '').lower() == 'true'
+            # Check if batching is enabled globally and for this score
+            batching_enabled = os.getenv('PLEXUS_ENABLE_BATCHING', '').lower() == 'true'
+            score_batch_enabled = self.batch
             
-            if batch_mode and breakpoints_enabled:
+            if batching_enabled and score_batch_enabled:
                 logging.info("Breaking before LLM API call with messages in state")
                 # Set flags in state for batch processing
                 state['at_llm_breakpoint'] = True
