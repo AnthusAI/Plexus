@@ -339,27 +339,64 @@ async function loadRelatedData(
   console.log('Loading related data:', {
     evaluationCount: evaluations.length,
     scorecardIds,
-    scoreIds
+    scoreIds,
+    evaluationsWithoutScoreId: evaluations.filter(e => !e.scoreId).map(e => ({
+      id: e.id,
+      type: e.type,
+      createdAt: e.createdAt
+    }))
   })
 
-  // Load all scorecards and scores in parallel
+  // Load all scorecards and scores in parallel with error handling
   const [scorecards, scores] = await Promise.all([
-    Promise.all(scorecardIds.map(id => getFromModel<Schema['Scorecard']['type']>(
-      client.models.Scorecard, 
-      id
-    ))),
-    Promise.all(scoreIds.map(id => getFromModel<Schema['Score']['type']>(
-      client.models.Score,
-      id
-    )))
+    Promise.all(
+      scorecardIds.map(async id => {
+        try {
+          return await getFromModel<Schema['Scorecard']['type']>(
+            client.models.Scorecard, 
+            id
+          )
+        } catch (error) {
+          console.error('Error loading scorecard:', { id, error })
+          return { data: null }
+        }
+      })
+    ),
+    Promise.all(
+      scoreIds.map(async id => {
+        try {
+          console.log('Attempting to load score:', { id })
+          const result = await getFromModel<Schema['Score']['type']>(
+            client.models.Score,
+            id
+          )
+          if (!result.data) {
+            console.warn('Score not found:', { id })
+          }
+          return result
+        } catch (error) {
+          console.error('Error loading score:', { id, error })
+          return { data: null }
+        }
+      })
+    )
   ])
+
+  // Log score loading results with more detail
+  console.log('Score loading results:', scores.map((result, index) => ({
+    id: result.data?.id,
+    requestedId: scoreIds[index],
+    name: result.data?.name,
+    success: !!result.data,
+    found: result.data !== null && result.data !== undefined
+  })))
 
   // Create maps for quick lookups
   const scorecardMap = new Map(
     scorecards.map(result => [result.data?.id, result.data])
   )
   const scoreMap = new Map(
-    scores.map(result => [result.data?.id, result.data])
+    scores.map((result, index) => [scoreIds[index], result.data])
   )
 
   // Create name mappings
@@ -374,7 +411,29 @@ async function loadRelatedData(
     }
     if (score) {
       newScoreNames[evaluation.id] = score.name
+    } else if (evaluation.scoreId) {
+      console.log('Missing score data for evaluation:', {
+        evaluationId: evaluation.id,
+        scoreId: evaluation.scoreId,
+        type: evaluation.type,
+        createdAt: evaluation.createdAt,
+        scoreMapKeys: Array.from(scoreMap.keys())
+      })
     }
+  })
+
+  // Log final name mappings with more detail
+  console.log('Final name mappings:', {
+    scoreNames: newScoreNames,
+    unmappedEvaluations: evaluations
+      .filter(e => !newScoreNames[e.id])
+      .map(e => ({
+        id: e.id,
+        scoreId: e.scoreId,
+        type: e.type,
+        createdAt: e.createdAt,
+        scoreFound: e.scoreId ? scoreMap.has(e.scoreId) : false
+      }))
   })
 
   // Update the state with the new names
@@ -490,10 +549,6 @@ const sortByCreatedAt = (evaluations: Schema['Evaluation']['type'][]) => {
   return [...evaluations].sort((a, b) => {
     const aTime = new Date(a.createdAt).getTime();
     const bTime = new Date(b.createdAt).getTime();
-    console.log('Comparing dates:', {
-      a: { id: a.id, time: a.createdAt, timestamp: aTime },
-      b: { id: b.id, time: b.createdAt, timestamp: bTime }
-    });
     return bTime - aTime;
   });
 };
@@ -917,8 +972,12 @@ export default function EvaluationsDashboard(): JSX.Element {
             // Transform the evaluation before setState to avoid async issues
             const transformedEvaluation = await loadRelatedData(
               [data],
-              setScorecardNames,
-              setScoreNames
+              (newNames) => {
+                setScorecardNames(prev => ({ ...prev, ...newNames }));
+              },
+              (newNames) => {
+                setScoreNames(prev => ({ ...prev, ...newNames }));
+              }
             );
 
             setEvaluations(prev => {
@@ -938,6 +997,7 @@ export default function EvaluationsDashboard(): JSX.Element {
             });
           } else {
             // For updates, we'll update the specific evaluation in place
+            // but preserve the existing names
             setEvaluations(prev => {
               const updatedList = prev.map(e => e.id === data.id ? {
                 ...e,
@@ -953,7 +1013,9 @@ export default function EvaluationsDashboard(): JSX.Element {
               console.log('Updated evaluation list order:', sortedList.map(e => ({
                 id: e.id,
                 createdAt: e.createdAt,
-                type: e.type
+                type: e.type,
+                scorecardName: scorecardNames[e.id],
+                scoreName: scoreNames[e.id]
               })));
 
               return sortedList;
