@@ -19,7 +19,7 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 function AuthWrapper({ children }: { children: React.ReactNode }) {
-  const { authStatus, user } = useAuthenticator(context => [context.authStatus]);
+  const { authStatus } = useAuthenticator(context => [context.authStatus]);
   const router = useRouter();
   const pathname = usePathname();
   
@@ -28,27 +28,28 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
       return;  // Don't redirect while auth is still loading
     }
     
+    // Only redirect in two specific cases:
+    // 1. User is not authenticated and tries to access a protected page
+    // 2. User is authenticated and is on the root/login page
     if (authStatus === 'unauthenticated' && pathname !== '/') {
       router.push('/');
+    } else if (authStatus === 'authenticated' && pathname === '/') {
+      router.push('/activity');
     }
   }, [authStatus, router, pathname]);
 
-  // If we're on the login page, show the page content
-  if (pathname === '/') {
-    return children;
-  }
-
-  // For other pages, require authentication
+  // While auth is loading, render nothing
   if (!authStatus) {
-    return null;  // Or return a loading spinner
-  }
-
-  if (authStatus !== 'authenticated') {
-    router.push('/');
     return null;
   }
 
-  return children;
+  // For the root/login page
+  if (pathname === '/') {
+    return authStatus === 'authenticated' ? null : children;
+  }
+
+  // For all other pages, show content only if authenticated
+  return authStatus === 'authenticated' ? children : null;
 }
 
 export default function ClientLayout({
