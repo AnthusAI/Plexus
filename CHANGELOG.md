@@ -1,7 +1,23 @@
 # CHANGELOG
 
 
+## v0.3.2-alpha.1 (2025-01-08)
+
+### Bug Fixes
+
+- **evaluations-dashboard**: "unknown Score" bug.
+  ([`c0c4506`](https://github.com/AnthusAI/Plexus/commit/c0c4506bd8efc7e9843a7adc155ffbc726d3f3a1))
+
+### Refactoring
+
+- **sync**: Update score processing to include index for order assignment
+  ([`e5852bf`](https://github.com/AnthusAI/Plexus/commit/e5852bf4cf8d93ded84fb6dfdff42395200b5233))
+
+
 ## v0.3.1-alpha.1 (2025-01-06)
+
+
+## v0.3.1 (2025-01-06)
 
 ### Bug Fixes
 
