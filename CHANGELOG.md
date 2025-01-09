@@ -1,7 +1,19 @@
 # CHANGELOG
 
 
+<<<<<<< HEAD
 ## v0.3.2 (2025-01-09)
+=======
+## v0.3.2-alpha.2 (2025-01-09)
+
+### Bug Fixes
+
+- **dashboard**: Stay on the same page when reloading.
+  ([`69874dd`](https://github.com/AnthusAI/Plexus/commit/69874dd93b3f4ffc50dd68b3ad79e67661c52b70))
+
+- **evaluations-dashboard**: Confusion matrix filtering -- now case-insensitive.
+  ([`bf68cae`](https://github.com/AnthusAI/Plexus/commit/bf68cae9d1d3f85d788fbf47c3aaa185768efd61))
+>>>>>>> develop
 
 ### Refactoring
 
@@ -13,6 +25,16 @@
   the initial sample size is used instead. - Ensured that the totalItems parameter reflects the
   correct count in the update parameters.
 
+<<<<<<< HEAD
+=======
+### Testing
+
+- Add CloudWatchLogger unit tests
+  ([`db19395`](https://github.com/AnthusAI/Plexus/commit/db1939576b7ccb02926c63625a0b11cacd142c2b))
+
+Tests cover AWS credential handling, metric logging, and error cases.
+
+>>>>>>> develop
 
 ## v0.3.2-alpha.1 (2025-01-08)
 

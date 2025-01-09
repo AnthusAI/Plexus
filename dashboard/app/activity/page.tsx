@@ -5,9 +5,10 @@ import DashboardLayout from '@/components/dashboard-layout';
 import ActivityDashboard from '@/components/activity-dashboard';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { signOut as amplifySignOut } from 'aws-amplify/auth';
 
 export default function ActivityPage() {
-  const { signOut, authStatus } = useAuthenticator((context) => [context.signOut, context.authStatus]);
+  const { authStatus } = useAuthenticator((context) => [context.authStatus]);
   const router = useRouter();
 
   useEffect(() => {
@@ -17,8 +18,12 @@ export default function ActivityPage() {
   }, [authStatus, router]);
 
   const handleSignOut = async () => {
-    await signOut();
-    router.push('/');
+    try {
+      await amplifySignOut();
+      router.push('/');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
   };
 
   if (authStatus !== 'authenticated') {
