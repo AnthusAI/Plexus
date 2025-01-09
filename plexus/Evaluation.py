@@ -372,23 +372,27 @@ class Evaluation:
             
             current_time = datetime.now(timezone.utc)
             
-            # Calculate actual total items from the distribution data
-            total_predictions = 0
-            if metrics["predicted_distribution"]:
-                # Sum up all counts for the first score (they should all be the same)
-                first_score = metrics["predicted_distribution"][0]["score"]
-                total_predictions = sum(item["count"] for item in metrics["predicted_distribution"] 
-                                     if item["score"] == first_score)
+            # Calculate total items based on status
+            if status == "COMPLETED":
+                # For final update, use actual total from distribution data
+                total_predictions = 0
+                if metrics["predicted_distribution"]:
+                    first_score = metrics["predicted_distribution"][0]["score"]
+                    total_predictions = sum(item["count"] for item in metrics["predicted_distribution"] 
+                                         if item["score"] == first_score)
+            else:
+                # During evaluation, use the initial sample size
+                total_predictions = self.number_of_texts_to_sample
             
             update_params = {
                 "id": self.experiment_id,
                 "type": "accuracy",
                 "metrics": json.dumps(metrics_list),
                 "processedItems": self.processed_items,
-                "totalItems": total_predictions,  # Use actual number of predictions
+                "totalItems": total_predictions,
                 "elapsedSeconds": elapsed_seconds,
                 "estimatedRemainingSeconds": int(elapsed_seconds * (total_predictions - self.processed_items) / self.processed_items) if self.processed_items > 0 else total_predictions,
-                "accuracy": metrics["accuracy"] * 100,  # Convert to percentage
+                "accuracy": metrics["accuracy"] * 100,
                 "updatedAt": current_time.isoformat().replace('+00:00', 'Z'),
                 "status": status,
                 "predictedClassDistribution": json.dumps(metrics["predicted_distribution"]),
