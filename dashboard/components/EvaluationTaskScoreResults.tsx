@@ -56,8 +56,8 @@ export function EvaluationTaskScoreResults({
   useEffect(() => {
     setFilters(prev => ({
       ...prev,
-      predictedValue: selectedPredictedValue ?? null,
-      actualValue: selectedActualValue ?? null
+      predictedValue: selectedPredictedValue?.toLowerCase() ?? null,
+      actualValue: selectedActualValue?.toLowerCase() ?? null
     }))
   }, [selectedPredictedValue, selectedActualValue])
 
@@ -66,8 +66,8 @@ export function EvaluationTaskScoreResults({
     const actual = new Set<string>()
     
     results.forEach(result => {
-      if (result.value) predicted.add(result.value)
-      if (result.metadata.human_label) actual.add(result.metadata.human_label)
+      if (result.value) predicted.add(result.value.toLowerCase())
+      if (result.metadata.human_label) actual.add(result.metadata.human_label.toLowerCase())
     })
     
     return {
@@ -82,11 +82,11 @@ export function EvaluationTaskScoreResults({
         return false
       }
       
-      if (filters.predictedValue && result.value !== filters.predictedValue) {
+      if (filters.predictedValue && result.value.toLowerCase() !== filters.predictedValue) {
         return false
       }
 
-      if (filters.actualValue && result.metadata.human_label !== filters.actualValue) {
+      if (filters.actualValue && result.metadata.human_label?.toLowerCase() !== filters.actualValue) {
         return false
       }
       
