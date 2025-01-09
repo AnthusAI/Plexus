@@ -72,7 +72,7 @@ async def test_classifier_detects_turnip_present(turnip_classifier_config):
         # Run parser node
         final_state = await parse_node(state_after_llm)
         
-        assert final_state["classification"] == "yes"
+        assert final_state.classification == "yes"
 
 @pytest.mark.asyncio
 async def test_classifier_detects_turnip_absent(turnip_classifier_config):
@@ -109,7 +109,7 @@ async def test_classifier_detects_turnip_absent(turnip_classifier_config):
         # Run parser node
         final_state = await parse_node(state_after_llm)
         
-        assert final_state["classification"] == "no"
+        assert final_state.classification == "no"
 
 @pytest.mark.asyncio
 async def test_classifier_succeeds_after_retry(turnip_classifier_config):
@@ -149,17 +149,20 @@ async def test_classifier_succeeds_after_retry(turnip_classifier_config):
         state_after_parse = await parse_node(state_after_llm)
         
         # Should need retry
-        assert state_after_parse["classification"] is None
+        assert state_after_parse.classification is None
         
         # Retry attempt - clear completion to force new LLM call
         state_after_retry = await retry_node(state_after_parse)
-        state_after_retry["completion"] = None
+        state_after_retry = classifier.GraphState(
+            **{k: v for k, v in state_after_retry.model_dump().items() if k != 'completion'},
+            completion=None
+        )
         state_after_prompt2 = await llm_prompt_node(state_after_retry)
         state_after_llm2 = await llm_call_node(state_after_prompt2)
         final_state = await parse_node(state_after_llm2)
         
-        assert final_state["classification"] == "yes"
-        assert final_state["retry_count"] == 1
+        assert final_state.classification == "yes"
+        assert final_state.retry_count == 1
 
 @pytest.mark.asyncio
 async def test_classifier_maximum_retries(turnip_classifier_config):
@@ -196,23 +199,27 @@ async def test_classifier_maximum_retries(turnip_classifier_config):
         retry_node = classifier.get_retry_node()
         max_retries_node = classifier.get_max_retries_node()
         
-        current_state = initial_state.model_dump()
+        current_state = initial_state
         for _ in range(3):
             # Clear chat history and completion before each attempt
-            current_state["chat_history"] = []
-            current_state["completion"] = None
+            current_state = classifier.GraphState(
+                **{k: v for k, v in current_state.model_dump().items() 
+                   if k not in ['chat_history', 'completion']},
+                chat_history=[],
+                completion=None
+            )
             
             current_state = await llm_prompt_node(current_state)
             current_state = await llm_call_node(current_state)
             current_state = await parse_node(current_state)
-            if current_state["classification"] is None:
+            if current_state.classification is None:
                 current_state = await retry_node(current_state)
         
         final_state = await max_retries_node(current_state)
         
-        assert final_state["classification"] == "unknown"
-        assert final_state["explanation"] == "Maximum retries reached"
-        assert final_state["retry_count"] == 3
+        assert final_state.classification == "unknown"
+        assert final_state.explanation == "Maximum retries reached"
+        assert final_state.retry_count == 3
         assert mock_model.ainvoke.call_count == 3
 
 @pytest.mark.asyncio
@@ -249,7 +256,7 @@ async def test_classifier_parse_from_end_default(turnip_classifier_config):
         state_after_llm = await llm_call_node(state_after_prompt)
         final_state = await parse_node(state_after_llm)
 
-        assert final_state["classification"] == "no"
+        assert final_state.classification == "no"
         # Ensures that when parse_from_start=False, it picks 'no'
 
 @pytest.mark.asyncio
@@ -288,5 +295,5 @@ async def test_classifier_parse_from_start_explicit(turnip_classifier_config):
         state_after_llm = await llm_call_node(state_after_prompt)
         final_state = await parse_node(state_after_llm)
 
-        assert final_state["classification"] == "yes"
+        assert final_state.classification == "yes"
         # Ensures that when parse_from_start=True, it picks 'yes'
