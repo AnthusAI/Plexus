@@ -212,11 +212,6 @@ def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, scor
 
     samples = score_instance.dataframe.to_dict('records')
 
-    if 'Good Call comment' in score_instance.dataframe.columns:
-        value_counts = score_instance.dataframe['Good Call comment'].value_counts()
-        logging.info("Distribution of Good Call comments:")
-        logging.info(f"\n{value_counts.to_string()}")
-    
     content_ids_to_exclude_filename = f"tuning/{scorecard_name}/{score_name}/training_ids.txt"
     if os.path.exists(content_ids_to_exclude_filename):
         with open(content_ids_to_exclude_filename, 'r') as file:
