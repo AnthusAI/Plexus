@@ -276,8 +276,13 @@ class Evaluation:
         mlflow.end_run()
 
     def start_mlflow_run(self):
-
         logging.getLogger('mlflow').setLevel(logging.WARNING)
+
+        # First, make sure any existing run is ended
+        try:
+            mlflow.end_run()
+        except Exception:
+            pass  # Ignore any errors from ending non-existent runs
 
         mlflow_tracking_uri = os.getenv('MLFLOW_TRACKING_URI')
         if mlflow_tracking_uri:
@@ -293,6 +298,7 @@ class Evaluation:
             experiment_name = experiment_name + " - " + self.experiment_label
         mlflow.set_experiment(experiment_name)
 
+        # Now start the new run
         try:
             mlflow.start_run()
         except Exception as e:
@@ -821,8 +827,10 @@ class Evaluation:
 
         logging.info("Logging scorecard results as an artifact in MLFlow.")
         scorecard_results = ScorecardResults(results)
-        scorecard_results.save_to_file(f"{report_folder_path}/scorecard_results.json")
-        mlflow.log_artifact(f"{report_folder_path}/scorecard_results.json")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        results_filename = f"scorecard_results_{timestamp}.json"
+        scorecard_results.save_to_file(f"{report_folder_path}/{results_filename}")
+        mlflow.log_artifact(f"{report_folder_path}/{results_filename}")
 
         logging.info("Scoring completed.")
 
@@ -864,54 +872,65 @@ class Evaluation:
 
         def log_html_report():
             try:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 html_report_content = analysis.generate_html_report(expenses=expenses)
-                with open(f"{report_folder_path}/scorecard_report.html", "w") as file:
+                report_filename = f"scorecard_report_{timestamp}.html"
+                with open(f"{report_folder_path}/{report_filename}", "w") as file:
                     file.write(html_report_content)
-                mlflow.log_artifact(f"{report_folder_path}/scorecard_report.html")
+                mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log HTML report: {e}")
 
         def log_incorrect_scores_report():
             try:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 html_report_content = analysis.generate_html_report(only_incorrect_scores=True, expenses=expenses)
-                with open(f"{report_folder_path}/scorecard_report_incorrect_scores.html", "w") as file:
+                report_filename = f"scorecard_report_incorrect_scores_{timestamp}.html"
+                with open(f"{report_folder_path}/{report_filename}", "w") as file:
                     file.write(html_report_content)
-                mlflow.log_artifact(f"{report_folder_path}/scorecard_report_incorrect_scores.html")
+                mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log incorrect scores report: {e}")
 
         def log_no_costs_report():
             try:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 html_report_content = analysis.generate_html_report(redact_cost_information=True)
-                with open(f"{report_folder_path}/scorecard_report_no_costs.html", "w") as file:
+                report_filename = f"scorecard_report_no_costs_{timestamp}.html"
+                with open(f"{report_folder_path}/{report_filename}", "w") as file:
                     file.write(html_report_content)
-                mlflow.log_artifact(f"{report_folder_path}/scorecard_report_no_costs.html")
+                mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log no costs report: {e}")
 
         def log_scorecard_costs():
             try:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 analysis.plot_scorecard_costs(results=results)
-                mlflow.log_artifact(f"{report_folder_path}/scorecard_input_output_costs.png")
-                mlflow.log_artifact(f"{report_folder_path}/histogram_of_total_costs.png")
-                mlflow.log_artifact(f"{report_folder_path}/distribution_of_input_costs.png")
-                mlflow.log_artifact(f"{report_folder_path}/total_llm_calls_by_score.png")
-                mlflow.log_artifact(f"{report_folder_path}/distribution_of_input_costs_by_element_type.png")
+                mlflow.log_artifact(f"{report_folder_path}/scorecard_input_output_costs_{timestamp}.png")
+                mlflow.log_artifact(f"{report_folder_path}/histogram_of_total_costs_{timestamp}.png")
+                mlflow.log_artifact(f"{report_folder_path}/distribution_of_input_costs_{timestamp}.png")
+                mlflow.log_artifact(f"{report_folder_path}/total_llm_calls_by_score_{timestamp}.png")
+                mlflow.log_artifact(f"{report_folder_path}/distribution_of_input_costs_by_element_type_{timestamp}.png")
             except Exception as e:
                 logging.error(f"Failed to log scorecard costs: {e}")
 
         def log_csv_report():
             try:
-                with open(f"{report_folder_path}/scorecard_report_for_incorrect_results.csv", "w") as file:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                report_filename = f"scorecard_report_for_incorrect_results_{timestamp}.csv"
+                with open(f"{report_folder_path}/{report_filename}", "w") as file:
                     file.write(analysis.generate_csv_scorecard_report(results=results))
-                mlflow.log_artifact(f"{report_folder_path}/scorecard_report_for_incorrect_results.csv")
+                mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log CSV report: {e}")
 
         def log_question_accuracy_csv():
             try:
-                analysis.generate_question_accuracy_csv(output_file=f"{report_folder_path}/question_accuracy_report.csv")
-                mlflow.log_artifact(f"{report_folder_path}/question_accuracy_report.csv")
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                report_filename = f"question_accuracy_report_{timestamp}.csv"
+                analysis.generate_question_accuracy_csv(output_file=f"{report_folder_path}/{report_filename}")
+                mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log question accuracy CSV: {e}")
 
@@ -1017,7 +1036,9 @@ Total cost:       ${expenses['total_cost']:.6f}
             "total_cost": f"{expenses['total_cost']:.7f}".rstrip('0').rstrip('.')
         }
 
-        metrics_file_path = f"{report_folder_path}/metrics.json"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        metrics_filename = f"metrics_{timestamp}.json"
+        metrics_file_path = f"{report_folder_path}/{metrics_filename}"
         with open(metrics_file_path, 'w') as f:
             json.dump(metrics, f, indent=2)
 
