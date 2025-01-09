@@ -21,7 +21,7 @@ interface FilterState {
 export interface EvaluationTaskScoreResultsProps {
   results: {
     id: string
-    value: string
+    value: string | number
     confidence: number | null
     explanation: string | null
     metadata: {
@@ -66,8 +66,12 @@ export function EvaluationTaskScoreResults({
     const actual = new Set<string>()
     
     results.forEach(result => {
-      if (result.value) predicted.add(result.value.toLowerCase())
-      if (result.metadata.human_label) actual.add(result.metadata.human_label.toLowerCase())
+      if (result.value !== undefined && result.value !== null) {
+        predicted.add(String(result.value).toLowerCase())
+      }
+      if (result.metadata.human_label) {
+        actual.add(result.metadata.human_label.toLowerCase())
+      }
     })
     
     return {
@@ -82,7 +86,7 @@ export function EvaluationTaskScoreResults({
         return false
       }
       
-      if (filters.predictedValue && result.value.toLowerCase() !== filters.predictedValue) {
+      if (filters.predictedValue && String(result.value).toLowerCase() !== filters.predictedValue) {
         return false
       }
 
@@ -203,7 +207,10 @@ export function EvaluationTaskScoreResults({
               className="cursor-pointer"
             >
               <EvaluationTaskScoreResult
-                {...result}
+                {...{
+                  ...result,
+                  value: String(result.value)
+                }}
                 isFocused={selectedScoreResult?.id === result.id}
               />
             </div>
