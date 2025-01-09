@@ -21,8 +21,7 @@ class Classifier(BaseNode):
     batch: bool = False  # Class-level attribute for batch configuration
     
     class Parameters(BaseNode.Parameters):
-        positive_class: str = Field(description="The label for the positive class")
-        negative_class: str = Field(description="The label for the negative class")
+        valid_classes: List[str] = Field(description="List of valid classification labels")
         explanation_message: Optional[str] = None
         maximum_retry_count: int = Field(
             default=3,
@@ -41,33 +40,92 @@ class Classifier(BaseNode):
         self.model = self._initialize_model()
 
     class ClassificationOutputParser(BaseOutputParser):
-        """Parser that identifies one of two possible classifications."""
-        positive_class: str = Field(...)
-        negative_class: str = Field(...)
-        parse_from_start: bool = Field(default=False)
+        """Parser that identifies one of the valid classifications."""
+        valid_classes: List[str] = Field(description="List of valid classification labels")
+        parse_from_start: bool = Field(default=False, description="Whether to parse from start (True) or end (False)")
+
+        def __init__(self, **data):
+            super().__init__(**data)
+            if not self.valid_classes:
+                self.valid_classes = ["Yes", "No"]
+
+        def normalize_text(self, text: str) -> str:
+            """Normalize text by converting to lowercase and handling special characters."""
+            # Replace underscores and multiple spaces with a single space
+            text = text.replace("_", " ")
+            text = " ".join(text.split())
+            # Remove all non-alphanumeric characters except spaces
+            return ''.join(c.lower() for c in text if c.isalnum() or c.isspace())
+
+        def find_matches_in_text(self, text: str) -> List[Tuple[str, int, int]]:
+            """Find all matches in text with their line and position.
+            Returns list of tuples: (valid_class, line_number, position)
+            """
+            matches = []
+            lines = text.strip().split('\n')
+            
+            # First normalize all valid classes (do this once)
+            normalized_classes = [(vc, self.normalize_text(vc), i) for i, vc in enumerate(self.valid_classes)]
+            
+            # When parsing from end, sort by length to handle overlapping terms
+            # When parsing from start, keep original order
+            if not self.parse_from_start:
+                normalized_classes.sort(key=lambda x: len(x[1]), reverse=True)
+            
+            # Process each line
+            for line_idx, line in enumerate(lines):
+                normalized_line = self.normalize_text(line)
+                
+                # Find all matches in this line
+                for original_class, normalized_class, original_idx in normalized_classes:
+                    pos = 0
+                    while True:
+                        pos = normalized_line.find(normalized_class, pos)
+                        if pos == -1:
+                            break
+                            
+                        # Check word boundaries
+                        before = pos == 0 or normalized_line[pos - 1].isspace()
+                        after = (pos + len(normalized_class) == len(normalized_line) or 
+                                normalized_line[pos + len(normalized_class)].isspace())
+                        
+                        if before and after:
+                            # Store original index to maintain order
+                            matches.append((original_class, line_idx, pos, original_idx))
+                            # When parsing from start, return first match immediately
+                            if self.parse_from_start:
+                                return [(original_class, line_idx, pos, original_idx)]
+                            # Skip past this match
+                            pos += len(normalized_class)
+                        else:
+                            # Move past this position
+                            pos += 1
+            
+            return matches
+
+        def select_match(self, matches: List[Tuple[str, int, int, int]], text: str) -> Optional[str]:
+            """Select the appropriate match based on parse_from_start setting."""
+            if not matches:
+                return None
+                
+            if self.parse_from_start:
+                # When parsing from start, we already have the first match
+                return matches[0][0]
+            else:
+                # When parsing from end, sort by line and position in reverse
+                matches.sort(key=lambda x: (x[1], x[2]), reverse=True)
+                return matches[0][0]  # Return the original class name
 
         def parse(self, output: str) -> Dict[str, Any]:
-            cleaned_output = ''.join(
-                char.lower() 
-                for char in output 
-                if char.isalnum() or char.isspace()
-            )
-            words = cleaned_output.split()
+            # Find all matches in the text
+            matches = self.find_matches_in_text(output)
             
-            word_iterator = words if self.parse_from_start else reversed(words)
-            classification = None
-            
-            for word in word_iterator:
-                if word.lower() == self.positive_class.lower():
-                    classification = self.positive_class
-                    break
-                elif word.lower() == self.negative_class.lower():
-                    classification = self.negative_class
-                    break
+            # Select the appropriate match
+            selected_class = self.select_match(matches, output)
             
             return {
-                "classification": classification,
-                "explanation": output
+                "classification": selected_class,
+                "explanation": output.strip()
             }
 
     def get_llm_prompt_node(self):
@@ -143,8 +201,7 @@ class Classifier(BaseNode):
     def get_parser_node(self):
         """Node that handles parsing the completion."""
         parser = self.ClassificationOutputParser(
-            positive_class=self.parameters.positive_class,
-            negative_class=self.parameters.negative_class,
+            valid_classes=self.parameters.valid_classes,
             parse_from_start=self.parameters.parse_from_start
         )
 
@@ -180,10 +237,11 @@ class Classifier(BaseNode):
             if isinstance(state, dict):
                 state = self.GraphState(**state)
             
+            valid_classes_str = "', '".join(self.parameters.valid_classes)
             retry_message = HumanMessage(content=(
                 f"You responded with an invalid classification. "
-                f"Please classify as either '{self.parameters.positive_class}' or "
-                f"'{self.parameters.negative_class}'. This is attempt {state.retry_count + 1} "
+                f"Please classify as one of: '{valid_classes_str}'. "
+                f"This is attempt {state.retry_count + 1} "
                 f"of {self.parameters.maximum_retry_count}."
             ))
             
