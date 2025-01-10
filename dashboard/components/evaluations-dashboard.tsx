@@ -183,6 +183,154 @@ interface ConfusionMatrix {
   labels: string[]
 }
 
+interface EvaluationRowProps {
+  evaluation: Schema['Evaluation']['type']
+  selectedEvaluationId: string | undefined | null
+  scorecardNames: Record<string, string>
+  scoreNames: Record<string, string>
+  onSelect: (evaluation: Schema['Evaluation']['type']) => void
+  onDelete: (evaluationId: string) => Promise<boolean>
+}
+
+const EvaluationRow = React.memo(({ 
+  evaluation, 
+  selectedEvaluationId, 
+  scorecardNames, 
+  scoreNames,
+  onSelect,
+  onDelete
+}: EvaluationRowProps) => {
+  return (
+    <TableRow 
+      onClick={() => onSelect(evaluation)} 
+      className="group cursor-pointer transition-colors duration-200 relative hover:bg-muted"
+    >
+      <TableCell className="font-medium">
+        <div className="block @[630px]:hidden">
+          <div className="flex justify-between">
+            <div className="w-[40%] space-y-0.5">
+              <div className="font-semibold truncate">
+                <span className={evaluation.id === selectedEvaluationId ? 'text-focus' : ''}>
+                  {scorecardNames[evaluation.id] || 'Unknown Scorecard'}
+                </span>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {scoreNames[evaluation.id] || 'Unknown Score'}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {formatDistanceToNow(new Date(evaluation.createdAt), { addSuffix: true })}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {evaluation.type || ''}
+              </div>
+            </div>
+            <div className="w-[55%] space-y-2">
+              <EvaluationListProgressBar 
+                progress={calculateProgress(evaluation.processedItems, evaluation.totalItems)}
+                totalSamples={evaluation.totalItems ?? 0}
+                isFocused={evaluation.id === selectedEvaluationId}
+              />
+              <EvaluationListAccuracyBar 
+                progress={calculateProgress(evaluation.processedItems, evaluation.totalItems)}
+                accuracy={evaluation.accuracy ?? 0}
+                isFocused={evaluation.id === selectedEvaluationId}
+              />
+            </div>
+          </div>
+          <div className="mt-2 flex justify-end space-x-2">
+            <CardButton 
+              icon={Eye}
+              onClick={() => onSelect(evaluation)}
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  className="h-8 w-8 p-0"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={async (e) => {
+                  e.stopPropagation();
+                  if (window.confirm('Are you sure you want to delete this evaluation?')) {
+                    await onDelete(evaluation.id);
+                  }
+                }}>
+                  <Trash2 className="h-4 w-4 mr-2" /> Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+        <div className="hidden @[630px]:block">
+          <div className="font-semibold">
+            <span className={evaluation.id === selectedEvaluationId ? 'text-focus' : ''}>
+              {scorecardNames[evaluation.id] || 'Unknown Scorecard'}
+            </span>
+          </div>
+          <div className="text-sm text-muted-foreground">
+            {scoreNames[evaluation.id] || 'Unknown Score'}
+          </div>
+          <div className="text-sm text-muted-foreground">
+            {formatDistanceToNow(new Date(evaluation.createdAt), { addSuffix: true })}
+          </div>
+        </div>
+      </TableCell>
+      <TableCell className="hidden @[630px]:table-cell text-sm text-muted-foreground">
+        {evaluation.type || ''}
+      </TableCell>
+      <TableCell className="hidden @[630px]:table-cell w-[15%] text-right">
+        <EvaluationListProgressBar 
+          progress={calculateProgress(evaluation.processedItems, evaluation.totalItems)}
+          totalSamples={evaluation.totalItems ?? 0}
+          isFocused={evaluation.id === selectedEvaluationId}
+        />
+      </TableCell>
+      <TableCell className="hidden @[630px]:table-cell w-[15%]">
+        <EvaluationListAccuracyBar 
+          progress={calculateProgress(evaluation.processedItems, evaluation.totalItems)}
+          accuracy={evaluation.accuracy ?? 0}
+          isFocused={evaluation.id === selectedEvaluationId}
+        />
+      </TableCell>
+      <TableCell className="hidden @[630px]:table-cell w-[10%] text-right">
+        <div className="flex items-center justify-end space-x-2">
+          <CardButton 
+            icon={Eye}
+            onClick={() => onSelect(evaluation)}
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                className="h-8 w-8 p-0"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={async (e) => {
+                e.stopPropagation();
+                if (window.confirm('Are you sure you want to delete this evaluation?')) {
+                  await onDelete(evaluation.id);
+                }
+              }}>
+                <Trash2 className="h-4 w-4 mr-2" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+});
+
+EvaluationRow.displayName = 'EvaluationRow';
+
 // Add viewport hook
 function useViewportWidth() {
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
@@ -659,154 +807,27 @@ export default function EvaluationsDashboard(): JSX.Element {
       </TableHeader>
       <TableBody>
         {filteredEvaluations.map((Evaluation) => (
-          <TableRow 
+          <EvaluationRow 
             key={Evaluation.id} 
-            onClick={() => {
+            evaluation={Evaluation}
+            selectedEvaluationId={selectedEvaluation?.id ?? null}
+            scorecardNames={scorecardNames}
+            scoreNames={scoreNames}
+            onSelect={(evaluation) => {
               setScoreResults([])
-              setSelectedEvaluation(Evaluation)
-            }} 
-            className="group cursor-pointer transition-colors duration-200 relative
-              hover:bg-muted"
-          >
-            <TableCell className="font-medium">
-              <div className="block @[630px]:hidden">
-                <div className="flex justify-between">
-                  <div className="w-[40%] space-y-0.5">
-                    <div className="font-semibold truncate">
-                      <span className={Evaluation.id === selectedEvaluation?.id ? 'text-focus' : ''}>
-                        {scorecardNames[Evaluation.id] || 'Unknown Scorecard'}
-                      </span>
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {scoreNames[Evaluation.id] || 'Unknown Score'}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {formatDistanceToNow(new Date(Evaluation.createdAt), { addSuffix: true })}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {Evaluation.type || ''}
-                    </div>
-                  </div>
-                  <div className="w-[55%] space-y-2">
-                    <EvaluationListProgressBar 
-                      progress={calculateProgress(Evaluation.processedItems, Evaluation.totalItems)}
-                      totalSamples={Evaluation.totalItems ?? 0}
-                      isFocused={Evaluation.id === selectedEvaluation?.id}
-                    />
-                    <EvaluationListAccuracyBar 
-                      progress={calculateProgress(Evaluation.processedItems, Evaluation.totalItems)}
-                      accuracy={Evaluation.accuracy ?? 0}
-                      isFocused={Evaluation.id === selectedEvaluation?.id}
-                    />
-                  </div>
-                </div>
-                <div className="mt-2 flex justify-end space-x-2">
-                  <CardButton 
-                    icon={Eye}
-                    onClick={() => {
-                      setScoreResults([])
-                      setSelectedEvaluation(Evaluation)
-                    }}
-                  />
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        className="h-8 w-8 p-0"
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={async (e) => {
-                        e.stopPropagation();
-                        if (window.confirm('Are you sure you want to delete this evaluation?')) {
-                          const success = await handleDeleteEvaluation(client, Evaluation.id);
-                          if (success) {
-                            setEvaluations(prev => prev.filter(e => e.id !== Evaluation.id));
-                            if (selectedEvaluation?.id === Evaluation.id) {
-                              setSelectedEvaluation(null);
-                            }
-                          }
-                        }
-                      }}>
-                        <Trash2 className="h-4 w-4 mr-2" /> Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-              <div className="hidden @[630px]:block">
-                <div className="font-semibold">
-                  <span className={Evaluation.id === selectedEvaluation?.id ? 'text-focus' : ''}>
-                    {scorecardNames[Evaluation.id] || 'Unknown Scorecard'}
-                  </span>
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {scoreNames[Evaluation.id] || 'Unknown Score'}
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {formatDistanceToNow(new Date(Evaluation.createdAt), { addSuffix: true })}
-                </div>
-              </div>
-            </TableCell>
-            <TableCell className="hidden @[630px]:table-cell text-sm text-muted-foreground">
-              {Evaluation.type || ''}
-            </TableCell>
-            <TableCell className="hidden @[630px]:table-cell w-[15%] text-right">
-              <EvaluationListProgressBar 
-                progress={calculateProgress(Evaluation.processedItems, Evaluation.totalItems)}
-                totalSamples={Evaluation.totalItems ?? 0}
-                isFocused={Evaluation.id === selectedEvaluation?.id}
-              />
-            </TableCell>
-            <TableCell className="hidden @[630px]:table-cell w-[15%]">
-              <EvaluationListAccuracyBar 
-                progress={calculateProgress(Evaluation.processedItems, Evaluation.totalItems)}
-                accuracy={Evaluation.accuracy ?? 0}
-                isFocused={Evaluation.id === selectedEvaluation?.id}
-              />
-            </TableCell>
-            <TableCell className="hidden @[630px]:table-cell w-[10%] text-right">
-              <div className="flex items-center justify-end space-x-2">
-                <CardButton 
-                  icon={Eye}
-                  onClick={() => {
-                    setScoreResults([])
-                    setSelectedEvaluation(Evaluation)
-                  }}
-                />
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                    <Button 
-                      variant="ghost" 
-                      size="icon"
-                      className="h-8 w-8 p-0"
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={async (e) => {
-                      e.stopPropagation();
-                      if (window.confirm('Are you sure you want to delete this evaluation?')) {
-                        const success = await handleDeleteEvaluation(client, Evaluation.id);
-                        if (success) {
-                          setEvaluations(prev => prev.filter(e => e.id !== Evaluation.id));
-                          if (selectedEvaluation?.id === Evaluation.id) {
-                            setSelectedEvaluation(null);
-                          }
-                        }
-                      }
-                    }}>
-                      <Trash2 className="h-4 w-4 mr-2" /> Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </TableCell>
-          </TableRow>
+              setSelectedEvaluation(evaluation)
+            }}
+            onDelete={async (evaluationId) => {
+              const success = await handleDeleteEvaluation(client, evaluationId);
+              if (success) {
+                setEvaluations(prev => prev.filter(e => e.id !== evaluationId));
+                if (selectedEvaluation?.id === evaluationId) {
+                  setSelectedEvaluation(null);
+                }
+              }
+              return success;
+            }}
+          />
         ))}
       </TableBody>
     </Table>
@@ -1107,18 +1128,22 @@ export default function EvaluationsDashboard(): JSX.Element {
             );
 
             setEvaluations(prev => {
-              // Double-check we haven't already added this evaluation
+              // If evaluation exists, update it
               if (prev.some(e => e.id === data.id)) {
-                console.log('Evaluation already exists in list, skipping:', data.id);
-                return prev;
+                console.log('Updating existing evaluation:', data.id);
+                return sortByCreatedAt(prev.map(e => e.id === data.id ? {
+                  ...e,
+                  ...transformedEvaluation[0],
+                  // Preserve the async functions
+                  account: e.account,
+                  scorecard: e.scorecard,
+                  score: e.score
+                } : e));
               }
 
+              // Otherwise add as new
               const newList = sortByCreatedAt([transformedEvaluation[0], ...prev]);
-              console.log('New evaluation list order:', newList.map(e => ({
-                id: e.id,
-                createdAt: e.createdAt,
-                type: e.type
-              })));
+              console.log('Adding new evaluation:', data.id);
               return newList;
             });
           } else {
