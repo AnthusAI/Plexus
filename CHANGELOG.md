@@ -1,7 +1,22 @@
 # CHANGELOG
 
 
+## v0.4.0-alpha.1 (2025-01-10)
+
+### Features
+
+- **evaluations**: Add delete functionality and action dropdown
+  ([`afff9e0`](https://github.com/AnthusAI/Plexus/commit/afff9e01fca2ea1794ca5bf465335122f6aa766c))
+
+- Enable deleting evaluations, score results, and scoring jobs via `handleDeleteEvaluation`. - Add
+  dropdown menu in each row for quick evaluation actions. - Update table layout with an "Actions"
+  column for better usability. - Subscribe to delete events for automatic list updates.
+
+
 ## v0.3.3 (2025-01-09)
+
+
+## v0.3.2 (2025-01-09)
 
 
 ## v0.3.2-alpha.2 (2025-01-09)
@@ -14,16 +29,6 @@
 - **evaluations-dashboard**: Confusion matrix filtering -- now case-insensitive.
   ([`bf68cae`](https://github.com/AnthusAI/Plexus/commit/bf68cae9d1d3f85d788fbf47c3aaa185768efd61))
 
-### Testing
-
-- Add CloudWatchLogger unit tests
-  ([`db19395`](https://github.com/AnthusAI/Plexus/commit/db1939576b7ccb02926c63625a0b11cacd142c2b))
-
-Tests cover AWS credential handling, metric logging, and error cases.
-
-
-## v0.3.2 (2025-01-09)
-
 ### Refactoring
 
 - **Evaluation**: Adjust total predictions calculation based on evaluation status
@@ -33,6 +38,13 @@ Tests cover AWS credential handling, metric logging, and error cases.
   evaluations, the total is derived from the predicted distribution data. - For ongoing evaluations,
   the initial sample size is used instead. - Ensured that the totalItems parameter reflects the
   correct count in the update parameters.
+
+### Testing
+
+- Add CloudWatchLogger unit tests
+  ([`db19395`](https://github.com/AnthusAI/Plexus/commit/db1939576b7ccb02926c63625a0b11cacd142c2b))
+
+Tests cover AWS credential handling, metric logging, and error cases.
 
 
 ## v0.3.2-alpha.1 (2025-01-08)
