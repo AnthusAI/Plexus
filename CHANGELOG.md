@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.4.0-alpha.2 (2025-01-10)
+
+### Bug Fixes
+
+- **evaluations**: Handle evaluation updates correctly
+  ([`f25a759`](https://github.com/AnthusAI/Plexus/commit/f25a759b75ae665405d3b67b958176ad4d491357))
+
+- Update existing evaluations instead of skipping them - Preserve related data references during
+  updates - Extract EvaluationRow component for better performance
+
+
 ## v0.4.0-alpha.1 (2025-01-10)
 
 ### Features
@@ -17,6 +28,9 @@
 
 
 ## v0.3.2 (2025-01-09)
+
+
+## v0.3.1-rc.1 (2025-01-06)
 
 
 ## v0.3.2-alpha.2 (2025-01-09)
@@ -67,9 +81,6 @@ Tests cover AWS credential handling, metric logging, and error cases.
 
 
 ## v0.3.1 (2025-01-06)
-
-
-## v0.3.1-rc.1 (2025-01-06)
 
 ### Bug Fixes
 
