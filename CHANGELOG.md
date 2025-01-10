@@ -1,6 +1,24 @@
 # CHANGELOG
 
 
+## v0.4.0-alpha.1 (2025-01-10)
+
+### Features
+
+- **evaluations**: Add delete functionality and action dropdown
+  ([`afff9e0`](https://github.com/AnthusAI/Plexus/commit/afff9e01fca2ea1794ca5bf465335122f6aa766c))
+
+- Enable deleting evaluations, score results, and scoring jobs via `handleDeleteEvaluation`. - Add
+  dropdown menu in each row for quick evaluation actions. - Update table layout with an "Actions"
+  column for better usability. - Subscribe to delete events for automatic list updates.
+
+
+## v0.3.3 (2025-01-09)
+
+
+## v0.3.2 (2025-01-09)
+
+
 ## v0.3.2-alpha.2 (2025-01-09)
 
 ### Bug Fixes
@@ -49,6 +67,9 @@ Tests cover AWS credential handling, metric logging, and error cases.
 
 
 ## v0.3.1 (2025-01-06)
+
+
+## v0.3.1-rc.1 (2025-01-06)
 
 ### Bug Fixes
 
