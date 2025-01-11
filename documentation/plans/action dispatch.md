@@ -23,6 +23,15 @@ This document outlines the implementation of Plexus's two-level dispatch system:
 - Configurable timeouts and retry policies
 - Result storage and retrieval ✓
 - Task cancellation removed (YAGNI - complexity outweighed benefits)
+- Task targeting system for worker specialization:
+  - Target string format: `domain/subdomain`
+  - Pattern matching with wildcards
+  - Worker configuration for target patterns
+  - Examples:
+    - `datasets/call-criteria`
+    - `training/call-criteria`
+    - `[datasets,training]/call-criteria`
+    - `*/gpu-required`
 
 ### Worker Infrastructure
 - AWS SQS for message broker ✓
@@ -63,6 +72,11 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Persistent storage ✓
    - Result expiration ✓
    - Query interfaces ✓
+4. Task targeting (In Progress)
+   - Target string format definition
+   - Pattern matching implementation
+   - Worker configuration
+   - Unit test coverage
 
 ### Phase 3: Action-Command Integration (In Progress)
 

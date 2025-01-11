@@ -11,9 +11,17 @@ def register_tasks(app):
     """Register Celery tasks with the application."""
     
     @app.task(bind=True, name="plexus.execute_command")
-    def execute_command(self: Task, command_string: str) -> dict:
+    def execute_command(self: Task, command_string: str, target: str = "default/command") -> dict:
         """Execute a Plexus command and return its result."""
         try:
+            # Check if this worker accepts this target
+            matcher = getattr(app.conf, "task_target_matcher", None)
+            if matcher and not matcher.matches(target):
+                # Reject the task so another worker can pick it up
+                self.request.callbacks = None
+                self.request.errbacks = None
+                raise self.reject(requeue=True)
+
             # Parse the command string safely
             args = shlex.split(command_string)
             
@@ -61,6 +69,7 @@ def register_tasks(app):
                 return {
                     'status': status,
                     'command': command_string,
+                    'target': target,
                     'stdout': stdout_capture.getvalue(),
                     'stderr': stderr_capture.getvalue(),
                 }
@@ -76,6 +85,7 @@ def register_tasks(app):
             return {
                 'status': 'error',
                 'command': command_string,
+                'target': target,
                 'error': str(e),
                 'stdout': stdout_capture.getvalue() if 'stdout_capture' in locals() else '',
                 'stderr': stderr_capture.getvalue() if 'stderr_capture' in locals() else '',

@@ -95,9 +95,31 @@ def command():
 @click.option('--concurrency', default=4, help='Number of worker processes')
 @click.option('--queue', default='celery', help='Queue to process')
 @click.option('--loglevel', default='INFO', help='Logging level')
-def worker(concurrency: int, queue: str, loglevel: str) -> None:
+@click.option(
+    '--target-patterns',
+    default="*",
+    help='Comma-separated list of target patterns (e.g. "domain/*,*/subdomain")'
+)
+def worker(
+    concurrency: int,
+    queue: str,
+    loglevel: str,
+    target_patterns: str
+) -> None:
     """Start a Celery worker for processing remote commands."""
+    from .TaskTargeting import TaskTargetMatcher
+    
     logging.info("Starting worker initialization...")
+    
+    # Parse and validate target patterns
+    patterns = [p.strip() for p in target_patterns.split(",")]
+    try:
+        matcher = TaskTargetMatcher(patterns)
+    except ValueError as e:
+        raise click.BadParameter(f"Invalid target pattern: {e}")
+    
+    # Store matcher in app config for task routing
+    celery_app.conf.task_target_matcher = matcher
     
     argv = [
         "worker",
@@ -106,6 +128,7 @@ def worker(concurrency: int, queue: str, loglevel: str) -> None:
         f"--loglevel={loglevel}",
     ]
     logging.info(f"Starting worker with arguments: {argv}")
+    logging.info(f"Target patterns: {patterns}")
     celery_app.worker_main(argv)
 
 @command.command()
@@ -113,11 +136,30 @@ def worker(concurrency: int, queue: str, loglevel: str) -> None:
 @click.option('--async', 'is_async', is_flag=True, help='Run command asynchronously')
 @click.option('--timeout', default=3600, help='Command timeout in seconds')
 @click.option('--loglevel', default='INFO', help='Logging level')
-def dispatch(command_string: str, is_async: bool, timeout: int, loglevel: str) -> None:
+@click.option(
+    '--target',
+    default='default/command',
+    help='Target string in format domain/subdomain'
+)
+def dispatch(
+    command_string: str,
+    is_async: bool,
+    timeout: int,
+    loglevel: str,
+    target: str
+) -> None:
     """Execute a Plexus command remotely via Celery."""
+    from .TaskTargeting import TaskTargetMatcher
+    
     logging.getLogger().setLevel(loglevel)
     
+    if not TaskTargetMatcher.validate_target(target):
+        raise click.BadParameter(
+            "Target must be in format 'domain/subdomain' with valid identifiers"
+        )
+    
     logging.info(f"Dispatching command: {command_string}")
+    logging.info(f"Target: {target}")
     logging.debug("Celery app: %s", celery_app)
     logging.debug("Broker URL: %s", celery_app.conf.broker_url)
     logging.debug("Backend URL: %s", celery_app.conf.result_backend)
@@ -126,7 +168,8 @@ def dispatch(command_string: str, is_async: bool, timeout: int, loglevel: str) -
     task = celery_app.send_task(
         'plexus.execute_command',
         args=[command_string],
-        expires=timeout
+        expires=timeout,
+        kwargs={'target': target}
     )
     
     logging.debug("Task ID: %s", task.id)
@@ -326,16 +369,21 @@ def get_progress_status(current: int, total: int) -> str:
         return "Finished processing items."
 
 @command.command()
-def demo() -> None:
+@click.option(
+    '--target',
+    default='default/command',
+    help='Target string in format domain/subdomain'
+)
+def demo(target: str) -> None:
     """Run a demo task that processes 2000 items over 20 seconds."""
-    from .CommandProgress import CommandProgress
-    import time
+    # Dispatch the demo task through Celery instead of running directly
+    logging.info("Dispatching demo task...")
     
-    total_items = 2000
-    target_duration = 20  # seconds
-    sleep_per_item = target_duration / total_items
-    
-    logging.info("Starting demo task processing...")
+    task = celery_app.send_task(
+        'plexus.execute_command',
+        args=["command demo"],
+        kwargs={'target': target}
+    )
     
     try:
         with Progress(
@@ -357,35 +405,84 @@ def demo() -> None:
             expand=True
         ) as progress:
             # Add a single task that tracks both status and progress
-            task = progress.add_task(
+            task_progress = progress.add_task(
                 "Processing...",
-                total=total_items,
-                status="Starting processing items..."
+                total=100,
+                status="Initializing..."
             )
             
-            start_time = time.time()
-            
-            for i in range(total_items):
-                current_item = i + 1
-                # Get new status message
-                new_status = get_progress_status(current_item, total_items)
-                
-                # Update progress and status
-                progress.update(task, advance=1, status=new_status)
-                
-                # Simulate processing an item
-                time.sleep(sleep_per_item)
-                
-                # Update command progress every 50 items
-                if i % 50 == 0 or i == total_items - 1:
-                    elapsed = time.time() - start_time
-                    items_per_sec = current_item / elapsed
+            while not task.ready():
+                if task.info and isinstance(task.info, dict):
+                    current = task.info.get('current')
+                    total = task.info.get('total')
+                    status = task.info.get('status')
                     
-                    CommandProgress.update(
-                        current=current_item,
-                        total=total_items,
-                        status=new_status
-                    )
+                    if all([current, total, status]):
+                        # Update progress and status
+                        progress.update(
+                            task_progress,
+                            total=total,
+                            completed=current,
+                            status=status
+                        )
+                            
+                time.sleep(0.5)  # Brief pause between updates
+            
+            # Ensure progress bar reaches 100% on success
+            if task.successful():
+                final_status = "Finished processing items."
+                progress.update(
+                    task_progress,
+                    completed=progress.tasks[task_progress].total,
+                    status=final_status
+                )
+        
+        # Get the final result
+        result = task.get()
+        if result['status'] == 'success':
+            logging.info("Demo task completed successfully")
+        else:
+            logging.error(f"Demo task failed: {result.get('error', 'Unknown error')}")
+            
+    except KeyboardInterrupt:
+        logging.info("\nDemo task cancelled by user")
+        return
+    except Exception as e:
+        logging.error(f"Error running demo task: {e}", exc_info=True)
+
+@command.command()
+def _demo_internal() -> None:
+    """Internal command for running the actual demo task."""
+    from .CommandProgress import CommandProgress
+    import time
+    
+    total_items = 2000
+    target_duration = 20  # seconds
+    sleep_per_item = target_duration / total_items
+    
+    logging.info("Starting demo task processing...")
+    
+    try:
+        start_time = time.time()
+        
+        for i in range(total_items):
+            current_item = i + 1
+            # Get new status message
+            new_status = get_progress_status(current_item, total_items)
+            
+            # Update command progress every 50 items
+            if i % 50 == 0 or i == total_items - 1:
+                elapsed = time.time() - start_time
+                items_per_sec = current_item / elapsed
+                
+                CommandProgress.update(
+                    current=current_item,
+                    total=total_items,
+                    status=new_status
+                )
+            
+            # Simulate processing an item
+            time.sleep(sleep_per_item)
         
         total_time = time.time() - start_time
         logging.info(
@@ -400,6 +497,6 @@ def demo() -> None:
             f"\nDemo task cancelled by user after {elapsed:.1f} seconds "
             f"({items_per_sec:.1f} items/sec)"
         )
-        return 
+        return
 
 # Remove duplicate ItemCountColumn class definition 
