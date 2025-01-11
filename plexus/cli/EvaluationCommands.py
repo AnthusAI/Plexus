@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+load_dotenv(override=True, verbose=True)
+
 import re
 import sys
 import json
@@ -19,10 +22,6 @@ from collections import Counter
 import concurrent.futures
 import time
 import threading
-
-from dotenv import load_dotenv
-from os import getenv
-load_dotenv(override=True)
 
 set_log_group('plexus/cli/evaluation')
 
@@ -209,15 +208,9 @@ def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, scor
     logging.info(f"Dataframe info for score {score_name}:")
     logging.info(f"Columns: {score_instance.dataframe.columns.tolist()}")
     logging.info(f"Shape: {score_instance.dataframe.shape}")
-    logging.info(f"Sample data:\n{score_instance.dataframe.head().to_string()}")
 
     samples = score_instance.dataframe.to_dict('records')
 
-    if 'Good Call comment' in score_instance.dataframe.columns:
-        value_counts = score_instance.dataframe['Good Call comment'].value_counts()
-        logging.info("Distribution of Good Call comments:")
-        logging.info(f"\n{value_counts.to_string()}")
-    
     content_ids_to_exclude_filename = f"tuning/{scorecard_name}/{score_name}/training_ids.txt"
     if os.path.exists(content_ids_to_exclude_filename):
         with open(content_ids_to_exclude_filename, 'r') as file:
@@ -333,7 +326,7 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
         model_input_class = getattr(score_class, 'Input')
         # Add required metadata for LangGraphScore
         if score_class_name == 'LangGraphScore':
-            account_key = getenv('PLEXUS_ACCOUNT_KEY')
+            account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
             if not account_key:
                 raise ValueError("PLEXUS_ACCOUNT_KEY not found in environment")
             metadata.update({

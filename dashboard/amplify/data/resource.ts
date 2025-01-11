@@ -14,7 +14,7 @@ type ScorecardSectionIndexFields = "name" | "scorecardId" | "order";
 type ScoreIndexFields = "name" | "order" | "sectionId" | "type" | "accuracy" | 
     "version" | "aiProvider" | "aiModel";
 type EvaluationIndexFields = "accountId" | "scorecardId" | "type" | "accuracy" | 
-    "scoreId" | "status";
+    "scoreId" | "status" | "updatedAt";
 type BatchJobIndexFields = "accountId" | "scorecardId" | "type" | "scoreId" | 
     "status" | "modelProvider" | "modelName" | "batchId";
 type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId";
@@ -158,7 +158,8 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId" as EvaluationIndexFields),
             idx("scorecardId" as EvaluationIndexFields),
-            idx("scoreId" as EvaluationIndexFields)
+            idx("scoreId" as EvaluationIndexFields),
+            idx("updatedAt" as EvaluationIndexFields)
         ]),
 
     BatchJob: a

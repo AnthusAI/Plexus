@@ -135,6 +135,52 @@ const GridContent = React.memo(({ data }: { data: EvaluationTaskData }) => (
   </div>
 ))
 
+interface ParsedScoreResult {
+  id: string
+  value: string
+  confidence: number | null
+  explanation: string | null
+  metadata: {
+    human_label: string | null
+    correct: boolean
+    human_explanation: string | null
+    text: string | null
+  }
+  itemId: string | null
+}
+
+function parseScoreResult(result: any): ParsedScoreResult {
+  const parsedMetadata = (() => {
+    try {
+      let metadata = result.metadata
+      if (typeof metadata === 'string') {
+        metadata = JSON.parse(metadata)
+        if (typeof metadata === 'string') {
+          metadata = JSON.parse(metadata)
+        }
+      }
+      return metadata || {}
+    } catch (e) {
+      console.error('Error parsing metadata:', e)
+      return {}
+    }
+  })()
+
+  return {
+    id: result.id || '',
+    value: String(result.value || ''),
+    confidence: result.confidence || null,
+    explanation: result.explanation || null,
+    metadata: {
+      human_label: parsedMetadata.human_label || null,
+      correct: Boolean(parsedMetadata.correct),
+      human_explanation: parsedMetadata.human_explanation || null,
+      text: parsedMetadata.text || null
+    },
+    itemId: result.itemId || null
+  }
+}
+
 const DetailContent = React.memo(({ 
   data, 
   isFullWidth,
@@ -189,6 +235,10 @@ const DetailContent = React.memo(({
   const handleScoreResultClose = () => {
     setSelectedScoreResult(null)
   }
+
+  const parsedScoreResults = useMemo(() => {
+    return data.scoreResults?.map(parseScoreResult) ?? []
+  }, [data.scoreResults])
 
   return (
     <div 
@@ -266,7 +316,7 @@ const DetailContent = React.memo(({
             {!showAsColumns && data.scoreResults && data.scoreResults.length > 0 && (
               <div className="mt-4">
                 <EvaluationTaskScoreResults 
-                  results={data.scoreResults} 
+                  results={parsedScoreResults} 
                   accuracy={data.accuracy ?? 0}
                   selectedPredictedValue={selectedPredictedActual.predicted}
                   selectedActualValue={selectedPredictedActual.actual}
@@ -282,7 +332,7 @@ const DetailContent = React.memo(({
           <div className="w-full h-full relative">
             <div className="absolute inset-0 pr-0">
               <EvaluationTaskScoreResults 
-                results={data.scoreResults} 
+                results={parsedScoreResults} 
                 accuracy={data.accuracy ?? 0}
                 selectedPredictedValue={selectedPredictedActual.predicted}
                 selectedActualValue={selectedPredictedActual.actual}
@@ -297,7 +347,7 @@ const DetailContent = React.memo(({
           <div className="w-full h-full relative">
             <div className="absolute inset-0 pr-0">
               <EvaluationTaskScoreResultDetail
-                result={selectedScoreResult}
+                result={parseScoreResult(selectedScoreResult)}
                 onClose={handleScoreResultClose}
               />
             </div>

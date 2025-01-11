@@ -4,30 +4,26 @@ import { useAuthenticator } from '@aws-amplify/ui-react';
 import DashboardLayout from '@/components/dashboard-layout';
 import FeedbackDashboard from '@/components/feedback-dashboard';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { signOut as amplifySignOut } from 'aws-amplify/auth';
+import { Suspense } from 'react';
 
 export default function FeedbackPage() {
-  const { signOut, authStatus } = useAuthenticator((context) => [context.signOut, context.authStatus]);
   const router = useRouter();
 
-  useEffect(() => {
-    if (authStatus !== 'authenticated') {
-      router.push('/');
-    }
-  }, [authStatus, router]);
-
   const handleSignOut = async () => {
-    await signOut();
-    router.push('/');
+    try {
+      await amplifySignOut();
+      router.push('/');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
   };
-
-  if (authStatus !== 'authenticated') {
-    return null; // or a loading spinner
-  }
 
   return (
     <DashboardLayout signOut={handleSignOut}>
-      <FeedbackDashboard />
+      <Suspense fallback={<div>Loading...</div>}>
+        <FeedbackDashboard />
+      </Suspense>
     </DashboardLayout>
   );
 }
