@@ -11,18 +11,18 @@ This document outlines the implementation of Plexus's two-level dispatch system:
 ## Core Architecture
 
 ### Action Processing
-- Actions represent high-level AI operations requested by users
-- Each Action maps to one or more CLI commands
-- Support both synchronous and asynchronous execution modes
-- Maintain consistent environment and configuration across workers
-- Preserve all existing CLI functionality and error handling
+- Actions represent high-level AI operations requested by users ✓
+- Each Action maps to one or more CLI commands ✓
+- Support both synchronous and asynchronous execution modes ✓
+- Maintain consistent environment and configuration across workers ✓
+- Preserve all existing CLI functionality and error handling ✓
 
 ### Command System
-- Celery tasks wrap CLI command execution
+- Celery tasks wrap CLI command execution ✓
 - Progress tracking for long-running operations ✓
-- Configurable timeouts and retry policies
+- Configurable timeouts and retry policies ✓
 - Result storage and retrieval ✓
-- Task cancellation removed (YAGNI - complexity outweighed benefits)
+- Task cancellation removed (YAGNI - complexity outweighed benefits) ✓
 - Task targeting system for worker specialization ✓
   - Target string format: `domain/subdomain` ✓
   - Pattern matching with wildcards ✓
@@ -78,66 +78,41 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Worker configuration ✓
    - Unit test coverage ✓
 
-### Phase 3: Action-Command Integration (Next Up)
+### Phase 3: Action-Command Integration (In Progress)
 
-#### Action Model Design
+1. **Model Implementation** ✓
+   - Action and ActionStage models deployed in Amplify
+   - Bidirectional relationships configured
+   - Indexes set up for efficient querying
+   - Command string field added for task dispatch
 
-1. **Core Models**
+2. **Next Implementation Steps**
+   1. Create Lambda function for Action-to-Celery dispatch
+      - Triggered on Action creation
+      - Extracts command and Action ID
+      - Dispatches Celery task with `--action-id`
+      - Handles errors and updates Action status
 
-   a. **Action**
-   - `id`: String (Primary Key)
-   - `accountId`: String (GSI)
-   - `type`: String (e.g., 'evaluation', 'batch_scoring', etc.)
-   - `status`: String (overall status: 'pending', 'running', 'completed', 'error')
-   - `statusMessage`: String (human-readable current status)
-   - `createdAt`: String (ISO timestamp)
-   - `startedAt`: String (ISO timestamp, nullable)
-   - `completedAt`: String (ISO timestamp, nullable)
-   - `estimatedCompletionAt`: String (ISO timestamp, nullable)
-   - `errorMessage`: String (nullable)
-   - `errorDetails`: JSON (nullable)
-   - `currentStageId`: String (FK to ActionStage)
-   - `metadata`: JSON (type-specific configuration)
-   - `target`: String (task targeting string, e.g., 'datasets/call-criteria')
+   2. Add Action and ActionStage model classes to Python client
+      - Create model classes matching Amplify schema
+      - Add methods for creating and updating actions
+      - Implement stage management utilities
+      - Add real-time progress tracking integration
 
-   b. **ActionStage**
-   - `id`: String (Primary Key)
-   - `actionId`: String (FK to Action)
-   - `name`: String (e.g., 'preprocessing', 'processing', 'summarizing')
-   - `order`: Number (sequence number for this stage)
-   - `status`: String ('pending', 'running', 'completed', 'error')
-   - `statusMessage`: String (human-readable current status)
-   - `startedAt`: String (ISO timestamp, nullable)
-   - `completedAt`: String (ISO timestamp, nullable)
-   - `estimatedCompletionAt`: String (ISO timestamp, nullable)
-   - `processedItems`: Number
-   - `totalItems`: Number
+   3. Update Celery worker for Action support
+      - Parse `--action-id` from command string
+      - Update Action progress during execution
+      - Stream stdout/stderr to Action record
+      - Handle errors and completion status
 
-2. **Implementation Requirements**
+   4. Create frontend components for progress display
+      - Action list and detail views
+      - Real-time progress updates
+      - Stage-based progress visualization
+      - Error handling and retry UI
 
-   a. **Time Handling**
-   - All timestamps in ISO 8601 format with UTC timezone
-   - Frontend calculates elapsed time as: `now() - startedAt`
-   - Frontend calculates remaining time as: `estimatedCompletionAt - now()`
-   - Backend updates `estimatedCompletionAt` based on progress rate
-   - All nodes synchronized via NTP
-
-   b. **State Management**
-   - One Action has many ActionStages
-   - Each ActionStage belongs to one Action
-   - Action.currentStageId points to currently active stage
-   - Stages follow defined order sequence
-   - Frontend subscribes to both Action and Stage updates
-
-3. **Next Implementation Steps**
-   1. Define Action and ActionStage models in Amplify schema
-   2. Create Lambda trigger for action creation
-   3. Extend Celery worker to update both models
-   4. Build frontend components for progress display
-   5. Implement real-time updates and time calculations
-
-4. **Technical Considerations**
-   - Use DynamoDB GSI on accountId for efficient listing
+3. **Technical Considerations**
+   - Use DynamoDB GSI on accountId for efficient listing ✓
    - Consider TTL for cleanup of completed actions
    - Use atomic updates for counters
    - Handle partial failures in stage updates
@@ -174,16 +149,16 @@ Progress tracking has been integrated into:
 ### Async Command Handling
 The system handles async commands in two ways:
 1. Command-level async:
-   - Commands like `evaluate accuracy` manage their own event loops
-   - Event loops are created and managed within the command
-   - Loops are not closed to allow reuse in worker processes
-   - Progress updates work seamlessly with async execution
+   - Commands like `evaluate accuracy` manage their own event loops ✓
+   - Event loops are created and managed within the command ✓
+   - Loops are not closed to allow reuse in worker processes ✓
+   - Progress updates work seamlessly with async execution ✓
 
 2. Dispatch-level async:
-   - Celery handles task dispatch asynchronously
-   - Commands can be run in background with progress tracking
-   - Results are stored in DynamoDB for retrieval
-   - Status updates flow through the Action model
+   - Celery handles task dispatch asynchronously ✓
+   - Commands can be run in background with progress tracking ✓
+   - Results are stored in DynamoDB for retrieval ✓
+   - Status updates flow through the Action model ✓
 
 ### Result Format
 Commands return results in a standardized format:
@@ -205,50 +180,31 @@ The system handles various error conditions:
 - System exits are handled gracefully with appropriate status codes ✓
 - Async command failures are properly propagated and logged ✓
 
-## Dashboard Integration
+## Next Steps
 
-### Architecture
-- Action model in Amplify schema represents both request and results
-- Lightweight Lambda function dispatches Celery commands on Action creation
-- Celery worker updates Action records directly through AppSync
-- Frontend components use normal Amplify subscriptions for realtime updates
+1. **Python Client Implementation**
+   - Create Action and ActionStage model classes
+   - Add methods for action lifecycle management
+   - Integrate with existing Celery task system
+   - Add real-time progress tracking
 
-### Lambda Implementation
-- Minimal Python script with Celery as only dependency
-- Infrastructure defined in Amplify backend.ts using CDK:
-  - SQS queue for Celery broker
-  - DynamoDB table for Celery results
-  - IAM permissions for Lambda to access both
-- Configuration accessed through Amplify's injected `env` object
-- Dispatches command asynchronously and exits immediately
-- No need for full Plexus installation in Lambda environment
+2. **Frontend Development**
+   - Build action list and detail views
+   - Implement real-time progress updates
+   - Add stage-based progress visualization
+   - Create error handling and retry UI
 
-### CDK Infrastructure
-- Define SQS queue and DynamoDB table in backend.ts
-- Create IAM policies for Lambda to access these resources
-- Export queue URL and table name through Lambda environment
-- Share same resources between Lambda and Celery workers
-- Ensure proper permissions for AppSync mutations
+3. **Testing & Documentation**
+   - Write unit tests for new models
+   - Add integration tests for action lifecycle
+   - Document API changes and new features
+   - Create usage examples
 
-### Action Model Integration
-- Action records include Celery command ID and status
-- Worker updates include required DataStore fields (_lastChangedAt, _version, _deleted)
-- Frontend subscribes to Action updates through standard Amplify patterns
-- Conflict resolution handled by Amplify DataStore
-
-### Implementation Requirements
-- AWS credentials and permissions for Celery worker AppSync access
-- Lambda function configuration in Amplify schema
-- Action model schema with appropriate fields and triggers
-- Worker code to perform AppSync mutations
-
-### Next Steps
-1. Define Action model schema with required fields
-2. Implement Lambda trigger for action creation
-3. Add AppSync mutation capability to Celery worker
-4. Create frontend components for action management
-5. Set up proper AWS permissions and credentials
-6. Test end-to-end action lifecycle
+4. **Deployment & Monitoring**
+   - Set up proper AWS permissions
+   - Configure monitoring and alerts
+   - Add operational dashboards
+   - Document operational procedures
 
 ## Environment Configuration
 
@@ -257,14 +213,6 @@ The system handles various error conditions:
 - `CELERY_AWS_SECRET_ACCESS_KEY`: AWS secret key for SQS
 - `CELERY_AWS_REGION_NAME`: AWS region for SQS
 - `CELERY_RESULT_BACKEND_TEMPLATE`: DynamoDB backend URL template
-
-## Next Steps
-
-1. Add resource monitoring and limits
-2. Enhance error handling with retry policies
-3. Add security measures
-4. Create monitoring dashboards
-5. Write comprehensive documentation
 
 ## Usage Example
 
