@@ -36,8 +36,10 @@ def mock_client():
 
 def test_client_requires_api_credentials():
     """Test that client requires API URL and key"""
-    with pytest.raises(ValueError, match="Missing required API URL or API key"):
-        PlexusDashboardClient()
+    # Clear any environment variables that might interfere
+    with patch.dict('os.environ', {}, clear=True):
+        with pytest.raises(ValueError, match="Missing required API URL or API key"):
+            PlexusDashboardClient()
 
 def test_client_accepts_manual_credentials():
     """Test that client accepts manually provided credentials"""
@@ -71,9 +73,14 @@ def test_execute_handles_query_error(mock_env, mock_gql_client):
     """Test that execute handles GraphQL query errors"""
     client = PlexusDashboardClient()
     
-    # Make the GQL client raise an error
-    mock_gql_client.return_value.execute.side_effect = \
-        TransportQueryError("Test error")
+    # Create TransportQueryError with proper errors attribute
+    error = TransportQueryError("GraphQL query failed")
+    error.errors = [{"message": "Test error"}]
+    
+    # Mock the session context manager
+    mock_session = Mock()
+    mock_session.execute.side_effect = error
+    mock_gql_client.return_value.__enter__.return_value = mock_session
     
     with pytest.raises(Exception, match="GraphQL query failed: Test error"):
         client.execute("query { test }")
@@ -84,6 +91,11 @@ def test_execute_returns_query_result(mock_env, mock_gql_client):
     
     expected_result = {'data': {'test': 'value'}}
     mock_gql_client.return_value.execute.return_value = expected_result
+    
+    # Mock the session context manager
+    mock_session = Mock()
+    mock_session.execute.return_value = expected_result
+    mock_gql_client.return_value.__enter__.return_value = mock_session
     
     result = client.execute("query { test }")
     assert result == expected_result

@@ -5,28 +5,24 @@ import { LabelBadgeComparison } from '@/components/LabelBadgeComparison'
 
 export interface EvaluationTaskScoreResultProps {
   id: string
-  value: string | number
-  confidence?: number | null
-  metadata?: any
-  correct?: boolean | null
+  value: string
+  confidence: number | null
+  explanation: string | null
+  metadata: {
+    human_label: string | null
+    correct: boolean
+  }
+  itemId: string | null
   isFocused?: boolean
 }
 
 export function EvaluationTaskScoreResult({ 
-  value, 
-  confidence, 
+  value,
+  confidence,
+  explanation,
   metadata,
-  correct,
   isFocused
 }: EvaluationTaskScoreResultProps) {
-  const parsedMetadata = typeof metadata === 'string' ? 
-    JSON.parse(metadata) : metadata
-
-  const firstResultKey = parsedMetadata?.results ? 
-    Object.keys(parsedMetadata.results)[0] : null
-  const result = firstResultKey ? 
-    parsedMetadata.results[firstResultKey] : null
-
   return (
     <Card className={`px-0 pb-0 rounded-lg border-0 shadow-none transition-colors
       hover:bg-background
@@ -35,23 +31,17 @@ export function EvaluationTaskScoreResult({
         <div className="flex items-start justify-between">
           <div>
             <div className="font-medium">
-              {result?.metadata ? (
-                <>
-                  <LabelBadgeComparison
-                    predictedLabel={result.value}
-                    actualLabel={result.metadata.human_label}
-                    isCorrect={result.metadata.correct}
-                    showStatus={false}
-                    isFocused={isFocused}
-                  />
-                  {result.explanation && (
-                    <div className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                      {result.explanation}
-                    </div>
-                  )}
-                </>
-              ) : (
-                'Unknown Prediction'
+              <LabelBadgeComparison
+                predictedLabel={value}
+                actualLabel={metadata.human_label ?? ''}
+                isCorrect={metadata.correct}
+                showStatus={false}
+                isFocused={isFocused}
+              />
+              {explanation && (
+                <div className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                  {explanation}
+                </div>
               )}
             </div>
           </div>

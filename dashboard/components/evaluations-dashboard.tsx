@@ -6,7 +6,7 @@ import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, RectangleVertical, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown } from "lucide-react"
+import { Square, RectangleVertical, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Trash2, MoreHorizontal, Eye } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -17,6 +17,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { TimeRangeSelector } from "@/components/time-range-selector"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import ReactMarkdown from 'react-markdown'
@@ -38,6 +44,7 @@ import { listFromModel, observeQueryFromModel, getFromModel, observeScoreResults
 import type { EvaluationTaskData } from '@/components/EvaluationTask'
 import { useAuthenticator } from '@aws-amplify/ui-react';
 import { useRouter } from 'next/navigation';
+import { Observable } from 'rxjs';
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -175,6 +182,154 @@ interface ConfusionMatrix {
   matrix: number[][]
   labels: string[]
 }
+
+interface EvaluationRowProps {
+  evaluation: Schema['Evaluation']['type']
+  selectedEvaluationId: string | undefined | null
+  scorecardNames: Record<string, string>
+  scoreNames: Record<string, string>
+  onSelect: (evaluation: Schema['Evaluation']['type']) => void
+  onDelete: (evaluationId: string) => Promise<boolean>
+}
+
+const EvaluationRow = React.memo(({ 
+  evaluation, 
+  selectedEvaluationId, 
+  scorecardNames, 
+  scoreNames,
+  onSelect,
+  onDelete
+}: EvaluationRowProps) => {
+  return (
+    <TableRow 
+      onClick={() => onSelect(evaluation)} 
+      className="group cursor-pointer transition-colors duration-200 relative hover:bg-muted"
+    >
+      <TableCell className="font-medium">
+        <div className="block @[630px]:hidden">
+          <div className="flex justify-between">
+            <div className="w-[40%] space-y-0.5">
+              <div className="font-semibold truncate">
+                <span className={evaluation.id === selectedEvaluationId ? 'text-focus' : ''}>
+                  {scorecardNames[evaluation.id] || 'Unknown Scorecard'}
+                </span>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {scoreNames[evaluation.id] || 'Unknown Score'}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {formatDistanceToNow(new Date(evaluation.createdAt), { addSuffix: true })}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {evaluation.type || ''}
+              </div>
+            </div>
+            <div className="w-[55%] space-y-2">
+              <EvaluationListProgressBar 
+                progress={calculateProgress(evaluation.processedItems, evaluation.totalItems)}
+                totalSamples={evaluation.totalItems ?? 0}
+                isFocused={evaluation.id === selectedEvaluationId}
+              />
+              <EvaluationListAccuracyBar 
+                progress={calculateProgress(evaluation.processedItems, evaluation.totalItems)}
+                accuracy={evaluation.accuracy ?? 0}
+                isFocused={evaluation.id === selectedEvaluationId}
+              />
+            </div>
+          </div>
+          <div className="mt-2 flex justify-end space-x-2">
+            <CardButton 
+              icon={Eye}
+              onClick={() => onSelect(evaluation)}
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  className="h-8 w-8 p-0"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={async (e) => {
+                  e.stopPropagation();
+                  if (window.confirm('Are you sure you want to delete this evaluation?')) {
+                    await onDelete(evaluation.id);
+                  }
+                }}>
+                  <Trash2 className="h-4 w-4 mr-2" /> Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+        <div className="hidden @[630px]:block">
+          <div className="font-semibold">
+            <span className={evaluation.id === selectedEvaluationId ? 'text-focus' : ''}>
+              {scorecardNames[evaluation.id] || 'Unknown Scorecard'}
+            </span>
+          </div>
+          <div className="text-sm text-muted-foreground">
+            {scoreNames[evaluation.id] || 'Unknown Score'}
+          </div>
+          <div className="text-sm text-muted-foreground">
+            {formatDistanceToNow(new Date(evaluation.createdAt), { addSuffix: true })}
+          </div>
+        </div>
+      </TableCell>
+      <TableCell className="hidden @[630px]:table-cell text-sm text-muted-foreground">
+        {evaluation.type || ''}
+      </TableCell>
+      <TableCell className="hidden @[630px]:table-cell w-[15%] text-right">
+        <EvaluationListProgressBar 
+          progress={calculateProgress(evaluation.processedItems, evaluation.totalItems)}
+          totalSamples={evaluation.totalItems ?? 0}
+          isFocused={evaluation.id === selectedEvaluationId}
+        />
+      </TableCell>
+      <TableCell className="hidden @[630px]:table-cell w-[15%]">
+        <EvaluationListAccuracyBar 
+          progress={calculateProgress(evaluation.processedItems, evaluation.totalItems)}
+          accuracy={evaluation.accuracy ?? 0}
+          isFocused={evaluation.id === selectedEvaluationId}
+        />
+      </TableCell>
+      <TableCell className="hidden @[630px]:table-cell w-[10%] text-right">
+        <div className="flex items-center justify-end space-x-2">
+          <CardButton 
+            icon={Eye}
+            onClick={() => onSelect(evaluation)}
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                className="h-8 w-8 p-0"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={async (e) => {
+                e.stopPropagation();
+                if (window.confirm('Are you sure you want to delete this evaluation?')) {
+                  await onDelete(evaluation.id);
+                }
+              }}>
+                <Trash2 className="h-4 w-4 mr-2" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+});
+
+EvaluationRow.displayName = 'EvaluationRow';
 
 // Add viewport hook
 function useViewportWidth() {
@@ -322,7 +477,11 @@ interface DragState {
 }
 
 // Add this new function near the top with other helper functions
-async function loadRelatedData(evaluations: Schema['Evaluation']['type'][]): Promise<Schema['Evaluation']['type'][]> {
+async function loadRelatedData(
+  evaluations: Schema['Evaluation']['type'][],
+  setScorecardNames: (names: Record<string, string>) => void,
+  setScoreNames: (names: Record<string, string>) => void
+): Promise<Schema['Evaluation']['type'][]> {
   // Get unique IDs
   const scorecardIds = [...new Set(evaluations
     .filter(e => e.scorecardId)
@@ -334,28 +493,106 @@ async function loadRelatedData(evaluations: Schema['Evaluation']['type'][]): Pro
   console.log('Loading related data:', {
     evaluationCount: evaluations.length,
     scorecardIds,
-    scoreIds
+    scoreIds,
+    evaluationsWithoutScoreId: evaluations.filter(e => !e.scoreId).map(e => ({
+      id: e.id,
+      type: e.type,
+      createdAt: e.createdAt
+    }))
   })
 
-  // Load all scorecards and scores in parallel
+  // Load all scorecards and scores in parallel with error handling
   const [scorecards, scores] = await Promise.all([
-    Promise.all(scorecardIds.map(id => getFromModel<Schema['Scorecard']['type']>(
-      client.models.Scorecard, 
-      id
-    ))),
-    Promise.all(scoreIds.map(id => getFromModel<Schema['Score']['type']>(
-      client.models.Score,
-      id
-    )))
+    Promise.all(
+      scorecardIds.map(async id => {
+        try {
+          return await getFromModel<Schema['Scorecard']['type']>(
+            client.models.Scorecard, 
+            id
+          )
+        } catch (error) {
+          console.error('Error loading scorecard:', { id, error })
+          return { data: null }
+        }
+      })
+    ),
+    Promise.all(
+      scoreIds.map(async id => {
+        try {
+          console.log('Attempting to load score:', { id })
+          const result = await getFromModel<Schema['Score']['type']>(
+            client.models.Score,
+            id
+          )
+          if (!result.data) {
+            console.warn('Score not found:', { id })
+          }
+          return result
+        } catch (error) {
+          console.error('Error loading score:', { id, error })
+          return { data: null }
+        }
+      })
+    )
   ])
+
+  // Log score loading results with more detail
+  console.log('Score loading results:', scores.map((result, index) => ({
+    id: result.data?.id,
+    requestedId: scoreIds[index],
+    name: result.data?.name,
+    success: !!result.data,
+    found: result.data !== null && result.data !== undefined
+  })))
 
   // Create maps for quick lookups
   const scorecardMap = new Map(
     scorecards.map(result => [result.data?.id, result.data])
   )
   const scoreMap = new Map(
-    scores.map(result => [result.data?.id, result.data])
+    scores.map((result, index) => [scoreIds[index], result.data])
   )
+
+  // Create name mappings
+  const newScorecardNames: Record<string, string> = {}
+  const newScoreNames: Record<string, string> = {}
+
+  evaluations.forEach(evaluation => {
+    const scorecard = scorecardMap.get(evaluation.scorecardId || '')
+    const score = scoreMap.get(evaluation.scoreId || '')
+    if (scorecard) {
+      newScorecardNames[evaluation.id] = scorecard.name
+    }
+    if (score) {
+      newScoreNames[evaluation.id] = score.name
+    } else if (evaluation.scoreId) {
+      console.log('Missing score data for evaluation:', {
+        evaluationId: evaluation.id,
+        scoreId: evaluation.scoreId,
+        type: evaluation.type,
+        createdAt: evaluation.createdAt,
+        scoreMapKeys: Array.from(scoreMap.keys())
+      })
+    }
+  })
+
+  // Log final name mappings with more detail
+  console.log('Final name mappings:', {
+    scoreNames: newScoreNames,
+    unmappedEvaluations: evaluations
+      .filter(e => !newScoreNames[e.id])
+      .map(e => ({
+        id: e.id,
+        scoreId: e.scoreId,
+        type: e.type,
+        createdAt: e.createdAt,
+        scoreFound: e.scoreId ? scoreMap.has(e.scoreId) : false
+      }))
+  })
+
+  // Update the state with the new names
+  setScorecardNames(newScorecardNames)
+  setScoreNames(newScoreNames)
 
   // Transform evaluations with pre-loaded data and explicitly return the result
   return evaluations.map(evaluation => ({
@@ -368,6 +605,152 @@ async function loadRelatedData(evaluations: Schema['Evaluation']['type'][]): Pro
     })
   }))
 }
+
+interface EvaluationMetric {
+  name?: string;
+  value?: number;
+  unit?: string;
+  maximum?: number;
+  priority?: boolean;
+}
+
+interface ParsedScoreResult {
+  id: string
+  value: string
+  confidence: number | null
+  explanation: string | null
+  metadata: {
+    human_label: string | null
+    correct: boolean
+    human_explanation?: string | null
+    text?: string | null
+  }
+  itemId: string | null
+}
+
+interface ScoreResultMetadata {
+  item_id?: number | string
+  results?: {
+    [key: string]: {
+      value?: string | number
+      confidence?: number
+      explanation?: string
+      metadata?: {
+        human_label?: string
+        correct?: boolean
+        human_explanation?: string
+        text?: string
+      }
+    }
+  }
+}
+
+function parseScoreResult(result: Schema['ScoreResult']['type']): ParsedScoreResult {
+  // Handle double-stringified JSON
+  const parsedMetadata = (() => {
+    try {
+      let metadata = result.metadata
+      if (typeof metadata === 'string') {
+        metadata = JSON.parse(metadata)
+        if (typeof metadata === 'string') {
+          metadata = JSON.parse(metadata)
+        }
+      }
+      return metadata as ScoreResultMetadata
+    } catch (e) {
+      console.error('Error parsing metadata:', e)
+      return {} as ScoreResultMetadata
+    }
+  })()
+
+  console.log('Raw score result:', {
+    id: result.id,
+    metadata: result.metadata,
+    parsedMetadata
+  })
+
+  const firstResultKey = parsedMetadata?.results ? 
+    Object.keys(parsedMetadata.results)[0] : null
+  const scoreResult = firstResultKey && parsedMetadata.results ? 
+    parsedMetadata.results[firstResultKey] : null
+
+  console.log('Parsed score result:', {
+    firstResultKey,
+    scoreResult,
+    value: scoreResult?.value,
+    confidence: scoreResult?.confidence,
+    explanation: scoreResult?.explanation,
+    metadata: scoreResult?.metadata
+  })
+
+  return {
+    id: result.id,
+    value: String(scoreResult?.value ?? ''),
+    confidence: result.confidence ?? scoreResult?.confidence ?? null,
+    explanation: scoreResult?.explanation ?? null,
+    metadata: {
+      human_label: scoreResult?.metadata?.human_label ?? null,
+      correct: Boolean(scoreResult?.metadata?.correct),
+      human_explanation: scoreResult?.metadata?.human_explanation ?? null,
+      text: scoreResult?.metadata?.text ?? null
+    },
+    itemId: parsedMetadata?.item_id?.toString() ?? null
+  }
+}
+
+// Add sorting helper at the top
+const sortByCreatedAt = (evaluations: Schema['Evaluation']['type'][]) => {
+  return [...evaluations].sort((a, b) => {
+    const aTime = new Date(a.createdAt).getTime();
+    const bTime = new Date(b.createdAt).getTime();
+    return bTime - aTime;
+  });
+};
+
+// Handle delete evaluation
+const handleDeleteEvaluation = async (client: any, evaluationId: string) => {
+  try {
+    // First, get all score results for this evaluation
+    const scoreResultsResponse = await client.models.ScoreResult.listScoreResultByEvaluationId({
+      evaluationId,
+      limit: 10000,
+      fields: ['id']
+    });
+
+    // Delete all score results first
+    if (scoreResultsResponse.data && scoreResultsResponse.data.length > 0) {
+      console.log(`Deleting ${scoreResultsResponse.data.length} score results for evaluation ${evaluationId}`);
+      await Promise.all(
+        scoreResultsResponse.data.map((result: { id: string }) => 
+          client.models.ScoreResult.delete({ id: result.id })
+        )
+      );
+    }
+
+    // Get and delete all scoring jobs for this evaluation
+    const scoringJobsResponse = await client.models.ScoringJob.listScoringJobByEvaluationId({
+      evaluationId,
+      limit: 10000,
+      fields: ['id']
+    });
+
+    if (scoringJobsResponse.data && scoringJobsResponse.data.length > 0) {
+      console.log(`Deleting ${scoringJobsResponse.data.length} scoring jobs for evaluation ${evaluationId}`);
+      await Promise.all(
+        scoringJobsResponse.data.map((job: { id: string }) => 
+          client.models.ScoringJob.delete({ id: job.id })
+        )
+      );
+    }
+
+    // Then delete the evaluation itself
+    await client.models.Evaluation.delete({ id: evaluationId });
+    return true;
+  } catch (error) {
+    console.error('Error deleting evaluation:', error);
+    return false;
+  }
+};
 
 export default function EvaluationsDashboard(): JSX.Element {
   const { authStatus, user } = useAuthenticator(context => [context.authStatus]);
@@ -415,88 +798,36 @@ export default function EvaluationsDashboard(): JSX.Element {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[30%]">Evaluation</TableHead>
+          <TableHead className="w-[40%]">Evaluation</TableHead>
           <TableHead className="w-[10%] @[630px]:table-cell hidden">Type</TableHead>
-          <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Progress</TableHead>
-          <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Accuracy</TableHead>
+          <TableHead className="w-[20%] @[630px]:table-cell hidden text-right">Progress</TableHead>
+          <TableHead className="w-[20%] @[630px]:table-cell hidden text-right">Accuracy</TableHead>
+          <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {filteredEvaluations.map((Evaluation) => (
-          <TableRow 
+          <EvaluationRow 
             key={Evaluation.id} 
-            onClick={() => {
+            evaluation={Evaluation}
+            selectedEvaluationId={selectedEvaluation?.id ?? null}
+            scorecardNames={scorecardNames}
+            scoreNames={scoreNames}
+            onSelect={(evaluation) => {
               setScoreResults([])
-              setSelectedEvaluation(Evaluation)
-            }} 
-            className={`cursor-pointer transition-colors duration-200 
-              ${Evaluation.id === selectedEvaluation?.id ? 'bg-muted' : 'hover:bg-muted'}`}
-          >
-            <TableCell className="font-medium">
-              <div className="block @[630px]:hidden">
-                <div className="flex justify-between">
-                  <div className="w-[40%] space-y-0.5">
-                    <div className="font-semibold truncate">
-                      <span className={Evaluation.id === selectedEvaluation?.id ? 'text-focus' : ''}>
-                        {scorecardNames[Evaluation.id] || 'Unknown Scorecard'}
-                      </span>
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {scoreNames[Evaluation.id] || 'Unknown Score'}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {formatDistanceToNow(new Date(Evaluation.createdAt), { addSuffix: true })}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {Evaluation.type || ''}
-                    </div>
-                  </div>
-                  <div className="w-[55%] space-y-2">
-                    <EvaluationListProgressBar 
-                      progress={calculateProgress(Evaluation.processedItems, Evaluation.totalItems)}
-                      totalSamples={Evaluation.totalItems ?? 0}
-                      isFocused={Evaluation.id === selectedEvaluation?.id}
-                    />
-                    <EvaluationListAccuracyBar 
-                      progress={calculateProgress(Evaluation.processedItems, Evaluation.totalItems)}
-                      accuracy={Evaluation.accuracy ?? 0}
-                      isFocused={Evaluation.id === selectedEvaluation?.id}
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="hidden @[630px]:block">
-                <div className="font-semibold">
-                  <span className={Evaluation.id === selectedEvaluation?.id ? 'text-focus' : ''}>
-                    {scorecardNames[Evaluation.id] || 'Unknown Scorecard'}
-                  </span>
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {scoreNames[Evaluation.id] || 'Unknown Score'}
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {formatDistanceToNow(new Date(Evaluation.createdAt), { addSuffix: true })}
-                </div>
-              </div>
-            </TableCell>
-            <TableCell className="hidden @[630px]:table-cell text-sm text-muted-foreground">
-              {Evaluation.type || ''}
-            </TableCell>
-            <TableCell className="hidden @[630px]:table-cell w-[15%] text-right">
-              <EvaluationListProgressBar 
-                progress={calculateProgress(Evaluation.processedItems, Evaluation.totalItems)}
-                totalSamples={Evaluation.totalItems ?? 0}
-                isFocused={Evaluation.id === selectedEvaluation?.id}
-              />
-            </TableCell>
-            <TableCell className="hidden @[630px]:table-cell w-[15%]">
-              <EvaluationListAccuracyBar 
-                progress={calculateProgress(Evaluation.processedItems, Evaluation.totalItems)}
-                accuracy={Evaluation.accuracy ?? 0}
-                isFocused={Evaluation.id === selectedEvaluation?.id}
-              />
-            </TableCell>
-          </TableRow>
+              setSelectedEvaluation(evaluation)
+            }}
+            onDelete={async (evaluationId) => {
+              const success = await handleDeleteEvaluation(client, evaluationId);
+              if (success) {
+                setEvaluations(prev => prev.filter(e => e.id !== evaluationId));
+                if (selectedEvaluation?.id === evaluationId) {
+                  setSelectedEvaluation(null);
+                }
+              }
+              return success;
+            }}
+          />
         ))}
       </TableBody>
     </Table>
@@ -561,7 +892,369 @@ export default function EvaluationsDashboard(): JSX.Element {
 
   useEffect(() => {
     selectedEvaluationRef.current = selectedEvaluation;
-  }, [selectedEvaluation]);
+
+    if (selectedEvaluation) {
+      const subscription = observeScoreResults(client, selectedEvaluation.id).subscribe({
+        next: (data) => {
+          const parsedResults = data.items.map(parseScoreResult)
+          setScoreResults(parsedResults)
+        },
+        error: (error) => {
+          console.error('Error observing score results:', error)
+        }
+      })
+
+      return () => {
+        subscription.unsubscribe()
+      }
+    }
+  }, [selectedEvaluation])
+
+  // Add effect to update EvaluationTaskProps when selectedEvaluation changes
+  useEffect(() => {
+    if (!selectedEvaluation) {
+      setEvaluationTaskProps(null);
+      return;
+    }
+
+    console.log('Selected evaluation data:', {
+      id: selectedEvaluation.id,
+      rawConfusionMatrix: selectedEvaluation.confusionMatrix,
+      confusionMatrixType: typeof selectedEvaluation.confusionMatrix,
+      isObject: selectedEvaluation.confusionMatrix && typeof selectedEvaluation.confusionMatrix === 'object',
+      hasMatrixProp: selectedEvaluation.confusionMatrix && 
+        typeof selectedEvaluation.confusionMatrix === 'object' && 
+        'matrix' in selectedEvaluation.confusionMatrix,
+      hasLabelsProp: selectedEvaluation.confusionMatrix && 
+        typeof selectedEvaluation.confusionMatrix === 'object' && 
+        'labels' in selectedEvaluation.confusionMatrix
+    });
+
+    const rawMetrics = (() => {
+      try {
+        if (typeof selectedEvaluation.metrics === 'string') {
+          return JSON.parse(selectedEvaluation.metrics);
+        }
+        if (Array.isArray(selectedEvaluation.metrics)) {
+          return selectedEvaluation.metrics;
+        }
+        return [];
+      } catch (e) {
+        console.error('Error parsing metrics:', e);
+        return [];
+      }
+    })();
+
+    const metrics = rawMetrics.map((metric: EvaluationMetric) => ({
+      name: String(metric?.name || ''),
+      value: Number(metric?.value || 0),
+      unit: String(metric?.unit || '%'),
+      maximum: Number(metric?.maximum || 100),
+      priority: Boolean(metric?.priority)
+    }));
+
+    const confusionMatrix = (() => {
+      try {
+        const rawMatrix = typeof selectedEvaluation.confusionMatrix === 'string' 
+          ? JSON.parse(selectedEvaluation.confusionMatrix)
+          : selectedEvaluation.confusionMatrix;
+
+        if (rawMatrix && typeof rawMatrix === 'object' &&
+            Array.isArray(rawMatrix.matrix) && Array.isArray(rawMatrix.labels)) {
+          return {
+            matrix: rawMatrix.matrix,
+            labels: rawMatrix.labels
+          };
+        }
+        return null;
+      } catch (e) {
+        console.error('Error parsing confusion matrix:', e);
+        return null;
+      }
+    })();
+
+    const datasetClassDistribution = (() => {
+      try {
+        const rawDist = typeof selectedEvaluation.datasetClassDistribution === 'string' 
+          ? JSON.parse(selectedEvaluation.datasetClassDistribution)
+          : selectedEvaluation.datasetClassDistribution;
+
+        if (Array.isArray(rawDist)) {
+          return rawDist.map(item => ({
+            label: String(item?.label || ''),
+            count: Number(item?.count || 0)
+          }));
+        }
+        return undefined;
+      } catch (e) {
+        console.error('Error parsing dataset distribution:', e);
+        return undefined;
+      }
+    })();
+
+    const predictedClassDistribution = (() => {
+      try {
+        const rawDist = typeof selectedEvaluation.predictedClassDistribution === 'string' 
+          ? JSON.parse(selectedEvaluation.predictedClassDistribution)
+          : selectedEvaluation.predictedClassDistribution;
+
+        if (Array.isArray(rawDist)) {
+          return rawDist.map(item => ({
+            label: String(item?.label || ''),
+            count: Number(item?.count || 0)
+          }));
+        }
+        return undefined;
+      } catch (e) {
+        console.error('Error parsing predicted distribution:', e);
+        return undefined;
+      }
+    })();
+
+    const taskProps = {
+      id: selectedEvaluation.id,
+      type: selectedEvaluation.type,
+      scorecard: scorecardNames[selectedEvaluation.id] || 'Unknown Scorecard',
+      score: scoreNames[selectedEvaluation.id] || 'Unknown Score',
+      time: selectedEvaluation.createdAt,
+      data: {
+        accuracy: selectedEvaluation.accuracy ?? null,
+        metrics,
+        metricsExplanation: selectedEvaluation.metricsExplanation ?? null,
+        processedItems: selectedEvaluation.processedItems ?? 0,
+        totalItems: selectedEvaluation.totalItems ?? 0,
+        progress: calculateProgress(selectedEvaluation.processedItems, selectedEvaluation.totalItems),
+        inferences: selectedEvaluation.inferences ?? 0,
+        cost: selectedEvaluation.cost ?? null,
+        status: selectedEvaluation.status || '',
+        elapsedSeconds: selectedEvaluation.elapsedSeconds ?? null,
+        estimatedRemainingSeconds: selectedEvaluation.estimatedRemainingSeconds ?? null,
+        startedAt: selectedEvaluation.startedAt ?? null,
+        errorMessage: selectedEvaluation.errorMessage ?? null,
+        errorDetails: selectedEvaluation.errorDetails ?? null,
+        confusionMatrix,
+        scoreGoal: selectedEvaluation.scoreGoal ?? null,
+        datasetClassDistribution,
+        isDatasetClassDistributionBalanced: selectedEvaluation.isDatasetClassDistributionBalanced ?? null,
+        predictedClassDistribution,
+        isPredictedClassDistributionBalanced: selectedEvaluation.isPredictedClassDistributionBalanced ?? null,
+        scoreResults: scoreResults
+      }
+    };
+
+    setEvaluationTaskProps(taskProps);
+  }, [selectedEvaluation, scorecardNames, scoreNames, scoreResults]);
+
+  // Add initial data loading effect
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const { data: accounts } = await listAccounts();
+        if (!accounts?.length) {
+          setIsLoading(false);
+          return;
+        }
+
+        const foundAccountId = accounts[0].id;
+        setAccountId(foundAccountId);
+
+        const { data: evaluations } = await listEvaluations(foundAccountId);
+        if (!evaluations) {
+          setIsLoading(false);
+          return;
+        }
+
+        console.log('Raw evaluations from listEvaluations:', evaluations.map(e => ({
+          id: e.id,
+          createdAt: e.createdAt,
+          type: e.type
+        })));
+
+        const transformedEvaluations = await loadRelatedData(
+          evaluations,
+          setScorecardNames,
+          setScoreNames
+        );
+
+        console.log('Transformed evaluations before sort:', transformedEvaluations.map(e => ({
+          id: e.id,
+          createdAt: e.createdAt,
+          type: e.type
+        })));
+
+        const sortedEvaluations = sortByCreatedAt(transformedEvaluations);
+
+        console.log('Transformed evaluations after sort:', sortedEvaluations.map(e => ({
+          id: e.id,
+          createdAt: e.createdAt,
+          type: e.type
+        })));
+
+        setEvaluations(sortedEvaluations);
+        setIsLoading(false);
+
+        // Set up subscriptions for real-time updates
+        const handleEvaluationUpdate = async (data: Schema['Evaluation']['type']) => {
+          console.log('Evaluation update received:', {
+            id: data.id,
+            type: data.type,
+            status: data.status,
+            processedItems: data.processedItems,
+            totalItems: data.totalItems,
+            accuracy: data.accuracy,
+            createdAt: data.createdAt
+          });
+
+          if (!foundAccountId) return;
+          
+          // For onCreate, we can just add the new evaluation to the list
+          const isCreate = !Evaluations.some(e => e.id === data.id);
+          if (isCreate) {
+            console.log('Handling onCreate for evaluation:', {
+              id: data.id,
+              createdAt: data.createdAt,
+              existingIds: Evaluations.map(e => e.id)
+            });
+
+            // Transform the evaluation before setState to avoid async issues
+            const transformedEvaluation = await loadRelatedData(
+              [data],
+              (newNames) => {
+                setScorecardNames(prev => ({ ...prev, ...newNames }));
+              },
+              (newNames) => {
+                setScoreNames(prev => ({ ...prev, ...newNames }));
+              }
+            );
+
+            setEvaluations(prev => {
+              // If evaluation exists, update it
+              if (prev.some(e => e.id === data.id)) {
+                console.log('Updating existing evaluation:', data.id);
+                return sortByCreatedAt(prev.map(e => e.id === data.id ? {
+                  ...e,
+                  ...transformedEvaluation[0],
+                  // Preserve the async functions
+                  account: e.account,
+                  scorecard: e.scorecard,
+                  score: e.score
+                } : e));
+              }
+
+              // Otherwise add as new
+              const newList = sortByCreatedAt([transformedEvaluation[0], ...prev]);
+              console.log('Adding new evaluation:', data.id);
+              return newList;
+            });
+          } else {
+            // For updates, we'll update the specific evaluation in place
+            // but preserve the existing names
+            setEvaluations(prev => {
+              const updatedList = prev.map(e => e.id === data.id ? {
+                ...e,
+                ...data,
+                // Preserve the async functions
+                account: e.account,
+                scorecard: e.scorecard,
+                score: e.score
+              } : e);
+
+              // Re-sort after update in case createdAt changed
+              const sortedList = sortByCreatedAt(updatedList);
+              console.log('Updated evaluation list order:', sortedList.map(e => ({
+                id: e.id,
+                createdAt: e.createdAt,
+                type: e.type,
+                scorecardName: scorecardNames[e.id],
+                scoreName: scoreNames[e.id]
+              })));
+
+              return sortedList;
+            });
+          }
+
+          // Update selectedEvaluation if it matches
+          if (selectedEvaluation && data.id === selectedEvaluation.id) {
+            setSelectedEvaluation(prev => ({
+              ...prev!,
+              ...data,
+              // Preserve the async functions
+              account: prev!.account,
+              scorecard: prev!.scorecard,
+              score: prev!.score
+            }));
+          }
+        };
+
+        const handleError = (error: unknown) => {
+          console.error('Subscription error:', error);
+          setError(error instanceof Error ? error : new Error(String(error)));
+        };
+
+        type EvaluationObservable = Observable<Schema['Evaluation']['type']>;
+        
+        // Subscribe to create events
+        const createSub = (client.models.Evaluation as any).onCreate().subscribe({
+          next: handleEvaluationUpdate,
+          error: handleError
+        });
+
+        // Subscribe to update events
+        const updateSub = (client.models.Evaluation as any).onUpdate().subscribe({
+          next: handleEvaluationUpdate,
+          error: handleError
+        });
+
+        // Subscribe to delete events
+        const deleteSub = (client.models.Evaluation as any).onDelete().subscribe({
+          next: (data: Schema['Evaluation']['type']) => {
+            if (!data) return;
+            console.log('Evaluation delete received:', {
+              id: data.id,
+              type: data.type,
+              createdAt: data.createdAt
+            });
+
+            // Remove from evaluations list
+            setEvaluations(prev => {
+              const updatedList = prev.filter(e => e.id !== data.id);
+              console.log('Removing deleted evaluation:', {
+                deletedId: data.id,
+                previousCount: prev.length,
+                newCount: updatedList.length
+              });
+              return sortByCreatedAt(updatedList);
+            });
+
+            // Clear selection if the deleted evaluation was selected
+            if (selectedEvaluation?.id === data.id) {
+              console.log('Clearing selected evaluation as it was deleted');
+              setSelectedEvaluation(null);
+              setScoreResults([]);
+              setEvaluationTaskProps(null);
+            }
+          },
+          error: handleError
+        });
+
+        return () => {
+          createSub.unsubscribe();
+          updateSub.unsubscribe();
+          deleteSub.unsubscribe();
+        };
+
+      } catch (error) {
+        console.error('Error loading initial data:', error);
+        setError(error instanceof Error ? error : new Error('Failed to load initial data'));
+        setIsLoading(false);
+      }
+    };
+
+    loadInitialData();
+
+    // No cleanup needed here as it's handled in the async function
+    return undefined;
+  }, [selectedEvaluation]); // Add selectedEvaluation to dependencies since we use it in handleEvaluationUpdate
 
   // Early return for unauthenticated state
   if (authStatus !== 'authenticated') {

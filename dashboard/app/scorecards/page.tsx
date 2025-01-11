@@ -4,26 +4,19 @@ import { useAuthenticator } from '@aws-amplify/ui-react';
 import DashboardLayout from '@/components/dashboard-layout';
 import ScorecardsComponent from '@/components/scorecards-dashboard';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { signOut as amplifySignOut } from 'aws-amplify/auth';
 
 export default function ScorecardsPage() {
-  const { signOut, authStatus } = useAuthenticator((context) => [context.signOut, context.authStatus]);
   const router = useRouter();
 
-  useEffect(() => {
-    if (authStatus !== 'authenticated') {
-      router.push('/');
-    }
-  }, [authStatus, router]);
-
   const handleSignOut = async () => {
-    await signOut();
-    router.push('/');
+    try {
+      await amplifySignOut();
+      router.push('/');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
   };
-
-  if (authStatus !== 'authenticated') {
-    return null; // or a loading spinner
-  }
 
   return (
     <DashboardLayout signOut={handleSignOut}>
