@@ -47,7 +47,7 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Process management ✓
    - Logging setup ✓
 
-### Phase 2: Reliability & Monitoring (In Progress)
+### Phase 2: Reliability & Monitoring ✓
 1. Enhanced error handling ✓
    - Retry mechanisms ✓
    - Timeout handling ✓
@@ -64,30 +64,69 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Result expiration ✓
    - Query interfaces ✓
 
-### Phase 3: Action-Command Integration
-1. Action Model Implementation
-   - Define Action GraphQL model schema
-   - Add required fields for command tracking
-   - Configure real-time subscriptions
-   - Set up DynamoDB table and indexes
+### Phase 3: Action-Command Integration (In Progress)
 
-2. Command Progress Integration
-   - Extend command dispatch to update Action records
-   - Add progress reporting to Action updates
-   - Implement status message propagation
-   - Handle command completion state
+#### Action Model Design
 
-3. React Dashboard Components
-   - Create ActionProgress component
-   - Implement real-time progress display
-   - Add command status visualization
-   - Handle command lifecycle events
+1. **Core Models**
 
-4. End-to-End Integration
-   - Connect React components to Action model
-   - Test long-running command updates
-   - Verify real-time progress display
-   - Validate error handling and recovery
+   a. **Action**
+   - `id`: String (Primary Key)
+   - `accountId`: String (GSI)
+   - `type`: String (e.g., 'evaluation', 'batch_scoring', etc.)
+   - `status`: String (overall status: 'pending', 'running', 'completed', 'error')
+   - `statusMessage`: String (human-readable current status)
+   - `createdAt`: String (ISO timestamp)
+   - `startedAt`: String (ISO timestamp, nullable)
+   - `completedAt`: String (ISO timestamp, nullable)
+   - `estimatedCompletionAt`: String (ISO timestamp, nullable)
+   - `errorMessage`: String (nullable)
+   - `errorDetails`: JSON (nullable)
+   - `currentStageId`: String (FK to ActionStage)
+   - `metadata`: JSON (type-specific configuration)
+
+   b. **ActionStage**
+   - `id`: String (Primary Key)
+   - `actionId`: String (FK to Action)
+   - `name`: String (e.g., 'preprocessing', 'processing', 'summarizing')
+   - `order`: Number (sequence number for this stage)
+   - `status`: String ('pending', 'running', 'completed', 'error')
+   - `statusMessage`: String (human-readable current status)
+   - `startedAt`: String (ISO timestamp, nullable)
+   - `completedAt`: String (ISO timestamp, nullable)
+   - `estimatedCompletionAt`: String (ISO timestamp, nullable)
+   - `processedItems`: Number
+   - `totalItems`: Number
+
+2. **Implementation Requirements**
+
+   a. **Time Handling**
+   - All timestamps in ISO 8601 format with UTC timezone
+   - Frontend calculates elapsed time as: `now() - startedAt`
+   - Frontend calculates remaining time as: `estimatedCompletionAt - now()`
+   - Backend updates `estimatedCompletionAt` based on progress rate
+   - All nodes synchronized via NTP
+
+   b. **State Management**
+   - One Action has many ActionStages
+   - Each ActionStage belongs to one Action
+   - Action.currentStageId points to currently active stage
+   - Stages follow defined order sequence
+   - Frontend subscribes to both Action and Stage updates
+
+3. **Next Implementation Steps**
+   - Define Action and ActionStage models in Amplify schema
+   - Create Lambda trigger for action creation
+   - Extend Celery worker to update both models
+   - Build frontend components for progress display
+   - Implement real-time updates and time calculations
+
+4. **Technical Considerations**
+   - Use DynamoDB GSI on accountId for efficient listing
+   - Consider TTL for cleanup of completed actions
+   - Use atomic updates for counters
+   - Handle partial failures in stage updates
+   - Optimize subscription updates to minimize network traffic
 
 ## Current Implementation Details
 
