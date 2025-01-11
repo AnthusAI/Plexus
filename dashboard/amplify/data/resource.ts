@@ -289,6 +289,7 @@ const schema = a.schema({
             type: a.string().required(),
             status: a.string().required(),
             target: a.string().required(),
+            command: a.string().required(),
             metadata: a.json(),
             createdAt: a.datetime().required(),
             startedAt: a.datetime(),
