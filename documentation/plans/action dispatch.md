@@ -23,10 +23,10 @@ This document outlines the implementation of Plexus's two-level dispatch system:
 - Configurable timeouts and retry policies
 - Result storage and retrieval ✓
 - Task cancellation removed (YAGNI - complexity outweighed benefits)
-- Task targeting system for worker specialization:
-  - Target string format: `domain/subdomain`
-  - Pattern matching with wildcards
-  - Worker configuration for target patterns
+- Task targeting system for worker specialization ✓
+  - Target string format: `domain/subdomain` ✓
+  - Pattern matching with wildcards ✓
+  - Worker configuration for target patterns ✓
   - Examples:
     - `datasets/call-criteria`
     - `training/call-criteria`
@@ -72,13 +72,13 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Persistent storage ✓
    - Result expiration ✓
    - Query interfaces ✓
-4. Task targeting (In Progress)
-   - Target string format definition
-   - Pattern matching implementation
-   - Worker configuration
-   - Unit test coverage
+4. Task targeting ✓
+   - Target string format definition ✓
+   - Pattern matching implementation ✓
+   - Worker configuration ✓
+   - Unit test coverage ✓
 
-### Phase 3: Action-Command Integration (In Progress)
+### Phase 3: Action-Command Integration (Next Up)
 
 #### Action Model Design
 
@@ -98,6 +98,7 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - `errorDetails`: JSON (nullable)
    - `currentStageId`: String (FK to ActionStage)
    - `metadata`: JSON (type-specific configuration)
+   - `target`: String (task targeting string, e.g., 'datasets/call-criteria')
 
    b. **ActionStage**
    - `id`: String (Primary Key)
@@ -129,11 +130,11 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Frontend subscribes to both Action and Stage updates
 
 3. **Next Implementation Steps**
-   - Define Action and ActionStage models in Amplify schema
-   - Create Lambda trigger for action creation
-   - Extend Celery worker to update both models
-   - Build frontend components for progress display
-   - Implement real-time updates and time calculations
+   1. Define Action and ActionStage models in Amplify schema
+   2. Create Lambda trigger for action creation
+   3. Extend Celery worker to update both models
+   4. Build frontend components for progress display
+   5. Implement real-time updates and time calculations
 
 4. **Technical Considerations**
    - Use DynamoDB GSI on accountId for efficient listing
@@ -141,6 +142,7 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Use atomic updates for counters
    - Handle partial failures in stage updates
    - Optimize subscription updates to minimize network traffic
+   - Ensure task targeting is respected in Action-to-Command dispatch
 
 ## Current Implementation Details
 
