@@ -289,6 +289,7 @@ const schema = a.schema({
             type: a.string().required(),
             status: a.string().required(),
             target: a.string().required(),
+            command: a.string().required(),
             metadata: a.json(),
             createdAt: a.datetime().required(),
             startedAt: a.datetime(),
@@ -328,6 +329,7 @@ const schema = a.schema({
             estimatedCompletionAt: a.datetime(),
             processedItems: a.integer(),
             totalItems: a.integer(),
+            actionsAsCurrentStage: a.hasMany('Action', 'currentStageId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
