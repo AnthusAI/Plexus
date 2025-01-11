@@ -328,6 +328,7 @@ const schema = a.schema({
             estimatedCompletionAt: a.datetime(),
             processedItems: a.integer(),
             totalItems: a.integer(),
+            actionsAsCurrentStage: a.hasMany('Action', 'currentStageId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
