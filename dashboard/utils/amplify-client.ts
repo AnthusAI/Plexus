@@ -127,5 +127,55 @@ export const amplifyClient = {
       const response = await (client.models.Score as any).delete(params)
       return { data: response.data as Schema['Score']['type'] }
     }
+  },
+  Evaluation: {
+    list: async (params: any) => {
+      const response = await (client.models.Evaluation as any).list(params)
+      return response as AmplifyResponse<Schema['Evaluation']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (client.models.Evaluation as any).get(params)
+      return { data: response.data as Schema['Evaluation']['type'] | null }
+    }
+  },
+  BatchJob: {
+    list: async (params: any) => {
+      const response = await (client.models.BatchJob as any).list(params)
+      return response as AmplifyResponse<Schema['BatchJob']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (client.models.BatchJob as any).get(params)
+      return { data: response.data as Schema['BatchJob']['type'] | null }
+    }
+  },
+  Item: {
+    list: async (params: any) => {
+      const response = await (client.models.Item as any).list(params)
+      return response as AmplifyResponse<Schema['Item']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (client.models.Item as any).get(params)
+      return { data: response.data as Schema['Item']['type'] | null }
+    }
+  },
+  ScoringJob: {
+    list: async (params: any) => {
+      const response = await (client.models.ScoringJob as any).list(params)
+      return response as AmplifyResponse<Schema['ScoringJob']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (client.models.ScoringJob as any).get(params)
+      return { data: response.data as Schema['ScoringJob']['type'] | null }
+    }
+  },
+  ScoreResult: {
+    list: async (params: any) => {
+      const response = await (client.models.ScoreResult as any).list(params)
+      return response as AmplifyResponse<Schema['ScoreResult']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (client.models.ScoreResult as any).get(params)
+      return { data: response.data as Schema['ScoreResult']['type'] | null }
+    }
   }
 } 
