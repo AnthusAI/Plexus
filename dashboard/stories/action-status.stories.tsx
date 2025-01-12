@@ -1,5 +1,6 @@
 import React from 'react'
 import type { Meta, StoryObj } from '@storybook/react'
+import { expect, within } from '@storybook/test'
 import { ActionStatus, ActionStageConfig, ActionStatusProps } from '../components/ui/action-status'
 
 const meta = {
@@ -65,7 +66,24 @@ const baseArgs = {
 }
 
 export const Running: Story = {
-  args: baseArgs
+  args: baseArgs,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    
+    // Verify stage labels are present
+    await expect(canvas.getByText('Startup')).toBeInTheDocument()
+    await expect(canvas.getByText('Processing')).toBeInTheDocument()
+    await expect(canvas.getByText('Finalizing')).toBeInTheDocument()
+    await expect(canvas.getByText('Complete')).toBeInTheDocument()
+    
+    // Verify progress information
+    await expect(canvas.getByText('45%')).toBeInTheDocument()
+    
+    // Verify time information
+    await expect(canvas.getByText(/Elapsed: 2m 15s/)).toBeInTheDocument()
+    await expect(canvas.getByText('ETA:')).toBeInTheDocument()
+    await expect(canvas.getByText('2m 45s')).toBeInTheDocument()
+  }
 }
 
 export const NoStages: Story = {
@@ -89,6 +107,19 @@ export const Finalizing: Story = {
     totalItems: 100,
     elapsedTime: '4m 45s',
     status: 'RUNNING' as const
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    
+    // Verify completed stages have primary color
+    const startupSegment = canvas.getByText('Startup').closest('div')
+    const finalizingSegment = canvas.getByText('Finalizing').closest('div')
+    await expect(startupSegment).toHaveClass('bg-primary')
+    await expect(finalizingSegment).toHaveClass('bg-primary')
+    
+    // Verify progress
+    await expect(canvas.getByText('100%')).toBeInTheDocument()
+    await expect(canvas.getByText(/Elapsed: 4m 45s/)).toBeInTheDocument()
   }
 }
 
@@ -101,6 +132,18 @@ export const Complete: Story = {
     totalItems: 100,
     elapsedTime: '5m 0s',
     status: 'COMPLETED' as const
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    
+    // Verify all stages are completed
+    const completeSegment = canvas.getByText('Complete').closest('div')
+    await expect(completeSegment).toHaveClass('bg-true')
+    
+    // Verify final progress state
+    await expect(canvas.getByText('100%')).toBeInTheDocument()
+    await expect(canvas.getByText(/Elapsed: 5m 0s/)).toBeInTheDocument()
+    await expect(canvas.getByText('Done')).toBeInTheDocument()
   }
 }
 
@@ -118,6 +161,20 @@ export const Failed: Story = {
     elapsedTime: '2m 15s',
     status: 'FAILED' as const,
     errorLabel: 'Failed'
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    
+    // Verify stage progression
+    await expect(canvas.getByText('Startup')).toBeInTheDocument()
+    await expect(canvas.getByText('Processing')).toBeInTheDocument()
+    await expect(canvas.getByText('Finalizing')).toBeInTheDocument()
+    
+    // Verify error state
+    const failedSegment = canvas.getByText('Failed')
+    await expect(failedSegment).toBeInTheDocument()
+    const failedContainer = failedSegment.closest('div')
+    await expect(failedContainer).toHaveClass('bg-false')
   }
 }
 
