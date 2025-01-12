@@ -266,7 +266,7 @@ The demo command processes 2000 items over 20 seconds, displaying:
 - When run with `--action-id`, updates Action stages:
   1. Initialization (4-6 seconds)
   2. Processing (2000 items over ~20 seconds)
-  3. Finishing (2-4 seconds)
+  3. Finalizing (2-4 seconds)
 
 The evaluation command processes scorecard evaluations with:
 - Real-time progress updates
