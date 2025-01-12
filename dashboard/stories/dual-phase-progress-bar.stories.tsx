@@ -3,11 +3,18 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { DualPhaseProgressBar } from '../components/ui/dual-phase-progress-bar'
 
 const meta: Meta<typeof DualPhaseProgressBar> = {
-  title: 'Components/DualPhaseProgressBar',
+  title: 'Progress Bars/DualPhaseProgressBar',
   component: DualPhaseProgressBar,
   parameters: {
-    layout: 'centered',
+    layout: 'padded',
   },
+  decorators: [
+    (Story) => (
+      <div className="w-full">
+        <Story />
+      </div>
+    ),
+  ],
   tags: ['autodocs'],
   argTypes: {
     firstPhaseProgress: {
