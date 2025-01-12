@@ -14,6 +14,9 @@ from rich.panel import Panel
 from rich.live import Live
 from rich.text import Text
 import typing
+from typing import Optional
+from plexus.dashboard.api.models.action import Action
+from plexus.dashboard.api.client import PlexusDashboardClient
 
 class ItemCountColumn(ProgressColumn):
     """Renders item count and total."""
@@ -84,7 +87,7 @@ celery_app = create_celery_app()
 
 # Register tasks for both worker and dispatcher
 from .CommandTasks import register_tasks
-register_tasks(celery_app)
+execute_command, demo_task = register_tasks(celery_app)
 
 @click.group()
 def command():
@@ -374,81 +377,252 @@ def get_progress_status(current: int, total: int) -> str:
     default='default/command',
     help='Target string in format domain/subdomain'
 )
-def demo(target: str) -> None:
+@click.option(
+    '--action-id',
+    help='Action ID to update progress through the API'
+)
+def demo(target: str, action_id: Optional[str] = None) -> None:
     """Run a demo task that processes 2000 items over 20 seconds."""
-    # Dispatch the demo task through Celery instead of running directly
-    logging.info("Dispatching demo task...")
+    from .CommandProgress import CommandProgress
+    import time
+    import random
+    from plexus.dashboard.api.models.action import Action
+    from plexus.dashboard.api.client import PlexusDashboardClient
     
-    task = celery_app.send_task(
-        'plexus.execute_command',
-        args=["command demo"],
-        kwargs={'target': target}
-    )
+    total_items = 2000
+    target_duration = 20  # seconds
+    sleep_per_item = target_duration / total_items
     
-    try:
-        with Progress(
-            # First row - status only
-            TextColumn("[bright_magenta]{task.fields[status]}"),
-            TextColumn(""),  # Empty column for spacing
-            # New line for visual separation
-            TextColumn("\n"),
-            # Second row - progress bar and details
-            SpinnerColumn(style="bright_magenta"),
-            ItemCountColumn(),
-            BarColumn(
-                complete_style="bright_magenta",
-                finished_style="bright_magenta"
-            ),
-            TaskProgressColumn(),
-            TimeElapsedColumn(),
-            TimeRemainingColumn(),
-            expand=True
-        ) as progress:
-            # Add a single task that tracks both status and progress
-            task_progress = progress.add_task(
-                "Processing...",
-                total=100,
-                status="Initializing..."
+    logging.info("Starting demo task processing...")
+    
+    action = None
+    if action_id:
+        client = PlexusDashboardClient()
+        action = Action.get_by_id(action_id, client)
+        action.start_processing()
+        
+        # Create all three stages
+        stage_configs = {
+            "initialization": {
+                "order": 1,
+                "totalItems": 1,
+                "processedItems": 0
+            },
+            "processing": {
+                "order": 2,
+                "totalItems": total_items,
+                "processedItems": 0
+            },
+            "finishing": {
+                "order": 3,
+                "totalItems": 1,
+                "processedItems": 0
+            }
+        }
+        stages = action.update_progress(0, total_items, stage_configs)
+    
+    with Progress(
+        TextColumn("[bright_magenta]{task.fields[status]}"),
+        TextColumn(""),  # Empty column for spacing
+        TextColumn("\n"),
+        SpinnerColumn(style="bright_magenta"),
+        ItemCountColumn(),
+        BarColumn(complete_style="bright_magenta", finished_style="bright_magenta"),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+        expand=True
+    ) as progress:
+        task_progress = progress.add_task(
+            "Processing...",
+            total=total_items,  # Only count main processing items
+            status="Starting initialization..."
+        )
+        
+        try:
+            start_time = time.time()
+            
+            # Initialization stage
+            init_time = random.uniform(4.0, 6.0)  # Random time between 4-6 seconds
+            time.sleep(init_time)
+            
+            if action:
+                stage_configs = {
+                    "initialization": {
+                        "order": 1,
+                        "totalItems": 1,
+                        "processedItems": 1
+                    },
+                    "processing": {
+                        "order": 2,
+                        "totalItems": total_items,
+                        "processedItems": 0
+                    },
+                    "finishing": {
+                        "order": 3,
+                        "totalItems": 1,
+                        "processedItems": 0
+                    }
+                }
+                action.update_progress(0, total_items, stage_configs)
+            
+            progress.update(
+                task_progress,
+                completed=0,  # Reset to 0 for main processing
+                status="Processing items..."
             )
             
-            while not task.ready():
-                if task.info and isinstance(task.info, dict):
-                    current = task.info.get('current')
-                    total = task.info.get('total')
-                    status = task.info.get('status')
+            # Main processing stage
+            for i in range(total_items):
+                current_item = i + 1
+                
+                # Update progress every 50 items or on the last item
+                if i % 50 == 0 or i == total_items - 1:
+                    elapsed = time.time() - start_time
+                    items_per_sec = current_item / elapsed
                     
-                    if all([current, total, status]):
-                        # Update progress and status
-                        progress.update(
-                            task_progress,
-                            total=total,
-                            completed=current,
-                            status=status
-                        )
-                            
-                time.sleep(0.5)  # Brief pause between updates
+                    # Get status message based on progress
+                    percentage = (current_item / total_items) * 100
+                    if percentage <= 5:
+                        status = "Starting processing items..."
+                    elif percentage <= 35:
+                        status = "Processing items..."
+                    elif percentage <= 65:
+                        status = "Cruising..."
+                    elif percentage <= 80:
+                        status = "On autopilot..."
+                    elif percentage <= 90:
+                        status = "Finishing soon..."
+                    elif percentage < 100:
+                        status = "Almost done processing items..."
+                    else:
+                        status = "Finished processing items..."
+                    
+                    progress.update(
+                        task_progress,
+                        completed=current_item,
+                        status=status
+                    )
+                    
+                    # Update Celery progress
+                    CommandProgress.update(
+                        current=current_item,
+                        total=total_items,
+                        status=status
+                    )
+                    
+                    # Update Action progress if we have an action ID
+                    if action:
+                        stage_configs = {
+                            "initialization": {
+                                "order": 1,
+                                "totalItems": 1,
+                                "processedItems": 1
+                            },
+                            "processing": {
+                                "order": 2,
+                                "totalItems": total_items,
+                                "processedItems": current_item
+                            },
+                            "finishing": {
+                                "order": 3,
+                                "totalItems": 1,
+                                "processedItems": 0
+                            }
+                        }
+                        action.update_progress(current_item, total_items, stage_configs)
+                
+                time.sleep(sleep_per_item)
             
-            # Ensure progress bar reaches 100% on success
-            if task.successful():
-                final_status = "Finished processing items."
-                progress.update(
-                    task_progress,
-                    completed=progress.tasks[task_progress].total,
-                    status=final_status
+            # Finishing stage
+            finish_time = random.uniform(2.0, 4.0)  # Random time between 2-4 seconds
+            progress.update(
+                task_progress,
+                completed=total_items,
+                status="Finalizing..."
+            )
+            
+            if action:
+                stage_configs = {
+                    "initialization": {
+                        "order": 1,
+                        "totalItems": 1,
+                        "processedItems": 1
+                    },
+                    "processing": {
+                        "order": 2,
+                        "totalItems": total_items,
+                        "processedItems": total_items
+                    },
+                    "finishing": {
+                        "order": 3,
+                        "totalItems": 1,
+                        "processedItems": 0
+                    }
+                }
+                action.update_progress(total_items, total_items, stage_configs)
+            
+            time.sleep(finish_time)
+            
+            # Complete all stages
+            if action:
+                stage_configs = {
+                    "initialization": {
+                        "order": 1,
+                        "totalItems": 1,
+                        "processedItems": 1
+                    },
+                    "processing": {
+                        "order": 2,
+                        "totalItems": total_items,
+                        "processedItems": total_items
+                    },
+                    "finishing": {
+                        "order": 3,
+                        "totalItems": 1,
+                        "processedItems": 1
+                    }
+                }
+                action.update_progress(total_items, total_items, stage_configs)
+            
+            total_time = time.time() - start_time
+            success_message = (
+                f"Demo task completed successfully in {total_time:.1f} seconds "
+                f"({total_items/total_time:.1f} items/sec)"
+            )
+            logging.info(success_message)
+            
+            # Mark action as completed if we have one
+            if action:
+                action.complete_processing()
+            
+        except KeyboardInterrupt:
+            elapsed = time.time() - start_time
+            items_per_sec = i / elapsed
+            error_message = (
+                f"Demo task cancelled by user after {elapsed:.1f} seconds "
+                f"({items_per_sec:.1f} items/sec)"
+            )
+            logging.info(error_message)
+            
+            # Mark action as failed if we have one
+            if action:
+                action.fail_processing(
+                    error_message=error_message,
+                    error_details={"type": "user_interrupt"}
                 )
-        
-        # Get the final result
-        result = task.get()
-        if result['status'] == 'success':
-            logging.info("Demo task completed successfully")
-        else:
-            logging.error(f"Demo task failed: {result.get('error', 'Unknown error')}")
+            return
+        except Exception as e:
+            error_message = f"Demo task failed: {str(e)}"
+            logging.error(error_message)
             
-    except KeyboardInterrupt:
-        logging.info("\nDemo task cancelled by user")
-        return
-    except Exception as e:
-        logging.error(f"Error running demo task: {e}", exc_info=True)
+            # Mark action as failed if we have one
+            if action:
+                action.fail_processing(
+                    error_message=error_message,
+                    error_details={"type": "error", "error": str(e)}
+                )
+            raise
 
 @command.command()
 def _demo_internal() -> None:

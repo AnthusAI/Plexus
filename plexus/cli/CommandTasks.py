@@ -91,4 +91,80 @@ def register_tasks(app):
                 'stderr': stderr_capture.getvalue() if 'stderr_capture' in locals() else '',
             }
     
-    return execute_command 
+    @app.task(bind=True, name="plexus.demo_task")
+    def demo_task(self: Task, target: str = "default/command") -> dict:
+        """Run a demo task that processes 2000 items over 20 seconds."""
+        from .CommandProgress import CommandProgress
+        import time
+        
+        total_items = 2000
+        target_duration = 20  # seconds
+        sleep_per_item = target_duration / total_items
+        
+        logging.info("Starting demo task processing...")
+        
+        try:
+            start_time = time.time()
+            
+            for i in range(total_items):
+                current_item = i + 1
+                
+                # Update progress every 50 items or on the last item
+                if i % 50 == 0 or i == total_items - 1:
+                    elapsed = time.time() - start_time
+                    items_per_sec = current_item / elapsed
+                    
+                    # Get status message based on progress
+                    percentage = (current_item / total_items) * 100
+                    if percentage <= 5:
+                        status = "Starting processing items..."
+                    elif percentage <= 35:
+                        status = "Processing items..."
+                    elif percentage <= 65:
+                        status = "Cruising..."
+                    elif percentage <= 80:
+                        status = "On autopilot..."
+                    elif percentage <= 90:
+                        status = "Finishing soon..."
+                    elif percentage < 100:
+                        status = "Almost done processing items..."
+                    else:
+                        status = "Finished processing items."
+                    
+                    self.update_state(
+                        state='PROGRESS',
+                        meta={
+                            'current': current_item,
+                            'total': total_items,
+                            'status': status,
+                            'elapsed_time': elapsed,
+                            'estimated_remaining': (total_items - current_item) / items_per_sec
+                        }
+                    )
+                
+                time.sleep(sleep_per_item)
+            
+            total_time = time.time() - start_time
+            logging.info(
+                f"Demo task completed successfully in {total_time:.1f} seconds "
+                f"({total_items/total_time:.1f} items/sec)"
+            )
+            
+            return {
+                'status': 'success',
+                'target': target,
+                'stdout': f"Processed {total_items} items in {total_time:.1f} seconds\n",
+                'stderr': ''
+            }
+            
+        except Exception as e:
+            logging.error(f"Demo task failed: {str(e)}")
+            return {
+                'status': 'error',
+                'target': target,
+                'error': str(e),
+                'stdout': '',
+                'stderr': str(e)
+            }
+    
+    return execute_command, demo_task 

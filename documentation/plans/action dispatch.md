@@ -81,37 +81,50 @@ This document outlines the implementation of Plexus's two-level dispatch system:
 ### Phase 3: Action-Command Integration (In Progress)
 
 1. **Model Implementation** ✓
-   - Action and ActionStage models deployed in Amplify
-   - Bidirectional relationships configured
-   - Indexes set up for efficient querying
-   - Command string field added for task dispatch
+   - Action and ActionStage models deployed in Amplify ✓
+   - Bidirectional relationships configured ✓
+   - Indexes set up for efficient querying ✓
+   - Command string field added for task dispatch ✓
 
-2. **Next Implementation Steps**
-   1. Create Lambda function for Action-to-Celery dispatch
+2. **Current Implementation Status**
+   - Action and ActionStage Python client models created ✓
+   - Basic CRUD operations implemented ✓
+   - Progress tracking methods added ✓
+   - Test coverage completed ✓
+   - Mock responses aligned with GraphQL schema ✓
+   - Demo command updated with Action support ✓
+   - Multi-stage progress tracking implemented ✓
+   - Progress updates working in both Celery and direct execution ✓
+
+3. **Current Challenges**
+   - Need to ensure atomic updates for counters
+   - Need to handle partial failures in stage updates
+   - Need to implement proper error propagation
+   - Need to optimize subscription updates
+   - Need to implement proper cleanup of completed actions
+
+4. **Next Implementation Steps**
+   1. Create frontend components for progress display
+      - Action list and detail views showing status and progress
+      - Stage-based progress visualization
+      - Real-time subscription updates
+      - Error handling and completion states
+      - Rich visual feedback for the 3-stage model
+
+   2. Create Lambda function for Action-to-Celery dispatch
       - Triggered on Action creation
       - Extracts command and Action ID
       - Dispatches Celery task with `--action-id`
       - Handles errors and updates Action status
+      - Enables UI-driven command execution
 
-   2. Add Action and ActionStage model classes to Python client
-      - Create model classes matching Amplify schema
-      - Add methods for creating and updating actions
-      - Implement stage management utilities
-      - Add real-time progress tracking integration
+   3. Update other commands with Action support
+      - Add `--action-id` parameter to all long-running commands
+      - Implement stage-based progress tracking
+      - Add proper error handling and status updates
+      - Test with both direct and Celery execution
 
-   3. Update Celery worker for Action support
-      - Parse `--action-id` from command string
-      - Update Action progress during execution
-      - Stream stdout/stderr to Action record
-      - Handle errors and completion status
-
-   4. Create frontend components for progress display
-      - Action list and detail views
-      - Real-time progress updates
-      - Stage-based progress visualization
-      - Error handling and retry UI
-
-3. **Technical Considerations**
+5. **Technical Considerations**
    - Use DynamoDB GSI on accountId for efficient listing ✓
    - Consider TTL for cleanup of completed actions
    - Use atomic updates for counters
@@ -182,25 +195,32 @@ The system handles various error conditions:
 
 ## Next Steps
 
-1. **Python Client Implementation**
-   - Create Action and ActionStage model classes
-   - Add methods for action lifecycle management
-   - Integrate with existing Celery task system
-   - Add real-time progress tracking
+1. **Frontend Development**
+   - Build Action list view with status indicators
+   - Create Action detail view with stage visualization
+   - Implement real-time subscription updates
+   - Add error handling and completion states
+   - Create intuitive command trigger UI
 
-2. **Frontend Development**
-   - Build action list and detail views
-   - Implement real-time progress updates
-   - Add stage-based progress visualization
-   - Create error handling and retry UI
+2. **Action-to-Celery Integration**
+   - Implement Action creation Lambda
+   - Set up Celery task dispatch
+   - Add error handling and status updates
+   - Test end-to-end flow from UI to worker
 
-3. **Testing & Documentation**
-   - Write unit tests for new models
-   - Add integration tests for action lifecycle
-   - Document API changes and new features
-   - Create usage examples
+3. **Command Integration**
+   - Add Action support to evaluation command
+   - Add Action support to training command
+   - Add Action support to dataset commands
+   - Test all commands with both direct and Celery execution
 
-4. **Deployment & Monitoring**
+4. **Testing & Documentation**
+   - Write integration tests for Action-enabled commands
+   - Add examples of Action usage to command docs
+   - Document stage-based progress tracking
+   - Create usage examples for frontend components
+
+5. **Deployment & Monitoring**
    - Set up proper AWS permissions
    - Configure monitoring and alerts
    - Add operational dashboards
@@ -228,6 +248,9 @@ Execute commands:
 # Run the demo task synchronously with progress display
 plexus command demo
 
+# Run the demo task with Action tracking
+plexus command demo --action-id <action-id>
+
 # Run an evaluation asynchronously
 plexus command dispatch "evaluate accuracy --scorecard-name agent-scorecard --number-of-samples 10"
 
@@ -240,6 +263,10 @@ The demo command processes 2000 items over 20 seconds, displaying:
 - Status messages that update based on progress
 - Time elapsed and estimated time remaining
 - A Rich progress bar with visual feedback
+- When run with `--action-id`, updates Action stages:
+  1. Initialization (4-6 seconds)
+  2. Processing (2000 items over ~20 seconds)
+  3. Finishing (2-4 seconds)
 
 The evaluation command processes scorecard evaluations with:
 - Real-time progress updates
