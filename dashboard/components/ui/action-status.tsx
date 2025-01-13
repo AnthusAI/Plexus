@@ -1,6 +1,7 @@
 import React from 'react'
 import { SegmentedProgressBar, SegmentConfig } from './segmented-progress-bar'
 import { ProgressBar } from './progress-bar'
+import { ProgressBarTiming } from './progress-bar-timing'
 
 export interface ActionStageConfig {
   name: string
@@ -39,8 +40,17 @@ export function ActionStatus({
   stageConfigs,
   errorLabel = 'Failed'
 }: ActionStatusProps) {
+  const isInProgress = status === 'RUNNING'
+  const progress = processedItems && totalItems ? 
+    (processedItems / totalItems) * 100 : 0
+
   return (
     <div className="space-y-4">
+      <ProgressBarTiming
+        elapsedTime={elapsedTime}
+        estimatedTimeRemaining={estimatedTimeRemaining}
+        isInProgress={isInProgress}
+      />
       {showStages && stages.length > 0 && stageConfigs && (
         <SegmentedProgressBar
           segments={stageConfigs}
@@ -50,13 +60,11 @@ export function ActionStatus({
         />
       )}
       <ProgressBar
-        progress={processedItems && totalItems ? 
-          (processedItems / totalItems) * 100 : 0}
+        progress={progress}
         processedItems={processedItems}
         totalItems={totalItems}
-        elapsedTime={elapsedTime}
-        estimatedTimeRemaining={estimatedTimeRemaining}
         color={status === 'FAILED' ? 'false' : 'secondary'}
+        showTiming={false}
       />
     </div>
   )

@@ -70,19 +70,26 @@ export const Running: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     
-    // Verify stage labels are present
+    // Verify stage labels and states
     await expect(canvas.getByText('Startup')).toBeInTheDocument()
     await expect(canvas.getByText('Processing')).toBeInTheDocument()
     await expect(canvas.getByText('Finalizing')).toBeInTheDocument()
     await expect(canvas.getByText('Complete')).toBeInTheDocument()
     
     // Verify progress information
+    await expect(canvas.getByText('45')).toBeInTheDocument()
+    await expect(canvas.getByText('/')).toBeInTheDocument()
+    await expect(canvas.getByText('100')).toBeInTheDocument()
     await expect(canvas.getByText('45%')).toBeInTheDocument()
     
     // Verify time information
     await expect(canvas.getByText(/Elapsed: 2m 15s/)).toBeInTheDocument()
     await expect(canvas.getByText('ETA:')).toBeInTheDocument()
     await expect(canvas.getByText('2m 45s')).toBeInTheDocument()
+
+    // Verify loading indicator is present
+    const loadingIcon = canvas.getByTestId('loader-icon')
+    await expect(loadingIcon).toHaveClass('animate-spin')
   }
 }
 
@@ -90,6 +97,22 @@ export const NoStages: Story = {
   args: {
     ...baseArgs,
     showStages: false,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    
+    // Verify progress information is shown without stages
+    await expect(canvas.getByText('45%')).toBeInTheDocument()
+    await expect(canvas.getByText('45')).toBeInTheDocument()
+    await expect(canvas.getByText('100')).toBeInTheDocument()
+    
+    // Verify timing information
+    await expect(canvas.getByText(/Elapsed: 2m 15s/)).toBeInTheDocument()
+    await expect(canvas.getByText('2m 45s')).toBeInTheDocument()
+    
+    // Verify stages are not shown
+    const stagesContainer = canvas.queryByRole('list')
+    await expect(stagesContainer).not.toBeInTheDocument()
   }
 }
 
@@ -111,15 +134,24 @@ export const Finalizing: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     
-    // Verify completed stages have primary color
+    // Verify stage progression
     const startupSegment = canvas.getByText('Startup').closest('div')
+    const processingSegment = canvas.getByText('Processing').closest('div')
     const finalizingSegment = canvas.getByText('Finalizing').closest('div')
-    await expect(startupSegment).toHaveClass('bg-primary')
-    await expect(finalizingSegment).toHaveClass('bg-primary')
+    const completeSegment = canvas.getByText('Complete').closest('div')
     
-    // Verify progress
+    await expect(startupSegment).toHaveClass('bg-primary')
+    await expect(processingSegment).toHaveClass('bg-secondary')
+    await expect(finalizingSegment).toHaveClass('bg-primary')
+    await expect(completeSegment).toHaveClass('bg-neutral')
+    
+    // Verify progress state
     await expect(canvas.getByText('100%')).toBeInTheDocument()
     await expect(canvas.getByText(/Elapsed: 4m 45s/)).toBeInTheDocument()
+    
+    // Verify loading state
+    const loadingIcon = canvas.getByTestId('loader-icon')
+    await expect(loadingIcon).toHaveClass('animate-spin')
   }
 }
 
@@ -144,6 +176,16 @@ export const Complete: Story = {
     await expect(canvas.getByText('100%')).toBeInTheDocument()
     await expect(canvas.getByText(/Elapsed: 5m 0s/)).toBeInTheDocument()
     await expect(canvas.getByText('Done')).toBeInTheDocument()
+    
+    // Verify completion icon
+    const checkIcon = canvas.getByTestId('check-icon')
+    await expect(checkIcon).toBeInTheDocument()
+    
+    // Verify all stages show completion
+    const segments = canvas.getAllByRole('listitem')
+    segments.forEach(async (segment) => {
+      await expect(segment).not.toHaveClass('bg-neutral')
+    })
   }
 }
 
@@ -175,6 +217,13 @@ export const Failed: Story = {
     await expect(failedSegment).toBeInTheDocument()
     const failedContainer = failedSegment.closest('div')
     await expect(failedContainer).toHaveClass('bg-false')
+    
+    // Verify progress bar shows error state
+    const progressBar = canvas.getByRole('progressbar')
+    await expect(progressBar).toHaveClass('bg-false')
+    
+    // Verify timing information is preserved
+    await expect(canvas.getByText(/Elapsed: 2m 15s/)).toBeInTheDocument()
   }
 }
 
@@ -183,7 +232,26 @@ export const Pending: Story = {
     ...baseArgs,
     stages: sampleStages.map(s => ({ ...s, status: 'PENDING' as const })),
     processedItems: 0,
-    status: 'PENDING' as const
+    status: 'PENDING' as const,
+    currentStageName: 'Startup'
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    
+    // Verify all stages are in pending state
+    await expect(canvas.getByText('Startup')).toBeInTheDocument()
+    await expect(canvas.getByText('Processing')).toBeInTheDocument()
+    await expect(canvas.getByText('Finalizing')).toBeInTheDocument()
+    await expect(canvas.getByText('Complete')).toBeInTheDocument()
+    
+    // Verify initial progress state
+    await expect(canvas.getByText('0')).toBeInTheDocument()
+    await expect(canvas.getByText('100')).toBeInTheDocument()
+    await expect(canvas.getByText('0%')).toBeInTheDocument()
+    
+    // Verify no progress has been made
+    const progressBar = canvas.getByRole('progressbar')
+    await expect(progressBar).toHaveAttribute('style', expect.stringContaining('width: 0%'))
   }
 }
 
