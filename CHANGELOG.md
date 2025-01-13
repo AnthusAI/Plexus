@@ -1,7 +1,47 @@
 # CHANGELOG
 
 
-## v0.3.2-rc.1 (2025-01-09)
+## v0.4.0-alpha.2 (2025-01-10)
+
+### Bug Fixes
+
+- **evaluations**: Handle evaluation updates correctly
+  ([`f25a759`](https://github.com/AnthusAI/Plexus/commit/f25a759b75ae665405d3b67b958176ad4d491357))
+
+- Update existing evaluations instead of skipping them - Preserve related data references during
+  updates - Extract EvaluationRow component for better performance
+
+
+## v0.4.0-alpha.1 (2025-01-10)
+
+### Features
+
+- **evaluations**: Add delete functionality and action dropdown
+  ([`afff9e0`](https://github.com/AnthusAI/Plexus/commit/afff9e01fca2ea1794ca5bf465335122f6aa766c))
+
+- Enable deleting evaluations, score results, and scoring jobs via `handleDeleteEvaluation`. - Add
+  dropdown menu in each row for quick evaluation actions. - Update table layout with an "Actions"
+  column for better usability. - Subscribe to delete events for automatic list updates.
+
+
+## v0.3.3 (2025-01-09)
+
+
+## v0.3.2 (2025-01-09)
+
+
+## v0.3.1-rc.1 (2025-01-06)
+
+
+## v0.3.2-alpha.2 (2025-01-09)
+
+### Bug Fixes
+
+- **dashboard**: Stay on the same page when reloading.
+  ([`69874dd`](https://github.com/AnthusAI/Plexus/commit/69874dd93b3f4ffc50dd68b3ad79e67661c52b70))
+
+- **evaluations-dashboard**: Confusion matrix filtering -- now case-insensitive.
+  ([`bf68cae`](https://github.com/AnthusAI/Plexus/commit/bf68cae9d1d3f85d788fbf47c3aaa185768efd61))
 
 ### Refactoring
 
@@ -12,6 +52,13 @@
   evaluations, the total is derived from the predicted distribution data. - For ongoing evaluations,
   the initial sample size is used instead. - Ensured that the totalItems parameter reflects the
   correct count in the update parameters.
+
+### Testing
+
+- Add CloudWatchLogger unit tests
+  ([`db19395`](https://github.com/AnthusAI/Plexus/commit/db1939576b7ccb02926c63625a0b11cacd142c2b))
+
+Tests cover AWS credential handling, metric logging, and error cases.
 
 
 ## v0.3.2-alpha.1 (2025-01-08)

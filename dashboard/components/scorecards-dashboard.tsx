@@ -29,8 +29,14 @@ import {
 import { ScoreCount } from "./scorecards/score-count"
 import { CardButton } from "@/components/CardButton"
 import { DatasetConfigFormComponent } from "@/components/dataset-config-form"
+import { listFromModel } from "@/utils/amplify-helpers"
+import { AmplifyListResult } from '@/types/shared'
+import { dataClient } from "@/utils/data-operations"
+import { generateClient } from "aws-amplify/data"
 
 const ACCOUNT_KEY = 'call-criteria'
+
+const client = generateClient<Schema>()
 
 export default function ScorecardsComponent() {
   const [scorecards, setScorecards] = useState<Schema['Scorecard']['type'][]>([])
@@ -138,9 +144,7 @@ export default function ScorecardsComponent() {
       scorecardId,
       createdAt: section.createdAt,
       updatedAt: section.updatedAt,
-      scorecard: async () => ({
-        data: await amplifyClient.Scorecard.get({ id: scorecardId }).then(result => result.data)
-      }),
+      scorecard: async () => amplifyClient.Scorecard.get({ id: scorecardId }),
       scores: async () => {
         const allScores = await fetchAllScoresForSection(section.id)
         return {
@@ -155,74 +159,30 @@ export default function ScorecardsComponent() {
   const handleCreate = async () => {
     if (!accountId) return
 
-    const newScorecard: Schema['Scorecard']['type'] = {
-      id: '',
+    const newScorecard = {
       name: '',
       key: '',
       externalId: '',
       description: '',
       accountId,
+    }
+
+    setSelectedScorecard({
+      ...newScorecard,
+      id: '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      evaluations: async () => ({
+      account: async () => amplifyClient.Account.get({ id: accountId }),
+      sections: async () => ({ 
         data: [],
         nextToken: null
       }),
-      batchJobs: async () => ({
-        data: [],
-        nextToken: null
-      }),
-      account: async () => ({
-        data: {
-          id: accountId,
-          name: ACCOUNT_KEY,
-          key: ACCOUNT_KEY,
-          description: '',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          evaluations: async () => ({
-            data: [],
-            nextToken: null
-          }),
-          scorecards: async () => ({
-            data: [],
-            nextToken: null
-          }),
-          batchJobs: async () => ({
-            data: [],
-            nextToken: null
-          }),
-          items: async () => ({
-            data: [],
-            nextToken: null
-          }),
-          scoringJobs: async () => ({
-            data: [],
-            nextToken: null
-          }),
-          scoreResults: async () => ({
-            data: [],
-            nextToken: null
-          })
-        }
-      }),
-      sections: async () => ({
-        data: [],
-        nextToken: null
-      }),
-      item: async () => ({
-        data: null
-      }),
-      scoringJobs: async () => ({
-        data: [],
-        nextToken: null
-      }),
-      scoreResults: async () => ({
-        data: [],
-        nextToken: null
-      })
-    }
-    setSelectedScorecard(newScorecard)
+      evaluations: async () => ({ data: [], nextToken: null }),
+      batchJobs: async () => ({ data: [], nextToken: null }),
+      item: async () => ({ data: null }),
+      scoringJobs: async () => ({ data: [], nextToken: null }),
+      scoreResults: async () => ({ data: [], nextToken: null })
+    } as Schema['Scorecard']['type'])
     setIsEditing(true)
   }
 
@@ -275,59 +235,30 @@ export default function ScorecardsComponent() {
       if (!accountResult.data) {
         throw new Error('Account not found')
       }
-      const accountData = accountResult.data
       
-      const fullScorecardData: Schema['Scorecard']['type'] = {
+      const fullScorecardData = {
         ...scorecardData,
-        evaluations: async () => ({
-          data: [],
-          nextToken: null
-        }),
-        batchJobs: async () => ({
-          data: [],
-          nextToken: null
-        }),
-        account: async () => ({
-          data: {
-            id: accountData.id,
-            name: accountData.name!,
-            key: accountData.key!,
-            description: accountData.description ?? '',
-            evaluations: async () => ({
-              data: [],
-              nextToken: null
-            }),
-            scorecards: async () => ({
-              data: await amplifyClient.Scorecard.list({
-                filter: { accountId: { eq: accountData.id } }
-              }).then(result => result.data),
-              nextToken: null
-            }),
-            batchJobs: async () => ({
-              data: [],
-              nextToken: null
-            }),
-            items: async () => ({
-              data: [],
-              nextToken: null
-            }),
-            scoringJobs: async () => ({
-              data: [],
-              nextToken: null
-            }),
-            scoreResults: async () => ({
-              data: [],
-              nextToken: null
-            }),
-            createdAt: accountData.createdAt!,
-            updatedAt: accountData.updatedAt!
-          }
-        }),
+        account: async () => amplifyClient.Account.get({ id: scorecardData.accountId }),
         sections: async () => ({
           data: sectionsWithScores,
           nextToken: null
+        }),
+        evaluations: async () => amplifyClient.Evaluation.list({
+          filter: { scorecardId: { eq: scorecardData.id } }
+        }),
+        batchJobs: async () => amplifyClient.BatchJob.list({
+          filter: { scorecardId: { eq: scorecardData.id } }
+        }),
+        item: async () => scorecardData.itemId ? 
+          amplifyClient.Item.get({ id: scorecardData.itemId }) :
+          Promise.resolve({ data: null }),
+        scoringJobs: async () => amplifyClient.ScoringJob.list({
+          filter: { scorecardId: { eq: scorecardData.id } }
+        }),
+        scoreResults: async () => amplifyClient.ScoreResult.list({
+          filter: { scorecardId: { eq: scorecardData.id } }
         })
-      }
+      } as Schema['Scorecard']['type']
       
       console.log('Setting selected scorecard with data:', fullScorecardData)
       setSelectedScorecard(fullScorecardData)
