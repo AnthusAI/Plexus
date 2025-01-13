@@ -14,7 +14,7 @@ type ScorecardSectionIndexFields = "name" | "scorecardId" | "order";
 type ScoreIndexFields = "name" | "order" | "sectionId" | "type" | "accuracy" | 
     "version" | "aiProvider" | "aiModel";
 type EvaluationIndexFields = "accountId" | "scorecardId" | "type" | "accuracy" | 
-    "scoreId" | "status";
+    "scoreId" | "status" | "updatedAt";
 type BatchJobIndexFields = "accountId" | "scorecardId" | "type" | "scoreId" | 
     "status" | "modelProvider" | "modelName" | "batchId";
 type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId";
@@ -23,6 +23,9 @@ type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" |
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
     "evaluationId" | "scoringJobId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
+type ActionIndexFields = "accountId" | "type" | "status" | "target" | 
+    "currentStageId";
+type ActionStageIndexFields = "actionId" | "name" | "order" | "status";
 
 const schema = a.schema({
     Account: a
@@ -36,6 +39,7 @@ const schema = a.schema({
             items: a.hasMany('Item', 'accountId'),
             scoringJobs: a.hasMany('ScoringJob', 'accountId'),
             scoreResults: a.hasMany('ScoreResult', 'accountId'),
+            actions: a.hasMany('Action', 'accountId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -158,7 +162,8 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId" as EvaluationIndexFields),
             idx("scorecardId" as EvaluationIndexFields),
-            idx("scoreId" as EvaluationIndexFields)
+            idx("scoreId" as EvaluationIndexFields),
+            idx("updatedAt" as EvaluationIndexFields)
         ]),
 
     BatchJob: a
@@ -276,6 +281,65 @@ const schema = a.schema({
             idx("scoringJobId"),
             idx("evaluationId"),
             idx("scorecardId")
+        ]),
+
+    Action: a
+        .model({
+            accountId: a.string().required(),
+            type: a.string().required(),
+            status: a.string().required(),
+            target: a.string().required(),
+            command: a.string().required(),
+            metadata: a.json(),
+            createdAt: a.datetime().required(),
+            startedAt: a.datetime(),
+            completedAt: a.datetime(),
+            estimatedCompletionAt: a.datetime(),
+            errorMessage: a.string(),
+            errorDetails: a.json(),
+            stdout: a.string(),
+            stderr: a.string(),
+            currentStageId: a.string(),
+            currentStage: a.belongsTo('ActionStage', 'currentStageId'),
+            stages: a.hasMany('ActionStage', 'actionId'),
+            account: a.belongsTo('Account', 'accountId'),
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ActionIndexFields) => any) => [
+            idx("accountId"),
+            idx("type"),
+            idx("status"),
+            idx("target"),
+            idx("currentStageId")
+        ]),
+
+    ActionStage: a
+        .model({
+            actionId: a.string().required(),
+            action: a.belongsTo('Action', 'actionId'),
+            name: a.string().required(),
+            order: a.integer().required(),
+            status: a.string().required(),
+            statusMessage: a.string(),
+            startedAt: a.datetime(),
+            completedAt: a.datetime(),
+            estimatedCompletionAt: a.datetime(),
+            processedItems: a.integer(),
+            totalItems: a.integer(),
+            actionsAsCurrentStage: a.hasMany('Action', 'currentStageId'),
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ActionStageIndexFields) => any) => [
+            idx("actionId"),
+            idx("name"),
+            idx("order"),
+            idx("status")
         ]),
 
     BatchJobScoringJob: a
