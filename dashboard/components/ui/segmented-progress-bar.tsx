@@ -29,13 +29,14 @@ export function SegmentedProgressBar({
       "w-full h-8 bg-neutral rounded-md overflow-hidden border border-border", 
       className
     )}>
-      <div className="h-full w-full flex gap-1">
+      <div role="list" className="h-full w-full flex gap-1">
         {segments.map((segment, index) => {
           const isBeforeCurrent = index < currentIndex
           const isCurrent = index === currentIndex
 
           return (
             <div
+              role="listitem"
               key={segment.key}
               className={cn(
                 "flex-1 flex items-center justify-center transition-colors duration-200",
