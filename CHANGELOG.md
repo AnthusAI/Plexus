@@ -1,6 +1,9 @@
 # CHANGELOG
 
 
+## v0.4.0-rc.1 (2025-01-13)
+
+
 ## v0.4.0-alpha.2 (2025-01-10)
 
 ### Bug Fixes
@@ -30,9 +33,6 @@
 ## v0.3.2 (2025-01-09)
 
 
-## v0.3.1-rc.1 (2025-01-06)
-
-
 ## v0.3.2-alpha.2 (2025-01-09)
 
 ### Bug Fixes
@@ -43,6 +43,16 @@
 - **evaluations-dashboard**: Confusion matrix filtering -- now case-insensitive.
   ([`bf68cae`](https://github.com/AnthusAI/Plexus/commit/bf68cae9d1d3f85d788fbf47c3aaa185768efd61))
 
+### Testing
+
+- Add CloudWatchLogger unit tests
+  ([`db19395`](https://github.com/AnthusAI/Plexus/commit/db1939576b7ccb02926c63625a0b11cacd142c2b))
+
+Tests cover AWS credential handling, metric logging, and error cases.
+
+
+## v0.3.2-rc.1 (2025-01-09)
+
 ### Refactoring
 
 - **Evaluation**: Adjust total predictions calculation based on evaluation status
@@ -52,13 +62,6 @@
   evaluations, the total is derived from the predicted distribution data. - For ongoing evaluations,
   the initial sample size is used instead. - Ensured that the totalItems parameter reflects the
   correct count in the update parameters.
-
-### Testing
-
-- Add CloudWatchLogger unit tests
-  ([`db19395`](https://github.com/AnthusAI/Plexus/commit/db1939576b7ccb02926c63625a0b11cacd142c2b))
-
-Tests cover AWS credential handling, metric logging, and error cases.
 
 
 ## v0.3.2-alpha.1 (2025-01-08)
