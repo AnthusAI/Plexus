@@ -24,7 +24,7 @@ class Classifier(BaseNode):
         valid_classes: List[str] = Field(description="List of valid classification labels")
         explanation_message: Optional[str] = None
         maximum_retry_count: int = Field(
-            default=3,
+            default=6,
             description="Maximum number of retries for classification"
         )
         parse_from_start: Optional[bool] = False
@@ -150,8 +150,63 @@ class Classifier(BaseNode):
                 for i, msg in enumerate(state.chat_history):
                     logging.info(f"Message type: {type(msg)}, content={msg}")
             
-            # Get messages from state or create new ones
-            if hasattr(state, 'messages') and state.messages:
+            # If we have chat history from a retry, use that
+            if hasattr(state, 'chat_history') and state.chat_history:
+                logging.info(f"Using existing chat history with {len(state.chat_history)} messages")
+                
+                # Convert dict messages back to LangChain objects if needed
+                chat_messages = []
+                for msg in state.chat_history:
+                    if isinstance(msg, dict):
+                        msg_type = msg.get('type', '').lower()
+                        if msg_type == 'human':
+                            chat_messages.append(HumanMessage(content=msg['content']))
+                        elif msg_type == 'ai':
+                            chat_messages.append(AIMessage(content=msg['content']))
+                        elif msg_type == 'system':
+                            chat_messages.append(SystemMessage(content=msg['content']))
+                        else:
+                            chat_messages.append(BaseMessage(content=msg['content']))
+                    else:
+                        chat_messages.append(msg)
+                
+                # Get the initial system and human messages from state.messages
+                initial_messages = []
+                if hasattr(state, 'messages') and state.messages:
+                    for msg in state.messages:
+                        if isinstance(msg, dict) and msg.get('type') in ['system', 'human']:
+                            msg_type = msg.get('type', '').lower()
+                            if msg_type == 'human':
+                                initial_messages.append(HumanMessage(content=msg['content']))
+                            elif msg_type == 'system':
+                                initial_messages.append(SystemMessage(content=msg['content']))
+                        else:
+                            break
+                
+                # If we don't have initial messages in state, get them from prompt template
+                if not initial_messages:
+                    prompt = prompt_templates[0].format_prompt(**state.model_dump())
+                    initial_messages = prompt.to_messages()[:2]  # Only take system and first human message
+                
+                # Combine messages in the correct order:
+                # 1. System message from initial_messages[0]
+                # 2. Original human message from initial_messages[1]
+                # 3. All chat history messages in order
+                messages = initial_messages + chat_messages
+                
+                # Log the final message sequence
+                logging.info("Final message sequence:")
+                for i, msg in enumerate(messages):
+                    logging.info(f"Message {i}: type={type(msg)}, content={msg.content}")
+                
+                # Store messages in state.messages to preserve them
+                state.messages = [{
+                    'type': msg.__class__.__name__.lower().replace('message', ''),
+                    'content': msg.content,
+                    '_type': msg.__class__.__name__
+                } for msg in messages]
+            # Otherwise use existing messages or create new ones
+            elif hasattr(state, 'messages') and state.messages:
                 logging.info("Found existing messages in state")
                 # Convert dict messages back to LangChain objects if needed
                 messages = []
@@ -169,19 +224,15 @@ class Classifier(BaseNode):
                     else:
                         messages.append(msg)
             else:
-                # Build messages from chat history or initial prompt if empty
-                if not hasattr(state, 'chat_history') or not state.chat_history:
-                    logging.info("No chat history or existing messages, building initial messages")
-                    try:
-                        prompt = prompt_templates[0].format_prompt(**state.model_dump())
-                        messages = prompt.to_messages()
-                        logging.info(f"Built new messages: {[type(m).__name__ for m in messages]}")
-                    except Exception as e:
-                        logging.error(f"Error building messages: {e}")
-                        raise
-                else:
-                    logging.info(f"Using existing chat history with {len(state.chat_history)} messages")
-                    messages = state.chat_history
+                # Build initial messages from prompt template
+                logging.info("No chat history or existing messages, building initial messages")
+                try:
+                    prompt = prompt_templates[0].format_prompt(**state.model_dump())
+                    messages = prompt.to_messages()
+                    logging.info(f"Built new messages: {[type(m).__name__ for m in messages]}")
+                except Exception as e:
+                    logging.error(f"Error building messages: {e}")
+                    raise
 
             # Convert messages to dicts for state storage
             message_dicts = [{
@@ -192,8 +243,9 @@ class Classifier(BaseNode):
 
             # Store messages as dicts in state - they'll be converted back to objects when needed
             return self.GraphState(
-                **{k: v for k, v in state.model_dump().items() if k != 'messages'},
-                messages=message_dicts
+                **{k: v for k, v in state.model_dump().items() if k not in ['messages', 'completion']},
+                messages=message_dicts,
+                completion=state.completion if hasattr(state, 'completion') else None
             )
 
         return llm_request
@@ -266,19 +318,37 @@ class Classifier(BaseNode):
                 else:
                     converted_history.append(msg)
             
+            # Add the last completion to chat history if it exists
+            if state.completion is not None:
+                converted_history.append(AIMessage(content=state.completion))
+            
+            # Add the retry message
+            converted_history.append(retry_message)
+            
             # Convert all messages back to dictionaries for state storage
             message_dicts = [{
                 'type': msg.__class__.__name__.lower().replace('message', ''),
                 'content': msg.content,
                 '_type': msg.__class__.__name__
-            } for msg in [*converted_history, retry_message]]
+            } for msg in converted_history]
             
-            # Store messages as dicts in state
+            # Get the initial system and human messages from state.messages
+            initial_messages = []
+            if hasattr(state, 'messages') and state.messages:
+                for msg in state.messages:
+                    if msg.get('type') in ['system', 'human']:
+                        initial_messages.append(msg)
+                    else:
+                        break
+            
+            # Store messages as dicts in state and explicitly clear completion
             new_state = self.GraphState(
                 chat_history=message_dicts,
+                messages=initial_messages + message_dicts,  # Combine initial messages with chat history
                 retry_count=state.retry_count + 1,
+                completion=None,  # Explicitly clear completion for next LLM call
                 **{k: v for k, v in state.model_dump().items() 
-                   if k not in ['chat_history', 'retry_count']}
+                   if k not in ['chat_history', 'retry_count', 'completion', 'messages']}
             )
             
             logging.info(f"Final state after retry preparation: {new_state}")
@@ -298,7 +368,10 @@ class Classifier(BaseNode):
         if state.retry_count >= self.parameters.maximum_retry_count:
             logging.info("Maximum retries reached")
             return "max_retries"
-        logging.info("No valid classification, retrying")
+            
+        # Clear completion when we need to retry
+        logging.info("No valid classification, clearing completion and retrying")
+        state.completion = None
         return "retry"
 
     def get_max_retries_node(self):
@@ -324,8 +397,11 @@ class Classifier(BaseNode):
             if not isinstance(state, dict):
                 state = state.model_dump()
 
-            # Check if completion already exists
-            if 'completion' in state and state['completion'] is not None:
+            # Check if completion already exists AND we're not in a retry
+            # (retry_count > 0 means we should make a new call regardless)
+            if ('completion' in state and 
+                state['completion'] is not None and 
+                state.get('retry_count', 0) == 0):
                 logging.info("Found existing completion in state - skipping LLM call")
                 return state
 
@@ -369,6 +445,7 @@ class Classifier(BaseNode):
                     logging.error(f"Account key: {account_key}")
                     logging.error(f"Scorecard key: {metadata.get('scorecard_key')}")
                     logging.error(f"Score name: {metadata.get('score_name')}")
+                    logging.error(f"Full metadata: {metadata}")
                     logging.error(f"Full metadata: {metadata}")
                     raise
                 
@@ -473,33 +550,53 @@ class Classifier(BaseNode):
                     raise ValueError("No messages found in state")
                 
                 # Convert dict messages back to LangChain objects if needed
-                messages = state['messages']
+                messages = state['messages'] if 'messages' in state else []
                 if messages and isinstance(messages[0], dict):
-                    messages = []
-                    for msg in state['messages']:
+                    converted_messages = []
+                    for msg in messages:
                         msg_type = msg.get('type', '').lower()
                         if msg_type == 'human':
-                            messages.append(HumanMessage(content=msg['content']))
+                            converted_messages.append(HumanMessage(content=msg['content']))
                         elif msg_type == 'ai':
-                            messages.append(AIMessage(content=msg['content']))
+                            converted_messages.append(AIMessage(content=msg['content']))
                         elif msg_type == 'system':
-                            messages.append(SystemMessage(content=msg['content']))
+                            converted_messages.append(SystemMessage(content=msg['content']))
                         else:
-                            messages.append(BaseMessage(content=msg['content']))
+                            converted_messages.append(BaseMessage(content=msg['content']))
+                    messages = converted_messages
                 
-                logging.info("Preparing to make LLM API call")
+                # Use chat history instead of extending messages
+                if 'chat_history' in state and state['chat_history']:
+                    messages = [messages[0], messages[1]]  # Keep only system and initial human message
+                    chat_messages = []
+                    for msg in state['chat_history']:
+                        msg_type = msg.get('type', '').lower()
+                        if msg_type == 'human':
+                            chat_messages.append(HumanMessage(content=msg['content']))
+                        elif msg_type == 'ai':
+                            chat_messages.append(AIMessage(content=msg['content']))
+                        elif msg_type == 'system':
+                            chat_messages.append(SystemMessage(content=msg['content']))
+                        else:
+                            chat_messages.append(BaseMessage(content=msg['content']))
+                    messages.extend(chat_messages)
+                
+                # Log the exact messages being sent to LLM
+                logging.info("Messages being sent to LLM:")
+                for i, msg in enumerate(messages):
+                    logging.info(f"Message {i}:")
+                    logging.info(f"  Type: {msg.__class__.__name__}")
+                    logging.info(f"  Content: {msg.content}")
+                
+                logging.info("Making LLM API call...")
                 completion = await model.ainvoke(messages)
                 logging.info("LLM call completed")
                 logging.info(f"LLM response: {completion.content}")
                 
-                # Return state with messages preserved
+                # Return state with ALL messages preserved
                 return self.GraphState(
                     **{k: v for k, v in state.items() if k not in ['messages', 'completion', 'at_llm_breakpoint']},
-                    messages=[{
-                        'type': msg.__class__.__name__.lower().replace('message', ''),
-                        'content': msg.content,
-                        '_type': msg.__class__.__name__
-                    } for msg in messages],
+                    messages=state['messages'],  # Keep original messages instead of converting again
                     completion=completion.content,
                     at_llm_breakpoint=False
                 )
