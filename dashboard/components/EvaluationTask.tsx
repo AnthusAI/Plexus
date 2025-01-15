@@ -67,6 +67,10 @@ export interface EvaluationTaskProps {
   isFullWidth?: boolean
   onToggleFullWidth?: () => void
   onClose?: () => void
+  /** ID of the currently selected score result. Null means no result is selected */
+  selectedScoreResultId?: string | null
+  /** Callback fired when a score result is selected or deselected */
+  onSelectScoreResult?: (id: string | null) => void
 }
 
 function computeEvaluationType(data: EvaluationTaskData): string {
@@ -186,19 +190,24 @@ const DetailContent = React.memo(({
   isFullWidth,
   metrics,
   metricsVariant,
+  selectedScoreResultId,
+  onSelectScoreResult,
 }: { 
   data: EvaluationTaskData
   isFullWidth: boolean
   metrics: any[]
   metricsVariant: 'grid' | 'detail'
+  selectedScoreResultId?: string | null
+  onSelectScoreResult?: (id: string | null) => void
 }) => {
-  const [selectedScoreResult, setSelectedScoreResult] = useState<Schema['ScoreResult']['type'] | null>(null)
   const [containerWidth, setContainerWidth] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const [selectedPredictedActual, setSelectedPredictedActual] = useState<{
     predicted: string | null
     actual: string | null
   }>({ predicted: null, actual: null })
+
+  const selectedScoreResult = data.scoreResults?.find(r => r.id === selectedScoreResultId) ?? null
 
   useResizeObserver(containerRef, (entry) => {
     setContainerWidth(entry.contentRect.width)
@@ -229,11 +238,11 @@ const DetailContent = React.memo(({
   const showResultDetail = selectedScoreResult
 
   const handleScoreResultSelect = (result: Schema['ScoreResult']['type']) => {
-    setSelectedScoreResult(result)
+    onSelectScoreResult?.(result.id)
   }
 
   const handleScoreResultClose = () => {
-    setSelectedScoreResult(null)
+    onSelectScoreResult?.(null)
   }
 
   const parsedScoreResults = useMemo(() => {
@@ -365,7 +374,9 @@ export default function EvaluationTask({
   controlButtons,
   isFullWidth,
   onToggleFullWidth,
-  onClose
+  onClose,
+  selectedScoreResultId,
+  onSelectScoreResult
 }: EvaluationTaskProps) {
   const data = task.data ?? {} as EvaluationTaskData
   const computedType = computeEvaluationType(data)
@@ -441,6 +452,8 @@ export default function EvaluationTask({
               isFullWidth={isFullWidth ?? false}
               metrics={metrics}
               metricsVariant="detail"
+              selectedScoreResultId={selectedScoreResultId}
+              onSelectScoreResult={onSelectScoreResult}
             />
           )}
         </TaskContent>
