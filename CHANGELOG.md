@@ -1,6 +1,25 @@
 # CHANGELOG
 
 
+## v0.4.1 (2025-01-15)
+
+
+## v0.4.0-alpha.3 (2025-01-14)
+
+### Bug Fixes
+
+- Close score result detail when selecting new evaluation
+  ([`7d1a233`](https://github.com/AnthusAI/Plexus/commit/7d1a2338d69b651e9aa7dde7102e119ee85d6110))
+
+The score result detail view now properly closes when selecting a different evaluation. This was
+  achieved by: - Moving score result selection state from DetailContent to parent component - Adding
+  selectedScoreResultId and onSelectScoreResult props to control visibility - Using props instead of
+  internal state to determine what detail view to show
+
+
+## v0.4.0 (2025-01-13)
+
+
 ## v0.4.0-alpha.2 (2025-01-10)
 
 ### Bug Fixes

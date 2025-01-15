@@ -137,8 +137,10 @@ class Evaluation:
         self.experiment_label = experiment_label
         self.max_mismatches_to_report = max_mismatches_to_report
 
-        # Results tracking
-        self.all_results = []
+        # Results tracking - separate results by score
+        self.results_by_score = {}  # Dictionary to store results for each score
+        self.processed_items_by_score = {}  # Track processed items per score
+        self.all_results = []  # Keep this for backwards compatibility
         self.processed_items = 0
         self.mismatches = []
         self.total_correct = 0
@@ -328,9 +330,20 @@ class Evaluation:
         else:
             return all_score_names_to_process
 
-    @staticmethod
     def time_execution(func):
-        def wrapper(self, *args, **kwargs):
+        async def async_wrapper(self, *args, **kwargs):
+            start_time = time.time()
+            result = await func(self, *args, **kwargs)
+            end_time = time.time()
+            execution_time = end_time - start_time
+            time_per_text = execution_time / self.number_of_texts_to_sample if self.number_of_texts_to_sample else 0
+            mlflow.log_metric("execution_time", execution_time)
+            mlflow.log_metric("time_per_text", time_per_text)
+            print(f"{func.__name__} executed in {execution_time:.2f} seconds.")
+            logging.info(f"Average time per text: {time_per_text:.2f} seconds.")
+            return result
+
+        def sync_wrapper(self, *args, **kwargs):
             start_time = time.time()
             result = func(self, *args, **kwargs)
             end_time = time.time()
@@ -341,11 +354,32 @@ class Evaluation:
             print(f"{func.__name__} executed in {execution_time:.2f} seconds.")
             logging.info(f"Average time per text: {time_per_text:.2f} seconds.")
             return result
-        return wrapper
 
-    @abstractmethod
-    def run(self):
-        pass
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        else:
+            return sync_wrapper
+
+    @time_execution
+    async def run(self):
+        """Now this is an async function that just runs _async_run directly"""
+        try:
+            return await self._async_run()
+        finally:
+            # Set should_stop to True to trigger final metrics updates
+            self.should_stop = True
+            # Wait for all metrics tasks to complete
+            if self.metrics_tasks:
+                # Wait a short time to allow final metrics updates to complete
+                await asyncio.sleep(0.2)
+                # Cancel and wait for all metrics tasks
+                for task in self.metrics_tasks.values():
+                    if not task.done():
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
 
     @retry(
         stop=stop_after_attempt(3),
@@ -820,14 +854,26 @@ class Evaluation:
                 random_state=self.random_seed
             )
 
-        # Process all results concurrently
-        results = await self.score_all_texts(selected_sample_rows)
-            
+        # Process all results concurrently for each score
+        score_tasks = []
+        for score_name in self.score_names():
+            task = asyncio.create_task(self.score_all_texts_for_score(selected_sample_rows, score_name))
+            score_tasks.append(task)
+
+        # Wait for all score evaluations to complete
+        all_results = await asyncio.gather(*score_tasks)
+        # Flatten results from all scores and filter out exceptions
+        self.all_results = [
+            result for score_results in all_results 
+            for result in score_results 
+            if not isinstance(result, Exception)
+        ]
+
         if not os.path.exists(report_folder_path):
             os.makedirs(report_folder_path)
 
         logging.info("Logging scorecard results as an artifact in MLFlow.")
-        scorecard_results = ScorecardResults(results)
+        scorecard_results = ScorecardResults(self.all_results)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         results_filename = f"scorecard_results_{timestamp}.json"
         scorecard_results.save_to_file(f"{report_folder_path}/{results_filename}")
@@ -836,7 +882,7 @@ class Evaluation:
         logging.info("Scoring completed.")
 
         # Count the number correct out of all questions.
-        for result in results:
+        for result in self.all_results:
             logging.info(f"Form ID: {result['form_id']}")
             for question in self.score_names():
                 score_result = next((result for result in result['results'].values() if result.parameters.name == question), None)
@@ -907,7 +953,7 @@ class Evaluation:
         def log_scorecard_costs():
             try:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                analysis.plot_scorecard_costs(results=results)
+                analysis.plot_scorecard_costs(results=self.all_results)
                 mlflow.log_artifact(f"{report_folder_path}/scorecard_input_output_costs_{timestamp}.png")
                 mlflow.log_artifact(f"{report_folder_path}/histogram_of_total_costs_{timestamp}.png")
                 mlflow.log_artifact(f"{report_folder_path}/distribution_of_input_costs_{timestamp}.png")
@@ -921,7 +967,7 @@ class Evaluation:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 report_filename = f"scorecard_report_for_incorrect_results_{timestamp}.csv"
                 with open(f"{report_folder_path}/{report_filename}", "w") as file:
-                    file.write(analysis.generate_csv_scorecard_report(results=results))
+                    file.write(analysis.generate_csv_scorecard_report(results=self.all_results))
                 mlflow.log_artifact(f"{report_folder_path}/{report_filename}")
             except Exception as e:
                 logging.error(f"Failed to log CSV report: {e}")
@@ -964,7 +1010,7 @@ class Evaluation:
         mlflow.log_metric("cost_per_text", expenses['cost_per_text'])
 
         # Generate the Excel report
-        self.generate_excel_report(report_folder_path, results, selected_sample_rows)
+        self.generate_excel_report(report_folder_path, self.all_results, selected_sample_rows)
 
         logging.info(f"Expenses: {expenses}")
         logging.info(f"{overall_accuracy:.1f}% accuracy / {len(selected_sample_rows)} samples")
@@ -973,84 +1019,79 @@ class Evaluation:
         report = self.generate_report(score_instance, overall_accuracy, expenses, len(selected_sample_rows))
         logging.info(report)
 
-        await asyncio.to_thread(self.generate_and_log_confusion_matrix, results, report_folder_path)
+        await asyncio.to_thread(self.generate_and_log_confusion_matrix, self.all_results, report_folder_path)
         
         for question in self.score_names():
-            self.create_performance_visualization(results, question, report_folder_path)
+            self.create_performance_visualization(self.all_results, question, report_folder_path)
 
         self.generate_metrics_json(report_folder_path, len(selected_sample_rows), expenses)
 
-    def generate_report(self, score_instance, overall_accuracy, expenses, sample_size):
-        score_config = score_instance.parameters
+    async def score_all_texts_for_score(self, selected_sample_rows, score_name: str):
+        """Score all texts for a specific score concurrently"""
+        if score_name not in self.results_by_score:
+            self.results_by_score[score_name] = []
+        if score_name not in self.processed_items_by_score:
+            self.processed_items_by_score[score_name] = 0
 
-        report = f"""
-Evaluation Report:
-------------------
-
-Prompts:
-{yaml.dump(score_config.graph, default_flow_style=False)}
-
-Mismatches (up to {self.max_mismatches_to_report}):
-"""
-        for mismatch in self.mismatches:
-            report += f"""
-Form ID:      {mismatch['form_id']}
-Question:     {mismatch['question']}
-
-Predicted:    {mismatch['predicted']}
-Ground Truth: {mismatch['ground_truth']}
-
-Explanation:
-{mismatch['explanation']}
-
-Transcript:
-{mismatch['transcript']}
-
----
-"""
-        report += f"""
-
-Overall Accuracy: {overall_accuracy:.1f}% ({self.total_correct} / {self.total_questions})
-Sample Size:      {sample_size}
-Cost per call:    ${expenses['cost_per_text']:.6f}
-Total cost:       ${expenses['total_cost']:.6f}
-"""            
-
-        return report
-
-    def generate_metrics_json(self, report_folder_path, sample_size, expenses):
-        overall_accuracy = None if self.total_questions == 0 else (self.total_correct / self.total_questions) * 100
+        tasks = []
+        total_rows = len(selected_sample_rows)
+        for idx, (_, row) in enumerate(selected_sample_rows.iterrows()):
+            task = asyncio.create_task(self.score_text(row, score_name))
+            tasks.append(task)
         
-        if sample_size < 120:
-            accuracy_format = "{:.0f}"
-        elif sample_size < 10000:
-            accuracy_format = "{:.1f}"
-        else:
-            accuracy_format = "{:.2f}"
+        for task in asyncio.as_completed(tasks):
+            try:
+                result = await task
+                if result:
+                    self.results_by_score[score_name].append(result)
+                    self.processed_items_by_score[score_name] += 1
+                    self.processed_items = sum(self.processed_items_by_score.values())
+                    # Start metrics task if needed
+                    is_final_result = self.processed_items_by_score[score_name] == total_rows
+                    await self.maybe_start_metrics_task(score_name, is_final_result)
+            except Exception as e:
+                logging.error(f"Error scoring text for {score_name}: {e}")
         
-        metrics = {
-            "overall_accuracy": accuracy_format.format(overall_accuracy) if overall_accuracy is not None else 0,
-            "number_correct": self.total_correct,
-            "total_questions": self.total_questions,
-            "number_of_samples": sample_size,
-            "cost_per_call": f"{expenses['cost_per_text']:.7f}".rstrip('0').rstrip('.'),
-            "total_cost": f"{expenses['total_cost']:.7f}".rstrip('0').rstrip('.')
-        }
+        return self.results_by_score[score_name]
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        metrics_filename = f"metrics_{timestamp}.json"
-        metrics_file_path = f"{report_folder_path}/{metrics_filename}"
-        with open(metrics_file_path, 'w') as f:
-            json.dump(metrics, f, indent=2)
+    async def maybe_start_metrics_task(self, score_name: str, is_final_result: bool = False):
+        """Start a metrics computation task if one isn't running, or if this is the final result"""
+        if is_final_result:
+            # For final results, always compute metrics
+            self.completed_scores.add(score_name)
+            if score_name in self.metrics_tasks:
+                task = self.metrics_tasks[score_name]
+                if not task.done():
+                    task.cancel()
+            self.metrics_tasks[score_name] = asyncio.create_task(self.continuous_metrics_computation(score_name))
+        elif score_name not in self.metrics_tasks or self.metrics_tasks[score_name].done():
+            # Start new task if none exists or previous one is done
+            self.metrics_tasks[score_name] = asyncio.create_task(self.continuous_metrics_computation(score_name))
 
-        mlflow.log_artifact(metrics_file_path)
-        logging.info(f"Metrics JSON file generated at {metrics_file_path}")
-
-        for key, value in metrics.items():
-            if key in ["overall_accuracy", "cost_per_call", "total_cost"]:
-                mlflow.log_metric(key, float(value))
-            else:
-                mlflow.log_metric(key, value)
+    async def continuous_metrics_computation(self, score_name: str):
+        """Background task that continuously computes and posts metrics for a specific score"""
+        last_processed_count = 0
+        while not self.should_stop:
+            try:
+                # Check if we have any new results for this score
+                current_count = len(self.results_by_score.get(score_name, []))
+                if current_count > 0 and current_count != last_processed_count:
+                    # Combine results from all scores for metrics calculation
+                    combined_results = []
+                    for score, results in self.results_by_score.items():
+                        combined_results.extend(results)
+                    
+                    metrics = self.calculate_metrics(combined_results)
+                    # If this is the final update (score is complete), mark it as completed
+                    status = "COMPLETED" if score_name in self.completed_scores else "RUNNING"
+                    await self.log_to_dashboard(metrics, status=status)
+                    last_processed_count = current_count
+                
+                # Wait a bit before checking again
+                await asyncio.sleep(.1)
+            except Exception as e:
+                logging.error(f"Error in continuous metrics computation for {score_name}: {e}")
+                await asyncio.sleep(5)  # Wait longer on error
 
     async def score_all_texts(self, selected_sample_rows):
         """Score all texts concurrently"""
@@ -1208,131 +1249,80 @@ Total cost:       ${expenses['total_cost']:.6f}
         
         mlflow.log_artifact(f"{report_folder_path}/performance_{safe_question}.png")
         
-class ConsistencyEvaluation(Evaluation):
-    def __init__(self, *, number_of_times_to_sample_each_text, **kwargs):
-        super().__init__(**kwargs)
-        self.number_of_times_to_sample_each_text = number_of_times_to_sample_each_text
-    
-    def log_parameters(self):
-        super().log_parameters()
-        mlflow.log_param("number_of_times_to_sample_each_text", self.number_of_times_to_sample_each_text)
-
-class AccuracyEvaluation(Evaluation):
-    def __init__(self, *, override_folder=None, labeled_samples=None, labeled_samples_filename=None, score_id=None, **kwargs):
-        super().__init__(**kwargs)
-        self.scorecard_name = kwargs.get('scorecard_name')
-        self.override_folder = override_folder
-        self.override_data = self.load_override_data() if self.override_folder else {}
-        self.labeled_samples = labeled_samples
-        self.labeled_samples_filename = labeled_samples_filename
-        self.score_id = score_id
-        self.results_queue = Queue()
-        self.metrics_task = None
-        self.should_stop = False
-
-    def load_override_data(self):
-        override_data = {}
-        if os.path.exists(self.override_folder):
-            logging.info(f"Loading overrides from folder: {self.override_folder}")
-            override_files = [f for f in os.listdir(self.override_folder) if f.endswith(".csv")]
-            logging.info(f"Found {len(override_files)} override files")
-            
-            for filename in override_files:
-                filepath = os.path.join(self.override_folder, filename)
-                try:
-                    df = pd.read_csv(filepath, keep_default_na=False)
-                    logging.info(f"Processing {len(df)} rows from {filename}")
-                    
-                    for _, row in df.iterrows():
-                        form_id = None
-                        if 'form_id' in row:
-                            form_id = row['form_id']
-                        elif 'f_id' in row:
-                            form_id = row['f_id']
-                            
-                        question_name = None
-                        if 'question_name' in row:
-                            question_name = row['question_name']
-                        elif 'question' in row:
-                            question_name = row['question']
-                            
-                        correct_value = None
-                        if 'correct_value' in row:
-                            correct_value = row['correct_value'].strip()
-                        elif 'Spot Check Answer' in row:
-                            correct_value = row['Spot Check Answer'].strip()
-                            
-                        if form_id and question_name and correct_value:
-                            if form_id not in override_data:
-                                override_data[form_id] = {}
-                            override_data[form_id][question_name] = correct_value
-                            
-                    logging.info(f"Loaded {len(override_data)} form overrides from {filename}")
-                except Exception as e:
-                    logging.error(f"Failed to read override file {filepath}: {e}")
+    def generate_metrics_json(self, report_folder_path, sample_size, expenses):
+        overall_accuracy = None if self.total_questions == 0 else (self.total_correct / self.total_questions) * 100
+        
+        if sample_size < 120:
+            accuracy_format = "{:.0f}"
+        elif sample_size < 10000:
+            accuracy_format = "{:.1f}"
         else:
-            logging.info(f"No override folder found at {self.override_folder}")
-        return override_data
-
-    async def continuous_metrics_computation(self):
-        """Background task that continuously computes and posts metrics as new results arrive"""
-        last_processed_count = 0
-        while not self.should_stop:
-            try:
-                # Check if we have any new results
-                current_count = len(self.all_results)
-                if current_count > 0 and current_count != last_processed_count:
-                    metrics = self.calculate_metrics(self.all_results)
-                    # If this is the final update (should_stop is True), mark it as completed
-                    status = "COMPLETED" if self.should_stop else "RUNNING"
-                    await self.log_to_dashboard(metrics, status=status)
-                    last_processed_count = current_count
-                
-                # Wait a bit before checking again
-                await asyncio.sleep(.1)
-            except Exception as e:
-                logging.error(f"Error in continuous metrics computation: {e}")
-                await asyncio.sleep(5)  # Wait longer on error
-
-    @Evaluation.time_execution
-    async def run(self):
-        """Now this is an async function that just runs _async_run directly"""
-        # Start the continuous metrics computation task
-        self.metrics_task = asyncio.create_task(self.continuous_metrics_computation())
-        try:
-            return await self._async_run()
-        finally:
-            # Set should_stop to True to trigger final metrics update
-            self.should_stop = True
-            if self.metrics_task:
-                # Wait a short time to allow final metrics update to complete
-                await asyncio.sleep(0.2)
-                await self.metrics_task
-
-    async def score_all_texts(self, selected_sample_rows):
-        """Score all texts concurrently"""
-        tasks = []
-        for _, row in selected_sample_rows.iterrows():
-            task = asyncio.create_task(self.score_text(row))
-            tasks.append(task)
+            accuracy_format = "{:.2f}"
         
-        results = []
-        for task in asyncio.as_completed(tasks):
-            try:
-                result = await task
-                results.append(result)
-            except Exception as e:
-                logging.error(f"Error scoring text: {e}")
-        
-        return results
+        metrics = {
+            "overall_accuracy": accuracy_format.format(overall_accuracy) if overall_accuracy is not None else 0,
+            "number_correct": self.total_correct,
+            "total_questions": self.total_questions,
+            "number_of_samples": sample_size,
+            "cost_per_call": f"{expenses['cost_per_text']:.7f}".rstrip('0').rstrip('.'),
+            "total_cost": f"{expenses['total_cost']:.7f}".rstrip('0').rstrip('.')
+        }
 
-    @retry(
-        wait=wait_fixed(2),
-        stop=stop_after_attempt(5),
-        before=before_log(logging.getLogger(), logging.INFO),
-        retry=retry_if_exception_type((Timeout, RequestException))
-    )
-    async def score_text(self, row):
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        metrics_filename = f"metrics_{timestamp}.json"
+        metrics_file_path = f"{report_folder_path}/{metrics_filename}"
+        with open(metrics_file_path, 'w') as f:
+            json.dump(metrics, f, indent=2)
+
+        mlflow.log_artifact(metrics_file_path)
+        logging.info(f"Metrics JSON file generated at {metrics_file_path}")
+
+        for key, value in metrics.items():
+            if key in ["overall_accuracy", "cost_per_call", "total_cost"]:
+                mlflow.log_metric(key, float(value))
+            else:
+                mlflow.log_metric(key, value)
+
+    def generate_report(self, score_instance, overall_accuracy, expenses, sample_size):
+        score_config = score_instance.parameters
+
+        report = f"""
+Evaluation Report:
+------------------
+
+Prompts:
+{yaml.dump(score_config.graph, default_flow_style=False)}
+
+Mismatches (up to {self.max_mismatches_to_report}):
+"""
+        for mismatch in self.mismatches:
+            report += f"""
+Form ID:      {mismatch['form_id']}
+Question:     {mismatch['question']}
+
+Predicted:    {mismatch['predicted']}
+Ground Truth: {mismatch['ground_truth']}
+
+Explanation:
+{mismatch['explanation']}
+
+Transcript:
+{mismatch['transcript']}
+
+---
+"""
+        report += f"""
+
+Overall Accuracy: {overall_accuracy:.1f}% ({self.total_correct} / {self.total_questions})
+Sample Size:      {sample_size}
+Cost per call:    ${expenses['cost_per_text']:.6f}
+Total cost:       ${expenses['total_cost']:.6f}
+"""            
+
+        return report
+
+    async def score_text(self, row, score_name: str = None):
+        """Score text with retry logic for handling timeouts and request exceptions"""
         logging.info("Scoring text...")
 
         text = row['text']
@@ -1356,10 +1346,12 @@ class AccuracyEvaluation(Evaluation):
 
         logging.info(f"Processing text for content_id: {content_id}, session_id: {session_id}, form_id: {form_id}")
 
+        # If score_name is provided, only process that score
+        score_names_to_process = [score_name] if score_name else self.score_names_to_process()
         scorecard_results = await self.scorecard.score_entire_text(
             text=text,
             metadata=metadata,
-            subset_of_score_names=self.score_names_to_process()
+            subset_of_score_names=score_names_to_process
         )
 
         # Create a new dictionary for filtered results
@@ -1377,9 +1369,10 @@ class AccuracyEvaluation(Evaluation):
         has_processed_scores = False
 
         # Get the primary score name if we're evaluating a specific score
-        primary_score_name = None
-        if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
-            primary_score_name = self.subset_of_score_names[0]
+        primary_score_name = score_name if score_name else (
+            self.subset_of_score_names[0] if self.subset_of_score_names and len(self.subset_of_score_names) == 1 
+            else None
+        )
 
         for score_identifier in scorecard_results.keys():
             try:
@@ -1436,7 +1429,7 @@ class AccuracyEvaluation(Evaluation):
 
                 # Create ScoreResult in a non-blocking way only for the primary score
                 if self.dashboard_client and self.experiment_id:
-                    asyncio.create_task(self._create_score_result(
+                    await asyncio.create_task(self._create_score_result(
                         score_result=score_result,
                         content_id=content_id,
                         result=result
@@ -1461,10 +1454,10 @@ class AccuracyEvaluation(Evaluation):
         )
         # Add result to all_results and increment processed_items only if we processed any scores
         if has_processed_scores:
-            self.all_results.append(result)
             self.processed_items += 1
 
         return result
+
     async def _create_score_result(self, score_result, content_id, result):
         """Helper method to create score result asynchronously"""
         max_retries = 3
@@ -1561,4 +1554,228 @@ class AccuracyEvaluation(Evaluation):
     def __exit__(self, exc_type, exc_val, exc_tb):
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.__aexit__(exc_type, exc_val, exc_tb))
+
+    @time_execution
+    async def run(self):
+        """Now this is an async function that just runs _async_run directly"""
+        try:
+            return await self._async_run()
+        finally:
+            # Set should_stop to True to trigger final metrics updates
+            self.should_stop = True
+            # Wait for all metrics tasks to complete
+            if self.metrics_tasks:
+                # Wait a short time to allow final metrics updates to complete
+                await asyncio.sleep(0.2)
+                # Cancel and wait for all metrics tasks
+                for task in self.metrics_tasks.values():
+                    if not task.done():
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+
+    @retry(
+        wait=wait_fixed(2),
+        stop=stop_after_attempt(5),
+        before=before_log(logging.getLogger(), logging.INFO),
+        retry=retry_if_exception_type((Timeout, RequestException)))
+    async def score_text(self, row, score_name: str = None):
+        """Score text with retry logic for handling timeouts and request exceptions"""
+        logging.info("Scoring text...")
+
+        text = row['text']
+        content_id = row.get('content_id', '')
+        session_id = row.get('Session ID', content_id)
+        columns = row.get('columns', {})
+        form_id = columns.get('form_id', '')
+        metadata_string = columns.get('metadata', {})
+        
+        # Initialize human_labels dictionary
+        human_labels = {}
+        
+        if isinstance(metadata_string, dict):
+            metadata = metadata_string
+        else:
+            try:
+                metadata = json.loads(metadata_string)
+            except json.JSONDecodeError:
+                logging.warning(f"Failed to parse metadata as JSON. Using empty dict. Metadata: {metadata_string}")
+                metadata = {}
+
+        logging.info(f"Processing text for content_id: {content_id}, session_id: {session_id}, form_id: {form_id}")
+
+        # If score_name is provided, only process that score
+        score_names_to_process = [score_name] if score_name else self.score_names_to_process()
+        scorecard_results = await self.scorecard.score_entire_text(
+            text=text,
+            metadata=metadata,
+            subset_of_score_names=score_names_to_process
+        )
+
+        # Create a new dictionary for filtered results
+        filtered_results = {}
+
+        result = {
+            'content_id': content_id,
+            'session_id': session_id,
+            'form_id': form_id,
+            'results': filtered_results,  # Use the filtered results dictionary
+            'human_labels': human_labels
+        }
+
+        # Track if we've processed any scores for this text
+        has_processed_scores = False
+
+        # Get the primary score name if we're evaluating a specific score
+        primary_score_name = score_name if score_name else (
+            self.subset_of_score_names[0] if self.subset_of_score_names and len(self.subset_of_score_names) == 1 
+            else None
+        )
+
+        for score_identifier in scorecard_results.keys():
+            try:
+                score_result = scorecard_results[score_identifier]
+                score_instance = Score.from_name(self.scorecard.name, score_identifier)
+                label_score_name = score_instance.get_label_score_name()
+                score_name = score_instance.parameters.name
+
+                # Skip if this is a dependency score and not our primary score
+                if primary_score_name and score_name != primary_score_name:
+                    logging.info(f"Skipping result creation for dependency score: {score_name}")
+                    continue
+
+                # First check for override
+                human_label = None
+                if form_id in self.override_data and score_name in self.override_data[form_id]:
+                    human_label = self.override_data[form_id][score_name]
+                    logging.info(f"Using override for form {form_id}, score {score_name}: {human_label}")
+                else:
+                    # Fall back to row data if no override exists
+                    label_column = label_score_name + '_label'
+                    if label_column in row.index:
+                        human_label = row[label_column]
+                    elif label_score_name in row.index:
+                        human_label = row[label_score_name]
+                    else:
+                        logging.warning(f"Neither '{score_identifier}' nor '{label_score_name}' found in the row. Available columns: {row.index.tolist()}")
+                        continue
+
+                human_label = str(human_label).lower().rstrip('.!?')
+                if human_label == 'nan':
+                    human_label = ''
+                if human_label == 'n/a':
+                    human_label = 'na'
+
+                human_explanation = columns.get(f"{label_score_name} comment", 'None')
+
+                score_result_value = ' '.join(str(score_result.value).lower().strip().split())
+
+                if form_id in self.override_data:
+                    for override_question_name, correct_value in self.override_data[form_id].items():
+                        if str(override_question_name) in human_labels:
+                            logging.info(f"OVERRIDING human label for question '{override_question_name}' in form '{form_id}' from '{human_labels[str(override_question_name)]}' to '{correct_value}'")
+                            human_labels[str(override_question_name)] = correct_value
+
+                score_result.metadata['human_label'] = human_label
+                score_result.metadata['human_explanation'] = human_explanation
+                score_result.metadata['correct'] = score_result_value == human_label
+                score_result.metadata['text'] = text
+
+                # Add to filtered results only if we get here (i.e., all conditions are met)
+                filtered_results[score_identifier] = score_result
+                has_processed_scores = True
+
+                # Create ScoreResult in a non-blocking way only for the primary score
+                if self.dashboard_client and self.experiment_id:
+                    await asyncio.create_task(self._create_score_result(
+                        score_result=score_result,
+                        content_id=content_id,
+                        result=result
+                    ))
+
+            except Exception as e:
+                logging.exception(f"Error processing {score_identifier}: {e}")
+                score_result = Score.Result(
+                    value="Error", 
+                    error=str(e),
+                    parameters=Score.Parameters(
+                        name=score_identifier,
+                        scorecard=self.scorecard_name
+                    )
+                )
+
+        # Remove the result accumulation from here since it's now handled in _async_run
+        if has_processed_scores:
+            self.processed_items += 1
+
+        return result
+
+class ConsistencyEvaluation(Evaluation):
+    def __init__(self, *, number_of_times_to_sample_each_text, **kwargs):
+        super().__init__(**kwargs)
+        self.number_of_times_to_sample_each_text = number_of_times_to_sample_each_text
+    
+    def log_parameters(self):
+        super().log_parameters()
+        mlflow.log_param("number_of_times_to_sample_each_text", self.number_of_times_to_sample_each_text)
+
+class AccuracyEvaluation(Evaluation):
+    def __init__(self, *, override_folder=None, labeled_samples=None, labeled_samples_filename=None, score_id=None, **kwargs):
+        super().__init__(**kwargs)
+        self.scorecard_name = kwargs.get('scorecard_name')
+        self.override_folder = override_folder
+        self.override_data = self.load_override_data() if self.override_folder else {}
+        self.labeled_samples = labeled_samples
+        self.labeled_samples_filename = labeled_samples_filename
+        self.score_id = score_id
+        self.results_queue = Queue()
+        self.metrics_tasks = {}  # Dictionary to track metrics computation tasks per score
+        self.should_stop = False
+        self.completed_scores = set()  # Track which scores have completed all their results
+
+    def load_override_data(self):
+        override_data = {}
+        if os.path.exists(self.override_folder):
+            logging.info(f"Loading overrides from folder: {self.override_folder}")
+            override_files = [f for f in os.listdir(self.override_folder) if f.endswith(".csv")]
+            logging.info(f"Found {len(override_files)} override files")
+            
+            for filename in override_files:
+                filepath = os.path.join(self.override_folder, filename)
+                try:
+                    df = pd.read_csv(filepath, keep_default_na=False)
+                    logging.info(f"Processing {len(df)} rows from {filename}")
+                    
+                    for _, row in df.iterrows():
+                        form_id = None
+                        if 'form_id' in row:
+                            form_id = row['form_id']
+                        elif 'f_id' in row:
+                            form_id = row['f_id']
+                            
+                        question_name = None
+                        if 'question_name' in row:
+                            question_name = row['question_name']
+                        elif 'question' in row:
+                            question_name = row['question']
+                            
+                        correct_value = None
+                        if 'correct_value' in row:
+                            correct_value = row['correct_value'].strip()
+                        elif 'Spot Check Answer' in row:
+                            correct_value = row['Spot Check Answer'].strip()
+                            
+                        if form_id and question_name and correct_value:
+                            if form_id not in override_data:
+                                override_data[form_id] = {}
+                            override_data[form_id][question_name] = correct_value
+                            
+                    logging.info(f"Loaded {len(override_data)} form overrides from {filename}")
+                except Exception as e:
+                    logging.error(f"Failed to read override file {filepath}: {e}")
+        else:
+            logging.info(f"No override folder found at {self.override_folder}")
+        return override_data
 
