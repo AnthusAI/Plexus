@@ -104,12 +104,15 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Need to implement proper cleanup of completed actions
 
 4. **Next Implementation Steps**
-   1. Create frontend components for progress display
-      - Action list and detail views showing status and progress
-      - Stage-based progress visualization
-      - Real-time subscription updates
-      - Error handling and completion states
-      - Rich visual feedback for the 3-stage model
+   1. ✓ Create frontend components for progress display
+      - ✓ Action list and detail views showing status and progress
+      - ✓ Stage-based progress visualization using SegmentedProgressBar
+      - ✓ Real-time subscription updates
+      - ✓ Error handling and completion states
+      - ✓ Rich visual feedback for the 3-stage model
+      - ✓ Pre-execution status display with animations
+      - ✓ Command and status message display
+      - ✓ Progress timing information
 
    2. Create Lambda function for Action-to-Celery dispatch
       - Triggered on Action creation
@@ -123,6 +126,18 @@ This document outlines the implementation of Plexus's two-level dispatch system:
       - Implement stage-based progress tracking
       - Add proper error handling and status updates
       - Test with both direct and Celery execution
+
+   4. Implement Action cleanup and maintenance
+      - Add TTL for completed/failed Actions
+      - Implement periodic cleanup of old Actions
+      - Add monitoring for stuck/zombie Actions
+      - Create Action archival process if needed
+
+   5. Add Action management features
+      - List view with filtering and sorting
+      - Detail view with stage history
+      - Manual retry/cancel capabilities
+      - Batch operation support
 
 5. **Technical Considerations**
    - Use DynamoDB GSI on accountId for efficient listing ✓
@@ -142,6 +157,30 @@ The command system supports:
 - Action ID tracking for async operations ✓
 - Rich progress display with status messages ✓
 - Live progress updates for both sync and async operations ✓
+
+### Testing with Demo Command
+The demo command provides a way to test Action functionality:
+
+```bash
+# Run demo with new auto-created Action
+plexus command demo
+
+# Run demo with existing Action
+plexus command demo --action-id YOUR_ACTION_ID
+```
+
+The demo command simulates a long-running task:
+1. Pre-execution stages (8-12 seconds total):
+   - Initial state (2-3s)
+   - Dispatched state (2-3s)
+   - Celery task creation (2-3s)
+   - Worker claiming (2-3s)
+2. Processing stages:
+   - Initialization (4-6 seconds)
+   - Main processing (2000 items over ~20 seconds)
+   - Finalizing (2-4 seconds)
+
+The command updates progress in real-time and works with both direct execution and Celery dispatch.
 
 ### Progress Tracking
 The system provides detailed progress information:
