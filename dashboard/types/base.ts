@@ -1,3 +1,5 @@
+import { ActionStageConfig } from '@/components/ui/action-status'
+
 // Base types that are shared across all tasks
 export interface BaseTaskData {
   id: string
@@ -18,7 +20,7 @@ export type ActivityType =
   | 'Score updated'
   | 'Scoring Job'
 
-// Simplified base activity type
+// Base activity type with stage support
 export type BaseActivity = {
   id: string
   timestamp: string
@@ -26,7 +28,15 @@ export type BaseActivity = {
   scorecard: string
   score: string
   time: string
-  summary: string
+  summary?: string
   description?: string
-  data: BaseTaskData
+  stages?: ActionStageConfig[]
+  currentStageName?: string
+  processedItems?: number
+  totalItems?: number
+  elapsedTime?: string
+  estimatedTimeRemaining?: string
+  status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  stageConfigs?: ActionStageConfig[]
+  data?: BaseTaskData
 }

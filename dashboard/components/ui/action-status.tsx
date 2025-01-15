@@ -2,6 +2,7 @@ import React from 'react'
 import { SegmentedProgressBar, SegmentConfig } from './segmented-progress-bar'
 import { ProgressBar } from './progress-bar'
 import { ProgressBarTiming } from './progress-bar-timing'
+import { Radio, Triangle } from 'lucide-react'
 
 export interface ActionStageConfig {
   name: string
@@ -26,6 +27,12 @@ export interface ActionStatusProps {
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
   stageConfigs?: SegmentConfig[]
   errorLabel?: string
+  dispatchStatus?: string
+  celeryTaskId?: string
+  workerNodeId?: string
+  showPreExecutionStages?: boolean
+  command?: string
+  statusMessage?: string
 }
 
 export function ActionStatus({
@@ -38,23 +45,81 @@ export function ActionStatus({
   estimatedTimeRemaining,
   status,
   stageConfigs,
-  errorLabel = 'Failed'
+  errorLabel = 'Failed',
+  dispatchStatus,
+  celeryTaskId,
+  workerNodeId,
+  showPreExecutionStages = false,
+  command,
+  statusMessage
 }: ActionStatusProps) {
   const isInProgress = status === 'RUNNING'
   const progress = processedItems && totalItems ? 
     (processedItems / totalItems) * 100 : 0
 
+  // Create the full stage config list including completion
+  const fullStageConfigs = stageConfigs ? [
+    ...stageConfigs,
+    {
+      key: 'completion',
+      label: status === 'FAILED' ? 'Failed' : 'Complete',
+      color: status === 'FAILED' ? 'bg-false' : 'bg-true'
+    }
+  ] : []
+
+  const getPreExecutionStatus = () => {
+    if (!dispatchStatus) return { 
+      message: 'Activity not yet announced...', 
+      icon: Radio,
+      animation: 'animate-pulse'
+    }
+    if (!celeryTaskId) return { 
+      message: 'Activity announced...', 
+      icon: Radio,
+      animation: 'animate-pulse'
+    }
+    if (!workerNodeId) return { 
+      message: 'Activity claimed.', 
+      icon: Triangle,
+      animation: 'animate-bounce'
+    }
+    return null
+  }
+
+  const preExecutionStatus = showPreExecutionStages ? getPreExecutionStatus() : null
+
   return (
     <div className="space-y-4">
-      <ProgressBarTiming
-        elapsedTime={elapsedTime}
-        estimatedTimeRemaining={estimatedTimeRemaining}
-        isInProgress={isInProgress}
-      />
+      {(command || statusMessage) && (
+        <div className="rounded-lg bg-card-light p-3 space-y-2">
+          {command && (
+            <div className="font-mono text-sm text-muted-foreground">
+              {command}
+            </div>
+          )}
+          {statusMessage && (
+            <div className="font-mono text-sm">
+              {statusMessage}
+            </div>
+          )}
+        </div>
+      )}
+      {preExecutionStatus ? (
+        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+          <preExecutionStatus.icon className={`w-4 h-4 ${preExecutionStatus.animation}`} />
+          <span>{preExecutionStatus.message}</span>
+        </div>
+      ) : (
+        <ProgressBarTiming
+          elapsedTime={elapsedTime}
+          estimatedTimeRemaining={estimatedTimeRemaining}
+          isInProgress={isInProgress}
+        />
+      )}
       {showStages && stages.length > 0 && stageConfigs && (
         <SegmentedProgressBar
-          segments={stageConfigs}
-          currentSegment={currentStageName || ''}
+          segments={fullStageConfigs}
+          currentSegment={status === 'FAILED' || status === 'COMPLETED' ? 'completion' : currentStageName || ''}
           error={status === 'FAILED'}
           errorLabel={errorLabel}
         />

@@ -399,6 +399,26 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
     if action_id:
         client = PlexusDashboardClient()
         action = Action.get_by_id(action_id, client)
+        
+        # Initial state - no dispatch status
+        time.sleep(random.uniform(2.0, 3.0))
+        
+        # Update to dispatched state
+        action.dispatchStatus = 'DISPATCHED'
+        action.save()
+        time.sleep(random.uniform(2.0, 3.0))
+        
+        # Simulate Celery task creation
+        action.celeryTaskId = f'demo-task-{int(time.time())}'
+        action.save()
+        time.sleep(random.uniform(2.0, 3.0))
+        
+        # Simulate worker claiming the task
+        action.workerNodeId = f'demo-worker-{random.randint(1000, 9999)}'
+        action.save()
+        time.sleep(random.uniform(2.0, 3.0))
+        
+        # Now start actual processing
         action.start_processing()
         
         # Create all three stages

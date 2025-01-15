@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Square, RectangleVertical, X } from 'lucide-react'
 import { formatTimeAgo } from '@/utils/format-time'
 import { CardButton } from '@/components/CardButton'
+import { ActionStatus, ActionStageConfig } from './ui/action-status'
 
 export interface BaseTaskProps<TData = unknown> {
   variant: 'grid' | 'detail' | 'nested'
@@ -16,6 +17,13 @@ export interface BaseTaskProps<TData = unknown> {
     summary?: string
     description?: string
     data?: TData
+    stages?: ActionStageConfig[]
+    currentStageName?: string
+    processedItems?: number
+    totalItems?: number
+    elapsedTime?: string
+    estimatedTimeRemaining?: string
+    status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
   }
   onClick?: () => void
   controlButtons?: React.ReactNode
@@ -26,11 +34,13 @@ export interface BaseTaskProps<TData = unknown> {
 
 interface TaskChildProps<TData = unknown> extends BaseTaskProps<TData> {
   children?: React.ReactNode
+  showProgress?: boolean
 }
 
 export interface TaskComponentProps<TData = unknown> extends BaseTaskProps<TData> {
   renderHeader: (props: TaskChildProps<TData>) => React.ReactNode
   renderContent: (props: TaskChildProps<TData>) => React.ReactNode
+  showProgress?: boolean
 }
 
 const Task = <TData = unknown>({ 
@@ -42,7 +52,8 @@ const Task = <TData = unknown>({
   renderContent,
   isFullWidth,
   onToggleFullWidth,
-  onClose
+  onClose,
+  showProgress = true
 }: TaskComponentProps<TData>) => {
   const childProps: TaskChildProps<TData> = {
     variant,
@@ -50,7 +61,8 @@ const Task = <TData = unknown>({
     controlButtons,
     isFullWidth,
     onToggleFullWidth,
-    onClose
+    onClose,
+    showProgress
   }
 
   if (variant === 'nested') {
@@ -139,31 +151,95 @@ const TaskContent = <TData = unknown>({
   variant, 
   children, 
   visualization, 
-  customSummary 
+  customSummary,
+  showProgress = true
 }: TaskChildProps<TData> & {
   visualization?: React.ReactNode,
   customSummary?: React.ReactNode
-}) => (
-  <CardContent className="h-full p-0 flex flex-col flex-1">
-    {variant === 'grid' ? (
-      <div className="flex flex-col h-full">
-        <div className="space-y-1 w-full">
-          <div className="text-lg font-bold">
-            {task.description && (
-              <div className="text-sm text-muted-foreground">
-                {task.description}
-              </div>
-            )}
-            {customSummary ? customSummary : <div>{task.summary}</div>}
+}) => {
+  // Find the current stage's status message
+  const currentStage = task.stages?.find(stage => stage.name === task.currentStageName)
+  const statusMessage = currentStage?.statusMessage
+
+  return (
+    <CardContent className="h-full p-0 flex flex-col flex-1">
+      {variant === 'grid' ? (
+        <div className="flex flex-col h-full">
+          <div className="space-y-1 w-full">
+            <div className="text-lg font-bold">
+              {customSummary ? customSummary : <div>{task.summary}</div>}
+            </div>
           </div>
+          {showProgress && task.stages && (
+            <div className="mt-4">
+              <ActionStatus
+                showStages={true}
+                stages={task.stages || []}
+                currentStageName={task.currentStageName}
+                processedItems={task.processedItems}
+                totalItems={task.totalItems}
+                elapsedTime={task.elapsedTime}
+                estimatedTimeRemaining={task.estimatedTimeRemaining}
+                status={task.status || 'PENDING'}
+                command={task.description}
+                statusMessage={statusMessage}
+                stageConfigs={task.stages?.map(stage => {
+                  const stageName = stage.name.toLowerCase()
+                  let color = 'bg-primary'
+                  
+                  // Only the middle processing stage should be secondary
+                  if (stageName === 'processing') {
+                    color = 'bg-secondary'
+                  }
+                  
+                  return {
+                    key: stage.name,
+                    label: stage.name,
+                    color
+                  }
+                })}
+              />
+            </div>
+          )}
         </div>
-        {visualization && (
-          <div className="flex-1 w-full mt-4">{visualization}</div>
-        )}
-      </div>
-    ) : null}
-    {children}
-  </CardContent>
-)
+      ) : (
+        <div className="flex flex-col h-full">
+          {children}
+          {showProgress && task.stages && (
+            <div className="mt-4">
+              <ActionStatus
+                showStages={true}
+                stages={task.stages || []}
+                currentStageName={task.currentStageName}
+                processedItems={task.processedItems}
+                totalItems={task.totalItems}
+                elapsedTime={task.elapsedTime}
+                estimatedTimeRemaining={task.estimatedTimeRemaining}
+                status={task.status || 'PENDING'}
+                command={task.description}
+                statusMessage={statusMessage}
+                stageConfigs={task.stages?.map(stage => {
+                  const stageName = stage.name.toLowerCase()
+                  let color = 'bg-primary'
+                  
+                  // Only the middle processing stage should be secondary
+                  if (stageName === 'processing') {
+                    color = 'bg-secondary'
+                  }
+                  
+                  return {
+                    key: stage.name,
+                    label: stage.name,
+                    color
+                  }
+                })}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </CardContent>
+  )
+}
 
 export { Task, TaskHeader, TaskContent }

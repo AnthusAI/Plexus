@@ -18,7 +18,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   return (
     <Task 
       variant={variant} 
-      task={task} 
+      task={task}
       onClick={onClick} 
       controlButtons={controlButtons}
       isFullWidth={isFullWidth}
@@ -32,9 +32,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         </TaskHeader>
       )}
       renderContent={(props) => (
-        <TaskContent {...props}>
-          {/* Additional content can be added here if needed */}
-        </TaskContent>
+        <TaskContent {...props} />
       )}
     />
   )
