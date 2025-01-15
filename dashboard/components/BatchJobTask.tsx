@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 import { CardButton } from '@/components/CardButton'
 import { formatTimeAgo } from '@/lib/format-time'
 import { BatchJobProgressBar, BatchJobStatus } from "@/components/ui/batch-job-progress-bar"
-import { dataClient, listFromModel, getFromModel } from '@/utils/data-operations'
+import { getClient, listFromModel, getFromModel } from '@/utils/data-operations'
 import type { Schema } from "@/amplify/data/resource"
 import { 
   createBatchJobScoringJobSubscription,
@@ -174,7 +174,8 @@ export default function BatchJobTask({
         setScoringJobs(validJobs);
         
         // Set up subscriptions with proper types
-        if (dataClient.models.BatchJobScoringJob) {
+        const client = getClient();
+        if (client.models.BatchJobScoringJob) {
           // Use the subscription helper for BatchJobScoringJob
           const handleBatchJobData = async (data: BatchJobScoringJobSubscriptionData) => {
             if (!data?.batchJobId || !data?.scoringJobId) return;

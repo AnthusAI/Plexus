@@ -14,15 +14,16 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof Task>
 
-const sampleTask = {
-  id: 1,
+const createTask = (id: string, overrides = {}) => ({
+  id,
   type: 'Sample Task',
   scorecard: 'Test Scorecard',
   score: 'Test Score',
   time: '2 hours ago',
   summary: 'Task Summary',
   description: 'Task Description',
-}
+  ...overrides
+})
 
 const TaskStoryHeader = (props: any) => (
   <TaskHeader {...props}>
@@ -36,19 +37,213 @@ const TaskStoryContent = (props: any) => (
   <TaskContent {...props} />
 )
 
-export const Grid: Story = {
+export const Starting: Story = {
   args: {
     variant: 'grid',
-    task: sampleTask,
+    task: createTask('starting', {
+      stages: [
+        {
+          name: 'Initialization',
+          order: 1,
+          status: 'RUNNING',
+          processedItems: 20,
+          totalItems: 100,
+          statusMessage: 'Loading data from database...'
+        },
+        {
+          name: 'Processing',
+          order: 2,
+          status: 'PENDING',
+          processedItems: 0,
+          totalItems: 100,
+          statusMessage: 'Processing data...'
+        },
+        {
+          name: 'Finishing',
+          order: 3,
+          status: 'PENDING',
+          processedItems: 0,
+          totalItems: 100,
+          statusMessage: 'Finalizing...'
+        }
+      ],
+      currentStageName: 'Initialization',
+      status: 'RUNNING',
+      elapsedTime: '15s',
+      estimatedTimeRemaining: '2m 45s',
+      summary: 'Starting task execution'
+    }),
     renderHeader: TaskStoryHeader,
     renderContent: TaskStoryContent,
   },
 }
 
-export const Detail: Story = {
+export const Processing: Story = {
+  args: {
+    variant: 'grid',
+    task: createTask('processing', {
+      stages: [
+        {
+          name: 'Initialization',
+          order: 1,
+          status: 'COMPLETED',
+          processedItems: 100,
+          totalItems: 100,
+          statusMessage: 'Data loaded'
+        },
+        {
+          name: 'Processing',
+          order: 2,
+          status: 'RUNNING',
+          processedItems: 45,
+          totalItems: 100,
+          statusMessage: 'Analyzing metrics and trends...'
+        },
+        {
+          name: 'Finishing',
+          order: 3,
+          status: 'PENDING',
+          processedItems: 0,
+          totalItems: 100,
+          statusMessage: 'Finalizing...'
+        }
+      ],
+      currentStageName: 'Processing',
+      status: 'RUNNING',
+      elapsedTime: '1m 30s',
+      estimatedTimeRemaining: '1m 15s',
+      summary: 'Processing data'
+    }),
+    renderHeader: TaskStoryHeader,
+    renderContent: TaskStoryContent,
+  },
+}
+
+export const Finishing: Story = {
+  args: {
+    variant: 'grid',
+    task: createTask('finishing', {
+      stages: [
+        {
+          name: 'Initialization',
+          order: 1,
+          status: 'COMPLETED',
+          processedItems: 100,
+          totalItems: 100,
+          statusMessage: 'Data loaded'
+        },
+        {
+          name: 'Processing',
+          order: 2,
+          status: 'COMPLETED',
+          processedItems: 100,
+          totalItems: 100,
+          statusMessage: 'Analysis complete'
+        },
+        {
+          name: 'Finishing',
+          order: 3,
+          status: 'RUNNING',
+          processedItems: 80,
+          totalItems: 100,
+          statusMessage: 'Generating output...'
+        }
+      ],
+      currentStageName: 'Finishing',
+      status: 'RUNNING',
+      elapsedTime: '2m 45s',
+      estimatedTimeRemaining: '15s',
+      summary: 'Finalizing task'
+    }),
+    renderHeader: TaskStoryHeader,
+    renderContent: TaskStoryContent,
+  },
+}
+
+export const Complete: Story = {
+  args: {
+    variant: 'grid',
+    task: createTask('complete', {
+      stages: [
+        {
+          name: 'Initialization',
+          order: 1,
+          status: 'COMPLETED',
+          processedItems: 100,
+          totalItems: 100,
+          statusMessage: 'Data loaded'
+        },
+        {
+          name: 'Processing',
+          order: 2,
+          status: 'COMPLETED',
+          processedItems: 100,
+          totalItems: 100,
+          statusMessage: 'Analysis complete'
+        },
+        {
+          name: 'Finishing',
+          order: 3,
+          status: 'COMPLETED',
+          processedItems: 100,
+          totalItems: 100,
+          statusMessage: 'Task completed successfully'
+        }
+      ],
+      currentStageName: 'Finishing',
+      status: 'COMPLETED',
+      elapsedTime: '3m 0s',
+      summary: 'Task completed'
+    }),
+    renderHeader: TaskStoryHeader,
+    renderContent: TaskStoryContent,
+  },
+}
+
+export const Failed: Story = {
+  args: {
+    variant: 'grid',
+    task: createTask('failed', {
+      stages: [
+        {
+          name: 'Initialization',
+          order: 1,
+          status: 'COMPLETED',
+          processedItems: 100,
+          totalItems: 100,
+          statusMessage: 'Data loaded'
+        },
+        {
+          name: 'Processing',
+          order: 2,
+          status: 'FAILED',
+          processedItems: 50,
+          totalItems: 100,
+          statusMessage: 'Error processing data: insufficient data'
+        },
+        {
+          name: 'Finishing',
+          order: 3,
+          status: 'PENDING',
+          processedItems: 0,
+          totalItems: 100,
+          statusMessage: 'Finalizing...'
+        }
+      ],
+      currentStageName: 'Processing',
+      status: 'FAILED',
+      elapsedTime: '1m 45s',
+      summary: 'Task failed'
+    }),
+    renderHeader: TaskStoryHeader,
+    renderContent: TaskStoryContent,
+  },
+}
+
+export const Detail = {
   args: {
     variant: 'detail',
-    task: sampleTask,
+    task: Starting.args.task,
     isFullWidth: false,
     onToggleFullWidth: () => console.log('Toggle full width'),
     onClose: () => console.log('Close'),
@@ -64,7 +259,7 @@ export const Detail: Story = {
   ],
 }
 
-export const DetailFullWidth: Story = {
+export const DetailFullWidth = {
   args: {
     ...Detail.args,
     isFullWidth: true,
@@ -81,33 +276,43 @@ export const DetailFullWidth: Story = {
   ],
 }
 
-export const GridWithMany = {
+export const NoProgress = {
+  args: {
+    variant: 'grid',
+    task: Processing.args.task,
+    showProgress: false,
+    renderHeader: TaskStoryHeader,
+    renderContent: TaskStoryContent,
+  },
+}
+
+export const Demo = {
   render: () => (
-    <div className="grid grid-cols-2 gap-4">
-      <Task
-        variant="grid"
-        task={{ ...sampleTask, id: 1, summary: 'First Task' }}
-        renderHeader={TaskStoryHeader}
-        renderContent={TaskStoryContent}
-      />
-      <Task
-        variant="grid"
-        task={{ ...sampleTask, id: 2, summary: 'Second Task' }}
-        renderHeader={TaskStoryHeader}
-        renderContent={TaskStoryContent}
-      />
-      <Task
-        variant="grid"
-        task={{ ...sampleTask, id: 3, summary: 'Third Task' }}
-        renderHeader={TaskStoryHeader}
-        renderContent={TaskStoryContent}
-      />
-      <Task
-        variant="grid"
-        task={{ ...sampleTask, id: 4, summary: 'Fourth Task' }}
-        renderHeader={TaskStoryHeader}
-        renderContent={TaskStoryContent}
-      />
+    <div className="space-y-8">
+      <div>
+        <div className="text-sm text-muted-foreground mb-2">Starting</div>
+        <Task {...Starting.args} />
+      </div>
+      <div>
+        <div className="text-sm text-muted-foreground mb-2">Processing</div>
+        <Task {...Processing.args} />
+      </div>
+      <div>
+        <div className="text-sm text-muted-foreground mb-2">Finishing</div>
+        <Task {...Finishing.args} />
+      </div>
+      <div>
+        <div className="text-sm text-muted-foreground mb-2">Complete</div>
+        <Task {...Complete.args} />
+      </div>
+      <div>
+        <div className="text-sm text-muted-foreground mb-2">Failed</div>
+        <Task {...Failed.args} />
+      </div>
+      <div>
+        <div className="text-sm text-muted-foreground mb-2">No Progress</div>
+        <Task {...NoProgress.args} />
+      </div>
     </div>
   ),
 }

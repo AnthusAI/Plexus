@@ -20,6 +20,9 @@ import ScorecardContext from "@/components/ScorecardContext"
 import { formatTimeAgo } from '@/utils/format-time'
 import { TaskStatus } from '@/types/shared'
 import { formatDuration } from '@/utils/format-duration'
+import { listRecentActions, observeRecentActions } from '@/utils/data-operations'
+import type { Schema } from '@/amplify/data/resource'
+import { ActionStageConfig } from '@/components/ui/action-status'
 
 // Import new task components
 import EvaluationTaskComponent from '@/components/EvaluationTask'
@@ -43,6 +46,104 @@ import {
   isEvaluationActivity,
   EvaluationActivity
 } from '@/types/tasks'
+
+function transformActionToActivity(action: Schema['Action']['type']): ActivityData {
+  console.log('Action data:', JSON.stringify(action, null, 2))
+
+  let activityType: ActivityData['type'] = 'Report'  // Default to Report type for now
+  if (action.type === 'test') {
+    activityType = 'Report'  // We can adjust these mappings as we add more action types
+  }
+
+  // Transform stages if present
+  const stages = ((action as any).stages || [])
+    .sort((a: Schema['ActionStage']['type'], b: Schema['ActionStage']['type']) => a.order - b.order)
+    .map((stage: Schema['ActionStage']['type']) => ({
+      name: stage.name,
+      order: stage.order,
+      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      startedAt: stage.startedAt,
+      completedAt: stage.completedAt,
+      estimatedCompletionAt: stage.estimatedCompletionAt,
+      statusMessage: stage.statusMessage
+    }))
+
+  // Get current stage info - highest order non-completed stage, or last stage if all completed
+  const currentStage = stages.length > 0 ? 
+    stages.reduce((current: ActionStageConfig | null, stage: ActionStageConfig) => {
+      // If we haven't found a stage yet, use this one
+      if (!current) return stage
+      
+      // If this stage is completed but the current one isn't, keep current
+      if (stage.status === 'COMPLETED' && current.status !== 'COMPLETED') return current
+      
+      // If this stage isn't completed and has higher order than current, use this one
+      if (stage.status !== 'COMPLETED' && stage.order > current.order) return stage
+      
+      // If all previous stages are completed and this is the last one, use this one
+      if (stage.status === 'COMPLETED' && stage === stages[stages.length - 1] && 
+          stages.every((s: ActionStageConfig) => s.order < stage.order ? s.status === 'COMPLETED' : true)) {
+        return stage
+      }
+      
+      return current
+    }, null) : null
+
+  // Calculate elapsed time based on status
+  const elapsedTime = action.startedAt ? formatDuration(
+    Math.round(
+      (action.status === 'COMPLETED' && action.completedAt ? 
+        new Date(action.completedAt).getTime() : 
+        new Date().getTime()
+      ) - new Date(action.startedAt).getTime()
+    ) / 1000
+  ) : undefined
+
+  const activity: ActivityData = {
+    id: action.id,
+    type: activityType,
+    scorecard: action.target,
+    score: '',
+    timestamp: action.createdAt,
+    time: formatTimeAgo(new Date(action.createdAt)),
+    summary: action.status,
+    stages,
+    currentStageName: currentStage?.name,
+    processedItems: currentStage?.processedItems || 0,
+    totalItems: currentStage?.totalItems || 0,
+    elapsedTime,
+    estimatedTimeRemaining: action.estimatedCompletionAt ? formatDuration(
+      Math.round((new Date(action.estimatedCompletionAt).getTime() - new Date().getTime()) / 1000)
+    ) : undefined,
+    status: action.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+    stageConfigs: ((action as any).stages || [])
+      .sort((a: Schema['ActionStage']['type'], b: Schema['ActionStage']['type']) => a.order - b.order)
+      .map((stage: Schema['ActionStage']['type']) => {
+        const stageName = stage.name.toLowerCase()
+        let color = 'bg-primary'
+        
+        // Only the middle processing stage should be secondary
+        if (stageName === 'processing') {
+          color = 'bg-secondary'
+        }
+        
+        return {
+          key: stage.name,
+          label: stage.name,
+          color
+        }
+      }),
+    data: {
+      id: action.id,
+      title: `${action.type} Action`,
+      command: action.command
+    }
+  }
+
+  return activity
+}
 
 const timeToMinutes = (timeString: string): number => {
   const [value, unit] = timeString.toLowerCase().split(' ');
@@ -85,325 +186,6 @@ const barChartData = [
   { name: "Sun", scored: 4, evaluations: 1, analysis: 5, feedback: 2 },
 ]
 
-// New data for recent activities
-const recentActivities: ActivityData[] = [
-  {
-    id: "0",
-    type: "Evaluation started",
-    scorecard: "CS3 Services v2",
-    score: "Good Call",
-    timestamp: new Date().toISOString(),
-    time: formatTimeAgo(new Date(), true),
-    summary: '\"Using fine-tuned model.\"',
-    data: {
-      id: "exp-1",
-      title: "Model Evaluation",
-      accuracy: 89,
-      metrics: [
-        {
-          name: "Accuracy",
-          value: 89,
-          unit: "%",
-          maximum: 100,
-          priority: true
-        },
-        {
-          name: "Precision",
-          value: 88,
-          unit: "%",
-          maximum: 100,
-          priority: false
-        },
-        {
-          name: "Sensitivity",
-          value: 87,
-          unit: "%",
-          maximum: 100,
-          priority: false
-        },
-        {
-          name: "Specificity",
-          value: 91,
-          unit: "%",
-          maximum: 100,
-          priority: false
-        }
-      ],
-      processedItems: 47,
-      totalItems: 100,
-      elapsedSeconds: 135,
-      estimatedRemainingSeconds: 260,
-      confusionMatrix: {
-        matrix: [[21, 2, 1], [1, 19, 1], [0, 1, 18]],
-        labels: ["Yes", "No", "NA"]
-      },
-      progress: 50,
-      inferences: 100,
-      cost: 10,
-      status: "running" as TaskStatus
-    }
-  },
-  {
-    id: "1",
-    type: "Alert",
-    scorecard: "Prime Edu",
-    score: "Agent Branding",
-    timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    time: formatTimeAgo(new Date(Date.now() - 15 * 60 * 1000)),
-    summary: "Inappropriate content detected",
-    data: {
-      id: "alert-1",
-      title: "Content Warning",
-      iconType: 'warning' as const,
-      description: "Score above 1 in the previous 15 minutes"
-    }
-  },
-  {
-    id: "2",
-    type: "Report",
-    scorecard: "SelectQuote TermLife v1",
-    score: "AI Coaching Report",
-    timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-    time: formatTimeAgo(new Date(Date.now() - 30 * 60 * 1000)),
-    summary: "Report generated",
-    data: {
-      id: "report-1",
-      title: "AI Coaching Report"
-    }
-  },
-  {
-    id: "3",
-    type: "Optimization started",
-    scorecard: "SelectQuote TermLife v1",
-    score: "Good Call",
-    timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-    time: formatTimeAgo(new Date(Date.now() - 60 * 60 * 1000)),
-    summary: "Progress: 92%",
-    data: {
-      id: "opt-1",
-      title: "Model Optimization",
-      progress: 92,
-      accuracy: 75,
-      numberComplete: 92,
-      numberTotal: 100,
-      eta: "00:05:00",
-      processedItems: 92,
-      totalItems: 100,
-      before: {
-        outerRing: [
-          { category: "Positive", value: 50, fill: "var(--true)" },
-          { category: "Negative", value: 50, fill: "var(--false)" }
-        ],
-        innerRing: [
-          { category: "Positive", value: 75, fill: "var(--true)" },
-          { category: "Negative", value: 25, fill: "var(--false)" }
-        ]
-      },
-      after: {
-        outerRing: [
-          { category: "Positive", value: 50, fill: "var(--true)" },
-          { category: "Negative", value: 50, fill: "var(--false)" }
-        ],
-        innerRing: [
-          { category: "Positive", value: 92, fill: "var(--true)" },
-          { category: "Negative", value: 8, fill: "var(--false)" }
-        ]
-      },
-      elapsedTime: "45m 30s",
-      estimatedTimeRemaining: "5m 0s",
-      elapsedSeconds: 2730,
-      estimatedRemainingSeconds: 300
-    }
-  },
-  {
-    id: "4",
-    type: 'Scoring Job',
-    scorecard: 'Customer Satisfaction',
-    score: 'Overall Score',
-    timestamp: new Date(Date.now() - 120 * 60 * 1000).toISOString(),
-    time: formatTimeAgo(new Date(Date.now() - 120 * 60 * 1000)),
-    summary: 'Scoring customer feedback',
-    description: 'Processing batch of customer reviews',
-    data: {
-      id: 'scoring-1',
-      title: 'Customer Feedback Scoring',
-      status: 'in_progress',
-      itemName: 'Q4 Reviews',
-      scorecardName: 'Customer Satisfaction',
-      totalItems: 300,
-      completedItems: 145,
-      batchJobs: [
-        {
-          id: '1',
-          title: 'Sentiment Analysis Job',
-          modelProvider: 'OpenAI',
-          modelName: 'gpt-4',
-          type: 'sentiment-analysis',
-          status: 'done',
-          totalRequests: 100,
-          completedRequests: 100,
-          failedRequests: 0,
-        },
-        {
-          id: '2',
-          title: 'Categorization Job',
-          modelProvider: 'Anthropic',
-          modelName: 'claude-2',
-          type: 'categorization',
-          status: 'in_progress',
-          totalRequests: 100,
-          completedRequests: 45,
-          failedRequests: 0,
-        },
-        {
-          id: '3',
-          title: 'Topic Extraction Job',
-          modelProvider: 'Cohere',
-          modelName: 'command',
-          type: 'topic-extraction',
-          status: 'pending',
-          totalRequests: 100,
-          completedRequests: 0,
-          failedRequests: 0,
-        },
-      ],
-    },
-  },
-  {
-    id: "6",
-    type: "Evaluation completed",
-    scorecard: "SelectQuote TermLife v1",
-    score: "Temperature Check",
-    timestamp: new Date(Date.now() - 180 * 60 * 1000).toISOString(),
-    time: formatTimeAgo(new Date(Date.now() - 180 * 60 * 1000)),
-    summary: "94% / 100",
-    description: "Accuracy",
-    data: {
-      id: "exp-2",
-      title: "Temperature Check Evaluation",
-      accuracy: 94,
-      metrics: [
-        {
-          name: "Accuracy",
-          value: 94,
-          unit: "%",
-          maximum: 100,
-          priority: true
-        },
-        {
-          name: "Precision",
-          value: 92,
-          unit: "%",
-          maximum: 100,
-          priority: false
-        },
-        {
-          name: "Sensitivity",
-          value: 93,
-          unit: "%",
-          maximum: 100,
-          priority: false
-        },
-        {
-          name: "Specificity",
-          value: 95,
-          unit: "%",
-          maximum: 100,
-          priority: false
-        }
-      ],
-      processedItems: 100,
-      totalItems: 100,
-      elapsedSeconds: 2420,
-      estimatedRemainingSeconds: 0,
-      confusionMatrix: {
-        matrix: [
-          [45, 3, 2],
-          [2, 43, 2],
-          [1, 2, 40]
-        ],
-        labels: ["Yes", "No", "NA"]
-      },
-      progress: 100,
-      inferences: 200,
-      cost: 20,
-      status: "completed" as TaskStatus
-    }
-  },
-  {
-    id: "7",
-    type: "Score updated",
-    scorecard: "SelectQuote TermLife v1",
-    score: "Assumptive Close",
-    timestamp: new Date(Date.now() - 1440 * 60 * 1000).toISOString(),
-    time: formatTimeAgo(new Date(Date.now() - 1440 * 60 * 1000)),
-    description: "Accuracy",
-    summary: "Improved from 75% to 82%",
-    data: {
-      id: "score-1",
-      title: "Score Update",
-      before: {
-        outerRing: [
-          { category: "Positive", value: 50, fill: "var(--true)" },
-          { category: "Negative", value: 50, fill: "var(--false)" },
-        ],
-        innerRing: [
-          { category: "Positive", value: 75, fill: "var(--true)" },
-          { category: "Negative", value: 25, fill: "var(--false)" },
-        ],
-      },
-      after: {
-        outerRing: [
-          { category: "Positive", value: 50, fill: "var(--true)" },
-          { category: "Negative", value: 50, fill: "var(--false)" },
-        ],
-        innerRing: [
-          { category: "Positive", value: 82, fill: "var(--true)" },
-          { category: "Negative", value: 18, fill: "var(--false)" },
-        ],
-      },
-    },
-  },
-  {
-    id: "8",
-    type: "Feedback queue started",
-    scorecard: "CS3 Services v2",
-    score: "",
-    timestamp: new Date(Date.now() - 300 * 60 * 1000).toISOString(),
-    time: formatTimeAgo(new Date(Date.now() - 300 * 60 * 1000)),
-    description: "Getting feedback",
-    summary: "150 items",
-    data: {
-      id: "feedback-1",
-      title: "Feedback Queue Processing",
-      progress: 25,
-      processedItems: 37,
-      totalItems: 150,
-      elapsedSeconds: 615,
-      estimatedRemainingSeconds: 345,
-    },
-  },
-  {
-    id: "9",
-    type: "Feedback queue completed",
-    scorecard: "SelectQuote TermLife v1",
-    score: "",
-    timestamp: new Date(Date.now() - 120 * 60 * 1000).toISOString(),
-    time: formatTimeAgo(new Date(Date.now() - 120 * 60 * 1000)),
-    description: "Got feedback",
-    summary: "200 scores processed",
-    data: {
-      id: "feedback-2",
-      title: "Completed Feedback Queue",
-      progress: 100,
-      processedItems: 200,
-      totalItems: 200,
-      elapsedSeconds: 1245,
-      estimatedRemainingSeconds: 0,
-    },
-  },
-]
-
 const chartConfig = {
   scored: { label: "Scored", color: "var(--chart-1)" },
   evaluations: { label: "Evaluations", color: "var(--chart-2)" },
@@ -424,9 +206,6 @@ interface BarData {
 
 export default function ActivityDashboard() {
   const [selectedBar, setSelectedBar] = useState<BarData | null>(null)
-  const [activities] = useState<ActivityData[]>(recentActivities)
-  const [currentPage, setCurrentPage] = useState(1)
-  const activitiesPerPage = 6
   const [selectedActivity, setSelectedActivity] = useState<ActivityData | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
@@ -434,45 +213,46 @@ export default function ActivityDashboard() {
   const [selectedScore, setSelectedScore] = useState<string | null>(null)
   const [displayedActivities, setDisplayedActivities] = useState<ActivityData[]>([])
   const [isInitialLoading, setIsInitialLoading] = useState(true)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [recentActions, setRecentActions] = useState<Schema['Action']['type'][]>([])
   const { ref, inView } = useInView({
     threshold: 0,
-    rootMargin: '0px 0px 400px 0px', // Increase this value to trigger earlier
+    rootMargin: '0px 0px 400px 0px',
   })
+
+  useEffect(() => {
+    const subscription = observeRecentActions(12).subscribe({
+      next: ({ items, isSynced }) => {
+        console.log('Received actions update:', { 
+          count: items.length, 
+          isSynced,
+          firstId: items[0]?.id,
+          lastId: items[items.length - 1]?.id
+        })
+        setRecentActions(items)
+      },
+      error: (error) => {
+        console.error('Error observing actions:', error)
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
 
   const activityListRef = useRef<HTMLDivElement>(null)
   const { rightSidebarState } = useSidebar()
 
-  const sortedActivities = useMemo(() => {
-    const sorted = [...recentActivities].sort((a, b) => {
-      const aMinutes = timeToMinutes(a.time);
-      const bMinutes = timeToMinutes(b.time);
-      return timeToMinutes(b.time) - timeToMinutes(a.time);
-    });
-    return sorted;
-  }, []);
-
   useEffect(() => {
-    setDisplayedActivities(sortedActivities.slice(0, 9))
+    const transformed = recentActions.map(transformActionToActivity)
+    console.log('Transformed actions:', transformed)
+    setDisplayedActivities(transformed)
     setIsInitialLoading(false)
-  }, [sortedActivities])
-
-  useEffect(() => {
-    if (inView && !isLoadingMore && !isInitialLoading) {
-      setIsLoadingMore(true)
-      // Load more items immediately
-      const currentLength = displayedActivities.length
-      const more = sortedActivities.slice(currentLength, currentLength + 9)
-      if (more.length > 0) {
-        setDisplayedActivities(prev => [...prev, ...more])
-      }
-      setIsLoadingMore(false)
-    }
-  }, [inView, isLoadingMore, isInitialLoading, displayedActivities, sortedActivities])
+  }, [recentActions])
 
   useEffect(() => {
     const checkViewportWidth = () => {
-      setIsNarrowViewport(window.innerWidth < 640) // 640px is the default 'sm' breakpoint in Tailwind
+      setIsNarrowViewport(window.innerWidth < 640)
     }
 
     checkViewportWidth()
@@ -491,8 +271,6 @@ export default function ActivityDashboard() {
       }
     }
   }, [selectedActivity])
-
-  const totalPages = Math.ceil(sortedActivities.length / activitiesPerPage)
 
   const handleBarClick = (data: BarData, index: number) => {
     setSelectedBar({ ...data, index })
@@ -930,12 +708,6 @@ export default function ActivityDashboard() {
                 })()}
               </div>
             ))}
-          </div>
-
-          <div ref={ref} className="h-12 flex items-center justify-center">
-            {isLoadingMore && (
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            )}
           </div>
         </div>
       </div>
