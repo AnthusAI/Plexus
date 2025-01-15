@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from plexus.scores.nodes.Classifier import Classifier
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 pytest.asyncio_fixture_scope = "function"
 pytest_plugins = ('pytest_asyncio',)
@@ -181,16 +181,72 @@ async def test_classifier_succeeds_after_retry(turnip_classifier_config):
         
         # Retry attempt - clear completion to force new LLM call
         state_after_retry = await retry_node(state_after_parse)
+        
+        # Verify retry message was added to chat history
+        assert len(state_after_retry.chat_history) > 0
+        messages = state_after_retry.chat_history
+        
+        # Verify original completion is in chat history
+        assert any(
+            msg['type'] == 'ai' and 
+            msg['content'] == "Well, let me analyze this carefully..."
+            for msg in messages
+        )
+        
+        # Verify retry message is in chat history
+        retry_message = messages[-1]
+        assert retry_message['type'] == 'human'
+        assert "You responded with an invalid classification" in retry_message['content']
+        assert "Please classify as one of: 'yes', 'no'" in retry_message['content']
+        
         state_after_retry = classifier.GraphState(
             **{k: v for k, v in state_after_retry.model_dump().items() if k != 'completion'},
             completion=None
         )
         state_after_prompt2 = await llm_prompt_node(state_after_retry)
+        
+        # Verify both the original completion and retry message are included in messages sent to LLM
+        assert len(state_after_prompt2.messages) > 0
+        assert any(
+            msg['type'] == 'ai' and 
+            msg['content'] == "Well, let me analyze this carefully..."
+            for msg in state_after_prompt2.messages
+        )
+        assert any(
+            msg['type'] == 'human' and
+            "You responded with an invalid classification" in msg['content']
+            for msg in state_after_prompt2.messages
+        )
+        
         state_after_llm2 = await llm_call_node(state_after_prompt2)
         final_state = await parse_node(state_after_llm2)
         
         assert final_state.classification == "yes"
         assert final_state.retry_count == 1
+        
+        # Verify the LLM was called with the complete message history
+        all_llm_calls = mock_model.ainvoke.call_args_list
+        assert len(all_llm_calls) == 2  # First attempt and retry
+        retry_call_messages = all_llm_calls[1][0][0]  # Second call's messages
+        
+        # Find system message (should be first)
+        assert isinstance(retry_call_messages[0], SystemMessage)
+        assert "You are a classifier that detects if the word 'turnip' appears in text" in retry_call_messages[0].content
+        
+        # Find user message (should be second)
+        assert isinstance(retry_call_messages[1], HumanMessage)
+        assert "Does this text contain the word 'turnip'" in retry_call_messages[1].content
+        
+        # Find original completion
+        assert any(
+            isinstance(msg, AIMessage) and 
+            msg.content == "Well, let me analyze this carefully..."
+            for msg in retry_call_messages
+        )
+        
+        # Find retry message (should be last)
+        assert isinstance(retry_call_messages[-1], HumanMessage)
+        assert "You responded with an invalid classification" in retry_call_messages[-1].content
 
 @pytest.mark.asyncio
 async def test_classifier_maximum_retries(turnip_classifier_config):
@@ -643,3 +699,83 @@ async def test_classifier_parser_empty_valid_classes():
     """
     assert parser_backward.parse(complex_response).get("classification") == "No"
     assert parser_forward.parse(complex_response).get("classification") == "Yes"
+
+@pytest.mark.asyncio
+async def test_classifier_message_sequence_two_retries(turnip_classifier_config):
+    mock_model = AsyncMock()
+    responses = [
+        AIMessage(content="Let me think about it..."),  # First invalid response
+        AIMessage(content="I need more time..."),       # Second invalid response
+        AIMessage(content="yes")                        # Final valid response
+    ]
+    mock_model.ainvoke = AsyncMock(side_effect=responses)
+    
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
+               return_value=mock_model):
+        classifier = Classifier(**turnip_classifier_config)
+        classifier.model = mock_model
+        
+        state = classifier.GraphState(
+            text="I love eating turnip soup.",
+            metadata={},
+            results={},
+            retry_count=0,
+            is_not_empty=True,
+            value=None,
+            reasoning=None,
+            classification=None,
+            chat_history=[],
+            completion=None
+        )
+        
+        llm_prompt_node = classifier.get_llm_prompt_node()
+        llm_call_node = classifier.get_llm_call_node()
+        parse_node = classifier.get_parser_node()
+        retry_node = classifier.get_retry_node()
+        
+        # First attempt
+        state = await llm_prompt_node(state)
+        state = await llm_call_node(state)
+        state = await parse_node(state)
+        assert state.classification is None
+        
+        # First retry
+        state = await retry_node(state)
+        state = await llm_prompt_node(state)
+        state = await llm_call_node(state)
+        state = await parse_node(state)
+        assert state.classification is None
+        
+        # Second retry
+        state = await retry_node(state)
+        state = await llm_prompt_node(state)
+        
+        # Verify the complete message sequence from the state
+        assert len(state.messages) == 6
+        
+        # Verify message types and content
+        assert state.messages[0]['type'] == 'system'
+        assert "classifier that detects if the word 'turnip' appears" in state.messages[0]['content']
+        
+        assert state.messages[1]['type'] == 'human'
+        assert "Does this text contain the word 'turnip'" in state.messages[1]['content']
+        
+        assert state.messages[2]['type'] == 'ai'
+        assert "Let me think about it..." == state.messages[2]['content']
+        
+        assert state.messages[3]['type'] == 'human'
+        assert "You responded with an invalid classification" in state.messages[3]['content']
+        assert "attempt 1 of" in state.messages[3]['content']
+        
+        assert state.messages[4]['type'] == 'ai'
+        assert "I need more time..." == state.messages[4]['content']
+        
+        assert state.messages[5]['type'] == 'human'
+        assert "You responded with an invalid classification" in state.messages[5]['content']
+        assert "attempt 2 of" in state.messages[5]['content']
+        
+        # Complete the sequence and verify final classification
+        state = await llm_call_node(state)
+        final_state = await parse_node(state)
+        assert final_state.classification == "yes"
+        assert final_state.retry_count == 2
