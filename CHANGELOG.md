@@ -1,7 +1,7 @@
 # CHANGELOG
 
 
-## v0.4.0 (2025-01-13)
+## v0.4.1 (2025-01-15)
 
 
 ## v0.4.0-alpha.3 (2025-01-14)
@@ -15,6 +15,9 @@ The score result detail view now properly closes when selecting a different eval
   achieved by: - Moving score result selection state from DetailContent to parent component - Adding
   selectedScoreResultId and onSelectScoreResult props to control visibility - Using props instead of
   internal state to determine what detail view to show
+
+
+## v0.4.0 (2025-01-13)
 
 
 ## v0.4.0-alpha.2 (2025-01-10)
