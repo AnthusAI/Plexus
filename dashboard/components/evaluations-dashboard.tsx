@@ -773,6 +773,7 @@ export default function EvaluationsDashboard(): JSX.Element {
   const [scoreResults, setScoreResults] = useState<Schema['ScoreResult']['type'][]>([])
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(50)
   const [scoreNames, setScoreNames] = useState<Record<string, string>>({})
+  const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null)
 
   // Ref hooks
   const selectedEvaluationRef = useRef<Schema['Evaluation']['type'] | null>(null)
@@ -816,6 +817,7 @@ export default function EvaluationsDashboard(): JSX.Element {
             scoreNames={scoreNames}
             onSelect={(evaluation) => {
               setScoreResults([])
+              setSelectedScoreResultId(null)
               setSelectedEvaluation(evaluation)
             }}
             onDelete={async (evaluationId) => {
@@ -842,14 +844,17 @@ export default function EvaluationsDashboard(): JSX.Element {
         variant="detail"
         task={EvaluationTaskProps}
         isFullWidth={isFullWidth}
+        selectedScoreResultId={selectedScoreResultId}
+        onSelectScoreResult={setSelectedScoreResultId}
         onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
         onClose={() => {
           setSelectedEvaluation(null)
+          setSelectedScoreResultId(null)
           setIsFullWidth(false)
         }}
       />
     )
-  }, [selectedEvaluation?.id, EvaluationTaskProps, isFullWidth])
+  }, [selectedEvaluation?.id, EvaluationTaskProps, isFullWidth, selectedScoreResultId])
 
   // Event handlers
   const handleDragStart = useCallback((e: React.MouseEvent) => {
