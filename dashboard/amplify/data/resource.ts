@@ -303,6 +303,9 @@ const schema = a.schema({
             currentStage: a.belongsTo('ActionStage', 'currentStageId'),
             stages: a.hasMany('ActionStage', 'actionId'),
             account: a.belongsTo('Account', 'accountId'),
+            celeryTaskId: a.string(),
+            workerNodeId: a.string(),
+            dispatchStatus: a.string(),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
