@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.4.2-alpha.1 (2025-01-16)
+
+### Bug Fixes
+
+- **packaging**: Package compatibility mode.
+  ([`62f3e8a`](https://github.com/AnthusAI/Plexus/commit/62f3e8ad535461b43567c5ba245a8de26f10e16d))
+
+
 ## v0.4.1 (2025-01-15)
 
 
