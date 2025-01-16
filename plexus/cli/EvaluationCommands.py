@@ -231,12 +231,30 @@ def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, scor
     if score_config.get('label_field'):
         score_name_column_name = f"{score_name} {score_config['label_field']}"
 
-    return [{
-        'text': sample.get('text', ''),
-        f'{score_name_column_name}_label': sample.get(score_name_column_name, ''),
-        'content_id': sample.get('content_id', ''),
-        'columns': {k: v for k, v in sample.items() if k not in ['text', score_name, 'content_id']}
-    } for sample in samples]
+    processed_samples = []
+    for sample in samples:
+        # Get metadata from the sample if it exists
+        metadata = sample.get('metadata', {})
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                logging.warning(f"Failed to parse metadata as JSON for content_id {sample.get('content_id')}")
+                metadata = {}
+        
+        # Create the sample dictionary with metadata included
+        processed_sample = {
+            'text': sample.get('text', ''),
+            f'{score_name_column_name}_label': sample.get(score_name_column_name, ''),
+            'content_id': sample.get('content_id', ''),
+            'columns': {
+                **{k: v for k, v in sample.items() if k not in ['text', score_name, 'content_id', 'metadata']},
+                'metadata': metadata  # Include the metadata in the columns
+            }
+        }
+        processed_samples.append(processed_sample)
+
+    return processed_samples
 
 def get_csv_samples(csv_filename):
     if not os.path.exists(csv_filename):
