@@ -387,83 +387,35 @@ class Classifier(BaseNode):
         return handle_max_retries
 
     def get_llm_call_node(self):
-        """Node that makes the actual LLM API call."""
+        """Node that handles the LLM call."""
         model = self.model
 
         async def llm_call(state):
-            logging.info("<*> Entering llm_call node")
-            
-            # Convert to dict if needed
-            if not isinstance(state, dict):
-                state = state.model_dump()
+            try:
+                if isinstance(state, dict):
+                    state = self.GraphState(**state)
 
-            # Check if completion already exists AND we're not in a retry
-            # (retry_count > 0 means we should make a new call regardless)
-            if ('completion' in state and 
-                state['completion'] is not None and 
-                state.get('retry_count', 0) == 0):
-                logging.info("Found existing completion in state - skipping LLM call")
-                return state
+                if not state.messages:
+                    logging.error("No messages found in state")
+                    logging.info(f"Available keys: {state.keys()}")
+                    raise ValueError("No messages found in state")
 
-            # Check if batching is enabled globally and for this score
-            batching_enabled = os.getenv('PLEXUS_ENABLE_BATCHING', '').lower() == 'true'
-            score_batch_enabled = self.batch
-            
-            if batching_enabled and score_batch_enabled:
-                logging.info("Breaking before LLM API call with messages in state")
-                # Set flags in state for batch processing
-                state['at_llm_breakpoint'] = True
-                state['next_node'] = 'parse'  # Explicitly set next node
-                
-                # Create batch job here
-                metadata = state.get('metadata', {})
-                if not metadata:
-                    logging.error("No metadata found in state")
-                    logging.error(f"State keys: {state.keys()}")
-                    raise ValueError("No metadata found in state")
-                    
-                account_key = metadata.get('account_key')
-                if not account_key:
-                    logging.error("No account_key found in metadata")
-                    logging.error(f"Metadata keys: {metadata.keys()}")
-                    logging.error(f"Full metadata: {metadata}")
-                    raise ValueError("No account_key found in metadata")
-                    
-                client = PlexusDashboardClient.for_scorecard(
-                    account_key=account_key,
-                    scorecard_key=metadata.get('scorecard_key'),
-                    score_name=metadata.get('score_name')
-                )
-                
-                thread_id = metadata.get('content_id', 'unknown')
-                try:
-                    score_id = client._resolve_score_id()
-                    scorecard_id = client._resolve_scorecard_id()
-                    account_id = client._resolve_account_id()
-                except Exception as e:
-                    logging.error(f"Error resolving IDs: {str(e)}")
-                    logging.error(f"Account key: {account_key}")
-                    logging.error(f"Scorecard key: {metadata.get('scorecard_key')}")
-                    logging.error(f"Score name: {metadata.get('score_name')}")
-                    logging.error(f"Full metadata: {metadata}")
-                    logging.error(f"Full metadata: {metadata}")
-                    raise
-                
-                # Create a serializable copy of the state
-                serializable_state = {}
-                logging.info(f"Creating serializable state from keys: {state.keys()}")
+                # If batch mode is enabled, use batch processing
+                if self.batch:
+                    # Create a serializable copy of the state
+                    serializable_state = {}
+                    logging.info(f"Creating serializable state from keys: {state.keys()}")
 
-                # First copy all primitive fields directly
-                for key, value in state.items():
-                    if isinstance(value, (str, int, float, bool, type(None))):
-                        serializable_state[key] = value
-                        logging.info(f"Copied primitive field {key}: {value}")
+                    # First copy all primitive fields directly
+                    for key, value in state.items():
+                        if isinstance(value, (str, int, float, bool, type(None))):
+                            serializable_state[key] = value
+                            logging.info(f"Copied primitive field {key}: {value}")
 
-                # Handle messages list specially
-                if 'messages' in state:
-                    if isinstance(state['messages'], list):
+                    # Handle messages list specially - handle both dict and Message objects
+                    if 'messages' in state:
                         serializable_state['messages'] = [
-                            {
+                            msg if isinstance(msg, dict) else {
                                 'type': msg.__class__.__name__.lower().replace('message', ''),
                                 'content': msg.content,
                                 '_type': msg.__class__.__name__
@@ -472,135 +424,101 @@ class Classifier(BaseNode):
                         ]
                         logging.info(f"Serialized messages: {serializable_state['messages']}")
 
-                # Handle chat_history list specially
-                if 'chat_history' in state:
-                    if isinstance(state['chat_history'], list):
-                        serializable_state['chat_history'] = [
-                            {
-                                'type': msg.__class__.__name__.lower().replace('message', ''),
-                                'content': msg.content,
-                                '_type': msg.__class__.__name__
-                            }
-                            for msg in state['chat_history']
-                        ]
-                        logging.info(f"Serialized chat_history: {serializable_state['chat_history']}")
+                    # Handle chat_history list specially
+                    if 'chat_history' in state:
+                        if isinstance(state['chat_history'], list):
+                            serializable_state['chat_history'] = [
+                                {
+                                    'type': msg.__class__.__name__.lower().replace('message', ''),
+                                    'content': msg.content,
+                                    '_type': msg.__class__.__name__
+                                }
+                                for msg in state['chat_history']
+                            ]
+                            logging.info(f"Serialized chat_history: {serializable_state['chat_history']}")
 
-                # Handle metadata specially to ensure it's included
-                if 'metadata' in state:
-                    serializable_state['metadata'] = state['metadata']
-                    logging.info(f"Copied metadata: {serializable_state['metadata']}")
+                    # Handle metadata specially to ensure it's included
+                    if 'metadata' in state:
+                        serializable_state['metadata'] = state['metadata']
+                        logging.info(f"Copied metadata: {serializable_state['metadata']}")
 
-                # Handle any remaining fields by converting to string representation
-                for key, value in state.items():
-                    if key not in serializable_state:
-                        try:
-                            serializable_state[key] = str(value)
-                            logging.info(f"Converted field {key} to string: {serializable_state[key]}")
-                        except Exception as e:
-                            logging.warning(f"Could not serialize field {key}: {str(e)}")
+                    # Handle any remaining fields by converting to string representation
+                    for key, value in state.items():
+                        if key not in serializable_state:
+                            try:
+                                serializable_state[key] = str(value)
+                                logging.info(f"Converted field {key} to string: {serializable_state[key]}")
+                            except Exception as e:
+                                logging.warning(f"Could not serialize field {key}: {str(e)}")
 
-                logging.info(f"Final serializable state: {serializable_state}")
-                
-                # Create batch job with serializable state
-                logging.info(f"Creating batch job with state: {serializable_state}")
-                logging.info(f"State type: {type(serializable_state)}")
+                    logging.info(f"Final serializable state: {serializable_state}")
+                    
+                    # Create batch job with serializable state
+                    logging.info(f"Creating batch job with state: {serializable_state}")
+                    logging.info(f"State type: {type(serializable_state)}")
 
-                client = PlexusDashboardClient.for_scorecard(
-                    account_key=state.get('metadata', {}).get('account_key'),
-                    scorecard_key=state.get('metadata', {}).get('scorecard_key'),
-                    score_name=state.get('metadata', {}).get('score_name')
-                )
+                    client = PlexusDashboardClient.for_scorecard(
+                        account_key=state.get('metadata', {}).get('account_key'),
+                        scorecard_key=state.get('metadata', {}).get('scorecard_key'),
+                        score_name=state.get('metadata', {}).get('score_name')
+                    )
 
-                logging.info(f"Creating batch job with metadata: {{'state': serializable_state}}")
-                logging.info(f"Score ID: {score_id}")
-                logging.info(f"Scorecard ID: {scorecard_id}")
-                logging.info(f"Account ID: {account_id}")
+                    logging.info(f"Creating batch job with metadata: {{'state': serializable_state}}")
+                    logging.info(f"Score ID: {score_id}")
+                    logging.info(f"Scorecard ID: {scorecard_id}")
+                    logging.info(f"Account ID: {account_id}")
 
-                scoring_job, batch_job = client.batch_scoring_job(
-                    itemId=thread_id,
-                    scorecardId=scorecard_id,
-                    accountId=account_id,
-                    model_provider='ChatOpenAI',
-                    model_name='gpt-4o-mini',
-                    scoreId=score_id,
-                    status='PENDING',
-                    metadata={'state': serializable_state},
-                    parameters={
-                        'thread_id': thread_id,
-                        'breakpoint': True
-                    }
-                )
+                    scoring_job, batch_job = client.batch_scoring_job(
+                        itemId=thread_id,
+                        scorecardId=scorecard_id,
+                        accountId=account_id,
+                        model_provider='ChatOpenAI',
+                        model_name='gpt-4o-mini',
+                        scoreId=score_id,
+                        status='PENDING',
+                        metadata={'state': serializable_state},
+                        parameters={
+                            'thread_id': thread_id,
+                            'breakpoint': True
+                        }
+                    )
 
-                if batch_job:
-                    logging.info(f"Created batch job with ID: {batch_job.id}")
+                    if batch_job:
+                        logging.info(f"Created batch job with ID: {batch_job.id}")
+                    else:
+                        logging.info(f"Using existing scoring job with ID: {scoring_job.id}")
+
+                    raise BatchProcessingPause(
+                        thread_id=thread_id,
+                        state=state,
+                        batch_job_id=batch_job.id if batch_job else None,
+                        message=f"Execution paused for batch processing. Scoring job ID: {scoring_job.id}"
+                    )
                 else:
-                    logging.info(f"Using existing scoring job with ID: {scoring_job.id}")
+                    # Non-batch mode - direct LLM call
+                    # Convert dict messages back to LangChain objects if needed
+                    messages = []
+                    for msg in state.messages:
+                        if isinstance(msg, dict):
+                            msg_type = msg.get('type', '').lower()
+                            if msg_type == 'human':
+                                messages.append(HumanMessage(content=msg['content']))
+                            elif msg_type == 'ai':
+                                messages.append(AIMessage(content=msg['content']))
+                            elif msg_type == 'system':
+                                messages.append(SystemMessage(content=msg['content']))
+                            else:
+                                messages.append(BaseMessage(content=msg['content']))
+                        else:
+                            messages.append(msg)
 
-                raise BatchProcessingPause(
-                    thread_id=thread_id,
-                    state=state,
-                    batch_job_id=batch_job.id if batch_job else None,
-                    message=f"Execution paused for batch processing. Scoring job ID: {scoring_job.id}"
-                )
-            
-            try:
-                if 'messages' not in state or not state['messages']:
-                    logging.error("No messages found in state")
-                    logging.info(f"Available keys: {state.keys()}")
-                    raise ValueError("No messages found in state")
-                
-                # Convert dict messages back to LangChain objects if needed
-                messages = state['messages'] if 'messages' in state else []
-                if messages and isinstance(messages[0], dict):
-                    converted_messages = []
-                    for msg in messages:
-                        msg_type = msg.get('type', '').lower()
-                        if msg_type == 'human':
-                            converted_messages.append(HumanMessage(content=msg['content']))
-                        elif msg_type == 'ai':
-                            converted_messages.append(AIMessage(content=msg['content']))
-                        elif msg_type == 'system':
-                            converted_messages.append(SystemMessage(content=msg['content']))
-                        else:
-                            converted_messages.append(BaseMessage(content=msg['content']))
-                    messages = converted_messages
-                
-                # Use chat history instead of extending messages
-                if 'chat_history' in state and state['chat_history']:
-                    messages = [messages[0], messages[1]]  # Keep only system and initial human message
-                    chat_messages = []
-                    for msg in state['chat_history']:
-                        msg_type = msg.get('type', '').lower()
-                        if msg_type == 'human':
-                            chat_messages.append(HumanMessage(content=msg['content']))
-                        elif msg_type == 'ai':
-                            chat_messages.append(AIMessage(content=msg['content']))
-                        elif msg_type == 'system':
-                            chat_messages.append(SystemMessage(content=msg['content']))
-                        else:
-                            chat_messages.append(BaseMessage(content=msg['content']))
-                    messages.extend(chat_messages)
-                
-                # Log the exact messages being sent to LLM
-                logging.info("Messages being sent to LLM:")
-                for i, msg in enumerate(messages):
-                    logging.info(f"Message {i}:")
-                    logging.info(f"  Type: {msg.__class__.__name__}")
-                    logging.info(f"  Content: {msg.content}")
-                
-                logging.info("Making LLM API call...")
-                completion = await model.ainvoke(messages)
-                logging.info("LLM call completed")
-                logging.info(f"LLM response: {completion.content}")
-                
-                # Return state with ALL messages preserved
-                return self.GraphState(
-                    **{k: v for k, v in state.items() if k not in ['messages', 'completion', 'at_llm_breakpoint']},
-                    messages=state['messages'],  # Keep original messages instead of converting again
-                    completion=completion.content,
-                    at_llm_breakpoint=False
-                )
-                
+                    response = await model.ainvoke(messages)
+                    
+                    return self.GraphState(
+                        **{k: v for k, v in state.model_dump().items() if k not in ['completion']},
+                        completion=response.content
+                    )
+
             except Exception as e:
                 logging.error(f"Error in llm_call: {e}")
                 logging.error(f"Stack trace: {traceback.format_exc()}")
