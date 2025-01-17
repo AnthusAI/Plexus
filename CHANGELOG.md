@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.4.2-rc.1 (2025-01-17)
+
+### Bug Fixes
+
+- **logging**: Update environment variable for AWS region in CustomLogging.py
+  ([`84123b2`](https://github.com/AnthusAI/Plexus/commit/84123b221a56f9429f3332cad1a84ef258fda2de))
+
+
 ## v0.4.2-alpha.1 (2025-01-16)
 
 ### Bug Fixes
@@ -10,6 +18,9 @@
 
 
 ## v0.4.1 (2025-01-15)
+
+
+## v0.4.0 (2025-01-13)
 
 
 ## v0.4.0-rc.2 (2025-01-15)
@@ -26,9 +37,6 @@ The score result detail view now properly closes when selecting a different eval
   achieved by: - Moving score result selection state from DetailContent to parent component - Adding
   selectedScoreResultId and onSelectScoreResult props to control visibility - Using props instead of
   internal state to determine what detail view to show
-
-
-## v0.4.0 (2025-01-13)
 
 
 ## v0.4.0-rc.1 (2025-01-13)
