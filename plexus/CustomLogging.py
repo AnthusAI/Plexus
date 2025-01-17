@@ -37,7 +37,7 @@ def setup_logging(log_group=DEFAULT_LOG_GROUP):
 
     # Only add CloudWatch handler if AWS credentials are available
     if os.getenv('AWS_ACCESS_KEY_ID') and os.getenv('AWS_SECRET_ACCESS_KEY') \
-            and os.getenv('AWS_DEFAULT_REGION'):
+            and os.getenv('AWS_REGION_NAME'):
         stream_name = f"plexus-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
         cloudwatch_handler = watchtower.CloudWatchLogHandler(
             log_group=log_group,
