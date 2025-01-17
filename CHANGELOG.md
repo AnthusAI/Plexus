@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.4.2-alpha.1 (2025-01-16)
+
+### Bug Fixes
+
+- **packaging**: Package compatibility mode.
+  ([`62f3e8a`](https://github.com/AnthusAI/Plexus/commit/62f3e8ad535461b43567c5ba245a8de26f10e16d))
+
+
+## v0.4.1 (2025-01-15)
+
+
 ## v0.4.0-rc.2 (2025-01-15)
 
 
@@ -15,6 +26,9 @@ The score result detail view now properly closes when selecting a different eval
   achieved by: - Moving score result selection state from DetailContent to parent component - Adding
   selectedScoreResultId and onSelectScoreResult props to control visibility - Using props instead of
   internal state to determine what detail view to show
+
+
+## v0.4.0 (2025-01-13)
 
 
 ## v0.4.0-rc.1 (2025-01-13)
