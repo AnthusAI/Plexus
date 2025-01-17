@@ -404,46 +404,47 @@ class Classifier(BaseNode):
                 if self.batch:
                     # Create a serializable copy of the state
                     serializable_state = {}
-                    logging.info(f"Creating serializable state from keys: {state.keys()}")
+                    state_dict = state.model_dump()
+                    logging.info(f"Creating serializable state from keys: {state_dict.keys()}")
 
                     # First copy all primitive fields directly
-                    for key, value in state.items():
+                    for key, value in state_dict.items():
                         if isinstance(value, (str, int, float, bool, type(None))):
                             serializable_state[key] = value
                             logging.info(f"Copied primitive field {key}: {value}")
 
                     # Handle messages list specially - handle both dict and Message objects
-                    if 'messages' in state:
+                    if 'messages' in state_dict:
                         serializable_state['messages'] = [
                             msg if isinstance(msg, dict) else {
                                 'type': msg.__class__.__name__.lower().replace('message', ''),
                                 'content': msg.content,
                                 '_type': msg.__class__.__name__
                             }
-                            for msg in state['messages']
+                            for msg in state_dict['messages']
                         ]
                         logging.info(f"Serialized messages: {serializable_state['messages']}")
 
                     # Handle chat_history list specially
-                    if 'chat_history' in state:
-                        if isinstance(state['chat_history'], list):
+                    if 'chat_history' in state_dict:
+                        if isinstance(state_dict['chat_history'], list):
                             serializable_state['chat_history'] = [
                                 {
                                     'type': msg.__class__.__name__.lower().replace('message', ''),
                                     'content': msg.content,
                                     '_type': msg.__class__.__name__
                                 }
-                                for msg in state['chat_history']
+                                for msg in state_dict['chat_history']
                             ]
                             logging.info(f"Serialized chat_history: {serializable_state['chat_history']}")
 
                     # Handle metadata specially to ensure it's included
-                    if 'metadata' in state:
-                        serializable_state['metadata'] = state['metadata']
+                    if 'metadata' in state_dict:
+                        serializable_state['metadata'] = state_dict['metadata']
                         logging.info(f"Copied metadata: {serializable_state['metadata']}")
 
                     # Handle any remaining fields by converting to string representation
-                    for key, value in state.items():
+                    for key, value in state_dict.items():
                         if key not in serializable_state:
                             try:
                                 serializable_state[key] = str(value)
@@ -458,11 +459,18 @@ class Classifier(BaseNode):
                     logging.info(f"State type: {type(serializable_state)}")
 
                     client = PlexusDashboardClient.for_scorecard(
-                        account_key=state.get('metadata', {}).get('account_key'),
-                        scorecard_key=state.get('metadata', {}).get('scorecard_key'),
-                        score_name=state.get('metadata', {}).get('score_name')
+                        account_key=state.metadata.get('account_key'),
+                        scorecard_key=state.metadata.get('scorecard_key'),
+                        score_name=state.metadata.get('score_name')
                     )
 
+                    # Extract required IDs from metadata
+                    thread_id = state.metadata.get('content_id', 'unknown')
+                    score_id = client._resolve_score_id()
+                    scorecard_id = client._resolve_scorecard_id()
+                    account_id = client._resolve_account_id()
+
+                    # Create batch job with metadata
                     logging.info(f"Creating batch job with metadata: {{'state': serializable_state}}")
                     logging.info(f"Score ID: {score_id}")
                     logging.info(f"Scorecard ID: {scorecard_id}")
@@ -473,7 +481,7 @@ class Classifier(BaseNode):
                         scorecardId=scorecard_id,
                         accountId=account_id,
                         model_provider='ChatOpenAI',
-                        model_name='gpt-4o-mini',
+                        model_name='gpt-4',
                         scoreId=score_id,
                         status='PENDING',
                         metadata={'state': serializable_state},
@@ -483,15 +491,12 @@ class Classifier(BaseNode):
                         }
                     )
 
-                    if batch_job:
-                        logging.info(f"Created batch job with ID: {batch_job.id}")
-                    else:
-                        logging.info(f"Using existing scoring job with ID: {scoring_job.id}")
+                    logging.info(f"Created batch job with ID: {batch_job.id}")
 
                     raise BatchProcessingPause(
                         thread_id=thread_id,
-                        state=state,
-                        batch_job_id=batch_job.id if batch_job else None,
+                        state=serializable_state,
+                        batch_job_id=batch_job.id,
                         message=f"Execution paused for batch processing. Scoring job ID: {scoring_job.id}"
                     )
                 else:
