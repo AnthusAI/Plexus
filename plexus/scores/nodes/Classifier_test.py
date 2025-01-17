@@ -779,3 +779,58 @@ async def test_classifier_message_sequence_two_retries(turnip_classifier_config)
         final_state = await parse_node(state)
         assert final_state.classification == "yes"
         assert final_state.retry_count == 2
+
+@pytest.mark.asyncio
+async def test_classifier_handles_dict_messages(turnip_classifier_config):
+    mock_model = AsyncMock()
+    mock_response = AIMessage(content="yes")
+    mock_model.ainvoke = AsyncMock(return_value=mock_response)
+    
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
+               return_value=mock_model):
+        classifier = Classifier(**turnip_classifier_config)
+        classifier.model = mock_model
+        
+        # Create state with messages already in dict format
+        state = classifier.GraphState(
+            text="I love eating turnip soup.",
+            metadata={},
+            results={},
+            retry_count=0,
+            is_not_empty=True,
+            value=None,
+            reasoning=None,
+            classification=None,
+            chat_history=[],
+            completion=None,
+            messages=[
+                {
+                    'type': 'system',
+                    'content': 'You are a classifier that detects if the word turnip appears in text.',
+                    '_type': 'SystemMessage'
+                },
+                {
+                    'type': 'human',
+                    'content': 'Does this text contain the word turnip?',
+                    '_type': 'HumanMessage'
+                }
+            ]
+        )
+        
+        llm_prompt_node = classifier.get_llm_prompt_node()
+        llm_call_node = classifier.get_llm_call_node()
+        parse_node = classifier.get_parser_node()
+        
+        # Run through nodes
+        state = await llm_prompt_node(state)
+        state = await llm_call_node(state)
+        final_state = await parse_node(state)
+        
+        assert final_state.classification == "yes"
+        
+        # Verify the messages were handled correctly
+        assert len(mock_model.ainvoke.call_args_list) == 1
+        call_messages = mock_model.ainvoke.call_args_list[0][0][0]
+        assert len(call_messages) == 2
+        assert isinstance(call_messages[0], SystemMessage)
+        assert isinstance(call_messages[1], HumanMessage)
