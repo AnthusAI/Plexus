@@ -492,7 +492,7 @@ class Classifier(BaseNode):
                     )
 
                     if not batch_job or not scoring_job:
-                        raise ValueError("Failed to create batch job - got None response")
+                        raise ValueError("Failed to find or create batch job")
 
                     logging.info(f"Created batch job with ID: {batch_job.id}")
                     logging.info(f"Created scoring job with ID: {scoring_job.id}")

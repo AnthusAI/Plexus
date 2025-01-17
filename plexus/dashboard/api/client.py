@@ -446,7 +446,12 @@ class _BaseAPIClient:
         max_batch_size: int = 20,
         **kwargs
     ) -> Tuple['ScoringJob', 'BatchJob']:
-        """Create or add to a batch scoring job."""
+        """Finds or creates a scoring job and assigns it to an appropriate batch job.
+        
+        If a scoring job exists for the item, returns it with its associated batch job.
+        If no scoring job exists, creates one and either:
+        - Assigns it to an existing open batch job with matching criteria, or
+        - Creates a new batch job if no suitable open batch exists."""
         from .models.scoring_job import ScoringJob
         from .models.batch_job import BatchJob
 
@@ -460,7 +465,10 @@ class _BaseAPIClient:
         existing_job = ScoringJob.find_by_item_id(itemId, self)
         if existing_job:
             logging.info(f"Found existing scoring job {existing_job.id} for item {itemId}")
-            return existing_job, None
+            batch_job = ScoringJob.get_batch_job(existing_job.id, self)
+            if not batch_job:
+                logging.warning(f"Scoring job {existing_job.id} has no associated batch job")
+            return existing_job, batch_job
 
         # Look for an existing open batch job
         query = """
