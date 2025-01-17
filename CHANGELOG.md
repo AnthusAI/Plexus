@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.4.2-alpha.2 (2025-01-17)
+
+### Bug Fixes
+
+- **logging**: Update environment variable for AWS region in CustomLogging.py
+  ([`84123b2`](https://github.com/AnthusAI/Plexus/commit/84123b221a56f9429f3332cad1a84ef258fda2de))
+
+
 ## v0.4.2-alpha.1 (2025-01-16)
 
 ### Bug Fixes
