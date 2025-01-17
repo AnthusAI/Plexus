@@ -273,7 +273,7 @@ class _BaseAPIClient:
             except (ValueError, Exception):
                 continue
             
-        raise ValueError(f"Could not find scorecard with identifier: {identifier}")
+        raise ValueError(f"Could not find scorecard in the API with identifier: {identifier}")
     
     def _resolve_score_id(self) -> Optional[str]:
         """Get score ID, resolving from key, external ID, or name if needed"""
