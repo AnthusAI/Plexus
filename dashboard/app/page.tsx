@@ -1,3 +1,4 @@
+import React from 'react'
 import { Hero } from '@/components/landing/Hero'
 import { Features } from '@/components/landing/Features'
 import { CTASection } from '@/components/landing/CTASection'

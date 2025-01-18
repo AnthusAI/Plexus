@@ -4,7 +4,7 @@
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
-    "types": ["node", "react", "react-dom", "next"],
+    "types": ["node", "react", "react-dom", "next", "jest", "@testing-library/jest-dom"],
     "strict": true,
     "noEmit": true,
     "esModuleInterop": true,
@@ -29,7 +29,6 @@
     "node_modules",
     "amplify",
     ".next",
-    "**/*.stories.tsx",
-    "**/*.test.tsx"
+    "**/*.stories.tsx"
   ]
 }
