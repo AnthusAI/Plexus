@@ -20,6 +20,33 @@
 ## v0.4.2 (2025-01-17)
 
 
+## v0.4.4 (2025-01-17)
+
+### Bug Fixes
+
+- **logging**: Update environment variable for AWS region in CustomLogging.py
+  ([`84123b2`](https://github.com/AnthusAI/Plexus/commit/84123b221a56f9429f3332cad1a84ef258fda2de))
+
+
+## v0.4.3 (2025-01-17)
+
+### Bug Fixes
+
+- **batching**: Find or create both BatchJob and ScoringJob.
+  ([`f8ccb26`](https://github.com/AnthusAI/Plexus/commit/f8ccb26f92a6b53ec2fd32b34bad95d54a1edca3))
+
+
+## v0.4.2 (2025-01-17)
+
+
+## v0.4.2-alpha.2 (2025-01-17)
+
+### Bug Fixes
+
+- **logging**: Update environment variable for AWS region in CustomLogging.py
+  ([`84123b2`](https://github.com/AnthusAI/Plexus/commit/84123b221a56f9429f3332cad1a84ef258fda2de))
+
+
 ## v0.4.2-alpha.1 (2025-01-16)
 
 ### Bug Fixes
