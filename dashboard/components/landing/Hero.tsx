@@ -1,21 +1,27 @@
 "use client"
 
+import React from 'react'
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Loader2 } from 'lucide-react'
+import { ArrowRight, Loader2, AlertCircle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 export const Hero = () => {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleLogin = async (e: React.MouseEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError(null)
     try {
       await router.push('/dashboard')
+    } catch (err) {
+      setError('Failed to navigate to dashboard. Please try again.')
+      console.error('Navigation error:', err)
     } finally {
-      setTimeout(() => setIsLoading(false), 1000)
+      setIsLoading(false)
     }
   }
 
@@ -47,7 +53,7 @@ export const Hero = () => {
             disabled={isLoading}
           >
             {isLoading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
+              <Loader2 className="h-5 w-5 animate-spin" role="img" aria-label="loading" />
             ) : (
               <>
                 Log In
@@ -56,6 +62,12 @@ export const Hero = () => {
             )}
           </Button>
         </div>
+        {error && (
+          <div className="mt-4 flex items-center gap-2 text-destructive">
+            <AlertCircle className="h-5 w-5" />
+            <span>{error}</span>
+          </div>
+        )}
       </div>
       <div className="mt-16 relative">
         <div className="absolute inset-0 bg-gradient-to-r from-secondary to-primary rounded-lg blur-2xl opacity-30"></div>

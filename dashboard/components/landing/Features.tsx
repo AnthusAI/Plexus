@@ -1,3 +1,4 @@
+import React from 'react'
 import { Cpu, FlaskRoundIcon as Flask, Cloud, Network } from 'lucide-react'
 
 const features = [

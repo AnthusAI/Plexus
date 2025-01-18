@@ -1,67 +1,48 @@
-Note: The following sections are required and should be preserved in future edits:
-- Background
-- Solution
-- Plan
-- Current Status
-- Next Steps
+# Landing Page Documentation
 
-# Landing Page Plan
+## Overview
+The landing page introduces Plexus to new users and provides navigation to the dashboard. It features a clean, modern design with responsive layouts and smooth interactions.
 
-## Background
-We have created several React components for a new landing page (Hero, Layout, Features, CTASection) currently located in `dashboard/components`. These need to be integrated into the Plexus dashboard while keeping them isolated from the existing domain-specific dashboard components. The current home page handles AWS Amplify authentication.
+## Components
 
-## Solution
-Create a dedicated landing page section using Next.js App Router architecture, isolating landing components from the main dashboard components. The landing page will serve as the new entry point at the root route (/), with the current authentication and dashboard functionality moved to a protected `/dashboard` route.
+### Hero Section
+- Main headline highlighting AI agent orchestration
+- Descriptive subheading explaining Plexus's core functionality
+- Login button with loading state and error handling
+- Visual placeholder for workflow diagram
 
-## Plan
-1. Organize Landing Page Components
-   - ✓ Create `dashboard/components/landing/` directory
-   - ✓ Move Hero, Layout, Features, CTASection components there
-   - ✓ Update import paths in all components
-   - ✓ Verify component isolation from main dashboard
+### Features Section
+- Grid of 4 key features: Multi-model, Lab workflow, Serverless, and Task dispatch
+- Each feature card includes an icon and detailed description
+- Responsive layout adapting from 1 to 4 columns based on screen size
 
-2. Restructure Routes
-   - ✓ Move current `page.tsx` (auth handler) to `dashboard/app/dashboard/page.tsx`
-   - ✓ Create new landing page at `dashboard/app/page.tsx`
-   - Set up layouts:
-     - ✓ Root layout remains unchanged
-     - ✓ Create dashboard layout for auth-protected routes
+### CTA Section
+- Early access signup section
+- Integration with Google Forms for collecting user information
+- Loading state and error handling for popup blockers
 
-3. Authentication Flow
-   - ✓ Move AWS Amplify authentication to dashboard route
-   - ✓ Update authentication redirects
-   - ✓ Add login button routing to dashboard
-   - ✓ Fix post-login navigation to activity page
-   - ✓ Test unauthenticated and authenticated flows
+## Technical Implementation
 
-4. Component Integration
-   - ✓ Set up proper module paths in tsconfig
-   - ✓ Update all component imports
-   - Verify SSR functionality
-   - Test hydration behavior
+### Navigation
+- Client-side routing using Next.js
+- Loading states during navigation
+- Error handling for failed navigation attempts
 
-5. Testing Implementation
-   - Add Jest tests for landing components
-   - Test authentication flows
-   - Add loading states
-   - Verify SSR behavior
+### Testing
+- Jest unit tests for all components
+- Test coverage includes:
+  - Component rendering
+  - Interactive elements
+  - Loading states
+  - Error handling
+  - Navigation behavior
 
-## Current Status
-- Components moved to `dashboard/components/landing/`
-- Using Next.js App Router
-- Current home page moved to dashboard route
-- ✓ New landing page renders correctly at root route
-- ✓ Interactive components working as client components
-- ✓ Components using system color variables
-- ✓ Button styles improved for better contrast and visibility
-- ✓ Dashboard layout created with auth protection
-- ✓ Login navigation and post-login flow working and tested
-- ✓ All layouts configured and working
-- ✓ Loading states added with minimal spinner animation
+### Server-Side Rendering
+- Full SSR support with Next.js
+- Hydration verified for all interactive elements
 
-## Next Steps
-1. Add Jest tests for landing components
-2. Add error handling for navigation failures
-3. Verify SSR and hydration behavior
-
-Note: This plan should be updated after each step is completed to maintain accurate progress tracking and adjust next steps as needed.
+## Accessibility
+- ARIA labels for loading states
+- Semantic HTML structure
+- Keyboard navigation support
+- Screen reader friendly button labels
