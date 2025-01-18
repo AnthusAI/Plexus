@@ -21,8 +21,8 @@ Create a dedicated landing page section using Next.js App Router architecture, i
    - ✓ Verify component isolation from main dashboard
 
 2. Restructure Routes
-   - Move current `page.tsx` (auth handler) to `dashboard/app/dashboard/page.tsx`
-   - Create new landing page at `dashboard/app/page.tsx`
+   - ✓ Move current `page.tsx` (auth handler) to `dashboard/app/dashboard/page.tsx`
+   - ✓ Create new landing page at `dashboard/app/page.tsx`
    - Set up layouts:
      - Root layout remains unchanged
      - Create dashboard layout for auth-protected routes
@@ -49,13 +49,16 @@ Create a dedicated landing page section using Next.js App Router architecture, i
 ## Current Status
 - Components moved to `dashboard/components/landing/`
 - Using Next.js App Router
-- Current home page handles AWS Amplify auth
-- Jest testing infrastructure in place
-- All component imports verified and working
+- Current home page moved to dashboard route
+- ✓ New landing page renders correctly at root route
+- ✓ Interactive components working as client components
+- ✓ Components using system color variables
+- ✓ Button styles improved for better contrast and visibility
+- Need to set up layouts and auth flow
 
 ## Next Steps
-1. Create new landing page at `dashboard/app/page.tsx`
-2. Move current auth page to dashboard route
+1. Create dashboard layout for auth-protected routes
+2. Set up authentication flow in dashboard route
 3. Set up layouts for both routes
 
 Note: This plan should be updated after each step is completed to maintain accurate progress tracking and adjust next steps as needed.
