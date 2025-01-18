@@ -24,7 +24,7 @@ type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" |
     "evaluationId" | "scoringJobId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type ActionIndexFields = "accountId" | "type" | "status" | "target" | 
-    "currentStageId";
+    "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
 type ActionStageIndexFields = "actionId" | "name" | "order" | "status";
 
 const schema = a.schema({
@@ -286,26 +286,31 @@ const schema = a.schema({
     Action: a
         .model({
             accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            scorecardId: a.string(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
             type: a.string().required(),
             status: a.string().required(),
             target: a.string().required(),
-            command: a.string().required(),
+            command: a.string(),
             metadata: a.json(),
             createdAt: a.datetime().required(),
-            startedAt: a.datetime(),
-            completedAt: a.datetime(),
-            estimatedCompletionAt: a.datetime(),
-            errorMessage: a.string(),
-            errorDetails: a.json(),
-            stdout: a.string(),
-            stderr: a.string(),
+            updatedAt: a.datetime().required(),
             currentStageId: a.string(),
             currentStage: a.belongsTo('ActionStage', 'currentStageId'),
             stages: a.hasMany('ActionStage', 'actionId'),
-            account: a.belongsTo('Account', 'accountId'),
+            dispatchStatus: a.string(),
+            startedAt: a.datetime(),
+            completedAt: a.datetime(),
+            estimatedCompletionAt: a.datetime(),
             celeryTaskId: a.string(),
             workerNodeId: a.string(),
-            dispatchStatus: a.string(),
+            stdout: a.string(),
+            stderr: a.string(),
+            errorMessage: a.string(),
+            errorDetails: a.json(),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -313,6 +318,9 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: ActionIndexFields) => any) => [
             idx("accountId"),
+            idx("scorecardId"),
+            idx("scoreId"),
+            idx("updatedAt"),
             idx("type"),
             idx("status"),
             idx("target"),
