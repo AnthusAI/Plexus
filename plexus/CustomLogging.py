@@ -23,29 +23,68 @@ else:
 cloudwatch_handler = None
 current_log_group = DEFAULT_LOG_GROUP
 
+def _get_aws_credentials():
+    """Helper function to check and return AWS credentials.
+    
+    Returns:
+        tuple: (access_key, secret_key, region, is_configured)
+        where is_configured is a boolean indicating if all credentials are present
+    """
+    access_key = os.getenv('AWS_ACCESS_KEY_ID')
+    secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
+    region = os.getenv('AWS_REGION_NAME')
+    
+    is_configured = all([access_key, secret_key, region])
+    
+    if os.getenv('DEBUG'):
+        print(f"AWS Credentials Check:")
+        print(f"- Access Key present: {bool(access_key)}")
+        print(f"- Secret Key present: {bool(secret_key)}")
+        print(f"- Region present: {bool(region)}")
+    
+    return access_key, secret_key, region, is_configured
+
 def setup_logging(log_group=DEFAULT_LOG_GROUP):
     global cloudwatch_handler, current_log_group
     
     # Remove existing CloudWatch handler if present
     if cloudwatch_handler:
         logging.getLogger().removeHandler(cloudwatch_handler)
+        print(f"Removed existing CloudWatch handler for log group: {current_log_group}")
     
     handlers = [
         RichHandler(console=console, markup=True, rich_tracebacks=True, 
                    show_time=False, show_path=False)
     ]
 
+    # Check AWS credentials
+    _, _, region, is_configured = _get_aws_credentials()
+
     # Only add CloudWatch handler if AWS credentials are available
-    if os.getenv('AWS_ACCESS_KEY_ID') and os.getenv('AWS_SECRET_ACCESS_KEY') \
-            and os.getenv('AWS_REGION_NAME'):
-        stream_name = f"plexus-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
-        cloudwatch_handler = watchtower.CloudWatchLogHandler(
-            log_group=log_group,
-            stream_name=stream_name
-        )
-        handlers.append(cloudwatch_handler)
-        current_log_group = log_group
+    if is_configured:
+        try:
+            stream_name = f"plexus-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
+            if os.getenv('DEBUG'):
+                print(f"Attempting to create CloudWatch handler:")
+                print(f"- Log Group: {log_group}")
+                print(f"- Stream Name: {stream_name}")
+                print(f"- AWS Region: {region}")
+            
+            cloudwatch_handler = watchtower.CloudWatchLogHandler(
+                log_group=log_group,
+                stream_name=stream_name
+            )
+            handlers.append(cloudwatch_handler)
+            current_log_group = log_group
+            if os.getenv('DEBUG'):
+                print("Successfully created CloudWatch handler")
+        except Exception as e:
+            print(f"Error creating CloudWatch handler: {str(e)}")
+            cloudwatch_handler = None
+            current_log_group = None
     else:
+        if os.getenv('DEBUG'):
+            print("Skipping CloudWatch handler - missing AWS credentials")
         cloudwatch_handler = None
         current_log_group = None
 
@@ -71,8 +110,8 @@ def set_log_group(new_log_group):
     :param new_log_group: The name of the new log group to use
     """
     # Skip if CloudWatch logging is not configured
-    if not os.getenv('AWS_ACCESS_KEY_ID') or not os.getenv('AWS_SECRET_ACCESS_KEY') \
-            or not os.getenv('AWS_DEFAULT_REGION'):
+    _, _, _, is_configured = _get_aws_credentials()
+    if not is_configured:
         logging.debug(f"CloudWatch logging not configured, skipping group change: {new_log_group}")
         return
     
@@ -94,7 +133,8 @@ def add_log_stream(stream_name):
     global cloudwatch_handler, current_log_group
     
     # Skip if CloudWatch logging is not configured
-    if not current_log_group:
+    _, _, _, is_configured = _get_aws_credentials()
+    if not is_configured or not current_log_group:
         logging.debug(f"CloudWatch logging not configured, skipping stream: {stream_name}")
         return None
     
