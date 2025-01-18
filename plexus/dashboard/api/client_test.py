@@ -206,151 +206,70 @@ def test_score_logging_with_different_configs(mock_score_result):
     assert len(args[1]) == 10  # Verify default batch size
 
 def test_batch_scoring_job_creates_new_batch(mock_client):
-    """Test creating a new batch when none exists"""
-    # Mock the query for existing batches
-    mock_client.execute.side_effect = [
-        # First query - all batch jobs
-        {'listBatchJobs': {'items': []}},
-        # Second query - open batch jobs
-        {'listBatchJobs': {'items': []}},
-        # Third - create scoring job
-        {'createScoringJob': {
-            'id': 'job-1',
-            'status': 'PENDING'
-        }},
-        # Fourth - create batch job
-        {'createBatchJob': {
-            'id': 'batch-1',
-            'accountId': 'acc-1',
-            'status': 'OPEN',
-            'type': 'MultiStepScore',
-            'batchId': 'batch-1',
-            'modelProvider': 'openai',
-            'modelName': 'gpt-4'
-        }},
-        # Fifth - link batch job to scoring job
-        {'createBatchJobScoringJob': {
-            'batchJobId': 'batch-1',
-            'scoringJobId': 'job-1'
-        }},
-        # Sixth - count batch job links
-        {'listBatchJobScoringJobs': {
-            'items': [{'scoringJobId': 'job-1'}]
-        }},
-        # Seventh - get batch status
-        {'getBatchJob': {
-            'id': 'batch-1',
-            'accountId': 'acc-1',
-            'status': 'OPEN',
-            'type': 'MultiStepScore',
-            'batchId': 'batch-1',
-            'modelProvider': 'openai',
-            'modelName': 'gpt-4',
-            'totalRequests': 1
-        }},
-        # Eighth - update batch count
-        {'updateBatchJob': {
-            'id': 'batch-1',
-            'accountId': 'acc-1',
-            'status': 'OPEN',
-            'type': 'MultiStepScore',
-            'batchId': 'batch-1',
-            'modelProvider': 'openai',
-            'modelName': 'gpt-4',
-            'totalRequests': 1
-        }}
-    ]
-
+    """Test that a new batch is created when no suitable open batch exists"""
     with patch('plexus.dashboard.api.models.scoring_job.ScoringJob') as mock_scoring_job, \
          patch('plexus.dashboard.api.models.batch_job.BatchJob') as mock_batch_job:
 
-        # Configure the mocks to return objects with IDs
+        # No existing scoring job
         mock_scoring_job.find_by_item_id.return_value = None
-        mock_scoring_job.create.return_value = Mock(id='job-1')
-        mock_batch_job.create.return_value = Mock(id='batch-1')
+        
+        # Mock all the necessary API responses
+        mock_client.execute.side_effect = [
+            {'listBatchJobs': {'items': []}},  # First query finds no open batches
+            {'createBatchJob': {'id': 'batch-2'}},  # Create new batch
+            {'getBatchJob': {  # Get batch status
+                'id': 'batch-2',
+                'status': 'OPEN',
+                'totalRequests': 0,
+                'scoringJobCountCache': 0
+            }},
+            {'updateBatchJob': {  # Update batch count
+                'id': 'batch-2',
+                'scoringJobCountCache': 1,
+                'status': 'OPEN'
+            }},
+            {'createBatchJobScoringJob': {'id': 'link-1'}}  # Link job to batch
+        ]
+
+        # Mock the new scoring job creation
+        mock_scoring_job.create.return_value = Mock(id='job-2')
+        mock_batch_job.create.return_value = Mock(id='batch-2')
 
         scoring_job, batch_job = mock_client.batch_scoring_job(
             itemId='item-1',
             scorecardId='card-1',
             accountId='acc-1',
             model_provider='openai',
-            model_name='gpt-4',
-            provider='openai'
+            model_name='gpt-4'
         )
 
-        assert scoring_job.id == 'job-1'
-        assert batch_job.id == 'batch-1'
+        assert scoring_job.id == 'job-2'
+        assert batch_job.id == 'batch-2'
+        mock_scoring_job.create.assert_called_once()
+        mock_batch_job.create.assert_called_once()
+        assert 'batchId' in mock_scoring_job.create.call_args[1]
+        assert mock_scoring_job.create.call_args[1]['batchId'] == 'batch-2'
 
 def test_batch_scoring_job_uses_existing_batch(mock_client):
-    """Test using an existing batch"""
-    mock_client.execute.side_effect = [
-        # First query - all batch jobs
-        {'listBatchJobs': {'items': [{
-            'id': 'batch-1',
-            'accountId': 'acc-1',
-            'status': 'OPEN',
-            'type': 'MultiStepScore',
-            'batchId': 'batch-1',
-            'modelProvider': 'openai',
-            'modelName': 'gpt-4',
-            'totalRequests': 1
-        }]}},
-        # Second query - open batch jobs
-        {'listBatchJobs': {'items': [{
-            'id': 'batch-1',
-            'accountId': 'acc-1',
-            'status': 'OPEN',
-            'type': 'MultiStepScore',
-            'batchId': 'batch-1',
-            'modelProvider': 'openai',
-            'modelName': 'gpt-4',
-            'totalRequests': 1
-        }]}},
-        # Third - create scoring job
-        {'createScoringJob': {
-            'id': 'job-1',
-            'status': 'PENDING'
-        }},
-        # Fourth - link to existing batch job
-        {'createBatchJobScoringJob': {
-            'batchJobId': 'batch-1',
-            'scoringJobId': 'job-1'
-        }},
-        # Fifth - count batch job links
-        {'listBatchJobScoringJobs': {
-            'items': [
-                {'scoringJobId': 'existing-job-1'},
-                {'scoringJobId': 'job-1'}
-            ]
-        }},
-        # Sixth - get batch status
-        {'getBatchJob': {
-            'id': 'batch-1',
-            'accountId': 'acc-1',
-            'status': 'OPEN',
-            'type': 'MultiStepScore',
-            'batchId': 'batch-1',
-            'modelProvider': 'openai',
-            'modelName': 'gpt-4',
-            'totalRequests': 2
-        }},
-        # Seventh - update batch count
-        {'updateBatchJob': {
-            'id': 'batch-1',
-            'accountId': 'acc-1',
-            'status': 'OPEN',
-            'type': 'MultiStepScore',
-            'batchId': 'batch-1',
-            'modelProvider': 'openai',
-            'modelName': 'gpt-4',
-            'totalRequests': 2
-        }}
-    ]
-
+    """Test that a new scoring job is assigned to an existing open batch when available"""
     with patch('plexus.dashboard.api.models.scoring_job.ScoringJob') as mock_scoring_job, \
          patch('plexus.dashboard.api.models.batch_job.BatchJob') as mock_batch_job:
 
+        # No existing scoring job
         mock_scoring_job.find_by_item_id.return_value = None
+        
+        # Mock existing open batch
+        mock_client.execute.return_value = {
+            'listBatchJobs': {
+                'items': [{
+                    'id': 'batch-1',
+                    'status': 'OPEN',
+                    'totalRequests': 5  # Below max_batch_size
+                }]
+            }
+        }
+
+        # Mock the new scoring job creation
         mock_scoring_job.create.return_value = Mock(id='job-1')
         mock_batch_job.get_by_id.return_value = Mock(id='batch-1')
 
@@ -359,12 +278,36 @@ def test_batch_scoring_job_uses_existing_batch(mock_client):
             scorecardId='card-1',
             accountId='acc-1',
             model_provider='openai',
-            model_name='gpt-4',
-            provider='openai'
+            model_name='gpt-4'
         )
 
         assert scoring_job.id == 'job-1'
         assert batch_job.id == 'batch-1'
+        mock_scoring_job.create.assert_called_once()
+        assert 'batchId' in mock_scoring_job.create.call_args[1]
+        assert mock_scoring_job.create.call_args[1]['batchId'] == 'batch-1'
+
+def test_batch_scoring_job_finds_existing_job(mock_client):
+    """Test that finding an existing scoring job also returns its associated batch job"""
+    with patch('plexus.dashboard.api.models.scoring_job.ScoringJob') as mock_scoring_job, \
+         patch('plexus.dashboard.api.models.batch_job.BatchJob') as mock_batch_job:
+
+        # Configure mocks to return objects with expected IDs
+        mock_scoring_job.find_by_item_id.return_value = Mock(id='job-1')
+        mock_batch = Mock(id='batch-1')
+        mock_scoring_job.get_batch_job.return_value = mock_batch
+
+        scoring_job, batch_job = mock_client.batch_scoring_job(
+            itemId='item-1',
+            scorecardId='card-1',
+            accountId='acc-1',
+            model_provider='openai',
+            model_name='gpt-4'
+        )
+
+        assert scoring_job.id == 'job-1'
+        assert batch_job.id == 'batch-1'
+        mock_scoring_job.get_batch_job.assert_called_once_with('job-1', mock_client)
 
 def test_update_evaluation_basic(mock_client):
     """Test basic evaluation update"""
