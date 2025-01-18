@@ -1,11 +1,23 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 
 export const Hero = () => {
   const router = useRouter()
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleLogin = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    try {
+      await router.push('/dashboard')
+    } finally {
+      setTimeout(() => setIsLoading(false), 1000)
+    }
+  }
 
   return (
     <section className="container mx-auto px-4 py-20 md:py-32">
@@ -25,18 +37,23 @@ export const Hero = () => {
         </p>
         <div className="flex flex-col sm:flex-row gap-4">
           <Button size="lg" className="w-full sm:w-auto bg-primary text-white hover:bg-primary/90 text-lg font-semibold">
-            Learn More
+            Request Early Access
+            <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
           <Button 
             size="lg" 
             className="w-full sm:w-auto bg-secondary text-white hover:bg-secondary/90 text-lg font-semibold"
-            onClick={(e) => {
-              e.preventDefault()
-              router.push('/dashboard')
-            }}
+            onClick={handleLogin}
+            disabled={isLoading}
           >
-            Log In
-            <ArrowRight className="ml-2 h-5 w-5" />
+            {isLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <>
+                Log In
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </>
+            )}
           </Button>
         </div>
       </div>
