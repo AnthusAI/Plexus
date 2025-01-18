@@ -292,9 +292,7 @@ def test_update_progress(mock_client, mock_action):
                         'type': 'TEST',
                         'status': 'RUNNING',
                         'target': 'test/target',
-                        'command': 'test command',
-                        'processedItems': variables['input'].get('processedItems', 0),
-                        'totalItems': variables['input'].get('totalItems', 0)
+                        'command': 'test command'
                     }
                 }
             elif operation_name == 'CreateActionStage':
