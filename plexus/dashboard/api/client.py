@@ -142,7 +142,17 @@ class _BaseAPIClient:
         while not self._stop_logging.is_set():
             try:
                 # Wait up to 1 second for new items
-                item = self._log_queue.get(timeout=1.0)
+                try:
+                    item = self._log_queue.get(timeout=1.0)
+                except Empty:
+                    # This is expected when queue is empty - just flush existing batches
+                    current_time = time.time()
+                    for items in batches.values():
+                        if items:
+                            self._flush_logs(items)
+                    batches.clear()
+                    last_flush = current_time
+                    continue
                 
                 # Extract batch config
                 batch_size = item.pop('batch_size', 10)
@@ -163,14 +173,10 @@ class _BaseAPIClient:
                         batches[size, timeout] = []
                         last_flush = current_time
                     
-            except Empty:
-                # Flush any remaining items
-                current_time = time.time()
-                for items in batches.values():
-                    if items:
-                        self._flush_logs(items)
-                batches.clear()
-                last_flush = current_time
+            except Exception as e:
+                # Log any unexpected errors but keep the thread running
+                logging.error(f"Error in log processing thread: {e}")
+                time.sleep(1.0)  # Avoid tight loop if there's a persistent error
 
     def flush(self) -> None:
         """Flush any pending log items immediately."""
