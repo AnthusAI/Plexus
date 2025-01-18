@@ -1,6 +1,31 @@
 # CHANGELOG
 
 
+## v0.4.2-rc.2 (2025-01-18)
+
+### Bug Fixes
+
+- **logging**: Enhance AWS credentials handling in CustomLogging.py
+  ([`c5eefb9`](https://github.com/AnthusAI/Plexus/commit/c5eefb904de79f413c3255c69f44e68c6af140be))
+
+- Added a helper function `_get_aws_credentials()` to check and return AWS credentials. - Improved
+  logging setup to conditionally create a CloudWatch handler based on the presence of AWS
+  credentials. - Included debug prints for better visibility during AWS credentials checks and
+  CloudWatch handler creation. - Updated log group and stream handling to ensure proper
+  configuration before logging to CloudWatch.
+
+
+## v0.4.2-alpha.2 (2025-01-17)
+
+
+## v0.4.2-rc.1 (2025-01-17)
+
+### Bug Fixes
+
+- **logging**: Update environment variable for AWS region in CustomLogging.py
+  ([`84123b2`](https://github.com/AnthusAI/Plexus/commit/84123b221a56f9429f3332cad1a84ef258fda2de))
+
+
 ## v0.4.2-alpha.1 (2025-01-16)
 
 ### Bug Fixes
