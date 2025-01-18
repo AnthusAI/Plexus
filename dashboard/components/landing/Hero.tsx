@@ -29,9 +29,13 @@ export const Hero = () => {
     <section className="container mx-auto px-4 py-20 md:py-32">
       <div className="flex flex-col items-center text-center">
         <h1 className="text-5xl md:text-7xl font-bold tracking-tighter mb-6 max-w-4xl leading-tight">
-          Orchestrate{' '}
-          <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text">
+          Run{' '}
+          <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text">
             AI agents
+          </span>{' '}
+          over{' '}
+          <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text">
+            your data
           </span>{' '}
           with{' '}
           <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text">
@@ -43,8 +47,7 @@ export const Hero = () => {
         </p>
         <div className="flex flex-col sm:flex-row gap-4">
           <Button size="lg" className="w-full sm:w-auto bg-primary text-white hover:bg-primary/90 text-lg font-semibold">
-            Request Early Access
-            <ArrowRight className="ml-2 h-5 w-5" />
+            Learn More
           </Button>
           <Button 
             size="lg" 
