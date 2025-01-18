@@ -24,7 +24,7 @@ type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" |
     "evaluationId" | "scoringJobId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type ActionIndexFields = "accountId" | "type" | "status" | "target" | 
-    "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
+    "currentStageId" | "scorecardId";
 type ActionStageIndexFields = "actionId" | "name" | "order" | "status";
 
 const schema = a.schema({
@@ -287,15 +287,12 @@ const schema = a.schema({
             account: a.belongsTo('Account', 'accountId'),
             scorecardId: a.string(),
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
-            scoreId: a.string(),
-            score: a.belongsTo('Score', 'scoreId'),
             type: a.string().required(),
             status: a.string().required(),
             target: a.string().required(),
             command: a.string(),
             metadata: a.json(),
             createdAt: a.datetime().required(),
-            updatedAt: a.datetime().required(),
             currentStageId: a.string(),
             currentStage: a.belongsTo('ActionStage', 'currentStageId'),
             stages: a.hasMany('ActionStage', 'actionId'),
@@ -317,8 +314,6 @@ const schema = a.schema({
         .secondaryIndexes((idx: (field: ActionIndexFields) => any) => [
             idx("accountId"),
             idx("scorecardId"),
-            idx("scoreId"),
-            idx("updatedAt"),
             idx("type"),
             idx("status"),
             idx("target"),
