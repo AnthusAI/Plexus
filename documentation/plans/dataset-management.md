@@ -6,57 +6,99 @@
 - Have a working Amplify Gen2 Data Store with Dataset model
 - CLI command exists that uses dataset config from score config
 - Need to integrate real dataset management via API
+- Need versioning of dataset configurations
+- Need profiling of dataset instances
+- Need to track relationships between datasets, versions, and profiles
 
 ## Solution
 Create an end-to-end dataset management system that:
-1. Stores real dataset configurations in Amplify Data Store
-2. Manages them through the Next.js dashboard UI
-3. Allows CLI commands to reference datasets by ID
-4. Maintains backwards compatibility with existing score config datasets
+1. Stores real dataset configurations in Amplify Data Store with versioning
+2. Tracks dataset profiles separately from versions
+3. Manages them through the Next.js dashboard UI
+4. Allows CLI commands to reference datasets by ID
+5. Maintains backwards compatibility with existing score config datasets
 
 ## Plan
-1. Data Store Integration
-   - [ ] Add Dataset model to Amplify schema with required fields:
-     - id (auto-generated)
-     - name
-     - description 
-     - configuration (JSON)
-     - scorecardId (optional)
-     - scoreId (optional)
-     - createdAt
-     - updatedAt
+1. Data Store Schema Updates
+   - [ ] Add base Dataset model:
+     ```graphql
+     type Dataset @model {
+       id: ID!
+       name: String!
+       description: String
+       scorecardId: ID
+       scoreId: ID
+       currentVersionId: ID
+       currentVersion: DatasetVersion @belongsTo
+       versions: [DatasetVersion] @hasMany
+       profiles: [DatasetProfile] @hasMany
+       createdAt: AWSDateTime!
+       updatedAt: AWSDateTime!
+     }
+     ```
+   - [ ] Add DatasetVersion model:
+     ```graphql
+     type DatasetVersion @model {
+       id: ID!
+       datasetId: ID!
+       dataset: Dataset @belongsTo
+       versionNumber: Int!
+       configuration: AWSJSON!
+       createdAt: AWSDateTime!
+       profiles: [DatasetProfile] @hasMany
+     }
+     ```
+   - [ ] Add DatasetProfile model:
+     ```graphql
+     type DatasetProfile @model {
+       id: ID!
+       datasetId: ID!
+       dataset: Dataset @belongsTo
+       datasetVersionId: ID!
+       datasetVersion: DatasetVersion @belongsTo
+       queryResults: AWSJSON!
+       filteredResults: AWSJSON!
+       columnList: [String]!
+       recordCounts: AWSJSON!
+       answerDistribution: AWSJSON!
+       createdAt: AWSDateTime!
+     }
+     ```
    - [ ] Generate and test Data Store models
-   - [ ] Create DatasetService class for CRUD operations
+   - [ ] Write unit tests for model relationships
 
-2. Dashboard UI Updates
-   - [ ] Update dataset-config-form.tsx to save real configs
-   - [ ] Add loading states and error handling
-   - [ ] Implement dataset listing with real data
-   - [ ] Add dataset deletion capability
-   - [ ] Add dataset editing capability
+2. Dashboard Service Layer
+   - [ ] Create DatasetService class with CRUD operations
+   - [ ] Add version management methods
+   - [ ] Add profile management methods
+   - [ ] Write unit tests for service layer
 
-3. CLI Integration  
+3. Dashboard UI Updates (Iterative)
+   - [ ] Update dataset listing to use real data
+   - [ ] Add dataset creation form
+   - [ ] Add version management UI
+   - [ ] Add profile viewing UI
+   - [ ] Add version comparison view
+   - [ ] Add profile history view
+   - [ ] Write component tests
+
+4. CLI Integration
    - [ ] Add --dataset-id option to evaluation commands
-   - [ ] Update dataset loading logic to check for API dataset first
-   - [ ] Maintain fallback to score config dataset
-   - [ ] Add dataset validation
-
-4. Testing
-   - [ ] Unit tests for Dataset model operations
-   - [ ] Integration tests for dashboard-API interaction
-   - [ ] CLI command tests with dataset override
-   - [ ] End-to-end workflow tests
+   - [ ] Add version resolution logic
+   - [ ] Add profile recording logic
+   - [ ] Write CLI integration tests
 
 ## Current Status
 - Have Amplify Data Store setup
 - Have dashboard UI mockup working
 - Have CLI evaluation command working with score config datasets
-- Need to implement real dataset management
+- Need to implement real dataset management with versioning and profiling
 
 ## Next Steps
-1. Review and validate Dataset model schema
-2. Create DatasetService class
-3. Update dashboard to use real data
-4. Add dataset ID support to CLI
+1. Review and validate expanded data model schema
+2. Set up test infrastructure for TDD approach
+3. Start with base Dataset model implementation
+4. Add version management
+5. Add profile tracking
 
-*Note: Update this plan document after each step completed, marking items with ✓ emoji and adding new details learned during implementation.*
+*Note: This plan should be updated after each step is completed, marking items with ✓ emoji and adding new details learned during implementation. Each step should be verified through tests before proceeding.*
