@@ -293,6 +293,23 @@ class Action(BaseModel):
         if not stage_configs:
             return []
 
+        # Update action status based on progress
+        if processed_items == 0:
+            if self.status not in ["COMPLETED", "FAILED"]:
+                self.update(status="PENDING")
+        elif processed_items == total_items:
+            if self.status != "COMPLETED":
+                self.update(
+                    status="COMPLETED",
+                    completedAt=datetime.now(timezone.utc)
+                )
+        else:
+            if self.status != "RUNNING":
+                self.update(
+                    status="RUNNING",
+                    startedAt=datetime.now(timezone.utc)
+                )
+
         # Get or create stages
         stages = self.get_stages()
         existing_stage_names = {stage.name for stage in stages}
