@@ -47,11 +47,17 @@ The landing page introduces Plexus to new users and provides navigation to the d
 - Integration with Google Forms for collecting user information ✓
 - Loading state and error handling for popup blockers ✓
 
-### Footer Section
-- Link to Anth.us main company website
-- Standard footer elements adapted from company style
-- Legal and contact information
-- Social media links if applicable
+### Footer Section ✓
+- Link to Anth.us main company website ✓
+- Resources section with links to Articles and Posts ✓
+- Social media integration: ✓
+  - GitHub ✓
+  - LinkedIn ✓
+  - Discord ✓
+  - X/Twitter updates ✓
+- Contact form link ✓
+- Responsive grid layout ✓
+- Copyright notice ✓
 
 ## Technical Implementation
 
