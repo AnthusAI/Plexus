@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from plexus.scores.nodes.Classifier import Classifier
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from plexus.scores.LangGraphScore import BatchProcessingPause
 
 pytest.asyncio_fixture_scope = "function"
 pytest_plugins = ('pytest_asyncio',)
@@ -779,3 +780,127 @@ async def test_classifier_message_sequence_two_retries(turnip_classifier_config)
         final_state = await parse_node(state)
         assert final_state.classification == "yes"
         assert final_state.retry_count == 2
+
+@pytest.mark.asyncio
+async def test_classifier_handles_dict_messages(turnip_classifier_config):
+    mock_model = AsyncMock()
+    mock_response = AIMessage(content="yes")
+    mock_model.ainvoke = AsyncMock(return_value=mock_response)
+    
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
+               return_value=mock_model):
+        classifier = Classifier(**turnip_classifier_config)
+        classifier.model = mock_model
+        
+        # Create state with messages already in dict format
+        state = classifier.GraphState(
+            text="I love eating turnip soup.",
+            metadata={},
+            results={},
+            retry_count=0,
+            is_not_empty=True,
+            value=None,
+            reasoning=None,
+            classification=None,
+            chat_history=[],
+            completion=None,
+            messages=[
+                {
+                    'type': 'system',
+                    'content': 'You are a classifier that detects if the word turnip appears in text.',
+                    '_type': 'SystemMessage'
+                },
+                {
+                    'type': 'human',
+                    'content': 'Does this text contain the word turnip?',
+                    '_type': 'HumanMessage'
+                }
+            ]
+        )
+        
+        llm_prompt_node = classifier.get_llm_prompt_node()
+        llm_call_node = classifier.get_llm_call_node()
+        parse_node = classifier.get_parser_node()
+        
+        # Run through nodes
+        state = await llm_prompt_node(state)
+        state = await llm_call_node(state)
+        final_state = await parse_node(state)
+        
+        assert final_state.classification == "yes"
+        
+        # Verify the messages were handled correctly
+        assert len(mock_model.ainvoke.call_args_list) == 1
+        call_messages = mock_model.ainvoke.call_args_list[0][0][0]
+        assert len(call_messages) == 2
+        assert isinstance(call_messages[0], SystemMessage)
+        assert isinstance(call_messages[1], HumanMessage)
+
+@pytest.mark.asyncio
+async def test_classifier_batch_mode(turnip_classifier_config):
+    mock_model = AsyncMock()
+    mock_response = AIMessage(content="yes")
+    mock_model.ainvoke = AsyncMock(return_value=mock_response)
+    
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
+               return_value=mock_model):
+        # Enable batch mode
+        turnip_classifier_config['batch'] = True
+        classifier = Classifier(**turnip_classifier_config)
+        classifier.model = mock_model
+        
+        state = classifier.GraphState(
+            text="I love eating turnip soup.",
+            metadata={
+                'account_key': 'test_account',
+                'scorecard_key': 'test_scorecard',
+                'score_name': 'test_score',
+                'content_id': 'test_thread'
+            },
+            results={},
+            retry_count=0,
+            is_not_empty=True,
+            value=None,
+            reasoning=None,
+            classification=None,
+            chat_history=[],
+            completion=None
+        )
+        
+        llm_prompt_node = classifier.get_llm_prompt_node()
+        llm_call_node = classifier.get_llm_call_node()
+        
+        # Mock PlexusDashboardClient methods
+        mock_client = MagicMock()
+        mock_client._resolve_score_id.return_value = 'test_score_id'
+        mock_client._resolve_scorecard_id.return_value = 'test_scorecard_id'
+        mock_client._resolve_account_id.return_value = 'test_account_id'
+        mock_client.batch_scoring_job.return_value = (
+            MagicMock(id='test_scoring_job_id'),  # scoring_job
+            MagicMock(id='test_batch_job_id')     # batch_job
+        )
+        
+        with patch('plexus.dashboard.api.client.PlexusDashboardClient.for_scorecard',
+                  return_value=mock_client):
+            # Run prompt node
+            state_after_prompt = await llm_prompt_node(state)
+            
+            # Run LLM call node - should raise BatchProcessingPause
+            with pytest.raises(BatchProcessingPause) as exc_info:
+                await llm_call_node(state_after_prompt)
+            
+            # Verify the BatchProcessingPause exception contains correct data
+            assert exc_info.value.thread_id == 'test_thread'
+            assert exc_info.value.batch_job_id == 'test_batch_job_id'
+            assert 'Execution paused for batch processing' in exc_info.value.message
+            
+            # Verify client was called with correct parameters
+            mock_client.batch_scoring_job.assert_called_once()
+            call_args = mock_client.batch_scoring_job.call_args[1]
+            assert call_args['itemId'] == 'test_thread'
+            assert call_args['scorecardId'] == 'test_scorecard_id'
+            assert call_args['accountId'] == 'test_account_id'
+            assert call_args['scoreId'] == 'test_score_id'
+            assert call_args['status'] == 'PENDING'
+            assert call_args['parameters']['thread_id'] == 'test_thread'
+            assert call_args['parameters']['breakpoint'] is True

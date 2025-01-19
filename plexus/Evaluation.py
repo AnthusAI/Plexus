@@ -366,20 +366,40 @@ class Evaluation:
         try:
             return await self._async_run()
         finally:
-            # Set should_stop to True to trigger final metrics updates
+            # Signal metrics tasks to stop gracefully
             self.should_stop = True
-            # Wait for all metrics tasks to complete
+            
             if self.metrics_tasks:
-                # Wait a short time to allow final metrics updates to complete
-                await asyncio.sleep(0.2)
-                # Cancel and wait for all metrics tasks
-                for task in self.metrics_tasks.values():
-                    if not task.done():
-                        task.cancel()
+                logging.info("Waiting for metrics tasks to complete...")
+                try:
+                    # Wait for all tasks to complete naturally
+                    done, pending = await asyncio.wait(
+                        self.metrics_tasks.values(),
+                        timeout=30.0,
+                        return_when=asyncio.ALL_COMPLETED
+                    )
+                    
+                    if pending:
+                        logging.warning(f"{len(pending)} metrics tasks still running after 30s wait")
+                        # Instead of canceling, wait a bit longer for final updates
+                        try:
+                            await asyncio.wait(pending, timeout=5.0)
+                        except Exception as e:
+                            logging.error(f"Error waiting for pending tasks: {e}")
+                    
+                    # Check for any exceptions in completed tasks
+                    for task in done:
                         try:
                             await task
                         except asyncio.CancelledError:
-                            pass
+                            pass  # Ignore cancellation errors
+                        except Exception as e:
+                            logging.error(f"Error in metrics task: {e}")
+                            
+                except Exception as e:
+                    logging.error(f"Error during metrics task cleanup: {e}")
+                
+                logging.info("Metrics task cleanup completed")
 
     @retry(
         stop=stop_after_attempt(3),
@@ -391,7 +411,7 @@ class Evaluation:
             logging.warning("Experiment ID not available - skipping metrics update")
             return
         
-        logging.info(f"Updating dashboard experiment {self.experiment_id} with metrics: {metrics}")
+        logging.info(f"Starting dashboard update for experiment {self.experiment_id}")
         
         try:
             elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
@@ -478,8 +498,10 @@ class Evaluation:
                 "input": update_params
             }
             
+            logging.info("Executing dashboard update...")
+            # Execute the API call directly - no shield needed since we handle cancellation in the caller
             await asyncio.to_thread(self.dashboard_client.execute, mutation, variables)
-            logging.info("Successfully updated dashboard experiment")
+            logging.info("Successfully completed dashboard update")
             
         except Exception as e:
             logging.error(f"Error updating dashboard experiment: {e}")
@@ -1084,11 +1106,27 @@ class Evaluation:
                     metrics = self.calculate_metrics(combined_results)
                     # If this is the final update (score is complete), mark it as completed
                     status = "COMPLETED" if score_name in self.completed_scores else "RUNNING"
-                    await self.log_to_dashboard(metrics, status=status)
-                    last_processed_count = current_count
+                    
+                    # Create a task for the API call and shield it from cancellation
+                    api_task = asyncio.shield(self.log_to_dashboard(metrics, status=status))
+                    try:
+                        await api_task
+                        last_processed_count = current_count
+                    except asyncio.CancelledError:
+                        # If we're cancelled, still wait for the API call to finish
+                        logging.info("Metrics task cancelled, ensuring API call completes")
+                        try:
+                            await api_task
+                        except asyncio.CancelledError:
+                            pass  # Ignore any additional cancellations
+                        logging.info("API call completed after cancellation")
+                        return  # Exit the task
                 
                 # Wait a bit before checking again
                 await asyncio.sleep(.1)
+            except asyncio.CancelledError:
+                logging.info(f"Metrics computation for {score_name} cancelled")
+                return  # Exit gracefully
             except Exception as e:
                 logging.error(f"Error in continuous metrics computation for {score_name}: {e}")
                 await asyncio.sleep(5)  # Wait longer on error
@@ -1517,8 +1555,17 @@ Total cost:       ${expenses['total_cost']:.6f}
         try:
             # Stop the metrics computation task
             self.should_stop = True
-            if self.metrics_task:
-                await self.metrics_task
+            if hasattr(self, 'metrics_tasks') and self.metrics_tasks:
+                logging.info("Cleaning up metrics tasks...")
+                for task in self.metrics_tasks.values():
+                    if not task.done():
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass  # Expected during cleanup
+                        except Exception as e:
+                            logging.error(f"Error cleaning up metrics task: {e}")
             
             # Clean up scorecard
             if hasattr(self, 'scorecard'):
@@ -1540,7 +1587,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                     pass
 
         except Exception as e:
-            logging.error(f"Error during AccuracyEvaluation cleanup: {e}")
+            logging.error(f"Error during {self.__class__.__name__} cleanup: {e}")
+            logging.debug("Cleanup error details:", exc_info=True)
 
     async def __aenter__(self):
         return self
@@ -1561,20 +1609,40 @@ Total cost:       ${expenses['total_cost']:.6f}
         try:
             return await self._async_run()
         finally:
-            # Set should_stop to True to trigger final metrics updates
+            # Signal metrics tasks to stop gracefully
             self.should_stop = True
-            # Wait for all metrics tasks to complete
+            
             if self.metrics_tasks:
-                # Wait a short time to allow final metrics updates to complete
-                await asyncio.sleep(0.2)
-                # Cancel and wait for all metrics tasks
-                for task in self.metrics_tasks.values():
-                    if not task.done():
-                        task.cancel()
+                logging.info("Waiting for metrics tasks to complete...")
+                try:
+                    # Wait for all tasks to complete naturally
+                    done, pending = await asyncio.wait(
+                        self.metrics_tasks.values(),
+                        timeout=30.0,
+                        return_when=asyncio.ALL_COMPLETED
+                    )
+                    
+                    if pending:
+                        logging.warning(f"{len(pending)} metrics tasks still running after 30s wait")
+                        # Instead of canceling, wait a bit longer for final updates
+                        try:
+                            await asyncio.wait(pending, timeout=5.0)
+                        except Exception as e:
+                            logging.error(f"Error waiting for pending tasks: {e}")
+                    
+                    # Check for any exceptions in completed tasks
+                    for task in done:
                         try:
                             await task
                         except asyncio.CancelledError:
-                            pass
+                            pass  # Ignore cancellation errors
+                        except Exception as e:
+                            logging.error(f"Error in metrics task: {e}")
+                            
+                except Exception as e:
+                    logging.error(f"Error during metrics task cleanup: {e}")
+                
+                logging.info("Metrics task cleanup completed")
 
     @retry(
         wait=wait_fixed(2),

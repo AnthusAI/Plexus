@@ -73,8 +73,8 @@ plexus = "plexus.cli.CommandLineInterface:main"
 plexus-dashboard = "plexus.dashboard.cli:cli"
 
 [tool.setuptools]
-packages = ["plexus"]
-package-data = { plexus = ["templates/*", "__main__.py"] }
+packages = { find = { include = ["plexus*"] } }
+package-data = { plexus = ["templates/*", "__main__.py", "py.typed", "scores/*.py"] }
 
 [tool.setuptools.dynamic]
 version = {attr = "plexus.__version__"}
