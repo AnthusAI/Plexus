@@ -23,6 +23,9 @@ type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" |
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
     "evaluationId" | "scoringJobId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
+type ActionIndexFields = "accountId" | "type" | "status" | "target" | 
+    "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
+type ActionStageIndexFields = "actionId" | "name" | "order" | "status";
 
 const schema = a.schema({
     Account: a
@@ -36,6 +39,7 @@ const schema = a.schema({
             items: a.hasMany('Item', 'accountId'),
             scoringJobs: a.hasMany('ScoringJob', 'accountId'),
             scoreResults: a.hasMany('ScoreResult', 'accountId'),
+            actions: a.hasMany('Action', 'accountId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -57,6 +61,7 @@ const schema = a.schema({
             batchJobs: a.hasMany('BatchJob', 'scorecardId'),
             scoringJobs: a.hasMany('ScoringJob', 'scorecardId'),
             scoreResults: a.hasMany('ScoreResult', 'scorecardId'),
+            actions: a.hasMany('Action', 'scorecardId'),
             externalId: a.string(),
             itemId: a.string(),
             item: a.belongsTo('Item', 'itemId'),
@@ -102,6 +107,7 @@ const schema = a.schema({
             evaluations: a.hasMany('Evaluation', 'scoreId'),
             batchJobs: a.hasMany('BatchJob', 'scoreId'),
             scoringJobs: a.hasMany('ScoringJob', 'scoreId'),
+            actions: a.hasMany('Action', 'scoreId'),
             metadata: a.json(),
         })
         .authorization((allow: AuthorizationCallback) => [
@@ -288,6 +294,76 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx) => [
             idx("batchJobId" as BatchJobScoringJobIndexFields)
+        ]),
+
+    Action: a
+        .model({
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            scorecardId: a.string(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
+            type: a.string().required(),
+            status: a.string().required(),
+            target: a.string().required(),
+            command: a.string(),
+            metadata: a.json(),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+            currentStageId: a.string(),
+            currentStage: a.belongsTo('ActionStage', 'currentStageId'),
+            stages: a.hasMany('ActionStage', 'actionId'),
+            dispatchStatus: a.string(),
+            startedAt: a.datetime(),
+            completedAt: a.datetime(),
+            estimatedCompletionAt: a.datetime(),
+            celeryTaskId: a.string(),
+            workerNodeId: a.string(),
+            stdout: a.string(),
+            stderr: a.string(),
+            errorMessage: a.string(),
+            errorDetails: a.json(),
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ActionIndexFields) => any) => [
+            idx("accountId"),
+            idx("scorecardId"),
+            idx("scoreId"),
+            idx("updatedAt"),
+            idx("type"),
+            idx("status"),
+            idx("target"),
+            idx("currentStageId")
+        ]),
+
+    ActionStage: a
+        .model({
+            actionId: a.string().required(),
+            action: a.belongsTo('Action', 'actionId'),
+            name: a.string().required(),
+            order: a.integer().required(),
+            status: a.string().required(),
+            statusMessage: a.string(),
+            startedAt: a.datetime(),
+            completedAt: a.datetime(),
+            estimatedCompletionAt: a.datetime(),
+            processedItems: a.integer(),
+            totalItems: a.integer(),
+            actionsAsCurrentStage: a.hasMany('Action', 'currentStageId'),
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ActionStageIndexFields) => any) => [
+            idx("actionId"),
+            idx("name"),
+            idx("order"),
+            idx("status")
         ])
 });
 
