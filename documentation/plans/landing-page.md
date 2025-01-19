@@ -11,55 +11,36 @@ The landing page introduces Plexus to new users and provides navigation to the d
 - Login button with loading state and error handling ✓
 - Responsive Plexus logo integration ✓
   - Square logo side-by-side with content on wider viewports ✓
-  - Wide/short logo version for mobile viewports ✓
   - Decorative glow effect behind logo matching current screenshot styling ✓
-  - Storybook stories to validate all responsive breakpoints ✓
-- Screenshot area removed ✓
 
 ### Features Section ✓
 - Grid of 4 key features: Multi-model, Lab workflow, Serverless, and Task dispatch ✓
 - Each feature card includes an icon and detailed description ✓
+- Subheading emphasizing adaptability to rapid AI changes ✓
 - Layout refinements: ✓
   - Enhanced visual hierarchy with consistent spacing ✓
   - Smooth hover state transitions and card interactions ✓
-  - Optimized icon sizing and placement within cards ✓
+  - Optimized icon sizing and placement with text flow ✓
   - Responsive grid adaptations: ✓
     - 4 columns on large displays ✓
     - 2 columns on tablets ✓
     - Single column on mobile ✓
-  - Animated transitions between layout breakpoints ✓
 
-### Use Cases Section
-- Grid layout similar to Features section
-- Four key use cases with detailed examples:
-  1. Email Processing
-     - Automated sorting and prioritization
-     - Custom classification rules
-     - Integration with existing workflows
-  2. Document Analysis
-     - Contract review and extraction
-     - Compliance checking
-     - Multi-language support
-  3. Customer Support
-     - Ticket classification and routing
-     - Response suggestion
-     - Sentiment analysis
-  4. Content Moderation
-     - Multi-model content filtering
-     - Custom policy enforcement
-     - Real-time processing
-- Each use case includes:
-  - Visual icon representation
-  - Brief overview
-  - Key benefits
-  - Example workflow diagram
-- Responsive layout matching Features section design
-
-### Narrative Section
-- No-code team collaboration story
-- Focus on data labeling workflows
-- Examples including email sorting and custom UI implementations
-- Emphasis on classifier improvement through team input
+### Use Cases Section ✓
+- Grid layout matching Features section ✓
+- Focus on team empowerment and no-code solutions ✓
+- Heading "Your team knows your business" ✓
+- Subheading about aligning AI without coding expertise ✓
+- Four key use cases demonstrating team input methods: ✓
+  1. Mailbox folders for email classifier training ✓
+  2. Direct labeling through Plexus dashboard ✓
+  3. Custom integrations with existing data sources ✓
+  4. Real-time feedback loops for continuous improvement ✓
+- Each use case includes: ✓
+  - Relevant icon ✓
+  - Clear title ✓
+  - Concise description ✓
+  - Consistent card styling ✓
 
 ### CTA Section ✓
 - Early access signup section ✓
@@ -82,8 +63,6 @@ The landing page introduces Plexus to new users and provides navigation to the d
 ### Testing ✓
 - Jest unit tests for all components ✓
 - Storybook stories for responsive design validation ✓
-  - Hero section logo placement at all breakpoints ✓
-  - Component behavior across viewport sizes ✓
 - Test coverage includes: ✓
   - Component rendering ✓
   - Interactive elements ✓
