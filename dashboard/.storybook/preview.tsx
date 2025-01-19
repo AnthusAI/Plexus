@@ -4,6 +4,22 @@ import '../app/globals.css';
 import { ThemeProvider } from '../components/theme-provider';
 import { withThemeByClassName } from "@storybook/addon-themes";
 
+const mockNextNavigation = (Story: React.ComponentType) => {
+  // @ts-ignore - we're mocking the router
+  window.next = {
+    router: {
+      push: async () => {},
+      back: () => {},
+      forward: () => {},
+      refresh: () => {},
+      replace: () => {},
+      prefetch: () => {}
+    }
+  };
+
+  return <Story />;
+};
+
 const preview: Preview = {
   parameters: {
     layout: 'fullscreen',
@@ -19,6 +35,7 @@ const preview: Preview = {
     },
   },
   decorators: [
+    mockNextNavigation,
     withThemeByClassName({ 
       themes: { light: "light", dark: "dark" }, 
       defaultTheme: "light" 
