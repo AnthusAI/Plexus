@@ -28,10 +28,14 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
       return;  // Don't redirect while auth is still loading
     }
     
+    // Allow unauthenticated access to / and /dashboard
+    const publicPaths = ['/', '/dashboard'];
+    const isPublicPath = publicPaths.includes(pathname);
+    
     // Only redirect in two specific cases:
     // 1. User is not authenticated and tries to access a protected page
-    // 2. User is authenticated and is on the root/login page
-    if (authStatus === 'unauthenticated' && pathname !== '/') {
+    // 2. User is authenticated and is on the root page
+    if (authStatus === 'unauthenticated' && !isPublicPath) {
       router.push('/');
     } else if (authStatus === 'authenticated' && pathname === '/') {
       router.push('/activity');
@@ -43,9 +47,9 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  // For the root/login page
-  if (pathname === '/') {
-    return authStatus === 'authenticated' ? null : children;
+  // For public paths (root and dashboard)
+  if (pathname === '/' || pathname === '/dashboard') {
+    return children;
   }
 
   // For all other pages, show content only if authenticated
