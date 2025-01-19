@@ -403,6 +403,7 @@ const schema = a.schema({
             configuration: a.json().required(),
             createdAt: a.datetime().required(),
             profiles: a.hasMany('DatasetProfile', 'datasetVersionId'),
+            datasetsAsCurrentVersion: a.hasMany('Dataset', 'currentVersionId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
