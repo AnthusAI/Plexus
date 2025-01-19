@@ -182,7 +182,8 @@ export default function ScorecardsComponent() {
       item: async () => ({ data: null }),
       scoringJobs: async () => ({ data: [], nextToken: null }),
       scoreResults: async () => ({ data: [], nextToken: null }),
-      actions: async () => ({ data: [], nextToken: null })
+      actions: async () => ({ data: [], nextToken: null }),
+      datasets: async () => ({ data: [], nextToken: null })
     } as Schema['Scorecard']['type'])
     setIsEditing(true)
   }
