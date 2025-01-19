@@ -47,7 +47,8 @@ class BatchProcessingPause(Exception):
         self.thread_id = thread_id
         self.state = state
         self.batch_job_id = batch_job_id
-        super().__init__(message or f"Execution paused for batch processing. Thread ID: {thread_id}")
+        self.message = message or f"Execution paused for batch processing. Thread ID: {thread_id}"
+        super().__init__(self.message)
 
 # Temporarily suppress the specific Pydantic warning about protected namespaces
 warnings.filterwarnings("ignore", 

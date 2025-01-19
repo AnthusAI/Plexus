@@ -164,7 +164,17 @@ class _BaseAPIClient:
         while not self._stop_logging.is_set():
             try:
                 # Wait up to 1 second for new items
-                item = self._log_queue.get(timeout=1.0)
+                try:
+                    item = self._log_queue.get(timeout=1.0)
+                except Empty:
+                    # This is expected when queue is empty - just flush existing batches
+                    current_time = time.time()
+                    for items in batches.values():
+                        if items:
+                            self._flush_logs(items)
+                    batches.clear()
+                    last_flush = current_time
+                    continue
                 
                 # Extract batch config
                 batch_size = item.pop('batch_size', 10)
@@ -185,14 +195,10 @@ class _BaseAPIClient:
                         batches[size, timeout] = []
                         last_flush = current_time
                     
-            except Empty:
-                # Flush any remaining items
-                current_time = time.time()
-                for items in batches.values():
-                    if items:
-                        self._flush_logs(items)
-                batches.clear()
-                last_flush = current_time
+            except Exception as e:
+                # Log any unexpected errors but keep the thread running
+                logging.error(f"Error in log processing thread: {e}")
+                time.sleep(1.0)  # Avoid tight loop if there's a persistent error
 
     def flush(self) -> None:
         """Flush any pending log items immediately."""
@@ -289,7 +295,7 @@ class _BaseAPIClient:
             except (ValueError, Exception):
                 continue
             
-        raise ValueError(f"Could not find scorecard with identifier: {identifier}")
+        raise ValueError(f"Could not find scorecard in the API with identifier: {identifier}")
     
     def _resolve_score_id(self) -> Optional[str]:
         """Get score ID, resolving from key, external ID, or name if needed"""
@@ -462,7 +468,12 @@ class _BaseAPIClient:
         max_batch_size: int = 20,
         **kwargs
     ) -> Tuple['ScoringJob', 'BatchJob']:
-        """Create or add to a batch scoring job."""
+        """Finds or creates a scoring job and assigns it to an appropriate batch job.
+        
+        If a scoring job exists for the item, returns it with its associated batch job.
+        If no scoring job exists, creates one and either:
+        - Assigns it to an existing open batch job with matching criteria, or
+        - Creates a new batch job if no suitable open batch exists."""
         from .models.scoring_job import ScoringJob
         from .models.batch_job import BatchJob
 
@@ -476,7 +487,10 @@ class _BaseAPIClient:
         existing_job = ScoringJob.find_by_item_id(itemId, self)
         if existing_job:
             logging.info(f"Found existing scoring job {existing_job.id} for item {itemId}")
-            return existing_job, None
+            batch_job = ScoringJob.get_batch_job(existing_job.id, self)
+            if not batch_job:
+                logging.warning(f"Scoring job {existing_job.id} has no associated batch job")
+            return existing_job, batch_job
 
         # Look for an existing open batch job
         query = """
