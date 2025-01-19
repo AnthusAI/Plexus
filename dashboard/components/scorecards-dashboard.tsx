@@ -181,7 +181,8 @@ export default function ScorecardsComponent() {
       batchJobs: async () => ({ data: [], nextToken: null }),
       item: async () => ({ data: null }),
       scoringJobs: async () => ({ data: [], nextToken: null }),
-      scoreResults: async () => ({ data: [], nextToken: null })
+      scoreResults: async () => ({ data: [], nextToken: null }),
+      actions: async () => ({ data: [], nextToken: null })
     } as Schema['Scorecard']['type'])
     setIsEditing(true)
   }
@@ -257,7 +258,8 @@ export default function ScorecardsComponent() {
         }),
         scoreResults: async () => amplifyClient.ScoreResult.list({
           filter: { scorecardId: { eq: scorecardData.id } }
-        })
+        }),
+        actions: async () => ({ data: [], nextToken: null })
       } as Schema['Scorecard']['type']
       
       console.log('Setting selected scorecard with data:', fullScorecardData)
