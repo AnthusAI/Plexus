@@ -52,7 +52,7 @@ export const Hero = ({ mockRouter }: HeroProps = {}) => {
             </span>
           </h1>
           <p className="text-xl md:text-2xl text-muted-foreground mb-8 max-w-3xl">
-            Plexus is a battle-tested task-dispatching platform for building agent-based AI workflows that analyze streams of content and take action.
+            Plexus is a battle-tested platform for building agent-based AI workflows that analyze streams of content and take action.
           </p>
           <div className="flex flex-col sm:flex-row gap-4">
             <Button size="lg" className="w-full sm:w-auto bg-primary text-white hover:bg-primary/90 text-lg font-semibold">
