@@ -25,11 +25,26 @@ Create an end-to-end dataset management system that:
    - [✓] Add DatasetProfile model
    - [✓] Define relationships between models
    - [ ] Write unit tests for model relationships
+      - Test Dataset-DatasetVersion relationships
+      - Test Dataset-DatasetProfile relationships
+      - Test DatasetVersion-DatasetProfile relationships
+      - Test currentVersion relationship logic
 
 2. Dashboard Service Layer
    - [ ] Create DatasetService class with CRUD operations
+      - Create dataset with initial version
+      - Update dataset metadata
+      - List datasets with current versions
+      - Delete dataset and all versions
    - [ ] Add version management methods
+      - Create new version
+      - Update version configuration
+      - List versions for dataset
+      - Compare versions
    - [ ] Add profile management methods
+      - Create profile for version
+      - List profiles for dataset/version
+      - Generate profile metrics
    - [ ] Write unit tests for service layer
 
 3. Dashboard UI Updates (Iterative)
@@ -48,16 +63,16 @@ Create an end-to-end dataset management system that:
    - [ ] Write CLI integration tests
 
 ## Current Status
-- Have Amplify Gen2 Data Store models defined and deployed
+- [✓] Have Amplify Gen2 Data Store models defined and deployed
 - Have dashboard UI mockup working
 - Have CLI evaluation command working with score config datasets
 - Need to implement service layer and UI integration
 
 ## Next Steps
-1. Write unit tests for model relationships
-2. Begin implementing DatasetService class
-3. Start with basic CRUD operations in the dashboard UI
-4. Add version management functionality
-5. Add profile tracking
+1. Create test suite for model relationships
+2. Design and implement DatasetService interface
+3. Implement core CRUD operations in service layer
+4. Write service layer unit tests
+5. Begin UI integration with service layer
 
 *Note: This plan should be updated after each step is completed, marking items with ✓ emoji and adding new details learned during implementation. Each step should be verified through tests before proceeding.*
