@@ -28,6 +28,12 @@ interface EditableFieldProps {
   className?: string;
 }
 
+interface ScoreMetadata {
+  configuration: any
+  distribution: any[]
+  versionHistory: any[]
+}
+
 interface ScoreState {
   id: string
   name: string
@@ -38,10 +44,7 @@ interface ScoreState {
   version: string
   aiProvider: string
   aiModel: string
-  isFineTuned: boolean
-  configuration: any
-  distribution: any[]
-  versionHistory: any[]
+  metadata: ScoreMetadata
   section?: Schema['ScorecardSection']['type']
   createdAt?: string
   updatedAt?: string
@@ -84,7 +87,6 @@ const createScore = async (scoreData: {
   accuracy: number
   aiProvider: string
   aiModel: string
-  isFineTuned: boolean
   configuration: any
   distribution: any[]
   versionHistory: any[]
@@ -101,7 +103,6 @@ const updateScore = async (scoreData: {
   accuracy: number
   aiProvider: string
   aiModel: string
-  isFineTuned: boolean
   configuration: any
   distribution: any[]
   versionHistory: any[]
@@ -182,6 +183,25 @@ function EditableField({ value, onChange, className = "" }: EditableFieldProps) 
   )
 }
 
+const defaultMetadata: ScoreMetadata = {
+  configuration: {},
+  distribution: [],
+  versionHistory: []
+}
+
+const defaultState: ScoreState = {
+  id: '',
+  name: '',
+  type: '',
+  order: 0,
+  sectionId: '',
+  accuracy: 0,
+  version: Date.now().toString(),
+  aiProvider: 'OpenAI',
+  aiModel: 'gpt-4',
+  metadata: defaultMetadata
+}
+
 export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditProps) {
   const router = useRouter()
   const [score, setScore] = useState<ScoreState | null>(null)
@@ -219,10 +239,10 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
           version: Date.now().toString(),
           aiProvider: 'OpenAI',
           aiModel: 'gpt-4',
-          isFineTuned: false,
-          configuration: {},
-          distribution: [],
-          versionHistory: []
+          metadata: defaultMetadata,
+          section: defaultSection,
+          createdAt: undefined,
+          updatedAt: undefined
         })
       } else {
         const scoreData = await getScore(scoreId)
@@ -241,12 +261,14 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
           version: scoreData.version ?? Date.now().toString(),
           aiProvider: scoreData.aiProvider ?? 'OpenAI',
           aiModel: scoreData.aiModel ?? 'gpt-4',
-          isFineTuned: scoreData.isFineTuned ?? false,
-          configuration: scoreData.configuration ?? {},
-          distribution: Array.isArray(scoreData.distribution) ? 
-            scoreData.distribution : [],
-          versionHistory: Array.isArray(scoreData.versionHistory) ? 
-            scoreData.versionHistory : [],
+          metadata: {
+            configuration: (scoreData.metadata as ScoreMetadata | undefined)?.configuration ?? {},
+            distribution: Array.isArray((scoreData.metadata as ScoreMetadata | undefined)?.distribution) ? 
+              (scoreData.metadata as ScoreMetadata).distribution : [],
+            versionHistory: Array.isArray((scoreData.metadata as ScoreMetadata | undefined)?.versionHistory) ? 
+              (scoreData.metadata as ScoreMetadata).versionHistory : []
+          } as ScoreMetadata,
+          section: scoreData.section as unknown as Schema['ScorecardSection']['type'],
           createdAt: scoreData.createdAt,
           updatedAt: scoreData.updatedAt
         })
@@ -278,10 +300,9 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
           accuracy: score.accuracy,
           aiProvider: score.aiProvider,
           aiModel: score.aiModel,
-          isFineTuned: score.isFineTuned,
-          configuration: score.configuration,
-          distribution: score.distribution,
-          versionHistory: score.versionHistory
+          configuration: score.metadata.configuration,
+          distribution: score.metadata.distribution,
+          versionHistory: score.metadata.versionHistory
         })
         console.log('Created score:', result)
       } else {
@@ -293,10 +314,9 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
           accuracy: score.accuracy,
           aiProvider: score.aiProvider,
           aiModel: score.aiModel,
-          isFineTuned: score.isFineTuned,
-          configuration: score.configuration,
-          distribution: score.distribution,
-          versionHistory: score.versionHistory
+          configuration: score.metadata.configuration,
+          distribution: score.metadata.distribution,
+          versionHistory: score.metadata.versionHistory
         })
         console.log('Updated score:', result)
       }
