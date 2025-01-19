@@ -25,20 +25,25 @@ interface ScoreItemProps {
     id: string
     name: string
     type: string
+    order: number
+    sectionId: string
     accuracy: number
     version: string
     timestamp: Date
-    distribution: Array<{ category: string; value: number }>
-    versionHistory: Array<{
-      version: string
-      parent: string | null
-      timestamp: Date
-      accuracy: number
-      distribution: Array<{ category: string; value: number }>
-    }>
     aiProvider?: string
     aiModel?: string
-    isFineTuned?: boolean
+    metadata: {
+      configuration: any
+      distribution: Array<{ category: string; value: number }>
+      versionHistory: Array<{
+        version: string
+        parent: string | null
+        timestamp: Date
+        accuracy: number
+        distribution: Array<{ category: string; value: number }>
+      }>
+      isFineTuned: boolean
+    }
   }
   scorecardId: string
   onEdit: (score: ScoreItemProps['score']) => void
@@ -76,15 +81,15 @@ function getMetricsForVersion(version: Version | null): { value: number; label: 
 export function ScoreItem({ score, scorecardId, onEdit }: ScoreItemProps) {
   const router = useRouter()
 
-  if (!score.versionHistory || score.versionHistory.length === 0) {
+  if (!score.metadata.versionHistory || score.metadata.versionHistory.length === 0) {
     const now = new Date()
-    score.versionHistory = [
+    score.metadata.versionHistory = [
       {
         version: score.version,
         parent: null,
         timestamp: score.timestamp,
         accuracy: score.accuracy,
-        distribution: score.distribution
+        distribution: score.metadata.distribution
       },
       {
         version: Date.now().toString(),
@@ -106,7 +111,7 @@ export function ScoreItem({ score, scorecardId, onEdit }: ScoreItemProps) {
     ]
   }
 
-  const latestVersion = score.versionHistory[0]
+  const latestVersion = score.metadata.versionHistory[0]
   const totalItems = latestVersion?.distribution?.reduce((sum, item) => sum + item.value, 0) ?? 0
 
   return (
@@ -129,7 +134,7 @@ export function ScoreItem({ score, scorecardId, onEdit }: ScoreItemProps) {
               <Badge className="bg-muted-foreground text-muted">
                 {score.aiModel || 'gpt-4-mini'}
               </Badge>
-              {score.isFineTuned && <Badge variant="secondary">Fine-tuned</Badge>}
+              {score.metadata.isFineTuned && <Badge variant="secondary">Fine-tuned</Badge>}
             </div>
           </div>
         </div>
@@ -149,7 +154,7 @@ export function ScoreItem({ score, scorecardId, onEdit }: ScoreItemProps) {
         <CollapsibleContent className="border-l-4 border-primary pl-4 mt-2">
           <div className="max-h-80 overflow-y-auto pr-4">
             <div className="space-y-4">
-              {score.versionHistory.map((version, index) => (
+              {score.metadata.versionHistory.map((version, index) => (
                 <div key={index} className="border-b last:border-b-0 pb-4">
                   <div className="flex justify-between items-start">
                     <div>

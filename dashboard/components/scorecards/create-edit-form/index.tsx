@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Plus, X, Square, RectangleVertical, ChevronUp, ChevronDown, Pencil } from "lucide-react"
 import { amplifyClient } from "@/utils/amplify-client"
-import { generateClient as generateGraphQLClient } from '@aws-amplify/api'
+import { generateClient } from '@aws-amplify/api'
 import type { Schema } from "@/amplify/data/resource"
 import { EditableField } from "@/components/ui/editable-field"
 import { ScoreItem } from "../score-item"
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { CardButton } from '@/components/CardButton'
 
-const graphqlClient = generateGraphQLClient()
+const client = generateClient<Schema>()
 
 interface ScorecardFormProps {
   scorecard: Schema['Scorecard']['type'] | null
@@ -32,39 +32,48 @@ interface ScorecardFormProps {
   isNarrowViewport?: boolean
 }
 
+interface ScoreMetadata {
+  configuration: any
+  distribution: Array<{ category: string; value: number }>
+  versionHistory: Array<{
+    version: string
+    parent: string | null
+    timestamp: Date
+    accuracy: number
+    distribution: Array<{ category: string; value: number }>
+  }>
+  isFineTuned: boolean
+}
+
+interface ScoreFormState {
+  id: string
+  name: string
+  type: string
+  order: number
+  sectionId: string
+  accuracy: number
+  version: string
+  timestamp: Date
+  aiProvider?: string
+  aiModel?: string
+  metadata: ScoreMetadata
+}
+
+interface SectionFormState {
+  id?: string
+  name: string
+  order: number
+  scores: ScoreFormState[]
+}
+
 interface FormData {
   id?: string
   name: string
   key: string
   description: string
   accountId: string
-  externalId: string
-  sections: Array<{
-    id?: string
-    name: string
-    order: number
-    scores: Array<{
-      id: string
-      name: string
-      type: string
-      order: number
-      accuracy: number
-      version: string
-      timestamp: Date
-      aiProvider?: string
-      aiModel?: string
-      isFineTuned?: boolean
-      configuration?: any
-      distribution: Array<{ category: string; value: number }>
-      versionHistory: Array<{
-        version: string
-        parent: string | null
-        timestamp: Date
-        accuracy: number
-        distribution: Array<{ category: string; value: number }>
-      }>
-    }>
-  }>
+  externalId?: string
+  sections: SectionFormState[]
 }
 
 interface DistributionItem {
@@ -78,6 +87,49 @@ interface VersionHistoryItem {
   timestamp: Date | string
   accuracy: number
   distribution: DistributionItem[]
+}
+
+interface ScoreInput {
+  name: string
+  type: string
+  order: number
+  sectionId: string
+  accuracy: number
+  version: string
+  aiProvider?: string
+  aiModel?: string
+  metadata: any
+}
+
+interface ScoreUpdateInput extends Omit<ScoreInput, 'sectionId'> {
+  id: string
+}
+
+interface ScoreAPIInput {
+  id?: string
+  name: string
+  type: string
+  order: number
+  sectionId: string
+  accuracy?: number
+  version?: string
+  aiProvider?: string
+  aiModel?: string
+  metadata: string
+}
+
+interface ScoreItemProps {
+  score: ScoreFormState
+  scorecardId: string
+  onEdit: (updatedScore: Partial<ScoreFormState>) => void
+}
+
+interface ScorecardAPIInput {
+  name: string
+  key: string
+  externalId: string
+  description?: string
+  accountId: string
 }
 
 export function ScorecardForm({ 
@@ -117,39 +169,27 @@ export function ScorecardForm({
                 id: section.id,
                 name: section.name,
                 order: section.order,
-                scores: scoresResult.data?.map(score => ({
-                  id: score.id,
-                  name: score.name,
-                  type: score.type,
-                  order: score.order,
-                  accuracy: score.accuracy ?? 0,
-                  version: score.version ?? Date.now().toString(),
-                  timestamp: new Date(score.createdAt ?? Date.now()),
-                  aiProvider: score.aiProvider ?? undefined,
-                  aiModel: score.aiModel ?? undefined,
-                  isFineTuned: score.isFineTuned ?? false,
-                  configuration: score.configuration ?? {},
-                  distribution: Array.isArray(score.distribution) 
-                    ? score.distribution.map((d: DistributionItem) => ({
-                        category: String(d.category),
-                        value: Number(d.value)
-                      }))
-                    : [],
-                  versionHistory: Array.isArray(score.versionHistory)
-                    ? score.versionHistory.map((v: VersionHistoryItem) => ({
-                        version: String(v.version),
-                        parent: v.parent ? String(v.parent) : null,
-                        timestamp: new Date(v.timestamp),
-                        accuracy: Number(v.accuracy),
-                        distribution: Array.isArray(v.distribution)
-                          ? v.distribution.map((d: DistributionItem) => ({
-                              category: String(d.category),
-                              value: Number(d.value)
-                            }))
-                          : []
-                      }))
-                    : []
-                })) ?? []
+                scores: scoresResult.data?.map(score => {
+                  const metadata = score.metadata as any ?? {}
+                  return {
+                    id: score.id,
+                    name: score.name,
+                    type: score.type,
+                    order: score.order,
+                    sectionId: section.id,
+                    accuracy: score.accuracy ?? 0,
+                    version: score.version ?? Date.now().toString(),
+                    timestamp: new Date(score.createdAt ?? Date.now()),
+                    aiProvider: score.aiProvider ?? undefined,
+                    aiModel: score.aiModel ?? undefined,
+                    metadata: {
+                      configuration: metadata.configuration ?? {},
+                      distribution: metadata.distribution ?? [],
+                      versionHistory: metadata.versionHistory ?? [],
+                      isFineTuned: metadata.isFineTuned ?? false
+                    }
+                  }
+                }) ?? []
               }
             })
           )
@@ -185,13 +225,76 @@ export function ScorecardForm({
       name: scorecard.name,
       key: scorecard.key,
       description: scorecard.description ?? "",
-      externalId: scorecard.externalId,
+      externalId: scorecard.externalId ?? "",
       accountId,
       sections: []  // We'll load sections through the useEffect
     }
   }
 
-  async function handleSave() {
+  const handleAddSection = () => {
+    const maxOrder = Math.max(0, ...formData.sections.map(s => s.order))
+    const newSection = {
+      name: "New section",
+      order: maxOrder + 1,
+      scores: []
+    }
+    setFormData({
+      ...formData,
+      sections: [...formData.sections, newSection]
+    })
+  }
+
+  const handleAddScore = (sectionIndex: number) => {
+    const baseAccuracy = Math.floor(Math.random() * 30) + 60
+    const section = formData.sections[sectionIndex]
+    const maxOrder = Math.max(0, ...section.scores.map(s => s.order))
+    const now = new Date()
+    
+    const newScore: ScoreFormState = {
+      id: `temp_${Date.now()}`,
+      name: "New Score",
+      type: "Boolean",
+      order: maxOrder + 1,
+      sectionId: section.id ?? '',
+      accuracy: baseAccuracy,
+      version: Date.now().toString(),
+      timestamp: now,
+      aiProvider: "OpenAI",
+      aiModel: "gpt-4-turbo",
+      metadata: {
+        configuration: {},
+        distribution: [
+          { category: "Positive", value: baseAccuracy },
+          { category: "Negative", value: 100 - baseAccuracy }
+        ],
+        versionHistory: [{
+          version: Date.now().toString(),
+          parent: null,
+          timestamp: now,
+          accuracy: baseAccuracy,
+          distribution: [
+            { category: "Positive", value: baseAccuracy },
+            { category: "Negative", value: 100 - baseAccuracy }
+          ]
+        }],
+        isFineTuned: false
+      }
+    }
+    
+    setFormData(prevData => {
+      const updatedSections = [...prevData.sections]
+      updatedSections[sectionIndex] = {
+        ...updatedSections[sectionIndex],
+        scores: [...updatedSections[sectionIndex].scores, newScore]
+      }
+      return {
+        ...prevData,
+        sections: updatedSections
+      }
+    })
+  }
+
+  const handleSave = async () => {
     if (!formData || !accountId) {
       console.log('Missing formData or accountId:', { formData, accountId })
       return
@@ -204,13 +307,15 @@ export function ScorecardForm({
       
       if (!formData.id) {
         console.log('Creating new scorecard...')
-        const scorecardResult = await amplifyClient.Scorecard.create({
+        const scorecardInput: ScorecardAPIInput = {
           name: formData.name,
           key: formData.key,
-          externalId: formData.externalId,
+          externalId: formData.externalId || `temp_${Date.now()}`,
           description: formData.description,
           accountId: formData.accountId
-        })
+        }
+        
+        const scorecardResult = await amplifyClient.Scorecard.create(scorecardInput)
         
         if (!scorecardResult.data) {
           throw new Error('Failed to create scorecard')
@@ -231,20 +336,7 @@ export function ScorecardForm({
           
           // Create scores for this section
           for (const score of section.scores) {
-            await amplifyClient.Score.create({
-              name: score.name,
-              type: score.type,
-              order: score.order,
-              sectionId: sectionResult.data.id,
-              accuracy: score.accuracy,
-              version: score.version,
-              aiProvider: score.aiProvider,
-              aiModel: score.aiModel,
-              isFineTuned: score.isFineTuned,
-              configuration: score.configuration ?? {},
-              distribution: score.distribution ?? [],
-              versionHistory: score.versionHistory ?? []
-            })
+            await createScore(score)
           }
         }
       } else {
@@ -337,121 +429,10 @@ export function ScorecardForm({
           for (const score of section.scores) {
             if (score.id && !score.id.startsWith('temp_')) {
               console.log('Updating existing score:', score.id)
-              const updateResult = await amplifyClient.Score.update({
-                id: score.id,
-                name: score.name,
-                type: score.type,
-                order: score.order,
-                sectionId: sectionId,
-                accuracy: score.accuracy,
-                version: score.version,
-                aiProvider: score.aiProvider,
-                aiModel: score.aiModel,
-                isFineTuned: score.isFineTuned,
-                configuration: score.configuration ? JSON.parse(JSON.stringify(score.configuration)) : {},
-                distribution: score.distribution ? JSON.parse(JSON.stringify(score.distribution)) : [],
-                versionHistory: score.versionHistory ? JSON.parse(JSON.stringify(score.versionHistory)) : []
-              })
-              console.log('Score update result:', updateResult)
+              await updateScore(score)
             } else {
               console.log('Creating new score for section:', sectionId)
-              try {
-                // Start with just the required fields
-                const basicScoreData = {
-                  name: score.name || 'New Score',
-                  type: score.type || 'Boolean',
-                  order: Math.floor(Number(score.order) || 0),
-                  sectionId
-                }
-
-                console.log('Attempting score creation with basic data:', JSON.stringify(basicScoreData, null, 2))
-
-                try {
-                  // First try with just required fields
-                  const createResult = await amplifyClient.Score.create(basicScoreData)
-                  
-                  if (!createResult.data) {
-                    console.error('Basic score creation failed:', createResult)
-                    throw new Error('Failed to create score with basic data')
-                  }
-
-                  // If basic creation succeeds, update with additional fields
-                  const scoreId = createResult.data.id
-                  console.log('Basic score created with ID:', scoreId)
-
-                  const updateData = {
-                    id: scoreId,
-                    name: score.name || 'New Score',
-                    type: score.type || 'Boolean',
-                    order: Math.floor(Number(score.order) || 0),
-                    sectionId,
-                    ...(typeof score.accuracy === 'number' && { accuracy: score.accuracy }),
-                    ...(score.version && { version: String(score.version) }),
-                    ...(score.aiProvider && { aiProvider: String(score.aiProvider) }),
-                    ...(score.aiModel && { aiModel: String(score.aiModel) }),
-                    ...(typeof score.isFineTuned === 'boolean' && { isFineTuned: score.isFineTuned }),
-                    ...(Object.keys(score.configuration || {}).length > 0 && { 
-                      configuration: score.configuration 
-                    }),
-                    ...(score.distribution?.length > 0 && { 
-                      distribution: score.distribution.map(d => ({
-                        category: String(d.category),
-                        value: Number(d.value)
-                      }))
-                    }),
-                    ...(score.versionHistory?.length > 0 && { 
-                      versionHistory: score.versionHistory.map(v => ({
-                        version: String(v.version),
-                        parent: v.parent ? String(v.parent) : null,
-                        timestamp: new Date(v.timestamp).toISOString(),
-                        accuracy: Number(v.accuracy),
-                        distribution: v.distribution?.map(d => ({
-                          category: String(d.category),
-                          value: Number(d.value)
-                        })) || []
-                      }))
-                    })
-                  }
-
-                  console.log('Updating score with additional data:', JSON.stringify(updateData, null, 2))
-                  
-                  const updateResult = await amplifyClient.Score.update(updateData)
-                  console.log('Score update result:', updateResult)
-
-                  if (!updateResult.data) {
-                    console.error('Score update failed:', updateResult)
-                    throw new Error('Failed to update score with additional data')
-                  }
-
-                  // Update formData with the real ID
-                  const sectionIndex = formData.sections.findIndex(s => s.id === sectionId)
-                  if (sectionIndex !== -1) {
-                    const scoreIndex = formData.sections[sectionIndex].scores.findIndex(
-                      s => s.id === score.id
-                    )
-                    if (scoreIndex !== -1) {
-                      formData.sections[sectionIndex].scores[scoreIndex].id = scoreId
-                    }
-                  }
-
-                } catch (error) {
-                  // Log the full error details
-                  console.error('Score creation error details:', {
-                    error,
-                    message: error instanceof Error ? error.message : 'Unknown error',
-                    stack: error instanceof Error ? error.stack : undefined,
-                    // @ts-ignore - checking for GraphQL error structure
-                    errors: error.errors ? error.errors : undefined
-                  })
-                  throw error
-                }
-              } catch (error) {
-                console.error('Error in score creation block:', error)
-                if (error instanceof Error) {
-                  throw new Error(`Failed to create score: ${error.message}`)
-                }
-                throw error
-              }
+              await createScore(score)
             }
           }
         }
@@ -469,92 +450,6 @@ export function ScorecardForm({
       throw error
     } finally {
       setIsSaving(false)
-    }
-  }
-
-  const handleAddSection = () => {
-    const maxOrder = Math.max(0, ...formData.sections.map(s => s.order))
-    const newSection = {
-      name: "New section",
-      order: maxOrder + 1,
-      scores: []
-    }
-    setFormData({
-      ...formData,
-      sections: [...formData.sections, newSection]
-    })
-  }
-
-  const handleAddScore = (sectionIndex: number) => {
-    const baseAccuracy = Math.floor(Math.random() * 30) + 60
-    const section = formData.sections[sectionIndex]
-    const maxOrder = Math.max(0, ...section.scores.map(s => s.order))
-    const now = new Date()
-    
-    const newScore = {
-      id: `temp_${Date.now()}`,
-      name: "New Score",
-      type: "Boolean",
-      order: maxOrder + 1,
-      accuracy: baseAccuracy,
-      version: Date.now().toString(),
-      timestamp: now,
-      aiProvider: "OpenAI",
-      aiModel: "gpt-4-turbo",
-      isFineTuned: false,
-      configuration: {},
-      distribution: [
-        { category: "Positive", value: baseAccuracy },
-        { category: "Negative", value: 100 - baseAccuracy }
-      ],
-      versionHistory: [{
-        version: Date.now().toString(),
-        parent: null,
-        timestamp: now,
-        accuracy: baseAccuracy,
-        distribution: [
-          { category: "Positive", value: baseAccuracy },
-          { category: "Negative", value: 100 - baseAccuracy }
-        ]
-      }]
-    }
-    const updatedScoreDetails = [...formData.sections]
-    updatedScoreDetails[sectionIndex].scores.push(newScore)
-    setFormData({
-      ...formData,
-      sections: updatedScoreDetails
-    })
-  }
-
-  // Add this function to test direct GraphQL update
-  async function testGraphQLUpdate() {
-    if (!scorecard?.id) return;
-    
-    try {
-      const updateMutation = `
-        mutation UpdateScorecard($input: UpdateScorecardInput!) {
-          updateScorecard(input: $input) {
-            id
-            foreignId
-          }
-        }
-      `;
-
-      const variables = {
-        input: {
-          id: scorecard.id,
-          foreignId: "test123"
-        }
-      };
-
-      console.log('Testing GraphQL update:', variables);
-      const response = await graphqlClient.graphql({ 
-        query: updateMutation,
-        variables 
-      });
-      console.log('GraphQL response:', response);
-    } catch (error) {
-      console.error('GraphQL update failed:', error);
     }
   }
 
@@ -589,6 +484,45 @@ export function ScorecardForm({
       sections: updatedSections
     })
     setSectionToDelete(null)
+  }
+
+  const defaultScore: ScoreFormState = {
+    id: '',
+    name: 'New Score',
+    type: 'LangGraphScore',
+    order: 0,
+    sectionId: '',
+    accuracy: 0,
+    version: Date.now().toString(),
+    timestamp: new Date(),
+    aiProvider: 'OpenAI',
+    aiModel: 'gpt-4',
+    metadata: {
+      configuration: {},
+      distribution: [],
+      versionHistory: [],
+      isFineTuned: false
+    }
+  }
+
+  const createScore = async (scoreData: Omit<ScoreFormState, 'timestamp'>) => {
+    const { metadata, ...rest } = scoreData
+    const apiInput: ScoreAPIInput = {
+      ...rest,
+      metadata: JSON.stringify(metadata)
+    }
+    const response = await (client.models.Score as any).create(apiInput)
+    return response.data as Schema['Score']['type']
+  }
+
+  const updateScore = async (scoreData: Omit<ScoreFormState, 'timestamp'>) => {
+    const { metadata, ...rest } = scoreData
+    const apiInput: ScoreAPIInput = {
+      ...rest,
+      metadata: JSON.stringify(metadata)
+    }
+    const response = await (client.models.Score as any).update(apiInput)
+    return response.data as Schema['Score']['type']
   }
 
   return (
