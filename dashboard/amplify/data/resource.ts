@@ -26,6 +26,9 @@ type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type ActionIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
 type ActionStageIndexFields = "actionId" | "name" | "order" | "status";
+type DatasetIndexFields = "scorecardId" | "scoreId";
+type DatasetVersionIndexFields = "datasetId";
+type DatasetProfileIndexFields = "datasetId" | "datasetVersionId";
 
 const schema = a.schema({
     Account: a
@@ -62,6 +65,7 @@ const schema = a.schema({
             scoringJobs: a.hasMany('ScoringJob', 'scorecardId'),
             scoreResults: a.hasMany('ScoreResult', 'scorecardId'),
             actions: a.hasMany('Action', 'scorecardId'),
+            datasets: a.hasMany('Dataset', 'scorecardId'),
             externalId: a.string(),
             itemId: a.string(),
             item: a.belongsTo('Item', 'itemId'),
@@ -108,6 +112,7 @@ const schema = a.schema({
             batchJobs: a.hasMany('BatchJob', 'scoreId'),
             scoringJobs: a.hasMany('ScoringJob', 'scoreId'),
             actions: a.hasMany('Action', 'scoreId'),
+            datasets: a.hasMany('Dataset', 'scoreId'),
             metadata: a.json(),
         })
         .authorization((allow: AuthorizationCallback) => [
@@ -364,6 +369,67 @@ const schema = a.schema({
             idx("name"),
             idx("order"),
             idx("status")
+        ]),
+
+    Dataset: a
+        .model({
+            name: a.string().required(),
+            description: a.string(),
+            scorecardId: a.string().required(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scoreId: a.string().required(),
+            score: a.belongsTo('Score', 'scoreId'),
+            currentVersionId: a.string(),
+            currentVersion: a.belongsTo('DatasetVersion', 'currentVersionId'),
+            versions: a.hasMany('DatasetVersion', 'datasetId'),
+            profiles: a.hasMany('DatasetProfile', 'datasetId'),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: DatasetIndexFields) => any) => [
+            idx("scorecardId"),
+            idx("scoreId")
+        ]),
+
+    DatasetVersion: a
+        .model({
+            datasetId: a.string().required(),
+            dataset: a.belongsTo('Dataset', 'datasetId'),
+            versionNumber: a.integer().required(),
+            configuration: a.json().required(),
+            createdAt: a.datetime().required(),
+            profiles: a.hasMany('DatasetProfile', 'datasetVersionId'),
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: DatasetVersionIndexFields) => any) => [
+            idx("datasetId")
+        ]),
+
+    DatasetProfile: a
+        .model({
+            datasetId: a.string().required(),
+            dataset: a.belongsTo('Dataset', 'datasetId'),
+            datasetVersionId: a.string().required(),
+            datasetVersion: a.belongsTo('DatasetVersion', 'datasetVersionId'),
+            columnList: a.string().array().required(),
+            recordCounts: a.json().required(),
+            answerDistribution: a.json().required(),
+            createdAt: a.datetime().required(),
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: DatasetProfileIndexFields) => any) => [
+            idx("datasetId"),
+            idx("datasetVersionId")
         ])
 });
 
