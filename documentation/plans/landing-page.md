@@ -12,6 +12,19 @@ The landing page introduces Plexus to new users and provides navigation to the d
 - Responsive Plexus logo integration ✓
   - Square logo side-by-side with content on wider viewports ✓
   - Decorative glow effect behind logo matching current screenshot styling ✓
+  - Logo size reduced to approximately 1/3 of viewport width ✓
+
+### Applications Section ✓
+- Narrative introduction explaining AI agent capabilities ✓
+- Focus on solving complex data processing challenges ✓
+- Highlights scalability and automation potential ✓
+- Four key application examples: ✓
+  1. Call Transcript Analysis ✓
+  2. Satellite & Drone Imagery ✓
+  3. Large-Scale Content Ranking ✓
+  4. Audio Quality Monitoring ✓
+- Responsive grid layout ✓
+- Consistent card design with icons and descriptions ✓
 
 ### Features Section ✓
 - Grid of 4 key features: Multi-model, Lab workflow, Serverless, and Task dispatch ✓
