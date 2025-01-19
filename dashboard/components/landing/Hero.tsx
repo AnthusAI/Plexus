@@ -14,7 +14,8 @@ interface HeroProps {
 }
 
 export const Hero = ({ mockRouter }: HeroProps = {}) => {
-  const router = mockRouter || useRouter()
+  const realRouter = useRouter()
+  const router = mockRouter || realRouter
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
