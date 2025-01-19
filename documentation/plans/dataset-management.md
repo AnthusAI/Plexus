@@ -20,51 +20,10 @@ Create an end-to-end dataset management system that:
 
 ## Plan
 1. Data Store Schema Updates
-   - [ ] Add base Dataset model:
-     ```graphql
-     type Dataset @model {
-       id: ID!
-       name: String!
-       description: String
-       scorecardId: ID
-       scoreId: ID
-       currentVersionId: ID
-       currentVersion: DatasetVersion @belongsTo
-       versions: [DatasetVersion] @hasMany
-       profiles: [DatasetProfile] @hasMany
-       createdAt: AWSDateTime!
-       updatedAt: AWSDateTime!
-     }
-     ```
-   - [ ] Add DatasetVersion model:
-     ```graphql
-     type DatasetVersion @model {
-       id: ID!
-       datasetId: ID!
-       dataset: Dataset @belongsTo
-       versionNumber: Int!
-       configuration: AWSJSON!
-       createdAt: AWSDateTime!
-       profiles: [DatasetProfile] @hasMany
-     }
-     ```
-   - [ ] Add DatasetProfile model:
-     ```graphql
-     type DatasetProfile @model {
-       id: ID!
-       datasetId: ID!
-       dataset: Dataset @belongsTo
-       datasetVersionId: ID!
-       datasetVersion: DatasetVersion @belongsTo
-       queryResults: AWSJSON!
-       filteredResults: AWSJSON!
-       columnList: [String]!
-       recordCounts: AWSJSON!
-       answerDistribution: AWSJSON!
-       createdAt: AWSDateTime!
-     }
-     ```
-   - [ ] Generate and test Data Store models
+   - [✓] Add base Dataset model
+   - [✓] Add DatasetVersion model
+   - [✓] Add DatasetProfile model
+   - [✓] Define relationships between models
    - [ ] Write unit tests for model relationships
 
 2. Dashboard Service Layer
@@ -89,16 +48,16 @@ Create an end-to-end dataset management system that:
    - [ ] Write CLI integration tests
 
 ## Current Status
-- Have Amplify Data Store setup
+- Have Amplify Gen2 Data Store models defined and deployed
 - Have dashboard UI mockup working
 - Have CLI evaluation command working with score config datasets
-- Need to implement real dataset management with versioning and profiling
+- Need to implement service layer and UI integration
 
 ## Next Steps
-1. Review and validate expanded data model schema
-2. Set up test infrastructure for TDD approach
-3. Start with base Dataset model implementation
-4. Add version management
+1. Write unit tests for model relationships
+2. Begin implementing DatasetService class
+3. Start with basic CRUD operations in the dashboard UI
+4. Add version management functionality
 5. Add profile tracking
 
 *Note: This plan should be updated after each step is completed, marking items with ✓ emoji and adding new details learned during implementation. Each step should be verified through tests before proceeding.*
