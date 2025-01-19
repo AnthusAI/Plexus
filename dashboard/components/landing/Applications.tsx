@@ -1,31 +1,31 @@
 import React from 'react'
 import { 
-  PhoneCall, 
-  Search, 
-  Shield, 
-  AudioLines 
+  Headphones, 
+  Filter, 
+  Mail, 
+  ShieldCheck 
 } from 'lucide-react'
 
 const applications = [
   {
-    title: "Call Transcript Analysis",
-    description: "Automatically process millions of telephone call transcripts to identify critical customer requests, like opt-out instructions or compliance issues.",
-    icon: PhoneCall
+    title: "Call Center Quality Assurance",
+    description: "Automatically analyze customer service interactions to assess agent performance, detect emotional nuances, and ensure consistent service quality.",
+    icon: Headphones
   },
   {
-    title: "Satellite & Drone Imagery",
-    description: "Deploy AI models to detect and classify high-stakes objects like land mines in complex terrain, enhancing safety and reconnaissance capabilities.",
-    icon: Shield
+    title: "Brand-Aligned Content Curation",
+    description: "Intelligently select and rank content items that align with your brand's voice, values, and messaging across various platforms.",
+    icon: Filter
   },
   {
-    title: "Large-Scale Content Ranking",
-    description: "Build intelligent search and recommendation systems by ranking millions of content items using sophisticated multi-model classification.",
-    icon: Search
+    title: "Regulatory Compliance Monitoring",
+    description: "Automatically detect and flag emails that may trigger regulatory issues, enabling proactive risk management and compliance.",
+    icon: Mail
   },
   {
-    title: "Audio Quality Monitoring",
-    description: "Analyze audio recordings to detect nuanced performance indicators, such as monotone speech patterns in customer service interactions.",
-    icon: AudioLines
+    title: "Automated Compliance Actions",
+    description: "Trigger predefined workflows when sensitive communications are detected, ensuring immediate and appropriate response.",
+    icon: ShieldCheck
   }
 ]
 
@@ -47,7 +47,7 @@ export const Applications = () => {
               classify, and act on massive datasets across different domains and industries.
             </p>
             <p className="text-xl text-muted-foreground">
-              Whether it's compliance, safety, search, or quality monitoring, 
+              Whether it's compliance, quality assurance, or content management, 
               intelligent automation can solve problems that were previously impossible to scale.
             </p>
           </div>
