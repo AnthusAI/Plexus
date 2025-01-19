@@ -23,9 +23,6 @@ type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" |
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
     "evaluationId" | "scoringJobId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
-type ActionIndexFields = "accountId" | "type" | "status" | "target" | 
-    "currentStageId";
-type ActionStageIndexFields = "actionId" | "name" | "order" | "status";
 
 const schema = a.schema({
     Account: a
@@ -39,7 +36,6 @@ const schema = a.schema({
             items: a.hasMany('Item', 'accountId'),
             scoringJobs: a.hasMany('ScoringJob', 'accountId'),
             scoreResults: a.hasMany('ScoreResult', 'accountId'),
-            actions: a.hasMany('Action', 'accountId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -53,17 +49,17 @@ const schema = a.schema({
         .model({
             name: a.string().required(),
             key: a.string().required(),
-            externalId: a.string().required(),
             description: a.string(),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             sections: a.hasMany('ScorecardSection', 'scorecardId'),
             evaluations: a.hasMany('Evaluation', 'scorecardId'),
             batchJobs: a.hasMany('BatchJob', 'scorecardId'),
-            itemId: a.string(),
-            item: a.belongsTo('Item', 'itemId'),
             scoringJobs: a.hasMany('ScoringJob', 'scorecardId'),
             scoreResults: a.hasMany('ScoreResult', 'scorecardId'),
+            externalId: a.string(),
+            itemId: a.string(),
+            item: a.belongsTo('Item', 'itemId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -94,23 +90,19 @@ const schema = a.schema({
     Score: a
         .model({
             name: a.string().required(),
-            key: a.string(),
-            externalId: a.string(),
-            type: a.string().required(),
+            description: a.string(),
             order: a.integer().required(),
+            type: a.string().required(),
             accuracy: a.float(),
             version: a.string(),
-            sectionId: a.string().required(),
-            section: a.belongsTo('ScorecardSection', 'sectionId'),
             aiProvider: a.string(),
             aiModel: a.string(),
-            isFineTuned: a.boolean(),
-            configuration: a.json(),
-            distribution: a.json(),
-            versionHistory: a.json(),
+            sectionId: a.string().required(),
+            section: a.belongsTo('ScorecardSection', 'sectionId'),
             evaluations: a.hasMany('Evaluation', 'scoreId'),
             batchJobs: a.hasMany('BatchJob', 'scoreId'),
             scoringJobs: a.hasMany('ScoringJob', 'scoreId'),
+            metadata: a.json(),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -281,68 +273,6 @@ const schema = a.schema({
             idx("scoringJobId"),
             idx("evaluationId"),
             idx("scorecardId")
-        ]),
-
-    Action: a
-        .model({
-            accountId: a.string().required(),
-            type: a.string().required(),
-            status: a.string().required(),
-            target: a.string().required(),
-            command: a.string().required(),
-            metadata: a.json(),
-            createdAt: a.datetime().required(),
-            startedAt: a.datetime(),
-            completedAt: a.datetime(),
-            estimatedCompletionAt: a.datetime(),
-            errorMessage: a.string(),
-            errorDetails: a.json(),
-            stdout: a.string(),
-            stderr: a.string(),
-            currentStageId: a.string(),
-            currentStage: a.belongsTo('ActionStage', 'currentStageId'),
-            stages: a.hasMany('ActionStage', 'actionId'),
-            account: a.belongsTo('Account', 'accountId'),
-            celeryTaskId: a.string(),
-            workerNodeId: a.string(),
-            dispatchStatus: a.string(),
-        })
-        .authorization((allow: AuthorizationCallback) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx: (field: ActionIndexFields) => any) => [
-            idx("accountId"),
-            idx("type"),
-            idx("status"),
-            idx("target"),
-            idx("currentStageId")
-        ]),
-
-    ActionStage: a
-        .model({
-            actionId: a.string().required(),
-            action: a.belongsTo('Action', 'actionId'),
-            name: a.string().required(),
-            order: a.integer().required(),
-            status: a.string().required(),
-            statusMessage: a.string(),
-            startedAt: a.datetime(),
-            completedAt: a.datetime(),
-            estimatedCompletionAt: a.datetime(),
-            processedItems: a.integer(),
-            totalItems: a.integer(),
-            actionsAsCurrentStage: a.hasMany('Action', 'currentStageId'),
-        })
-        .authorization((allow: AuthorizationCallback) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx: (field: ActionStageIndexFields) => any) => [
-            idx("actionId"),
-            idx("name"),
-            idx("order"),
-            idx("status")
         ]),
 
     BatchJobScoringJob: a

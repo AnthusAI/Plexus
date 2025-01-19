@@ -2,6 +2,7 @@ from typing import Optional, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from .base import BaseModel
+from .batch_job import BatchJob
 from ..client import _BaseAPIClient
 import json
 import logging
@@ -290,3 +291,27 @@ class ScoringJob(BaseModel):
         if items:
             return cls.from_dict(items[0], client)
         return None
+
+    @classmethod
+    def get_batch_job(cls, scoring_job_id: str, client: '_BaseAPIClient') -> Optional[BatchJob]:
+        """Gets the associated batch job for a scoring job through the join table.
+        
+        :param scoring_job_id: ID of the scoring job
+        :param client: API client instance
+        :return: BatchJob instance if found, None otherwise
+        """
+        query = """
+        query GetBatchJobForScoringJob($scoringJobId: String!) {
+            listBatchJobScoringJobs(filter: {scoringJobId: {eq: $scoringJobId}}) {
+                items {
+                    batchJob {
+                        %s
+                    }
+                }
+            }
+        }
+        """ % BatchJob.fields()
+        
+        result = client.execute(query, {'scoringJobId': scoring_job_id})
+        items = result.get('listBatchJobScoringJobs', {}).get('items', [])
+        return BatchJob.from_dict(items[0]['batchJob'], client) if items else None
