@@ -80,7 +80,7 @@ export const Hero = ({ mockRouter }: HeroProps = {}) => {
             </div>
           )}
         </div>
-        <div className="w-full md:w-1/2 max-w-[500px] relative p-8">
+        <div className="w-full md:w-1/2 relative p-4">
           <div className="absolute inset-[-2rem] bg-gradient-to-r from-secondary to-primary rounded-[2rem] blur-2xl opacity-30"></div>
           <div className="relative z-10">
             <SquareLogo 
