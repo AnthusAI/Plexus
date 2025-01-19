@@ -9,12 +9,12 @@ The landing page introduces Plexus to new users and provides navigation to the d
 - Main headline highlighting AI agent orchestration ✓
 - Descriptive subheading explaining Plexus's core functionality ✓
 - Login button with loading state and error handling ✓
-- Responsive Plexus logo integration: ✓
+- Responsive Plexus logo integration ✓
   - Square logo side-by-side with content on wider viewports ✓
   - Wide/short logo version for mobile viewports ✓
   - Decorative glow effect behind logo matching current screenshot styling ✓
   - Storybook stories to validate all responsive breakpoints ✓
-- Screenshot area (hidden until final assets are ready)
+- Screenshot area removed ✓
 
 ### Features Section ✓
 - Grid of 4 key features: Multi-model, Lab workflow, Serverless, and Task dispatch ✓
@@ -30,9 +30,30 @@ The landing page introduces Plexus to new users and provides navigation to the d
   - Animated transitions between layout breakpoints ✓
 
 ### Use Cases Section
-- Detailed examples of real-world applications
-- Focus on practical implementations and solutions
-- Visual representations of use case workflows
+- Grid layout similar to Features section
+- Four key use cases with detailed examples:
+  1. Email Processing
+     - Automated sorting and prioritization
+     - Custom classification rules
+     - Integration with existing workflows
+  2. Document Analysis
+     - Contract review and extraction
+     - Compliance checking
+     - Multi-language support
+  3. Customer Support
+     - Ticket classification and routing
+     - Response suggestion
+     - Sentiment analysis
+  4. Content Moderation
+     - Multi-model content filtering
+     - Custom policy enforcement
+     - Real-time processing
+- Each use case includes:
+  - Visual icon representation
+  - Brief overview
+  - Key benefits
+  - Example workflow diagram
+- Responsive layout matching Features section design
 
 ### Narrative Section
 - No-code team collaboration story
