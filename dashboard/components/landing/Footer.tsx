@@ -104,9 +104,14 @@ export const Footer = () => {
         </div>
         
         <div className="mt-8 pt-8 border-t border-border text-center">
-          <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Anth.us. All rights reserved.
-          </p>
+          <Link 
+            href="https://anth.us"
+            className="text-sm text-muted-foreground hover:text-accent"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            © {new Date().getFullYear()} Anthus AI Solutions
+          </Link>
         </div>
       </div>
     </footer>

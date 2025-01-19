@@ -70,7 +70,7 @@ The landing page introduces Plexus to new users and provides navigation to the d
   - X/Twitter updates ✓
 - Contact form link ✓
 - Responsive grid layout ✓
-- Copyright notice ✓
+- Copyright notice reads "Anthus AI Solutions" ✓
 
 ## Technical Implementation
 
