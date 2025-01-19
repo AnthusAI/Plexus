@@ -36,7 +36,7 @@ export const Hero = ({ mockRouter }: HeroProps = {}) => {
   return (
     <section className="container mx-auto px-4 py-20 md:py-32">
       <div className="flex flex-col md:flex-row items-center gap-8">
-        <div className="w-full md:w-1/2 flex flex-col items-center md:items-start text-center md:text-left">
+        <div className="w-full md:w-2/3 flex flex-col items-center md:items-start text-center md:text-left">
           <h1 className="text-5xl md:text-7xl font-bold tracking-tighter mb-6 max-w-4xl leading-tight">
             Run{' '}
             <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text">
@@ -81,7 +81,7 @@ export const Hero = ({ mockRouter }: HeroProps = {}) => {
             </div>
           )}
         </div>
-        <div className="w-full md:w-1/2 relative p-4">
+        <div className="w-full md:w-1/3 relative p-4">
           <div className="absolute inset-[-2rem] bg-gradient-to-r from-secondary to-primary rounded-[2rem] blur-2xl opacity-30"></div>
           <div className="relative z-10">
             <SquareLogo 
