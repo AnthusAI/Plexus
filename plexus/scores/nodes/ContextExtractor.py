@@ -9,7 +9,7 @@ from plexus.scores.nodes.BaseNode import BaseNode
 from plexus.CustomLogging import logging
 from rapidfuzz import fuzz, process
 import nltk
-from nltk.tokenize import sent_tokenize
+from nltk.tokenize import sent_tokenize, PunktSentenceTokenizer
 
 class ContextExtractor(BaseNode, LangChainUser):
     """
@@ -56,6 +56,29 @@ class ContextExtractor(BaseNode, LangChainUser):
         context_before: int = Field(...)
         context_after: int = Field(...)
         use_sentence_boundaries: bool = Field(...)
+        __tokenizer: Optional[PunktSentenceTokenizer] = None
+
+        class Config:
+            arbitrary_types_allowed = True
+            underscore_attrs_are_private = True
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            try:
+                nltk.data.find('tokenizers/punkt/english.pickle')
+                logging.info("Found punkt tokenizer data")
+            except LookupError as e:
+                logging.error(f"Could not find punkt tokenizer data: {e}")
+                nltk.download('punkt', quiet=False)
+            self._initialize_tokenizer()
+
+        def _initialize_tokenizer(self) -> None:
+            if self.__tokenizer is None:
+                self.__tokenizer = PunktSentenceTokenizer()
+
+        def tokenize(self, text: str) -> list[str]:
+            self._initialize_tokenizer()
+            return self.__tokenizer.tokenize(text)
 
         def parse(self, output: str) -> Dict[str, Any]:
             # Clean the output
@@ -120,7 +143,7 @@ class ContextExtractor(BaseNode, LangChainUser):
             
             if self.use_sentence_boundaries:
                 # Tokenize the relevant portion of text into sentences
-                sentences = sent_tokenize(self.text)
+                sentences = self.tokenize(self.text)
                 
                 # Find sentences that contain our boundaries
                 current_pos = 0
