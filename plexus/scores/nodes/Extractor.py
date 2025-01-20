@@ -13,6 +13,7 @@ from plexus.LangChainUser import LangChainUser
 from plexus.CustomLogging import logging
 from concurrent.futures import ThreadPoolExecutor
 import time
+from nltk.tokenize import PunktSentenceTokenizer
 
 class Extractor(BaseNode, LangChainUser):
     """
@@ -38,10 +39,29 @@ class Extractor(BaseNode, LangChainUser):
         FUZZY_MATCH_SCORE_CUTOFF: int = Field(...)
         text: str = Field(...)
         use_exact_matching: bool = Field(default=False)
+        __tokenizer: Optional[PunktSentenceTokenizer] = None
+
+        class Config:
+            arbitrary_types_allowed = True
+            underscore_attrs_are_private = True
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            nltk.download('punkt', quiet=True)  # Download the punkt tokenizer data
+            try:
+                nltk.data.find('tokenizers/punkt/english.pickle')
+                logging.info("Found punkt tokenizer data")
+            except LookupError as e:
+                logging.error(f"Could not find punkt tokenizer data: {e}")
+                nltk.download('punkt', quiet=False)
+            self._initialize_tokenizer()
+
+        def _initialize_tokenizer(self) -> None:
+            if self.__tokenizer is None:
+                self.__tokenizer = PunktSentenceTokenizer()
+
+        def tokenize(self, text: str) -> list[str]:
+            self._initialize_tokenizer()
+            return self.__tokenizer.tokenize(text)
 
         @property
         def _type(self) -> str:
