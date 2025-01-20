@@ -95,6 +95,8 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Demo command updated with Action support ✓
    - Multi-stage progress tracking implemented ✓
    - Progress updates working in both Celery and direct execution ✓
+   - Fixed stage selection logic in activity dashboard ✓
+   - Fixed type errors in activity transformations ✓
 
 3. **Current Challenges**
    - Need to ensure atomic updates for counters
@@ -104,7 +106,42 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Need to implement proper cleanup of completed actions
 
 4. **Next Implementation Steps**
-   1. Fix Realtime Updates
+   1. Refine ActionStatus Component States
+      - Define all possible states for ActionStatus component:
+        - Initial/Not Started
+        - Running with determinate progress
+        - Running with indeterminate progress
+        - Running with error but continuing
+        - Paused/Waiting
+        - Failed with unrecoverable error
+        - Completed successfully
+        - Completed with warnings
+      - Implement visual design for each state:
+        - Color schemes
+        - Progress bar styles
+        - Icons and animations
+        - Status messages
+        - Interactive elements
+      - Add proper state transitions
+        - Define valid state transitions
+        - Handle edge cases
+        - Add transition animations
+      - Improve accessibility
+        - Add ARIA labels
+        - Ensure keyboard navigation
+        - Add screen reader descriptions
+
+   2. Update Activity Dashboard Integration
+      - Audit all places where ActionStatus is used
+      - Ensure proper state mapping from Actions
+      - Add proper error handling
+      - Implement consistent status messages
+      - Add tooltips for additional context
+      - Handle state transitions smoothly
+      - Add proper loading states
+      - Improve mobile responsiveness
+
+   3. Fix Realtime Updates
       - Modify progress tracking to update Action record on each stage update
       - Ensure Action record includes latest stage status and progress
       - Add updatedAt timestamp updates to trigger subscriptions
@@ -112,14 +149,14 @@ This document outlines the implementation of Plexus's two-level dispatch system:
       - Add error handling for subscription failures
       - Optimize update frequency to balance responsiveness and load
 
-   2. Improve Action List Display
+   4. Improve Action List Display
       - Fix sorting to show actions in reverse chronological order
       - Add proper indexing on updatedAt field
       - Implement pagination for better performance
       - Add filtering options for status and type
       - Consider adding search functionality
 
-   3. Polish Task Component UI
+   5. Polish Task Component UI
       - Review and refine all task component variants
       - Improve progress visualization
       - Add better error state handling
@@ -131,26 +168,26 @@ This document outlines the implementation of Plexus's two-level dispatch system:
       - Add keyboard navigation support
       - Implement accessibility improvements
 
-   4. Create Lambda function for Action-to-Celery dispatch
+   6. Create Lambda function for Action-to-Celery dispatch
       - Triggered on Action creation
       - Extracts command and Action ID
       - Dispatches Celery task with `--action-id`
       - Handles errors and updates Action status
       - Enables UI-driven command execution
 
-   5. Update other commands with Action support
+   7. Update other commands with Action support
       - Add `--action-id` parameter to all long-running commands
       - Implement stage-based progress tracking
       - Add proper error handling and status updates
       - Test with both direct and Celery execution
 
-   6. Implement Action cleanup and maintenance
+   8. Implement Action cleanup and maintenance
       - Add TTL for completed/failed Actions
       - Implement periodic cleanup of old Actions
       - Add monitoring for stuck/zombie Actions
       - Create Action archival process if needed
 
-   7. Add Action management features
+   9. Add Action management features
       - List view with filtering and sorting
       - Detail view with stage history
       - Manual retry/cancel capabilities

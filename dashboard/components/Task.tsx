@@ -30,6 +30,9 @@ export interface BaseTaskProps<TData = unknown> {
   isFullWidth?: boolean
   onToggleFullWidth?: () => void
   onClose?: () => void
+  isLoading?: boolean
+  error?: string
+  onRetry?: () => void
 }
 
 interface TaskChildProps<TData = unknown> extends BaseTaskProps<TData> {
@@ -53,7 +56,10 @@ const Task = <TData = unknown>({
   isFullWidth,
   onToggleFullWidth,
   onClose,
-  showProgress = true
+  showProgress = true,
+  isLoading = false,
+  error,
+  onRetry
 }: TaskComponentProps<TData>) => {
   const childProps: TaskChildProps<TData> = {
     variant,
@@ -62,7 +68,10 @@ const Task = <TData = unknown>({
     isFullWidth,
     onToggleFullWidth,
     onClose,
-    showProgress
+    showProgress,
+    isLoading,
+    error,
+    onRetry
   }
 
   if (variant === 'nested') {
@@ -80,14 +89,41 @@ const Task = <TData = unknown>({
         bg-card shadow-none border-none rounded-lg transition-colors duration-200 
         flex flex-col h-full min-w-[300px]
         ${variant === 'grid' ? 'cursor-pointer' : ''}
+        ${isLoading ? 'opacity-70' : ''}
       `}
-      onClick={variant === 'grid' ? onClick : undefined}
+      onClick={variant === 'grid' && !isLoading ? onClick : undefined}
+      role={variant === 'grid' ? 'button' : 'article'}
+      tabIndex={variant === 'grid' ? 0 : undefined}
+      onKeyDown={variant === 'grid' ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick?.()
+        }
+      } : undefined}
+      aria-busy={isLoading}
+      aria-disabled={isLoading}
     >
       <div className="flex-none">
         {renderHeader(childProps)}
       </div>
       <CardContent className="flex-1 min-h-0 p-4">
-        {renderContent(childProps)}
+        {error ? (
+          <div className="flex flex-col items-center justify-center h-full text-center p-4">
+            <div className="text-destructive mb-2">{error}</div>
+            {onRetry && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onRetry}
+                className="mt-2"
+              >
+                Retry
+              </Button>
+            )}
+          </div>
+        ) : (
+          renderContent(childProps)
+        )}
       </CardContent>
     </Card>
   )
@@ -100,7 +136,8 @@ const TaskHeader = <TData = unknown>({
   controlButtons,
   isFullWidth,
   onToggleFullWidth,
-  onClose 
+  onClose,
+  isLoading
 }: TaskChildProps<TData>) => {
   const formattedTime = formatTimeAgo(task.time, variant === 'grid')
 
@@ -124,12 +161,16 @@ const TaskHeader = <TData = unknown>({
                 <CardButton
                   icon={isFullWidth ? RectangleVertical : Square}
                   onClick={onToggleFullWidth}
+                  disabled={isLoading}
+                  aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
                 />
               )}
               {onClose && (
                 <CardButton
                   icon={X}
                   onClick={onClose}
+                  disabled={isLoading}
+                  aria-label="Close"
                 />
               )}
               {controlButtons}
@@ -152,7 +193,8 @@ const TaskContent = <TData = unknown>({
   children, 
   visualization, 
   customSummary,
-  showProgress = true
+  showProgress = true,
+  isLoading
 }: TaskChildProps<TData> & {
   visualization?: React.ReactNode,
   customSummary?: React.ReactNode
@@ -195,9 +237,19 @@ const TaskContent = <TData = unknown>({
                   return {
                     key: stage.name,
                     label: stage.name,
-                    color
+                    color,
+                    tooltip: `${stage.name} - ${stage.status}${
+                      stage.processedItems !== undefined && stage.totalItems 
+                        ? ` (${stage.processedItems}/${stage.totalItems})`
+                        : ''
+                    }${
+                      stage.elapsedTime
+                        ? `\nElapsed: ${stage.elapsedTime}`
+                        : ''
+                    }`
                   }
                 })}
+                isLoading={isLoading}
               />
             </div>
           )}
@@ -230,9 +282,19 @@ const TaskContent = <TData = unknown>({
                   return {
                     key: stage.name,
                     label: stage.name,
-                    color
+                    color,
+                    tooltip: `${stage.name} - ${stage.status}${
+                      stage.processedItems !== undefined && stage.totalItems 
+                        ? ` (${stage.processedItems}/${stage.totalItems})`
+                        : ''
+                    }${
+                      stage.elapsedTime
+                        ? `\nElapsed: ${stage.elapsedTime}`
+                        : ''
+                    }`
                   }
                 })}
+                isLoading={isLoading}
               />
             </div>
           )}

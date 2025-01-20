@@ -22,7 +22,9 @@ export function SegmentedProgressBar({
   errorLabel = 'Error',
   className = ''
 }: SegmentedProgressBarProps) {
-  const currentIndex = segments.findIndex(s => s.key === currentSegment)
+  const currentIndex = segments.findIndex(s => 
+    s.key.toLowerCase() === currentSegment.toLowerCase()
+  )
   
   return (
     <div className={cn(

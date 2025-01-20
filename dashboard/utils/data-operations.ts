@@ -38,7 +38,6 @@ export async function listFromModel<T extends keyof Schema>(
 }
 
 export async function listRecentActions(limit: number = 12) {
-  console.log('listRecentActions called with:', { limit });
   const currentClient = getClient();
   console.log('client at time of call:', currentClient);
   console.log('client.models at time of call:', currentClient.models);
@@ -59,13 +58,18 @@ export async function listRecentActions(limit: number = 12) {
       })
     );
     
+    // Sort by createdAt in reverse chronological order
+    const sortedActions = [...actionsWithStages].sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    
     console.log('Action list response:', {
-      data: actionsWithStages,
-      count: actionsWithStages.length,
-      firstRecord: actionsWithStages[0],
+      data: sortedActions,
+      count: sortedActions.length,
+      firstRecord: sortedActions[0],
       nextToken: response.nextToken
     });
-    return { data: actionsWithStages };
+    return { data: sortedActions };
   } catch (error) {
     console.error('Error listing actions:', error);
     return { data: [] };
@@ -87,10 +91,29 @@ export function observeRecentActions(limit: number = 12) {
         handlers.next({ items: response.data, isSynced: true });
       }).catch(handlers.error);
 
-      // Subscribe to updates
-      const sub = (currentClient.models.Action as any).onCreate({}).subscribe({
+      // Subscribe to Action updates
+      const actionSubs = [
+        // Subscribe to new actions
+        (currentClient.models.Action as any).onCreate({}).subscribe({
+          next: async () => {
+            const response = await listRecentActions(limit);
+            handlers.next({ items: response.data, isSynced: true });
+          },
+          error: handlers.error
+        }),
+        // Subscribe to action updates
+        (currentClient.models.Action as any).onUpdate({}).subscribe({
+          next: async () => {
+            const response = await listRecentActions(limit);
+            handlers.next({ items: response.data, isSynced: true });
+          },
+          error: handlers.error
+        })
+      ];
+
+      // Subscribe to stage updates
+      const stageSub = (currentClient.models.ActionStage as any).onUpdate({}).subscribe({
         next: async () => {
-          // Refetch the full list when we get an update
           const response = await listRecentActions(limit);
           handlers.next({ items: response.data, isSynced: true });
         },
@@ -98,7 +121,10 @@ export function observeRecentActions(limit: number = 12) {
       });
 
       return {
-        unsubscribe: () => sub.unsubscribe()
+        unsubscribe: () => {
+          actionSubs.forEach(sub => sub.unsubscribe());
+          stageSub.unsubscribe();
+        }
       };
     }
   };

@@ -21,12 +21,6 @@ export async function listFromModel<T extends { id: string }>(
   nextToken?: string,
   limit?: number
 ): Promise<AmplifyListResult<T>> {
-  console.log('Listing from model:', {
-    modelName: model?.name,
-    filter,
-    nextToken,
-    limit
-  })
 
   const options: any = {}
   if (filter) options.filter = filter

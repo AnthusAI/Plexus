@@ -5,6 +5,10 @@ import { ProgressBarTiming } from './progress-bar-timing'
 import { Radio, Triangle } from 'lucide-react'
 
 export interface ActionStageConfig {
+  key: string
+  label: string
+  color: string
+  elapsedTime?: string
   name: string
   order: number
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
@@ -17,22 +21,23 @@ export interface ActionStageConfig {
 }
 
 export interface ActionStatusProps {
-  showStages?: boolean
-  stages?: ActionStageConfig[]
+  showStages: boolean
+  stages: ActionStageConfig[]
   currentStageName?: string
   processedItems?: number
   totalItems?: number
   elapsedTime?: string
   estimatedTimeRemaining?: string
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
-  stageConfigs?: SegmentConfig[]
+  command?: string
+  statusMessage?: string
+  stageConfigs?: ActionStageConfig[]
+  isLoading?: boolean
   errorLabel?: string
   dispatchStatus?: string
   celeryTaskId?: string
   workerNodeId?: string
   showPreExecutionStages?: boolean
-  command?: string
-  statusMessage?: string
 }
 
 export function ActionStatus({
