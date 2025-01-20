@@ -2,21 +2,19 @@ import React from 'react'
 import type { Meta, StoryObj } from '@storybook/react'
 import { Hero } from '../components/landing/Hero'
 
-const mockRouter = {
-  push: async (url: string) => {
-    console.log('Mock navigation to:', url)
-  }
-}
-
 const meta = {
   title: 'Landing/Hero',
   component: Hero,
   parameters: {
     layout: 'fullscreen',
   },
-  args: {
-    mockRouter
-  }
+  decorators: [
+    (Story) => (
+      <div className="min-h-screen bg-background p-4">
+        <Story />
+      </div>
+    ),
+  ],
 } satisfies Meta<typeof Hero>
 
 export default meta
