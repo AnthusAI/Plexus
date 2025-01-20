@@ -16,7 +16,22 @@ import { signOut as amplifySignOut } from "aws-amplify/auth"
 import { useToast } from "@/components/ui/use-toast"
 import { useAccount } from "@/app/contexts/AccountContext"
 
+type Account = Schema["Account"]["type"]
+
 const client = generateClient<Schema>()
+
+const accountApi = {
+    async list() {
+        type ListAccountsResponse = { data: Account[]; nextToken: string | null }
+        const list = client.models.Account.list as unknown as () => Promise<ListAccountsResponse>
+        return (await list()).data
+    },
+    async update(id: string, settings: string) {
+        type UpdateAccountFn = (args: { id: string; settings: string }) => Promise<Account>
+        const update = client.models.Account.update as unknown as UpdateAccountFn
+        return update({ id, settings })
+    }
+}
 
 const MENU_ITEMS = [
     "Activity",
@@ -48,7 +63,7 @@ export default function AccountSettings() {
     useEffect(() => {
         async function fetchAccount() {
             try {
-                const { data: accounts } = await client.models.Account.list({})
+                const accounts = await accountApi.list()
                 if (accounts.length > 0) {
                     const firstAccount = accounts[0]
                     setAccount(firstAccount)
@@ -99,10 +114,7 @@ export default function AccountSettings() {
             const newSettings: AccountSettings = {
                 hiddenMenuItems: hiddenItems
             }
-            await client.models.Account.update({
-                id: account.id,
-                settings: JSON.stringify(newSettings)
-            })
+            await accountApi.update(account.id, JSON.stringify(newSettings))
             
             // Refresh the account data to update the menu
             await refreshAccount()

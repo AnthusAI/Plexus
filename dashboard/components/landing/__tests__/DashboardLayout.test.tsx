@@ -18,7 +18,7 @@ jest.mock("@/utils/amplify-helpers")
 
 const mockListFromModel = listFromModel as jest.MockedFunction<typeof listFromModel>
 const mockUseAuthenticator = useAuthenticator as jest.MockedFunction<typeof useAuthenticator>
-const mockGenerateClient = generateClient as jest.MockedFunction<typeof generateClient>
+const mockGenerateClient = generateClient as unknown as jest.Mock
 
 type Account = Schema["Account"]["type"]
 
@@ -27,23 +27,10 @@ describe("DashboardLayout", () => {
   const mockClient = {
     models: {
       Account: {
-        list: jest.fn().mockResolvedValue({
-          data: [{
-            id: "1",
-            name: "Test Account",
-            key: "test",
-            settings: null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          } as Account],
-          nextToken: null
-        })
+        list: jest.fn().mockResolvedValue({ data: [] })
       }
-    },
-    graphql: jest.fn(),
-    cancel: jest.fn(),
-    isCancelError: jest.fn()
-  } as unknown as ReturnType<typeof generateClient>
+    }
+  }
 
   beforeEach(() => {
     mockUseAuthenticator.mockReturnValue({ authStatus: "authenticated" } as any)

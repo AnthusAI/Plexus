@@ -16,7 +16,7 @@ jest.mock('next/navigation', () => ({
 
 // Mock next-themes
 jest.mock('next-themes', () => ({
-  ThemeProvider: function ThemeProvider({ children }) { return children },
+  ThemeProvider: function ThemeProvider({ children }: { children: React.ReactNode }) { return children },
   useTheme: () => ({ theme: 'light', setTheme: jest.fn() })
 }))
 
@@ -63,6 +63,9 @@ jest.mock("aws-amplify/api", () => ({
 }))
 
 // Initialize client
+declare global {
+  var client: typeof mockClient
+}
 global.client = mockClient
 
 // Mock listFromModel
