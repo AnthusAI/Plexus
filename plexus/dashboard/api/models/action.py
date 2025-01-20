@@ -293,6 +293,9 @@ class Action(BaseModel):
         if not stage_configs:
             return []
 
+        # Always update the action's updatedAt timestamp to trigger subscriptions
+        self.update(updatedAt=datetime.now(timezone.utc))
+
         # Update action status based on progress
         if processed_items == 0:
             if self.status not in ["COMPLETED", "FAILED"]:

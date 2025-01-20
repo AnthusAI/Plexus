@@ -48,7 +48,6 @@ import {
 } from '@/types/tasks'
 
 function transformActionToActivity(action: Schema['Action']['type']): ActivityData {
-  console.log('Action data:', JSON.stringify(action, null, 2))
 
   let activityType: ActivityData['type'] = 'Report'  // Default to Report type for now
   if (action.type === 'test') {
@@ -76,13 +75,22 @@ function transformActionToActivity(action: Schema['Action']['type']): ActivityDa
       // If we haven't found a stage yet, use this one
       if (!current) return stage
       
-      // If this stage is completed but the current one isn't, keep current
-      if (stage.status === 'COMPLETED' && current.status !== 'COMPLETED') return current
+      // If this stage is RUNNING, it should be the current stage
+      if (stage.status === 'RUNNING') return stage
       
-      // If this stage isn't completed and has higher order than current, use this one
-      if (stage.status !== 'COMPLETED' && stage.order > current.order) return stage
+      // If current stage is RUNNING, keep it
+      if (current.status === 'RUNNING') return current
       
-      // If all previous stages are completed and this is the last one, use this one
+      // If neither stage is RUNNING, prefer the earliest PENDING stage
+      if (stage.status === 'PENDING' && current.status === 'PENDING') {
+        return stage.order < current.order ? stage : current
+      }
+      
+      // If one stage is PENDING and the other isn't, prefer the PENDING stage
+      if (stage.status === 'PENDING') return stage
+      if (current.status === 'PENDING') return current
+      
+      // If all stages are completed, use the last one
       if (stage.status === 'COMPLETED' && stage === stages[stages.length - 1] && 
           stages.every((s: ActionStageConfig) => s.order < stage.order ? s.status === 'COMPLETED' : true)) {
         return stage
@@ -101,6 +109,24 @@ function transformActionToActivity(action: Schema['Action']['type']): ActivityDa
     ) / 1000
   ) : undefined
 
+  const stageConfigs = ((action as any).stages || [])
+    .sort((a: Schema['ActionStage']['type'], b: Schema['ActionStage']['type']) => a.order - b.order)
+    .map((stage: Schema['ActionStage']['type']) => {
+      const stageName = stage.name.toLowerCase()
+      let color = 'bg-primary'
+      
+      // Only the middle processing stage should be secondary
+      if (stageName === 'processing') {
+        color = 'bg-secondary'
+      }
+      
+      return {
+        key: stage.name.toLowerCase(),
+        label: stage.name,
+        color
+      }
+    })
+
   const activity: ActivityData = {
     id: action.id,
     type: activityType,
@@ -113,32 +139,16 @@ function transformActionToActivity(action: Schema['Action']['type']): ActivityDa
     currentStageName: currentStage?.name,
     processedItems: currentStage?.processedItems || 0,
     totalItems: currentStage?.totalItems || 0,
-    elapsedTime,
-    estimatedTimeRemaining: action.estimatedCompletionAt ? formatDuration(
-      Math.round((new Date(action.estimatedCompletionAt).getTime() - new Date().getTime()) / 1000)
-    ) : undefined,
+    elapsedTime: elapsedTime,
+    estimatedTimeRemaining: action.estimatedCompletionAt 
+      ? formatDuration(Math.round((new Date(action.estimatedCompletionAt).getTime() - new Date().getTime()) / 1000))
+      : undefined,
     status: action.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-    stageConfigs: ((action as any).stages || [])
-      .sort((a: Schema['ActionStage']['type'], b: Schema['ActionStage']['type']) => a.order - b.order)
-      .map((stage: Schema['ActionStage']['type']) => {
-        const stageName = stage.name.toLowerCase()
-        let color = 'bg-primary'
-        
-        // Only the middle processing stage should be secondary
-        if (stageName === 'processing') {
-          color = 'bg-secondary'
-        }
-        
-        return {
-          key: stage.name,
-          label: stage.name,
-          color
-        }
-      }),
+    stageConfigs: stageConfigs,
     data: {
       id: action.id,
       title: `${action.type} Action`,
-      command: action.command
+      command: action.command || ''
     }
   }
 
