@@ -8,6 +8,8 @@ import { useTheme } from "next-themes"
 import { generateClient } from "aws-amplify/data"
 import { listFromModel } from "@/utils/amplify-helpers"
 import type { Schema } from "@/amplify/data/resource"
+import type { AccountSettings } from "@/types/account-config"
+import { isValidAccountSettings } from "@/types/account-config"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button, type ButtonProps } from "@/components/ui/button"
@@ -177,211 +179,212 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     { name: "Alerts", icon: Siren, path: "/alerts" },
   ]
 
-  const LeftSidebar = () => (
-    <div className={`flex flex-col h-full py-2 bg-muted ${isMobile ? 'pr-3' : ''}`}>
-      <div className={`mb-4 ${isLeftSidebarOpen ? 'pl-2' : ''}`}>
-        <Link href="/" className={`block ${isLeftSidebarOpen ? 'w-full max-w-md' : 'w-12 pl-2'}`}>
-          {isLeftSidebarOpen ? (
-            <SquareLogo variant={LogoVariant.Wide} />
-          ) : (
-            <SquareLogo variant={LogoVariant.Narrow} />
-          )}
-        </Link>
-      </div>
+  const LeftSidebar = () => {
+    const visibleMenuItems = menuItems.filter(item => {
+      if (!selectedAccount?.settings) return true
+      const settings = selectedAccount.settings as AccountSettings
+      if (!isValidAccountSettings(settings)) return true
+      return !settings.hiddenMenuItems.includes(item.name)
+    })
 
-      <ScrollArea className="flex-grow overflow-y-auto">
-        <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
-          {menuItems.map((item) => (
-            <TooltipProvider key={item.name}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link href={item.path} passHref>
-                    <DashboardButton
-                      variant={
-                        (pathname === item.path || 
-                        (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
-                        (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
-                          ? "secondary"
-                          : "ghost"
-                      }
-                      className={`w-full justify-start group !rounded-[4px] ${
-                        (pathname === item.path || 
-                        (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
-                        (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
-                          ? "bg-secondary text-secondary-foreground"
-                          : ""
-                      } ${isLeftSidebarOpen ? '' : 'px-2'} ${
-                        isMobile ? 'py-3' : ''
-                      }`}
-                    >
-                      <item.icon className={`h-4 w-4 group-hover:text-accent-foreground ${
-                        isLeftSidebarOpen ? 'mr-2' : ''
-                      } flex-shrink-0 ${
-                        (pathname === item.path || 
-                        (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
-                        (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
-                          ? 'text-focus'
-                          : 'text-secondary'
-                      }`} />
-                      {isLeftSidebarOpen && (
-                        <span className={
+    return (
+      <div className={`flex flex-col h-full py-2 bg-muted ${isMobile ? 'pr-3' : ''}`}>
+        <div className={`mb-4 ${isLeftSidebarOpen ? 'pl-2' : ''}`}>
+          <Link href="/" className={`block ${isLeftSidebarOpen ? 'w-full max-w-md' : 'w-12 pl-2'}`}>
+            {isLeftSidebarOpen ? (
+              <SquareLogo variant={LogoVariant.Wide} />
+            ) : (
+              <SquareLogo variant={LogoVariant.Narrow} />
+            )}
+          </Link>
+        </div>
+
+        <ScrollArea className="flex-grow overflow-y-auto">
+          <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
+            {visibleMenuItems.map((item) => (
+              <TooltipProvider key={item.name}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link href={item.path} passHref>
+                      <DashboardButton
+                        variant={
                           (pathname === item.path || 
                           (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
                           (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
-                            ? 'font-semibold text-focus'
-                            : ''
-                        }>
-                          {item.name}
-                        </span>
-                      )}
-                    </DashboardButton>
-                  </Link>
-                </TooltipTrigger>
-                {!isLeftSidebarOpen && <TooltipContent side="right">{item.name}</TooltipContent>}
-              </Tooltip>
-            </TooltipProvider>
-          ))}
-        </div>
-      </ScrollArea>
+                            ? "secondary"
+                            : "ghost"
+                        }
+                        className={`w-full justify-start group !rounded-[4px] ${
+                          (pathname === item.path || 
+                          (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
+                          (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
+                            ? "bg-secondary text-secondary-foreground"
+                            : ""
+                        } ${isLeftSidebarOpen ? '' : 'px-2'} ${
+                          isMobile ? 'py-3' : ''
+                        }`}
+                      >
+                        <item.icon className={`h-4 w-4 flex-shrink-0 ${
+                          (pathname === item.path || 
+                          (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
+                          (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
+                            ? "text-secondary-foreground"
+                            : "text-secondary group-hover:text-accent-foreground"
+                        }`} />
+                        {isLeftSidebarOpen && (
+                          <span className="ml-3">{item.name}</span>
+                        )}
+                      </DashboardButton>
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    {item.name}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ))}
+          </div>
+        </ScrollArea>
 
-      <div className="mt-auto pl-2 space-y-2 py-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              className={`w-full justify-start px-2 pr-2 cursor-pointer`}
-            >
-              <Avatar className={`h-8 w-8 ${isLeftSidebarOpen ? 'mr-2' : ''}`}>
-                <AvatarImage 
-                  src={`/avatar-${selectedAccount?.key || '1'}.png`} 
-                  alt={selectedAccount?.name || 'Account'} 
-                />
-                <AvatarFallback className="bg-background dark:bg-border">
-                  {selectedAccount?.name?.split(' ').map(word => word[0]).join('') || 'AC'}
-                </AvatarFallback>
-              </Avatar>
-              {isLeftSidebarOpen && <span>{selectedAccount?.name || 'Select Account'}</span>}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-[200px]">
-            <Link href="/settings">
-              <DropdownMenuItem className="cursor-pointer">
-                <Settings className="mr-2 h-4 w-4" />
-                Settings
-              </DropdownMenuItem>
-            </Link>
-            <DropdownMenuSeparator />
-            <DropdownMenu>
-              <DropdownMenuTrigger className="w-full">
+        <div className="mt-auto pl-2 space-y-2 py-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className={`w-full justify-start px-2 pr-2 cursor-pointer`}
+              >
+                <Avatar className={`h-8 w-8 ${isLeftSidebarOpen ? 'mr-2' : ''}`}>
+                  <AvatarImage 
+                    src={`/avatar-${selectedAccount?.key || '1'}.png`} 
+                    alt={selectedAccount?.name || 'Account'} 
+                  />
+                  <AvatarFallback className="bg-background dark:bg-border">
+                    {selectedAccount?.name?.split(' ').map(word => word[0]).join('') || 'AC'}
+                  </AvatarFallback>
+                </Avatar>
+                {isLeftSidebarOpen && <span>{selectedAccount?.name || 'Select Account'}</span>}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[200px]">
+              <Link href="/settings">
                 <DropdownMenuItem className="cursor-pointer">
-                  <ArrowLeftRight className="mr-2 h-4 w-4" />
-                  Select Account
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
                 </DropdownMenuItem>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="right" align="start" className="w-[200px]">
-                {isLoadingAccounts ? (
-                  <DropdownMenuItem>Loading accounts...</DropdownMenuItem>
-                ) : accounts.length === 0 ? (
-                  <DropdownMenuItem>No accounts found</DropdownMenuItem>
-                ) : (
-                  accounts.map((account) => (
-                    <DropdownMenuItem 
-                      key={account.id} 
-                      className="cursor-pointer"
-                      onClick={() => handleAccountSelect(account)}
-                    >
-                      <Avatar className="h-8 w-8 mr-2">
-                        <AvatarImage 
-                          src={`/avatar-${account.key}.png`} 
-                          alt={account.name} 
-                        />
-                        <AvatarFallback className="bg-muted dark:bg-border">
-                          {account.name.split(' ').map(word => word[0]).join('')}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span>{account.name}</span>
-                    </DropdownMenuItem>
-                  ))
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              </Link>
+              <DropdownMenuSeparator />
+              <DropdownMenu>
+                <DropdownMenuTrigger className="w-full">
+                  <DropdownMenuItem className="cursor-pointer">
+                    <ArrowLeftRight className="mr-2 h-4 w-4" />
+                    Select Account
+                  </DropdownMenuItem>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="right" align="start" className="w-[200px]">
+                  {isLoadingAccounts ? (
+                    <DropdownMenuItem>Loading accounts...</DropdownMenuItem>
+                  ) : accounts.length === 0 ? (
+                    <DropdownMenuItem>No accounts found</DropdownMenuItem>
+                  ) : (
+                    accounts.map((account) => (
+                      <DropdownMenuItem 
+                        key={account.id} 
+                        className="cursor-pointer"
+                        onClick={() => handleAccountSelect(account)}
+                      >
+                        <Avatar className="h-8 w-8 mr-2">
+                          <AvatarImage 
+                            src={`/avatar-${account.key}.png`} 
+                            alt={account.name} 
+                          />
+                          <AvatarFallback className="bg-muted dark:bg-border">
+                            {account.name.split(' ').map(word => word[0]).join('')}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span>{account.name}</span>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              className={`w-full justify-start px-2 pr-2 cursor-pointer`}
-            >
-              <Avatar className={`h-8 w-8 ${isLeftSidebarOpen ? 'mr-2' : ''}`}>
-                <AvatarImage src="/user-avatar.png" alt="User avatar" />
-                <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
-              </Avatar>
-              {isLeftSidebarOpen && <span>Ryan Porter</span>}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-[200px]">
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <Link href="/settings">
-              <DropdownMenuItem className="cursor-pointer">
-                <Settings className="mr-2 h-4 w-4" />
-                Settings
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className={`w-full justify-start px-2 pr-2 cursor-pointer`}
+              >
+                <Avatar className={`h-8 w-8 ${isLeftSidebarOpen ? 'mr-2' : ''}`}>
+                  <AvatarImage src="/user-avatar.png" alt="User avatar" />
+                  <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
+                </Avatar>
+                {isLeftSidebarOpen && <span>Ryan Porter</span>}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[200px]">
+              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <Link href="/settings">
+                <DropdownMenuItem className="cursor-pointer">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </DropdownMenuItem>
+              </Link>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="cursor-pointer" onClick={signOut}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign out
               </DropdownMenuItem>
-            </Link>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer" onClick={signOut}>
-              <LogOut className="mr-2 h-4 w-4" />
-              Sign out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-        <div className="flex items-center justify-between">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DashboardButton
-                  variant="ghost"
-                  className="pl-4 group"
-                  onClick={toggleLeftSidebar}
-                >
-                  <PanelLeft className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
-                </DashboardButton>
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                {isLeftSidebarOpen ? "Toggle sidebar" : "Expand sidebar"}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          {isLeftSidebarOpen && (
+          <div className="flex items-center justify-between">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <DashboardButton
                     variant="ghost"
-                    className="pr-4 group"
-                    onClick={toggleTheme}
+                    className="pl-4 group"
+                    onClick={toggleLeftSidebar}
                   >
-                    {theme === "dark" ? (
-                      <Sun className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
-                    ) : (
-                      <Moon className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
-                    )}
+                    <PanelLeft className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
                   </DashboardButton>
                 </TooltipTrigger>
                 <TooltipContent side="right">
-                  Toggle {theme === "dark" ? "Light" : "Dark"} Mode
+                  {isLeftSidebarOpen ? "Toggle sidebar" : "Expand sidebar"}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-          )}
+
+            {isLeftSidebarOpen && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DashboardButton
+                      variant="ghost"
+                      className="pr-4 group"
+                      onClick={toggleTheme}
+                    >
+                      {theme === "dark" ? (
+                        <Sun className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                      ) : (
+                        <Moon className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                      )}
+                    </DashboardButton>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    Toggle {theme === "dark" ? "Light" : "Dark"} Mode
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   const RightSidebar = () => {
     return (

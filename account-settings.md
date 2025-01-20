@@ -13,10 +13,9 @@ We will:
 
 ## Plan
 1. Update Account Model Schema
-   - Add a `configuration` JSON field to the Account model
+   - Add a `settings` JSON field to the Account model
    - Define a schema for menu configuration that includes `hiddenMenuItems` array
    - Update GraphQL schema and resolvers
-   - Add migration for existing accounts
 
 2. Create Account Settings UI
    - Create `/settings/account` page
@@ -25,9 +24,9 @@ We will:
    - Add preview of menu with hidden items
 
 3. Update Sidebar Menu Implementation
-   - Modify `dashboard-layout.tsx` to fetch account configuration
+   - Modify `dashboard-layout.tsx` to fetch account settings
    - Filter menu items based on account's `hiddenMenuItems` setting
-   - Add loading state for menu while fetching configuration
+   - Add loading state for menu while fetching settings
    - Handle error cases gracefully
 
 4. Testing & Validation
@@ -37,14 +36,20 @@ We will:
    - Manual testing across different accounts
 
 ## Current Status
-Schema update in progress:
-- Added `configuration` JSON field to Account model
-- Deployment of schema changes in progress
+Implementation nearly complete:
+- Added `settings` JSON field to Account model
+- Created TypeScript types for settings with `hiddenMenuItems` array
+- Added validation function for settings structure
+- Created `/settings/account` page with menu visibility controls
+- Implemented settings form with save functionality
+- Added loading and error states
+- Modified sidebar menu to respect hidden items configuration
 
 ## Next Steps
-1. After schema deployment completes:
-   - Define configuration JSON schema structure for menu settings
-   - Update GraphQL schema if needed
-   - Create migration plan for existing accounts
+1. Testing & Validation:
+   - Manual testing of settings UI and menu visibility
+   - Add tests for settings UI components
+   - Add tests for menu filtering logic
+   - Test across different accounts
 
 Note: This plan should be updated after each step is completed to reflect current status and adjust next steps as needed. 
