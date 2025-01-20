@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { signOut as amplifySignOut } from "aws-amplify/auth"
 import { useToast } from "@/components/ui/use-toast"
+import { useAccount } from "@/app/contexts/AccountContext"
 
 const client = generateClient<Schema>()
 
@@ -33,6 +34,7 @@ export default function AccountSettings() {
     const { authStatus } = useAuthenticator((context) => [context.authStatus])
     const router = useRouter()
     const { toast } = useToast()
+    const { refreshAccount } = useAccount()
     const [account, setAccount] = useState<Schema["Account"]["type"] | null>(null)
     const [hiddenItems, setHiddenItems] = useState<string[]>([])
     const [isSaving, setIsSaving] = useState(false)
@@ -51,9 +53,10 @@ export default function AccountSettings() {
                     const firstAccount = accounts[0]
                     setAccount(firstAccount)
                     if (firstAccount.settings) {
-                        const settings = firstAccount.settings as AccountSettings
-                        if (isValidAccountSettings(settings)) {
-                            setHiddenItems(settings.hiddenMenuItems)
+                        const parsedSettings = typeof firstAccount.settings === 'string' ?
+                            JSON.parse(firstAccount.settings) : firstAccount.settings
+                        if (isValidAccountSettings(parsedSettings)) {
+                            setHiddenItems(parsedSettings.hiddenMenuItems)
                         }
                     }
                 }
@@ -93,16 +96,22 @@ export default function AccountSettings() {
 
         setIsSaving(true)
         try {
+            const newSettings: AccountSettings = {
+                hiddenMenuItems: hiddenItems
+            }
             await client.models.Account.update({
                 id: account.id,
-                settings: {
-                    hiddenMenuItems: hiddenItems
-                }
+                settings: JSON.stringify(newSettings)
             })
+            
+            // Refresh the account data to update the menu
+            await refreshAccount()
+
             toast({
                 title: "Success",
                 description: "Account settings saved successfully"
             })
+            router.push("/settings")
         } catch (error) {
             console.error("Error saving settings:", error)
             toast({

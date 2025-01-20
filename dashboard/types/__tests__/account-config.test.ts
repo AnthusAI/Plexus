@@ -10,7 +10,7 @@ describe('AccountSettings validation', () => {
 
     it('accepts valid settings with string array', () => {
         const settings: AccountSettings = {
-            hiddenMenuItems: ['dashboard', 'settings', 'evaluations']
+            hiddenMenuItems: ['Feedback', 'Activity', 'Evaluations']
         }
         expect(isValidAccountSettings(settings)).toBe(true)
     })
@@ -30,14 +30,14 @@ describe('AccountSettings validation', () => {
 
     it('rejects non-array hiddenMenuItems', () => {
         const settings = {
-            hiddenMenuItems: 'dashboard'
+            hiddenMenuItems: 'not an array'
         }
         expect(isValidAccountSettings(settings)).toBe(false)
     })
 
     it('rejects array with non-string elements', () => {
         const settings = {
-            hiddenMenuItems: ['dashboard', 42, 'settings']
+            hiddenMenuItems: ['Feedback', 123, 'Activity']
         }
         expect(isValidAccountSettings(settings)).toBe(false)
     })

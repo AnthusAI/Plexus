@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { useState, useEffect, useRef } from "react"
 import { Activity, StickyNote, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3 } from "lucide-react"
 import Link from "next/link"
@@ -28,6 +29,7 @@ import { ChatEvaluationCard } from "@/components/chat-evaluation-card"
 
 import SquareLogo, { LogoVariant } from './logo-square'
 import { useSidebar } from "@/app/contexts/SidebarContext"
+import { useAccount } from "@/app/contexts/AccountContext"
 
 const useMediaQuery = (query: string): boolean => {
   const [matches, setMatches] = useState(false)
@@ -45,9 +47,12 @@ const useMediaQuery = (query: string): boolean => {
   return matches
 }
 
-const DashboardButton: React.FC<ButtonProps> = ({ className, ...props }) => (
-  <Button className={`!rounded-[6px] ${className}`} {...props} />
+const DashboardButton = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, ...props }, ref) => (
+    <Button ref={ref} className={`!rounded-[6px] ${className}`} {...props} />
+  )
 )
+DashboardButton.displayName = "DashboardButton"
 
 const MobileHeader = ({ 
   toggleLeftSidebar, 
@@ -87,39 +92,25 @@ const client = generateClient<Schema>()
 
 type Account = Schema['Account']['type']
 
+export const menuItems = [
+  { name: "Activity", icon: Activity, path: "/activity" },
+  { name: "Scorecards", icon: ListTodo, path: "/scorecards" },
+  { name: "Datasets", icon: Database, path: "/datasets" },
+  { name: "Evaluations", icon: FlaskConical, path: "/evaluations" },
+  { name: "Items", icon: StickyNote, path: "/items" },
+  { name: "Batches", icon: Layers3, path: "/batches" },
+  { name: "Feedback", icon: MessageCircleMore, path: "/feedback-queues" },
+  { name: "Reports", icon: FileBarChart, path: "/reports" },
+  { name: "Alerts", icon: Siren, path: "/alerts" },
+]
+
 const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; signOut: () => Promise<void> }) => {
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true)
   const { rightSidebarState, setRightSidebarState } = useSidebar()
   const { theme, setTheme } = useTheme()
   const isDesktop = useMediaQuery("(min-width: 1024px)")
   const isMobile = useMediaQuery("(max-width: 1023px)")
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
-  const [isLoadingAccounts, setIsLoadingAccounts] = useState(true)
-
-  useEffect(() => {
-    async function fetchAccounts() {
-      try {
-        const { data: accountsData } = await listFromModel<Schema['Account']['type']>(
-          client.models.Account
-        )
-        setAccounts(accountsData)
-        if (accountsData.length > 0 && !selectedAccount) {
-          setSelectedAccount(accountsData[0])
-        }
-      } catch (error) {
-        console.error('Error fetching accounts:', error)
-      } finally {
-        setIsLoadingAccounts(false)
-      }
-    }
-
-    fetchAccounts()
-  }, [selectedAccount])
-
-  const handleAccountSelect = (account: Account) => {
-    setSelectedAccount(account)
-  }
+  const { accounts, selectedAccount, isLoadingAccounts, visibleMenuItems, setSelectedAccount } = useAccount()
 
   useEffect(() => {    
     if (isDesktop) {
@@ -167,26 +158,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   const pathname = usePathname()
 
-  const menuItems = [
-    { name: "Activity", icon: Activity, path: "/activity" },
-    { name: "Scorecards", icon: ListTodo, path: "/scorecards" },
-    { name: "Datasets", icon: Database, path: "/datasets" },
-    { name: "Evaluations", icon: FlaskConical, path: "/evaluations" },
-    { name: "Items", icon: StickyNote, path: "/items" },
-    { name: "Batches", icon: Layers3, path: "/batches" },
-    { name: "Feedback", icon: MessageCircleMore, path: "/feedback-queues" },
-    { name: "Reports", icon: FileBarChart, path: "/reports" },
-    { name: "Alerts", icon: Siren, path: "/alerts" },
-  ]
-
   const LeftSidebar = () => {
-    const visibleMenuItems = menuItems.filter(item => {
-      if (!selectedAccount?.settings) return true
-      const settings = selectedAccount.settings as AccountSettings
-      if (!isValidAccountSettings(settings)) return true
-      return !settings.hiddenMenuItems.includes(item.name)
-    })
-
     return (
       <div className={`flex flex-col h-full py-2 bg-muted ${isMobile ? 'pr-3' : ''}`}>
         <div className={`mb-4 ${isLeftSidebarOpen ? 'pl-2' : ''}`}>
@@ -290,7 +262,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                       <DropdownMenuItem 
                         key={account.id} 
                         className="cursor-pointer"
-                        onClick={() => handleAccountSelect(account)}
+                        onClick={() => setSelectedAccount(account)}
                       >
                         <Avatar className="h-8 w-8 mr-2">
                           <AvatarImage 
