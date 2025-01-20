@@ -17,6 +17,7 @@ import typing
 from typing import Optional
 from plexus.dashboard.api.models.action import Action
 from plexus.dashboard.api.client import PlexusDashboardClient
+import json
 
 class ItemCountColumn(ProgressColumn):
     """Renders item count and total."""
@@ -386,6 +387,7 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
     from .CommandProgress import CommandProgress
     import time
     import random
+    import json
     from plexus.dashboard.api.models.action import Action
     from plexus.dashboard.api.client import PlexusDashboardClient
     
@@ -395,51 +397,65 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
     
     logging.info("Starting demo task processing...")
     
+    client = PlexusDashboardClient()
     action = None
+    
     if action_id:
-        client = PlexusDashboardClient()
         action = Action.get_by_id(action_id, client)
-        
-        # Initial state - no dispatch status
-        time.sleep(random.uniform(2.0, 3.0))
-        
-        # Update to dispatched state
-        action.dispatchStatus = 'DISPATCHED'
-        action.save()
-        time.sleep(random.uniform(2.0, 3.0))
-        
-        # Simulate Celery task creation
-        action.celeryTaskId = f'demo-task-{int(time.time())}'
-        action.save()
-        time.sleep(random.uniform(2.0, 3.0))
-        
-        # Simulate worker claiming the task
-        action.workerNodeId = f'demo-worker-{random.randint(1000, 9999)}'
-        action.save()
-        time.sleep(random.uniform(2.0, 3.0))
-        
-        # Now start actual processing
-        action.start_processing()
-        
-        # Create all three stages
-        stage_configs = {
-            "initialization": {
-                "order": 1,
-                "totalItems": 1,
-                "processedItems": 0
-            },
-            "processing": {
-                "order": 2,
-                "totalItems": total_items,
-                "processedItems": 0
-            },
-            "finishing": {
-                "order": 3,
-                "totalItems": 1,
-                "processedItems": 0
-            }
+    else:
+        # Create a new Action record with metadata as JSON string
+        metadata_str = json.dumps({
+            "total_items": total_items,
+            "target_duration": target_duration
+        })
+        action = Action.create(
+            client=client,
+            accountId="default",  # Using default account for demo
+            type="DEMO",
+            target=target,
+            command="plexus command demo",
+            metadata=metadata_str
+        )
+        action_id = action.id
+        logging.info(f"Created new Action with ID: {action_id}")
+    
+    # Initial state - no dispatch status
+    time.sleep(random.uniform(2.0, 3.0))
+    
+    # Update to dispatched state
+    action.update(dispatchStatus='DISPATCHED')
+    time.sleep(random.uniform(2.0, 3.0))
+    
+    # Simulate Celery task creation
+    action.update(celeryTaskId=f'demo-task-{int(time.time())}')
+    time.sleep(random.uniform(2.0, 3.0))
+    
+    # Simulate worker claiming the task
+    action.update(workerNodeId=f'demo-worker-{random.randint(1000, 9999)}')
+    time.sleep(random.uniform(2.0, 3.0))
+    
+    # Now start actual processing
+    action.start_processing()
+    
+    # Create all three stages
+    stage_configs = {
+        "initialization": {
+            "order": 1,
+            "totalItems": 1,
+            "processedItems": 0
+        },
+        "processing": {
+            "order": 2,
+            "totalItems": total_items,
+            "processedItems": 0
+        },
+        "finishing": {
+            "order": 3,
+            "totalItems": 1,
+            "processedItems": 0
         }
-        stages = action.update_progress(0, total_items, stage_configs)
+    }
+    stages = action.update_progress(0, total_items, stage_configs)
     
     with Progress(
         TextColumn("[bright_magenta]{task.fields[status]}"),

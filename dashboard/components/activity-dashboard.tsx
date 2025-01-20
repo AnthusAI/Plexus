@@ -520,7 +520,8 @@ export default function ActivityDashboard() {
             />
           </div>
 
-          <Card className="shadow-none border-none mb-6 bg-card">
+          {/* Temporarily disabled bar chart */}
+          {/* <Card className="shadow-none border-none mb-6 bg-card">
             <CardContent className="p-0">
               <div ref={chartContainerRef} className="w-full h-[300px]">
                 <ChartContainer config={chartConfig} className="h-full w-full">
@@ -567,7 +568,7 @@ export default function ActivityDashboard() {
                 </ChartContainer>
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
 
           <div className="grid gap-2 pb-8 grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3">
             {displayedActivities.map((activity) => (

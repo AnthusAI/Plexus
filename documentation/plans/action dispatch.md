@@ -104,36 +104,53 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Need to implement proper cleanup of completed actions
 
 4. **Next Implementation Steps**
-   1. ✓ Create frontend components for progress display
-      - ✓ Action list and detail views showing status and progress
-      - ✓ Stage-based progress visualization using SegmentedProgressBar
-      - ✓ Real-time subscription updates
-      - ✓ Error handling and completion states
-      - ✓ Rich visual feedback for the 3-stage model
-      - ✓ Pre-execution status display with animations
-      - ✓ Command and status message display
-      - ✓ Progress timing information
+   1. Fix Realtime Updates
+      - Modify progress tracking to update Action record on each stage update
+      - Ensure Action record includes latest stage status and progress
+      - Add updatedAt timestamp updates to trigger subscriptions
+      - Test subscription behavior with multiple concurrent actions
+      - Add error handling for subscription failures
+      - Optimize update frequency to balance responsiveness and load
 
-   2. Create Lambda function for Action-to-Celery dispatch
+   2. Improve Action List Display
+      - Fix sorting to show actions in reverse chronological order
+      - Add proper indexing on updatedAt field
+      - Implement pagination for better performance
+      - Add filtering options for status and type
+      - Consider adding search functionality
+
+   3. Polish Task Component UI
+      - Review and refine all task component variants
+      - Improve progress visualization
+      - Add better error state handling
+      - Enhance status message display
+      - Add tooltips for additional information
+      - Improve mobile responsiveness
+      - Add animation transitions
+      - Ensure consistent styling across variants
+      - Add keyboard navigation support
+      - Implement accessibility improvements
+
+   4. Create Lambda function for Action-to-Celery dispatch
       - Triggered on Action creation
       - Extracts command and Action ID
       - Dispatches Celery task with `--action-id`
       - Handles errors and updates Action status
       - Enables UI-driven command execution
 
-   3. Update other commands with Action support
+   5. Update other commands with Action support
       - Add `--action-id` parameter to all long-running commands
       - Implement stage-based progress tracking
       - Add proper error handling and status updates
       - Test with both direct and Celery execution
 
-   4. Implement Action cleanup and maintenance
+   6. Implement Action cleanup and maintenance
       - Add TTL for completed/failed Actions
       - Implement periodic cleanup of old Actions
       - Add monitoring for stuck/zombie Actions
       - Create Action archival process if needed
 
-   5. Add Action management features
+   7. Add Action management features
       - List view with filtering and sorting
       - Detail view with stage history
       - Manual retry/cancel capabilities
@@ -312,3 +329,55 @@ The evaluation command processes scorecard evaluations with:
 - Proper async execution handling
 - Detailed status reporting
 - Error handling and cleanup
+
+### Action Dispatch System Status
+
+#### Completed
+- Schema deployment ✓
+  - Action model with all required fields
+  - ActionStage model for progress tracking
+  - Proper indexes for efficient querying
+  - Relationships between models properly defined
+
+- Command Dispatch System ✓
+  - Synchronous and asynchronous execution
+  - Timeout configuration
+  - Output streaming to caller
+  - Action ID tracking for async operations
+  - Rich progress display with status messages
+  - Live progress updates for both sync and async operations
+
+- Progress Tracking ✓
+  - Current item count and total items
+  - Progress bar with percentage complete
+  - Time elapsed and estimated time remaining
+  - Dynamic status messages based on progress
+  - Clean display using Rich library
+  - Support for both local and remote progress updates
+
+- Frontend Integration (In Progress)
+  - Real-time action status updates in dashboard
+  - Progress visualization
+  - Stage tracking display
+  - Error handling and display
+
+#### Next Steps
+1. Testing & Validation
+   - Write comprehensive tests for Action model operations
+   - Validate index performance for common queries
+   - Test edge cases in async operation handling
+
+2. Monitoring & Observability
+   - Add logging for key operations
+   - Set up monitoring for long-running actions
+   - Create dashboard for system health metrics
+
+3. Performance Optimization
+   - Analyze query patterns for potential bottlenecks
+   - Optimize index usage
+   - Consider caching strategies for frequently accessed data
+
+4. Documentation
+   - Update API documentation with new Action model details
+   - Document best practices for action creation and monitoring
+   - Create troubleshooting guide
