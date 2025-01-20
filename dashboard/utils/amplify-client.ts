@@ -177,5 +177,76 @@ export const amplifyClient = {
       const response = await (client.models.ScoreResult as any).get(params)
       return { data: response.data as Schema['ScoreResult']['type'] | null }
     }
+  },
+  Dataset: {
+    list: async (params: any) => {
+      const response = await (client.models.Dataset as any).list(params)
+      return response as AmplifyResponse<Schema['Dataset']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (client.models.Dataset as any).get(params)
+      return { data: response.data as Schema['Dataset']['type'] | null }
+    },
+    create: async (data: {
+      name: string
+      description?: string
+      scorecardId: string
+      scoreId: string
+      currentVersionId?: string
+      createdAt: string
+      updatedAt: string
+    }) => {
+      const response = await (client.models.Dataset as any).create(data)
+      return { data: response.data as Schema['Dataset']['type'] }
+    },
+    update: async (data: {
+      id: string
+      name?: string
+      description?: string
+      currentVersionId?: string
+    }) => {
+      const response = await (client.models.Dataset as any).update(data)
+      return { data: response.data as Schema['Dataset']['type'] }
+    }
+  },
+  DatasetVersion: {
+    list: async (params: any) => {
+      const response = await (client.models.DatasetVersion as any).list(params)
+      return response as AmplifyResponse<Schema['DatasetVersion']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (client.models.DatasetVersion as any).get(params)
+      return { data: response.data as Schema['DatasetVersion']['type'] | null }
+    },
+    create: async (data: {
+      datasetId: string
+      versionNumber: number
+      configuration: any
+      createdAt: string
+    }) => {
+      const response = await (client.models.DatasetVersion as any).create(data)
+      return { data: response.data as Schema['DatasetVersion']['type'] }
+    }
+  },
+  DatasetProfile: {
+    list: async (params: any) => {
+      const response = await (client.models.DatasetProfile as any).list(params)
+      return response as AmplifyResponse<Schema['DatasetProfile']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (client.models.DatasetProfile as any).get(params)
+      return { data: response.data as Schema['DatasetProfile']['type'] | null }
+    },
+    create: async (data: {
+      datasetId: string
+      datasetVersionId: string
+      columnList: string[]
+      recordCounts: any
+      answerDistribution: any
+      createdAt: string
+    }) => {
+      const response = await (client.models.DatasetProfile as any).create(data)
+      return { data: response.data as Schema['DatasetProfile']['type'] }
+    }
   }
 } 
