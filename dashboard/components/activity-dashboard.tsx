@@ -48,7 +48,6 @@ import {
 } from '@/types/tasks'
 
 function transformActionToActivity(action: Schema['Action']['type']): ActivityData {
-
   let activityType: ActivityData['type'] = 'Report'  // Default to Report type for now
   if (action.type === 'test') {
     activityType = 'Report'  // We can adjust these mappings as we add more action types
@@ -58,6 +57,9 @@ function transformActionToActivity(action: Schema['Action']['type']): ActivityDa
   const stages = ((action as any).stages || [])
     .sort((a: Schema['ActionStage']['type'], b: Schema['ActionStage']['type']) => a.order - b.order)
     .map((stage: Schema['ActionStage']['type']) => ({
+      key: stage.name,
+      label: stage.name,
+      color: stage.name.toLowerCase() === 'processing' ? 'bg-secondary' : 'bg-primary',
       name: stage.name,
       order: stage.order,
       status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
@@ -109,24 +111,6 @@ function transformActionToActivity(action: Schema['Action']['type']): ActivityDa
     ) / 1000
   ) : undefined
 
-  const stageConfigs = ((action as any).stages || [])
-    .sort((a: Schema['ActionStage']['type'], b: Schema['ActionStage']['type']) => a.order - b.order)
-    .map((stage: Schema['ActionStage']['type']) => {
-      const stageName = stage.name.toLowerCase()
-      let color = 'bg-primary'
-      
-      // Only the middle processing stage should be secondary
-      if (stageName === 'processing') {
-        color = 'bg-secondary'
-      }
-      
-      return {
-        key: stage.name.toLowerCase(),
-        label: stage.name,
-        color
-      }
-    })
-
   const activity: ActivityData = {
     id: action.id,
     type: activityType,
@@ -144,7 +128,7 @@ function transformActionToActivity(action: Schema['Action']['type']): ActivityDa
       ? formatDuration(Math.round((new Date(action.estimatedCompletionAt).getTime() - new Date().getTime()) / 1000))
       : undefined,
     status: action.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-    stageConfigs: stageConfigs,
+    stageConfigs: stages,
     data: {
       id: action.id,
       title: `${action.type} Action`,

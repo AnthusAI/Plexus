@@ -24,6 +24,8 @@ export interface BaseTaskProps<TData = unknown> {
     elapsedTime?: string
     estimatedTimeRemaining?: string
     status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+    dispatchStatus?: 'DISPATCHED'
+    celeryTaskId?: string
   }
   onClick?: () => void
   controlButtons?: React.ReactNode
@@ -33,6 +35,7 @@ export interface BaseTaskProps<TData = unknown> {
   isLoading?: boolean
   error?: string
   onRetry?: () => void
+  showPreExecutionStages?: boolean
 }
 
 interface TaskChildProps<TData = unknown> extends BaseTaskProps<TData> {
@@ -59,7 +62,8 @@ const Task = <TData = unknown>({
   showProgress = true,
   isLoading = false,
   error,
-  onRetry
+  onRetry,
+  showPreExecutionStages
 }: TaskComponentProps<TData>) => {
   const childProps: TaskChildProps<TData> = {
     variant,
@@ -71,7 +75,8 @@ const Task = <TData = unknown>({
     showProgress,
     isLoading,
     error,
-    onRetry
+    onRetry,
+    showPreExecutionStages
   }
 
   if (variant === 'nested') {
@@ -194,7 +199,8 @@ const TaskContent = <TData = unknown>({
   visualization, 
   customSummary,
   showProgress = true,
-  isLoading
+  isLoading,
+  showPreExecutionStages
 }: TaskChildProps<TData> & {
   visualization?: React.ReactNode,
   customSummary?: React.ReactNode
@@ -216,7 +222,8 @@ const TaskContent = <TData = unknown>({
             <div className="mt-4">
               <ActionStatus
                 showStages={true}
-                stages={task.stages || []}
+                stages={task.stages}
+                stageConfigs={task.stages}
                 currentStageName={task.currentStageName}
                 processedItems={task.processedItems}
                 totalItems={task.totalItems}
@@ -225,80 +232,16 @@ const TaskContent = <TData = unknown>({
                 status={task.status || 'PENDING'}
                 command={task.description}
                 statusMessage={statusMessage}
-                stageConfigs={task.stages?.map(stage => {
-                  const stageName = stage.name.toLowerCase()
-                  let color = 'bg-primary'
-                  
-                  // Only the middle processing stage should be secondary
-                  if (stageName === 'processing') {
-                    color = 'bg-secondary'
-                  }
-                  
-                  return {
-                    key: stage.name,
-                    label: stage.name,
-                    color,
-                    tooltip: `${stage.name} - ${stage.status}${
-                      stage.processedItems !== undefined && stage.totalItems 
-                        ? ` (${stage.processedItems}/${stage.totalItems})`
-                        : ''
-                    }${
-                      stage.elapsedTime
-                        ? `\nElapsed: ${stage.elapsedTime}`
-                        : ''
-                    }`
-                  }
-                })}
-                isLoading={isLoading}
+                dispatchStatus={task.dispatchStatus}
+                celeryTaskId={task.celeryTaskId}
+                showPreExecutionStages={showPreExecutionStages}
               />
             </div>
           )}
+          {children}
         </div>
       ) : (
-        <div className="flex flex-col h-full">
-          {children}
-          {showProgress && task.stages && (
-            <div className="mt-4">
-              <ActionStatus
-                showStages={true}
-                stages={task.stages || []}
-                currentStageName={task.currentStageName}
-                processedItems={task.processedItems}
-                totalItems={task.totalItems}
-                elapsedTime={task.elapsedTime}
-                estimatedTimeRemaining={task.estimatedTimeRemaining}
-                status={task.status || 'PENDING'}
-                command={task.description}
-                statusMessage={statusMessage}
-                stageConfigs={task.stages?.map(stage => {
-                  const stageName = stage.name.toLowerCase()
-                  let color = 'bg-primary'
-                  
-                  // Only the middle processing stage should be secondary
-                  if (stageName === 'processing') {
-                    color = 'bg-secondary'
-                  }
-                  
-                  return {
-                    key: stage.name,
-                    label: stage.name,
-                    color,
-                    tooltip: `${stage.name} - ${stage.status}${
-                      stage.processedItems !== undefined && stage.totalItems 
-                        ? ` (${stage.processedItems}/${stage.totalItems})`
-                        : ''
-                    }${
-                      stage.elapsedTime
-                        ? `\nElapsed: ${stage.elapsedTime}`
-                        : ''
-                    }`
-                  }
-                })}
-                isLoading={isLoading}
-              />
-            </div>
-          )}
-        </div>
+        children
       )}
     </CardContent>
   )
