@@ -3,7 +3,7 @@ import nltk
 from types import FunctionType
 import pydantic
 from pydantic import Field
-from nltk.tokenize import sent_tokenize
+from nltk.tokenize import PunktSentenceTokenizer
 from rapidfuzz import fuzz, process
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import BaseOutputParser
@@ -35,10 +35,32 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
     class SlicingOutputParser(BaseOutputParser[dict]):
         FUZZY_MATCH_SCORE_CUTOFF: ClassVar[int] = 70
         text: str = Field(...)
+        __tokenizer: Optional[PunktSentenceTokenizer] = None
+
+        class Config:
+            arbitrary_types_allowed = True
+            underscore_attrs_are_private = True
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            nltk.download('punkt', quiet=True)  # Download the punkt tokenizer data
+            # Add debug logging
+            logging.info(f"NLTK data path: {nltk.data.path}")
+            try:
+                nltk.data.find('tokenizers/punkt/english.pickle')
+                logging.info("Found punkt tokenizer data")
+            except LookupError as e:
+                logging.error(f"Could not find punkt tokenizer data: {e}")
+                # Try downloading with verbose output
+                nltk.download('punkt', quiet=False)
+            self._initialize_tokenizer()
+
+        def _initialize_tokenizer(self) -> None:
+            if self.__tokenizer is None:
+                self.__tokenizer = PunktSentenceTokenizer()
+
+        def tokenize(self, text: str) -> list[str]:
+            self._initialize_tokenizer()
+            return self.__tokenizer.tokenize(text)
 
         @property
         def _type(self) -> str:
@@ -57,8 +79,8 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
             
             logging.info(f"Cleaned output: {output}")
             
-            # Tokenize the text into sentences
-            sentences = sent_tokenize(self.text)
+            # Tokenize the text into sentences using our initialized tokenizer
+            sentences = self.tokenize(self.text)
             
             # Use RapidFuzz to find the best match among sentences
             result = process.extractOne(
