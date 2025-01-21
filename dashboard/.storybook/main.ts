@@ -10,9 +10,7 @@ const config: StorybookConfig = {
     "@storybook/addon-essentials",
     "@storybook/addon-interactions",
     "@storybook/addon-themes",
-    "storybook-dark-mode",
-    "@storybook/addon-styling-webpack",
-    "@storybook/addon-interactions"
+    "storybook-dark-mode"
   ],
   framework: {
     name: "@storybook/nextjs",
@@ -21,6 +19,7 @@ const config: StorybookConfig = {
   docs: {
     autodocs: "tag",
   },
+  staticDirs: ['../public'],
   webpackFinal: async (config) => {
     if (config.resolve) {
       config.resolve.alias = {

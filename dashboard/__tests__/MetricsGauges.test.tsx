@@ -3,7 +3,6 @@ import { render, screen } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import MetricsGauges from '@/components/MetricsGauges'
 import { describe, it, expect } from '@jest/globals'
-import type { } from '@testing-library/jest-dom/extend-expect'
 
 describe('MetricsGauges', () => {
   const mockGauges = [
