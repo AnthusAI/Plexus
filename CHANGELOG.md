@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v0.6.1 (2025-01-21)
+
+### Bug Fixes
+
+- **dashboard**: Gradient logo backgrounds on login, sidebar
+  ([`d82626b`](https://github.com/AnthusAI/Plexus/commit/d82626bcd1f125f4c89a8b6e57827a1dbea1350e))
+
+### Chores
+
+- **dependencies**: Add SQLAlchemy[asyncio] version 1.4.15 to project dependencies to fix dependency
+  mismatch
+  ([`fe5ae21`](https://github.com/AnthusAI/Plexus/commit/fe5ae216ba805b86ba6fe4a2107ed9964ac23e7a))
+
+
 ## v0.6.0 (2025-01-21)
 
 
