@@ -1,6 +1,36 @@
 # CHANGELOG
 
 
+## v0.6.0-alpha.1 (2025-01-21)
+
+### Bug Fixes
+
+- **NLTK**: Standardize tokenizer initialization across parser classes
+  ([`2d48066`](https://github.com/AnthusAI/Plexus/commit/2d4806653e82d78b0e4def97e7212f94a1e90898))
+
+- Replace direct NLTK punkt downloads with proper error handling - Add consistent
+  PunktSentenceTokenizer initialization pattern - Implement private tokenizer attribute with proper
+  Pydantic config - Update tokenizer usage in BeforeAfterSlicer, Extractor, and ContextExtractor -
+  Fix potential race conditions in tokenizer initialization
+
+### Chores
+
+- **dependencies**: Update NLTK version and fix repository URL for openai-cost-calculator
+  ([`6f75c59`](https://github.com/AnthusAI/Plexus/commit/6f75c59ecd1f5d02526f34e5b493ca295f2d6697))
+
+### Features
+
+- **dashboard**: Account settings - closes #32
+  ([`d7e17d5`](https://github.com/AnthusAI/Plexus/commit/d7e17d5f33ae61b7f252a0e069522d17d72f672c))
+
+### Refactoring
+
+- **cloudwatch**: Enhance CloudWatchLogger with detailed AWS credentials logging and error handling.
+  Added debug and warning logs for client initialization and metric logging processes to improve
+  traceability and error diagnosis.
+  ([`13e30fe`](https://github.com/AnthusAI/Plexus/commit/13e30feb60dfa0df4e97432f292ac0a1858dc9be))
+
+
 ## v0.5.0 (2025-01-19)
 
 ### Features
