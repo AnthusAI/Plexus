@@ -21,11 +21,6 @@ type Account = Schema["Account"]["type"]
 const client = generateClient<Schema>()
 
 const accountApi = {
-    async list() {
-        type ListAccountsResponse = { data: Account[]; nextToken: string | null }
-        const list = client.models.Account.list as unknown as () => Promise<ListAccountsResponse>
-        return (await list()).data
-    },
     async update(id: string, settings: string) {
         type UpdateAccountFn = (args: { id: string; settings: string }) => Promise<Account>
         const update = client.models.Account.update as unknown as UpdateAccountFn
@@ -49,8 +44,7 @@ export default function AccountSettings() {
     const { authStatus } = useAuthenticator((context) => [context.authStatus])
     const router = useRouter()
     const { toast } = useToast()
-    const { refreshAccount } = useAccount()
-    const [account, setAccount] = useState<Schema["Account"]["type"] | null>(null)
+    const { selectedAccount, refreshAccount } = useAccount()
     const [hiddenItems, setHiddenItems] = useState<string[]>([])
     const [isSaving, setIsSaving] = useState(false)
 
@@ -61,32 +55,14 @@ export default function AccountSettings() {
     }, [authStatus, router])
 
     useEffect(() => {
-        async function fetchAccount() {
-            try {
-                const accounts = await accountApi.list()
-                if (accounts.length > 0) {
-                    const firstAccount = accounts[0]
-                    setAccount(firstAccount)
-                    if (firstAccount.settings) {
-                        const parsedSettings = typeof firstAccount.settings === 'string' ?
-                            JSON.parse(firstAccount.settings) : firstAccount.settings
-                        if (isValidAccountSettings(parsedSettings)) {
-                            setHiddenItems(parsedSettings.hiddenMenuItems)
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error("Error fetching account:", error)
-                toast({
-                    title: "Error",
-                    description: "Failed to load account settings",
-                    variant: "destructive"
-                })
+        if (selectedAccount?.settings) {
+            const parsedSettings = typeof selectedAccount.settings === 'string' ?
+                JSON.parse(selectedAccount.settings) : selectedAccount.settings
+            if (isValidAccountSettings(parsedSettings)) {
+                setHiddenItems(parsedSettings.hiddenMenuItems)
             }
         }
-
-        fetchAccount()
-    }, [toast])
+    }, [selectedAccount])
 
     const handleSignOut = async () => {
         try {
@@ -107,14 +83,14 @@ export default function AccountSettings() {
     }
 
     const handleSave = async () => {
-        if (!account) return
+        if (!selectedAccount) return
 
         setIsSaving(true)
         try {
             const newSettings: AccountSettings = {
                 hiddenMenuItems: hiddenItems
             }
-            await accountApi.update(account.id, JSON.stringify(newSettings))
+            await accountApi.update(selectedAccount.id, JSON.stringify(newSettings))
             
             // Refresh the account data to update the menu
             await refreshAccount()
@@ -140,6 +116,16 @@ export default function AccountSettings() {
         return null
     }
 
+    if (!selectedAccount) {
+        return (
+            <DashboardLayout signOut={handleSignOut}>
+                <div className="px-6 pt-0 pb-6">
+                    <p>No account selected</p>
+                </div>
+            </DashboardLayout>
+        )
+    }
+
     return (
         <DashboardLayout signOut={handleSignOut}>
             <div className="px-6 pt-0 pb-6 space-y-6">
@@ -152,7 +138,7 @@ export default function AccountSettings() {
 
                 <Card>
                     <CardHeader>
-                        <CardTitle>Menu Visibility</CardTitle>
+                        <CardTitle>Menu Visibility for {selectedAccount.name}</CardTitle>
                         <CardDescription>
                             Choose which menu items to show or hide in the sidebar.
                         </CardDescription>
