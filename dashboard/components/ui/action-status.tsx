@@ -75,6 +75,7 @@ export interface ActionStatusProps {
   workerNodeId?: string
   showPreExecutionStages?: boolean
   completedAt?: string
+  truncateMessages?: boolean
 }
 
 function formatDuration(seconds: number): string {
@@ -108,7 +109,8 @@ export function ActionStatus({
   showPreExecutionStages = false,
   command,
   statusMessage,
-  completedAt
+  completedAt,
+  truncateMessages = true
 }: ActionStatusProps) {
   const isInProgress = status === 'RUNNING'
   const isFinished = status === 'COMPLETED' || status === 'FAILED'
@@ -242,16 +244,16 @@ export function ActionStatus({
   const showEmptyState = !stages.length && !preExecutionStatus
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       <StyleTag />
       {(command || statusMessage) && (
-        <div className="rounded-lg bg-card-light p-3 space-y-2">
+        <div className="rounded-lg bg-card-light px-2 py-1">
           {command && (
-            <div className="font-mono text-sm text-muted-foreground truncate">
+            <div className={`font-mono text-sm text-muted-foreground ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
               $ {command}
             </div>
           )}
-          <div className="font-mono text-sm truncate">
+          <div className={`font-mono text-sm ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
             {statusMessage || '\u00A0'}
           </div>
         </div>
