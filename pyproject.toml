@@ -64,7 +64,8 @@ dependencies = [
     "rich>=13.7.1",
     "gql[requests]>=3.0.0",
     "openai-cost-calculator @ git+https://github.com/AnthusAI/openai_cost_calculator.git@main",
-    "invoke>=2.2.0"
+    "invoke>=2.2.0",
+    "SQLAlchemy[asyncio]==1.4.15"
 ]
 
 [project.scripts]
