@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.6.0-rc.1 (2025-01-21)
+
+### Chores
+
+- **dependencies**: Add SQLAlchemy[asyncio] version 1.4.15 to project dependencies to fix dependency
+  mismatch
+  ([`fe5ae21`](https://github.com/AnthusAI/Plexus/commit/fe5ae216ba805b86ba6fe4a2107ed9964ac23e7a))
+
+
 ## v0.6.0-alpha.1 (2025-01-21)
 
 ### Bug Fixes
@@ -60,6 +69,9 @@ feat(landing): implement responsive landing page with navigation
 
 ## v0.4.2-alpha.3 (2025-01-18)
 
+
+## v0.4.2-rc.2 (2025-01-18)
+
 ### Bug Fixes
 
 - **logging**: Enhance AWS credentials handling in CustomLogging.py
@@ -73,6 +85,9 @@ feat(landing): implement responsive landing page with navigation
 
 
 ## v0.4.2-alpha.2 (2025-01-17)
+
+
+## v0.4.2-rc.1 (2025-01-17)
 
 ### Bug Fixes
 
