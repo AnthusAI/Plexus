@@ -1,6 +1,8 @@
 import React from 'react'
 import type { Meta, StoryObj } from '@storybook/react'
 import { DualPhaseProgressBar } from '../components/ui/dual-phase-progress-bar'
+import { expect } from '@storybook/test'
+import { within } from '@storybook/testing-library'
 
 const meta: Meta<typeof DualPhaseProgressBar> = {
   title: 'Progress Bars/DualPhaseProgressBar',
@@ -34,7 +36,7 @@ const meta: Meta<typeof DualPhaseProgressBar> = {
       control: 'boolean'
     }
   }
-}
+} satisfies Meta<typeof DualPhaseProgressBar>
 
 export default meta
 type Story = StoryObj<typeof DualPhaseProgressBar>
@@ -50,14 +52,12 @@ export const Default: Story = {
     secondPhaseTotalItems: 100,
     isFocused: false
   },
-  decorators: [
-    (Story) => (
-      <div className="w-[600px] bg-background text-foreground p-4">
-        <div className="text-sm text-muted-foreground mb-2">Default Progress Bar</div>
-        <Story />
-      </div>
-    ),
-  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByText('60%')).toBeInTheDocument()
+    await expect(canvas.getByText('60')).toBeInTheDocument()
+    await expect(canvas.getByText('100')).toBeInTheDocument()
+  }
 }
 
 export const Focused: Story = {
@@ -71,14 +71,12 @@ export const Focused: Story = {
     secondPhaseTotalItems: 100,
     isFocused: true
   },
-  decorators: [
-    (Story) => (
-      <div className="w-[600px] bg-background text-foreground p-4">
-        <div className="text-sm text-muted-foreground mb-2">Focused Progress Bar</div>
-        <Story />
-      </div>
-    ),
-  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByText('60%')).toBeInTheDocument()
+    await expect(canvas.getByText('60')).toBeInTheDocument()
+    await expect(canvas.getByText('100')).toBeInTheDocument()
+  }
 }
 
 export const AllStates: Story = {
@@ -176,6 +174,16 @@ export const AllStates: Story = {
       </div>
     </div>
   ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    
+    // Check for presence of all expected progress values
+    const progressValues = ['0%', '30%', '100%', '60%', '75%']
+    for (const value of progressValues) {
+      const elements = await canvas.queryAllByText(value)
+      await expect(elements.length).toBeGreaterThan(0)
+    }
+  }
 }
 
 export const SmallBatch: Story = {
@@ -189,12 +197,10 @@ export const SmallBatch: Story = {
     secondPhaseTotalItems: 3,
     isFocused: false
   },
-  decorators: [
-    (Story) => (
-      <div className="w-[600px] bg-background text-foreground p-4">
-        <div className="text-sm text-muted-foreground mb-2">Small Batch Progress</div>
-        <Story />
-      </div>
-    ),
-  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByText('66%')).toBeInTheDocument()
+    await expect(canvas.getByText('2')).toBeInTheDocument()
+    await expect(canvas.getByText('3')).toBeInTheDocument()
+  }
 } 
