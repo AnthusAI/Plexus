@@ -5,15 +5,34 @@ import { ThemeProvider } from '../components/theme-provider';
 import { withThemeByClassName } from "@storybook/addon-themes";
 
 const mockNextNavigation = (Story: React.ComponentType) => {
+  // Mock the Next.js app router
   // @ts-ignore - we're mocking the router
   window.next = {
     router: {
-      push: async () => {},
       back: () => {},
       forward: () => {},
       refresh: () => {},
-      replace: () => {},
-      prefetch: () => {}
+      push: async () => {},
+      replace: async () => {},
+      prefetch: async () => {},
+      beforePopState: () => {},
+      events: {
+        on: () => {},
+        off: () => {},
+        emit: () => {},
+      },
+      isFallback: false,
+      isLocaleDomain: false,
+      isPreview: false,
+      isReady: true,
+      route: '/',
+      basePath: '',
+      pathname: '/',
+      query: {},
+      asPath: '/',
+      locale: undefined,
+      locales: undefined,
+      defaultLocale: undefined,
     }
   };
 
@@ -32,6 +51,13 @@ const preview: Preview = {
     },
     darkMode: {
       dark: ["class", '[data-mode="dark"]'],
+    },
+    nextjs: {
+      appDirectory: true,
+      navigation: {
+        pathname: '/',
+        query: {},
+      },
     },
   },
   decorators: [

@@ -36,14 +36,6 @@ export async function listFromModel<T extends { id: string }>(
       if (currentNextToken) options.nextToken = currentNextToken
       
       const response = await model.list(options)
-      console.log('List page response:', {
-        count: response.data?.length,
-        nextToken: response.nextToken,
-        sampleItem: response.data?.[0] ? {
-          id: response.data[0].id,
-          allFields: Object.keys(response.data[0])
-        } : null
-      })
 
       if (response.data?.length) {
         allData = [...allData, ...response.data]
@@ -51,12 +43,6 @@ export async function listFromModel<T extends { id: string }>(
 
       currentNextToken = response.nextToken
     } while (currentNextToken)
-
-    console.log('All pages fetched:', {
-      totalCount: allData.length,
-      firstId: allData[0]?.id,
-      lastId: allData[allData.length - 1]?.id
-    })
 
     return {
       data: allData,
