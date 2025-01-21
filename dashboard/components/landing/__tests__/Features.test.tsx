@@ -5,7 +5,7 @@ import { Features } from '../Features'
 describe('Features Component', () => {
   it('renders the main heading', () => {
     render(<Features />)
-    expect(screen.getByText('Powerful Features for AI Orchestration')).toBeInTheDocument()
+    expect(screen.getByText('Powerful Features for Agent Orchestration')).toBeInTheDocument()
   })
 
   it('renders all feature cards', () => {
@@ -26,7 +26,7 @@ describe('Features Component', () => {
 
   it('renders feature icons', () => {
     render(<Features />)
-    const icons = document.querySelectorAll('.text-fuchsia-500')
+    const icons = document.querySelectorAll('.text-accent')
     expect(icons).toHaveLength(4)
   })
 }) 

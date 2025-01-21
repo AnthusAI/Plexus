@@ -13,3 +13,11 @@ jest.mock('next/navigation', () => ({
     return ''
   }
 }))
+
+class MockResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+global.ResizeObserver = MockResizeObserver;

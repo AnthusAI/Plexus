@@ -26,14 +26,14 @@ describe('Hero', () => {
   it('renders the main heading', () => {
     render(<Hero />)
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
-    expect(screen.getByText(/orchestrate/i)).toBeInTheDocument()
     expect(screen.getByText(/ai agents/i)).toBeInTheDocument()
+    expect(screen.getByText(/your data/i)).toBeInTheDocument()
     expect(screen.getByText(/no code/i)).toBeInTheDocument()
   })
 
   it('renders both CTA buttons', () => {
     render(<Hero />)
-    expect(screen.getByText('Request Early Access')).toBeInTheDocument()
+    expect(screen.getByText('Learn More')).toBeInTheDocument()
     expect(screen.getByText('Log In')).toBeInTheDocument()
   })
 
