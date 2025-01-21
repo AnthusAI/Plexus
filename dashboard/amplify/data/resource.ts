@@ -100,6 +100,7 @@ const schema = a.schema({
     Score: a
         .model({
             name: a.string().required(),
+            key: a.string().required(),
             description: a.string(),
             order: a.integer().required(),
             type: a.string().required(),
@@ -112,8 +113,9 @@ const schema = a.schema({
             evaluations: a.hasMany('Evaluation', 'scoreId'),
             batchJobs: a.hasMany('BatchJob', 'scoreId'),
             scoringJobs: a.hasMany('ScoringJob', 'scoreId'),
+            datasets: a.hasMany('Dataset', 'scoreId'),
             tasks: a.hasMany('Task', 'scoreId'),
-            metadata: a.json(),
+            metadata: a.json()
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
