@@ -73,10 +73,14 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
             JSON.parse(account.settings) : account.settings
         }))
         setAccounts(accountsWithParsedSettings)
-        if (accountsWithParsedSettings.length > 0 && !selectedAccount) {
-          const firstAccount = accountsWithParsedSettings[0]
-          setSelectedAccount(firstAccount)
-          updateVisibleMenuItems(firstAccount)
+        if (!selectedAccount) {
+          const defaultAccount = accountsWithParsedSettings.find(
+            account => account.key === 'call-criteria'
+          ) || accountsWithParsedSettings[0]
+          if (defaultAccount) {
+            setSelectedAccount(defaultAccount)
+            updateVisibleMenuItems(defaultAccount)
+          }
         }
       } catch (error) {
         console.error('Error fetching accounts:', error)
