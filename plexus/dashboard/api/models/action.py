@@ -297,29 +297,31 @@ class Action(BaseModel):
 
         now = datetime.now(timezone.utc)
 
-        # Always update the action's updatedAt timestamp to trigger subscriptions
-        update_fields = {"updatedAt": now}
+        # Determine new status based on progress
+        new_status = self.status
+        if processed_items == 0:
+            if self.status not in ["COMPLETED", "FAILED"]:
+                new_status = "PENDING"
+        elif processed_items == total_items:
+            if self.status != "COMPLETED":
+                new_status = "COMPLETED"
+        else:
+            if self.status != "RUNNING":
+                new_status = "RUNNING"
+
+        # Combine all action updates into a single call
+        update_fields = {
+            "updatedAt": now,
+            "status": new_status
+        }
         
-        # Add estimated completion time if provided
         if estimated_completion_at:
             update_fields["estimatedCompletionAt"] = estimated_completion_at
         
+        if new_status == "COMPLETED":
+            update_fields["completedAt"] = now
+        
         self.update(**update_fields)
-
-        # Update action status based on progress
-        if processed_items == 0:
-            if self.status not in ["COMPLETED", "FAILED"]:
-                self.update(status="PENDING")
-        elif processed_items == total_items:
-            if self.status != "COMPLETED":
-                self.update(
-                    status="COMPLETED",
-                    completedAt=now
-                )
-        else:
-            # Only update status to RUNNING if needed, never update startedAt here
-            if self.status != "RUNNING":
-                self.update(status="RUNNING")
 
         # Get or create stages
         stages = self.get_stages()
