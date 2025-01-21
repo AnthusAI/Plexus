@@ -66,6 +66,10 @@ const schema = a.schema({
             scoringJobs: a.hasMany('ScoringJob', 'scorecardId'),
             scoreResults: a.hasMany('ScoreResult', 'scorecardId'),
             tasks: a.hasMany('Task', 'scorecardId'),
+<<<<<<< Updated upstream
+=======
+            datasets: a.hasMany('Dataset', 'scorecardId'),
+>>>>>>> Stashed changes
             externalId: a.string(),
             itemId: a.string(),
             item: a.belongsTo('Item', 'itemId'),
