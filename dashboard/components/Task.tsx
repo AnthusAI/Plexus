@@ -5,8 +5,9 @@ import { Square, RectangleVertical, X } from 'lucide-react'
 import { formatTimeAgo } from '@/utils/format-time'
 import { CardButton } from '@/components/CardButton'
 import { ActionStatus, ActionStageConfig } from './ui/action-status'
+import { BaseTaskData } from '@/types/base'
 
-export interface BaseTaskProps<TData = unknown> {
+export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
   variant: 'grid' | 'detail' | 'nested'
   task: {
     id: string
@@ -14,18 +15,19 @@ export interface BaseTaskProps<TData = unknown> {
     scorecard: string
     score: string
     time: string
-    summary?: string
     description?: string
     data?: TData
     stages?: ActionStageConfig[]
     currentStageName?: string
     processedItems?: number
     totalItems?: number
-    elapsedTime?: string
-    estimatedTimeRemaining?: string
+    startedAt?: string
+    estimatedCompletionAt?: string
     status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
     dispatchStatus?: 'DISPATCHED'
     celeryTaskId?: string
+    workerNodeId?: string
+    completedAt?: string
   }
   onClick?: () => void
   controlButtons?: React.ReactNode
@@ -196,28 +198,30 @@ const TaskContent = <TData = unknown>({
   task, 
   variant, 
   children, 
-  visualization, 
-  customSummary,
+  visualization,
   showProgress = true,
   isLoading,
   showPreExecutionStages
 }: TaskChildProps<TData> & {
-  visualization?: React.ReactNode,
-  customSummary?: React.ReactNode
+  visualization?: React.ReactNode
 }) => {
-  // Find the current stage's status message
-  const currentStage = task.stages?.find(stage => stage.name === task.currentStageName)
-  const statusMessage = currentStage?.statusMessage
+  // Get status message from current stage or last completed stage if task is done
+  const statusMessage = (() => {
+    if (!task.stages?.length) return undefined
+    if (task.status === 'COMPLETED' || task.status === 'FAILED') {
+      // Find the last stage with a status message
+      return [...task.stages]
+        .reverse()
+        .find(stage => stage.statusMessage)?.statusMessage
+    }
+    // Otherwise use current stage's message
+    return task.stages.find(stage => stage.name === task.currentStageName)?.statusMessage
+  })()
 
   return (
     <CardContent className="h-full p-0 flex flex-col flex-1">
       {variant === 'grid' ? (
         <div className="flex flex-col h-full">
-          <div className="space-y-1 w-full">
-            <div className="text-lg font-bold">
-              {customSummary ? customSummary : <div>{task.summary}</div>}
-            </div>
-          </div>
           {showProgress && task.stages && (
             <div className="mt-4">
               <ActionStatus
@@ -227,14 +231,16 @@ const TaskContent = <TData = unknown>({
                 currentStageName={task.currentStageName}
                 processedItems={task.processedItems}
                 totalItems={task.totalItems}
-                elapsedTime={task.elapsedTime}
-                estimatedTimeRemaining={task.estimatedTimeRemaining}
+                startedAt={task.startedAt}
+                estimatedCompletionAt={task.estimatedCompletionAt}
                 status={task.status || 'PENDING'}
-                command={task.description}
+                command={task.data?.command}
                 statusMessage={statusMessage}
                 dispatchStatus={task.dispatchStatus}
                 celeryTaskId={task.celeryTaskId}
+                workerNodeId={task.workerNodeId}
                 showPreExecutionStages={showPreExecutionStages}
+                completedAt={task.completedAt}
               />
             </div>
           )}

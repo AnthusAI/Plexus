@@ -6,6 +6,7 @@ export interface BaseTaskData {
   title: string
   description?: string
   errorMessage?: string
+  command?: string
 }
 
 export type ActivityType = 
@@ -34,8 +35,9 @@ export type BaseActivity = {
   currentStageName?: string
   processedItems?: number
   totalItems?: number
-  elapsedTime?: string
-  estimatedTimeRemaining?: string
+  startedAt?: string
+  estimatedCompletionAt?: string
+  completedAt?: string
   status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
   stageConfigs?: ActionStageConfig[]
   data?: BaseTaskData

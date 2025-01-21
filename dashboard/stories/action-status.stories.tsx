@@ -30,6 +30,9 @@ const sampleStages: ActionStageConfig[] = [
     name: 'Initializing',
     order: 0,
     status: 'COMPLETED',
+    startedAt: new Date(Date.now() - 300000).toISOString(),
+    completedAt: new Date(Date.now() - 240000).toISOString(),
+    estimatedCompletionAt: new Date(Date.now() - 240000).toISOString(),
   },
   {
     key: 'Processing',
@@ -40,6 +43,9 @@ const sampleStages: ActionStageConfig[] = [
     status: 'RUNNING',
     processedItems: 45,
     totalItems: 100,
+    startedAt: new Date(Date.now() - 240000).toISOString(),
+    completedAt: new Date(Date.now() - 60000).toISOString(),
+    estimatedCompletionAt: new Date(Date.now() - 60000).toISOString(),
   },
   {
     key: 'Finalizing',
@@ -48,6 +54,9 @@ const sampleStages: ActionStageConfig[] = [
     name: 'Finalizing',
     order: 2,
     status: 'PENDING',
+    startedAt: new Date(Date.now() - 60000).toISOString(),
+    completedAt: new Date(Date.now() - 1000).toISOString(),
+    estimatedCompletionAt: new Date(Date.now() - 1000).toISOString(),
   }
 ]
 
@@ -148,8 +157,8 @@ export const Initializing: Story = {
     currentStageName: 'Initializing',
     processedItems: 45,
     totalItems: 100,
-    elapsedTime: '2m 15s',
-    estimatedTimeRemaining: '2m 45s',
+    startedAt: new Date(Date.now() - 135000).toISOString(), // 2m 15s ago
+    estimatedCompletionAt: new Date(Date.now() + 165000).toISOString(), // 2m 45s from now
     status: 'RUNNING',
     command: 'plexus report generate --type monthly',
     statusMessage: 'Loading data...'
@@ -164,8 +173,8 @@ export const Running: Story = {
     currentStageName: 'Processing',
     processedItems: 45,
     totalItems: 100,
-    elapsedTime: '2m 15s',
-    estimatedTimeRemaining: '2m 45s',
+    startedAt: new Date(Date.now() - 135000).toISOString(), // 2m 15s ago
+    estimatedCompletionAt: new Date(Date.now() + 165000).toISOString(), // 2m 45s from now
     status: 'RUNNING',
     command: 'plexus report generate --type monthly',
     statusMessage: 'Processing activity data...'
@@ -180,8 +189,8 @@ export const NoStages: Story = {
     currentStageName: 'Processing',
     processedItems: 45,
     totalItems: 100,
-    elapsedTime: '2m 15s',
-    estimatedTimeRemaining: '2m 45s',
+    startedAt: new Date(Date.now() - 135000).toISOString(), // 2m 15s ago
+    estimatedCompletionAt: new Date(Date.now() + 165000).toISOString(), // 2m 45s from now
     status: 'RUNNING',
     command: 'plexus report list',
     statusMessage: 'Fetching report list...'
@@ -199,7 +208,7 @@ export const Finalizing: Story = {
     currentStageName: 'Finalizing',
     processedItems: 100,
     totalItems: 100,
-    elapsedTime: '4m 45s',
+    startedAt: new Date(Date.now() - 285000).toISOString(), // 4m 45s ago
     status: 'RUNNING',
     command: 'plexus report generate --type monthly',
     statusMessage: 'Generating PDF report...'
@@ -211,13 +220,23 @@ export const Complete: Story = {
     showStages: true,
     stages: sampleStages.map(stage => ({
       ...stage,
-      status: 'COMPLETED' as const
+      status: 'COMPLETED' as const,
+      startedAt: new Date(Date.now() - 300000).toISOString(),
+      completedAt: new Date(Date.now() - 1000).toISOString(),
+      estimatedCompletionAt: new Date(Date.now() - 1000).toISOString()
     })),
-    stageConfigs: sampleStages,
+    stageConfigs: sampleStages.map(stage => ({
+      ...stage,
+      status: 'COMPLETED' as const,
+      startedAt: new Date(Date.now() - 300000).toISOString(),
+      completedAt: new Date(Date.now() - 1000).toISOString(),
+      estimatedCompletionAt: new Date(Date.now() - 1000).toISOString()
+    })),
     currentStageName: 'Complete',
     processedItems: 100,
     totalItems: 100,
-    elapsedTime: '5m 0s',
+    startedAt: new Date(Date.now() - 300000).toISOString(), // 5m ago
+    estimatedCompletionAt: new Date(Date.now() - 1000).toISOString(), // Just completed
     status: 'COMPLETED',
     command: 'plexus report generate --type monthly',
     statusMessage: 'Report generated successfully'
@@ -230,7 +249,10 @@ export const Failed: Story = {
     stages: [
       ...sampleStages.map(stage => ({
         ...stage,
-        status: 'COMPLETED' as const
+        status: 'COMPLETED' as const,
+        startedAt: new Date(Date.now() - 135000).toISOString(),
+        completedAt: new Date(Date.now() - 1000).toISOString(),
+        estimatedCompletionAt: new Date(Date.now() - 1000).toISOString()
       })),
       {
         key: 'Complete',
@@ -238,12 +260,22 @@ export const Failed: Story = {
         color: 'bg-false',
         name: 'Complete',
         order: 3,
-        status: 'FAILED' as const
+        status: 'FAILED' as const,
+        startedAt: new Date(Date.now() - 135000).toISOString(),
+        completedAt: new Date(Date.now() - 1000).toISOString(),
+        estimatedCompletionAt: new Date(Date.now() - 1000).toISOString()
       }
     ],
-    stageConfigs: sampleStages,
+    stageConfigs: sampleStages.map(stage => ({
+      ...stage,
+      status: 'COMPLETED' as const,
+      startedAt: new Date(Date.now() - 135000).toISOString(),
+      completedAt: new Date(Date.now() - 1000).toISOString(),
+      estimatedCompletionAt: new Date(Date.now() - 1000).toISOString()
+    })),
     currentStageName: 'Complete',
-    elapsedTime: '2m 15s',
+    startedAt: new Date(Date.now() - 135000).toISOString(), // 2m 15s ago
+    estimatedCompletionAt: new Date(Date.now() - 1000).toISOString(), // Just failed
     status: 'FAILED',
     errorLabel: 'Failed',
     command: 'plexus report generate --type monthly',
