@@ -40,18 +40,18 @@ export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
   showPreExecutionStages?: boolean
 }
 
-interface TaskChildProps<TData = unknown> extends BaseTaskProps<TData> {
+interface TaskChildProps<TData extends BaseTaskData = BaseTaskData> extends BaseTaskProps<TData> {
   children?: React.ReactNode
   showProgress?: boolean
 }
 
-export interface TaskComponentProps<TData = unknown> extends BaseTaskProps<TData> {
+export interface TaskComponentProps<TData extends BaseTaskData = BaseTaskData> extends BaseTaskProps<TData> {
   renderHeader: (props: TaskChildProps<TData>) => React.ReactNode
   renderContent: (props: TaskChildProps<TData>) => React.ReactNode
   showProgress?: boolean
 }
 
-const Task = <TData = unknown>({ 
+const Task = <TData extends BaseTaskData = BaseTaskData>({ 
   variant, 
   task, 
   onClick, 
@@ -113,7 +113,7 @@ const Task = <TData = unknown>({
       <div className="flex-none">
         {renderHeader(childProps)}
       </div>
-      <CardContent className="flex-1 min-h-0 p-4">
+      <CardContent className="flex-1 min-h-0 p-2">
         {error ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             <div className="text-destructive mb-2">{error}</div>
@@ -136,7 +136,7 @@ const Task = <TData = unknown>({
   )
 }
 
-const TaskHeader = <TData = unknown>({ 
+const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({ 
   task, 
   variant, 
   children, 
@@ -149,7 +149,7 @@ const TaskHeader = <TData = unknown>({
   const formattedTime = formatTimeAgo(task.time, variant === 'grid')
 
   return (
-    <CardHeader className="space-y-1.5 p-4 pr-4 flex flex-col items-start">
+    <CardHeader className="space-y-1.5 px-2 py-2 flex flex-col items-start">
       <div className="flex justify-between items-start w-full">
         <div className="flex flex-col">
           <div className="text-lg font-bold">{task.type}</div>
@@ -194,7 +194,7 @@ const TaskHeader = <TData = unknown>({
   )
 }
 
-const TaskContent = <TData = unknown>({ 
+const TaskContent = <TData extends BaseTaskData = BaseTaskData>({ 
   task, 
   variant, 
   children, 
@@ -220,35 +220,30 @@ const TaskContent = <TData = unknown>({
 
   return (
     <CardContent className="h-full p-0 flex flex-col flex-1">
-      {variant === 'grid' ? (
-        <div className="flex flex-col h-full">
-          {showProgress && task.stages && (
-            <div className="mt-4">
-              <ActionStatus
-                showStages={true}
-                stages={task.stages}
-                stageConfigs={task.stages}
-                currentStageName={task.currentStageName}
-                processedItems={task.processedItems}
-                totalItems={task.totalItems}
-                startedAt={task.startedAt}
-                estimatedCompletionAt={task.estimatedCompletionAt}
-                status={task.status || 'PENDING'}
-                command={task.data?.command}
-                statusMessage={statusMessage}
-                dispatchStatus={task.dispatchStatus}
-                celeryTaskId={task.celeryTaskId}
-                workerNodeId={task.workerNodeId}
-                showPreExecutionStages={showPreExecutionStages}
-                completedAt={task.completedAt}
-              />
-            </div>
-          )}
-          {children}
+      {showProgress && task.stages && (
+        <div>
+          <ActionStatus
+            showStages={true}
+            stages={task.stages}
+            stageConfigs={task.stages}
+            currentStageName={task.currentStageName}
+            processedItems={task.processedItems}
+            totalItems={task.totalItems}
+            startedAt={task.startedAt}
+            estimatedCompletionAt={task.estimatedCompletionAt}
+            status={task.status || 'PENDING'}
+            command={task.data?.command}
+            statusMessage={statusMessage}
+            dispatchStatus={task.dispatchStatus}
+            celeryTaskId={task.celeryTaskId}
+            workerNodeId={task.workerNodeId}
+            showPreExecutionStages={showPreExecutionStages}
+            completedAt={task.completedAt}
+            truncateMessages={variant === 'grid'}
+          />
         </div>
-      ) : (
-        children
       )}
+      {children}
     </CardContent>
   )
 }

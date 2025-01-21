@@ -51,6 +51,11 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
   const rows = variant === LogoVariant.Square ? 6 : variant === LogoVariant.Wide ? 2 : 1;
   const containerRef = useRef<HTMLDivElement>(null);
   const [fontSize, setFontSize] = useState('16px');
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const cycleDuration = 80000;
 
@@ -68,20 +73,24 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
     Array(rows * columns).fill(0).map(() => Math.random() * 0.2 - 0.1),
   [rows, columns]);
 
-  const [grid, setGrid] = useState<string[]>(() =>
+  // Use a fixed initial grid for server-side rendering
+  const initialGrid = useMemo(() => 
     Array(rows * columns).fill(0).map((_, index) => {
       const row = Math.floor(index / columns);
       const col = index % columns;
-      const baseProgress = ((10 - (row + col)) / 10 + ((Date.now() - startTime) / cycleDuration)) % 1;
-      const randomizedProgress = (baseProgress + randomOffsets[index] + jitterValues[index].value + 1) % 1;
-      return getColorAtPosition(randomizedProgress);
-    })
-  );
+      const baseProgress = (10 - (row + col)) / 10;
+      return getColorAtPosition(baseProgress);
+    }),
+  [rows, columns]);
+
+  const [grid, setGrid] = useState<string[]>(initialGrid);
 
   useEffect(() => {
-    const animationInterval = setInterval(() => {
-      setGrid(prevGrid => 
-        prevGrid.map((_, index) => {
+    if (!isClient) return;
+
+    const updateGrid = () => {
+      setGrid(prev => 
+        prev.map((_, index) => {
           const row = Math.floor(index / columns);
           const col = index % columns;
           const baseProgress = ((10 - (row + col)) / 10 + ((Date.now() - startTime) / cycleDuration)) % 1;
@@ -89,20 +98,11 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
           return getColorAtPosition(randomizedProgress);
         })
       );
+    };
 
-      setJitterValues(prevJitterValues => 
-        prevJitterValues.map(jitter => {
-          const newValue = jitter.value + (jitter.target - jitter.value) * 0.05;
-          if (Math.abs(newValue - jitter.target) < 0.001) {
-            return { value: newValue, target: Math.random() * 0.1 - 0.05 };
-          }
-          return { ...jitter, value: newValue };
-        })
-      );
-    }, 200);
-
-    return () => clearInterval(animationInterval);
-  }, [randomOffsets, startTime, columns, rows]);
+    const interval = setInterval(updateGrid, 50);
+    return () => clearInterval(interval);
+  }, [isClient, columns, startTime, cycleDuration, randomOffsets, jitterValues]);
 
   useEffect(() => {
     const updateSize = () => {
