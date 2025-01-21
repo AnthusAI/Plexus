@@ -7,7 +7,7 @@ from plexus.CustomLogging import logging
 from kombu.utils.url import safequote
 import sys
 from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, \
-    BarColumn, TaskProgressColumn, TimeRemainingColumn, TextColumn, ProgressColumn
+    BarColumn, TaskProgressColumn, TimeRemainingColumn, TextColumn, ProgressColumn, Task
 from rich.style import Style
 from rich.console import Console
 from rich.panel import Panel
@@ -22,13 +22,13 @@ import datetime
 
 class ItemCountColumn(ProgressColumn):
     """Renders item count and total."""
-    def render(self, task: "Task") -> typing.Union[str, typing.Text]:
+    def render(self, task: Task) -> typing.Union[str, typing.Text]:
         """Show item count and total."""
         return f"{int(task.completed)}/{int(task.total)}"
 
 class StatusColumn(ProgressColumn):
     """Renders status in a full line above the progress bar."""
-    def render(self, task: "Task") -> typing.Union[str, typing.Text]:
+    def render(self, task: Task) -> typing.Union[str, typing.Text]:
         return f"[bright_magenta]{task.fields.get('status', '')}"
 
 load_dotenv()
