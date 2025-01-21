@@ -133,6 +133,7 @@ const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['type'] =
         scoringJobs: async (options?: any) => ({ data: [], nextToken: null }),
         scoreResults: async (options?: any) => ({ data: [], nextToken: null }),
         actions: async (options?: any) => ({ data: [], nextToken: null }),
+        tasks: async (options?: any) => ({ data: [], nextToken: null }),
         createdAt: rawEvaluation.account?.createdAt || new Date().toISOString(),
         updatedAt: rawEvaluation.account?.updatedAt || new Date().toISOString(),
         description: rawEvaluation.account?.description || ''
