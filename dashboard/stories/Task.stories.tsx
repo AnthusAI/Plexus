@@ -20,7 +20,6 @@ const createTask = (id: string, overrides = {}) => ({
   scorecard: 'Test Scorecard',
   score: 'Test Score',
   time: '2 hours ago',
-  summary: 'Task Summary',
   description: 'Task Description',
   ...overrides
 })
@@ -91,7 +90,6 @@ const stories = {
         status: 'PENDING',
         processedItems: 0,
         totalItems: 100,
-        summary: 'Starting task execution',
         statusMessage: 'Initializing task...'
       }),
     },
@@ -107,7 +105,6 @@ const stories = {
         totalItems: 100,
         dispatchStatus: 'DISPATCHED',
         celeryTaskId: '',
-        summary: 'Task announced',
         statusMessage: 'Activity announced...'
       }),
     },
@@ -123,7 +120,6 @@ const stories = {
         totalItems: 100,
         dispatchStatus: 'DISPATCHED',
         celeryTaskId: 'task-123',
-        summary: 'Task claimed',
         statusMessage: 'Activity claimed.'
       }),
     },
@@ -152,8 +148,7 @@ export const Initializing: Story = {
       currentStageName: 'Initializing',
       status: 'RUNNING',
       elapsedTime: '2m 15s',
-      estimatedTimeRemaining: '2m 45s',
-      summary: 'Initializing task'
+      estimatedTimeRemaining: '2m 45s'
     }),
   },
 }
@@ -184,8 +179,7 @@ export const Running: Story = {
       processedItems: 45,
       totalItems: 100,
       elapsedTime: '2m 15s',
-      estimatedTimeRemaining: '2m 45s',
-      summary: 'Processing data'
+      estimatedTimeRemaining: '2m 45s'
     }),
   },
 }
@@ -201,7 +195,6 @@ export const NoStages: Story = {
       elapsedTime: '2m 15s',
       estimatedTimeRemaining: '2m 45s',
       status: 'RUNNING',
-      summary: 'Processing without stages',
       statusMessage: 'Fetching report list...'
     }),
   },
@@ -236,8 +229,7 @@ export const Finalizing: Story = {
       ],
       currentStageName: 'Finalizing',
       status: 'RUNNING',
-      elapsedTime: '4m 45s',
-      summary: 'Finalizing task'
+      elapsedTime: '4m 45s'
     }),
   },
 }
@@ -254,8 +246,7 @@ export const Complete: Story = {
       })),
       currentStageName: 'Complete',
       status: 'COMPLETED',
-      elapsedTime: '5m 0s',
-      summary: 'Task completed'
+      elapsedTime: '5m 0s'
     }),
   },
 }
@@ -283,8 +274,7 @@ export const Failed: Story = {
       ],
       currentStageName: 'Processing',
       status: 'FAILED',
-      elapsedTime: '2m 15s',
-      summary: 'Task failed'
+      elapsedTime: '2m 15s'
     }),
   },
 }
@@ -322,8 +312,7 @@ export const NoProgress: Story = {
       currentStageName: 'Processing',
       status: 'RUNNING',
       elapsedTime: '2m 15s',
-      estimatedTimeRemaining: '2m 45s',
-      summary: 'Processing without progress bar'
+      estimatedTimeRemaining: '2m 45s'
     }),
     showProgress: false,
   },

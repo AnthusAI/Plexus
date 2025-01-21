@@ -238,10 +238,10 @@ class Action(BaseModel):
 
     def start_processing(self) -> None:
         """Mark the action as started and update its status."""
-        self.update(
-            status="RUNNING",
-            startedAt=datetime.now(timezone.utc)
-        )
+        update_fields = {"status": "RUNNING"}
+        if not self.startedAt:
+            update_fields["startedAt"] = datetime.now(timezone.utc)
+        self.update(**update_fields)
 
     def complete_processing(self) -> None:
         """Mark the action as completed."""
@@ -267,7 +267,8 @@ class Action(BaseModel):
         self,
         processed_items: int,
         total_items: int,
-        stage_configs: Optional[Dict[str, Dict[str, Any]]] = None
+        stage_configs: Optional[Dict[str, Dict[str, Any]]] = None,
+        estimated_completion_at: Optional[datetime] = None
     ) -> List['ActionStage']:
         """
         Update progress for action stages.
@@ -284,6 +285,7 @@ class Action(BaseModel):
                     }
                 }
                 If not provided, stages won't be created/updated
+            estimated_completion_at: Optional estimated completion time in UTC
         
         Returns:
             List of current stages in order
@@ -293,8 +295,16 @@ class Action(BaseModel):
         if not stage_configs:
             return []
 
+        now = datetime.now(timezone.utc)
+
         # Always update the action's updatedAt timestamp to trigger subscriptions
-        self.update(updatedAt=datetime.now(timezone.utc))
+        update_fields = {"updatedAt": now}
+        
+        # Add estimated completion time if provided
+        if estimated_completion_at:
+            update_fields["estimatedCompletionAt"] = estimated_completion_at
+        
+        self.update(**update_fields)
 
         # Update action status based on progress
         if processed_items == 0:
@@ -304,14 +314,12 @@ class Action(BaseModel):
             if self.status != "COMPLETED":
                 self.update(
                     status="COMPLETED",
-                    completedAt=datetime.now(timezone.utc)
+                    completedAt=now
                 )
         else:
+            # Only update status to RUNNING if needed, never update startedAt here
             if self.status != "RUNNING":
-                self.update(
-                    status="RUNNING",
-                    startedAt=datetime.now(timezone.utc)
-                )
+                self.update(status="RUNNING")
 
         # Get or create stages
         stages = self.get_stages()
@@ -327,7 +335,8 @@ class Action(BaseModel):
                     order=config["order"],
                     status="PENDING",
                     processedItems=0,
-                    totalItems=config["totalItems"]
+                    totalItems=config["totalItems"],
+                    statusMessage=config.get("statusMessage")
                 ))
 
         # Sort stages by order
@@ -350,19 +359,21 @@ class Action(BaseModel):
                 if stage.status != "COMPLETED":
                     stage.update(
                         status="COMPLETED",
-                        completedAt=datetime.now(timezone.utc),
+                        completedAt=now,
                         processedItems=total,
-                        totalItems=total
+                        totalItems=total,
+                        statusMessage=config.get("statusMessage")
                     )
             else:
                 if stage.status != "RUNNING":
                     stage.update(
                         status="RUNNING",
-                        startedAt=datetime.now(timezone.utc)
+                        startedAt=now
                     )
                 stage.update(
                     processedItems=processed,
-                    totalItems=total
+                    totalItems=total,
+                    statusMessage=config.get("statusMessage")
                 )
 
         return stages

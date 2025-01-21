@@ -18,6 +18,7 @@ from typing import Optional
 from plexus.dashboard.api.models.action import Action
 from plexus.dashboard.api.client import PlexusDashboardClient
 import json
+import datetime
 
 class ItemCountColumn(ProgressColumn):
     """Renders item count and total."""
@@ -439,20 +440,22 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
     
     # Create all three stages
     stage_configs = {
-        "initialization": {
+        "Setup": {
             "order": 1,
             "totalItems": 1,
-            "processedItems": 0
+            "processedItems": 0,
+            "statusMessage": "Starting initialization..."
         },
-        "processing": {
+        "Running": {
             "order": 2,
             "totalItems": total_items,
             "processedItems": 0
         },
-        "finishing": {
+        "Finishing": {
             "order": 3,
             "totalItems": 1,
-            "processedItems": 0
+            "processedItems": 0,
+            "statusMessage": "Waiting to finalize..."
         }
     }
     stages = action.update_progress(0, total_items, stage_configs)
@@ -484,20 +487,22 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
             
             if action:
                 stage_configs = {
-                    "initialization": {
+                    "Setup": {
                         "order": 1,
                         "totalItems": 1,
-                        "processedItems": 1
+                        "processedItems": 1,
+                        "statusMessage": "Initialization complete"
                     },
-                    "processing": {
+                    "Running": {
                         "order": 2,
                         "totalItems": total_items,
                         "processedItems": 0
                     },
-                    "finishing": {
+                    "Finishing": {
                         "order": 3,
                         "totalItems": 1,
-                        "processedItems": 0
+                        "processedItems": 0,
+                        "statusMessage": "Waiting to finalize..."
                     }
                 }
                 action.update_progress(0, total_items, stage_configs)
@@ -509,30 +514,38 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
             )
             
             # Main processing stage
+            start_time = time.time()
             for i in range(total_items):
                 current_item = i + 1
                 
                 # Update progress every 50 items or on the last item
                 if i % 50 == 0 or i == total_items - 1:
                     elapsed = time.time() - start_time
-                    items_per_sec = current_item / elapsed
+                    items_per_sec = current_item / elapsed if elapsed > 0 else 0
+                    remaining_items = total_items - current_item
+                    eta_seconds = remaining_items / items_per_sec if items_per_sec > 0 else 0
+                    
+                    # Calculate estimated completion time in UTC
+                    current_time = datetime.datetime.now(datetime.timezone.utc)
+                    estimated_completion = current_time + datetime.timedelta(seconds=eta_seconds) \
+                        if eta_seconds > 0 else None
                     
                     # Get status message based on progress
                     percentage = (current_item / total_items) * 100
                     if percentage <= 5:
                         status = "Starting processing items..."
                     elif percentage <= 35:
-                        status = "Processing items..."
+                        status = f"Processing items... ({items_per_sec:.1f} items/sec)"
                     elif percentage <= 65:
-                        status = "Cruising..."
+                        status = f"Cruising... ({items_per_sec:.1f} items/sec)"
                     elif percentage <= 80:
-                        status = "On autopilot..."
+                        status = f"On autopilot... ({items_per_sec:.1f} items/sec)"
                     elif percentage <= 90:
-                        status = "Finishing soon..."
+                        status = f"Finishing soon... ({items_per_sec:.1f} items/sec)"
                     elif percentage < 100:
-                        status = "Almost done processing items..."
+                        status = f"Almost done... ({items_per_sec:.1f} items/sec)"
                     else:
-                        status = "Finished processing items..."
+                        status = f"Processed {total_items:,} items."
                     
                     progress.update(
                         task_progress,
@@ -550,23 +563,32 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
                     # Update Action progress if we have an action ID
                     if action:
                         stage_configs = {
-                            "initialization": {
+                            "Setup": {
                                 "order": 1,
                                 "totalItems": 1,
-                                "processedItems": 1
+                                "processedItems": 1,
+                                "statusMessage": "Setup complete"
                             },
-                            "processing": {
+                            "Running": {
                                 "order": 2,
                                 "totalItems": total_items,
-                                "processedItems": current_item
+                                "processedItems": current_item,
+                                "itemsPerSecond": items_per_sec,
+                                "statusMessage": status
                             },
-                            "finishing": {
+                            "Finishing": {
                                 "order": 3,
                                 "totalItems": 1,
-                                "processedItems": 0
+                                "processedItems": 0,
+                                "statusMessage": "Waiting to finalize..."
                             }
                         }
-                        action.update_progress(current_item, total_items, stage_configs)
+                        action.update_progress(
+                            current_item,
+                            total_items,
+                            stage_configs,
+                            estimated_completion_at=estimated_completion
+                        )
                 
                 time.sleep(sleep_per_item)
             
@@ -578,48 +600,38 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
                 status="Finalizing..."
             )
             
-            if action:
-                stage_configs = {
-                    "initialization": {
-                        "order": 1,
-                        "totalItems": 1,
-                        "processedItems": 1
-                    },
-                    "processing": {
-                        "order": 2,
-                        "totalItems": total_items,
-                        "processedItems": total_items
-                    },
-                    "finishing": {
-                        "order": 3,
-                        "totalItems": 1,
-                        "processedItems": 0
-                    }
-                }
-                action.update_progress(total_items, total_items, stage_configs)
-            
             time.sleep(finish_time)
             
-            # Complete all stages
+            # Complete all stages with final messages
             if action:
                 stage_configs = {
-                    "initialization": {
+                    "Setup": {
                         "order": 1,
                         "totalItems": 1,
-                        "processedItems": 1
+                        "processedItems": 1,
+                        "statusMessage": "Setup complete"
                     },
-                    "processing": {
+                    "Running": {
                         "order": 2,
                         "totalItems": total_items,
                         "processedItems": total_items
                     },
-                    "finishing": {
+                    "Finishing": {
                         "order": 3,
                         "totalItems": 1,
-                        "processedItems": 1
+                        "processedItems": 1,
+                        "statusMessage": f"Successfully processed {total_items:,} items."
                     }
                 }
-                action.update_progress(total_items, total_items, stage_configs)
+                stages = action.update_progress(total_items, total_items, stage_configs)
+                
+                # Now mark as completed
+                action.complete_processing()
+                
+                # Get current stages to verify their state
+                final_stages = action.get_stages()
+                for stage in final_stages:
+                    logging.info(f"Final stage {stage.name}: status={stage.status}, message={stage.statusMessage}")
             
             total_time = time.time() - start_time
             success_message = (
@@ -627,10 +639,6 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
                 f"({total_items/total_time:.1f} items/sec)"
             )
             logging.info(success_message)
-            
-            # Mark action as completed if we have one
-            if action:
-                action.complete_processing()
             
         except KeyboardInterrupt:
             elapsed = time.time() - start_time
@@ -708,5 +716,3 @@ def _demo_internal() -> None:
             f"({items_per_sec:.1f} items/sec)"
         )
         return
-
-# Remove duplicate ItemCountColumn class definition 

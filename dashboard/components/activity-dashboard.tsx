@@ -123,10 +123,9 @@ function transformActionToActivity(action: Schema['Action']['type']): ActivityDa
     currentStageName: currentStage?.name,
     processedItems: currentStage?.processedItems || 0,
     totalItems: currentStage?.totalItems || 0,
-    elapsedTime: elapsedTime,
-    estimatedTimeRemaining: action.estimatedCompletionAt 
-      ? formatDuration(Math.round((new Date(action.estimatedCompletionAt).getTime() - new Date().getTime()) / 1000))
-      : undefined,
+    startedAt: action.startedAt || undefined,
+    estimatedCompletionAt: action.estimatedCompletionAt || undefined,
+    completedAt: action.completedAt || undefined,
     status: action.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
     stageConfigs: stages,
     data: {

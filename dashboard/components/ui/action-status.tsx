@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { SegmentedProgressBar, SegmentConfig } from './segmented-progress-bar'
 import { ProgressBar } from './progress-bar'
 import { ProgressBarTiming } from './progress-bar-timing'
@@ -62,8 +62,8 @@ export interface ActionStatusProps {
   currentStageName?: string
   processedItems?: number
   totalItems?: number
-  elapsedTime?: string
-  estimatedTimeRemaining?: string
+  startedAt?: string
+  estimatedCompletionAt?: string
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
   command?: string
   statusMessage?: string
@@ -74,6 +74,21 @@ export interface ActionStatusProps {
   celeryTaskId?: string
   workerNodeId?: string
   showPreExecutionStages?: boolean
+  completedAt?: string
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) {
+    return `${Math.floor(seconds)}s`
+  }
+  if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = Math.floor(seconds % 60)
+    return `${minutes}m ${remainingSeconds}s`
+  }
+  const hours = Math.floor(seconds / 3600)
+  const remainingMinutes = Math.floor((seconds % 3600) / 60)
+  return `${hours}h ${remainingMinutes}m`
 }
 
 export function ActionStatus({
@@ -82,8 +97,8 @@ export function ActionStatus({
   currentStageName,
   processedItems,
   totalItems,
-  elapsedTime,
-  estimatedTimeRemaining,
+  startedAt,
+  estimatedCompletionAt,
   status,
   stageConfigs,
   errorLabel = 'Failed',
@@ -92,11 +107,62 @@ export function ActionStatus({
   workerNodeId,
   showPreExecutionStages = false,
   command,
-  statusMessage
+  statusMessage,
+  completedAt
 }: ActionStatusProps) {
   const isInProgress = status === 'RUNNING'
+  const isFinished = status === 'COMPLETED' || status === 'FAILED'
   const progress = processedItems && totalItems ? 
     (processedItems / totalItems) * 100 : 0
+
+  // State for computed timing values
+  const [elapsedTime, setElapsedTime] = useState<string>('')
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string>('')
+
+  // Update timing values every second while not completed
+  useEffect(() => {
+    if (!startedAt) return
+
+    const updateTiming = () => {
+      const now = new Date()
+      const started = new Date(startedAt)
+      
+      // For finished tasks, use completedAt time instead of current time
+      const endTime = completedAt ? 
+        new Date(completedAt) : now
+
+      const elapsedSeconds = Math.floor(
+        (endTime.getTime() - started.getTime()) / 1000
+      )
+
+      setElapsedTime(formatDuration(elapsedSeconds))
+
+      // Only show ETA if in progress and we have an estimate
+      if (isInProgress && estimatedCompletionAt) {
+        const estimated = new Date(estimatedCompletionAt)
+        const remainingSeconds = Math.floor(
+          (estimated.getTime() - now.getTime()) / 1000
+        )
+        if (remainingSeconds > 0) {
+          setEstimatedTimeRemaining(formatDuration(remainingSeconds))
+        } else {
+          setEstimatedTimeRemaining('')
+        }
+      } else {
+        setEstimatedTimeRemaining('')
+      }
+    }
+
+    // Initial update
+    updateTiming()
+
+    // Update every second until completed
+    const interval = !completedAt ? setInterval(updateTiming, 1000) : null
+
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [startedAt, estimatedCompletionAt, completedAt, isInProgress])
 
   // Convert ActionStageConfig to SegmentConfig for the progress bar
   const segmentConfigs: SegmentConfig[] = stageConfigs ? [
@@ -141,15 +207,13 @@ export function ActionStatus({
       {(command || statusMessage) && (
         <div className="rounded-lg bg-card-light p-3 space-y-2">
           {command && (
-            <div className="font-mono text-sm text-muted-foreground">
-              {command}
+            <div className="font-mono text-sm text-muted-foreground truncate">
+              $ {command}
             </div>
           )}
-          {statusMessage && (
-            <div className="font-mono text-sm">
-              {statusMessage}
-            </div>
-          )}
+          <div className="font-mono text-sm truncate">
+            {statusMessage || '\u00A0'}
+          </div>
         </div>
       )}
       {showEmptyState ? (
