@@ -7,7 +7,7 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'Plexus'
-copyright = '2024, Anthus AI Solutions'
+copyright = 'Anthus AI Solutions'
 author = 'Anthus AI Solutions'
 release = '0.1'
 
