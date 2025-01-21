@@ -5,21 +5,21 @@ import { UseCases } from '../UseCases'
 describe('UseCases Component', () => {
   it('renders the main heading', () => {
     render(<UseCases />)
-    expect(screen.getByText('Real-World Applications')).toBeInTheDocument()
+    expect(screen.getByText('Your Team Knows Your Business')).toBeInTheDocument()
   })
 
   it('renders all use case cards', () => {
     render(<UseCases />)
     
-    expect(screen.getByText('Email Processing')).toBeInTheDocument()
-    expect(screen.getByText('Document Analysis')).toBeInTheDocument()
-    expect(screen.getByText('Customer Support')).toBeInTheDocument()
-    expect(screen.getByText('Content Moderation')).toBeInTheDocument()
+    expect(screen.getByText('Mailbox folders')).toBeInTheDocument()
+    expect(screen.getByText('Use our UI')).toBeInTheDocument()
+    expect(screen.getByText('Custom integrations')).toBeInTheDocument()
+    expect(screen.getByText('Feedback loops')).toBeInTheDocument()
     
-    expect(screen.getByText(/Automate email workflows/)).toBeInTheDocument()
-    expect(screen.getByText(/Extract insights from contracts/)).toBeInTheDocument()
-    expect(screen.getByText(/Enhance support operations/)).toBeInTheDocument()
-    expect(screen.getByText(/Deploy real-time content filtering/)).toBeInTheDocument()
+    expect(screen.getByText(/Train custom email classifiers/)).toBeInTheDocument()
+    expect(screen.getByText(/Label items directly in the Plexus dashboard/)).toBeInTheDocument()
+    expect(screen.getByText(/We can incorporate labels from any data source/)).toBeInTheDocument()
+    expect(screen.getByText(/Review and correct agent decisions/)).toBeInTheDocument()
   })
 
   it('renders use case icons', () => {

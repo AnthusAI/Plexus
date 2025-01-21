@@ -618,8 +618,8 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
                     },
                     "Finishing": {
                         "order": 3,
-                        "totalItems": 1,
-                        "processedItems": 1,
+                        "totalItems": None,
+                        "processedItems": None,
                         "statusMessage": f"Successfully processed {total_items:,} items."
                     }
                 }

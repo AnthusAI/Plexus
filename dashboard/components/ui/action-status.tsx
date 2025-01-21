@@ -112,8 +112,48 @@ export function ActionStatus({
 }: ActionStatusProps) {
   const isInProgress = status === 'RUNNING'
   const isFinished = status === 'COMPLETED' || status === 'FAILED'
-  const progress = processedItems && totalItems ? 
-    (processedItems / totalItems) * 100 : 0
+
+  // Find the most recent stage with valid progress information
+  const getProgressFromStages = () => {
+    if (!stages || stages.length === 0) {
+      return { processedItems, totalItems }
+    }
+
+    // Start from the current stage and work backwards
+    const currentStageIndex = stages.findIndex(s => s.name === currentStageName)
+    if (currentStageIndex === -1) {
+      return { processedItems, totalItems }
+    }
+
+    // Check current stage first
+    const currentStage = stages[currentStageIndex]
+    if (currentStage.totalItems !== undefined && currentStage.totalItems !== null) {
+      return {
+        processedItems: currentStage.processedItems,
+        totalItems: currentStage.totalItems
+      }
+    }
+
+    // Look backwards through previous stages for progress info
+    for (let i = currentStageIndex - 1; i >= 0; i--) {
+      const stage = stages[i]
+      if (stage.totalItems !== undefined && stage.totalItems !== null) {
+        return {
+          processedItems: stage.processedItems,
+          totalItems: stage.totalItems
+        }
+      }
+    }
+
+    // Fallback to props if no stage has progress info
+    return { processedItems, totalItems }
+  }
+
+  const { processedItems: effectiveProcessedItems, totalItems: effectiveTotalItems } = 
+    getProgressFromStages()
+  
+  const progress = effectiveProcessedItems && effectiveTotalItems ? 
+    (effectiveProcessedItems / effectiveTotalItems) * 100 : 0
 
   // State for computed timing values
   const [elapsedTime, setElapsedTime] = useState<string>('')
@@ -243,8 +283,8 @@ export function ActionStatus({
       )}
       <ProgressBar
         progress={progress}
-        processedItems={processedItems}
-        totalItems={totalItems}
+        processedItems={effectiveProcessedItems}
+        totalItems={effectiveTotalItems}
         color={status === 'FAILED' ? 'false' : 'secondary'}
         showTiming={false}
       />
