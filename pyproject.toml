@@ -22,7 +22,7 @@ dependencies = [
     "pandas==2.1.4",
     "openai>=1.35.10",
     "tenacity==8.2.3",
-    "nltk",
+    "nltk==3.9.1",
     "pybind11",
     "fasttext",
     "tiktoken==0.7.0",
@@ -63,7 +63,7 @@ dependencies = [
     "azure-identity>=1.15.0",
     "rich>=13.7.1",
     "gql[requests]>=3.0.0",
-    "openai-cost-calculator @ git+https://github.com/Anth-us/openai_cost_calculator.git@main",
+    "openai-cost-calculator @ git+https://github.com/AnthusAI/openai_cost_calculator.git@main",
     "invoke>=2.2.0"
 ]
 
