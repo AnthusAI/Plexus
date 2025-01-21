@@ -1,7 +1,7 @@
 # CHANGELOG
 
 
-## v0.6.0-alpha.2 (2025-01-21)
+## v0.6.1 (2025-01-21)
 
 ### Bug Fixes
 
@@ -13,6 +13,9 @@
 - **dependencies**: Add SQLAlchemy[asyncio] version 1.4.15 to project dependencies to fix dependency
   mismatch
   ([`fe5ae21`](https://github.com/AnthusAI/Plexus/commit/fe5ae216ba805b86ba6fe4a2107ed9964ac23e7a))
+
+
+## v0.6.0 (2025-01-21)
 
 
 ## v0.6.0-alpha.1 (2025-01-21)

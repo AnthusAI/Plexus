@@ -12,6 +12,20 @@ The landing page introduces Plexus to new users and provides navigation to the d
 - Responsive Plexus logo integration ✓
   - Square logo side-by-side with content on wider viewports ✓
   - Decorative glow effect behind logo matching current screenshot styling ✓
+  - Logo size reduced to approximately 1/3 of viewport width ✓
+
+### Applications Section ✓
+- Headline "AI Agents at Scale" ✓
+- Narrative introduction explaining AI agent capabilities ✓
+- Focus on solving complex data processing challenges ✓
+- Highlights scalability and automation potential ✓
+- Four key application examples: ✓
+  1. Call Center Quality Assurance ✓
+  2. Brand-Aligned Content Curation ✓
+  3. Regulatory Compliance Monitoring ✓
+  4. Automated Compliance Actions ✓
+- Responsive grid layout ✓
+- Consistent card design with icons and descriptions ✓
 
 ### Features Section ✓
 - Grid of 4 key features: Multi-model, Lab workflow, Serverless, and Task dispatch ✓
@@ -29,7 +43,7 @@ The landing page introduces Plexus to new users and provides navigation to the d
 ### Use Cases Section ✓
 - Grid layout matching Features section ✓
 - Focus on team empowerment and no-code solutions ✓
-- Heading "Your team knows your business" ✓
+- Heading "Your Team Knows Your Business" ✓
 - Subheading about aligning AI without coding expertise ✓
 - Four key use cases demonstrating team input methods: ✓
   1. Mailbox folders for email classifier training ✓
@@ -57,7 +71,7 @@ The landing page introduces Plexus to new users and provides navigation to the d
   - X/Twitter updates ✓
 - Contact form link ✓
 - Responsive grid layout ✓
-- Copyright notice ✓
+- Copyright notice reads "Anthus AI Solutions" ✓
 
 ## Technical Implementation
 

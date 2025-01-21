@@ -6,7 +6,7 @@ describe('Footer', () => {
   it('renders the company name and copyright notice', () => {
     render(<Footer />)
     const currentYear = new Date().getFullYear()
-    expect(screen.getByText(`© ${currentYear} Anth.us. All rights reserved.`))
+    expect(screen.getByText(`© ${currentYear} Anthus AI Solutions`))
       .toBeInTheDocument()
   })
 
