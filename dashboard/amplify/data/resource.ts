@@ -377,7 +377,7 @@ const schema = a.schema({
             description: a.string(),
             scorecardId: a.string().required(),
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
-            scoreId: a.string().required(),
+            scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
             currentVersionId: a.string(),
             currentVersion: a.belongsTo('DatasetVersion', 'currentVersionId'),
