@@ -36,6 +36,7 @@ const schema = a.schema({
             name: a.string().required(),
             key: a.string().required(),
             description: a.string(),
+            settings: a.json(),
             scorecards: a.hasMany('Scorecard', 'accountId'),
             evaluations: a.hasMany('Evaluation', 'accountId'),
             batchJobs: a.hasMany('BatchJob', 'accountId'),
