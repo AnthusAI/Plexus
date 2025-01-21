@@ -3,6 +3,9 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import ClientLayout from "./client-layout";
 import { HydrationOverlay } from "@builder.io/react-hydration-overlay";
+import { AccountProvider } from "./contexts/AccountContext"
+import { ThemeProvider } from "./contexts/ThemeContext"
+import { SidebarProvider } from "./contexts/SidebarContext"
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -59,9 +62,20 @@ export default function RootLayout({
         />
       </head>
       <body className={inter.className}>
-        <HydrationOverlay>
-          <ClientLayout>{children}</ClientLayout>
-        </HydrationOverlay>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <AccountProvider>
+            <SidebarProvider>
+              <HydrationOverlay>
+                <ClientLayout>{children}</ClientLayout>
+              </HydrationOverlay>
+            </SidebarProvider>
+          </AccountProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
