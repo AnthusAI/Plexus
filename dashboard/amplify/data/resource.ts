@@ -23,9 +23,9 @@ type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" |
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
     "evaluationId" | "scoringJobId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
-type ActionIndexFields = "accountId" | "type" | "status" | "target" | 
+type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
-type ActionStageIndexFields = "actionId" | "name" | "order" | "status";
+type TaskStageIndexFields = "taskId" | "name" | "order" | "status";
 type DatasetIndexFields = "scorecardId" | "scoreId";
 type DatasetVersionIndexFields = "datasetId";
 type DatasetProfileIndexFields = "datasetId" | "datasetVersionId";
@@ -36,13 +36,14 @@ const schema = a.schema({
             name: a.string().required(),
             key: a.string().required(),
             description: a.string(),
+            settings: a.json(),
             scorecards: a.hasMany('Scorecard', 'accountId'),
             evaluations: a.hasMany('Evaluation', 'accountId'),
             batchJobs: a.hasMany('BatchJob', 'accountId'),
             items: a.hasMany('Item', 'accountId'),
             scoringJobs: a.hasMany('ScoringJob', 'accountId'),
             scoreResults: a.hasMany('ScoreResult', 'accountId'),
-            actions: a.hasMany('Action', 'accountId'),
+            tasks: a.hasMany('Task', 'accountId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -64,7 +65,7 @@ const schema = a.schema({
             batchJobs: a.hasMany('BatchJob', 'scorecardId'),
             scoringJobs: a.hasMany('ScoringJob', 'scorecardId'),
             scoreResults: a.hasMany('ScoreResult', 'scorecardId'),
-            actions: a.hasMany('Action', 'scorecardId'),
+            tasks: a.hasMany('Task', 'scorecardId'),
             datasets: a.hasMany('Dataset', 'scorecardId'),
             externalId: a.string(),
             itemId: a.string(),
@@ -99,6 +100,7 @@ const schema = a.schema({
     Score: a
         .model({
             name: a.string().required(),
+            key: a.string().required(),
             description: a.string(),
             order: a.integer().required(),
             type: a.string().required(),
@@ -111,9 +113,9 @@ const schema = a.schema({
             evaluations: a.hasMany('Evaluation', 'scoreId'),
             batchJobs: a.hasMany('BatchJob', 'scoreId'),
             scoringJobs: a.hasMany('ScoringJob', 'scoreId'),
-            actions: a.hasMany('Action', 'scoreId'),
             datasets: a.hasMany('Dataset', 'scoreId'),
-            metadata: a.json(),
+            tasks: a.hasMany('Task', 'scoreId'),
+            metadata: a.json()
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -301,7 +303,7 @@ const schema = a.schema({
             idx("batchJobId" as BatchJobScoringJobIndexFields)
         ]),
 
-    Action: a
+    Task: a
         .model({
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
@@ -317,8 +319,8 @@ const schema = a.schema({
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
             currentStageId: a.string(),
-            currentStage: a.belongsTo('ActionStage', 'currentStageId'),
-            stages: a.hasMany('ActionStage', 'actionId'),
+            currentStage: a.belongsTo('TaskStage', 'currentStageId'),
+            stages: a.hasMany('TaskStage', 'taskId'),
             dispatchStatus: a.string(),
             startedAt: a.datetime(),
             completedAt: a.datetime(),
@@ -334,7 +336,7 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx: (field: ActionIndexFields) => any) => [
+        .secondaryIndexes((idx: (field: TaskIndexFields) => any) => [
             idx("accountId"),
             idx("scorecardId"),
             idx("scoreId"),
@@ -345,10 +347,10 @@ const schema = a.schema({
             idx("currentStageId")
         ]),
 
-    ActionStage: a
+    TaskStage: a
         .model({
-            actionId: a.string().required(),
-            action: a.belongsTo('Action', 'actionId'),
+            taskId: a.string().required(),
+            task: a.belongsTo('Task', 'taskId'),
             name: a.string().required(),
             order: a.integer().required(),
             status: a.string().required(),
@@ -358,14 +360,14 @@ const schema = a.schema({
             estimatedCompletionAt: a.datetime(),
             processedItems: a.integer(),
             totalItems: a.integer(),
-            actionsAsCurrentStage: a.hasMany('Action', 'currentStageId'),
+            tasksAsCurrentStage: a.hasMany('Task', 'currentStageId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx: (field: ActionStageIndexFields) => any) => [
-            idx("actionId"),
+        .secondaryIndexes((idx: (field: TaskStageIndexFields) => any) => [
+            idx("taskId"),
             idx("name"),
             idx("order"),
             idx("status")

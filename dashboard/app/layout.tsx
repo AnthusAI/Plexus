@@ -3,12 +3,39 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import ClientLayout from "./client-layout";
 import { HydrationOverlay } from "@builder.io/react-hydration-overlay";
+import "@aws-amplify/ui-react/styles.css";
+import { AccountProvider } from "./contexts/AccountContext"
+import { ThemeProvider } from "./contexts/ThemeContext"
+import { SidebarProvider } from "./contexts/SidebarContext"
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Plexus",
-  description: "AI scoring at scale",
+  title: "Plexus - AI Agents at Scale",
+  description: "Run AI agents over your data with no code. Plexus is a battle-tested platform for building agent-based AI workflows that analyze streams of content and take action.",
+  openGraph: {
+    title: "Plexus - AI Agents at Scale",
+    description: "Run AI agents over your data with no code. Plexus is a battle-tested platform for building agent-based AI workflows that analyze streams of content and take action.",
+    url: "https://plexus.anth.us",
+    siteName: "Plexus",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Plexus - AI Agents at Scale"
+      }
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Plexus - AI Agents at Scale",
+    description: "Run AI agents over your data with no code. Plexus is a battle-tested platform for building agent-based AI workflows that analyze streams of content and take action.",
+    creator: "@Anthus_AI",
+    images: ["/og-image.png"],
+  }
 };
 
 export default function RootLayout({
@@ -59,9 +86,20 @@ export default function RootLayout({
         />
       </head>
       <body className={inter.className}>
-        <HydrationOverlay>
-          <ClientLayout>{children}</ClientLayout>
-        </HydrationOverlay>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <AccountProvider>
+            <SidebarProvider>
+              <HydrationOverlay>
+                <ClientLayout>{children}</ClientLayout>
+              </HydrationOverlay>
+            </SidebarProvider>
+          </AccountProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

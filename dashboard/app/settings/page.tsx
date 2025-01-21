@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { signOut as amplifySignOut } from 'aws-amplify/auth';
+import Link from 'next/link';
 
 export default function Settings() {
   const { authStatus } = useAuthenticator((context) => [context.authStatus]);
@@ -47,6 +48,11 @@ export default function Settings() {
           </CardHeader>
           <CardContent>
             <p>Update your profile, change notification preferences, and manage security settings.</p>
+            <div className="mt-4">
+              <Link href="/settings/account" className="text-primary hover:underline">
+                Manage Menu Visibility
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>
