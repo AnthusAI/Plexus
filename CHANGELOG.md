@@ -1,7 +1,81 @@
 # CHANGELOG
 
 
+## v0.6.1 (2025-01-21)
+
+### Bug Fixes
+
+- **dashboard**: Gradient logo backgrounds on login, sidebar
+  ([`d82626b`](https://github.com/AnthusAI/Plexus/commit/d82626bcd1f125f4c89a8b6e57827a1dbea1350e))
+
+### Chores
+
+- **dependencies**: Add SQLAlchemy[asyncio] version 1.4.15 to project dependencies to fix dependency
+  mismatch
+  ([`fe5ae21`](https://github.com/AnthusAI/Plexus/commit/fe5ae216ba805b86ba6fe4a2107ed9964ac23e7a))
+
+
+## v0.6.0 (2025-01-21)
+
+
+## v0.6.0-alpha.1 (2025-01-21)
+
+### Bug Fixes
+
+- **NLTK**: Standardize tokenizer initialization across parser classes
+  ([`2d48066`](https://github.com/AnthusAI/Plexus/commit/2d4806653e82d78b0e4def97e7212f94a1e90898))
+
+- Replace direct NLTK punkt downloads with proper error handling - Add consistent
+  PunktSentenceTokenizer initialization pattern - Implement private tokenizer attribute with proper
+  Pydantic config - Update tokenizer usage in BeforeAfterSlicer, Extractor, and ContextExtractor -
+  Fix potential race conditions in tokenizer initialization
+
+### Chores
+
+- **dependencies**: Update NLTK version and fix repository URL for openai-cost-calculator
+  ([`6f75c59`](https://github.com/AnthusAI/Plexus/commit/6f75c59ecd1f5d02526f34e5b493ca295f2d6697))
+
+### Features
+
+- **dashboard**: Account settings - closes #32
+  ([`d7e17d5`](https://github.com/AnthusAI/Plexus/commit/d7e17d5f33ae61b7f252a0e069522d17d72f672c))
+
+### Refactoring
+
+- **cloudwatch**: Enhance CloudWatchLogger with detailed AWS credentials logging and error handling.
+  Added debug and warning logs for client initialization and metric logging processes to improve
+  traceability and error diagnosis.
+  ([`13e30fe`](https://github.com/AnthusAI/Plexus/commit/13e30feb60dfa0df4e97432f292ac0a1858dc9be))
+
+
+## v0.5.0 (2025-01-19)
+
+### Features
+
+- **landing**: Implement responsive landing page with navigation
+  ([`28e8907`](https://github.com/AnthusAI/Plexus/commit/28e89078d019623826cdd52b047c61fae4029f84))
+
+feat(landing): implement responsive landing page with navigation
+
+
 ## v0.4.5 (2025-01-18)
+
+
+## v0.4.4 (2025-01-17)
+
+
+## v0.4.3 (2025-01-17)
+
+### Bug Fixes
+
+- **batching**: Find or create both BatchJob and ScoringJob.
+  ([`f8ccb26`](https://github.com/AnthusAI/Plexus/commit/f8ccb26f92a6b53ec2fd32b34bad95d54a1edca3))
+
+
+## v0.4.2 (2025-01-17)
+
+
+## v0.4.2-alpha.3 (2025-01-18)
 
 ### Bug Fixes
 
@@ -17,24 +91,10 @@
 
 ## v0.4.2-alpha.2 (2025-01-17)
 
-
-## v0.4.4 (2025-01-17)
-
 ### Bug Fixes
 
 - **logging**: Update environment variable for AWS region in CustomLogging.py
   ([`84123b2`](https://github.com/AnthusAI/Plexus/commit/84123b221a56f9429f3332cad1a84ef258fda2de))
-
-
-## v0.4.3 (2025-01-17)
-
-### Bug Fixes
-
-- **batching**: Find or create both BatchJob and ScoringJob.
-  ([`f8ccb26`](https://github.com/AnthusAI/Plexus/commit/f8ccb26f92a6b53ec2fd32b34bad95d54a1edca3))
-
-
-## v0.4.2 (2025-01-17)
 
 
 ## v0.4.2-alpha.1 (2025-01-16)
