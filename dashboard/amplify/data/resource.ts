@@ -115,7 +115,7 @@ const schema = a.schema({
             scoringJobs: a.hasMany('ScoringJob', 'scoreId'),
             datasets: a.hasMany('Dataset', 'scoreId'),
             tasks: a.hasMany('Task', 'scoreId'),
-            metadata: a.json()
+            configuration: a.json()
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
