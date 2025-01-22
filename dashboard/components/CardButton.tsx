@@ -5,7 +5,9 @@ import { cn } from '@/lib/utils'
 
 export interface CardButtonProps {
   icon: LucideIcon
-  onClick?: () => void
+  onClick: () => void
+  disabled?: boolean
+  'aria-label'?: string
   active?: boolean
   label?: string
 }
@@ -13,6 +15,8 @@ export interface CardButtonProps {
 export function CardButton({
   icon: Icon,
   onClick,
+  disabled,
+  'aria-label': ariaLabel,
   active = false,
   label
 }: CardButtonProps) {
@@ -26,6 +30,8 @@ export function CardButton({
         active ? "bg-accent" : "bg-card-light"
       )}
       onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
     >
       <Icon className="h-4 w-4" />
       {label && <span>{label}</span>}

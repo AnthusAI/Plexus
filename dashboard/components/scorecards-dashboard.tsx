@@ -31,7 +31,7 @@ import { CardButton } from "@/components/CardButton"
 import { DatasetConfigFormComponent } from "@/components/dataset-config-form"
 import { listFromModel } from "@/utils/amplify-helpers"
 import { AmplifyListResult } from '@/types/shared'
-import { dataClient } from "@/utils/data-operations"
+import { getClient } from "@/utils/data-operations"
 import { generateClient } from "aws-amplify/data"
 
 const ACCOUNT_KEY = 'call-criteria'

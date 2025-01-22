@@ -79,7 +79,7 @@ export type OptimizationTaskData = BaseTaskData & {
 }
 
 export type ReportTaskData = BaseTaskData & {
-  // Report-specific fields can be added here
+  command: string
 }
 
 export type ScoreUpdatedTaskData = BaseTaskData & {

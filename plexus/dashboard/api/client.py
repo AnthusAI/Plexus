@@ -66,6 +66,28 @@ import time
 from datetime import datetime, timezone
 import logging
 
+# Configure GQL loggers to not propagate to root
+gql_logger = logging.getLogger('gql')
+gql_logger.setLevel(logging.INFO)
+gql_logger.propagate = False
+if not gql_logger.handlers:
+    null_handler = logging.NullHandler()
+    gql_logger.addHandler(null_handler)
+
+transport_logger = logging.getLogger('gql.transport')
+transport_logger.setLevel(logging.INFO)
+transport_logger.propagate = False
+if not transport_logger.handlers:
+    null_handler = logging.NullHandler()
+    transport_logger.addHandler(null_handler)
+
+requests_logger = logging.getLogger('urllib3')
+requests_logger.setLevel(logging.INFO)
+requests_logger.propagate = False
+if not requests_logger.handlers:
+    null_handler = logging.NullHandler()
+    requests_logger.addHandler(null_handler)
+
 if TYPE_CHECKING:
     from .models.scoring_job import ScoringJob
     from .models.batch_job import BatchJob
@@ -115,7 +137,7 @@ class _BaseAPIClient:
         
         self.client = Client(
             transport=transport,
-            fetch_schema_from_transport=False
+            fetch_schema_from_transport=True
         )
         
         # Initialize model namespaces
@@ -218,7 +240,7 @@ class _BaseAPIClient:
             )
             client = Client(
                 transport=transport,
-                fetch_schema_from_transport=False
+                fetch_schema_from_transport=True
             )
             with client as session:
                 return session.execute(gql(query), variable_values=variables)

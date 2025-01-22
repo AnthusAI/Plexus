@@ -53,7 +53,6 @@ dependencies = [
     "langchain-openai>=0.1.14",
     "langchain-google-vertexai>=1.0.6",
     "langgraph-checkpoint-postgres==2.0.9",
-    "psycopg[binary]>=3.2.0,<4.0.0",
     "openpyxl==3.1.5",
     "rapidfuzz==3.9.4",
     "datasets",
@@ -65,6 +64,8 @@ dependencies = [
     "gql[requests]>=3.0.0",
     "openai-cost-calculator @ git+https://github.com/AnthusAI/openai_cost_calculator.git@main",
     "invoke>=2.2.0",
+    "celery>=5.4.0",
+    "pycurl>=7.45.4"
     "SQLAlchemy[asyncio]==1.4.15"
 ]
 
@@ -112,7 +113,7 @@ commit_message = "chore: release {version}"
 major_on_zero = false
 tag_format = "v{version}"
 changelog_file = "CHANGELOG.md"
-build_command = ""
+build_command = "echo Building... [dummy command]"
 starting_version = "0.0.0"
 version_source = "tag"
 
@@ -128,4 +129,7 @@ prerelease_token = "rc"
 [tool.semantic_release.branches.develop]
 match = "develop"
 prerelease = true
-prerelease_token = "alpha" 
+prerelease_token = "alpha"
+
+[tool.pydantic-settings]
+protected_namespaces = []

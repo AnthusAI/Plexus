@@ -2,8 +2,9 @@ import React from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from './Task'
 import { MessageCircleMore } from 'lucide-react'
 import { ProgressBar } from '@/components/ui/progress-bar'
+import { BaseTaskData } from '@/types/base'
 
-interface FeedbackTaskData {
+interface FeedbackTaskData extends BaseTaskData {
   progress?: number
   elapsedTime?: string
   processedItems?: number

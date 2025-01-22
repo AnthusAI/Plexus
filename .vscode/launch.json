@@ -1,9 +1,8 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
-    "python.pythonPath": "/home/ec2-user/miniconda3/envs/py39/bin/python",
+    "python": {
+        "pythonPath": "/Users/ryan/miniconda3/envs/py39/bin/python"
+    },
     "configurations": [
         {
             "name": "Plexus Evaluate Accuracy",
@@ -13,21 +12,20 @@
             "args": [
                 "evaluate",
                 "accuracy",
-                "--scorecard-name", "randallreillyv1",
-                "--score-name", "IVR Present",
-                "--number-of-samples", "40"
-                "--sampling-method", "random",
-                // "--random-seed", "42",
-                // "--content-ids-to-sample", "50035677"
-                // "--fresh",
-                // "--use-langsmith-trace"
+                "--scorecard-name",
+                "cs3_tpa_psd_in",
+                "--score-name",
+                "Good Call",
+                "--number-of-samples",
+                "40",
+                "--sampling-method",
+                "random"
             ],
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/../Call-Criteria-Python",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
-            },
-            // "justMyCode": false,
+            }
         },
         {
             "name": "Plexus Predict",
@@ -36,13 +34,12 @@
             "module": "plexus",
             "args": [
                 "predict",
-                "--scorecard-name", "randallreillyv1",
-                "--score-name", "IVR Present",
-                // "--content-id", "251030621"
-                "--number", "1",
-                // "--fresh"
-                // "--excel",
-                // "--use-langsmith-trace"
+                "--scorecard-name",
+                "randallreillyv1",
+                "--score-name",
+                "IVR Present",
+                "--number",
+                "1"
             ],
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/../Call-Criteria-Python",
@@ -58,7 +55,8 @@
             "args": [
                 "batch",
                 "generate",
-                "--account-key", "call-criteria"
+                "--account-key",
+                "call-criteria"
             ],
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/../Call-Criteria-Python",
@@ -74,7 +72,8 @@
             "args": [
                 "batch",
                 "status",
-                "--account-key", "call-criteria"
+                "--account-key",
+                "call-criteria"
             ],
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/../Call-Criteria-Python",
@@ -90,7 +89,8 @@
             "args": [
                 "batch",
                 "complete",
-                "--account-key", "call-criteria"
+                "--account-key",
+                "call-criteria"
             ],
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/../Call-Criteria-Python",
@@ -98,5 +98,28 @@
                 "PYTHONPATH": "${workspaceFolder}"
             }
         },
+        {
+            "name": "Plexus Action Worker",
+            "type": "python",
+            "request": "launch",
+            "module": "plexus",
+            "args": [
+                "action",
+                "worker",
+                "--loglevel",
+                "DEBUG"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Python Debugger: Python File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}"
+        }
     ]
 }
