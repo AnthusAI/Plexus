@@ -21,6 +21,7 @@ export async function listFromModel<T extends { id: string }>(
   nextToken?: string,
   limit?: number
 ): Promise<AmplifyListResult<T>> {
+
   const options: any = {}
   if (filter) options.filter = filter
   if (nextToken) options.nextToken = nextToken

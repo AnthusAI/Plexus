@@ -132,6 +132,7 @@ export function EvaluationTaskScoreResults({
                   active={filters.showCorrect !== null || 
                          filters.predictedValue !== null || 
                          filters.actualValue !== null}
+                  onClick={() => {}}
                 />
               </div>
             </DropdownMenuTrigger>

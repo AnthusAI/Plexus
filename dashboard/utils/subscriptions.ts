@@ -1,4 +1,4 @@
-import { dataClient } from '@/utils/data-operations'
+import { getClient } from '@/utils/data-operations'
 import type { Schema } from "@/amplify/data/resource"
 
 export type SubscriptionCallback<T> = (data: T) => void
@@ -26,8 +26,9 @@ export function createBatchJobScoringJobSubscription(
   onData: SubscriptionCallback<BatchJobScoringJobSubscriptionData>,
   onError: ErrorCallback
 ) {
+  const client = getClient()
   // @ts-ignore - Amplify Gen2 typing issue
-  return dataClient.models.BatchJobScoringJob.onCreate().subscribe({
+  return client.models.BatchJobScoringJob.onCreate().subscribe({
     next: onData,
     error: onError
   })
@@ -37,8 +38,9 @@ export function createScoringJobSubscription(
   onData: SubscriptionCallback<ScoringJobSubscriptionData>,
   onError: ErrorCallback
 ) {
+  const client = getClient()
   // @ts-ignore - Amplify Gen2 typing issue
-  return dataClient.models.ScoringJob.onUpdate().subscribe({
+  return client.models.ScoringJob.onUpdate().subscribe({
     next: onData,
     error: onError
   })

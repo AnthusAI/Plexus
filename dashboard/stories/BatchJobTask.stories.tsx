@@ -20,7 +20,6 @@ const defaultTask = {
   scorecard: 'Test Scorecard',
   score: 'Test Score',
   time: new Date().toISOString(),
-  summary: 'Test Summary',
   data: {
     type: 'batch',
     status: 'running',

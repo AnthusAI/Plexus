@@ -1,128 +1,114 @@
 import React from 'react'
 import type { Meta, StoryObj } from '@storybook/react'
-import { SegmentedProgressBar } from '../components/ui/segmented-progress-bar'
+import { SegmentedProgressBar, SegmentConfig } from '../components/ui/segmented-progress-bar'
 
-const meta: Meta<typeof SegmentedProgressBar> = {
-  title: 'Components/SegmentedProgressBar',
+const meta = {
+  title: 'Progress Bars/SegmentedProgressBar',
   component: SegmentedProgressBar,
   parameters: {
-    layout: 'centered',
+    layout: 'padded',
   },
-  tags: ['autodocs'],
-  argTypes: {
-    state: {
-      description: 'Current state of the progress bar',
-      options: ['open', 'closed', 'processing', 'complete', 'error'],
-      control: { type: 'radio' }
-    }
-  }
-}
+  decorators: [
+    (Story) => (
+      <div className="w-full">
+        <Story />
+      </div>
+    ),
+  ],
+} satisfies Meta<typeof SegmentedProgressBar>
 
 export default meta
 type Story = StoryObj<typeof SegmentedProgressBar>
 
-export const AllStates: Story = {
+const sampleSegments: SegmentConfig[] = [
+  { key: 'start', label: 'Start', color: 'bg-primary' },
+  { key: 'middle', label: 'Middle', color: 'bg-secondary' },
+  { key: 'end', label: 'End', color: 'bg-true' }
+]
+
+const baseArgs = {
+  segments: sampleSegments,
+  error: false
+} as const
+
+export const AtStart: Story = {
+  args: {
+    ...baseArgs,
+    currentSegment: 'start'
+  }
+}
+
+export const InMiddle: Story = {
+  args: {
+    ...baseArgs,
+    currentSegment: 'middle'
+  }
+}
+
+export const AtEnd: Story = {
+  args: {
+    ...baseArgs,
+    currentSegment: 'end'
+  }
+}
+
+export const WithError: Story = {
+  args: {
+    ...baseArgs,
+    currentSegment: 'end',
+    error: true,
+    errorLabel: 'Error'
+  }
+}
+
+export const WithCustomErrorLabel: Story = {
+  args: {
+    ...baseArgs,
+    currentSegment: 'end',
+    error: true,
+    errorLabel: 'Failed'
+  }
+}
+
+export const CustomColors: Story = {
+  args: {
+    segments: [
+      { key: 'one', label: 'One', color: 'bg-blue-500' },
+      { key: 'two', label: 'Two', color: 'bg-green-500' },
+      { key: 'three', label: 'Three', color: 'bg-purple-500' }
+    ],
+    currentSegment: 'two',
+    error: false
+  }
+}
+
+export const Demo: Story = {
   render: () => (
-    <div className="space-y-8 w-[600px]">
+    <div className="space-y-8">
       <div>
-        <div className="text-sm text-muted-foreground mb-2">Open - Initial state</div>
-        <SegmentedProgressBar state="open" />
+        <div className="text-sm text-muted-foreground mb-2">At Start</div>
+        <SegmentedProgressBar {...AtStart.args} />
       </div>
       <div>
-        <div className="text-sm text-muted-foreground mb-2">Closed - Ready for processing</div>
-        <SegmentedProgressBar state="closed" />
+        <div className="text-sm text-muted-foreground mb-2">In Middle</div>
+        <SegmentedProgressBar {...InMiddle.args} />
       </div>
       <div>
-        <div className="text-sm text-muted-foreground mb-2">Processing - Currently running</div>
-        <SegmentedProgressBar state="processing" />
+        <div className="text-sm text-muted-foreground mb-2">At End</div>
+        <SegmentedProgressBar {...AtEnd.args} />
       </div>
       <div>
-        <div className="text-sm text-muted-foreground mb-2">Complete - Successfully finished</div>
-        <SegmentedProgressBar state="complete" />
+        <div className="text-sm text-muted-foreground mb-2">With Error</div>
+        <SegmentedProgressBar {...WithError.args} />
       </div>
       <div>
-        <div className="text-sm text-muted-foreground mb-2">Error - Failed during processing</div>
-        <SegmentedProgressBar state="error" />
+        <div className="text-sm text-muted-foreground mb-2">With Custom Error Label</div>
+        <SegmentedProgressBar {...WithCustomErrorLabel.args} />
+      </div>
+      <div>
+        <div className="text-sm text-muted-foreground mb-2">Custom Colors</div>
+        <SegmentedProgressBar {...CustomColors.args} />
       </div>
     </div>
-  ),
-}
-
-export const Open: Story = {
-  args: {
-    state: 'open',
-  },
-  parameters: {
-    docs: {
-      description: {
-        story: 'Initial state when the job is first created. Only the first segment is active.'
-      }
-    }
-  }
-}
-
-export const Closed: Story = {
-  args: {
-    state: 'closed',
-  },
-  parameters: {
-    docs: {
-      description: {
-        story: 'Job is closed and ready for processing. First two segments are active.'
-      }
-    }
-  }
-}
-
-export const Processing: Story = {
-  args: {
-    state: 'processing',
-  },
-  parameters: {
-    docs: {
-      description: {
-        story: 'Job is currently being processed. First three segments are active.'
-      }
-    }
-  }
-}
-
-export const Complete: Story = {
-  args: {
-    state: 'complete',
-  },
-  parameters: {
-    docs: {
-      description: {
-        story: 'Job has completed successfully. All segments are active.'
-      }
-    }
-  }
-}
-
-export const Error: Story = {
-  args: {
-    state: 'error',
-  },
-  parameters: {
-    docs: {
-      description: {
-        story: 'Job failed during processing. Shows error state in the final segment.'
-      }
-    }
-  }
-}
-
-export const WithCustomWidth: Story = {
-  args: {
-    state: 'processing',
-    className: 'w-[300px]'
-  },
-  parameters: {
-    docs: {
-      description: {
-        story: 'The progress bar can be customized with additional classes for width or other styles.'
-      }
-    }
-  }
+  )
 } 
