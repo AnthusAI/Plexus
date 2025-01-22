@@ -170,7 +170,7 @@ export function ScorecardForm({
                 name: section.name,
                 order: section.order,
                 scores: scoresResult.data?.map(score => {
-                  const metadata = score.metadata as any ?? {}
+                  const metadata = score.configuration as any ?? {}
                   return {
                     id: score.id,
                     name: score.name,
