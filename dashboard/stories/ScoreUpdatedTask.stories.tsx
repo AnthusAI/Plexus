@@ -37,7 +37,6 @@ const createTask = (id: number, beforeScore: number, afterScore: number): ScoreU
     scorecard: 'Performance Review',
     score: 'Improved',
     time: '30 minutes ago',
-    summary: 'Score improved significantly',
     description: 'Score update details',
     data: {
       before: {

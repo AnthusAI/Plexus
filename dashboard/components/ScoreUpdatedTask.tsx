@@ -2,8 +2,9 @@ import React from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from './Task'
 import { ListTodo, MoveUpRight } from 'lucide-react'
 import BeforeAfterGauges from './BeforeAfterGauges'
+import { BaseTaskData } from '@/types/base'
 
-interface ScoreUpdatedTaskData {
+interface ScoreUpdatedTaskData extends BaseTaskData {
   before: {
     outerRing: Array<{ category: string; value: number; fill: string }>
     innerRing: Array<{ category: string; value: number; fill: string }>

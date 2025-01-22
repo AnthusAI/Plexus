@@ -35,7 +35,6 @@ const createTask = (id: number, processedItems: number, totalItems: number): Fee
     scorecard: 'Test Scorecard',
     score: 'Test Score',
     time: '2 hours ago',
-    summary: 'Feedback Summary',
     description: 'Feedback Description',
     data: {
       progress: (processedItems / totalItems) * 100,

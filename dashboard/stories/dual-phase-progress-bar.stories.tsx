@@ -4,12 +4,19 @@ import { DualPhaseProgressBar } from '../components/ui/dual-phase-progress-bar'
 import { expect } from '@storybook/test'
 import { within } from '@storybook/testing-library'
 
-const meta = {
-  title: 'Components/DualPhaseProgressBar',
+const meta: Meta<typeof DualPhaseProgressBar> = {
+  title: 'Progress Bars/DualPhaseProgressBar',
   component: DualPhaseProgressBar,
   parameters: {
-    layout: 'centered',
+    layout: 'padded',
   },
+  decorators: [
+    (Story) => (
+      <div className="w-full">
+        <Story />
+      </div>
+    ),
+  ],
   tags: ['autodocs'],
   argTypes: {
     firstPhaseProgress: {

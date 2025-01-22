@@ -31,7 +31,7 @@ import { CardButton } from "@/components/CardButton"
 import { DatasetConfigFormComponent } from "@/components/dataset-config-form"
 import { listFromModel } from "@/utils/amplify-helpers"
 import { AmplifyListResult } from '@/types/shared'
-import { dataClient } from "@/utils/data-operations"
+import { getClient } from "@/utils/data-operations"
 import { generateClient } from "aws-amplify/data"
 
 const ACCOUNT_KEY = 'call-criteria'
@@ -182,8 +182,14 @@ export default function ScorecardsComponent() {
       item: async () => ({ data: null }),
       scoringJobs: async () => ({ data: [], nextToken: null }),
       scoreResults: async () => ({ data: [], nextToken: null }),
-      actions: async () => ({ data: [], nextToken: null }),
-      datasets: async () => ({ data: [], nextToken: null })
+      actions: [],
+      datasets: async () => ({ data: [], nextToken: null }),
+      tasks: async (): Promise<AmplifyListResult<Schema['Task']['type']>> => {
+        return listFromModel<Schema['Task']['type']>(
+          client.models.Task,
+          { scorecardId: { eq: '' } }  // Empty ID for new scorecard
+        );
+      }
     } as Schema['Scorecard']['type'])
     setIsEditing(true)
   }
@@ -260,7 +266,13 @@ export default function ScorecardsComponent() {
         scoreResults: async () => amplifyClient.ScoreResult.list({
           filter: { scorecardId: { eq: scorecardData.id } }
         }),
-        actions: async () => ({ data: [], nextToken: null })
+        actions: [],
+        tasks: async (): Promise<AmplifyListResult<Schema['Task']['type']>> => {
+          return listFromModel<Schema['Task']['type']>(
+            client.models.Task,
+            { scorecardId: { eq: scorecardData.id } }
+          );
+        }
       } as Schema['Scorecard']['type']
       
       console.log('Setting selected scorecard with data:', fullScorecardData)

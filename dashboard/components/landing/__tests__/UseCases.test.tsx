@@ -5,7 +5,7 @@ import { UseCases } from '../UseCases'
 describe('UseCases Component', () => {
   it('renders the main heading', () => {
     render(<UseCases />)
-    expect(screen.getByText('Your team knows your business')).toBeInTheDocument()
+    expect(screen.getByText('Your Team Knows Your Business')).toBeInTheDocument()
   })
 
   it('renders all use case cards', () => {

@@ -133,6 +133,7 @@ const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['type'] =
         scoringJobs: async (options?: any) => ({ data: [], nextToken: null }),
         scoreResults: async (options?: any) => ({ data: [], nextToken: null }),
         actions: async (options?: any) => ({ data: [], nextToken: null }),
+        tasks: async (options?: any) => ({ data: [], nextToken: null }),
         createdAt: rawEvaluation.account?.createdAt || new Date().toISOString(),
         updatedAt: rawEvaluation.account?.updatedAt || new Date().toISOString(),
         description: rawEvaluation.account?.description || ''
@@ -1024,6 +1025,8 @@ export default function EvaluationsDashboard(): JSX.Element {
       score: scoreNames[selectedEvaluation.id] || 'Unknown Score',
       time: selectedEvaluation.createdAt,
       data: {
+        id: selectedEvaluation.id,
+        title: scorecardNames[selectedEvaluation.id] || 'Unknown Scorecard',
         accuracy: selectedEvaluation.accuracy ?? null,
         metrics,
         metricsExplanation: selectedEvaluation.metricsExplanation ?? null,
@@ -1036,7 +1039,7 @@ export default function EvaluationsDashboard(): JSX.Element {
         elapsedSeconds: selectedEvaluation.elapsedSeconds ?? null,
         estimatedRemainingSeconds: selectedEvaluation.estimatedRemainingSeconds ?? null,
         startedAt: selectedEvaluation.startedAt ?? null,
-        errorMessage: selectedEvaluation.errorMessage ?? null,
+        errorMessage: selectedEvaluation.errorMessage ?? undefined,
         errorDetails: selectedEvaluation.errorDetails ?? null,
         confusionMatrix,
         scoreGoal: selectedEvaluation.scoreGoal ?? null,

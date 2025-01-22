@@ -4,8 +4,10 @@ import { Button } from '@/components/ui/button'
 import { Square, RectangleVertical, X } from 'lucide-react'
 import { formatTimeAgo } from '@/utils/format-time'
 import { CardButton } from '@/components/CardButton'
+import { TaskStatus, TaskStageConfig } from './ui/task-status'
+import { BaseTaskData } from '@/types/base'
 
-export interface BaseTaskProps<TData = unknown> {
+export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
   variant: 'grid' | 'detail' | 'nested'
   task: {
     id: string
@@ -13,27 +15,43 @@ export interface BaseTaskProps<TData = unknown> {
     scorecard: string
     score: string
     time: string
-    summary?: string
     description?: string
     data?: TData
+    stages?: TaskStageConfig[]
+    currentStageName?: string
+    processedItems?: number
+    totalItems?: number
+    startedAt?: string
+    estimatedCompletionAt?: string
+    status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+    dispatchStatus?: 'DISPATCHED'
+    celeryTaskId?: string
+    workerNodeId?: string
+    completedAt?: string
   }
   onClick?: () => void
   controlButtons?: React.ReactNode
   isFullWidth?: boolean
   onToggleFullWidth?: () => void
   onClose?: () => void
+  isLoading?: boolean
+  error?: string
+  onRetry?: () => void
+  showPreExecutionStages?: boolean
 }
 
-interface TaskChildProps<TData = unknown> extends BaseTaskProps<TData> {
+interface TaskChildProps<TData extends BaseTaskData = BaseTaskData> extends BaseTaskProps<TData> {
   children?: React.ReactNode
+  showProgress?: boolean
 }
 
-export interface TaskComponentProps<TData = unknown> extends BaseTaskProps<TData> {
+export interface TaskComponentProps<TData extends BaseTaskData = BaseTaskData> extends BaseTaskProps<TData> {
   renderHeader: (props: TaskChildProps<TData>) => React.ReactNode
   renderContent: (props: TaskChildProps<TData>) => React.ReactNode
+  showProgress?: boolean
 }
 
-const Task = <TData = unknown>({ 
+const Task = <TData extends BaseTaskData = BaseTaskData>({ 
   variant, 
   task, 
   onClick, 
@@ -42,7 +60,12 @@ const Task = <TData = unknown>({
   renderContent,
   isFullWidth,
   onToggleFullWidth,
-  onClose
+  onClose,
+  showProgress = true,
+  isLoading = false,
+  error,
+  onRetry,
+  showPreExecutionStages
 }: TaskComponentProps<TData>) => {
   const childProps: TaskChildProps<TData> = {
     variant,
@@ -50,7 +73,12 @@ const Task = <TData = unknown>({
     controlButtons,
     isFullWidth,
     onToggleFullWidth,
-    onClose
+    onClose,
+    showProgress,
+    isLoading,
+    error,
+    onRetry,
+    showPreExecutionStages
   }
 
   if (variant === 'nested') {
@@ -68,32 +96,60 @@ const Task = <TData = unknown>({
         bg-card shadow-none border-none rounded-lg transition-colors duration-200 
         flex flex-col h-full min-w-[300px]
         ${variant === 'grid' ? 'cursor-pointer' : ''}
+        ${isLoading ? 'opacity-70' : ''}
       `}
-      onClick={variant === 'grid' ? onClick : undefined}
+      onClick={variant === 'grid' && !isLoading ? onClick : undefined}
+      role={variant === 'grid' ? 'button' : 'article'}
+      tabIndex={variant === 'grid' ? 0 : undefined}
+      onKeyDown={variant === 'grid' ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick?.()
+        }
+      } : undefined}
+      aria-busy={isLoading}
+      aria-disabled={isLoading}
     >
       <div className="flex-none">
         {renderHeader(childProps)}
       </div>
-      <CardContent className="flex-1 min-h-0 p-4">
-        {renderContent(childProps)}
+      <CardContent className="flex-1 min-h-0 p-2">
+        {error ? (
+          <div className="flex flex-col items-center justify-center h-full text-center p-4">
+            <div className="text-destructive mb-2">{error}</div>
+            {onRetry && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onRetry}
+                className="mt-2"
+              >
+                Retry
+              </Button>
+            )}
+          </div>
+        ) : (
+          renderContent(childProps)
+        )}
       </CardContent>
     </Card>
   )
 }
 
-const TaskHeader = <TData = unknown>({ 
+const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({ 
   task, 
   variant, 
   children, 
   controlButtons,
   isFullWidth,
   onToggleFullWidth,
-  onClose 
+  onClose,
+  isLoading
 }: TaskChildProps<TData>) => {
   const formattedTime = formatTimeAgo(task.time, variant === 'grid')
 
   return (
-    <CardHeader className="space-y-1.5 p-4 pr-4 flex flex-col items-start">
+    <CardHeader className="space-y-1.5 px-2 py-2 flex flex-col items-start">
       <div className="flex justify-between items-start w-full">
         <div className="flex flex-col">
           <div className="text-lg font-bold">{task.type}</div>
@@ -112,12 +168,16 @@ const TaskHeader = <TData = unknown>({
                 <CardButton
                   icon={isFullWidth ? RectangleVertical : Square}
                   onClick={onToggleFullWidth}
+                  disabled={isLoading}
+                  aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
                 />
               )}
               {onClose && (
                 <CardButton
                   icon={X}
                   onClick={onClose}
+                  disabled={isLoading}
+                  aria-label="Close"
                 />
               )}
               {controlButtons}
@@ -134,36 +194,58 @@ const TaskHeader = <TData = unknown>({
   )
 }
 
-const TaskContent = <TData = unknown>({ 
+const TaskContent = <TData extends BaseTaskData = BaseTaskData>({ 
   task, 
   variant, 
   children, 
-  visualization, 
-  customSummary 
+  visualization,
+  showProgress = true,
+  isLoading,
+  showPreExecutionStages
 }: TaskChildProps<TData> & {
-  visualization?: React.ReactNode,
-  customSummary?: React.ReactNode
-}) => (
-  <CardContent className="h-full p-0 flex flex-col flex-1">
-    {variant === 'grid' ? (
-      <div className="flex flex-col h-full">
-        <div className="space-y-1 w-full">
-          <div className="text-lg font-bold">
-            {task.description && (
-              <div className="text-sm text-muted-foreground">
-                {task.description}
-              </div>
-            )}
-            {customSummary ? customSummary : <div>{task.summary}</div>}
-          </div>
+  visualization?: React.ReactNode
+}) => {
+  // Get status message from current stage or last completed stage if task is done
+  const statusMessage = (() => {
+    if (!task.stages?.length) return undefined
+    if (task.status === 'COMPLETED' || task.status === 'FAILED') {
+      // Find the last stage with a status message
+      return [...task.stages]
+        .reverse()
+        .find(stage => stage.statusMessage)?.statusMessage
+    }
+    // Otherwise use current stage's message
+    return task.stages.find(stage => stage.name === task.currentStageName)?.statusMessage
+  })()
+
+  return (
+    <CardContent className="h-full p-0 flex flex-col flex-1">
+      {showProgress && task.stages && (
+        <div>
+          <TaskStatus
+            showStages={true}
+            stages={task.stages}
+            stageConfigs={task.stages}
+            currentStageName={task.currentStageName}
+            processedItems={task.processedItems}
+            totalItems={task.totalItems}
+            startedAt={task.startedAt}
+            estimatedCompletionAt={task.estimatedCompletionAt}
+            status={task.status || 'PENDING'}
+            command={task.data?.command}
+            statusMessage={statusMessage}
+            dispatchStatus={task.dispatchStatus}
+            celeryTaskId={task.celeryTaskId}
+            workerNodeId={task.workerNodeId}
+            showPreExecutionStages={showPreExecutionStages}
+            completedAt={task.completedAt}
+            truncateMessages={variant === 'grid'}
+          />
         </div>
-        {visualization && (
-          <div className="flex-1 w-full mt-4">{visualization}</div>
-        )}
-      </div>
-    ) : null}
-    {children}
-  </CardContent>
-)
+      )}
+      {children}
+    </CardContent>
+  )
+}
 
 export { Task, TaskHeader, TaskContent }

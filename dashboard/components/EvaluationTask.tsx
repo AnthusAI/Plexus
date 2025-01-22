@@ -13,6 +13,7 @@ import MetricsGaugesExplanation from '@/components/MetricsGaugesExplanation'
 import { EvaluationTaskScoreResults } from '@/components/EvaluationTaskScoreResults'
 import { EvaluationTaskScoreResultDetail } from '@/components/EvaluationTaskScoreResultDetail'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
+import { BaseTaskData } from '@/types/base'
 
 export interface EvaluationMetric {
   name: string
@@ -23,6 +24,8 @@ export interface EvaluationMetric {
 }
 
 export interface EvaluationTaskData {
+  id: string
+  title: string
   accuracy: number | null
   metrics: EvaluationMetric[]
   metricsExplanation?: string | null
@@ -35,7 +38,7 @@ export interface EvaluationTaskData {
   elapsedSeconds: number | null
   estimatedRemainingSeconds: number | null
   startedAt?: string | null
-  errorMessage?: string | null
+  errorMessage?: string
   errorDetails?: any | null
   confusionMatrix?: {
     matrix: number[][] | null
@@ -430,7 +433,7 @@ export default function EvaluationTask({
       task={{
         ...task,
         type: computedType,
-        summary: variant === 'detail' ? undefined : task.summary
+        description: variant === 'detail' ? undefined : task.summary
       }}
       onClick={onClick}
       controlButtons={controlButtons}

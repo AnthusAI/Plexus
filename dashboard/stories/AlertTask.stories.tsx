@@ -25,7 +25,7 @@ const Template: StoryFn<AlertTaskStoryProps> = (args: AlertTaskStoryProps) => (
 
 const createTask = (
   id: number, 
-  summary: string, 
+  description: string, 
   iconType: 'info' | 'warning' | 'siren'
 ): AlertTaskStoryProps => ({
   variant: 'grid',
@@ -35,7 +35,7 @@ const createTask = (
     scorecard: 'System Health',
     score: 'Critical',
     time: '10 minutes ago',
-    summary,
+    description,
   },
   iconType,
   onClick: () => console.log(`Clicked task ${id}`),

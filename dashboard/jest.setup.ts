@@ -14,6 +14,13 @@ jest.mock('next/navigation', () => ({
   }
 }))
 
+class MockResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+global.ResizeObserver = MockResizeObserver;
 // Mock next-themes
 jest.mock('next-themes', () => ({
   ThemeProvider: function ThemeProvider({ children }: { children: React.ReactNode }) { return children },
