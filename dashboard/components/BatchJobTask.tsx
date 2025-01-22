@@ -17,6 +17,7 @@ import {
   BatchJobScoringJobSubscriptionData,
   ScoringJobSubscriptionData
 } from '@/utils/subscriptions'
+import { BaseTaskData } from '@/types/base'
 
 interface ScoringJobData {
   id: string
@@ -35,6 +36,7 @@ interface ScoringJobData {
 
 export interface BatchJobTaskData {
   id: string
+  title: string
   modelProvider: string
   modelName: string
   type: string
@@ -45,7 +47,7 @@ export interface BatchJobTaskData {
   startedAt: string | null
   estimatedEndAt: string | null
   completedAt: string | null
-  errorMessage: string | null
+  errorMessage?: string
   errorDetails: Record<string, unknown>
   scoringJobs?: ScoringJobData[]
   scoringJobCountCache?: number

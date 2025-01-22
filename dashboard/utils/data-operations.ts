@@ -1,5 +1,6 @@
 import { generateClient } from 'aws-amplify/data';
 import { Schema } from '@/amplify/data/resource';
+import { Observable } from 'rxjs';
 
 let client: ReturnType<typeof generateClient<Schema>>;
 
@@ -16,6 +17,7 @@ export async function listFromModel<T extends keyof Schema>(
   modelName: T,
   options?: {
     limit?: number,
+    filter?: Record<string, any>
   }
 ) {
   console.log('listFromModel called with:', { modelName, options });
@@ -24,7 +26,8 @@ export async function listFromModel<T extends keyof Schema>(
   console.log('client.models at time of call:', currentClient.models);
   try {
     const response = await (currentClient.models[modelName] as any).list({
-      limit: options?.limit
+      limit: options?.limit,
+      filter: options?.filter
     });
     return {
       data: [...response.data].sort((a, b) =>
@@ -37,99 +40,86 @@ export async function listFromModel<T extends keyof Schema>(
   }
 }
 
-export async function listRecentActions(limit: number = 12) {
+export async function listRecentTasks(limit: number = 12) {
   const currentClient = getClient();
   console.log('client at time of call:', currentClient);
   console.log('client.models at time of call:', currentClient.models);
   try {
-    const response = await (currentClient.models.Action as any).list({
+    const response = await (currentClient.models.Task as any).list({
       limit,
       include: ['stages']
     });
     
-    // Fetch stages for each action
-    const actionsWithStages = await Promise.all(
-      response.data.map(async (action: any) => {
-        const stagesResponse = await action.stages();
+    // Fetch stages for each task
+    const tasksWithStages = await Promise.all(
+      response.data.map(async (task: any) => {
+        const stagesResponse = await task.stages();
         return {
-          ...action,
+          ...task,
           stages: stagesResponse.data
         };
       })
     );
     
     // Sort by createdAt in reverse chronological order
-    const sortedActions = [...actionsWithStages].sort((a, b) => 
+    const sortedTasks = [...tasksWithStages].sort((a, b) => 
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
     
-    console.log('Action list response:', {
-      data: sortedActions,
-      count: sortedActions.length,
-      firstRecord: sortedActions[0],
+    console.log('Task list response:', {
+      data: sortedTasks,
+      count: sortedTasks.length,
+      firstRecord: sortedTasks[0],
       nextToken: response.nextToken
     });
-    return { data: sortedActions };
+    return { data: sortedTasks };
   } catch (error) {
-    console.error('Error listing actions:', error);
+    console.error('Error listing tasks:', error);
     return { data: [] };
   }
 }
 
-export function observeRecentActions(limit: number = 12) {
-  console.log('observeRecentActions called with:', { limit });
-  const currentClient = getClient();
-  console.log('client at time of call:', currentClient);
-  console.log('client.models at time of call:', currentClient.models);
-  const subscription = {
-    subscribe: (handlers: { 
-      next: (data: { items: Schema['Action']['type'][], isSynced: boolean }) => void,
-      error: (error: Error) => void 
-    }) => {
-      // Initial fetch
-      listRecentActions(limit).then(response => {
+export function observeRecentTasks(limit: number = 12): Observable<{ items: Schema['Task']['type'][], isSynced: boolean }> {
+  return new Observable(handlers => {
+    const currentClient = getClient();
+
+    // Initial fetch
+    listRecentTasks(limit).then(response => {
+      handlers.next({ items: response.data, isSynced: true });
+    }).catch(handlers.error);
+
+    // Subscribe to changes
+    const createSub = (currentClient.models.Task as any).onCreate({}).subscribe({
+      next: async () => {
+        const response = await listRecentTasks(limit);
         handlers.next({ items: response.data, isSynced: true });
-      }).catch(handlers.error);
+      },
+      error: handlers.error
+    });
 
-      // Subscribe to Action updates
-      const actionSubs = [
-        // Subscribe to new actions
-        (currentClient.models.Action as any).onCreate({}).subscribe({
-          next: async () => {
-            const response = await listRecentActions(limit);
-            handlers.next({ items: response.data, isSynced: true });
-          },
-          error: handlers.error
-        }),
-        // Subscribe to action updates
-        (currentClient.models.Action as any).onUpdate({}).subscribe({
-          next: async () => {
-            const response = await listRecentActions(limit);
-            handlers.next({ items: response.data, isSynced: true });
-          },
-          error: handlers.error
-        })
-      ];
+    const updateSub = (currentClient.models.Task as any).onUpdate({}).subscribe({
+      next: async () => {
+        const response = await listRecentTasks(limit);
+        handlers.next({ items: response.data, isSynced: true });
+      },
+      error: handlers.error
+    });
 
-      // Subscribe to stage updates
-      const stageSub = (currentClient.models.ActionStage as any).onUpdate({}).subscribe({
-        next: async () => {
-          const response = await listRecentActions(limit);
-          handlers.next({ items: response.data, isSynced: true });
-        },
-        error: handlers.error
-      });
+    const stageSub = (currentClient.models.TaskStage as any).onUpdate({}).subscribe({
+      next: async () => {
+        const response = await listRecentTasks(limit);
+        handlers.next({ items: response.data, isSynced: true });
+      },
+      error: handlers.error
+    });
 
-      return {
-        unsubscribe: () => {
-          actionSubs.forEach(sub => sub.unsubscribe());
-          stageSub.unsubscribe();
-        }
-      };
-    }
-  };
-
-  return subscription;
+    // Cleanup subscriptions
+    return () => {
+      createSub.unsubscribe();
+      updateSub.unsubscribe();
+      stageSub.unsubscribe();
+    };
+  });
 }
 
 export async function getFromModel<T extends keyof Schema>(

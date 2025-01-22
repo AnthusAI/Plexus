@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { dataClient, listFromModel, getFromModel } from '@/utils/data-operations'
+import { listFromModel, getFromModel, getClient } from '@/utils/data-operations'
 import type { Schema } from "@/amplify/data/resource"
 import {
   Table,
@@ -473,7 +473,7 @@ export default function BatchesDashboard() {
     if (!accountId) return;
 
     try {
-      if (dataClient.models.BatchJob) {
+      if (getClient().models.BatchJob) {
         const handleBatchUpdate = async (data: Schema['BatchJob']['type']) => {
           if (!accountId) return;
           
@@ -503,13 +503,13 @@ export default function BatchesDashboard() {
         };
 
         // @ts-ignore - Amplify Gen2 typing issue
-        const createSub = dataClient.models.BatchJob.onCreate().subscribe({
+        const createSub = getClient().models.BatchJob.onCreate().subscribe({
           next: handleBatchUpdate,
           error: handleError
         });
 
         // @ts-ignore - Amplify Gen2 typing issue
-        const updateSub = dataClient.models.BatchJob.onUpdate().subscribe({
+        const updateSub = getClient().models.BatchJob.onUpdate().subscribe({
           next: handleBatchUpdate,
           error: handleError
         });
@@ -762,10 +762,10 @@ export default function BatchesDashboard() {
                 scorecard: '',
                 score: '',
                 time: selectedBatchJob.completedAt || selectedBatchJob.startedAt || new Date().toISOString(),
-                summary: `${getProgressPercentage(selectedBatchJob)}% complete`,
-                description: selectedBatchJob.errorMessage || undefined,
+                description: `${getProgressPercentage(selectedBatchJob)}% complete`,
                 data: {
                   id: selectedBatchJob.id,
+                  title: `${selectedBatchJob.type} - ${selectedBatchJob.modelProvider} ${selectedBatchJob.modelName}`,
                   modelProvider: selectedBatchJob.modelProvider,
                   modelName: selectedBatchJob.modelName,
                   type: selectedBatchJob.type,
@@ -776,7 +776,7 @@ export default function BatchesDashboard() {
                   startedAt: selectedBatchJob.startedAt || null,
                   estimatedEndAt: selectedBatchJob.estimatedEndAt || null,
                   completedAt: selectedBatchJob.completedAt || null,
-                  errorMessage: selectedBatchJob.errorMessage || null,
+                  errorMessage: selectedBatchJob.errorMessage || undefined,
                   errorDetails: selectedBatchJob.errorDetails as Record<string, unknown> || {},
                   scoringJobs: [],
                   scoringJobCountCache: selectedBatchJob.scoringJobCountCache || 0

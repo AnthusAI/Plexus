@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Square, RectangleVertical, X } from 'lucide-react'
 import { formatTimeAgo } from '@/utils/format-time'
 import { CardButton } from '@/components/CardButton'
-import { ActionStatus, ActionStageConfig } from './ui/action-status'
+import { TaskStatus, TaskStageConfig } from './ui/task-status'
 import { BaseTaskData } from '@/types/base'
 
 export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
@@ -17,7 +17,7 @@ export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
     time: string
     description?: string
     data?: TData
-    stages?: ActionStageConfig[]
+    stages?: TaskStageConfig[]
     currentStageName?: string
     processedItems?: number
     totalItems?: number
@@ -222,7 +222,7 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
     <CardContent className="h-full p-0 flex flex-col flex-1">
       {showProgress && task.stages && (
         <div>
-          <ActionStatus
+          <TaskStatus
             showStages={true}
             stages={task.stages}
             stageConfigs={task.stages}

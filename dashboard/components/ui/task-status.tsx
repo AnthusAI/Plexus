@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react'
 import { SegmentedProgressBar, SegmentConfig } from './segmented-progress-bar'
 import { ProgressBar } from './progress-bar'
 import { ProgressBarTiming } from './progress-bar-timing'
-import { Radio, Hand, ConciergeBell } from 'lucide-react'
+import { Radio, Hand, ConciergeBell, Square, RectangleVertical, X } from 'lucide-react'
 import { cn } from "@/lib/utils"
+import { StyleTag } from './style-tag'
+import { CardButton } from '@/components/CardButton'
 
 // Add custom animation styles
 const animations = `
@@ -36,12 +38,7 @@ const animations = `
 }
 `
 
-// Add style tag to inject the animation
-const StyleTag = () => (
-  <style>{animations}</style>
-)
-
-export interface ActionStageConfig {
+export interface TaskStageConfig {
   key: string
   label: string
   color: string
@@ -56,9 +53,9 @@ export interface ActionStageConfig {
   statusMessage?: string
 }
 
-export interface ActionStatusProps {
+export interface TaskStatusProps {
   showStages?: boolean
-  stages?: ActionStageConfig[]
+  stages?: TaskStageConfig[]
   currentStageName?: string
   processedItems?: number
   totalItems?: number
@@ -67,7 +64,7 @@ export interface ActionStatusProps {
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
   command?: string
   statusMessage?: string
-  stageConfigs?: ActionStageConfig[]
+  stageConfigs?: TaskStageConfig[]
   isLoading?: boolean
   errorLabel?: string
   dispatchStatus?: string
@@ -76,6 +73,10 @@ export interface ActionStatusProps {
   showPreExecutionStages?: boolean
   completedAt?: string
   truncateMessages?: boolean
+  variant?: 'grid' | 'detail' | 'nested'
+  isFullWidth?: boolean
+  onToggleFullWidth?: () => void
+  onClose?: () => void
 }
 
 function formatDuration(seconds: number): string {
@@ -92,7 +93,7 @@ function formatDuration(seconds: number): string {
   return `${hours}h ${remainingMinutes}m`
 }
 
-export function ActionStatus({
+export function TaskStatus({
   showStages = true,
   stages = [],
   currentStageName,
@@ -110,8 +111,12 @@ export function ActionStatus({
   command,
   statusMessage,
   completedAt,
-  truncateMessages = true
-}: ActionStatusProps) {
+  truncateMessages = true,
+  variant,
+  isFullWidth,
+  onToggleFullWidth,
+  onClose
+}: TaskStatusProps) {
   const isInProgress = status === 'RUNNING'
   const isFinished = status === 'COMPLETED' || status === 'FAILED'
 
@@ -206,7 +211,7 @@ export function ActionStatus({
     }
   }, [startedAt, estimatedCompletionAt, completedAt, isInProgress])
 
-  // Convert ActionStageConfig to SegmentConfig for the progress bar
+  // Convert TaskStageConfig to SegmentConfig for the progress bar
   const segmentConfigs: SegmentConfig[] = stageConfigs ? [
     ...stageConfigs.map(stage => ({
       key: stage.name,
@@ -228,12 +233,12 @@ export function ActionStatus({
       animation: 'animate-pulse'
     }
     if (!celeryTaskId) return { 
-      message: 'Activity announced...', 
+      message: 'Task announced...', 
       icon: ConciergeBell,
       animation: 'animate-jiggle'
     }
     if (!workerNodeId) return { 
-      message: 'Activity claimed.', 
+      message: 'Task claimed.', 
       icon: Hand,
       animation: 'animate-wave'
     }
@@ -246,6 +251,25 @@ export function ActionStatus({
   return (
     <div className="space-y-2">
       <StyleTag />
+      {variant === 'detail' && (
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex-grow" />
+          <div className="flex items-center space-x-2">
+            {onToggleFullWidth && (
+              <CardButton
+                icon={isFullWidth ? RectangleVertical : Square}
+                onClick={onToggleFullWidth}
+              />
+            )}
+            {onClose && (
+              <CardButton
+                icon={X}
+                onClick={onClose}
+              />
+            )}
+          </div>
+        </div>
+      )}
       {(command || statusMessage) && (
         <div className="rounded-lg bg-card-light px-2 py-1">
           {command && (

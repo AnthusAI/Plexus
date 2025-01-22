@@ -5,10 +5,10 @@ from .base import BaseModel
 from ..client import _BaseAPIClient
 
 if TYPE_CHECKING:
-    from .action_stage import ActionStage
+    from .task_stage import TaskStage
 
 @dataclass
-class Action(BaseModel):
+class Task(BaseModel):
     accountId: str
     type: str
     status: str
@@ -107,7 +107,7 @@ class Action(BaseModel):
         command: str,
         metadata: Optional[Dict] = None,
         **kwargs
-    ) -> 'Action':
+    ) -> 'Task':
         input_data = {
             'accountId': accountId,
             'type': type,
@@ -130,18 +130,18 @@ class Action(BaseModel):
                 input_data[field] = kwargs[field]
 
         mutation = """
-        mutation CreateAction($input: CreateActionInput!) {
-            createAction(input: $input) {
+        mutation CreateTask($input: CreateTaskInput!) {
+            createTask(input: $input) {
                 %s
             }
         }
         """ % cls.fields()
 
         result = client.execute(mutation, {'input': input_data})
-        return cls.from_dict(result['createAction'], client)
+        return cls.from_dict(result['createTask'], client)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Action':
+    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Task':
         for date_field in ['createdAt', 'startedAt', 'completedAt', 'estimatedCompletionAt']:
             if data.get(date_field):
                 data[date_field] = datetime.fromisoformat(
@@ -151,7 +151,7 @@ class Action(BaseModel):
         filtered_data = {k: v for k, v in data.items() if k != 'stages'}
         return cls(client=client, **filtered_data)
 
-    def update(self, **kwargs) -> 'Action':
+    def update(self, **kwargs) -> 'Task':
         if 'createdAt' in kwargs:
             raise ValueError("createdAt cannot be modified")
 
@@ -161,16 +161,16 @@ class Action(BaseModel):
                 kwargs[field] = value.isoformat().replace('+00:00', 'Z')
 
         mutation = """
-        mutation UpdateAction($input: UpdateActionInput!) {
-            updateAction(input: $input) {
+        mutation UpdateTask($input: UpdateTaskInput!) {
+            updateTask(input: $input) {
                 %s
             }
         }
         """ % self.fields()
 
         query = """
-        query GetAction($id: ID!) {
-            getAction(id: $id) {
+        query GetTask($id: ID!) {
+            getTask(id: $id) {
                 accountId
                 type
                 status
@@ -180,7 +180,7 @@ class Action(BaseModel):
         }
         """
         result = self._client.execute(query, {'id': self.id})
-        current_data = result.get('getAction', {})
+        current_data = result.get('getTask', {})
 
         input_data = {
             'id': self.id,
@@ -193,32 +193,32 @@ class Action(BaseModel):
         }
 
         result = self._client.execute(mutation, {'input': input_data})
-        return self.from_dict(result['updateAction'], self._client)
+        return self.from_dict(result['updateTask'], self._client)
 
     @classmethod
-    def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'Action':
+    def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'Task':
         query = """
-        query GetAction($id: ID!) {
-            getAction(id: $id) {
+        query GetTask($id: ID!) {
+            getTask(id: $id) {
                 %s
             }
         }
         """ % cls.fields()
 
         result = client.execute(query, {'id': id})
-        if not result or 'getAction' not in result:
-            raise Exception(f"Failed to get Action {id}")
+        if not result or 'getTask' not in result:
+            raise Exception(f"Failed to get Task {id}")
 
-        return cls.from_dict(result['getAction'], client)
+        return cls.from_dict(result['getTask'], client)
 
-    def get_stages(self) -> List['ActionStage']:
-        from .action_stage import ActionStage
+    def get_stages(self) -> List['TaskStage']:
+        from .task_stage import TaskStage
         query = """
-        query ListActionStages($actionId: String!) {
-            listActionStages(filter: { actionId: { eq: $actionId } }) {
+        query ListTaskStages($taskId: String!) {
+            listTaskStages(filter: { taskId: { eq: $taskId } }) {
                 items {
                     id
-                    actionId
+                    taskId
                     name
                     order
                     status
@@ -232,19 +232,19 @@ class Action(BaseModel):
             }
         }
         """
-        result = self._client.execute(query, {'actionId': self.id})
-        stages = result.get('listActionStages', {}).get('items', [])
-        return [ActionStage.from_dict(stage, self._client) for stage in stages]
+        result = self._client.execute(query, {'taskId': self.id})
+        stages = result.get('listTaskStages', {}).get('items', [])
+        return [TaskStage.from_dict(stage, self._client) for stage in stages]
 
     def start_processing(self) -> None:
-        """Mark the action as started and update its status."""
+        """Mark the task as started and update its status."""
         update_fields = {"status": "RUNNING"}
         if not self.startedAt:
             update_fields["startedAt"] = datetime.now(timezone.utc)
         self.update(**update_fields)
 
     def complete_processing(self) -> None:
-        """Mark the action as completed."""
+        """Mark the task as completed."""
         self.update(
             status="COMPLETED",
             completedAt=datetime.now(timezone.utc)
@@ -255,7 +255,7 @@ class Action(BaseModel):
         error_message: str,
         error_details: Optional[Dict] = None
     ) -> None:
-        """Mark the action as failed with error information."""
+        """Mark the task as failed with error information."""
         self.update(
             status="FAILED",
             errorMessage=error_message,
@@ -269,9 +269,9 @@ class Action(BaseModel):
         total_items: int,
         stage_configs: Optional[Dict[str, Dict[str, Any]]] = None,
         estimated_completion_at: Optional[datetime] = None
-    ) -> List['ActionStage']:
+    ) -> List['TaskStage']:
         """
-        Update progress for action stages.
+        Update progress for task stages.
         
         Args:
             processed_items: Number of items processed so far
@@ -290,7 +290,7 @@ class Action(BaseModel):
         Returns:
             List of current stages in order
         """
-        from .action_stage import ActionStage
+        from .task_stage import TaskStage
 
         if not stage_configs:
             return []
@@ -309,7 +309,7 @@ class Action(BaseModel):
             if self.status != "RUNNING":
                 new_status = "RUNNING"
 
-        # Combine all action updates into a single call
+        # Combine all task updates into a single call
         update_fields = {
             "updatedAt": now,
             "status": new_status
@@ -330,9 +330,9 @@ class Action(BaseModel):
         # Create any missing stages
         for name, config in stage_configs.items():
             if name not in existing_stage_names:
-                stages.append(ActionStage.create(
+                stages.append(TaskStage.create(
                     client=self._client,
-                    actionId=self.id,
+                    taskId=self.id,
                     name=name,
                     order=config["order"],
                     status="PENDING",
