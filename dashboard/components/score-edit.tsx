@@ -262,11 +262,11 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
           aiProvider: scoreData.aiProvider ?? 'OpenAI',
           aiModel: scoreData.aiModel ?? 'gpt-4',
           metadata: {
-            configuration: (scoreData.metadata as ScoreMetadata | undefined)?.configuration ?? {},
-            distribution: Array.isArray((scoreData.metadata as ScoreMetadata | undefined)?.distribution) ? 
-              (scoreData.metadata as ScoreMetadata).distribution : [],
-            versionHistory: Array.isArray((scoreData.metadata as ScoreMetadata | undefined)?.versionHistory) ? 
-              (scoreData.metadata as ScoreMetadata).versionHistory : []
+            configuration: (scoreData.configuration as ScoreMetadata | undefined)?.configuration ?? {},
+            distribution: Array.isArray((scoreData.configuration as ScoreMetadata | undefined)?.distribution) ?
+              (scoreData.configuration as ScoreMetadata).distribution : [],
+            versionHistory: Array.isArray((scoreData.configuration as ScoreMetadata | undefined)?.versionHistory) ?
+              (scoreData.configuration as ScoreMetadata).versionHistory : []
           } as ScoreMetadata,
           section: scoreData.section as unknown as Schema['ScorecardSection']['type'],
           createdAt: scoreData.createdAt,
