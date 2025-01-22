@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 import { CardButton } from '@/components/CardButton'
 import { formatTimeAgo } from '@/lib/format-time'
 import { BatchJobProgressBar, BatchJobStatus } from "@/components/ui/batch-job-progress-bar"
-import { dataClient, listFromModel, getFromModel } from '@/utils/data-operations'
+import { getClient, listFromModel, getFromModel } from '@/utils/data-operations'
 import type { Schema } from "@/amplify/data/resource"
 import { 
   createBatchJobScoringJobSubscription,
@@ -17,6 +17,7 @@ import {
   BatchJobScoringJobSubscriptionData,
   ScoringJobSubscriptionData
 } from '@/utils/subscriptions'
+import { BaseTaskData } from '@/types/base'
 
 interface ScoringJobData {
   id: string
@@ -35,6 +36,7 @@ interface ScoringJobData {
 
 export interface BatchJobTaskData {
   id: string
+  title: string
   modelProvider: string
   modelName: string
   type: string
@@ -45,7 +47,7 @@ export interface BatchJobTaskData {
   startedAt: string | null
   estimatedEndAt: string | null
   completedAt: string | null
-  errorMessage: string | null
+  errorMessage?: string
   errorDetails: Record<string, unknown>
   scoringJobs?: ScoringJobData[]
   scoringJobCountCache?: number
@@ -174,7 +176,8 @@ export default function BatchJobTask({
         setScoringJobs(validJobs);
         
         // Set up subscriptions with proper types
-        if (dataClient.models.BatchJobScoringJob) {
+        const client = getClient();
+        if (client.models.BatchJobScoringJob) {
           // Use the subscription helper for BatchJobScoringJob
           const handleBatchJobData = async (data: BatchJobScoringJobSubscriptionData) => {
             if (!data?.batchJobId || !data?.scoringJobId) return;

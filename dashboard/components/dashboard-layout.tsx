@@ -160,14 +160,17 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   const LeftSidebar = () => {
     return (
-      <div className={`flex flex-col h-full py-2 bg-muted ${isMobile ? 'pr-3' : ''}`}>
+      <div className={`flex flex-col h-full py-2 bg-muted ${isMobile ? 'pr-3' : 'pr-2'}`}>
         <div className={`mb-4 ${isLeftSidebarOpen ? 'pl-2' : ''}`}>
-          <Link href="/" className={`block ${isLeftSidebarOpen ? 'w-full max-w-md' : 'w-12 pl-2'}`}>
-            {isLeftSidebarOpen ? (
-              <SquareLogo variant={LogoVariant.Wide} />
-            ) : (
-              <SquareLogo variant={LogoVariant.Narrow} />
-            )}
+          <Link href="/" className={`block relative ${isLeftSidebarOpen ? 'w-full max-w-md' : 'w-12 pl-2'}`}>
+            <div className="absolute -inset-1 bg-gradient-to-r from-secondary to-primary rounded-md blur-sm opacity-50"></div>
+            <div className="relative">
+              {isLeftSidebarOpen ? (
+                <SquareLogo variant={LogoVariant.Wide} />
+              ) : (
+                <SquareLogo variant={LogoVariant.Narrow} />
+              )}
+            </div>
           </Link>
         </div>
 
@@ -585,7 +588,6 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               rightSidebarState === 'normal' ? (isMobile ? 'mr-0' : 'mr-80') : 
               rightSidebarState === 'expanded' ? (isMobile ? 'mr-0' : 'mr-[40%]') : 
               (isMobile ? 'mr-0' : 'mr-14')}
-            ${isLeftSidebarOpen ? 'pl-2' : 'pl-0'}
             ${rightSidebarState !== 'collapsed' ? 'pr-2' : 'pr-0'}
             ${isMobile ? '' : 'py-2'}
           `}

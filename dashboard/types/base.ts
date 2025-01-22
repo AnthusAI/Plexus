@@ -1,9 +1,12 @@
+import { TaskStageConfig } from '@/components/ui/task-status'
+
 // Base types that are shared across all tasks
 export interface BaseTaskData {
   id: string
   title: string
   description?: string
   errorMessage?: string
+  command?: string
 }
 
 export type ActivityType = 
@@ -18,7 +21,7 @@ export type ActivityType =
   | 'Score updated'
   | 'Scoring Job'
 
-// Simplified base activity type
+// Base activity type with stage support
 export type BaseActivity = {
   id: string
   timestamp: string
@@ -26,7 +29,16 @@ export type BaseActivity = {
   scorecard: string
   score: string
   time: string
-  summary: string
+  summary?: string
   description?: string
-  data: BaseTaskData
+  stages?: TaskStageConfig[]
+  currentStageName?: string
+  processedItems?: number
+  totalItems?: number
+  startedAt?: string
+  estimatedCompletionAt?: string
+  completedAt?: string
+  status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  stageConfigs?: TaskStageConfig[]
+  data?: BaseTaskData
 }

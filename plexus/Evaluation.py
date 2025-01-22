@@ -37,6 +37,7 @@ from plexus.scores.Score import Score
 from .Scorecard import Scorecard
 from .ScorecardResults import ScorecardResults
 from .ScorecardResultsAnalysis import ScorecardResultsAnalysis
+from plexus.cli.CommandProgress import CommandProgress
 
 from sklearn.metrics import confusion_matrix
 
@@ -1483,7 +1484,13 @@ Total cost:       ${expenses['total_cost']:.6f}
                     )
                 )
 
-        # Remove the result accumulation from here since it's now handled in _async_run
+        # Update progress tracking
+        CommandProgress.update(
+            current=self.processed_items,
+            total=self.number_of_texts_to_sample,
+            status=f"Evaluating accuracy ({self.processed_items}/{self.number_of_texts_to_sample})"
+        )
+        # Add result to all_results and increment processed_items only if we processed any scores
         if has_processed_scores:
             self.processed_items += 1
 

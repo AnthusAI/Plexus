@@ -17,10 +17,11 @@ from .TuningCommands import tuning
 from .AnalyzeCommands import analyze
 from .console import console
 from .BatchCommands import batch
+from .CommandDispatch import command
 
 class OrderCommands(click.Group):
-  def list_commands(self, ctx: click.Context) -> list[str]:
-    return list(self.commands)
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        return list(self.commands)
 
 @click.group(cls=OrderCommands)
 def main():
@@ -49,6 +50,7 @@ main.add_command(predict)
 main.add_command(tuning)
 main.add_command(analyze)
 main.add_command(batch)
+main.add_command(command)
 
 def load_plexus_extensions():
     print("Loading Plexus extensions...")

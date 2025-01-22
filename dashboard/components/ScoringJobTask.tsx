@@ -7,8 +7,9 @@ import { ProgressBar } from "@/components/ui/progress-bar"
 import { Separator } from "@/components/ui/separator"
 import BatchJobTask from '@/components/BatchJobTask'
 import { RelatedBatchJob } from '@/types/tasks'
+import { BaseTaskData } from '@/types/base'
 
-export interface ScoringJobTaskData {
+export interface ScoringJobTaskData extends BaseTaskData {
   status: string
   startedAt?: string
   completedAt?: string
@@ -109,9 +110,10 @@ export default function ScoringJobTask({
                   scorecard: task.scorecard,
                   score: task.score,
                   time: task.time,
-                  summary: `${batchJob.type} job`,
+                  description: `${batchJob.type} job`,
                   data: {
                     id: batchJob.id,
+                    title: `${batchJob.type} - ${batchJob.modelProvider} ${batchJob.modelName}`,
                     modelProvider: batchJob.modelProvider,
                     modelName: batchJob.modelName,
                     type: batchJob.type,
@@ -122,7 +124,7 @@ export default function ScoringJobTask({
                     startedAt: batchJob.startedAt || null,
                     estimatedEndAt: batchJob.estimatedEndAt || null,
                     completedAt: batchJob.completedAt || null,
-                    errorMessage: batchJob.errorMessage || null,
+                    errorMessage: batchJob.errorMessage || undefined,
                     errorDetails: batchJob.errorDetails || {},
                     scoringJobs: []
                   }
