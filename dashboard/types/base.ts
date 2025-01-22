@@ -1,4 +1,4 @@
-import { ActionStageConfig } from '@/components/ui/action-status'
+import { TaskStageConfig } from '@/components/ui/task-status'
 
 // Base types that are shared across all tasks
 export interface BaseTaskData {
@@ -31,7 +31,7 @@ export type BaseActivity = {
   time: string
   summary?: string
   description?: string
-  stages?: ActionStageConfig[]
+  stages?: TaskStageConfig[]
   currentStageName?: string
   processedItems?: number
   totalItems?: number
@@ -39,6 +39,6 @@ export type BaseActivity = {
   estimatedCompletionAt?: string
   completedAt?: string
   status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
-  stageConfigs?: ActionStageConfig[]
+  stageConfigs?: TaskStageConfig[]
   data?: BaseTaskData
 }

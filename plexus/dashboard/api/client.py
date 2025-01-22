@@ -137,7 +137,7 @@ class _BaseAPIClient:
         
         self.client = Client(
             transport=transport,
-            fetch_schema_from_transport=False
+            fetch_schema_from_transport=True
         )
         
         # Initialize model namespaces
@@ -240,7 +240,7 @@ class _BaseAPIClient:
             )
             client = Client(
                 transport=transport,
-                fetch_schema_from_transport=False
+                fetch_schema_from_transport=True
             )
             with client as session:
                 return session.execute(gql(query), variable_values=variables)

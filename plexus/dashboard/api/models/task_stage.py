@@ -5,8 +5,8 @@ from .base import BaseModel
 from ..client import _BaseAPIClient
 
 @dataclass
-class ActionStage(BaseModel):
-    actionId: str
+class TaskStage(BaseModel):
+    taskId: str
     name: str
     order: int
     status: str
@@ -20,7 +20,7 @@ class ActionStage(BaseModel):
     def __init__(
         self,
         id: str,
-        actionId: str,
+        taskId: str,
         name: str,
         order: int,
         status: str,
@@ -33,7 +33,7 @@ class ActionStage(BaseModel):
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
-        self.actionId = actionId
+        self.taskId = taskId
         self.name = name
         self.order = order
         self.status = status
@@ -48,7 +48,7 @@ class ActionStage(BaseModel):
     def fields(cls) -> str:
         return """
             id
-            actionId
+            taskId
             name
             order
             status
@@ -64,15 +64,15 @@ class ActionStage(BaseModel):
     def create(
         cls,
         client: _BaseAPIClient,
-        actionId: str,
+        taskId: str,
         name: str,
         order: int,
         status: str,
         statusMessage: Optional[str] = None,
         **kwargs
-    ) -> 'ActionStage':
+    ) -> 'TaskStage':
         input_data = {
-            'actionId': actionId,
+            'taskId': taskId,
             'name': name,
             'order': order,
             'status': status
@@ -90,18 +90,18 @@ class ActionStage(BaseModel):
                 input_data[field] = kwargs[field]
 
         mutation = """
-        mutation CreateActionStage($input: CreateActionStageInput!) {
-            createActionStage(input: $input) {
+        mutation CreateTaskStage($input: CreateTaskStageInput!) {
+            createTaskStage(input: $input) {
                 %s
             }
         }
         """ % cls.fields()
 
         result = client.execute(mutation, {'input': input_data})
-        return cls.from_dict(result['createActionStage'], client)
+        return cls.from_dict(result['createTaskStage'], client)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'ActionStage':
+    def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'TaskStage':
         # Convert datetime fields
         for date_field in ['startedAt', 'completedAt', 'estimatedCompletionAt']:
             if data.get(date_field):
@@ -111,7 +111,7 @@ class ActionStage(BaseModel):
 
         # Extract required fields first
         id = data.pop('id')
-        actionId = data.pop('actionId')
+        taskId = data.pop('taskId')
         name = data.pop('name')
         order = data.pop('order')
         status = data.pop('status')
@@ -119,7 +119,7 @@ class ActionStage(BaseModel):
         # Create instance with required fields
         return cls(
             id=id,
-            actionId=actionId,
+            taskId=taskId,
             name=name,
             order=order,
             status=status,
@@ -127,24 +127,24 @@ class ActionStage(BaseModel):
             **data  # Pass remaining fields as kwargs
         )
 
-    def update(self, **kwargs) -> 'ActionStage':
+    def update(self, **kwargs) -> 'TaskStage':
         # Convert datetime fields to ISO format strings
         for field, value in kwargs.items():
             if isinstance(value, datetime):
                 kwargs[field] = value.isoformat().replace('+00:00', 'Z')
 
         mutation = """
-        mutation UpdateActionStage($input: UpdateActionStageInput!) {
-            updateActionStage(input: $input) {
+        mutation UpdateTaskStage($input: UpdateTaskStageInput!) {
+            updateTaskStage(input: $input) {
                 %s
             }
         }
         """ % self.fields()
 
         query = """
-        query GetActionStage($id: ID!) {
-            getActionStage(id: $id) {
-                actionId
+        query GetTaskStage($id: ID!) {
+            getTaskStage(id: $id) {
+                taskId
                 name
                 order
                 status
@@ -152,12 +152,12 @@ class ActionStage(BaseModel):
         }
         """
         result = self._client.execute(query, {'id': self.id})
-        current_data = result.get('getActionStage', {})
+        current_data = result.get('getTaskStage', {})
 
         # If we don't have current data, use the instance's data
         input_data = {
             'id': self.id,
-            'actionId': current_data.get('actionId', self.actionId),
+            'taskId': current_data.get('taskId', self.taskId),
             'name': current_data.get('name', self.name),
             'order': current_data.get('order', self.order),
             'status': current_data.get('status', self.status),
@@ -165,20 +165,20 @@ class ActionStage(BaseModel):
         }
 
         result = self._client.execute(mutation, {'input': input_data})
-        return self.from_dict(result['updateActionStage'], self._client)
+        return self.from_dict(result['updateTaskStage'], self._client)
 
     @classmethod
-    def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'ActionStage':
+    def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'TaskStage':
         query = """
-        query GetActionStage($id: ID!) {
-            getActionStage(id: $id) {
+        query GetTaskStage($id: ID!) {
+            getTaskStage(id: $id) {
                 %s
             }
         }
         """ % cls.fields()
 
         result = client.execute(query, {'id': id})
-        if not result or 'getActionStage' not in result:
-            raise Exception(f"Failed to get ActionStage {id}")
+        if not result or 'getTaskStage' not in result:
+            raise Exception(f"Failed to get TaskStage {id}")
 
-        return cls.from_dict(result['getActionStage'], client) 
+        return cls.from_dict(result['getTaskStage'], client) 

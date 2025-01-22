@@ -7,7 +7,7 @@ from plexus.CustomLogging import logging
 from kombu.utils.url import safequote
 import sys
 from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, \
-    BarColumn, TaskProgressColumn, TimeRemainingColumn, TextColumn, ProgressColumn, Task
+    BarColumn, TaskProgressColumn, TimeRemainingColumn, TextColumn, ProgressColumn, Task as RichTask
 from rich.style import Style
 from rich.console import Console
 from rich.panel import Panel
@@ -15,20 +15,20 @@ from rich.live import Live
 from rich.text import Text
 import typing
 from typing import Optional
-from plexus.dashboard.api.models.action import Action
+from plexus.dashboard.api.models.task import Task
 from plexus.dashboard.api.client import PlexusDashboardClient
 import json
 import datetime
 
 class ItemCountColumn(ProgressColumn):
     """Renders item count and total."""
-    def render(self, task: Task) -> typing.Union[str, typing.Text]:
+    def render(self, task: RichTask) -> typing.Union[str, typing.Text]:
         """Show item count and total."""
         return f"{int(task.completed)}/{int(task.total)}"
 
 class StatusColumn(ProgressColumn):
     """Renders status in a full line above the progress bar."""
-    def render(self, task: Task) -> typing.Union[str, typing.Text]:
+    def render(self, task: RichTask) -> typing.Union[str, typing.Text]:
         return f"[bright_magenta]{task.fields.get('status', '')}"
 
 load_dotenv()
@@ -380,16 +380,16 @@ def get_progress_status(current: int, total: int) -> str:
     help='Target string in format domain/subdomain'
 )
 @click.option(
-    '--action-id',
-    help='Action ID to update progress through the API'
+    '--task-id',
+    help='Task ID to update progress through the API'
 )
-def demo(target: str, action_id: Optional[str] = None) -> None:
+def demo(target: str, task_id: Optional[str] = None) -> None:
     """Run a demo task that processes 2000 items over 20 seconds."""
     from .CommandProgress import CommandProgress
     import time
     import random
     import json
-    from plexus.dashboard.api.models.action import Action
+    from plexus.dashboard.api.models.task import Task
     from plexus.dashboard.api.client import PlexusDashboardClient
     
     total_items = 2000
@@ -399,17 +399,17 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
     logging.info("Starting demo task processing...")
     
     client = PlexusDashboardClient()
-    action = None
+    task = None
     
-    if action_id:
-        action = Action.get_by_id(action_id, client)
+    if task_id:
+        task = Task.get_by_id(task_id, client)
     else:
-        # Create a new Action record with metadata as JSON string
+        # Create a new Task record with metadata as JSON string
         metadata_str = json.dumps({
             "total_items": total_items,
             "target_duration": target_duration
         })
-        action = Action.create(
+        task = Task.create(
             client=client,
             accountId="default",  # Using default account for demo
             type="DEMO",
@@ -417,26 +417,26 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
             command="plexus command demo",
             metadata=metadata_str
         )
-        action_id = action.id
-        logging.info(f"Created new Action with ID: {action_id}")
+        task_id = task.id
+        logging.info(f"Created new Task with ID: {task_id}")
     
     # Initial state - no dispatch status
     time.sleep(random.uniform(2.0, 3.0))
     
     # Update to dispatched state
-    action.update(dispatchStatus='DISPATCHED')
+    task.update(dispatchStatus='DISPATCHED')
     time.sleep(random.uniform(2.0, 3.0))
     
     # Simulate Celery task creation
-    action.update(celeryTaskId=f'demo-task-{int(time.time())}')
+    task.update(celeryTaskId=f'demo-task-{int(time.time())}')
     time.sleep(random.uniform(2.0, 3.0))
     
     # Simulate worker claiming the task
-    action.update(workerNodeId=f'demo-worker-{random.randint(1000, 9999)}')
+    task.update(workerNodeId=f'demo-worker-{random.randint(1000, 9999)}')
     time.sleep(random.uniform(2.0, 3.0))
     
     # Now start actual processing
-    action.start_processing()
+    task.start_processing()
     
     # Create all three stages
     stage_configs = {
@@ -458,7 +458,7 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
             "statusMessage": "Waiting to finalize..."
         }
     }
-    stages = action.update_progress(0, total_items, stage_configs)
+    stages = task.update_progress(0, total_items, stage_configs)
     
     with Progress(
         TextColumn("[bright_magenta]{task.fields[status]}"),
@@ -485,7 +485,7 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
             init_time = random.uniform(4.0, 6.0)  # Random time between 4-6 seconds
             time.sleep(init_time)
             
-            if action:
+            if task:
                 stage_configs = {
                     "Setup": {
                         "order": 1,
@@ -505,7 +505,7 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
                         "statusMessage": "Waiting to finalize..."
                     }
                 }
-                action.update_progress(0, total_items, stage_configs)
+                task.update_progress(0, total_items, stage_configs)
             
             progress.update(
                 task_progress,
@@ -560,8 +560,8 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
                         status=status
                     )
                     
-                    # Update Action progress if we have an action ID
-                    if action:
+                    # Update Task progress if we have a task ID
+                    if task:
                         stage_configs = {
                             "Setup": {
                                 "order": 1,
@@ -583,7 +583,7 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
                                 "statusMessage": "Waiting to finalize..."
                             }
                         }
-                        action.update_progress(
+                        task.update_progress(
                             current_item,
                             total_items,
                             stage_configs,
@@ -603,7 +603,7 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
             time.sleep(finish_time)
             
             # Complete all stages with final messages
-            if action:
+            if task:
                 stage_configs = {
                     "Setup": {
                         "order": 1,
@@ -623,13 +623,13 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
                         "statusMessage": f"Successfully processed {total_items:,} items."
                     }
                 }
-                stages = action.update_progress(total_items, total_items, stage_configs)
+                stages = task.update_progress(total_items, total_items, stage_configs)
                 
                 # Now mark as completed
-                action.complete_processing()
+                task.complete_processing()
                 
                 # Get current stages to verify their state
-                final_stages = action.get_stages()
+                final_stages = task.get_stages()
                 for stage in final_stages:
                     logging.info(f"Final stage {stage.name}: status={stage.status}, message={stage.statusMessage}")
             
@@ -649,9 +649,9 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
             )
             logging.info(error_message)
             
-            # Mark action as failed if we have one
-            if action:
-                action.fail_processing(
+            # Mark task as failed if we have one
+            if task:
+                task.fail_processing(
                     error_message=error_message,
                     error_details={"type": "user_interrupt"}
                 )
@@ -660,9 +660,9 @@ def demo(target: str, action_id: Optional[str] = None) -> None:
             error_message = f"Demo task failed: {str(e)}"
             logging.error(error_message)
             
-            # Mark action as failed if we have one
-            if action:
-                action.fail_processing(
+            # Mark task as failed if we have one
+            if task:
+                task.fail_processing(
                     error_message=error_message,
                     error_details={"type": "error", "error": str(e)}
                 )
