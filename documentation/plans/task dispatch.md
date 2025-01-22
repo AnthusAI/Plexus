@@ -81,106 +81,79 @@ This document outlines the implementation of Plexus's two-level dispatch system:
 ### Phase 3: Task-Command Integration (Current Phase)
 
 #### Current Status
-- Schema deployment (Needs Update)
-  - Action model needs renaming to Task
-  - ActionStage model needs renaming to TaskStage
-  - Relationships and queries need updating
-  - New Task-Evaluation relationship needed
+- Schema deployment ✓
+  - Action model renamed to Task ✓
+  - ActionStage model renamed to TaskStage ✓
+  - Relationships and queries updated ✓
+  - Task-Evaluation relationship added ✓
 
 - Command Dispatch System ✓
-  - Synchronous and asynchronous execution
-  - Timeout configuration
-  - Output streaming to caller
-  - Task ID tracking for async operations
-  - Rich progress display with status messages
-  - Live progress updates for both sync and async operations
+  - Synchronous and asynchronous execution ✓
+  - Timeout configuration ✓
+  - Output streaming to caller ✓
+  - Task ID tracking for async operations ✓
+  - Rich progress display with status messages ✓
+  - Live progress updates for both sync and async operations ✓
 
-- Progress Tracking ✓
-  - Current item count and total items
-  - Progress bar with percentage complete
-  - Time elapsed and estimated time remaining
-  - Dynamic status messages based on progress
-  - Clean display using Rich library
-  - Support for both local and remote progress updates
+- Progress Tracking (Partial)
+  - Current item count and total items ✓
+  - Progress bar with percentage complete ✓
+  - Time elapsed and estimated time remaining ✓
+  - Dynamic status messages based on progress ✓
+  - Clean display using Rich library ✓
+  - Support for both local and remote progress updates (In Progress)
 
-- Frontend Integration (In Progress)
-  - Real-time task status updates in dashboard
-  - Progress visualization
-  - Stage tracking display
-  - Error handling and display
-  - ActionStatus component needs renaming to TaskStatus
-  - EvaluationTask component needs Task integration
+- Frontend Integration (Partial)
+  - Real-time task status updates in dashboard ✓
+  - Progress visualization ✓
+  - Stage tracking display ✓
+  - Error handling and display ✓
+  - ActionStatus component renamed to TaskStatus ✓
+  - Task system integration with evaluations (In Progress)
 
 #### Current Challenges
+- Need to integrate evaluation process with Task system:
+  - Migrate evaluation progress tracking to use TaskStage system
+  - Add support for real-time status messages in evaluations
+  - Ensure proper Task-Evaluation record association
+  - Maintain backward compatibility during transition
 - Need to ensure atomic updates for counters
 - Need to handle partial failures in stage updates
 - Need to implement proper error propagation
 - Need to optimize subscription updates
 - Need to implement proper cleanup of completed tasks
-- Need to integrate evaluation process with Task system
-- Need to complete Action-to-Task nomenclature refactoring:
-  - Rename ActionStatus component to TaskStatus
-  - Update API schema to rename Action model to Task
-  - Update API schema to rename ActionStage to TaskStage
-  - Update all frontend components using ActionStatus
-  - Update all code referencing Action/ActionStage models
 
 #### Next Steps
 
-1. **Action-to-Task Refactoring**
-   - API Schema Updates:
-     - Rename Action model to Task
-     - Rename ActionStage to TaskStage
-     - Update all relationships and queries
-     - Deploy schema changes
-   - Frontend Component Updates:
-     - Rename ActionStatus to TaskStatus
-     - Update all imports and references
-     - Test all component variants with new names
-   - Evaluation Integration:
-     - Modify evaluation process to create Task records
-     - Update EvaluationTask to use Task records for progress
-     - Ensure proper Task-Evaluation record association
-     - Migrate evaluation progress tracking to TaskStage system
-   - Testing & Validation:
-     - Verify all renamed components work correctly
-     - Test Task-Evaluation relationships
-     - Validate progress tracking in evaluation process
-     - Check all UI components display correctly
+1. **Evaluation-Task Integration**
+   - Analysis:
+     - Map current evaluation progress states to Task stages
+     - Identify gaps between evaluation and Task progress tracking
+     - Plan transition strategy for existing evaluations
+   - Implementation:
+     - Create Task records for new evaluations
+     - Add TaskStage support to evaluation process
+     - Implement real-time status message updates
+     - Update evaluation UI to show rich progress data
+   - Testing:
+     - Verify all progress tracking features work
+     - Test error handling and recovery
+     - Validate real-time updates
+     - Check backward compatibility
 
-2. **Frontend Development**
-   - Refine TaskStatus Component States
-   - Update Activity Dashboard Integration
-   - Fix Realtime Updates
-   - Improve Task List Display
-   - Polish Task Component UI
-   - Create intuitive command trigger UI
+2. **System Reliability**
+   - Implement atomic counter updates
+   - Add handling for partial stage failures
+   - Improve error propagation
+   - Optimize subscription updates
+   - Add Task cleanup with TTL
 
-3. **Backend Integration**
-   - Create Lambda function for Task-to-Celery dispatch
-   - Set up Celery task dispatch
-   - Add error handling and status updates
-   - Test end-to-end flow from UI to worker
-   - Add Task support to evaluation command
-   - Add Task support to training command
-   - Add Task support to dataset commands
-
-4. **System Maintenance**
-   - Implement Task cleanup with TTL
-   - Set up monitoring for long-running tasks
-   - Add operational dashboards
-   - Configure alerts
-   - Implement periodic cleanup
-   - Monitor Task-Evaluation relationships
-
-5. **Testing & Documentation**
-   - Write comprehensive tests for Task model operations
-   - Validate index performance
-   - Test edge cases in async operation handling
-   - Document Task-Evaluation relationships
-   - Create troubleshooting guide
+3. **Testing & Documentation**
+   - Write integration tests for Task-Evaluation flow
    - Update API documentation
-   - Create usage examples
+   - Create migration guide
+   - Document new progress tracking features
+   - Add troubleshooting section
 
 ## Implementation Details
 
