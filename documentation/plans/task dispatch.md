@@ -78,82 +78,117 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Worker configuration ✓
    - Unit test coverage ✓
 
-### Phase 3: Task-Command Integration (Current Phase)
+### Phase 3: Standardized Progress Tracking
 
-#### Current Status
-- Schema deployment ✓
-  - Action model renamed to Task ✓
-  - ActionStage model renamed to TaskStage ✓
-  - Relationships and queries updated ✓
-  - Task-Evaluation relationship added ✓
+1. **Create TaskProgressTracker Class**
+   - Core functionality:
+     - Track current stage, processed items, total items
+     - Calculate elapsed time and estimated completion
+     - Generate status messages based on progress
+     - Handle stage transitions and updates
+     - Support both local and remote progress updates
+   - Key features:
+     - Thread-safe singleton pattern for global state
+     - Context manager interface for automatic cleanup
+     - Support for both sync and async operations
+     - Atomic counter updates
+     - Rich status message generation
+     - Error state handling
 
-- Command Dispatch System ✓
-  - Synchronous and asynchronous execution ✓
-  - Timeout configuration ✓
-  - Output streaming to caller ✓
-  - Task ID tracking for async operations ✓
-  - Rich progress display with status messages ✓
-  - Live progress updates for both sync and async operations ✓
+2. **Refactor Demo Command**
+   - Move progress tracking logic from `demo` command to `TaskProgressTracker`
+   - Use the new tracker for:
+     - Stage management
+     - Progress calculations
+     - Status message generation
+     - Time tracking
+   - Validate the implementation works with:
+     - Direct execution
+     - Celery dispatch
+     - Task API integration
 
-- Progress Tracking (Partial)
-  - Current item count and total items ✓
-  - Progress bar with percentage complete ✓
-  - Time elapsed and estimated time remaining ✓
-  - Dynamic status messages based on progress ✓
-  - Clean display using Rich library ✓
-  - Support for both local and remote progress updates (In Progress)
+3. **Refactor ReportTask**
+   - Update `ReportTask` to use `TaskProgressTracker`
+   - Ensure compatibility with existing UI components
+   - Maintain current progress visualization features
+   - Add support for rich status messages
 
-- Frontend Integration (Partial)
-  - Real-time task status updates in dashboard ✓
-  - Progress visualization ✓
-  - Stage tracking display ✓
-  - Error handling and display ✓
-  - ActionStatus component renamed to TaskStatus ✓
-  - Task system integration with evaluations (In Progress)
+4. **Testing & Validation**
+   - Write unit tests for `TaskProgressTracker`
+   - Add integration tests for demo and report tasks
+   - Verify UI updates work correctly
+   - Test error handling and recovery
 
-#### Current Challenges
-- Need to integrate evaluation process with Task system:
-  - Migrate evaluation progress tracking to use TaskStage system
-  - Add support for real-time status messages in evaluations
-  - Ensure proper Task-Evaluation record association
-  - Maintain backward compatibility during transition
-- Need to ensure atomic updates for counters
-- Need to handle partial failures in stage updates
-- Need to implement proper error propagation
-- Need to optimize subscription updates
-- Need to implement proper cleanup of completed tasks
+### Phase 4: Backend Integration
 
-#### Next Steps
+1. **Lambda Integration**
+   - Create Lambda function for Task-to-Celery dispatch
+   - Set up secure communication channels
+   - Implement error handling
+   - Add monitoring and logging
 
-1. **Evaluation-Task Integration**
-   - Analysis:
-     - Map current evaluation progress states to Task stages
-     - Identify gaps between evaluation and Task progress tracking
-     - Plan transition strategy for existing evaluations
-   - Implementation:
-     - Create Task records for new evaluations
-     - Add TaskStage support to evaluation process
-     - Implement real-time status message updates
-     - Update evaluation UI to show rich progress data
-   - Testing:
-     - Verify all progress tracking features work
-     - Test error handling and recovery
-     - Validate real-time updates
-     - Check backward compatibility
+2. **Command Integration**
+   - Add Task support to evaluation command
+   - Add Task support to training command
+   - Add Task support to dataset commands
+   - Implement consistent error handling
+   - Add progress tracking to all commands
 
-2. **System Reliability**
-   - Implement atomic counter updates
-   - Add handling for partial stage failures
-   - Improve error propagation
-   - Optimize subscription updates
-   - Add Task cleanup with TTL
+3. **System Testing**
+   - Test end-to-end flow from UI to worker
+   - Validate error handling
+   - Test progress reporting
+   - Verify state transitions
+   - Test concurrent operations
 
-3. **Testing & Documentation**
-   - Write integration tests for Task-Evaluation flow
+### Phase 5: System Maintenance
+
+1. **Task Lifecycle Management**
+   - Implement Task cleanup with TTL
+   - Set up monitoring for long-running tasks
+   - Add operational dashboards
+   - Configure alerts
+   - Implement periodic cleanup
+   - Monitor Task-Evaluation relationships
+
+2. **Performance Monitoring**
+   - Set up metrics collection
+   - Create performance dashboards
+   - Configure performance alerts
+   - Monitor system resource usage
+   - Track task completion times
+
+3. **System Health**
+   - Monitor worker health
+   - Track queue depths
+   - Monitor database performance
+   - Set up system alerts
+   - Implement auto-recovery
+
+### Phase 6: Testing & Documentation
+
+1. **Testing**
+   - Write comprehensive tests for Task model operations
+   - Validate index performance
+   - Test edge cases in async operation handling
+   - Test error recovery scenarios
+   - Verify monitoring systems
+   - Test cleanup processes
+
+2. **Documentation**
+   - Document Task-Evaluation relationships
+   - Create troubleshooting guide
    - Update API documentation
-   - Create migration guide
-   - Document new progress tracking features
-   - Add troubleshooting section
+   - Create usage examples
+   - Document monitoring setup
+   - Add maintenance procedures
+
+3. **Validation**
+   - Perform load testing
+   - Validate error handling
+   - Test recovery procedures
+   - Verify monitoring accuracy
+   - Test alert systems
 
 ## Implementation Details
 
@@ -165,30 +200,6 @@ The command system supports:
 - Task ID tracking for async operations ✓
 - Rich progress display with status messages ✓
 - Live progress updates for both sync and async operations ✓
-
-### Testing with Demo Command
-The demo command provides a way to test Task functionality:
-
-```bash
-# Run demo with new auto-created Task
-plexus command demo
-
-# Run demo with existing Task
-plexus command demo --task-id YOUR_TASK_ID
-```
-
-The demo command simulates a long-running task:
-1. Pre-execution stages (8-12 seconds total):
-   - Initial state (2-3s)
-   - Dispatched state (2-3s)
-   - Celery task creation (2-3s)
-   - Worker claiming (2-3s)
-2. Processing stages:
-   - Initialization (4-6 seconds)
-   - Main processing (2000 items over ~20 seconds)
-   - Finalizing (2-4 seconds)
-
-The command updates progress in real-time and works with both direct execution and Celery dispatch.
 
 ### Progress Tracking
 The system provides detailed progress information:
