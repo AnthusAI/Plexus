@@ -12,7 +12,7 @@ type ScorecardIndexFields = "name" | "key" | "description" | "accountId" |
     "externalId" | "itemId";
 type ScorecardSectionIndexFields = "name" | "scorecardId" | "order";
 type ScoreIndexFields = "name" | "order" | "sectionId" | "type" | "accuracy" | 
-    "version" | "aiProvider" | "aiModel";
+    "version" | "aiProvider" | "aiModel" | "externalId";
 type EvaluationIndexFields = "accountId" | "scorecardId" | "type" | "accuracy" | 
     "scoreId" | "status" | "updatedAt";
 type BatchJobIndexFields = "accountId" | "scorecardId" | "type" | "scoreId" | 
@@ -115,14 +115,16 @@ const schema = a.schema({
             scoringJobs: a.hasMany('ScoringJob', 'scoreId'),
             datasets: a.hasMany('Dataset', 'scoreId'),
             tasks: a.hasMany('Task', 'scoreId'),
-            configuration: a.json()
+            configuration: a.json(),
+            externalId: a.string().required()
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
         .secondaryIndexes((idx: (field: ScoreIndexFields) => any) => [
-            idx("sectionId")
+            idx("sectionId"),
+            idx("externalId")
         ]),
 
     Evaluation: a
