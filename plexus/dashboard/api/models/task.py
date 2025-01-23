@@ -353,30 +353,31 @@ class Task(BaseModel):
             processed = config.get("processedItems", 0)
             total = config.get("totalItems", 0)
 
-            # Determine if this stage should be running
+            # Combine all stage updates into a single call
+            update_fields = {
+                "processedItems": processed,
+                "totalItems": total,
+                "statusMessage": config.get("statusMessage")
+            }
+
+            # Determine if stage status needs to change
             if processed == 0:
                 if stage.status not in ["COMPLETED", "FAILED"]:
-                    stage.update(status="PENDING")
+                    update_fields["status"] = "PENDING"
             elif processed == total:
                 if stage.status != "COMPLETED":
-                    stage.update(
-                        status="COMPLETED",
-                        completedAt=now,
-                        processedItems=total,
-                        totalItems=total,
-                        statusMessage=config.get("statusMessage")
-                    )
+                    update_fields.update({
+                        "status": "COMPLETED",
+                        "completedAt": now
+                    })
             else:
                 if stage.status != "RUNNING":
-                    stage.update(
-                        status="RUNNING",
-                        startedAt=now
-                    )
-                stage.update(
-                    processedItems=processed,
-                    totalItems=total,
-                    statusMessage=config.get("statusMessage")
-                )
+                    update_fields.update({
+                        "status": "RUNNING",
+                        "startedAt": now
+                    })
+
+            stage.update(**update_fields)
 
         return stages
 
