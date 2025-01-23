@@ -46,6 +46,8 @@ from plexus.dashboard.commands.simulate import (
     CLASS_SETS
 )
 import yaml
+import boto3
+from botocore.config import Config
 
 # Configure logging with a more concise format
 logging.basicConfig(
@@ -58,6 +60,10 @@ logger = logging.getLogger(__name__)
 # Add after other constants
 SCORE_TYPES = ['binary', 'multiclass']
 DATA_BALANCES = ['balanced', 'unbalanced']
+
+def generate_key(name: str) -> str:
+    """Generate a URL-safe key from a name."""
+    return name.lower().replace(' ', '-')
 
 @click.group()
 def cli():
@@ -419,6 +425,134 @@ def update(id: str, value: Optional[float], confidence: Optional[float], metadat
         
     except Exception as e:
         logging.getLogger(__name__).error(f"Error updating score result: {str(e)}")
+        click.echo(f"Error: {str(e)}", err=True)
+
+@score_result.command()
+@click.option('--dry-run', is_flag=True, help='Show what would be updated without making changes')
+def fix_missing_external_ids(dry_run: bool):
+    """Fix scores that are missing required externalId field"""
+    client = create_client()
+    
+    try:
+        scores_to_fix = []
+        next_token = None
+        page_size = 100
+        total_processed = 0
+        page_number = 0
+        
+        logger.info("Starting to fetch scores...")
+        
+        while True:
+            page_number += 1
+            logger.info(f"Fetching page {page_number} (size: {page_size}, next_token: {next_token})")
+            
+            # Query scores with pagination
+            query = """
+            query ListScores($limit: Int, $nextToken: String) {
+                listScores(limit: $limit, nextToken: $nextToken) {
+                    items {
+                        id
+                        name
+                        type
+                        sectionId
+                    }
+                    nextToken
+                }
+            }
+            """
+            
+            try:
+                logger.info("Executing ListScores query...")
+                response = client.execute(query, {
+                    'limit': page_size,
+                    'nextToken': next_token
+                })
+                logger.info("Received response from ListScores query")
+                
+                items = response['listScores']['items']
+                total_processed += len(items)
+                logger.info(f"Found {len(items)} scores on this page")
+                
+                # Try to get externalId for each score
+                for i, score in enumerate(items):
+                    logger.info(f"Checking score {i+1}/{len(items)} on page {page_number} (ID: {score['id']})")
+                    detail_query = """
+                    query GetScore($id: ID!) {
+                        getScore(id: $id) {
+                            id
+                            name
+                            externalId
+                        }
+                    }
+                    """
+                    
+                    try:
+                        detail = client.execute(detail_query, {'id': score['id']})
+                        if not detail['getScore'].get('externalId'):
+                            logger.info(f"Found score missing externalId: {score['id']} ({score['name']})")
+                            scores_to_fix.append(score)
+                    except Exception as e:
+                        if 'non-nullable' in str(e) and 'externalId' in str(e):
+                            logger.info(f"Found score with null externalId: {score['id']} ({score['name']})")
+                            scores_to_fix.append(score)
+                        else:
+                            logger.error(f"Error checking score {score['id']}: {str(e)}")
+                
+                next_token = response['listScores'].get('nextToken')
+                logger.info(f"Next token: {next_token}")
+                
+                if not next_token:
+                    logger.info("No more pages to process")
+                    break
+                    
+            except Exception as e:
+                logger.error(f"Error processing page {page_number}: {str(e)}")
+                if 'non-nullable' in str(e) and 'externalId' in str(e):
+                    # Try to extract the problematic score index
+                    try:
+                        error_str = str(e)
+                        if 'items[' in error_str:
+                            index = int(error_str.split('items[')[1].split(']')[0])
+                            if len(items) > index:
+                                logger.info(f"Adding problematic score from error: {items[index]['id']}")
+                                scores_to_fix.append(items[index])
+                    except:
+                        pass
+                break
+        
+        if not scores_to_fix:
+            click.echo("No scores found with missing externalId")
+            return
+            
+        click.echo(f"Found {len(scores_to_fix)} scores with missing externalId")
+        click.echo(f"Processed {total_processed} total scores")
+        
+        for score in scores_to_fix:
+            # Generate deterministic external ID based on score ID
+            external_id = f"score_{score['id']}"
+            
+            click.echo(f"Updating score {score['id']} ({score['name']}) with externalId: {external_id}")
+            if not dry_run:
+                mutation = """
+                mutation UpdateScore($input: UpdateScoreInput!) {
+                    updateScore(input: $input) {
+                        id
+                        name
+                    }
+                }
+                """
+                
+                client.execute(mutation, {
+                    'input': {
+                        'id': score['id'],
+                        'externalId': external_id
+                    }
+                })
+        
+        click.echo("Update complete")
+        
+    except Exception as e:
+        logger.error(f"Error fixing scores: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
 @evaluation.command()
@@ -1072,61 +1206,371 @@ def sync(account_key: str, directory: str):
             
             # Process each score
             for index, score_data in enumerate(yaml_data['scores'], start=1):
-                # Try to find existing score
-                existing_scores = client.execute("""
-                    query GetScores($sectionId: String!, $name: String!) {
-                        listScores(filter: {
-                            sectionId: {eq: $sectionId},
-                            name: {eq: $name}
-                        }) {
-                            items {
-                                id
-                                name
-                                type
-                                order
-                                aiProvider
-                                aiModel
-                                configuration
-                            }
-                        }
-                    }
-                """, {
-                    'sectionId': section_id,
-                    'name': score_data['name']
-                })
-                
-                if existing_scores['listScores']['items']:
-                    logger.info(f"Score {score_data['name']} already exists")
-                    continue
-                
-                # Create new score
-                logger.info(f"Creating score: {score_data['name']}")
-                score = client.execute("""
-                    mutation CreateScore($input: CreateScoreInput!) {
-                        createScore(input: $input) {
-                            id
-                            name
-                            type
-                            order
-                        }
-                    }
-                """, {
-                    'input': {
-                        'name': score_data['name'],
-                        'type': score_data.get('class', 'LangGraphScore'),
-                        'order': score_data.get('order', index),
+                try:
+                    logger.info(f"Processing score at index {index}")
+                    logger.info(f"Score data: {json.dumps(score_data, indent=2)}")
+                    
+                    score_name = score_data['name']
+                    logger.info(f"Score name: {score_name!r}")
+                    
+                    score_key = score_data.get('key', generate_key(score_name))
+                    logger.info(f"Score key: {score_key!r}")
+                    
+                    score_type = score_data.get('class', 'LangGraphScore')
+                    logger.info(f"Score type: {score_type!r}")
+                    
+                    score_order = score_data.get('order', index)
+                    logger.info(f"Score order: {score_order!r}")
+                    
+                    logger.info(f"Section ID: {section_id!r}")
+                    
+                    score_input = {
+                        'name': score_name,
+                        'key': score_key,
+                        'type': score_type,
+                        'order': score_order,
                         'sectionId': section_id,
                         'aiProvider': score_data.get('model_provider'),
                         'aiModel': score_data.get('model_name'),
                         'configuration': json.dumps(score_data)
                     }
-                })
-                logger.info(f"Created score: {score['createScore']['name']}")
+                    
+                    logger.info("Score input fields:")
+                    for key, value in score_input.items():
+                        logger.info(f"  {key}: {value!r}")
+                    
+                    # Try to find existing score by key first, then by name as fallback
+                    existing_scores = client.execute("""
+                        query GetScores($sectionId: String!, $key: String!, $name: String!) {
+                            listScores(filter: {
+                                and: {
+                                    sectionId: {eq: $sectionId},
+                                    or: {
+                                        key: {eq: $key},
+                                        name: {eq: $name}
+                                    }
+                                }
+                            }) {
+                                items {
+                                    id
+                                    name
+                                    key
+                                    type
+                                    order
+                                    aiProvider
+                                    aiModel
+                                    configuration
+                                    externalId
+                                    createdAt
+                                }
+                            }
+                        }
+                    """, {
+                        'sectionId': section_id,
+                        'key': score_key,
+                        'name': score_name
+                    })
+                    
+                    existing_items = existing_scores['listScores']['items']
+                    if len(existing_items) > 1:
+                        logger.info(f"Found {len(existing_items)} duplicate scores for {score_name}")
+                        # Sort by createdAt to keep oldest
+                        sorted_items = sorted(existing_items, key=lambda s: s.get('createdAt', ''))
+                        keep_score = sorted_items[0]
+                        to_delete = sorted_items[1:]
+                        
+                        # Delete duplicates
+                        for duplicate in to_delete:
+                            logger.info(f"Deleting duplicate score {duplicate['id']}")
+                            client.execute("""
+                                mutation DeleteScore($input: DeleteScoreInput!) {
+                                    deleteScore(input: $input) {
+                                        id
+                                    }
+                                }
+                            """, {
+                                'input': {
+                                    'id': duplicate['id']
+                                }
+                            })
+                        existing_items = [keep_score]
+                    
+                    if existing_items:
+                        existing_score = existing_items[0]
+                        logger.info(f"Updating score: {score_name} (id: {existing_score['id']})")
+                        
+                        # Check for missing required fields
+                        needs_update = False
+                        if not existing_score.get('key'):
+                            logger.info(f"Score {existing_score['id']} missing key, will add")
+                            needs_update = True
+                        if not existing_score.get('externalId'):
+                            logger.info(f"Score {existing_score['id']} missing externalId, will add")
+                            needs_update = True
+                            score_input['externalId'] = f"score_{existing_score['id']}"
+                        
+                        update_input = {
+                            'id': existing_score['id'],
+                            **score_input
+                        }
+                        
+                        if needs_update or any(update_input[k] != existing_score.get(k) for k in score_input if k in existing_score):
+                            logger.info(f"Update input data: {json.dumps(update_input, indent=2)}")
+                            try:
+                                result = client.execute("""
+                                    mutation UpdateScore($input: UpdateScoreInput!) {
+                                        updateScore(input: $input) {
+                                            id
+                                            name
+                                            key
+                                            type
+                                            order
+                                            externalId
+                                        }
+                                    }
+                                """, {
+                                    'input': update_input
+                                })
+                                logger.info(f"Update result: {json.dumps(result, indent=2)}")
+                                logger.info(f"Updated score: {score_name}")
+                            except Exception as e:
+                                logger.error(f"Error updating score: {str(e)}")
+                                logger.error(f"Update input was: {json.dumps(update_input, indent=2)}")
+                                raise
+                        else:
+                            logger.info(f"No updates needed for score: {score_name}")
+                    else:
+                        # Create new score
+                        logger.info(f"Creating score: {score_name} with key {score_key}")
+                        # Ensure externalId will be set for new scores
+                        if 'externalId' not in score_input:
+                            score_input['externalId'] = f"score_new_{int(time.time())}"
+                        logger.info(f"Create input data: {json.dumps(score_input, indent=2)}")
+                        try:
+                            mutation = """
+                                mutation CreateScore($input: CreateScoreInput!) {
+                                    createScore(input: $input) {
+                                        id
+                                        name
+                                        key
+                                        type
+                                        order
+                                        externalId
+                                    }
+                                }
+                            """
+                            logger.info(f"Executing mutation: {mutation}")
+                            logger.info(f"With variables: {json.dumps({'input': score_input}, indent=2)}")
+                            score = client.execute(mutation, {'input': score_input})
+                            logger.info(f"Create result: {json.dumps(score, indent=2)}")
+                            logger.info(f"Created score: {score['createScore']['name']} (id: {score['createScore']['id']})")
+                        except Exception as e:
+                            logger.error(f"Error creating score: {str(e)}")
+                            logger.error(f"Create input was: {json.dumps(score_input, indent=2)}")
+                            logger.error(f"Error type: {type(e).__name__}")
+                            if hasattr(e, 'response'):
+                                logger.error(f"Response: {e.response}")
+                            raise
+                except Exception as e:
+                    logger.error(f"Error processing score data: {str(e)}")
+                    logger.error(f"Score data: {json.dumps(score_data, indent=2)}")
+                    raise
         
         logger.info("Sync completed successfully")
         
     except Exception as e:
         logger.error(f"Error syncing scorecards: {str(e)}")
+        click.echo(f"Error: {str(e)}", err=True)
+
+@scorecard.command()
+@click.option('--account-key', required=True, help='Account key')
+@click.option('--fix', is_flag=True, help='Fix duplicates by removing newer copies')
+def find_duplicates(account_key: str, fix: bool):
+    """Find and optionally fix duplicate scores based on name+order+section combination."""
+    client = create_client()
+    account = Account.get_by_key(account_key, client)
+
+    # Get all scores with their sections
+    all_scores = []
+    next_token = None
+    
+    while True:
+        query = """
+            query ListAllScores($nextToken: String) {
+                listScores(limit: 100, nextToken: $nextToken) {
+                    items {
+                        id
+                        name
+                        sectionId
+                        order
+                        type
+                        createdAt
+                        updatedAt
+                    }
+                    nextToken
+                }
+            }
+        """
+        try:
+            result = client.execute(query, {'nextToken': next_token})
+            items = result['listScores']['items']
+            all_scores.extend(items)
+            
+            next_token = result['listScores'].get('nextToken')
+            if not next_token:
+                break
+        except Exception as e:
+            logger.error(f"Error fetching scores: {str(e)}")
+            break
+
+    # Group scores by name+order+sectionId
+    scores_by_key = {}
+    for score in all_scores:
+        key = f"{score['name']}|{score['order']}|{score['sectionId']}"
+        if key not in scores_by_key:
+            scores_by_key[key] = []
+        scores_by_key[key].append(score)
+
+    # Find duplicates
+    duplicates = {k: v for k, v in scores_by_key.items() if len(v) > 1}
+    
+    if duplicates:
+        logger.info(f"Found {len(duplicates)} sets of duplicate scores:")
+        for key, scores in duplicates.items():
+            name, order, section = key.split('|')
+            # Sort by createdAt to identify oldest (keep) vs newer (delete)
+            sorted_scores = sorted(scores, key=lambda s: s['createdAt'])
+            oldest = sorted_scores[0]
+            to_delete = sorted_scores[1:]
+            
+            logger.info(f"\nDuplicate score found:")
+            logger.info(f"  Name: {name}")
+            logger.info(f"  Order: {order}")
+            logger.info(f"  Section: {section}")
+            logger.info(f"  Keeping oldest:")
+            logger.info(f"    - id: {oldest['id']}, created: {oldest['createdAt']}")
+            logger.info(f"  Duplicates to remove:")
+            for score in to_delete:
+                logger.info(f"    - id: {score['id']}, created: {score['createdAt']}")
+            
+            if fix:
+                for score in to_delete:
+                    try:
+                        logger.info(f"Deleting duplicate score {score['id']}")
+                        mutation = """
+                        mutation DeleteScore($input: DeleteScoreInput!) {
+                            deleteScore(input: $input) {
+                                id
+                            }
+                        }
+                        """
+                        client.execute(mutation, {
+                            'input': {
+                                'id': score['id']
+                            }
+                        })
+                        logger.info(f"Successfully deleted score {score['id']}")
+                    except Exception as e:
+                        logger.error(f"Failed to delete score {score['id']}: {str(e)}")
+    else:
+        logger.info("No duplicate scores found")
+
+@scorecard.command()
+@click.option('--scorecard-id', help='Scorecard ID')
+@click.option('--scorecard-key', help='Scorecard key')
+@click.option('--scorecard-name', help='Scorecard name')
+def list_scores(scorecard_id: Optional[str], scorecard_key: Optional[str], scorecard_name: Optional[str]):
+    """List all scores for a specific scorecard."""
+    client = create_client()
+    
+    try:
+        # Get scorecard
+        if scorecard_id:
+            logger.info(f"Using provided scorecard ID: {scorecard_id}")
+            scorecard = Scorecard.get_by_id(scorecard_id, client)
+        elif scorecard_key:
+            logger.info(f"Looking up scorecard by key: {scorecard_key}")
+            scorecard = Scorecard.get_by_key(scorecard_key, client)
+        elif scorecard_name:
+            logger.info(f"Looking up scorecard by name: {scorecard_name}")
+            scorecard = Scorecard.get_by_name(scorecard_name, client)
+        else:
+            raise click.UsageError("Must provide scorecard-id, scorecard-key, or scorecard-name")
+        
+        logger.info(f"Found scorecard: {scorecard.name} ({scorecard.id})")
+        
+        # First get all sections for this scorecard
+        sections_query = """
+            query GetSections($scorecardId: String!) {
+                listScorecardSections(filter: {scorecardId: {eq: $scorecardId}}) {
+                    items {
+                        id
+                        name
+                        order
+                        scores {
+                            items {
+                                id
+                                name
+                                type
+                                order
+                                externalId
+                                createdAt
+                                updatedAt
+                            }
+                        }
+                    }
+                }
+            }
+        """
+        
+        result = client.execute(sections_query, {
+            'scorecardId': scorecard.id
+        })
+        
+        sections = result['listScorecardSections']['items']
+        
+        # Flatten scores from all sections
+        all_scores = []
+        for section in sections:
+            for score in section['scores']['items']:
+                score['section'] = {
+                    'name': section['name'],
+                    'order': section['order']
+                }
+                all_scores.append(score)
+        
+        # Sort scores by section order, then score order
+        sorted_scores = sorted(
+            all_scores,
+            key=lambda s: (
+                s['section']['order'] if s.get('section') else 999,
+                s.get('order', 999)
+            )
+        )
+        
+        click.echo(f"\nFound {len(sorted_scores)} scores in scorecard {scorecard.name}:\n")
+        
+        current_section = None
+        for score in sorted_scores:
+            # Print section header if changed
+            section_name = score['section']['name'] if score.get('section') else 'Unknown Section'
+            if section_name != current_section:
+                current_section = section_name
+                click.echo(f"\nSection: {section_name}")
+                click.echo("-" * (len(section_name) + 9))
+            
+            # Print score details
+            click.echo(f"ID: {score['id']}")
+            click.echo(f"  Name: {score['name']}")
+            click.echo(f"  Type: {score['type']}")
+            click.echo(f"  Order: {score.get('order', 'N/A')}")
+            click.echo(f"  External ID: {score.get('externalId', 'N/A')}")
+            click.echo(f"  Created: {score['createdAt']}")
+            click.echo(f"  Updated: {score['updatedAt']}")
+            click.echo("")
+            
+    except Exception as e:
+        logger.error(f"Error listing scores: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
 if __name__ == '__main__':
