@@ -1,21 +1,43 @@
 # CHANGELOG
 
 
+## v0.6.2-alpha.1 (2025-01-23)
+
+### Bug Fixes
+
+- **dashboard**: Only show 100 Evaluations.
+  ([`bd623c0`](https://github.com/AnthusAI/Plexus/commit/bd623c05ffdca9ca186d94d717f78fa7cd91995d))
+
+- **dependencies**: Add missing comma in pyproject.toml dependencies list
+  ([`547280d`](https://github.com/AnthusAI/Plexus/commit/547280dea49669215e9a2391777ad3a461a70592))
+
+### Refactoring
+
+- **tasks**: Replace 'Action' with 'Task' across components and update related logic
+  ([`756dde9`](https://github.com/AnthusAI/Plexus/commit/756dde97f455df0af9a5788643999d6c3015b11e))
+
+
 ## v0.6.1 (2025-01-21)
+
+
+## v0.6.0 (2025-01-21)
+
+
+## v0.6.0-alpha.2 (2025-01-21)
 
 ### Bug Fixes
 
 - **dashboard**: Gradient logo backgrounds on login, sidebar
   ([`d82626b`](https://github.com/AnthusAI/Plexus/commit/d82626bcd1f125f4c89a8b6e57827a1dbea1350e))
 
+
+## v0.6.0-rc.1 (2025-01-21)
+
 ### Chores
 
 - **dependencies**: Add SQLAlchemy[asyncio] version 1.4.15 to project dependencies to fix dependency
   mismatch
   ([`fe5ae21`](https://github.com/AnthusAI/Plexus/commit/fe5ae216ba805b86ba6fe4a2107ed9964ac23e7a))
-
-
-## v0.6.0 (2025-01-21)
 
 
 ## v0.6.0-alpha.1 (2025-01-21)
