@@ -350,6 +350,50 @@ def test_update_progress():
                     }
                 ]
             }
+        },
+        # Get current state for Setup stage
+        {
+            'getTaskStage': {
+                'taskId': mock_task.id,
+                'name': 'Setup',
+                'order': 1,
+                'status': 'COMPLETED'
+            }
+        },
+        # Update Setup stage
+        {
+            'updateTaskStage': {
+                'id': 'test-stage-1',
+                'taskId': mock_task.id,
+                'name': 'Setup',
+                'order': 1,
+                'status': 'COMPLETED',
+                'statusMessage': 'Setup complete',
+                'processedItems': 1,
+                'totalItems': 1
+            }
+        },
+        # Get current state for Running stage
+        {
+            'getTaskStage': {
+                'taskId': mock_task.id,
+                'name': 'Running',
+                'order': 2,
+                'status': 'RUNNING'
+            }
+        },
+        # Update Running stage
+        {
+            'updateTaskStage': {
+                'id': 'test-stage-2',
+                'taskId': mock_task.id,
+                'name': 'Running',
+                'order': 2,
+                'status': 'RUNNING',
+                'statusMessage': 'Processing...',
+                'processedItems': 50,
+                'totalItems': 100
+            }
         }
     ]
 
@@ -365,4 +409,4 @@ def test_update_progress():
     assert stages[0].status == 'COMPLETED'
     assert stages[1].name == 'Running'
     assert stages[1].status == 'RUNNING'
-    assert mock_client.execute.call_count == 3 
+    assert mock_client.execute.call_count == 7  # Initial task update + list stages + 2 stages * 2 calls each 
