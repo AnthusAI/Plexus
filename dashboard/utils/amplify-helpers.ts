@@ -25,7 +25,7 @@ export async function listFromModel<T extends { id: string }>(
   const options: any = {}
   if (filter) options.filter = filter
   if (nextToken) options.nextToken = nextToken
-  if (limit) options.limit = limit
+  if (limit) options.limit = Math.min(limit, 1000) // Cap at 1000 per page
 
   try {
     // Collect all results across pages
@@ -39,6 +39,11 @@ export async function listFromModel<T extends { id: string }>(
 
       if (response.data?.length) {
         allData = [...allData, ...response.data]
+        // If we have a limit and we've exceeded it, trim the array
+        if (limit && allData.length > limit) {
+          allData = allData.slice(0, limit)
+          break // Stop fetching more pages
+        }
       }
 
       currentNextToken = response.nextToken
