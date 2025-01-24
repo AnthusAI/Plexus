@@ -82,7 +82,7 @@ export const Hero = ({ mockRouter }: HeroProps = {}) => {
           )}
         </div>
         <div className="w-full md:w-1/3 relative p-4">
-          <div className="absolute inset-[-2rem] bg-gradient-to-r from-secondary to-primary rounded-[2rem] blur-2xl opacity-30"></div>
+          <div className="absolute inset-[-2rem] bg-gradient-to-r from-secondary to-primary rounded-[2rem] blur-2xl opacity-20"></div>
           <div className="relative z-10">
             <SquareLogo 
               variant={LogoVariant.Square} 
