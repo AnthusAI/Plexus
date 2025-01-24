@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 import pandas as pd
 import mlflow
+import random
 
 from plexus.Evaluation import AccuracyEvaluation
 from plexus.apos.models import (
@@ -38,14 +39,20 @@ class APOSEvaluation(AccuracyEvaluation):
         self.config = config or load_config()
         self.config.setup_logging()
         
-        # Store samples for reuse
+        # Store all samples and create fixed evaluation set
         self.all_labeled_samples = labeled_samples
-        
-        # Set sample size from config before parent initialization
-        kwargs['number_of_texts_to_sample'] = self.config.analysis.samples_per_iteration
+        if labeled_samples and self.config.analysis.samples_per_iteration:
+            random.seed(42)  # Use fixed seed for reproducibility
+            self.evaluation_samples = random.sample(labeled_samples, self.config.analysis.samples_per_iteration)
+            random.seed()  # Reset seed
+            kwargs['labeled_samples'] = self.evaluation_samples
+            kwargs['number_of_texts_to_sample'] = len(self.evaluation_samples)  # Override to use all evaluation samples
+        else:
+            self.evaluation_samples = labeled_samples
+            kwargs['labeled_samples'] = labeled_samples
         
         # Pass labeled_samples directly to parent class
-        super().__init__(labeled_samples=labeled_samples, **kwargs)
+        super().__init__(**kwargs)
         
         # Create state tracking
         self.state = OptimizationState(
@@ -77,9 +84,8 @@ class APOSEvaluation(AccuracyEvaluation):
         self.metrics_tasks = {}
         self.current_prompt_changes = []  # Reset prompt changes
         
-        # Re-sample for the new iteration by resetting labeled_samples
-        # This will trigger resampling in the parent class's run method
-        self.labeled_samples = self.all_labeled_samples
+        # Use the same evaluation samples for each iteration
+        self.labeled_samples = self.evaluation_samples
         
         logger.info("Reset evaluation state for new iteration")
 

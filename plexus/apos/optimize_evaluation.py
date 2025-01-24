@@ -166,9 +166,8 @@ async def optimize_evaluation(
         
         # Use the best prompts we tracked during optimization
         final_prompts = {
-            'system_message': best_prompts.get('system_message', ''),
-            'user_message': best_prompts.get('user_message', ''),
-            'few_shot_examples': []  # Keep this if needed for compatibility
+            'system_message': best_prompts.get(score_name, {}).get('system_message', ''),
+            'user_message': best_prompts.get(score_name, {}).get('user_message', '')
         }
         
         with open(output_file, 'w') as f:
