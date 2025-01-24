@@ -18,6 +18,7 @@ from .AnalyzeCommands import analyze
 from .console import console
 from .BatchCommands import batch
 from .CommandDispatch import command
+from .OptimizationCommands import optimize
 
 class OrderCommands(click.Group):
     def list_commands(self, ctx: click.Context) -> list[str]:
@@ -51,6 +52,7 @@ main.add_command(tuning)
 main.add_command(analyze)
 main.add_command(batch)
 main.add_command(command)
+main.add_command(optimize)
 
 def load_plexus_extensions():
     print("Loading Plexus extensions...")

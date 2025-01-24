@@ -1,0 +1,26 @@
+optimization:
+  max_iterations: 10
+  target_accuracy: 0.95
+  min_improvement: 0.01
+  max_regression: 0.02
+
+analysis:
+  samples_per_iteration: 5
+  min_mismatch_confidence: 0.8
+  max_prompt_length: 2000
+
+model:
+  model_type: "gpt-4o-mini-2024-07-18"
+  temperature: 0.03
+  max_tokens: 2000
+  top_p: 0.03
+  frequency_penalty: 0.0
+  presence_penalty: 0.0
+  cache_dir: ".langchain_cache"
+  request_timeout: 60
+  max_retries: 3
+  streaming: true
+
+persistence_path: "./optimization_history"
+log_level: "INFO"
+backup_frequency: 1 
