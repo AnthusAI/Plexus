@@ -23,14 +23,14 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   
+  // Allow unauthenticated access to /, /dashboard, and /call-center-qa
+  const publicPaths = ['/', '/dashboard', '/call-center-qa'];
+  const isPublicPath = publicPaths.includes(pathname);
+  
   useEffect(() => {
     if (!authStatus) {
       return;  // Don't redirect while auth is still loading
     }
-    
-    // Allow unauthenticated access to / and /dashboard
-    const publicPaths = ['/', '/dashboard'];
-    const isPublicPath = publicPaths.includes(pathname);
     
     // Only redirect in two specific cases:
     // 1. User is not authenticated and tries to access a protected page
@@ -47,8 +47,8 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  // For public paths (root and dashboard)
-  if (pathname === '/' || pathname === '/dashboard') {
+  // For public paths
+  if (isPublicPath) {
     return children;
   }
 
