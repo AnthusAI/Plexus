@@ -68,25 +68,13 @@ class PromptOptimizer:
         cache_dir.mkdir(parents=True, exist_ok=True)
         set_llm_cache(SQLiteCache(database_path=str(cache_dir / "langchain.db")))
         
-        # Setup callbacks
-        callbacks = []
-        if model_config.streaming:
-            callbacks.append(StreamingCallbackHandler())
-        
         # Initialize the LLM
         self.llm = ChatOpenAI(
             model_name=model_config.model_type,
-            temperature=model_config.temperature,
             max_tokens=model_config.max_tokens,
-            top_p=model_config.top_p,
-            frequency_penalty=model_config.frequency_penalty,
-            presence_penalty=model_config.presence_penalty,
-            openai_api_key=model_config.api_key,
-            openai_api_base=model_config.api_base,
-            openai_organization=model_config.organization,
-            request_timeout=model_config.request_timeout,
-            max_retries=model_config.max_retries,
-            callbacks=callbacks if callbacks else None
+            model_kwargs={
+                'top_p': model_config.top_p,
+            }
         )
         
         # Setup prompt templates
@@ -132,11 +120,14 @@ class PromptOptimizer:
             self.human_template
         ])
             
-    def optimize_prompt(self, score_name: str, mismatches: List[MismatchAnalysis]) -> Dict[str, PromptChange]:
+    def optimize_prompt(self, score_name: str, mismatches: List[MismatchAnalysis], evaluation_instance) -> Dict[str, PromptChange]:
         """Generate optimized prompts based on the mismatches."""
         try:
-            # Get current prompts
-            current_prompts = self.get_current_prompts(score_name)
+            # Get current prompts from evaluation instance
+            current_prompts = evaluation_instance.get_current_prompts().get(score_name, {})
+            if not current_prompts:
+                logger.warning(f"No current prompts found for {score_name}, falling back to scorecard")
+                current_prompts = self.get_current_prompts(score_name)
             logger.info(f"Optimizing prompts for score: {score_name}")
             logger.info("Current prompts loaded:")
             logger.info(f"System message: {current_prompts.get('system_message')}")
@@ -292,40 +283,6 @@ Transcript:
         # 3. Readability metrics
         # 4. Test against sample inputs
         return True 
-
-    def _get_system_prompt(self) -> str:
-        """Get the system prompt for the LLM."""
-        return """You are an expert at optimizing prompts for classification tasks.
-        Your goal is to improve prompt accuracy while maintaining clarity and conciseness.
-        Analyze the provided patterns and recommendation to generate optimized prompts.
-        Focus on addressing the identified issues while preserving the essential evaluation criteria.
-        
-        You will generate complete optimized prompts for both components:
-        - system_message: Contains the core evaluation criteria and rules
-        - user_message: Contains the specific question and context for evaluation"""
-
-    def _get_human_prompt(self, recommendation: Recommendation, patterns: List[PatternInfo]) -> str:
-        """Get the human prompt template with context."""
-        return f"""Based on the following error patterns and recommendation, generate optimized prompts:
-
-        Error Patterns:
-        {self._format_patterns(patterns)}
-        
-        Recommendation:
-        {recommendation.description}
-        
-        Generate optimized prompts that address these issues. Your response should be valid JSON with this structure:
-        {{
-            "system_message": "string - complete optimized system message with evaluation criteria and rules",
-            "user_message": "string - complete optimized human message with question and context",
-            "rationale": "string - detailed explanation of the improvements made and how they address the patterns"
-        }}
-        
-        Important:
-        1. Both system_message and user_message must be complete, standalone prompts
-        2. Preserve all essential evaluation criteria while improving clarity and robustness
-        3. Focus on addressing the identified error patterns
-        4. Ensure your response contains ONLY the JSON object, no additional text"""
 
     def _format_patterns(self, patterns: List[PatternInfo]) -> str:
         """Format patterns to show concrete examples."""

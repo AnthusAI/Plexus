@@ -15,15 +15,13 @@ class OptimizationConfig:
     """Configuration for the optimization process."""
     max_iterations: int = 2
     target_accuracy: float = 0.95
-    min_improvement: float = 0.01
-    max_regression: float = 0.02
+    max_consecutive_no_improvement: int = 3  # Maximum number of consecutive iterations without improvement before stopping
 
 
 @dataclass
 class AnalysisConfig:
     """Configuration for the analysis process."""
     samples_per_iteration: int = 5
-    min_mismatch_confidence: float = 0.8
     max_prompt_length: int = 2000
     min_pattern_frequency: int = 2  # Minimum number of mismatches to consider a pattern significant
 
@@ -32,19 +30,12 @@ class AnalysisConfig:
 class ModelConfig:
     """Configuration for the LLM used in prompt optimization."""
     model_type: Literal["gpt-4o-mini-2024-07-18", "claude", "gpt-3.5-turbo"] = "gpt-4o-mini-2024-07-18"
-    temperature: float = 0.7
+    temperature: float = 0
     max_tokens: int = 2000
-    top_p: float = 0.95
-    frequency_penalty: float = 0.0
-    presence_penalty: float = 0.0
-    api_key: Optional[str] = None
-    api_base: Optional[str] = None
-    organization: Optional[str] = None
+    top_p: float = 0.03
     # LangChain specific settings
     cache_dir: str = ".langchain_cache"
-    request_timeout: int = 60
     max_retries: int = 3
-    streaming: bool = False
 
 
 @dataclass
@@ -55,7 +46,6 @@ class APOSConfig:
     model: ModelConfig
     persistence_path: str = "./optimization_history"
     log_level: str = "INFO"
-    backup_frequency: int = 1
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> 'APOSConfig':
@@ -69,8 +59,7 @@ class APOSConfig:
             analysis=analysis_config,
             model=model_config,
             persistence_path=config_dict.get('persistence_path', "./optimization_history"),
-            log_level=config_dict.get('log_level', "INFO"),
-            backup_frequency=config_dict.get('backup_frequency', 1)
+            log_level=config_dict.get('log_level', "INFO")
         )
 
     @classmethod
@@ -113,22 +102,34 @@ def load_config(config_path: Optional[str] = None) -> APOSConfig:
     Load APOS configuration from a file or return default config.
     
     Args:
-        config_path: Path to the configuration file. If None, uses default config.
+        config_path: Path to the configuration file. If None, looks in default locations.
         
     Returns:
         APOSConfig instance
     """
-    if not config_path:
-        return get_default_config()
-        
-    config_path = Path(config_path)
-    if not config_path.exists():
-        logging.warning(f"Config file {config_path} not found. Using default configuration.")
-        return get_default_config()
-        
-    try:
-        return APOSConfig.from_yaml(str(config_path))
-    except Exception as e:
-        logging.error(f"Error loading config from {config_path}: {e}")
-        logging.warning("Using default configuration.")
-        return get_default_config() 
+    # If explicit path provided, try that first
+    if config_path:
+        config_path = Path(config_path)
+        if config_path.exists():
+            try:
+                return APOSConfig.from_yaml(str(config_path))
+            except Exception as e:
+                logging.error(f"Error loading config from {config_path}: {e}")
+    
+    # Try default locations in order
+    default_locations = [
+        Path(__file__).parent / "apos_config.yaml",  # Same directory as this file
+        Path("plexus/apos/apos_config.yaml"),  # Relative to current directory
+    ]
+    
+    for path in default_locations:
+        if path.exists():
+            try:
+                logging.info(f"Loading config from {path}")
+                return APOSConfig.from_yaml(str(path))
+            except Exception as e:
+                logging.error(f"Error loading config from {path}: {e}")
+                continue
+    
+    logging.warning("No valid configuration found. Using default configuration.")
+    return get_default_config() 

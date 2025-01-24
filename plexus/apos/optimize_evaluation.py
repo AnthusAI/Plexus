@@ -22,7 +22,8 @@ logger = logging.getLogger('plexus.apos.optimize')
 async def optimize_evaluation(
     scorecard_name: str,
     score_name: Optional[str] = None,
-    config_path: Optional[str] = None
+    config_path: Optional[str] = None,
+    number_of_samples: Optional[int] = None
 ) -> None:
     """
     Run an automated optimization cycle for a scorecard evaluation.
@@ -31,10 +32,16 @@ async def optimize_evaluation(
         scorecard_name: Name of the scorecard to optimize
         score_name: Optional specific score to focus on
         config_path: Optional path to configuration file
+        number_of_samples: Optional number of samples to use per iteration
     """
     try:
         # Load configuration
         config = load_config(config_path)
+        
+        # Override samples_per_iteration if specified
+        if number_of_samples is not None:
+            config.analysis.samples_per_iteration = number_of_samples
+            
         logger.info(f"Starting optimization for scorecard '{scorecard_name}'")
         
         # Load scorecard
@@ -101,7 +108,7 @@ async def optimize_evaluation(
             if current_accuracy < 1.0 and result.mismatches:
                 # Generate prompt improvements directly from mismatches
                 logger.info("Generating prompt improvements...")
-                optimized_changes = optimizer.optimize_prompt(score_name, result.mismatches)
+                optimized_changes = optimizer.optimize_prompt(score_name, result.mismatches, evaluation)
                 
                 # Validate and collect changes
                 prompt_changes = []
@@ -139,8 +146,8 @@ async def optimize_evaluation(
                         logger.info(f"No improvement for {consecutive_no_improvement} consecutive iterations")
                     
                     # Only break if we've had multiple iterations without improvement
-                    if consecutive_no_improvement >= 3:
-                        logger.info("No improvement for 3 consecutive iterations")
+                    if consecutive_no_improvement >= config.optimization.max_consecutive_no_improvement:
+                        logger.info(f"No improvement for {consecutive_no_improvement} consecutive iterations")
                         break
                 else:
                     logger.info("No valid prompt improvements generated")
@@ -187,11 +194,13 @@ if __name__ == "__main__":
     parser.add_argument("scorecard", help="Name of scorecard to optimize")
     parser.add_argument("--score", help="Specific score to optimize")
     parser.add_argument("--config", help="Path to configuration file")
+    parser.add_argument("--number-of-samples", type=int, help="Number of samples to use per iteration")
     
     args = parser.parse_args()
     
     asyncio.run(optimize_evaluation(
         scorecard_name=args.scorecard,
         score_name=args.score,
-        config_path=args.config
+        config_path=args.config,
+        number_of_samples=args.number_of_samples
     )) 
