@@ -5,11 +5,12 @@ import os
 import json
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import pandas as pd
 import mlflow
 import random
+import asyncio
 
 from plexus.Evaluation import AccuracyEvaluation
 from plexus.apos.models import (
@@ -19,6 +20,10 @@ from plexus.apos.models import (
     PromptChange
 )
 from plexus.apos.config import APOSConfig, load_config
+from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.models.account import Account
+from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
 
 
 logger = logging.getLogger('plexus.apos.evaluation')
@@ -35,8 +40,9 @@ class APOSEvaluation(AccuracyEvaluation):
     4. History tracking
     """
     
-    def __init__(self, config: Optional[APOSConfig] = None, labeled_samples: Optional[List[Dict[str, Any]]] = None, **kwargs):
-        self.config = config or load_config()
+    def __init__(self, *, override_folder=None, labeled_samples=None, labeled_samples_filename=None, score_id=None, **kwargs):
+        # Extract config from kwargs since base class doesn't use it
+        self.config = kwargs.pop('config', None) or load_config()
         self.config.setup_logging()
         
         # Store all samples and create fixed evaluation set
@@ -50,9 +56,103 @@ class APOSEvaluation(AccuracyEvaluation):
         else:
             self.evaluation_samples = labeled_samples
             kwargs['labeled_samples'] = labeled_samples
+
+        # Initialize our own attributes
+        self.scorecard_name = kwargs.get('scorecard_name')
+        self.override_folder = override_folder
+        self.override_data = self.load_override_data() if self.override_folder else {}
+        self.labeled_samples = labeled_samples
+        self.labeled_samples_filename = labeled_samples_filename
+        self.score_id = score_id
+        self.results_queue = asyncio.Queue()
+        self.metrics_tasks = {}  # Dictionary to track metrics computation tasks per score
+        self.should_stop = False
+        self.completed_scores = set()  # Track which scores have completed all their results
         
-        # Pass labeled_samples directly to parent class
+        # Initialize remaining attributes from base class first
         super().__init__(**kwargs)
+        
+        # Initialize dashboard client without creating experiment
+        try:
+            logging.info("Initializing Plexus Dashboard client...")
+            self.dashboard_client = PlexusDashboardClient.for_account(kwargs.get('account_key', 'call-criteria'))
+            
+            # Look up account using default key
+            account_key = kwargs.get('account_key', 'call-criteria')
+            logging.info(f"Looking up account with key: {account_key}")
+            account = Account.get_by_key(account_key, self.dashboard_client)
+            logging.info(f"Found account: {account.name} ({account.id})")
+            
+            # Store the account ID
+            self.account_id = account.id
+            
+            # Look up scorecard using available identifiers
+            scorecard = kwargs.get('scorecard')
+            logging.info(f"Looking up scorecard with name: {scorecard.name}")
+            if hasattr(scorecard, 'key'):
+                logging.info(f"Using scorecard key: {scorecard.key}")
+                dashboard_scorecard = DashboardScorecard.get_by_key(scorecard.key, self.dashboard_client)
+            elif hasattr(scorecard, 'id'):
+                logging.info(f"Using scorecard ID: {scorecard.id}")
+                dashboard_scorecard = DashboardScorecard.get_by_id(scorecard.id, self.dashboard_client)
+            else:
+                logging.info(f"Looking up scorecard by name: {scorecard.name}")
+                dashboard_scorecard = DashboardScorecard.get_by_name(scorecard.name, self.dashboard_client)
+            logging.info(f"Found scorecard: {dashboard_scorecard.name} ({dashboard_scorecard.id})")
+            
+            # Store the scorecard ID
+            self.scorecard_id = dashboard_scorecard.id
+
+            # Look up score ID if we have a subset of score names
+            if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
+                score_name = self.subset_of_score_names[0]
+                logging.info(f"Looking up score with name: {score_name}")
+                try:
+                    query = """
+                    query GetScoreFromScorecard($scorecardId: ID!, $name: String!) {
+                        getScorecard(id: $scorecardId) {
+                            sections {
+                                items {
+                                    scores(filter: {name: {eq: $name}}) {
+                                        items {
+                                            id
+                                            name
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    """
+                    variables = {
+                        "scorecardId": dashboard_scorecard.id,
+                        "name": score_name
+                    }
+                    result = self.dashboard_client.execute(query, variables)
+                    
+                    # Find the first score with matching name
+                    matching_score = None
+                    scorecard_data = result.get('getScorecard', {})
+                    sections = scorecard_data.get('sections', {}).get('items', [])
+                    
+                    for section in sections:
+                        scores = section.get('scores', {}).get('items', [])
+                        if scores:  # If we have any scores
+                            matching_score = scores[0]  # Take the first one since GraphQL already filtered
+                            break
+                    
+                    if matching_score:
+                        self.score_id = matching_score['id']
+                        logging.info(f"Found score: {matching_score['name']} ({self.score_id})")
+                    else:
+                        logging.warning(f"Could not find score with name: {score_name} in scorecard: {dashboard_scorecard.id}")
+                except Exception as e:
+                    logging.error(f"Error looking up score: {e}")
+
+        except Exception as e:
+            logging.error(f"Failed to initialize dashboard client: {str(e)}", exc_info=True)
+            self.dashboard_client = None
+            self.experiment_id = None
         
         # Create state tracking
         self.state = OptimizationState(
@@ -106,6 +206,37 @@ class APOSEvaluation(AccuracyEvaluation):
             logger.info(f"Starting iteration {iteration} with run ID: {self.run_id}")
             
             try:
+                # Only create a new dashboard experiment for iterations after the first one
+                if self.state.current_iteration > 0:
+                    started_at = datetime.now(timezone.utc)
+                    experiment_params = {
+                        "type": "accuracy",
+                        "accountId": self.account_id,
+                        "scorecardId": self.scorecard_id,
+                        "status": "RUNNING",
+                        "accuracy": 0.0,
+                        "totalItems": self.number_of_texts_to_sample,
+                        "processedItems": 0,
+                        "parameters": json.dumps({
+                            "sampling_method": self.sampling_method,
+                            "sample_size": self.number_of_texts_to_sample,
+                            "iteration": iteration,
+                            "score_name": self.subset_of_score_names[0] if self.subset_of_score_names else None
+                        }),
+                        "estimatedRemainingSeconds": self.number_of_texts_to_sample
+                    }
+                    
+                    # Add score ID if available
+                    if self.score_id:
+                        experiment_params["scoreId"] = self.score_id
+
+                    response = DashboardEvaluation.create(
+                        client=self.dashboard_client,
+                        **experiment_params
+                    )
+                    self.experiment_id = response.id
+                    self.started_at = started_at
+                
                 # Run base evaluation
                 await super().run()
                 
@@ -126,6 +257,14 @@ class APOSEvaluation(AccuracyEvaluation):
                 
                 # Persist results
                 self._persist_results(result)
+                
+                # Update final metrics
+                if self.dashboard_client and self.experiment_id:
+                    metrics = self.calculate_metrics(self.all_results)
+                    await self.log_to_dashboard(
+                        metrics,
+                        status="COMPLETED"
+                    )
                 
                 logger.info(f"Completed iteration {iteration} with accuracy {result.accuracy:.2%}")
                 return result
@@ -215,55 +354,6 @@ class APOSEvaluation(AccuracyEvaluation):
             
         logger.info(f"Persisted iteration {result.iteration} results to {iteration_dir}")
 
-    def load_iteration_result(self, iteration: int) -> Optional[IterationResult]:
-        """Load results for a specific iteration."""
-        iteration_dir = Path(self.config.persistence_path) / f"iteration_{iteration}"
-        if not iteration_dir.exists():
-            logger.warning(f"No results found for iteration {iteration}")
-            return None
-            
-        try:
-            # Load main result
-            with open(iteration_dir / "result.json") as f:
-                result_data = json.load(f)
-                
-            # Load mismatches
-            with open(iteration_dir / "mismatches.json") as f:
-                mismatches_data = json.load(f)
-                
-            # Load prompt changes
-            with open(iteration_dir / "prompt_changes.json") as f:
-                changes_data = json.load(f)
-                
-            # Reconstruct objects
-            mismatches = [MismatchAnalysis(**m) for m in mismatches_data]
-            changes = [PromptChange(**c) for c in changes_data]
-            
-            return IterationResult(
-                iteration=result_data['iteration'],
-                accuracy=result_data['accuracy'],
-                mismatches=mismatches,
-                prompt_changes=changes,
-                metrics=result_data['metrics'],
-                metadata=result_data['metadata']
-            )
-            
-        except Exception as e:
-            logger.error(f"Error loading iteration {iteration} results: {e}")
-            return None
-
-    def get_improvement_trend(self) -> List[float]:
-        """Get the accuracy improvement trend across iterations."""
-        improvements = []
-        prev_result = None
-        
-        for result in self.state.history:
-            improvement = result.get_improvement(prev_result)
-            improvements.append(improvement)
-            prev_result = result
-            
-        return improvements
-
     def get_current_prompts(self) -> Dict[str, Dict[str, Any]]:
         """Get the current prompts being used for evaluation."""
         prompts = {}
@@ -349,35 +439,85 @@ class APOSEvaluation(AccuracyEvaluation):
         self.set_prompts(current_prompts)
         logger.info(f"Applied {len(changes)} prompt changes")
 
-    def generate_excel_report(self, report_folder_path, results, selected_sample_rows):
-        """Override parent's generate_excel_report to include iteration number in filename."""
-        records = []
-        score_names = self.score_names()
-        all_score_names = "_".join(score_names).replace(" ", "_")
-        filename_safe_score_names = "".join(c for c in all_score_names if c.isalnum() or c in "_-")
-        
-        # Include iteration number in filename
-        iteration_suffix = f"_iteration_{self.state.current_iteration + 1}"
-        
-        for result in results:
-            for question in score_names:
-                score_result = next((r for r in result['results'].values() if r.parameters.name == question), None)
-                if score_result:
-                    records.append({
-                        'report_id': result['session_id'],
-                        'form_id': result['form_id'],
-                        'question_name': question,
-                        'human_label': score_result.metadata['human_label'],
-                        'human_explanation': score_result.metadata['human_explanation'],
-                        'predicted_answer': score_result.value,
-                        'match': score_result.metadata['correct'],
-                        'explanation': score_result.explanation,
-                        'original_text': score_result.metadata['text'],
-                    })
+    async def score_all_texts_for_score(self, selected_sample_rows, score_name):
+        """Score all texts for a specific score concurrently"""
+        if score_name not in self.results_by_score:
+            self.results_by_score[score_name] = []
+        if score_name not in self.processed_items_by_score:
+            self.processed_items_by_score[score_name] = 0
 
-        df_records = pd.DataFrame(records)
-        excel_file_path = f"{report_folder_path}/Evaluation Report for {filename_safe_score_names}{iteration_suffix}.xlsx"
-        df_records.to_excel(excel_file_path, index=False)
-        mlflow.log_artifact(excel_file_path)
+        tasks = []
+        total_rows = len(selected_sample_rows)
+        for idx, (_, row) in enumerate(selected_sample_rows.iterrows()):
+            task = asyncio.create_task(self.score_text(row, score_name))
+            tasks.append(task)
+        
+        for task in asyncio.as_completed(tasks):
+            try:
+                result = await task
+                if result:
+                    self.results_by_score[score_name].append(result)
+                    self.processed_items_by_score[score_name] += 1
+                    self.processed_items = sum(self.processed_items_by_score.values())
+                    # Start metrics task if needed
+                    is_final_result = self.processed_items_by_score[score_name] == total_rows
+                    await self.maybe_start_metrics_task(score_name, is_final_result)
+            except Exception as e:
+                logger.error(f"Error scoring text for {score_name}: {e}")
+        
+        return self.results_by_score[score_name]
 
-        logger.info(f"Excel report generated at {excel_file_path}") 
+    async def maybe_start_metrics_task(self, score_name: str, is_final_result: bool = False):
+        """Start a metrics computation task if one isn't running, or if this is the final result"""
+        if is_final_result:
+            # For final results, always compute metrics
+            self.completed_scores.add(score_name)
+            if score_name in self.metrics_tasks:
+                task = self.metrics_tasks[score_name]
+                if not task.done():
+                    task.cancel()
+            self.metrics_tasks[score_name] = asyncio.create_task(self.continuous_metrics_computation(score_name))
+        elif score_name not in self.metrics_tasks or self.metrics_tasks[score_name].done():
+            # Start new task if none exists or previous one is done
+            self.metrics_tasks[score_name] = asyncio.create_task(self.continuous_metrics_computation(score_name))
+
+    async def continuous_metrics_computation(self, score_name: str):
+        """Background task that continuously computes and posts metrics for a specific score"""
+        last_processed_count = 0
+        while not self.should_stop:
+            try:
+                # Check if we have any new results for this score
+                current_count = len(self.results_by_score.get(score_name, []))
+                if current_count > 0 and current_count != last_processed_count:
+                    # Combine results from all scores for metrics calculation
+                    combined_results = []
+                    for score, results in self.results_by_score.items():
+                        combined_results.extend(results)
+                    
+                    metrics = self.calculate_metrics(combined_results)
+                    # If this is the final update (score is complete), mark it as completed
+                    status = "COMPLETED" if score_name in self.completed_scores else "RUNNING"
+                    
+                    # Create a task for the API call and shield it from cancellation
+                    api_task = asyncio.shield(self.log_to_dashboard(metrics, status=status))
+                    try:
+                        await api_task
+                        last_processed_count = current_count
+                    except asyncio.CancelledError:
+                        # If we're cancelled, still wait for the API call to finish
+                        logger.info("Metrics task cancelled, ensuring API call completes")
+                        try:
+                            await api_task
+                        except asyncio.CancelledError:
+                            pass  # Ignore any additional cancellations
+                        logger.info("API call completed after cancellation")
+                        return  # Exit the task
+                
+                # Wait a bit before checking again
+                await asyncio.sleep(.1)
+            except asyncio.CancelledError:
+                logger.info(f"Metrics computation for {score_name} cancelled")
+                return  # Exit gracefully
+            except Exception as e:
+                logger.error(f"Error in continuous metrics computation for {score_name}: {e}")
+                await asyncio.sleep(5)  # Wait longer on error 
