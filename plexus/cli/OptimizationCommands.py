@@ -44,15 +44,17 @@ def create_sample_data(scorecard_name: str, score_name: str) -> str:
     return samples_path
 
 @optimize.command()
-@click.argument('scorecard')
-@click.option('--score', help='Specific score to optimize')
+@click.option('--scorecard-name', required=True, help='Name of scorecard to optimize')
+@click.option('--score-name', help='Specific score to optimize')
 @click.option('--config', help='Path to configuration file')
-def evaluation(scorecard: str, score: str = None, config: str = None):
+@click.option('--number-of-samples', type=int, help='Number of samples to use per iteration')
+def evaluation(scorecard_name: str, score_name: str = None, config: str = None, number_of_samples: int = None):
     """Run automated evaluation optimization."""
     asyncio.run(optimize_evaluation(
-        scorecard_name=scorecard,
-        score_name=score,
-        config_path=config
+        scorecard_name=scorecard_name,
+        score_name=score_name,
+        config_path=config,
+        number_of_samples=number_of_samples
     ))
 
 def get_samples(scorecard_instance, score_name, score_config):
