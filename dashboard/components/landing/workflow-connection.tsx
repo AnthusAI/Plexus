@@ -1,7 +1,7 @@
 export function WorkflowConnection({ className }: { className?: string }) {
   return (
     <svg
-      className={className}
+      className={`text-muted-foreground ${className}`}
       width="100%"
       height="100%"
       viewBox="0 0 100 100"
