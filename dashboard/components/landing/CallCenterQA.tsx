@@ -64,9 +64,9 @@ const capabilities = [
 export const CallCenterQA = () => {
   return (
     <Layout>
-      <section className="py-20 bg-background">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto text-center">
+      <div className="container mx-auto px-4 max-w-7xl">
+        <div className="py-16">
+          <div className="max-w-3xl mx-auto text-center mb-16">
             <h1 className="text-4xl md:text-5xl font-bold mb-8 text-foreground 
                          bg-gradient-to-r from-accent to-accent-foreground 
                          bg-clip-text text-transparent">
@@ -87,10 +87,8 @@ export const CallCenterQA = () => {
             </div>
           </div>
         </div>
-      </section>
 
-      <section className="py-20">
-        <div className="container mx-auto px-4">
+        <section className="py-20">
           <div className="max-w-4xl mx-auto">
             <h2 className="text-3xl font-bold mb-12 text-center text-foreground">
               Platform Features
@@ -115,11 +113,9 @@ export const CallCenterQA = () => {
               })}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="py-20 bg-accent/5">
-        <div className="container mx-auto px-4">
+        <section className="py-20 bg-accent/5">
           <div className="max-w-4xl mx-auto">
             <h2 className="text-3xl font-bold mb-12 text-center text-foreground">
               Advanced Capabilities
@@ -143,11 +139,9 @@ export const CallCenterQA = () => {
               })}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="py-20">
-        <div className="container mx-auto px-4">
+        <section className="py-20">
           <div className="max-w-4xl mx-auto text-center">
             <h2 className="text-3xl font-bold mb-8 text-foreground">
               Start Building Your Scorecards
@@ -161,8 +155,8 @@ export const CallCenterQA = () => {
               <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </Layout>
   )
 } 
