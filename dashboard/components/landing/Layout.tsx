@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { Menu } from 'lucide-react'
+import { usePathname, useRouter } from 'next/navigation'
+import { Menu, ArrowRight, Loader2, AlertCircle } from 'lucide-react'
 import SquareLogo, { LogoVariant } from '../logo-square'
 import { Button } from '../ui/button'
 import {
@@ -23,10 +23,12 @@ const landingPages = [
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname()
+  const router = useRouter()
   const [visiblePages, setVisiblePages] = useState(landingPages.slice(0, 1))
   const [overflowPages, setOverflowPages] = useState(landingPages.slice(1))
   const containerRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const [isLoading, setIsLoading] = useState(false)
   
   useEffect(() => {
     const updateVisibleItems = () => {
@@ -54,11 +56,23 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     return () => window.removeEventListener('resize', updateVisibleItems)
   }, [])
 
+  const handleSignIn = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    try {
+      await router.push('/dashboard')
+    } catch (err) {
+      console.error('Navigation error:', err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen">
       <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto flex h-14 items-center" ref={containerRef}>
+          <div className="flex h-14 items-center" ref={containerRef}>
             <div className="flex items-center flex-1">
               <Link href="/" className="mr-4 flex items-center">
                 <div className="relative">
@@ -81,7 +95,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                 ))}
               </div>
             </div>
-            <div ref={menuRef} className="ml-4">
+            <div className="flex items-center gap-4">
               {overflowPages.length > 0 && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -107,6 +121,18 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
+              <Button 
+                size="sm"
+                className="bg-secondary text-white hover:bg-secondary/90"
+                onClick={handleSignIn}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  'Sign In'
+                )}
+              </Button>
             </div>
           </div>
         </div>
