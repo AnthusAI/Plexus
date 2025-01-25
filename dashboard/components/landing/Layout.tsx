@@ -15,6 +15,7 @@ import {
 
 const landingPages = [
   { href: '/platform', label: 'Platform' },
+  { href: '/optimizer-agents', label: 'Optimizer Agents' },
   { href: '/call-center-qa', label: 'Call Center QA' },
   { href: '/enterprise', label: 'Enterprise' },
   { href: '/resources', label: 'Resources' }
@@ -57,7 +58,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     <div className="min-h-screen">
       <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4">
-          <div className="flex h-14 items-center" ref={containerRef}>
+          <div className="max-w-4xl mx-auto flex h-14 items-center" ref={containerRef}>
             <div className="flex items-center flex-1">
               <Link href="/" className="mr-4 flex items-center">
                 <div className="relative">
