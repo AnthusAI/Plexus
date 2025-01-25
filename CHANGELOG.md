@@ -1,21 +1,43 @@
 # CHANGELOG
 
 
+## v0.6.2 (2025-01-23)
+
+### Bug Fixes
+
+- **dashboard**: Only show 100 Evaluations.
+  ([`bd623c0`](https://github.com/AnthusAI/Plexus/commit/bd623c05ffdca9ca186d94d717f78fa7cd91995d))
+
+- **dependencies**: Add missing comma in pyproject.toml dependencies list
+  ([`547280d`](https://github.com/AnthusAI/Plexus/commit/547280dea49669215e9a2391777ad3a461a70592))
+
+### Refactoring
+
+- **tasks**: Replace 'Action' with 'Task' across components and update related logic
+  ([`756dde9`](https://github.com/AnthusAI/Plexus/commit/756dde97f455df0af9a5788643999d6c3015b11e))
+
+
 ## v0.6.1 (2025-01-21)
+
+
+## v0.6.0 (2025-01-21)
+
+
+## v0.6.0-alpha.2 (2025-01-21)
 
 ### Bug Fixes
 
 - **dashboard**: Gradient logo backgrounds on login, sidebar
   ([`d82626b`](https://github.com/AnthusAI/Plexus/commit/d82626bcd1f125f4c89a8b6e57827a1dbea1350e))
 
+
+## v0.6.0-rc.1 (2025-01-21)
+
 ### Chores
 
 - **dependencies**: Add SQLAlchemy[asyncio] version 1.4.15 to project dependencies to fix dependency
   mismatch
   ([`fe5ae21`](https://github.com/AnthusAI/Plexus/commit/fe5ae216ba805b86ba6fe4a2107ed9964ac23e7a))
-
-
-## v0.6.0 (2025-01-21)
 
 
 ## v0.6.0-alpha.1 (2025-01-21)
@@ -77,6 +99,9 @@ feat(landing): implement responsive landing page with navigation
 
 ## v0.4.2-alpha.3 (2025-01-18)
 
+
+## v0.4.2-rc.2 (2025-01-18)
+
 ### Bug Fixes
 
 - **logging**: Enhance AWS credentials handling in CustomLogging.py
@@ -90,6 +115,9 @@ feat(landing): implement responsive landing page with navigation
 
 
 ## v0.4.2-alpha.2 (2025-01-17)
+
+
+## v0.4.2-rc.1 (2025-01-17)
 
 ### Bug Fixes
 
@@ -108,6 +136,12 @@ feat(landing): implement responsive landing page with navigation
 ## v0.4.1 (2025-01-15)
 
 
+## v0.4.0 (2025-01-13)
+
+
+## v0.4.0-rc.2 (2025-01-15)
+
+
 ## v0.4.0-alpha.3 (2025-01-14)
 
 ### Bug Fixes
@@ -121,7 +155,7 @@ The score result detail view now properly closes when selecting a different eval
   internal state to determine what detail view to show
 
 
-## v0.4.0 (2025-01-13)
+## v0.4.0-rc.1 (2025-01-13)
 
 
 ## v0.4.0-alpha.2 (2025-01-10)
@@ -153,9 +187,6 @@ The score result detail view now properly closes when selecting a different eval
 ## v0.3.2 (2025-01-09)
 
 
-## v0.3.1-rc.1 (2025-01-06)
-
-
 ## v0.3.2-alpha.2 (2025-01-09)
 
 ### Bug Fixes
@@ -166,6 +197,16 @@ The score result detail view now properly closes when selecting a different eval
 - **evaluations-dashboard**: Confusion matrix filtering -- now case-insensitive.
   ([`bf68cae`](https://github.com/AnthusAI/Plexus/commit/bf68cae9d1d3f85d788fbf47c3aaa185768efd61))
 
+### Testing
+
+- Add CloudWatchLogger unit tests
+  ([`db19395`](https://github.com/AnthusAI/Plexus/commit/db1939576b7ccb02926c63625a0b11cacd142c2b))
+
+Tests cover AWS credential handling, metric logging, and error cases.
+
+
+## v0.3.2-rc.1 (2025-01-09)
+
 ### Refactoring
 
 - **Evaluation**: Adjust total predictions calculation based on evaluation status
@@ -175,13 +216,6 @@ The score result detail view now properly closes when selecting a different eval
   evaluations, the total is derived from the predicted distribution data. - For ongoing evaluations,
   the initial sample size is used instead. - Ensured that the totalItems parameter reflects the
   correct count in the update parameters.
-
-### Testing
-
-- Add CloudWatchLogger unit tests
-  ([`db19395`](https://github.com/AnthusAI/Plexus/commit/db1939576b7ccb02926c63625a0b11cacd142c2b))
-
-Tests cover AWS credential handling, metric logging, and error cases.
 
 
 ## v0.3.2-alpha.1 (2025-01-08)
@@ -204,6 +238,9 @@ Tests cover AWS credential handling, metric logging, and error cases.
 
 
 ## v0.3.1 (2025-01-06)
+
+
+## v0.3.1-rc.1 (2025-01-06)
 
 ### Bug Fixes
 

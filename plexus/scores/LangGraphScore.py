@@ -295,6 +295,7 @@ class LangGraphScore(Score, LangChainUser):
     async def build_compiled_workflow(self):
         """Build the LangGraph workflow with optional persistence."""
         logging.info("=== Building Workflow ===")
+        
         # First collect node instances
         node_instances = []
         if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
@@ -442,20 +443,74 @@ class LangGraphScore(Score, LangChainUser):
 
     def generate_graph_visualization(self, output_path: str = "./tmp/workflow_graph.png"):
         """
-        Generate and save a visual representation of the workflow graph.
-
-        This method creates a graphical visualization of the workflow using Graphviz.
-        It represents nodes and edges of the workflow, with different colors for
-        start, end, and intermediate nodes.
+        Generate and save a visual representation of the workflow graph using LangChain's
+        built-in visualization capabilities.
 
         :param output_path: The file path where the graph image will be saved.
         """
-        from IPython.display import Image, display
         from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeStyles
-
+        import os
+        
+        # Clean up the output path - replace spaces with underscores
+        output_dir = os.path.dirname(output_path)
+        filename = os.path.basename(output_path)
+        clean_filename = filename.replace(' ', '_')
+        output_path = os.path.join(output_dir, clean_filename)
+        
+        logging.info("Getting workflow graph...")
         graph = self.workflow.get_graph()
-        with open("tmp/workflow_graph.png", "wb") as output_file:
-            output_file.write(graph.draw_mermaid_png(draw_method=MermaidDrawMethod.API))
+        logging.info(f"Graph nodes: {graph.nodes}")
+        logging.info(f"Graph edges: {graph.edges}")
+        
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        logging.info(f"Generating PNG visualization at {output_path}")
+        
+        try:
+            png_data = graph.draw_mermaid_png(
+                draw_method=MermaidDrawMethod.API,
+                curve_style=CurveStyle.LINEAR,
+                node_colors=NodeStyles(
+                    first="#ffdfba",
+                    last="#baffc9", 
+                    default="#f2f0ff"
+                )
+            )
+            logging.info(f"Generated PNG data size: {len(png_data)} bytes")
+            
+            if not png_data:
+                raise ValueError("No PNG data generated")
+                
+            # Write in a way that ensures the file is properly closed
+            try:
+                with open(output_path, "wb") as output_file:
+                    bytes_written = output_file.write(png_data)
+                    output_file.flush()
+                    os.fsync(output_file.fileno())  # Ensure data is written to disk
+                
+                # Verify the file was written correctly
+                if not os.path.exists(output_path):
+                    raise IOError(f"File {output_path} was not created")
+                    
+                file_size = os.path.getsize(output_path)
+                logging.info(f"Wrote {bytes_written} bytes, file size is {file_size} bytes")
+                
+                if file_size == 0:
+                    raise IOError(f"File {output_path} is empty")
+                elif file_size != len(png_data):
+                    raise IOError(f"File size {file_size} does not match PNG data size {len(png_data)}")
+                    
+                logging.info("Successfully wrote PNG file")
+                
+            except IOError as e:
+                logging.error(f"IO Error writing PNG file: {str(e)}")
+                raise
+                
+            return output_path
+            
+        except Exception as e:
+            logging.error(f"Error generating graph visualization: {str(e)}")
+            logging.error(f"Full traceback: {traceback.format_exc()}")
+            raise
 
     def register_model(self):
         """
@@ -665,30 +720,30 @@ class LangGraphScore(Score, LangChainUser):
         try:
             # Import from the nodes package
             module = importlib.import_module('plexus.scores.nodes')
-            logging.info(f"Attempting to get class {class_name} from nodes module")
-            logging.info(f"Module contents: {dir(module)}")
+            logging.debug(f"Attempting to get class {class_name} from nodes module")
+            logging.debug(f"Module contents: {dir(module)}")
             
             # List all modules in plexus.scores.nodes
             import pkgutil
             package = importlib.import_module('plexus.scores.nodes')
             modules = [name for _, name, _ in pkgutil.iter_modules(package.__path__)]
-            logging.info(f"Available modules in plexus.scores.nodes: {modules}")
+            logging.debug(f"Available modules in plexus.scores.nodes: {modules}")
             
             # Try to import specific module
             specific_module_path = f'plexus.scores.nodes.{class_name}'
-            logging.info(f"Attempting to import from specific path: {specific_module_path}")
+            logging.debug(f"Attempting to import from specific path: {specific_module_path}")
             specific_module = importlib.import_module(specific_module_path)
-            logging.info(f"Specific module contents: {dir(specific_module)}")
+            logging.debug(f"Specific module contents: {dir(specific_module)}")
             
             # Check what's actually in the module
             for item_name in dir(specific_module):
                 item = getattr(specific_module, item_name)
                 if not item_name.startswith('_'):  # Skip private attributes
-                    logging.info(f"Item '{item_name}' is of type: {type(item)}")
+                    logging.debug(f"Item '{item_name}' is of type: {type(item)}")
                     if isinstance(item, type):
-                        logging.info(f"Found class: {item_name}")
+                        logging.debug(f"Found class: {item_name}")
                         if item_name == class_name:
-                            logging.info(f"Found matching class {class_name}")
+                            logging.debug(f"Found matching class {class_name}")
                             return item
             
             raise ImportError(
