@@ -7,13 +7,14 @@ from typing import List, Dict, Any, Optional
 from dataclasses import asdict
 from pathlib import Path
 
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain_community.cache import SQLiteCache
 from langchain_core.globals import set_llm_cache
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.pydantic_v1 import BaseModel, Field
 
 from plexus.apos.config import APOSConfig, ModelConfig
 from plexus.apos.models import (
@@ -42,6 +43,13 @@ class StreamingCallbackHandler(BaseCallbackHandler):
         print()
 
 
+class PromptImprovement(BaseModel):
+    """Schema for prompt improvement response."""
+    system_message: str = Field(description="The improved system message with meaningful changes to fix issues")
+    user_message: str = Field(description="The improved user message (must contain {{text}} placeholder)")
+    rationale: str = Field(description="Explanation of the specific changes made and why they will help")
+
+
 class PromptOptimizer:
     """
     Optimizes prompts using LLMs based on identified patterns and recommendations.
@@ -68,34 +76,29 @@ class PromptOptimizer:
         cache_dir.mkdir(parents=True, exist_ok=True)
         set_llm_cache(SQLiteCache(database_path=str(cache_dir / "langchain.db")))
         
-        # Initialize the LLM
+        # Initialize the LLM with structured output
         self.llm = ChatOpenAI(
             model_name=model_config.model_type,
             max_tokens=model_config.max_tokens,
-            model_kwargs={
-                'top_p': model_config.top_p,
-            }
-        )
+            top_p=model_config.top_p
+        ).with_structured_output(PromptImprovement)
         
         # Setup prompt templates
         self.system_template = SystemMessagePromptTemplate.from_template(
             """You are an expert at optimizing prompts for classification tasks.
-            Your goal is to improve accuracy by making targeted improvements to the existing prompts.
+            Your goal is to improve accuracy by making meaningful improvements to the existing prompts.
             
             You will be shown:
             1. The current prompts being used
             2. Examples where the model gave wrong answers
             
             IMPORTANT:
-            - DO NOT rewrite the prompts from scratch
+            - Make MEANINGFUL changes that address the misclassified examples
+            - DO NOT return the same prompts with minor formatting changes
             - Keep the existing structure and rules
-            - Make minimal, targeted changes to fix the issues shown in the examples
+            - Make targeted changes to fix the issues shown in the examples
             - Preserve all the detailed criteria and steps
-            
-            Return ONLY a raw JSON object with these fields:
-            {{"system_message": "the improved system message (with same structure but targeted fixes)", 
-              "user_message": "the improved user message (must contain {{text}} placeholder)",
-              "rationale": "explanation of the specific changes made and why"}}"""
+            - If you can't identify meaningful improvements, say so in the rationale"""
         )
         
         self.human_template = HumanMessagePromptTemplate.from_template(
@@ -111,15 +114,14 @@ class PromptOptimizer:
             Your task:
             1. Start with the current prompts and make targeted improvements
             2. Ensure the {{text}} variable is ONLY in the user_message
-            3. Focus on fixing the misclassified cases while maintaining existing functionality
-            4. Return ONLY a raw JSON object (no markdown, no code blocks)"""
+            3. Focus on fixing the misclassified cases while maintaining existing functionality"""
         )
         
         self.chat_prompt = ChatPromptTemplate.from_messages([
             self.system_template,
             self.human_template
         ])
-            
+
     def optimize_prompt(self, score_name: str, mismatches: List[MismatchAnalysis], evaluation_instance) -> Dict[str, PromptChange]:
         """Generate optimized prompts based on the mismatches."""
         try:
@@ -141,86 +143,60 @@ class PromptOptimizer:
                 'recommendation': "Improve the prompts to correctly handle the misclassified cases while maintaining accuracy on other cases."
             }
             
-            # Log what we're sending to the LLM
-            logger.info("Sending to LLM:")
-            logger.info(f"System message template: {self.system_template.prompt.template}")
-            logger.info(f"Human message template: {self.human_template.prompt.template}")
-            logger.info("Context:")
-            logger.info(f"- Current system message length: {len(context['current_system_message'])}")
-            logger.info(f"- Current user message length: {len(context['current_user_message'])}")
-            logger.info(f"- Number of mismatches: {len(mismatches)}")
-            
             # Generate improvements using the chat prompt and LLM
             messages = self.chat_prompt.format_messages(**context)
-            response = self.llm.invoke(messages).content
-            logger.debug(f"LLM response: {response}")
+            prompt_data = self.llm.invoke(messages)
             
-            # Parse the response
-            try:
-                content = response.strip()
-                # Remove markdown code blocks if present
-                if content.startswith('```'):
-                    content = content.split('```')[1]
-                    if content.startswith('json'):
-                        content = content[4:]
-                content = content.strip()
-                
-                if not content.startswith('{'): 
-                    logger.error(f"Invalid JSON response: {content}")
-                    raise ValueError("LLM response is not valid JSON")
-                    
-                prompt_data = json.loads(content)
-                
-                # Validate required fields in response
-                required_fields = ['system_message', 'user_message', 'rationale']
-                missing_fields = [f for f in required_fields if f not in prompt_data]
-                if missing_fields:
-                    logger.error(f"Missing required fields in LLM response: {missing_fields}")
-                    raise ValueError(f"LLM response missing required fields: {missing_fields}")
-                
-                # Validate {text} variable is only in user_message
-                if '{text}' in prompt_data['system_message']:
-                    logger.error("system_message should not contain {text} variable")
-                    raise ValueError("system_message should not contain {text} variable")
-                if '{text}' not in prompt_data['user_message']:
-                    logger.error("user_message must contain {text} variable")
-                    raise ValueError("user_message must contain {text} variable")
-                
-                # Create PromptChange objects for each component
-                changes = {}
-                metadata = {
-                    'score_name': score_name,
-                    'num_mismatches': len(mismatches),
-                    'mismatch_ids': [m.transcript_id for m in mismatches]
-                }
-                
-                # Create changes for both components
+            # Validate {text} variable is only in user_message
+            if '{text}' in prompt_data.system_message:
+                logger.error("system_message should not contain {text} variable")
+                raise ValueError("system_message should not contain {text} variable")
+            if '{text}' not in prompt_data.user_message:
+                logger.error("user_message must contain {text} variable")
+                raise ValueError("user_message must contain {text} variable")
+            
+            # Create PromptChange objects for each component
+            changes = {}
+            metadata = {
+                'score_name': score_name,
+                'num_mismatches': len(mismatches),
+                'mismatch_ids': [m.transcript_id for m in mismatches]
+            }
+            
+            # Only create changes if the prompts are actually different
+            if prompt_data.system_message.strip() != current_prompts.get('system_message', '').strip():
                 changes['system_message'] = PromptChange(
                     component='system_message',
                     old_text=current_prompts.get('system_message', ''),
-                    new_text=prompt_data['system_message'],
-                    rationale=prompt_data['rationale'],
+                    new_text=prompt_data.system_message,
+                    rationale=prompt_data.rationale,
                     metadata=metadata.copy()
                 )
-                
+                logger.info("Generated new system message that differs from current")
+            else:
+                logger.info("System message unchanged - skipping")
+            
+            if prompt_data.user_message.strip() != current_prompts.get('user_message', '').strip():
                 changes['user_message'] = PromptChange(
                     component='user_message',
                     old_text=current_prompts.get('user_message', ''),
-                    new_text=prompt_data['user_message'],
-                    rationale=prompt_data['rationale'],
+                    new_text=prompt_data.user_message,
+                    rationale=prompt_data.rationale,
                     metadata=metadata.copy()
                 )
-                
-                return changes
-                
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse JSON response: {e}\nResponse: {content}")
-                raise
+                logger.info("Generated new user message that differs from current")
+            else:
+                logger.info("User message unchanged - skipping")
+            
+            if not changes:
+                logger.warning("LLM did not generate any meaningful changes to the prompts")
+            
+            return changes
             
         except Exception as e:
             logger.error(f"Error generating prompt improvements: {e}")
             raise
-            
+
     def _format_mismatches(self, mismatches: List[MismatchAnalysis]) -> str:
         """Format mismatches to show concrete examples."""
         formatted = []
@@ -230,7 +206,7 @@ Predicted:    {mismatch.model_answer}
 Ground Truth: {mismatch.ground_truth}
 
 Explanation:
-{mismatch.analysis}
+{mismatch.original_explanation}
 
 Transcript:
 {mismatch.transcript_text}
@@ -257,7 +233,7 @@ Transcript:
                             "transcript_id": m.transcript_id,
                             "ground_truth": m.ground_truth,
                             "model_answer": m.model_answer,
-                            "analysis": m.analysis
+                            "analysis": m.original_explanation
                         }
                         for m in p.example_mismatches[:2]  # Include up to 2 examples
                     ]
@@ -294,7 +270,7 @@ Transcript:
                 Transcript: {example.metadata.get('transcript_text', 'Not available')}
                 Expected Answer: {example.ground_truth}
                 Model's Answer: {example.model_answer}
-                Analysis: {example.analysis}
+                Analysis: {example.original_explanation}
                 """)
         return "\n".join(formatted)
 

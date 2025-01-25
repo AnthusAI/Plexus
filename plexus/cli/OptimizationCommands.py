@@ -5,6 +5,7 @@ import click
 import os
 import pandas as pd
 from plexus.apos.optimize_evaluation import optimize_evaluation
+from plexus.apos.config import load_config
 from plexus.Scorecard import Scorecard
 from plexus.Registries import scorecard_registry
 import asyncio
@@ -53,7 +54,7 @@ def evaluation(scorecard_name: str, score_name: str = None, config: str = None, 
     asyncio.run(optimize_evaluation(
         scorecard_name=scorecard_name,
         score_name=score_name,
-        config_path=config,
+        config=load_config(config) if config else None,
         number_of_samples=number_of_samples
     ))
 
