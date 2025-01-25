@@ -71,6 +71,7 @@ class YesOrNoClassifier(BaseNode):
         executor = ThreadPoolExecutor(max_workers=1)
 
         def classifier_node(state):
+            logging.info("<*> Entering YesOrNoClassifier")
             initial_prompt = prompt_templates[0]
             retry_count = 0 if state.retry_count is None else state.retry_count
 
@@ -129,6 +130,6 @@ class YesOrNoClassifier(BaseNode):
 
         return classifier_node
 
-    def add_core_nodes(self, workflow: StateGraph) -> StateGraph:
-        workflow.add_node("classify", self.get_classifier_node())
+    def add_core_nodes(self, workflow: StateGraph, node_name: str) -> StateGraph:
+        workflow.add_node(node_name, self.get_classifier_node())
         return workflow
