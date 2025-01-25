@@ -56,21 +56,22 @@ export const Overview = () => {
       </div>
 
       <div className="container mx-auto px-4 mt-20">
-        <div className="grid md:grid-cols-2 gap-12 items-center">
-          <div className="w-full max-w-xl">
-            <WorkflowIllustration />
-          </div>
-          <div>
-            <h3 className="text-3xl font-bold mb-6 text-foreground">
-              Intelligent Workflow Orchestration
-            </h3>
-            <p className="text-xl text-muted-foreground">
-              Our platform seamlessly coordinates complex workflows, 
-              intelligently routing tasks and data through your organization. 
-              From initial data ingestion to final actions, every step is 
-              optimized for efficiency and accuracy, ensuring your processes 
-              run smoothly at any scale.
-            </p>
+        <div className="flex justify-center">
+          <div className="flex flex-col md:flex-row items-center max-w-5xl w-full">
+            <div className="flex justify-end w-full">
+              <div className="w-full max-w-[400px]">
+                <WorkflowIllustration />
+              </div>
+            </div>
+            <div className="md:pl-8 md:max-w-[500px] w-full">
+              <h3 className="text-3xl font-bold mb-6 text-foreground">
+                Intelligent Workflow Orchestration
+              </h3>
+              <p className="text-xl text-muted-foreground">
+                Plexus runs a scorecard on each item in your data, with multiple scores per scorecard.
+                Each score can use AI, ML, logical rules, or any combination.  Classify, predict, extract, and act on your data.
+              </p>
+            </div>
           </div>
         </div>
       </div>
