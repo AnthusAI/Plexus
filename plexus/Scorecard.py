@@ -21,7 +21,7 @@ from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
 import plexus.scores
 from plexus.scores.Score import Score
-from plexus.logging.Cloudwatch import CloudWatchLogger
+from plexus.plexus_logging.Cloudwatch import CloudWatchLogger
 from plexus.scores.LangGraphScore import BatchProcessingPause, LangGraphScore
 
 class Scorecard:

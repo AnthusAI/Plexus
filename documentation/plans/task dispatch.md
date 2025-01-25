@@ -78,46 +78,63 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Worker configuration ✓
    - Unit test coverage ✓
 
-### Phase 3: Standardized Progress Tracking
+### Phase 3: Standardized Progress Tracking ✓
 
-1. **Create TaskProgressTracker Class**
+1. **Create TaskProgressTracker Class** ✓
    - Core functionality:
-     - Track current stage, processed items, total items
-     - Calculate elapsed time and estimated completion
-     - Generate status messages based on progress
-     - Handle stage transitions and updates
-     - Support both local and remote progress updates
+     - Track current stage, processed items, total items ✓
+     - Calculate elapsed time and estimated completion ✓
+     - Generate status messages based on progress ✓
+     - Handle stage transitions and updates ✓
+     - Support both local and remote progress updates ✓
    - Key features:
-     - Thread-safe singleton pattern for global state
-     - Context manager interface for automatic cleanup
-     - Support for both sync and async operations
-     - Atomic counter updates
-     - Rich status message generation
-     - Error state handling
+     - Thread-safe singleton pattern for global state ✓
+     - Context manager interface for automatic cleanup ✓
+     - Support for both sync and async operations ✓
+     - Atomic counter updates ✓
+     - Rich status message generation ✓
+     - Error state handling ✓
+     - Estimated completion time in UTC ✓
+     - Items per second calculation ✓
+     - Stage management with configurable stages ✓
 
-2. **Refactor Demo Command**
-   - Move progress tracking logic from `demo` command to `TaskProgressTracker`
+2. **Refactor Demo Command** ✓
+   - Move progress tracking logic from `demo` command to `TaskProgressTracker` ✓
    - Use the new tracker for:
-     - Stage management
-     - Progress calculations
-     - Status message generation
-     - Time tracking
+     - Stage management ✓
+     - Progress calculations ✓
+     - Status message generation ✓
+     - Time tracking ✓
    - Validate the implementation works with:
-     - Direct execution
-     - Celery dispatch
-     - Task API integration
+     - Direct execution ✓
+     - Celery dispatch ✓
+     - Task API integration ✓
 
-3. **Refactor ReportTask**
-   - Update `ReportTask` to use `TaskProgressTracker`
-   - Ensure compatibility with existing UI components
-   - Maintain current progress visualization features
-   - Add support for rich status messages
+3. **Refactor ReportTask** ✓
+   - Update `ReportTask` to use `TaskProgressTracker` ✓
+   - Ensure compatibility with existing UI components ✓
+   - Maintain current progress visualization features ✓
+   - Add support for rich status messages ✓
 
-4. **Testing & Validation**
-   - Write unit tests for `TaskProgressTracker`
-   - Add integration tests for demo and report tasks
-   - Verify UI updates work correctly
-   - Test error handling and recovery
+4. **Testing & Validation** ✓
+   - Write unit tests for `TaskProgressTracker` ✓
+     - Basic progress tracking ✓
+     - Update progress ✓
+     - Elapsed time ✓
+     - Estimated time remaining ✓
+     - Stage management ✓
+     - Context manager ✓
+     - Error handling ✓
+     - Status message generation ✓
+     - Estimated completion time ✓
+     - Items per second ✓
+   - Add integration tests for demo and report tasks ✓
+   - Verify UI updates work correctly ✓
+   - Test error handling and recovery ✓
+
+5. **Command Integration**
+   - Add Task support to evaluation command
+   - Implement consistent error handling
 
 ### Phase 4: Backend Integration
 
@@ -126,13 +143,6 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Set up secure communication channels
    - Implement error handling
    - Add monitoring and logging
-
-2. **Command Integration**
-   - Add Task support to evaluation command
-   - Add Task support to training command
-   - Add Task support to dataset commands
-   - Implement consistent error handling
-   - Add progress tracking to all commands
 
 3. **System Testing**
    - Test end-to-end flow from UI to worker
