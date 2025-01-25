@@ -21,8 +21,8 @@ export function WorkflowNode({ status, isMain = false, className }: WorkflowNode
           isMain
             ? "w-[calc(var(--base-size)*0.2)] h-[calc(var(--base-size)*0.2)]"
             : "w-[calc(var(--base-size)*0.16)] h-[calc(var(--base-size)*0.16)]",
-          status === "not-started" && "border-2 border-border bg-muted-foreground",
-          status === "processing" && "bg-card-foreground border-2 border-border",
+          status === "not-started" && "border-2 border-foreground bg-card",
+          status === "processing" && "bg-card border-2 border-foreground",
           status === "complete" && "bg-true text-background",
         )}
       >

@@ -149,7 +149,7 @@ export default function Workflow() {
                 C ${baseSize * 0.25} ${baseHeight * 0.4}, ${baseSize * 0.35} ${baseHeight * 0.45}, ${baseSize * 0.5} ${
               baseHeight * 0.45
             }`}
-            className="stroke-muted-foreground"
+            className="stroke-border"
             strokeWidth={strokeWidth}
             fill="none"
             strokeLinecap="round"
@@ -161,7 +161,7 @@ export default function Workflow() {
                 C ${baseSize * 0.25} ${baseHeight * 0.85}, ${baseSize * 0.35} ${baseHeight * 0.9}, ${baseSize * 0.5} ${
               baseHeight * 0.9
             }`}
-            className="stroke-muted-foreground"
+            className="stroke-border"
             strokeWidth={strokeWidth}
             fill="none"
             strokeLinecap="round"
@@ -169,7 +169,7 @@ export default function Workflow() {
           {/* Row 1A to Row 1B */}
           <path
             d={`M${baseSize * 0.55} ${baseHeight * 0.45} L ${baseSize * 0.85} ${baseHeight * 0.45}`}
-            className="stroke-muted-foreground"
+            className="stroke-border"
             strokeWidth={strokeWidth}
             fill="none"
             strokeLinecap="round"
@@ -177,7 +177,7 @@ export default function Workflow() {
           {/* Row 2A to Row 2B */}
           <path
             d={`M${baseSize * 0.55} ${baseHeight * 0.9} L ${baseSize * 0.85} ${baseHeight * 0.9}`}
-            className="stroke-muted-foreground"
+            className="stroke-border"
             strokeWidth={strokeWidth}
             fill="none"
             strokeLinecap="round"
