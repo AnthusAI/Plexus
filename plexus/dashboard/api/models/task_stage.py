@@ -181,4 +181,28 @@ class TaskStage(BaseModel):
         if not result or 'getTaskStage' not in result:
             raise Exception(f"Failed to get TaskStage {id}")
 
-        return cls.from_dict(result['getTaskStage'], client) 
+        return cls.from_dict(result['getTaskStage'], client)
+
+    def start_processing(self) -> None:
+        """Mark the stage as started and update its status."""
+        update_fields = {
+            "status": "RUNNING",
+            "statusMessage": "Processing...",
+            "startedAt": datetime.now(timezone.utc)
+        }
+        self.update(**update_fields)
+
+    def complete_processing(self) -> None:
+        """Mark the stage as completed."""
+        self.update(
+            status="COMPLETED",
+            statusMessage="Complete",
+            completedAt=datetime.now(timezone.utc)
+        )
+
+    def fail_processing(self, error_message: str) -> None:
+        """Mark the stage as failed with error information."""
+        self.update(
+            status="FAILED",
+            statusMessage=error_message
+        ) 

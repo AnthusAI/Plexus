@@ -21,6 +21,7 @@ from requests.exceptions import Timeout, RequestException
 import mlflow
 from concurrent.futures import ThreadPoolExecutor
 from asyncio import Queue
+import importlib
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -117,7 +118,8 @@ class Evaluation:
         experiment_label = None,
         max_mismatches_to_report=5,
         account_key: str = 'call-criteria',
-        score_id: str = None
+        score_id: str = None,
+        visualize: bool = False
     ):
         self.scorecard_name = scorecard_name
         self.scorecard = scorecard
@@ -129,6 +131,7 @@ class Evaluation:
         self.random_seed = random_seed
         self.score_id = score_id
         self.account_key = account_key  # Store the account key
+        self.visualize = visualize
         
         # Parse lists, if available.
         self.session_ids_to_sample = session_ids_to_sample
@@ -1386,6 +1389,25 @@ Total cost:       ${expenses['total_cost']:.6f}
 
         # If score_name is provided, only process that score
         score_names_to_process = [score_name] if score_name else self.score_names_to_process()
+        
+        # Check if we need to generate visualization for any LangGraphScores
+        if hasattr(self, 'visualize') and self.visualize:
+            for score_to_process in score_names_to_process:
+                # Find score config in the scores list
+                score_config = next(
+                    (score for score in self.scorecard.properties['scores'] 
+                     if score.get('name') == score_to_process),
+                    {}
+                )
+                if score_config.get('class') == 'LangGraphScore':
+                    score_instance = Score.from_name(self.scorecard_name, score_to_process)
+                    if isinstance(score_instance, LangGraphScore):
+                        await score_instance.async_setup()  # Ensure the graph is built
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        output_path = os.path.join('tmp', f'graph_{score_to_process}_{timestamp}.png')
+                        score_instance.generate_graph_visualization(output_path)
+                        logging.info(f"Generated graph visualization at {output_path}")
+        
         scorecard_results = await self.scorecard.score_entire_text(
             text=text,
             metadata=metadata,
@@ -1484,13 +1506,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                     )
                 )
 
-        # Update progress tracking
-        CommandProgress.update(
-            current=self.processed_items,
-            total=self.number_of_texts_to_sample,
-            status=f"Evaluating accuracy ({self.processed_items}/{self.number_of_texts_to_sample})"
-        )
-        # Add result to all_results and increment processed_items only if we processed any scores
+        # Remove the result accumulation from here since it's now handled in _async_run
         if has_processed_scores:
             self.processed_items += 1
 
@@ -1676,6 +1692,25 @@ Total cost:       ${expenses['total_cost']:.6f}
 
         # If score_name is provided, only process that score
         score_names_to_process = [score_name] if score_name else self.score_names_to_process()
+        
+        # Check if we need to generate visualization for any LangGraphScores
+        if hasattr(self, 'visualize') and self.visualize:
+            for score_to_process in score_names_to_process:
+                # Find score config in the scores list
+                score_config = next(
+                    (score for score in self.scorecard.properties['scores'] 
+                     if score.get('name') == score_to_process),
+                    {}
+                )
+                if score_config.get('class') == 'LangGraphScore':
+                    score_instance = Score.from_name(self.scorecard_name, score_to_process)
+                    if isinstance(score_instance, LangGraphScore):
+                        await score_instance.async_setup()  # Ensure the graph is built
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        output_path = os.path.join('tmp', f'graph_{score_to_process}_{timestamp}.png')
+                        score_instance.generate_graph_visualization(output_path)
+                        logging.info(f"Generated graph visualization at {output_path}")
+        
         scorecard_results = await self.scorecard.score_entire_text(
             text=text,
             metadata=metadata,
@@ -1790,7 +1825,7 @@ class ConsistencyEvaluation(Evaluation):
         mlflow.log_param("number_of_times_to_sample_each_text", self.number_of_times_to_sample_each_text)
 
 class AccuracyEvaluation(Evaluation):
-    def __init__(self, *, override_folder=None, labeled_samples=None, labeled_samples_filename=None, score_id=None, **kwargs):
+    def __init__(self, *, override_folder=None, labeled_samples=None, labeled_samples_filename=None, score_id=None, visualize=False, **kwargs):
         super().__init__(**kwargs)
         self.scorecard_name = kwargs.get('scorecard_name')
         self.override_folder = override_folder
@@ -1798,6 +1833,7 @@ class AccuracyEvaluation(Evaluation):
         self.labeled_samples = labeled_samples
         self.labeled_samples_filename = labeled_samples_filename
         self.score_id = score_id
+        self.visualize = visualize
         self.results_queue = Queue()
         self.metrics_tasks = {}  # Dictionary to track metrics computation tasks per score
         self.should_stop = False
