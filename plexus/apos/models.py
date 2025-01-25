@@ -29,18 +29,25 @@ class PromptChange:
 
 @dataclass
 class MismatchAnalysis:
-    """Analysis of a single mismatch between model output and ground truth."""
+    """Analysis of a single mismatch case."""
     transcript_id: str
     question_name: str
     ground_truth: str
     model_answer: str
     transcript_text: str
-    analysis: str
+    original_explanation: str  # Original model explanation
+    detailed_analysis: Optional[str] = None  # Our detailed mismatch analysis
     error_category: Optional[str] = None
     root_cause: Optional[str] = None
-    suggested_improvements: List[str] = field(default_factory=list)
-    confidence: float = 0.0
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class SynthesisResult:
+    """Results from pattern synthesis across multiple mismatches."""
+    error_patterns: List[Dict[str, Any]]
+    improvement_suggestions: List[Dict[str, Any]]
+    overall_assessment: str
 
 
 @dataclass
@@ -53,6 +60,8 @@ class IterationResult:
     timestamp: datetime = field(default_factory=datetime.utcnow)
     metrics: Dict[str, float] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    mismatch_analyses: Optional[List[MismatchAnalysis]] = None
+    pattern_synthesis: Optional[SynthesisResult] = None
 
     def get_improvement(self, previous: Optional['IterationResult']) -> float:
         """Calculate improvement from previous iteration."""
@@ -135,15 +144,6 @@ class PatternInfo:
 class Recommendation:
     """A recommendation for improving a prompt based on pattern analysis."""
     description: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class SynthesisResult:
-    """Result of pattern synthesis process."""
-    patterns: List[PatternInfo]
-    recommendations: List[Recommendation]
-    metrics: Dict[str, float] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 

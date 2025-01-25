@@ -4,13 +4,15 @@ Extended evaluation functionality for APOS.
 import os
 import json
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timezone
 from pathlib import Path
 import pandas as pd
 import mlflow
 import random
 import asyncio
+from dataclasses import asdict
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from plexus.Evaluation import AccuracyEvaluation
 from plexus.apos.models import (
@@ -24,6 +26,11 @@ from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvalua
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.account import Account
 from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
+from langchain_openai import ChatOpenAI
+from plexus.cli.AnalyzeCommands import PromptAnalyzer
+from plexus.apos.analyzer import MismatchAnalyzer
+from plexus.apos.pattern_analyzer import PatternAnalyzer
+from plexus.apos.synthesis import PatternSynthesizer, SynthesisResult
 
 
 logger = logging.getLogger('plexus.apos.evaluation')
@@ -45,14 +52,22 @@ class APOSEvaluation(AccuracyEvaluation):
         self.config = kwargs.pop('config', None) or load_config()
         self.config.setup_logging()
         
+        # Store original sample size request and override config if specified
+        self.requested_sample_size = kwargs.get('number_of_texts_to_sample', 100)
+        if self.requested_sample_size:
+            # Command line argument takes precedence over config
+            self.config.analysis.samples_per_iteration = self.requested_sample_size
+        
         # Store all samples and create fixed evaluation set
         self.all_labeled_samples = labeled_samples
         if labeled_samples and self.config.analysis.samples_per_iteration:
             random.seed(42)  # Use fixed seed for reproducibility
-            self.evaluation_samples = random.sample(labeled_samples, self.config.analysis.samples_per_iteration)
+            sample_size = min(len(labeled_samples), self.config.analysis.samples_per_iteration)
+            self.evaluation_samples = random.sample(labeled_samples, sample_size)
             random.seed()  # Reset seed
+            # Override number_of_texts_to_sample with samples_per_iteration
+            kwargs['number_of_texts_to_sample'] = sample_size
             kwargs['labeled_samples'] = self.evaluation_samples
-            kwargs['number_of_texts_to_sample'] = len(self.evaluation_samples)  # Override to use all evaluation samples
         else:
             self.evaluation_samples = labeled_samples
             kwargs['labeled_samples'] = labeled_samples
@@ -168,11 +183,29 @@ class APOSEvaluation(AccuracyEvaluation):
         # Ensure persistence directory exists
         os.makedirs(self.config.persistence_path, exist_ok=True)
         
+        # Initialize LLM and PromptAnalyzer
+        llm = ChatOpenAI(
+            model="gpt-4o-mini-2024-07-18",
+            api_key=os.getenv("OPENAI_API_KEY"),
+            max_tokens=500,
+            temperature=0.3,
+        )
+        self.prompt_analyzer = PromptAnalyzer(llm)
+        
+        self.mismatch_analyzer = MismatchAnalyzer()
+        self.pattern_analyzer = PatternAnalyzer()
+        self.history_dir = "optimization_history"
+        self.current_iteration = 0
+        self.iteration_dir = None
+        
         logger.info(f"Initialized APOS evaluation for scorecard '{self.scorecard_name}' with {self.config.analysis.samples_per_iteration} samples per iteration")
 
     def reset_state(self) -> None:
         """Reset evaluation state for a new iteration."""
-        # Reset base class state
+        # Store current prompts before reset
+        current_prompts = self.get_current_prompts()
+        
+        # Reset base class state variables
         self.total_correct = 0
         self.total_questions = 0
         self.all_results = []
@@ -180,122 +213,229 @@ class APOSEvaluation(AccuracyEvaluation):
         self.results_by_score = {}
         self.processed_items_by_score = {}
         self.processed_items = 0
-        self.completed_scores = set()
+        
+        # Reset our own state variables
+        self.results_queue = asyncio.Queue()
         self.metrics_tasks = {}
-        self.current_prompt_changes = []  # Reset prompt changes
+        self.should_stop = False
+        self.completed_scores = set()
+        
+        # Reset sample size to configured value
+        if self.config.analysis.samples_per_iteration:
+            self.number_of_texts_to_sample = self.config.analysis.samples_per_iteration
+        else:
+            self.number_of_texts_to_sample = self.requested_sample_size
         
         # Use the same evaluation samples for each iteration
         self.labeled_samples = self.evaluation_samples
         
-        logger.info("Reset evaluation state for new iteration")
+        # Restore prompts after reset - this ensures optimized prompts are preserved
+        self.set_prompts(current_prompts)
+        
+        logger.info(f"Reset evaluation state for new iteration with {self.number_of_texts_to_sample} samples")
 
-    async def run(self) -> IterationResult:
-        """Run a single evaluation iteration."""
+    async def _analyze_and_synthesize(self) -> Tuple[List[MismatchAnalysis], SynthesisResult]:
+        """
+        Analyze mismatches individually and synthesize patterns.
+        
+        Returns:
+            Tuple of (analyzed mismatches, synthesis results)
+        """
+        # First analyze each mismatch individually
+        analyzed_mismatches = await self._analyze_mismatches()
+        
+        # Then analyze patterns across all mismatches
+        synthesis_result = await self.pattern_analyzer.analyze_patterns(analyzed_mismatches)
+        
+        # Save both individual analyses and synthesis results
+        self._persist_mismatch_analyses(analyzed_mismatches)
+        self._persist_synthesis_results(synthesis_result)
+        
+        return analyzed_mismatches, synthesis_result
+        
+    def _persist_mismatch_analyses(self, analyses: List[MismatchAnalysis]) -> None:
+        """Save mismatch analyses to disk."""
+        if not self.iteration_dir:
+            self.iteration_dir = os.path.join(self.history_dir, f"iteration_{self.current_iteration}")
+            os.makedirs(self.iteration_dir, exist_ok=True)
+            
+        output_path = os.path.join(self.iteration_dir, "mismatches.json")
+        with open(output_path, 'w') as f:
+            json.dump([asdict(m) for m in analyses], f, indent=4)
+        logger.info(f"Saved {len(analyses)} mismatch analyses to {output_path}")
+        
+    def _persist_synthesis_results(self, synthesis: SynthesisResult) -> None:
+        """Save pattern synthesis results to disk."""
+        if not self.iteration_dir:
+            self.iteration_dir = os.path.join(self.history_dir, f"iteration_{self.current_iteration}")
+            os.makedirs(self.iteration_dir, exist_ok=True)
+            
+        output_path = os.path.join(self.iteration_dir, "patterns.json")
+        with open(output_path, 'w') as f:
+            json.dump(asdict(synthesis), f, indent=4)
+        logger.info(f"Saved pattern synthesis results to {output_path}")
+
+    def _load_best_prompts(self) -> Optional[Dict[str, Dict[str, Any]]]:
+        """Load the best performing prompts from previous iterations."""
         try:
-            # Start iteration
-            self.state.status = "in_progress"
-            iteration = self.state.current_iteration + 1
+            best_accuracy = 0.0
+            best_prompts = None
             
-            # Reset state for new iteration
-            self.reset_state()
-            
-            # Set unique run ID for MLFlow artifacts
-            self.run_id = f"iteration_{iteration}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            mlflow.start_run(run_name=self.run_id, nested=True)
-            
-            logger.info(f"Starting iteration {iteration} with run ID: {self.run_id}")
-            
-            try:
-                # Only create a new dashboard experiment for iterations after the first one
-                if self.state.current_iteration > 0:
-                    started_at = datetime.now(timezone.utc)
-                    experiment_params = {
-                        "type": "accuracy",
-                        "accountId": self.account_id,
-                        "scorecardId": self.scorecard_id,
-                        "status": "RUNNING",
-                        "accuracy": 0.0,
-                        "totalItems": self.number_of_texts_to_sample,
-                        "processedItems": 0,
-                        "parameters": json.dumps({
-                            "sampling_method": self.sampling_method,
-                            "sample_size": self.number_of_texts_to_sample,
-                            "iteration": iteration,
-                            "score_name": self.subset_of_score_names[0] if self.subset_of_score_names else None
-                        }),
-                        "estimatedRemainingSeconds": self.number_of_texts_to_sample
-                    }
+            # Check each iteration directory for prompts and accuracy
+            for iteration_dir in sorted(Path(self.history_dir).glob("iteration_*")):
+                result_path = iteration_dir / "result.json"
+                prompts_path = iteration_dir / "current_prompts.json"
+                
+                if result_path.exists() and prompts_path.exists():
+                    # Load accuracy from result
+                    with open(result_path) as f:
+                        result = json.load(f)
+                        accuracy = result.get('accuracy', 0.0)
                     
-                    # Add score ID if available
-                    if self.score_id:
-                        experiment_params["scoreId"] = self.score_id
-
-                    response = DashboardEvaluation.create(
-                        client=self.dashboard_client,
-                        **experiment_params
-                    )
-                    self.experiment_id = response.id
-                    self.started_at = started_at
-                
-                # Run base evaluation
-                await super().run()
-                
-                # Create mismatch analyses
-                mismatches = self._analyze_mismatches()
-                
-                # Create iteration result
-                result = IterationResult(
-                    iteration=iteration,
-                    accuracy=self.total_correct / self.total_questions if self.total_questions > 0 else 0.0,
-                    mismatches=mismatches,
-                    prompt_changes=self.current_prompt_changes.copy(),  # Include current changes
-                    metrics=self._get_metrics()
-                )
-                
-                # Update state
-                self.state.add_iteration_result(result)
-                
-                # Persist results
-                self._persist_results(result)
-                
-                # Update final metrics
-                if self.dashboard_client and self.experiment_id:
-                    metrics = self.calculate_metrics(self.all_results)
-                    await self.log_to_dashboard(
-                        metrics,
-                        status="COMPLETED"
-                    )
-                
-                logger.info(f"Completed iteration {iteration} with accuracy {result.accuracy:.2%}")
-                return result
-            finally:
-                mlflow.end_run()
+                    # If this iteration had better accuracy, load its prompts
+                    if accuracy > best_accuracy:
+                        with open(prompts_path) as f:
+                            prompts = json.load(f)
+                            best_accuracy = accuracy
+                            best_prompts = prompts
+                            logger.info(f"Found better prompts in {iteration_dir} with accuracy {accuracy:.1%}")
+            
+            return best_prompts
             
         except Exception as e:
-            logger.error(f"Error during iteration {self.state.current_iteration + 1}: {e}")
+            logger.error(f"Error loading best prompts: {e}")
+            return None
+
+    async def run(self) -> IterationResult:
+        """Run the evaluation process."""
+        try:
+            # Store current prompts before reset
+            current_prompts = self.get_current_prompts()
+            if current_prompts:
+                logger.info("\nCurrent prompts before reset:")
+                for score_name, prompts in current_prompts.items():
+                    logger.info(f"\nScore '{score_name}':")
+                    logger.info(f"System Message: {prompts['system_message'][:100]}...")
+                    logger.info(f"User Message: {prompts['user_message'][:100]}...")
+            
+            # Reset state at the start of each run
+            self.reset_state()
+            
+            # Restore current prompts - these take precedence over saved prompts
+            if current_prompts:
+                logger.info("\nRestoring current prompts after reset")
+                self.set_prompts(current_prompts)
+            # Only load saved prompts if we don't have current ones
+            elif self.current_iteration > 0:
+                best_prompts = self._load_best_prompts()
+                if best_prompts:
+                    logger.info("\nApplying best prompts from previous iterations")
+                    self.set_prompts(best_prompts)
+            
+            # Create iteration directory
+            self.current_iteration += 1
+            self.iteration_dir = os.path.join(self.history_dir, f"iteration_{self.current_iteration}")
+            os.makedirs(self.iteration_dir, exist_ok=True)
+            
+            # Set report folder path in base class
+            report_folder_path = os.path.join(self.iteration_dir, f"iteration_{self.current_iteration}")
+            os.makedirs(report_folder_path, exist_ok=True)
+            
+            # Create new evaluation in dashboard for this iteration
+            if self.dashboard_client:
+                started_at = datetime.now(timezone.utc)
+                experiment_params = {
+                    "type": "accuracy",
+                    "accountId": self.account_id,
+                    "scorecardId": self.scorecard_id,
+                    "scoreId": self.score_id,
+                    "status": "RUNNING",
+                    "accuracy": 0.0,
+                    "createdAt": started_at.isoformat().replace('+00:00', 'Z'),
+                    "updatedAt": started_at.isoformat().replace('+00:00', 'Z'),
+                    "totalItems": self.requested_sample_size,
+                    "processedItems": 0,
+                    "parameters": json.dumps({
+                        "sampling_method": self.sampling_method,
+                        "sample_size": self.requested_sample_size,
+                        "iteration": self.current_iteration
+                    }),
+                    "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
+                    "estimatedRemainingSeconds": self.requested_sample_size
+                }
+                
+                response = DashboardEvaluation.create(
+                    client=self.dashboard_client,
+                    **experiment_params
+                )
+                self.experiment_id = response.id
+                self.started_at = started_at
+                logger.info(f"Created new evaluation for iteration {self.current_iteration}: {self.experiment_id}")
+                
+                # Start new MLflow run for this iteration
+                mlflow.end_run()  # End previous run if any
+                mlflow.start_run(run_name=f"iteration_{self.current_iteration}")
+            
+            # Run base evaluation with the report folder path
+            self.report_folder_path = report_folder_path
+            await super()._async_run()
+            
+            # Create initial result object
+            result = IterationResult(
+                iteration=self.current_iteration,
+                accuracy=self.total_correct / self.total_questions if self.total_questions > 0 else 0.0,
+                mismatches=self.mismatches,
+                prompt_changes=self.current_prompt_changes,
+                metrics={},
+                metadata={}
+            )
+            
+            # Analyze mismatches and synthesize patterns
+            analyzed_mismatches, synthesis_result = await self._analyze_and_synthesize()
+            
+            # Update result with analyses
+            result.mismatch_analyses = analyzed_mismatches
+            result.pattern_synthesis = synthesis_result
+            
+            # Persist results including current prompts
+            self._persist_results(result)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error running APOS evaluation: {e}")
             raise
 
-    def _analyze_mismatches(self) -> List[MismatchAnalysis]:
-        """Analyze mismatches from the evaluation."""
-        analyses = []
+    async def _analyze_mismatches(self) -> List[MismatchAnalysis]:
+        """
+        Analyze mismatches individually to understand why they occurred.
         
+        Returns:
+            List of analyzed mismatches
+        """
+        logger.info(f"Analyzing {len(self.mismatches)} mismatches individually")
+        
+        # Convert raw mismatches to MismatchAnalysis objects
+        mismatch_analyses = []
         for mismatch in self.mismatches:
             analysis = MismatchAnalysis(
-                transcript_id=mismatch['form_id'],
-                question_name=mismatch['question'],
-                ground_truth=mismatch['ground_truth'],
-                model_answer=mismatch['predicted'],
-                transcript_text=mismatch['transcript'],
-                analysis=mismatch['explanation'] if mismatch['explanation'] else "",
-                error_category=None,  # Will be filled by analyzer
-                root_cause=None,  # Will be filled by analyzer
-                confidence=0.0  # Will be filled by analyzer
+                transcript_id=mismatch["form_id"],
+                question_name=mismatch["question"],
+                transcript_text=mismatch["transcript"],
+                model_answer=mismatch["predicted"],
+                ground_truth=mismatch["ground_truth"],
+                original_explanation=mismatch["explanation"] if mismatch["explanation"] else ""
             )
-            analyses.append(analysis)
+            mismatch_analyses.append(analysis)
             
-        logger.info(f"Created {len(analyses)} mismatch analyses")
-        return analyses
-
+        # Analyze each mismatch individually
+        analyzed_mismatches = await self.mismatch_analyzer.analyze_mismatches(mismatch_analyses)
+        
+        # Save the analyses
+        self._persist_mismatch_analyses(analyzed_mismatches)
+        
+        return analyzed_mismatches
+        
     def _get_metrics(self) -> Dict[str, float]:
         """Get evaluation metrics."""
         return {
@@ -320,19 +460,16 @@ class APOSEvaluation(AccuracyEvaluation):
                 'metadata': result.metadata
             }, f, indent=2)
         
-        # Save mismatches
+        # Save mismatches - handle dictionary format
         mismatches_path = iteration_dir / "mismatches.json"
         with open(mismatches_path, 'w') as f:
             json.dump([{
-                'transcript_id': m.transcript_id,
-                'question_name': m.question_name,
-                'ground_truth': m.ground_truth,
-                'model_answer': m.model_answer,
-                'analysis': m.analysis,
-                'error_category': m.error_category,
-                'root_cause': m.root_cause,
-                'confidence': m.confidence,
-                'metadata': m.metadata
+                'transcript_id': m.get('form_id'),
+                'question_name': m.get('question'),
+                'ground_truth': m.get('ground_truth'),
+                'model_answer': m.get('predicted'),
+                'explanation': m.get('explanation', ''),
+                'metadata': m.get('metadata', {})
             } for m in result.mismatches], f, indent=2)
         
         # Save prompt changes
@@ -365,15 +502,13 @@ class APOSEvaluation(AccuracyEvaluation):
                     node = score['graph'][0]
                     prompts[score['name']] = {
                         'system_message': node.get('system_message', ''),
-                        'user_message': node.get('user_message', ''),
-                        'few_shot_examples': node.get('examples', [])
+                        'user_message': node.get('user_message', '')
                     }
                 else:
                     # Fallback to direct score prompts if no graph
                     prompts[score['name']] = {
                         'system_message': score.get('system_message', ''),
-                        'user_message': score.get('user_message', ''),
-                        'few_shot_examples': score.get('few_shot_examples', [])
+                        'user_message': score.get('user_message', '')
                     }
         return prompts
 
@@ -390,16 +525,20 @@ class APOSEvaluation(AccuracyEvaluation):
                 node = score['graph'][0]
                 node['system_message'] = prompt_config.get('system_message', node.get('system_message', ''))
                 node['user_message'] = prompt_config.get('user_message', node.get('user_message', ''))
-                if 'examples' not in node:
-                    node['examples'] = []
-                node['examples'] = prompt_config.get('few_shot_examples', node['examples'])
+                
+                # Log the actual prompt content
+                logger.info(f"\nUpdated prompts for score '{score_name}':")
+                logger.info(f"System Message: {node['system_message'][:100]}...")
+                logger.info(f"User Message: {node['user_message'][:100]}...")
             elif score:
                 # Fallback to updating direct score prompts if no graph
                 score['system_message'] = prompt_config.get('system_message', score.get('system_message', ''))
                 score['user_message'] = prompt_config.get('user_message', score.get('user_message', ''))
-                score['few_shot_examples'] = prompt_config.get('few_shot_examples', score.get('few_shot_examples', []))
-        
-        logger.info(f"Updated prompts for {len(prompts)} scores")
+                
+                # Log the actual prompt content
+                logger.info(f"\nUpdated prompts for score '{score_name}':")
+                logger.info(f"System Message: {score['system_message'][:100]}...")
+                logger.info(f"User Message: {score['user_message'][:100]}...")
 
     def apply_prompt_changes(self, changes: List[PromptChange]) -> None:
         """Apply a list of prompt changes.
@@ -407,6 +546,7 @@ class APOSEvaluation(AccuracyEvaluation):
         Args:
             changes: List of PromptChange objects to apply
         """
+        logger.info(f"\nApplying {len(changes)} prompt changes:")
         current_prompts = self.get_current_prompts()
         
         # Store old prompts to set in PromptChange objects
@@ -423,12 +563,15 @@ class APOSEvaluation(AccuracyEvaluation):
             if component == 'system_message':
                 change.old_text = prompt_config.get('system_message', '')
                 prompt_config['system_message'] = change.new_text
+                logger.info(f"\nScore '{score_name}' - System Message Change:")
+                logger.info(f"Old: {change.old_text[:100]}...")
+                logger.info(f"New: {change.new_text[:100]}...")
             elif component == 'user_message':
                 change.old_text = prompt_config.get('user_message', '')
                 prompt_config['user_message'] = change.new_text
-            elif component == 'few_shot_examples':
-                change.old_text = str(prompt_config.get('few_shot_examples', []))
-                prompt_config['few_shot_examples'] = change.new_text
+                logger.info(f"\nScore '{score_name}' - User Message Change:")
+                logger.info(f"Old: {change.old_text[:100]}...")
+                logger.info(f"New: {change.new_text[:100]}...")
             else:
                 logger.warning(f"Unknown prompt component: {component}")
                 continue
@@ -437,7 +580,6 @@ class APOSEvaluation(AccuracyEvaluation):
         self.current_prompt_changes.extend(changes)
                 
         self.set_prompts(current_prompts)
-        logger.info(f"Applied {len(changes)} prompt changes")
 
     async def score_all_texts_for_score(self, selected_sample_rows, score_name):
         """Score all texts for a specific score concurrently"""
@@ -498,6 +640,10 @@ class APOSEvaluation(AccuracyEvaluation):
                     # If this is the final update (score is complete), mark it as completed
                     status = "COMPLETED" if score_name in self.completed_scores else "RUNNING"
                     
+                    # Override metrics to maintain correct total items
+                    metrics["totalItems"] = self.requested_sample_size
+                    metrics["processedItems"] = min(self.processed_items, self.requested_sample_size)
+                    
                     # Create a task for the API call and shield it from cancellation
                     api_task = asyncio.shield(self.log_to_dashboard(metrics, status=status))
                     try:
@@ -520,4 +666,107 @@ class APOSEvaluation(AccuracyEvaluation):
                 return  # Exit gracefully
             except Exception as e:
                 logger.error(f"Error in continuous metrics computation for {score_name}: {e}")
-                await asyncio.sleep(5)  # Wait longer on error 
+                await asyncio.sleep(5)  # Wait longer on error
+
+    async def _async_run(self):
+        """Run the base evaluation."""
+        try:
+            result = await super()._async_run()
+            return result
+        finally:
+            pass
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10)
+    )
+    async def log_to_dashboard(self, metrics, status="RUNNING"):
+        """Log metrics to the dashboard."""
+        if not self.dashboard_client or not self.experiment_id:
+            return
+
+        try:
+            current_time = datetime.now(timezone.utc)
+            elapsed_seconds = int((current_time - self.started_at).total_seconds())
+
+            # Convert metrics to list format
+            metrics_list = []
+            for key, value in metrics.items():
+                if key not in ['predicted_distribution', 'actual_distribution', 'totalItems', 'processedItems']:
+                    metrics_list.append({"name": key, "value": value})
+
+            # Prepare confusion matrix data
+            matrix_data = []
+            if metrics.get("confusion_matrix"):
+                for actual, predictions in metrics["confusion_matrix"].items():
+                    for predicted, count in predictions.items():
+                        matrix_data.append({
+                            "actual": actual,
+                            "predicted": predicted,
+                            "count": count
+                        })
+            
+            # Use requested sample size for total items
+            total_predictions = self.requested_sample_size
+            processed_items = min(self.processed_items, total_predictions)
+            
+            update_params = {
+                "id": self.experiment_id,
+                "type": "accuracy",
+                "metrics": json.dumps(metrics_list),
+                "processedItems": processed_items,
+                "totalItems": total_predictions,
+                "elapsedSeconds": elapsed_seconds,
+                "estimatedRemainingSeconds": int(elapsed_seconds * (total_predictions - processed_items) / processed_items) if processed_items > 0 else total_predictions,
+                "accuracy": metrics["accuracy"] * 100,
+                "updatedAt": current_time.isoformat().replace('+00:00', 'Z'),
+                "status": status,
+                "predictedClassDistribution": json.dumps(metrics["predicted_distribution"]),
+                "datasetClassDistribution": json.dumps(metrics["actual_distribution"]),
+                "confusionMatrix": json.dumps(matrix_data)
+            }
+
+            mutation = """
+            mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                updateEvaluation(input: $input) {
+                    id
+                    type
+                    accountId
+                    status
+                    createdAt
+                    updatedAt
+                    parameters
+                    metrics
+                    inferences
+                    accuracy
+                    cost
+                    startedAt
+                    elapsedSeconds
+                    estimatedRemainingSeconds
+                    totalItems
+                    processedItems
+                    errorMessage
+                    errorDetails
+                    scorecardId
+                    scoreId
+                    confusionMatrix
+                    scoreGoal
+                    datasetClassDistribution
+                    isDatasetClassDistributionBalanced
+                    predictedClassDistribution
+                    isPredictedClassDistributionBalanced
+                }
+            }
+            """
+            
+            variables = {
+                "input": update_params
+            }
+            
+            logging.info("Executing dashboard update...")
+            # Execute the API call directly - no shield needed since we handle cancellation in the caller
+            await asyncio.to_thread(self.dashboard_client.execute, mutation, variables)
+
+        except Exception as e:
+            logger.error(f"Error updating dashboard: {e}")
+            raise

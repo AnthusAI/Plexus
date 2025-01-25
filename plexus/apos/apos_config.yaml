@@ -1,5 +1,5 @@
 optimization:
-  max_iterations: 5
+  max_iterations: 9
   target_accuracy: 0.95
   max_consecutive_no_improvement: 5  # Stop after this many iterations without improvement
 
