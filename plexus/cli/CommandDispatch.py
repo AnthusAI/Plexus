@@ -19,6 +19,7 @@ from plexus.dashboard.api.models.task import Task
 from plexus.dashboard.api.client import PlexusDashboardClient
 import json
 import datetime
+from plexus.cli.task_progress_tracker import TaskProgressTracker, StageConfig
 
 class ItemCountColumn(ProgressColumn):
     """Renders item count and total."""
@@ -438,27 +439,15 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
     # Now start actual processing
     task.start_processing()
     
-    # Create all three stages
+    # Create stage configs for TaskProgressTracker
     stage_configs = {
-        "Setup": {
-            "order": 1,
-            "totalItems": 1,
-            "processedItems": 0,
-            "statusMessage": "Starting initialization..."
-        },
-        "Running": {
-            "order": 2,
-            "totalItems": total_items,
-            "processedItems": 0
-        },
-        "Finishing": {
-            "order": 3,
-            "totalItems": 1,
-            "processedItems": 0,
-            "statusMessage": "Waiting to finalize..."
-        }
+        "Setup": StageConfig(order=1, total_items=1),
+        "Running": StageConfig(order=2, total_items=total_items),
+        "Finishing": StageConfig(order=3, total_items=1)
     }
-    stages = task.update_progress(0, total_items, stage_configs)
+    
+    # Initialize progress tracker
+    tracker = TaskProgressTracker(total_items=total_items, stage_configs=stage_configs)
     
     with Progress(
         TextColumn("[bright_magenta]{task.fields[status]}"),
@@ -475,124 +464,85 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
         task_progress = progress.add_task(
             "Processing...",
             total=total_items,  # Only count main processing items
-            status="Starting initialization..."
+            status=tracker.status
         )
         
         try:
-            start_time = time.time()
-            
             # Initialization stage
             init_time = random.uniform(4.0, 6.0)  # Random time between 4-6 seconds
             time.sleep(init_time)
+            tracker.advance_stage()  # Complete Setup stage
             
             if task:
-                stage_configs = {
-                    "Setup": {
-                        "order": 1,
-                        "totalItems": 1,
-                        "processedItems": 1,
-                        "statusMessage": "Initialization complete"
-                    },
-                    "Running": {
-                        "order": 2,
-                        "totalItems": total_items,
-                        "processedItems": 0
-                    },
-                    "Finishing": {
-                        "order": 3,
-                        "totalItems": 1,
-                        "processedItems": 0,
-                        "statusMessage": "Waiting to finalize..."
+                task.update_progress(
+                    tracker.current_items,
+                    tracker.total_items,
+                    {
+                        name: {
+                            "order": config.order,
+                            "totalItems": config.total_items,
+                            "processedItems": stage.processed_items if stage else 0,
+                            "statusMessage": stage.status_message if stage else ""
+                        }
+                        for name, (config, stage) in zip(
+                            stage_configs.keys(),
+                            [(c, tracker._stages.get(n)) for n, c in stage_configs.items()]
+                        )
                     }
-                }
-                task.update_progress(0, total_items, stage_configs)
+                )
             
             progress.update(
                 task_progress,
-                completed=0,  # Reset to 0 for main processing
-                status="Processing items..."
+                completed=tracker.current_items,
+                status=tracker.status
             )
             
             # Main processing stage
-            start_time = time.time()
             for i in range(total_items):
                 current_item = i + 1
+                tracker.update(current_items=current_item)
                 
                 # Update progress every 50 items or on the last item
                 if i % 50 == 0 or i == total_items - 1:
-                    elapsed = time.time() - start_time
-                    items_per_sec = current_item / elapsed if elapsed > 0 else 0
-                    remaining_items = total_items - current_item
-                    eta_seconds = remaining_items / items_per_sec if items_per_sec > 0 else 0
-                    
-                    # Calculate estimated completion time in UTC
-                    current_time = datetime.datetime.now(datetime.timezone.utc)
-                    estimated_completion = current_time + datetime.timedelta(seconds=eta_seconds) \
-                        if eta_seconds > 0 else None
-                    
-                    # Get status message based on progress
-                    percentage = (current_item / total_items) * 100
-                    if percentage <= 5:
-                        status = "Starting processing items..."
-                    elif percentage <= 35:
-                        status = f"Processing items... ({items_per_sec:.1f} items/sec)"
-                    elif percentage <= 65:
-                        status = f"Cruising... ({items_per_sec:.1f} items/sec)"
-                    elif percentage <= 80:
-                        status = f"On autopilot... ({items_per_sec:.1f} items/sec)"
-                    elif percentage <= 90:
-                        status = f"Finishing soon... ({items_per_sec:.1f} items/sec)"
-                    elif percentage < 100:
-                        status = f"Almost done... ({items_per_sec:.1f} items/sec)"
-                    else:
-                        status = f"Processed {total_items:,} items."
-                    
+                    # Update rich progress
                     progress.update(
                         task_progress,
                         completed=current_item,
-                        status=status
+                        status=f"{tracker.status} ({tracker.items_per_second:.1f} items/sec)"
                     )
                     
                     # Update Celery progress
                     CommandProgress.update(
                         current=current_item,
                         total=total_items,
-                        status=status
+                        status=tracker.status
                     )
                     
                     # Update Task progress if we have a task ID
                     if task:
-                        stage_configs = {
-                            "Setup": {
-                                "order": 1,
-                                "totalItems": 1,
-                                "processedItems": 1,
-                                "statusMessage": "Setup complete"
-                            },
-                            "Running": {
-                                "order": 2,
-                                "totalItems": total_items,
-                                "processedItems": current_item,
-                                "itemsPerSecond": items_per_sec,
-                                "statusMessage": status
-                            },
-                            "Finishing": {
-                                "order": 3,
-                                "totalItems": 1,
-                                "processedItems": 0,
-                                "statusMessage": "Waiting to finalize..."
-                            }
-                        }
                         task.update_progress(
-                            current_item,
-                            total_items,
-                            stage_configs,
-                            estimated_completion_at=estimated_completion
+                            tracker.current_items,
+                            tracker.total_items,
+                            {
+                                name: {
+                                    "order": config.order,
+                                    "totalItems": config.total_items,
+                                    "processedItems": stage.processed_items if stage else 0,
+                                    "statusMessage": stage.status_message if stage else "",
+                                    "itemsPerSecond": tracker.items_per_second
+                                }
+                                for name, (config, stage) in zip(
+                                    stage_configs.keys(),
+                                    [(c, tracker._stages.get(n)) for n, c in stage_configs.items()]
+                                )
+                            },
+                            estimated_completion_at=tracker.estimated_completion_time
                         )
                 
                 time.sleep(sleep_per_item)
             
             # Finishing stage
+            tracker.advance_stage()  # Move to Finishing stage
             finish_time = random.uniform(2.0, 4.0)  # Random time between 2-4 seconds
             progress.update(
                 task_progress,
@@ -602,28 +552,26 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
             
             time.sleep(finish_time)
             
-            # Complete all stages with final messages
+            # Complete all stages
+            tracker.complete()
+            
             if task:
-                stage_configs = {
-                    "Setup": {
-                        "order": 1,
-                        "totalItems": 1,
-                        "processedItems": 1,
-                        "statusMessage": "Setup complete"
-                    },
-                    "Running": {
-                        "order": 2,
-                        "totalItems": total_items,
-                        "processedItems": total_items
-                    },
-                    "Finishing": {
-                        "order": 3,
-                        "totalItems": None,
-                        "processedItems": None,
-                        "statusMessage": f"Successfully processed {total_items:,} items."
+                task.update_progress(
+                    tracker.current_items,
+                    tracker.total_items,
+                    {
+                        name: {
+                            "order": config.order,
+                            "totalItems": config.total_items,
+                            "processedItems": stage.processed_items if stage else 0,
+                            "statusMessage": stage.status_message if stage else ""
+                        }
+                        for name, (config, stage) in zip(
+                            stage_configs.keys(),
+                            [(c, tracker._stages.get(n)) for n, c in stage_configs.items()]
+                        )
                     }
-                }
-                stages = task.update_progress(total_items, total_items, stage_configs)
+                )
                 
                 # Now mark as completed
                 task.complete_processing()
@@ -633,86 +581,15 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
                 for stage in final_stages:
                     logging.info(f"Final stage {stage.name}: status={stage.status}, message={stage.statusMessage}")
             
-            total_time = time.time() - start_time
             success_message = (
-                f"Demo task completed successfully in {total_time:.1f} seconds "
-                f"({total_items/total_time:.1f} items/sec)"
+                f"Demo task completed successfully in {tracker.elapsed_time:.1f} seconds "
+                f"({tracker.items_per_second:.1f} items/sec)"
             )
             logging.info(success_message)
             
         except KeyboardInterrupt:
-            elapsed = time.time() - start_time
-            items_per_sec = i / elapsed
             error_message = (
-                f"Demo task cancelled by user after {elapsed:.1f} seconds "
-                f"({items_per_sec:.1f} items/sec)"
+                f"Demo task cancelled by user after {tracker.elapsed_time:.1f} seconds "
+                f"({tracker.items_per_second:.1f} items/sec)"
             )
             logging.info(error_message)
-            
-            # Mark task as failed if we have one
-            if task:
-                task.fail_processing(
-                    error_message=error_message,
-                    error_details={"type": "user_interrupt"}
-                )
-            return
-        except Exception as e:
-            error_message = f"Demo task failed: {str(e)}"
-            logging.error(error_message)
-            
-            # Mark task as failed if we have one
-            if task:
-                task.fail_processing(
-                    error_message=error_message,
-                    error_details={"type": "error", "error": str(e)}
-                )
-            raise
-
-@command.command()
-def _demo_internal() -> None:
-    """Internal command for running the actual demo task."""
-    from .CommandProgress import CommandProgress
-    import time
-    
-    total_items = 2000
-    target_duration = 20  # seconds
-    sleep_per_item = target_duration / total_items
-    
-    logging.info("Starting demo task processing...")
-    
-    try:
-        start_time = time.time()
-        
-        for i in range(total_items):
-            current_item = i + 1
-            # Get new status message
-            new_status = get_progress_status(current_item, total_items)
-            
-            # Update command progress every 50 items
-            if i % 50 == 0 or i == total_items - 1:
-                elapsed = time.time() - start_time
-                items_per_sec = current_item / elapsed
-                
-                CommandProgress.update(
-                    current=current_item,
-                    total=total_items,
-                    status=new_status
-                )
-            
-            # Simulate processing an item
-            time.sleep(sleep_per_item)
-        
-        total_time = time.time() - start_time
-        logging.info(
-            f"Demo task completed successfully in {total_time:.1f} seconds "
-            f"({total_items/total_time:.1f} items/sec)"
-        )
-        
-    except KeyboardInterrupt:
-        elapsed = time.time() - start_time
-        items_per_sec = i / elapsed
-        logging.info(
-            f"\nDemo task cancelled by user after {elapsed:.1f} seconds "
-            f"({items_per_sec:.1f} items/sec)"
-        )
-        return
