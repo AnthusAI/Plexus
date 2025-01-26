@@ -19,10 +19,9 @@ from langchain_core.pydantic_v1 import BaseModel, Field
 from plexus.apos.config import APOSConfig, ModelConfig
 from plexus.apos.models import (
     PromptChange, 
-    PatternInfo, 
-    Recommendation, 
     Mismatch,
-    MismatchAnalysis
+    MismatchAnalysis,
+    SynthesisResult
 )
 from plexus.Registries import scorecard_registry
 from plexus.Scorecard import Scorecard
@@ -53,12 +52,6 @@ class PromptImprovement(BaseModel):
 class PromptOptimizer:
     """
     Optimizes prompts using LLMs based on identified patterns and recommendations.
-    
-    This class is responsible for:
-    1. Taking pattern analysis results
-    2. Generating specific prompt improvements using LLMs
-    3. Applying improvements to existing prompts
-    4. Validating the changes
     """
     
     def __init__(self, config: APOSConfig):
@@ -86,35 +79,44 @@ class PromptOptimizer:
         # Setup prompt templates
         self.system_template = SystemMessagePromptTemplate.from_template(
             """You are an expert at optimizing prompts for classification tasks.
-            Your goal is to improve accuracy by making meaningful improvements to the existing prompts.
+            Your goal is to improve accuracy by making substantial improvements to the existing prompts.
             
             You will be shown:
             1. The current prompts being used
-            2. Examples where the model gave wrong answers
+            2. Analysis of why these prompts are causing incorrect answers
             
             IMPORTANT:
-            - Make MEANINGFUL changes that address the misclassified examples
-            - DO NOT return the same prompts with minor formatting changes
-            - Keep the existing structure and rules
-            - Make targeted changes to fix the issues shown in the examples
-            - Preserve all the detailed criteria and steps
-            - If you can't identify meaningful improvements, say so in the rationale"""
+            - Make bold, substantial changes that directly address the identified issues
+            - Don't be afraid to completely rewrite sections that aren't working
+            - Focus on clarity and precision in the instructions
+            - Keep the core rules and requirements, but feel free to restructure how they're presented
+            - If you can't identify meaningful improvements, say so in the rationale
+            - Small tweaks and minor clarifications are usually not enough to fix systemic issues"""
         )
         
         self.human_template = HumanMessagePromptTemplate.from_template(
-            """Here are the current prompts and examples of misclassified cases:
+            """Here are the current prompts and analysis of why they're causing problems:
 
-            Current Prompts (these should be used as a foundation):
+            Current Prompts:
             system_message: "{current_system_message}"
             user_message: "{current_user_message}"
 
-            Misclassified Examples:
-            {patterns}
+            Analysis of Issues:
+            Common Problems:
+            {common_issues}
+
+            Summary:
+            {summary}
             
             Your task:
-            1. Start with the current prompts and make targeted improvements
-            2. Ensure the {{text}} variable is ONLY in the user_message
-            3. Focus on fixing the misclassified cases while maintaining existing functionality"""
+            1. Start with the current prompts
+            2. Make substantial changes to fix the identified issues - don't be afraid to rewrite entire sections
+            3. Ensure the {{text}} variable is ONLY in the user_message
+            4. Focus on making the instructions clearer and more precise
+            5. Consider restructuring the information to make it easier to follow
+            6. Add explicit examples if they would help clarify the requirements
+            
+            Remember: Minor tweaks and small clarifications rarely fix systemic issues. Be bold with your changes while keeping the core requirements intact."""
         )
         
         self.chat_prompt = ChatPromptTemplate.from_messages([
@@ -122,25 +124,30 @@ class PromptOptimizer:
             self.human_template
         ])
 
-    def optimize_prompt(self, score_name: str, mismatches: List[MismatchAnalysis], evaluation_instance) -> Dict[str, PromptChange]:
-        """Generate optimized prompts based on the mismatches."""
+    def optimize_prompt(self, score_name: str, synthesis_result: SynthesisResult, evaluation_instance) -> Dict[str, PromptChange]:
+        """Generate optimized prompts based on analysis of issues."""
         try:
+            # Log the pattern analysis results
+            logger.info("\n=== Pattern Analysis Results ===")
+            logger.info("Common Issues:")
+            for issue in synthesis_result.common_issues:
+                logger.info(f"- {issue}")
+            logger.info("\nSummary:")
+            logger.info(synthesis_result.summary)
+            logger.info("===============================\n")
+            
             # Get current prompts from evaluation instance
             current_prompts = evaluation_instance.get_current_prompts().get(score_name, {})
             if not current_prompts:
                 logger.warning(f"No current prompts found for {score_name}, falling back to scorecard")
                 current_prompts = self.get_current_prompts(score_name)
-            logger.info(f"Optimizing prompts for score: {score_name}")
-            logger.info("Current prompts loaded:")
-            logger.info(f"System message: {current_prompts.get('system_message')}")
-            logger.info(f"User message: {current_prompts.get('user_message')}")
             
             # Prepare context for the LLM
             context = {
                 'current_system_message': current_prompts.get('system_message', ''),
                 'current_user_message': current_prompts.get('user_message', ''),
-                'patterns': self._format_mismatches(mismatches),
-                'recommendation': "Improve the prompts to correctly handle the misclassified cases while maintaining accuracy on other cases."
+                'common_issues': "\n".join(f"- {issue}" for issue in synthesis_result.common_issues),
+                'summary': synthesis_result.summary
             }
             
             # Generate improvements using the chat prompt and LLM
@@ -159,8 +166,7 @@ class PromptOptimizer:
             changes = {}
             metadata = {
                 'score_name': score_name,
-                'num_mismatches': len(mismatches),
-                'mismatch_ids': [m.transcript_id for m in mismatches]
+                'analysis_summary': synthesis_result.summary
             }
             
             # Only create changes if the prompts are actually different
@@ -172,9 +178,7 @@ class PromptOptimizer:
                     rationale=prompt_data.rationale,
                     metadata=metadata.copy()
                 )
-                logger.info("Generated new system message that differs from current")
-            else:
-                logger.info("System message unchanged - skipping")
+                logger.info("Generated new system message")
             
             if prompt_data.user_message.strip() != current_prompts.get('user_message', '').strip():
                 changes['user_message'] = PromptChange(
@@ -184,95 +188,16 @@ class PromptOptimizer:
                     rationale=prompt_data.rationale,
                     metadata=metadata.copy()
                 )
-                logger.info("Generated new user message that differs from current")
-            else:
-                logger.info("User message unchanged - skipping")
+                logger.info("Generated new user message")
             
             if not changes:
-                logger.warning("LLM did not generate any meaningful changes to the prompts")
+                logger.warning("No meaningful changes to prompts were needed")
             
             return changes
             
         except Exception as e:
             logger.error(f"Error generating prompt improvements: {e}")
             raise
-
-    def _format_mismatches(self, mismatches: List[MismatchAnalysis]) -> str:
-        """Format mismatches to show concrete examples."""
-        formatted = []
-        for mismatch in mismatches:
-            formatted.append(f"""
-Predicted:    {mismatch.model_answer}
-Ground Truth: {mismatch.ground_truth}
-
-Explanation:
-{mismatch.original_explanation}
-
-Transcript:
-{mismatch.transcript_text}
-
----""")
-        return "\n".join(formatted)
-
-    def _prepare_optimization_context(
-        self,
-        prompt_change: PromptChange,
-        patterns: List[PatternInfo]
-    ) -> Dict[str, Any]:
-        """Prepare context for the LLM."""
-        return {
-            "component": prompt_change.component,
-            "current_text": prompt_change.old_text,
-            "improvement_rationale": prompt_change.rationale,
-            "patterns": [
-                {
-                    "category": p.category,
-                    "frequency": p.frequency,
-                    "examples": [
-                        {
-                            "transcript_id": m.transcript_id,
-                            "ground_truth": m.ground_truth,
-                            "model_answer": m.model_answer,
-                            "analysis": m.original_explanation
-                        }
-                        for m in p.example_mismatches[:2]  # Include up to 2 examples
-                    ]
-                }
-                for p in patterns
-            ]
-        }
-        
-    def validate_change(self, prompt_change: PromptChange) -> bool:
-        """
-        Validate that the proposed change maintains the prompt's core functionality.
-        
-        Args:
-            prompt_change: The proposed prompt change
-            
-        Returns:
-            bool indicating if the change is valid
-        """
-        # TODO: Implement validation logic
-        # This could include:
-        # 1. Length checks
-        # 2. Core concept preservation
-        # 3. Readability metrics
-        # 4. Test against sample inputs
-        return True 
-
-    def _format_patterns(self, patterns: List[PatternInfo]) -> str:
-        """Format patterns to show concrete examples."""
-        formatted = []
-        for pattern in patterns:
-            for example in pattern.example_mismatches:
-                formatted.append(f"""
-                Example {example.transcript_id}:
-                Transcript: {example.metadata.get('transcript_text', 'Not available')}
-                Expected Answer: {example.ground_truth}
-                Model's Answer: {example.model_answer}
-                Analysis: {example.original_explanation}
-                """)
-        return "\n".join(formatted)
 
     def get_current_prompts(self, score_name: str) -> Dict[str, str]:
         """Get the current prompts for a given score."""
@@ -292,7 +217,6 @@ Transcript:
                 
                 if score_config:
                     logger.info(f"Found score config for {score_name}")
-                    logger.info(f"Score config: {score_config}")
                     
                     # Look for Classifier node in graph
                     if 'graph' in score_config:

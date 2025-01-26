@@ -44,10 +44,9 @@ class MismatchAnalysis:
 
 @dataclass
 class SynthesisResult:
-    """Results from pattern synthesis across multiple mismatches."""
-    error_patterns: List[Dict[str, Any]]
-    improvement_suggestions: List[Dict[str, Any]]
-    overall_assessment: str
+    """Results from analyzing mismatches to identify common issues and provide a summary."""
+    common_issues: List[str]  # List of common issues identified across mismatches
+    summary: str  # Overall summary of how the current prompt is causing mismatches
 
 
 @dataclass
@@ -126,24 +125,6 @@ class Mismatch:
     model_answer: str
     analysis: str
     confidence: float = 0.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class PatternInfo:
-    """Information about an identified error pattern."""
-    category: str
-    frequency: int
-    affected_questions: List[str]
-    example_mismatches: List[Mismatch]
-    confidence: float = 0.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class Recommendation:
-    """A recommendation for improving a prompt based on pattern analysis."""
-    description: str
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 

@@ -19,7 +19,8 @@ from plexus.apos.models import (
     OptimizationState,
     IterationResult,
     MismatchAnalysis,
-    PromptChange
+    PromptChange,
+    SynthesisResult
 )
 from plexus.apos.config import APOSConfig, load_config
 from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
@@ -30,7 +31,6 @@ from langchain_openai import ChatOpenAI
 from plexus.cli.AnalyzeCommands import PromptAnalyzer
 from plexus.apos.analyzer import MismatchAnalyzer
 from plexus.apos.pattern_analyzer import PatternAnalyzer
-from plexus.apos.synthesis import PatternSynthesizer, SynthesisResult
 
 
 logger = logging.getLogger('plexus.apos.evaluation')
@@ -204,6 +204,12 @@ class APOSEvaluation(AccuracyEvaluation):
         """Reset evaluation state for a new iteration."""
         # Store current prompts before reset
         current_prompts = self.get_current_prompts()
+        if current_prompts:
+            logger.info("\nStoring current prompts before reset:")
+            for score_name, prompts in current_prompts.items():
+                logger.info(f"\nScore '{score_name}':")
+                logger.info(f"System Message: {prompts['system_message']}")
+                logger.info(f"User Message: {prompts['user_message']}")
         
         # Reset base class state variables
         self.total_correct = 0
@@ -230,7 +236,14 @@ class APOSEvaluation(AccuracyEvaluation):
         self.labeled_samples = self.evaluation_samples
         
         # Restore prompts after reset - this ensures optimized prompts are preserved
-        self.set_prompts(current_prompts)
+        if current_prompts:
+            logger.info("\nRestoring prompts after reset:")
+            self.set_prompts(current_prompts)
+            restored_prompts = self.get_current_prompts()
+            for score_name, prompts in restored_prompts.items():
+                logger.info(f"\nScore '{score_name}':")
+                logger.info(f"System Message: {prompts['system_message']}")
+                logger.info(f"User Message: {prompts['user_message']}")
         
         logger.info(f"Reset evaluation state for new iteration with {self.number_of_texts_to_sample} samples")
 
@@ -549,6 +562,13 @@ class APOSEvaluation(AccuracyEvaluation):
         logger.info(f"\nApplying {len(changes)} prompt changes:")
         current_prompts = self.get_current_prompts()
         
+        # Log current prompts before changes
+        logger.info("\nCurrent prompts before changes:")
+        for score_name, prompts in current_prompts.items():
+            logger.info(f"\nScore '{score_name}':")
+            logger.info(f"System Message: {prompts['system_message']}")
+            logger.info(f"User Message: {prompts['user_message']}")
+        
         # Store old prompts to set in PromptChange objects
         for change in changes:
             score_name = change.metadata.get('score_name')
@@ -564,14 +584,14 @@ class APOSEvaluation(AccuracyEvaluation):
                 change.old_text = prompt_config.get('system_message', '')
                 prompt_config['system_message'] = change.new_text
                 logger.info(f"\nScore '{score_name}' - System Message Change:")
-                logger.info(f"Old: {change.old_text[:100]}...")
-                logger.info(f"New: {change.new_text[:100]}...")
+                logger.info(f"Old: {change.old_text}")
+                logger.info(f"New: {change.new_text}")
             elif component == 'user_message':
                 change.old_text = prompt_config.get('user_message', '')
                 prompt_config['user_message'] = change.new_text
                 logger.info(f"\nScore '{score_name}' - User Message Change:")
-                logger.info(f"Old: {change.old_text[:100]}...")
-                logger.info(f"New: {change.new_text[:100]}...")
+                logger.info(f"Old: {change.old_text}")
+                logger.info(f"New: {change.new_text}")
             else:
                 logger.warning(f"Unknown prompt component: {component}")
                 continue
@@ -579,7 +599,16 @@ class APOSEvaluation(AccuracyEvaluation):
         # Store changes for the iteration result
         self.current_prompt_changes.extend(changes)
                 
+        # Apply the changes
         self.set_prompts(current_prompts)
+        
+        # Log final prompts after changes
+        logger.info("\nFinal prompts after changes:")
+        final_prompts = self.get_current_prompts()
+        for score_name, prompts in final_prompts.items():
+            logger.info(f"\nScore '{score_name}':")
+            logger.info(f"System Message: {prompts['system_message']}")
+            logger.info(f"User Message: {prompts['user_message']}")
 
     async def score_all_texts_for_score(self, selected_sample_rows, score_name):
         """Score all texts for a specific score concurrently"""
