@@ -28,7 +28,6 @@ from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.account import Account
 from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
 from langchain_openai import ChatOpenAI
-from plexus.cli.AnalyzeCommands import PromptAnalyzer
 from plexus.apos.analyzer import MismatchAnalyzer
 from plexus.apos.pattern_analyzer import PatternAnalyzer
 
@@ -183,15 +182,7 @@ class APOSEvaluation(AccuracyEvaluation):
         # Ensure persistence directory exists
         os.makedirs(self.config.persistence_path, exist_ok=True)
         
-        # Initialize LLM and PromptAnalyzer
-        llm = ChatOpenAI(
-            model="gpt-4o-mini-2024-07-18",
-            api_key=os.getenv("OPENAI_API_KEY"),
-            max_tokens=500,
-            temperature=0.3,
-        )
-        self.prompt_analyzer = PromptAnalyzer(llm)
-        
+        # Initialize analyzers
         self.mismatch_analyzer = MismatchAnalyzer()
         self.pattern_analyzer = PatternAnalyzer()
         self.history_dir = "optimization_history"
@@ -234,6 +225,10 @@ class APOSEvaluation(AccuracyEvaluation):
         
         # Use the same evaluation samples for each iteration
         self.labeled_samples = self.evaluation_samples
+        
+        # Clear experiment ID to ensure new dashboard record for each iteration
+        self.experiment_id = None
+        self.started_at = None
         
         # Restore prompts after reset - this ensures optimized prompts are preserved
         if current_prompts:
@@ -384,10 +379,10 @@ class APOSEvaluation(AccuracyEvaluation):
                 self.experiment_id = response.id
                 self.started_at = started_at
                 logger.info(f"Created new evaluation for iteration {self.current_iteration}: {self.experiment_id}")
-                
-                # Start new MLflow run for this iteration
-                mlflow.end_run()  # End previous run if any
-                mlflow.start_run(run_name=f"iteration_{self.current_iteration}")
+            
+            # Start new MLflow run for this iteration
+            mlflow.end_run()  # End previous run if any
+            mlflow.start_run(run_name=f"iteration_{self.current_iteration}")
             
             # Run base evaluation with the report folder path
             self.report_folder_path = report_folder_path
@@ -610,93 +605,6 @@ class APOSEvaluation(AccuracyEvaluation):
             logger.info(f"System Message: {prompts['system_message']}")
             logger.info(f"User Message: {prompts['user_message']}")
 
-    async def score_all_texts_for_score(self, selected_sample_rows, score_name):
-        """Score all texts for a specific score concurrently"""
-        if score_name not in self.results_by_score:
-            self.results_by_score[score_name] = []
-        if score_name not in self.processed_items_by_score:
-            self.processed_items_by_score[score_name] = 0
-
-        tasks = []
-        total_rows = len(selected_sample_rows)
-        for idx, (_, row) in enumerate(selected_sample_rows.iterrows()):
-            task = asyncio.create_task(self.score_text(row, score_name))
-            tasks.append(task)
-        
-        for task in asyncio.as_completed(tasks):
-            try:
-                result = await task
-                if result:
-                    self.results_by_score[score_name].append(result)
-                    self.processed_items_by_score[score_name] += 1
-                    self.processed_items = sum(self.processed_items_by_score.values())
-                    # Start metrics task if needed
-                    is_final_result = self.processed_items_by_score[score_name] == total_rows
-                    await self.maybe_start_metrics_task(score_name, is_final_result)
-            except Exception as e:
-                logger.error(f"Error scoring text for {score_name}: {e}")
-        
-        return self.results_by_score[score_name]
-
-    async def maybe_start_metrics_task(self, score_name: str, is_final_result: bool = False):
-        """Start a metrics computation task if one isn't running, or if this is the final result"""
-        if is_final_result:
-            # For final results, always compute metrics
-            self.completed_scores.add(score_name)
-            if score_name in self.metrics_tasks:
-                task = self.metrics_tasks[score_name]
-                if not task.done():
-                    task.cancel()
-            self.metrics_tasks[score_name] = asyncio.create_task(self.continuous_metrics_computation(score_name))
-        elif score_name not in self.metrics_tasks or self.metrics_tasks[score_name].done():
-            # Start new task if none exists or previous one is done
-            self.metrics_tasks[score_name] = asyncio.create_task(self.continuous_metrics_computation(score_name))
-
-    async def continuous_metrics_computation(self, score_name: str):
-        """Background task that continuously computes and posts metrics for a specific score"""
-        last_processed_count = 0
-        while not self.should_stop:
-            try:
-                # Check if we have any new results for this score
-                current_count = len(self.results_by_score.get(score_name, []))
-                if current_count > 0 and current_count != last_processed_count:
-                    # Combine results from all scores for metrics calculation
-                    combined_results = []
-                    for score, results in self.results_by_score.items():
-                        combined_results.extend(results)
-                    
-                    metrics = self.calculate_metrics(combined_results)
-                    # If this is the final update (score is complete), mark it as completed
-                    status = "COMPLETED" if score_name in self.completed_scores else "RUNNING"
-                    
-                    # Override metrics to maintain correct total items
-                    metrics["totalItems"] = self.requested_sample_size
-                    metrics["processedItems"] = min(self.processed_items, self.requested_sample_size)
-                    
-                    # Create a task for the API call and shield it from cancellation
-                    api_task = asyncio.shield(self.log_to_dashboard(metrics, status=status))
-                    try:
-                        await api_task
-                        last_processed_count = current_count
-                    except asyncio.CancelledError:
-                        # If we're cancelled, still wait for the API call to finish
-                        logger.info("Metrics task cancelled, ensuring API call completes")
-                        try:
-                            await api_task
-                        except asyncio.CancelledError:
-                            pass  # Ignore any additional cancellations
-                        logger.info("API call completed after cancellation")
-                        return  # Exit the task
-                
-                # Wait a bit before checking again
-                await asyncio.sleep(.1)
-            except asyncio.CancelledError:
-                logger.info(f"Metrics computation for {score_name} cancelled")
-                return  # Exit gracefully
-            except Exception as e:
-                logger.error(f"Error in continuous metrics computation for {score_name}: {e}")
-                await asyncio.sleep(5)  # Wait longer on error
-
     async def _async_run(self):
         """Run the base evaluation."""
         try:
@@ -704,98 +612,3 @@ class APOSEvaluation(AccuracyEvaluation):
             return result
         finally:
             pass
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10)
-    )
-    async def log_to_dashboard(self, metrics, status="RUNNING"):
-        """Log metrics to the dashboard."""
-        if not self.dashboard_client or not self.experiment_id:
-            return
-
-        try:
-            current_time = datetime.now(timezone.utc)
-            elapsed_seconds = int((current_time - self.started_at).total_seconds())
-
-            # Convert metrics to list format
-            metrics_list = []
-            for key, value in metrics.items():
-                if key not in ['predicted_distribution', 'actual_distribution', 'totalItems', 'processedItems']:
-                    metrics_list.append({"name": key, "value": value})
-
-            # Prepare confusion matrix data
-            matrix_data = []
-            if metrics.get("confusion_matrix"):
-                for actual, predictions in metrics["confusion_matrix"].items():
-                    for predicted, count in predictions.items():
-                        matrix_data.append({
-                            "actual": actual,
-                            "predicted": predicted,
-                            "count": count
-                        })
-            
-            # Use requested sample size for total items
-            total_predictions = self.requested_sample_size
-            processed_items = min(self.processed_items, total_predictions)
-            
-            update_params = {
-                "id": self.experiment_id,
-                "type": "accuracy",
-                "metrics": json.dumps(metrics_list),
-                "processedItems": processed_items,
-                "totalItems": total_predictions,
-                "elapsedSeconds": elapsed_seconds,
-                "estimatedRemainingSeconds": int(elapsed_seconds * (total_predictions - processed_items) / processed_items) if processed_items > 0 else total_predictions,
-                "accuracy": metrics["accuracy"] * 100,
-                "updatedAt": current_time.isoformat().replace('+00:00', 'Z'),
-                "status": status,
-                "predictedClassDistribution": json.dumps(metrics["predicted_distribution"]),
-                "datasetClassDistribution": json.dumps(metrics["actual_distribution"]),
-                "confusionMatrix": json.dumps(matrix_data)
-            }
-
-            mutation = """
-            mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                updateEvaluation(input: $input) {
-                    id
-                    type
-                    accountId
-                    status
-                    createdAt
-                    updatedAt
-                    parameters
-                    metrics
-                    inferences
-                    accuracy
-                    cost
-                    startedAt
-                    elapsedSeconds
-                    estimatedRemainingSeconds
-                    totalItems
-                    processedItems
-                    errorMessage
-                    errorDetails
-                    scorecardId
-                    scoreId
-                    confusionMatrix
-                    scoreGoal
-                    datasetClassDistribution
-                    isDatasetClassDistributionBalanced
-                    predictedClassDistribution
-                    isPredictedClassDistributionBalanced
-                }
-            }
-            """
-            
-            variables = {
-                "input": update_params
-            }
-            
-            logging.info("Executing dashboard update...")
-            # Execute the API call directly - no shield needed since we handle cancellation in the caller
-            await asyncio.to_thread(self.dashboard_client.execute, mutation, variables)
-
-        except Exception as e:
-            logger.error(f"Error updating dashboard: {e}")
-            raise
