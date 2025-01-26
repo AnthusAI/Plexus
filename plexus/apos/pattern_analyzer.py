@@ -10,11 +10,20 @@ from dataclasses import asdict
 
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import ResponseSchema, StructuredOutputParser
+from langchain_core.pydantic_v1 import BaseModel, Field
 
 from plexus.apos.models import MismatchAnalysis, SynthesisResult
 
 logger = logging.getLogger('plexus.apos.pattern_analyzer')
+
+class PatternAnalysisError(Exception):
+    """Raised when pattern analysis fails."""
+    pass
+
+class PatternAnalysisOutput(BaseModel):
+    """Schema for pattern analysis response."""
+    common_issues: List[str] = Field(description="List of common issues found across the mismatches that explain why the prompt misguided the model")
+    summary: str = Field(description="A clear summary of how the current prompt is causing these mismatches")
 
 class PatternAnalyzer:
     """
@@ -28,75 +37,32 @@ class PatternAnalyzer:
             model="gpt-4o-mini-2024-07-18",
             temperature=0.1,  # Low temperature for consistent analysis
             max_tokens=2000  # Higher token limit for analyzing multiple mismatches
-        )
-        self.output_parser = self._create_output_parser()
+        ).with_structured_output(PatternAnalysisOutput)
         self.prompt = self._create_prompt()
-        
-    def _create_output_parser(self):
-        """Create a structured output parser for pattern analysis results."""
-        schemas = [
-            ResponseSchema(
-                name="error_patterns",
-                description="""List of identified error patterns. Each pattern should have:
-                - pattern_name: A descriptive name for the pattern
-                - description: Detailed description of the pattern
-                - frequency: How many mismatches show this pattern
-                - examples: List of transcript IDs that exemplify this pattern
-                - severity: How critical this pattern is to address (HIGH/MEDIUM/LOW)"""
-            ),
-            ResponseSchema(
-                name="improvement_suggestions",
-                description="""List of suggested improvements. Each suggestion should have:
-                - target: What aspect of the system to improve (e.g., 'prompt structure', 'context handling')
-                - suggestion: Detailed description of the proposed improvement
-                - rationale: Why this improvement would help
-                - affected_patterns: List of pattern names this would address"""
-            ),
-            ResponseSchema(
-                name="overall_assessment",
-                description="A high-level assessment of the systematic issues found and their impact on model performance"
-            )
-        ]
-        return StructuredOutputParser.from_response_schemas(schemas)
         
     def _create_prompt(self):
         """Create the pattern analysis prompt template."""
-        template = """Analyze the following set of mismatches to identify patterns and suggest improvements.
-
-Mismatches:
-{mismatch_summaries}
+        template = """Review these mismatches where the model gave incorrect answers. For each mismatch, we've analyzed why the prompt misguided the model.
 
 Your task is to:
-1. Identify patterns in how and why the model is making mistakes
-2. Suggest specific improvements that would address these patterns
-3. Provide an overall assessment of the systematic issues
+1. Look at all the mismatch analyses
+2. Identify the common issues in how the prompt is misguiding the model
+3. Create a clear summary explaining how the prompt is causing these problems
 
-Focus on finding actionable patterns that can lead to concrete improvements.
-Look for commonalities in:
-- Error categories
-- Root causes
-- Types of misunderstandings
-- Specific aspects of the transcripts that cause issues
+Mismatches and their analyses:
+{mismatch_summaries}
 
-Provide your analysis in the following structured format:
-{format_instructions}
-
-Remember to:
-- Focus on systematic patterns rather than individual cases
-- Prioritize patterns that appear multiple times
-- Make specific, actionable improvement suggestions
-- Connect improvements to the patterns they would address"""
+Focus on being clear and specific about how the prompt is causing these issues."""
 
         return ChatPromptTemplate.from_template(template)
         
     def _format_mismatch_summary(self, mismatch: MismatchAnalysis) -> str:
         """Format a single mismatch for inclusion in the prompt."""
         return f"""
-Transcript ID: {mismatch.transcript_id}
 Question: {mismatch.question_name}
-Error Category: {mismatch.error_category}
-Root Cause: {mismatch.root_cause}
-Detailed Analysis: {mismatch.detailed_analysis}
+Model's Answer: {mismatch.model_answer}
+Correct Answer: {mismatch.ground_truth}
+Analysis: {mismatch.detailed_analysis}
 ---"""
 
     async def analyze_patterns(self, mismatches: List[MismatchAnalysis]) -> SynthesisResult:
@@ -107,8 +73,14 @@ Detailed Analysis: {mismatch.detailed_analysis}
             mismatches: List of analyzed mismatches to find patterns in
             
         Returns:
-            SynthesisResult containing identified patterns and improvement suggestions
+            SynthesisResult containing common issues and a summary
+            
+        Raises:
+            PatternAnalysisError: If pattern analysis fails
         """
+        if not mismatches:
+            raise PatternAnalysisError("No mismatches provided for pattern analysis")
+            
         try:
             # Format mismatches for the prompt
             mismatch_summaries = "\n".join(
@@ -116,26 +88,23 @@ Detailed Analysis: {mismatch.detailed_analysis}
             )
             
             # Prepare the prompt
-            format_instructions = self.output_parser.get_format_instructions()
             messages = self.prompt.format_messages(
-                mismatch_summaries=mismatch_summaries,
-                format_instructions=format_instructions
+                mismatch_summaries=mismatch_summaries
             )
             
             # Get analysis from LLM
-            response = await self.llm.ainvoke(messages)
-            analysis_result = self.output_parser.parse(response.content)
+            analysis_result = await self.llm.ainvoke(messages)
             
             # Create synthesis result
             result = SynthesisResult(
-                error_patterns=analysis_result["error_patterns"],
-                improvement_suggestions=analysis_result["improvement_suggestions"],
-                overall_assessment=analysis_result["overall_assessment"]
+                common_issues=analysis_result.common_issues,
+                summary=analysis_result.summary
             )
             
-            logger.info(f"Completed pattern analysis for {len(mismatches)} mismatches")
+            logger.info("Completed pattern analysis")
             return result
             
         except Exception as e:
-            logger.error(f"Error analyzing patterns: {e}")
-            raise 
+            error_msg = f"Error analyzing patterns: {str(e)}"
+            logger.error(error_msg)
+            raise PatternAnalysisError(error_msg) from e 

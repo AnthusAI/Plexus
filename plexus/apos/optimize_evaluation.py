@@ -11,6 +11,7 @@ import pandas as pd
 
 from plexus.apos.evaluation import APOSEvaluation
 from plexus.apos.optimizer import PromptOptimizer
+from plexus.apos.pattern_analyzer import PatternAnalyzer
 from plexus.apos.config import APOSConfig, load_config
 from plexus.Scorecard import Scorecard
 from plexus.Registries import scorecard_registry
@@ -114,6 +115,9 @@ async def optimize_evaluation(
                     )
                     mismatch_analyses.append(analysis)
                 
+                # Use evaluation's pattern analysis
+                analyzed_mismatches, synthesis_result = await evaluation._analyze_and_synthesize()
+                
                 # Optimize prompts for each score
                 for score_name in evaluation.subset_of_score_names or []:
                     logger.info(f"Optimizing prompts for score: {score_name}")
@@ -124,8 +128,8 @@ async def optimize_evaluation(
                     logger.info(f"System message: {current_prompts[score_name]['system_message']}")
                     logger.info(f"User message: {current_prompts[score_name]['user_message']}")
                     
-                    # Generate improvements
-                    optimized_changes = optimizer.optimize_prompt(score_name, mismatch_analyses, evaluation)
+                    # Generate improvements using synthesis result
+                    optimized_changes = optimizer.optimize_prompt(score_name, synthesis_result, evaluation)
                     
                     # Convert dict of changes to list
                     changes_list = list(optimized_changes.values())

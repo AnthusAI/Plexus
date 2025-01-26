@@ -8,11 +8,17 @@ import json
 
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import ResponseSchema, StructuredOutputParser
+from langchain_core.pydantic_v1 import BaseModel, Field
 
 from plexus.apos.models import MismatchAnalysis
 
 logger = logging.getLogger('plexus.apos.analyzer')
+
+class MismatchAnalysisOutput(BaseModel):
+    """Schema for mismatch analysis response."""
+    error_category: str = Field(description="The type of error that occurred (e.g., 'Misinterpretation of Context', 'Overlooked Detail', 'Script Adherence Issue')")
+    root_cause: str = Field(description="The fundamental reason why the model made this specific mistake")
+    detailed_analysis: str = Field(description="A thorough analysis of why this mismatch occurred, including specific details from the transcript and model's reasoning")
 
 class MismatchAnalyzer:
     """
@@ -25,27 +31,8 @@ class MismatchAnalyzer:
             model="gpt-4o-mini-2024-07-18",
             temperature=0.1,  # Low temperature for consistent analysis
             max_tokens=1000
-        )
-        self.output_parser = self._create_output_parser()
+        ).with_structured_output(MismatchAnalysisOutput)
         self.prompt = self._create_prompt()
-        
-    def _create_output_parser(self):
-        """Create a structured output parser for analysis results."""
-        schemas = [
-            ResponseSchema(
-                name="error_category",
-                description="The type of error that occurred (e.g., 'Misinterpretation of Context', 'Overlooked Detail', 'Script Adherence Issue')"
-            ),
-            ResponseSchema(
-                name="root_cause",
-                description="The fundamental reason why the model made this specific mistake"
-            ),
-            ResponseSchema(
-                name="detailed_analysis",
-                description="A thorough analysis of why this mismatch occurred, including specific details from the transcript and model's reasoning"
-            )
-        ]
-        return StructuredOutputParser.from_response_schemas(schemas)
         
     def _create_prompt(self):
         """Create the analysis prompt template."""
@@ -68,9 +55,6 @@ Your task is to:
 2. Identify the root cause of the error
 3. Provide a detailed analysis of what went wrong
 
-Provide your analysis in the following structured format:
-{format_instructions}
-
 Remember to:
 - Be specific and reference exact details from the transcript
 - Consider both what the model did wrong AND why it thought it was right"""
@@ -89,24 +73,21 @@ Remember to:
         """
         try:
             # Prepare the prompt
-            format_instructions = self.output_parser.get_format_instructions()
             messages = self.prompt.format_messages(
                 question_name=mismatch.question_name,
                 transcript_text=mismatch.transcript_text,
                 model_answer=mismatch.model_answer,
                 ground_truth=mismatch.ground_truth,
-                original_explanation=mismatch.original_explanation,
-                format_instructions=format_instructions
+                original_explanation=mismatch.original_explanation
             )
             
             # Get analysis from LLM
-            response = await self.llm.ainvoke(messages)
-            analysis_result = self.output_parser.parse(response.content)
+            analysis_result = await self.llm.ainvoke(messages)
             
             # Update mismatch with analysis results
-            mismatch.detailed_analysis = analysis_result["detailed_analysis"]
-            mismatch.error_category = analysis_result["error_category"]
-            mismatch.root_cause = analysis_result["root_cause"]
+            mismatch.detailed_analysis = analysis_result.detailed_analysis
+            mismatch.error_category = analysis_result.error_category
+            mismatch.root_cause = analysis_result.root_cause
             
             logger.info(f"Completed analysis for mismatch {mismatch.transcript_id}")
             return mismatch
