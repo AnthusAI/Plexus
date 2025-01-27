@@ -123,7 +123,7 @@ export default function Workflow() {
           {/* Main to Row 1A */}
           <path
             d="M1 1 C1 1.3 0.9 2 2 2"
-            className="stroke-card"
+            className="stroke-muted-foreground"
             strokeWidth="0.15"
             fill="none"
             strokeLinecap="round"
@@ -131,7 +131,7 @@ export default function Workflow() {
           {/* Main to Row 2A */}
           <path
             d="M1 1 L1 2.5 C1 2.7 0.9 3 2 3"
-            className="stroke-card"
+            className="stroke-muted-foreground"
             strokeWidth="0.15"
             fill="none"
             strokeLinecap="round"
@@ -139,7 +139,7 @@ export default function Workflow() {
           {/* Row 1A to Row 1B */}
           <path
             d="M2 2 L3 2"
-            className="stroke-card"
+            className="stroke-muted-foreground"
             strokeWidth="0.15"
             fill="none"
             strokeLinecap="round"
@@ -147,7 +147,7 @@ export default function Workflow() {
           {/* Row 2A to Row 2B */}
           <path
             d="M2 3 L3 3"
-            className="stroke-card"
+            className="stroke-muted-foreground"
             strokeWidth="0.15"
             fill="none"
             strokeLinecap="round"
