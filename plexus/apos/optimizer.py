@@ -115,8 +115,14 @@ class PromptOptimizer:
             4. Focus on making the instructions clearer and more precise
             5. Consider restructuring the information to make it easier to follow
             6. Add explicit examples if they would help clarify the requirements
+            7. Provide a detailed rationale explaining your changes and how they address the identified issues
             
-            Remember: Minor tweaks and small clarifications rarely fix systemic issues. Be bold with your changes while keeping the core requirements intact."""
+            Remember: Minor tweaks and small clarifications rarely fix systemic issues. Be bold with your changes while keeping the core requirements intact.
+            
+            Your response must include:
+            1. An improved system_message
+            2. An improved user_message (with {{text}} placeholder)
+            3. A detailed rationale explaining your changes and how they address the issues"""
         )
         
         self.chat_prompt = ChatPromptTemplate.from_messages([
@@ -154,20 +160,22 @@ class PromptOptimizer:
             messages = self.chat_prompt.format_messages(**context)
             prompt_data = self.llm.invoke(messages)
             
-            # Validate {text} variable is only in user_message
-            if '{text}' in prompt_data.system_message:
-                logger.error("system_message should not contain {text} variable")
-                raise ValueError("system_message should not contain {text} variable")
-            if '{text}' not in prompt_data.user_message:
-                logger.error("user_message must contain {text} variable")
-                raise ValueError("user_message must contain {text} variable")
+            # Validate {{text}} variable is only in user_message
+            if '{{text}}' in prompt_data.system_message:
+                logger.error("system_message should not contain {{text}} variable")
+                raise ValueError("system_message should not contain {{text}} variable")
+            if '{{text}}' not in prompt_data.user_message:
+                logger.error("user_message must contain {{text}} variable")
+                raise ValueError("user_message must contain {{text}} variable")
             
             # Create PromptChange objects for each component
             changes = {}
             metadata = {
                 'score_name': score_name,
-                'analysis_summary': synthesis_result.summary
+                'analysis_summary': synthesis_result.summary,
+                'iteration': evaluation_instance.current_iteration
             }
+            logger.info(f"DEBUG: Creating changes with metadata: {metadata}")
             
             # Only create changes if the prompts are actually different
             if prompt_data.system_message.strip() != current_prompts.get('system_message', '').strip():
@@ -179,6 +187,7 @@ class PromptOptimizer:
                     metadata=metadata.copy()
                 )
                 logger.info("Generated new system message")
+                logger.info(f"DEBUG: Created system message change: {changes['system_message']}")
             
             if prompt_data.user_message.strip() != current_prompts.get('user_message', '').strip():
                 changes['user_message'] = PromptChange(
@@ -189,9 +198,12 @@ class PromptOptimizer:
                     metadata=metadata.copy()
                 )
                 logger.info("Generated new user message")
+                logger.info(f"DEBUG: Created user message change: {changes['user_message']}")
             
             if not changes:
                 logger.warning("No meaningful changes to prompts were needed")
+            else:
+                logger.info(f"DEBUG: Final changes to return: {changes}")
             
             return changes
             

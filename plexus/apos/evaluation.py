@@ -11,6 +11,7 @@ import pandas as pd
 import mlflow
 import random
 import asyncio
+import sys
 from dataclasses import asdict
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -50,6 +51,9 @@ class APOSEvaluation(AccuracyEvaluation):
         # Extract config from kwargs since base class doesn't use it
         self.config = kwargs.pop('config', None) or load_config()
         self.config.setup_logging()
+        
+        # Set max_mismatches_to_report from config
+        kwargs['max_mismatches_to_report'] = self.config.optimization.max_mismatches_to_report
         
         # Store original sample size request and override config if specified
         self.requested_sample_size = kwargs.get('number_of_texts_to_sample', 100)
@@ -217,6 +221,9 @@ class APOSEvaluation(AccuracyEvaluation):
         self.should_stop = False
         self.completed_scores = set()
         
+        # Clear prompt changes from previous iterations
+        self.current_prompt_changes = []
+        
         # Reset sample size to configured value
         if self.config.analysis.samples_per_iteration:
             self.number_of_texts_to_sample = self.config.analysis.samples_per_iteration
@@ -229,16 +236,6 @@ class APOSEvaluation(AccuracyEvaluation):
         # Clear experiment ID to ensure new dashboard record for each iteration
         self.experiment_id = None
         self.started_at = None
-        
-        # Restore prompts after reset - this ensures optimized prompts are preserved
-        if current_prompts:
-            logger.info("\nRestoring prompts after reset:")
-            self.set_prompts(current_prompts)
-            restored_prompts = self.get_current_prompts()
-            for score_name, prompts in restored_prompts.items():
-                logger.info(f"\nScore '{score_name}':")
-                logger.info(f"System Message: {prompts['system_message']}")
-                logger.info(f"User Message: {prompts['user_message']}")
         
         logger.info(f"Reset evaluation state for new iteration with {self.number_of_texts_to_sample} samples")
 
@@ -341,7 +338,6 @@ class APOSEvaluation(AccuracyEvaluation):
                     self.set_prompts(best_prompts)
             
             # Create iteration directory
-            self.current_iteration += 1
             self.iteration_dir = os.path.join(self.history_dir, f"iteration_{self.current_iteration}")
             os.makedirs(self.iteration_dir, exist_ok=True)
             
@@ -388,18 +384,18 @@ class APOSEvaluation(AccuracyEvaluation):
             self.report_folder_path = report_folder_path
             await super()._async_run()
             
-            # Create initial result object
+            # Analyze mismatches and synthesize patterns
+            analyzed_mismatches, synthesis_result = await self._analyze_and_synthesize()
+            
+            # Create result object after all changes are complete and restored
             result = IterationResult(
                 iteration=self.current_iteration,
                 accuracy=self.total_correct / self.total_questions if self.total_questions > 0 else 0.0,
                 mismatches=self.mismatches,
-                prompt_changes=self.current_prompt_changes,
+                prompt_changes=self.current_prompt_changes,  # This will now have the restored changes
                 metrics={},
                 metadata={}
             )
-            
-            # Analyze mismatches and synthesize patterns
-            analyzed_mismatches, synthesis_result = await self._analyze_and_synthesize()
             
             # Update result with analyses
             result.mismatch_analyses = analyzed_mismatches
@@ -457,6 +453,15 @@ class APOSEvaluation(AccuracyEvaluation):
         iteration_dir = Path(self.config.persistence_path) / f"iteration_{result.iteration}"
         os.makedirs(iteration_dir, exist_ok=True)
         
+        # Debug logging for prompt changes
+        logger.info(f"DEBUG: Type of result.prompt_changes: {type(result.prompt_changes)}")
+        logger.info(f"DEBUG: Content of result.prompt_changes: {result.prompt_changes}")
+        if result.prompt_changes:
+            sample_change = result.prompt_changes[0]
+            logger.info(f"DEBUG: Sample change type: {type(sample_change)}")
+            if hasattr(sample_change, 'metadata'):
+                logger.info(f"DEBUG: Sample change metadata: {sample_change.metadata}")
+        
         # Save iteration result
         result_path = iteration_dir / "result.json"
         with open(result_path, 'w') as f:
@@ -480,17 +485,37 @@ class APOSEvaluation(AccuracyEvaluation):
                 'metadata': m.get('metadata', {})
             } for m in result.mismatches], f, indent=2)
         
-        # Save prompt changes
+        # Save prompt changes - only from current iteration
         changes_path = iteration_dir / "prompt_changes.json"
+        logger.info(f"Total prompt changes before filtering: {len(result.prompt_changes)}")
+        
+        # Ensure we only save changes from this iteration
+        current_iteration_changes = []
+        for change in result.prompt_changes:
+            logger.info(f"DEBUG: Processing change: {change}")
+            if isinstance(change, dict):
+                if change.get('metadata', {}).get('iteration') == result.iteration:
+                    current_iteration_changes.append(change)
+                    logger.info(f"DEBUG: Added dict change for iteration {result.iteration}")
+            else:  # PromptChange object
+                if change.metadata.get('iteration') == result.iteration:
+                    change_dict = {
+                        'component': change.component,
+                        'old_text': change.old_text,
+                        'new_text': change.new_text,
+                        'rationale': change.rationale,
+                        'metadata': change.metadata
+                    }
+                    if hasattr(change, 'timestamp'):
+                        change_dict['timestamp'] = change.timestamp.isoformat()
+                    current_iteration_changes.append(change_dict)
+                    logger.info(f"DEBUG: Added object change for iteration {result.iteration}")
+        
+        logger.info(f"Prompt changes for iteration {result.iteration}: {len(current_iteration_changes)}")
+        logger.info(f"DEBUG: Final changes to save: {current_iteration_changes}")
+        
         with open(changes_path, 'w') as f:
-            json.dump([{
-                'component': c.component,
-                'old_text': c.old_text,
-                'new_text': c.new_text,
-                'rationale': c.rationale,
-                'timestamp': c.timestamp.isoformat() if hasattr(c, 'timestamp') else None,
-                'metadata': c.metadata if hasattr(c, 'metadata') else {}
-            } for c in result.prompt_changes], f, indent=2)
+            json.dump(current_iteration_changes, f, indent=2)
             
         # Also save current prompts for this iteration
         prompts_path = iteration_dir / "current_prompts.json"
@@ -555,6 +580,7 @@ class APOSEvaluation(AccuracyEvaluation):
             changes: List of PromptChange objects to apply
         """
         logger.info(f"\nApplying {len(changes)} prompt changes:")
+        logger.info(f"Current iteration: {self.current_iteration}")
         current_prompts = self.get_current_prompts()
         
         # Log current prompts before changes
@@ -573,6 +599,11 @@ class APOSEvaluation(AccuracyEvaluation):
                 
             prompt_config = current_prompts[score_name]
             component = change.component.lower()
+            
+            # Ensure iteration is set in metadata
+            if 'iteration' not in change.metadata:
+                change.metadata['iteration'] = self.current_iteration
+            logger.info(f"Change metadata after setting iteration: {change.metadata}")
             
             # Store the old text before applying change
             if component == 'system_message':
@@ -593,6 +624,7 @@ class APOSEvaluation(AccuracyEvaluation):
                 
         # Store changes for the iteration result
         self.current_prompt_changes.extend(changes)
+        logger.info(f"Total changes in current_prompt_changes after extend: {len(self.current_prompt_changes)}")
                 
         # Apply the changes
         self.set_prompts(current_prompts)

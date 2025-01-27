@@ -16,6 +16,7 @@ class OptimizationConfig:
     max_iterations: int = 2
     target_accuracy: float = 0.95
     max_consecutive_no_improvement: int = 3  # Maximum number of consecutive iterations without improvement before stopping
+    max_mismatches_to_report: int = 100  # Maximum number of mismatches to analyze per iteration
 
 
 @dataclass

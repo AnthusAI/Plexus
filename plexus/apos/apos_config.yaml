@@ -1,7 +1,8 @@
 optimization:
-  max_iterations: 9
+  max_iterations: 5
   target_accuracy: 0.95
-  max_consecutive_no_improvement: 5  # Stop after this many iterations without improvement
+  max_consecutive_no_improvement: 3  # Stop after this many iterations without improvement
+  max_mismatches_to_report: 100  # Maximum number of mismatches to analyze per iteration
 
 model:
   model_type: "gpt-4o-mini-2024-07-18"
