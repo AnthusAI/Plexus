@@ -8,6 +8,7 @@ from typing import Optional, List, Dict, Any
 from pathlib import Path
 import json
 import pandas as pd
+import yaml
 
 from plexus.apos.evaluation import APOSEvaluation
 from plexus.apos.optimizer import PromptOptimizer
@@ -63,7 +64,7 @@ async def optimize_evaluation(
         if config is None:
             config = load_config()
         
-        # Initialize optimizer
+        # Initialize optimizer with config
         optimizer = PromptOptimizer(config=config)
         
         # Initialize evaluation
@@ -77,6 +78,13 @@ async def optimize_evaluation(
             override_folder=override_folder
         )
         
+        # Create output directory for best prompts and iterations
+        output_dir = Path(f"optimization_history/{scorecard_name}")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Set evaluation's history directory to be under the scorecard directory
+        evaluation.history_dir = str(output_dir)
+        
         # Run initial evaluation to get baseline
         result = await evaluation.run()
         initial_accuracy = result.accuracy
@@ -87,10 +95,6 @@ async def optimize_evaluation(
         best_prompts = evaluation.get_current_prompts()
         best_iteration = 0
         logger.info(f"New best accuracy achieved: {best_accuracy:.1%}")
-        
-        # Create output directory for best prompts
-        output_dir = Path(f"optimization_history/{scorecard_name}")
-        output_dir.mkdir(parents=True, exist_ok=True)
         
         # Main optimization loop
         iteration = 1
@@ -196,16 +200,27 @@ async def optimize_evaluation(
                     # Save best prompts to file
                     # Sanitize score name for file path
                     safe_score_name = score_name.replace('/', '_').replace('\\', '_')
-                    output_file = output_dir / f"{safe_score_name}_optimized_prompts.json"
+                    output_file = output_dir / f"{safe_score_name}_optimized_prompts.yaml"
                     os.makedirs(output_dir, exist_ok=True)  # Ensure directory exists
+
+                    # Convert string values to use | indicator for multiline strings
+                    formatted_prompts = {}
+                    for prompt_name, prompt_data in best_prompts.items():
+                        formatted_prompts[prompt_name] = {}
+                        for key, value in prompt_data.items():
+                            if isinstance(value, str) and ('\n' in value or len(value) > 80):
+                                formatted_prompts[prompt_name][key] = yaml.scalarstring.LiteralScalarString(value)
+                            else:
+                                formatted_prompts[prompt_name][key] = value
+
                     with open(output_file, 'w') as f:
-                        json.dump({
+                        yaml.dump({
                             'accuracy': best_accuracy,
                             'iteration': iteration,
-                            'prompts': best_prompts,
-                            'score_name': score_name,  # Keep original score name in the JSON
+                            'prompts': formatted_prompts,
+                            'score_name': score_name,  # Keep original score name in the YAML
                             'scorecard_name': scorecard_name
-                        }, f, indent=2)
+                        }, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
                     logger.info(f"Saved best prompts to {output_file}")
                 
                 iteration += 1
@@ -218,7 +233,7 @@ async def optimize_evaluation(
         logger.info("\n=== Optimization Complete ===")
         logger.info(f"Initial accuracy: {initial_accuracy:.1%}")
         logger.info(f"Best accuracy: {best_accuracy:.1%} (achieved at iteration {best_iteration})")
-        logger.info(f"Best prompts saved to optimization_history/{scorecard_name}/{score_name}_optimized_prompts.json")
+        logger.info(f"Best prompts saved to optimization_history/{scorecard_name}/{score_name}_optimized_prompts.yaml")
         
     except Exception as e:
         logger.error(f"Error running optimization: {e}")

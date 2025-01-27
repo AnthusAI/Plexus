@@ -4,7 +4,138 @@ optimization:
   max_consecutive_no_improvement: 3  # Stop after this many iterations without improvement
   max_mismatches_to_report: 100  # Maximum number of mismatches to analyze per iteration
 
-model:
+optimizer_model:  # For generating prompt improvements
   model_type: "gpt-4o-mini-2024-07-18"
-  top_p: 0.03
+  # temperature: 0.1  # Slightly higher temperature for more creative improvements
   max_tokens: 2000
+  top_p: 0.03
+  cache_dir: ".langchain_cache"
+  max_retries: 3
+  prompts:
+    system_template: |
+      You are an expert at optimizing prompts for classification tasks.
+      Your goal is to improve accuracy by making substantial improvements to the existing prompts.
+      
+      You will be shown:
+      1. The current prompts being used
+      2. Analysis of why these prompts are causing incorrect answers
+      
+      IMPORTANT:
+      - Make bold, substantial changes that directly address the identified issues
+      - Don't be afraid to completely rewrite sections that aren't working
+      - Focus on clarity and precision in the instructions
+      - Keep the core rules and requirements, but feel free to restructure how they're presented
+      - If you can't identify meaningful improvements, say so in the rationale
+      - Small tweaks and minor clarifications are usually not enough to fix systemic issues
+
+    human_template: |
+      Here are the current prompts and analysis of why they're causing problems:
+
+      Current Prompts:
+      system_message: "{current_system_message}"
+      user_message: "{current_user_message}"
+
+      Analysis of Issues:
+      Common Problems:
+      {common_issues}
+
+      Summary:
+      {summary}
+      
+      Your task:
+      1. Start with the current prompts
+      2. Make substantial changes to fix the identified issues - don't be afraid to rewrite entire sections
+      3. Ensure the {{text}} variable is ONLY in the user_message
+      4. Focus on making the instructions clearer and more precise
+      5. Consider restructuring the information to make it easier to follow
+      6. Add explicit examples if they would help clarify the requirements
+      7. Provide a detailed rationale explaining your changes and how they address the issues
+      
+      Remember: Minor tweaks and small clarifications rarely fix systemic issues. Be bold with your changes while keeping the core requirements intact.
+      
+      Your response must include:
+      1. An improved system_message
+      2. An improved user_message (with {{text}} placeholder)
+      3. A detailed rationale explaining your changes and how they address the issues
+
+analyzer_model:  # For analyzing individual mismatches
+  model_type: "gpt-4o-mini-2024-07-18"
+  # temperature: 0
+  max_tokens: 1500
+  top_p: 0.03
+  cache_dir: ".langchain_cache"
+  max_retries: 3
+  prompts:
+    system_template: |
+      You are an expert at analyzing classification errors and understanding why models make mistakes.
+      Your goal is to provide detailed, specific analysis of why a model made an incorrect prediction in a particular case.
+      
+      You will be shown:
+      1. The original transcript
+      2. The model's prediction and explanation
+      3. The correct ground truth answer
+      
+      Focus on:
+      - Identifying the exact reason for the error
+      - Understanding the model's reasoning process
+      - Finding specific details in the transcript that led to the mistake
+      - Categorizing the type of error that occurred
+
+    human_template: |
+      Analyze this specific case where the model's prediction did not match the ground truth.
+
+      Context:
+      The model was asked to evaluate a transcript and determine: {question_name}
+
+      Transcript:
+      {transcript_text}
+
+      Model's Prediction: {model_answer}
+      Ground Truth: {ground_truth}
+
+      Model's Original Explanation:
+      {original_explanation}
+
+      Your task is to:
+      1. Analyze exactly why the model made the wrong prediction in this specific case
+      2. Identify the root cause of the error
+      3. Provide a detailed analysis of what went wrong
+
+      Remember to:
+      - Be specific and reference exact details from the transcript
+      - Consider both what the model did wrong AND why it thought it was right
+
+pattern_analyzer_model:  # For analyzing patterns across mismatches
+  model_type: "gpt-4o-mini-2024-07-18"
+  # temperature: 0
+  max_tokens: 2500  # Higher token limit for pattern analysis
+  top_p: 0.03
+  cache_dir: ".langchain_cache"
+  max_retries: 3
+  prompts:
+    system_template: |
+      You are an expert at identifying patterns in classification errors and understanding systematic issues in prompts.
+      Your goal is to analyze multiple mismatches to find common problems and understand how the prompt design is causing these issues.
+      
+      You will be shown:
+      1. Multiple cases where the model gave incorrect answers
+      2. Detailed analysis of why each error occurred
+      
+      Focus on:
+      - Finding common patterns across the mismatches
+      - Identifying systematic issues in how the prompt guides the model
+      - Understanding how the prompt's structure or content contributes to errors
+      - Being specific about how these issues manifest across different cases
+
+    human_template: |
+      Review these mismatches where the model gave incorrect answers. For each mismatch, we've analyzed why the prompt misguided the model.
+
+      Your task is to:
+      1. Look at all the mismatch analyses
+      2. Identify the common issues in how the prompt is misguiding the model
+      3. Create a clear summary explaining how the prompt is causing these problems
+
+      Mismatches and their analyses:
+      {mismatch_summaries}
+
+      Focus on being clear and specific about how the prompt is causing these issues.

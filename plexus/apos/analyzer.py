@@ -8,10 +8,11 @@ import json
 import asyncio
 
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
+from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field
 
 from plexus.apos.models import MismatchAnalysis
+from plexus.apos.config import APOSConfig
 
 logger = logging.getLogger('plexus.apos.analyzer')
 
@@ -26,41 +27,45 @@ class MismatchAnalyzer:
     Analyzes individual mismatches to understand why they occurred and how to fix them.
     """
     
-    def __init__(self, llm: Optional[ChatOpenAI] = None):
-        """Initialize the analyzer with an optional LLM."""
-        self.llm = llm or ChatOpenAI(
-            model="gpt-4o-mini-2024-07-18",
-            temperature=0.1,  # Low temperature for consistent analysis
-            max_tokens=1000
+    def __init__(self, config: APOSConfig):
+        """Initialize the analyzer with configuration."""
+        self.config = config
+        
+        # Initialize LLM with analyzer-specific model config
+        model_config = config.analyzer_model
+        
+        # Setup LangChain caching if specified
+        if hasattr(model_config, 'cache_dir'):
+            from langchain_community.cache import SQLiteCache
+            from langchain_core.globals import set_llm_cache
+            set_llm_cache(SQLiteCache(database_path=f"{model_config.cache_dir}/analyzer_cache.db"))
+        
+        # Initialize LLM with only valid OpenAI parameters
+        self.llm = ChatOpenAI(
+            model=model_config.model_type,
+            temperature=model_config.temperature,
+            max_tokens=model_config.max_tokens,
+            top_p=model_config.top_p,
+            max_retries=model_config.max_retries
         ).with_structured_output(MismatchAnalysisOutput)
+        
+        logger.info(f"Initialized mismatch analyzer using {model_config.model_type}")
         self.prompt = self._create_prompt()
         
     def _create_prompt(self):
         """Create the analysis prompt template."""
-        template = """Analyze this specific case where the model's prediction did not match the ground truth.
-
-Context:
-The model was asked to evaluate a transcript and determine: {question_name}
-
-Transcript:
-{transcript_text}
-
-Model's Prediction: {model_answer}
-Ground Truth: {ground_truth}
-
-Model's Original Explanation:
-{original_explanation}
-
-Your task is to:
-1. Analyze exactly why the model made the wrong prediction in this specific case
-2. Identify the root cause of the error
-3. Provide a detailed analysis of what went wrong
-
-Remember to:
-- Be specific and reference exact details from the transcript
-- Consider both what the model did wrong AND why it thought it was right"""
-
-        return ChatPromptTemplate.from_template(template)
+        system_template = SystemMessagePromptTemplate.from_template(
+            self.config.analyzer_model.prompts['system_template']
+        )
+        
+        human_template = HumanMessagePromptTemplate.from_template(
+            self.config.analyzer_model.prompts['human_template']
+        )
+        
+        return ChatPromptTemplate.from_messages([
+            system_template,
+            human_template
+        ])
         
     async def analyze_mismatch(self, mismatch: MismatchAnalysis) -> MismatchAnalysis:
         """

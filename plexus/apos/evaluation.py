@@ -186,9 +186,9 @@ class APOSEvaluation(AccuracyEvaluation):
         # Ensure persistence directory exists
         os.makedirs(self.config.persistence_path, exist_ok=True)
         
-        # Initialize analyzers
-        self.mismatch_analyzer = MismatchAnalyzer()
-        self.pattern_analyzer = PatternAnalyzer()
+        # Initialize analyzers with config
+        self.mismatch_analyzer = MismatchAnalyzer(config=self.config)
+        self.pattern_analyzer = PatternAnalyzer(config=self.config)
         self.history_dir = "optimization_history"
         self.current_iteration = 0
         self.iteration_dir = None
@@ -341,9 +341,8 @@ class APOSEvaluation(AccuracyEvaluation):
             self.iteration_dir = os.path.join(self.history_dir, f"iteration_{self.current_iteration}")
             os.makedirs(self.iteration_dir, exist_ok=True)
             
-            # Set report folder path in base class
-            report_folder_path = os.path.join(self.iteration_dir, f"iteration_{self.current_iteration}")
-            os.makedirs(report_folder_path, exist_ok=True)
+            # Set report folder path in base class to the same directory
+            self.report_folder_path = self.iteration_dir
             
             # Create new evaluation in dashboard for this iteration
             if self.dashboard_client:
@@ -381,7 +380,7 @@ class APOSEvaluation(AccuracyEvaluation):
             mlflow.start_run(run_name=f"iteration_{self.current_iteration}")
             
             # Run base evaluation with the report folder path
-            self.report_folder_path = report_folder_path
+            self.report_folder_path = self.iteration_dir
             await super()._async_run()
             
             # Analyze mismatches and synthesize patterns
@@ -450,7 +449,7 @@ class APOSEvaluation(AccuracyEvaluation):
 
     def _persist_results(self, result: IterationResult) -> None:
         """Persist iteration results to disk."""
-        iteration_dir = Path(self.config.persistence_path) / f"iteration_{result.iteration}"
+        iteration_dir = Path(self.history_dir) / f"iteration_{result.iteration}"
         os.makedirs(iteration_dir, exist_ok=True)
         
         # Debug logging for prompt changes

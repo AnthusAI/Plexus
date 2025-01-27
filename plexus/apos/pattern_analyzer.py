@@ -9,10 +9,11 @@ from typing import List, Dict, Any, Optional
 from dataclasses import asdict
 
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
+from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field
 
 from plexus.apos.models import MismatchAnalysis, SynthesisResult
+from plexus.apos.config import APOSConfig
 
 logger = logging.getLogger('plexus.apos.pattern_analyzer')
 
@@ -31,30 +32,45 @@ class PatternAnalyzer:
     and suggest improvements.
     """
     
-    def __init__(self, llm: Optional[ChatOpenAI] = None):
-        """Initialize the analyzer with an optional LLM."""
-        self.llm = llm or ChatOpenAI(
-            model="gpt-4o-mini-2024-07-18",
-            temperature=0.1,  # Low temperature for consistent analysis
-            max_tokens=2000  # Higher token limit for analyzing multiple mismatches
+    def __init__(self, config: APOSConfig):
+        """Initialize the analyzer with configuration."""
+        self.config = config
+        
+        # Initialize LLM with pattern analyzer-specific model config
+        model_config = config.pattern_analyzer_model
+        
+        # Setup LangChain caching if specified
+        if hasattr(model_config, 'cache_dir'):
+            from langchain_community.cache import SQLiteCache
+            from langchain_core.globals import set_llm_cache
+            set_llm_cache(SQLiteCache(database_path=f"{model_config.cache_dir}/pattern_analyzer_cache.db"))
+        
+        # Initialize LLM with only valid OpenAI parameters
+        self.llm = ChatOpenAI(
+            model=model_config.model_type,
+            temperature=model_config.temperature,
+            max_tokens=model_config.max_tokens,
+            top_p=model_config.top_p,
+            max_retries=model_config.max_retries
         ).with_structured_output(PatternAnalysisOutput)
+        
+        logger.info(f"Initialized pattern analyzer using {model_config.model_type}")
         self.prompt = self._create_prompt()
         
     def _create_prompt(self):
         """Create the pattern analysis prompt template."""
-        template = """Review these mismatches where the model gave incorrect answers. For each mismatch, we've analyzed why the prompt misguided the model.
-
-Your task is to:
-1. Look at all the mismatch analyses
-2. Identify the common issues in how the prompt is misguiding the model
-3. Create a clear summary explaining how the prompt is causing these problems
-
-Mismatches and their analyses:
-{mismatch_summaries}
-
-Focus on being clear and specific about how the prompt is causing these issues."""
-
-        return ChatPromptTemplate.from_template(template)
+        system_template = SystemMessagePromptTemplate.from_template(
+            self.config.pattern_analyzer_model.prompts['system_template']
+        )
+        
+        human_template = HumanMessagePromptTemplate.from_template(
+            self.config.pattern_analyzer_model.prompts['human_template']
+        )
+        
+        return ChatPromptTemplate.from_messages([
+            system_template,
+            human_template
+        ])
         
     def _format_mismatch_summary(self, mismatch: MismatchAnalysis) -> str:
         """Format a single mismatch for inclusion in the prompt."""
