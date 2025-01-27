@@ -124,7 +124,7 @@ export default function Workflow() {
           <path
             d="M1 1 C1 1.3 0.9 2 2 2"
             className="stroke-card"
-            strokeWidth="0.1"
+            strokeWidth="0.15"
             fill="none"
             strokeLinecap="round"
           />
@@ -132,7 +132,7 @@ export default function Workflow() {
           <path
             d="M1 1 L1 2.5 C1 2.7 0.9 3 2 3"
             className="stroke-card"
-            strokeWidth="0.1"
+            strokeWidth="0.15"
             fill="none"
             strokeLinecap="round"
           />
@@ -140,7 +140,7 @@ export default function Workflow() {
           <path
             d="M2 2 L3 2"
             className="stroke-card"
-            strokeWidth="0.1"
+            strokeWidth="0.15"
             fill="none"
             strokeLinecap="round"
           />
@@ -148,7 +148,7 @@ export default function Workflow() {
           <path
             d="M2 3 L3 3"
             className="stroke-card"
-            strokeWidth="0.1"
+            strokeWidth="0.15"
             fill="none"
             strokeLinecap="round"
           />
@@ -164,8 +164,8 @@ export default function Workflow() {
                 case "row2-b": return { x: 3, y: 3 }
               }
             })()
-            const radius = step.position === "main" ? 0.4 : 0.3
-            const iconScale = step.position === "main" ? 0.5 : 0.35
+            const radius = step.position === "main" ? 0.6 : 0.4
+            const iconScale = step.position === "main" ? 0.75 : 0.5
 
             return (
               <g key={step.id}>
@@ -179,7 +179,7 @@ export default function Workflow() {
                     step.status === "processing" && "fill-card stroke-border",
                     step.status === "complete" && "fill-true stroke-none"
                   )}
-                  strokeWidth={0.02}
+                  strokeWidth={0.03}
                 />
                 {step.status === "not-started" && (
                   <circle
@@ -187,7 +187,7 @@ export default function Workflow() {
                     cy={position.y}
                     r={radius * 0.6}
                     className="stroke-border fill-none"
-                    strokeWidth={0.02}
+                    strokeWidth={0.03}
                   />
                 )}
                 {step.status === "processing" && (
@@ -196,7 +196,7 @@ export default function Workflow() {
                     cy={position.y}
                     r={radius * 0.6}
                     className="stroke-secondary fill-none"
-                    strokeWidth={0.1}
+                    strokeWidth={0.15}
                     strokeLinecap="round"
                     strokeDasharray={`${radius * 2} ${radius * 2}`}
                   >
@@ -212,9 +212,9 @@ export default function Workflow() {
                 )}
                 {step.status === "complete" && (
                   <path
-                    d={`M${position.x - iconScale/2} ${position.y + (step.position === "main" ? 0.08 : 0.05)} l${iconScale/3} ${iconScale/3} l${iconScale/2} -${iconScale}`}
+                    d={`M${position.x - iconScale/2} ${position.y + (step.position === "main" ? 0.12 : 0.075)} l${iconScale/3} ${iconScale/3} l${iconScale/2} -${iconScale}`}
                     className="stroke-background"
-                    strokeWidth={step.position === "main" ? 0.15 : 0.1}
+                    strokeWidth={step.position === "main" ? 0.225 : 0.15}
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     fill="none"
