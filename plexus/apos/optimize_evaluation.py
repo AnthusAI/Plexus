@@ -17,6 +17,7 @@ from plexus.Scorecard import Scorecard
 from plexus.Registries import scorecard_registry
 from plexus.apos.samples import get_samples
 from plexus.apos.models import MismatchAnalysis
+from plexus.apos.evaluation import IterationResult
 
 
 logger = logging.getLogger('plexus.apos.optimize')
@@ -130,15 +131,60 @@ async def optimize_evaluation(
                     
                     # Generate improvements using synthesis result
                     optimized_changes = optimizer.optimize_prompt(score_name, synthesis_result, evaluation)
+                    logger.info(f"DEBUG: Optimized changes: {optimized_changes}")
                     
-                    # Convert dict of changes to list
-                    changes_list = list(optimized_changes.values())
+                    # Ensure only one change per component
+                    filtered_changes = {}
+                    for change in optimized_changes.values():
+                        if change.component not in filtered_changes:
+                            filtered_changes[change.component] = change
+                            logger.info(f"DEBUG: Keeping change for component {change.component}")
+                        else:
+                            logger.info(f"DEBUG: Skipping duplicate change for component {change.component}")
                     
-                    # Apply changes
+                    # Convert filtered dict of changes to list
+                    changes_list = list(filtered_changes.values())
+                    logger.info(f"DEBUG: Filtered changes list: {changes_list}")
+                    
+                    # Start with empty list for this iteration's changes
+                    saved_changes = []  # Start with empty list for this iteration
+                    logger.info(f"DEBUG: Starting new iteration with empty saved_changes")
+                    
+                    # Add filtered changes to saved_changes with current iteration number
+                    for change in changes_list:
+                        change.metadata['iteration'] = iteration
+                        saved_changes.append(change)
+                        logger.info(f"DEBUG: Added change for component {change.component} to iteration {iteration}")
+                    
+                    # Apply the changes to the actual prompts
                     evaluation.apply_prompt_changes(changes_list)
+                    logger.info(f"DEBUG: Applied changes to prompts")
+                    
+                    # Set evaluation's iteration number and changes
+                    evaluation.current_iteration = iteration
+                    evaluation.current_prompt_changes = saved_changes
+                    logger.info(f"DEBUG: Set evaluation iteration to {iteration} with {len(saved_changes)} changes")
+                    
+                    # Run evaluation
+                    await evaluation.run()
+                    
+                    # Create result with only this iteration's changes
+                    result = IterationResult(
+                        iteration=iteration,
+                        accuracy=evaluation.total_correct / evaluation.total_questions if evaluation.total_questions > 0 else 0.0,
+                        mismatches=evaluation.mismatches,
+                        prompt_changes=saved_changes,
+                        metrics={},
+                        metadata={}
+                    )
+                    logger.info(f"DEBUG: Result prompt changes for iteration {iteration}: {result.prompt_changes}")
                 
-                # Run evaluation with new prompts
-                result = await evaluation.run()
+                # Update result with analyses
+                result.mismatch_analyses = analyzed_mismatches
+                result.pattern_synthesis = synthesis_result
+                
+                # Persist results including current prompts
+                evaluation._persist_results(result)
                 
                 # Update best accuracy and prompts if improved
                 if result.accuracy > best_accuracy:
@@ -148,13 +194,16 @@ async def optimize_evaluation(
                     logger.info(f"New best accuracy achieved: {best_accuracy:.1%} at iteration {iteration}")
                     
                     # Save best prompts to file
-                    output_file = output_dir / f"{score_name}_optimized_prompts.json"
+                    # Sanitize score name for file path
+                    safe_score_name = score_name.replace('/', '_').replace('\\', '_')
+                    output_file = output_dir / f"{safe_score_name}_optimized_prompts.json"
+                    os.makedirs(output_dir, exist_ok=True)  # Ensure directory exists
                     with open(output_file, 'w') as f:
                         json.dump({
                             'accuracy': best_accuracy,
                             'iteration': iteration,
                             'prompts': best_prompts,
-                            'score_name': score_name,
+                            'score_name': score_name,  # Keep original score name in the JSON
                             'scorecard_name': scorecard_name
                         }, f, indent=2)
                     logger.info(f"Saved best prompts to {output_file}")

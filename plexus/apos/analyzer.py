@@ -5,6 +5,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from dataclasses import asdict
 import json
+import asyncio
 
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
@@ -98,7 +99,7 @@ Remember to:
 
     async def analyze_mismatches(self, mismatches: List[MismatchAnalysis]) -> List[MismatchAnalysis]:
         """
-        Analyze a list of mismatches individually.
+        Analyze a list of mismatches concurrently.
         
         Args:
             mismatches: List of mismatches to analyze
@@ -106,13 +107,28 @@ Remember to:
         Returns:
             List of analyzed mismatches
         """
-        analyzed = []
+        # Create tasks for all mismatches
+        tasks = []
         for mismatch in mismatches:
-            try:
-                analyzed_mismatch = await self.analyze_mismatch(mismatch)
-                analyzed.append(analyzed_mismatch)
-            except Exception as e:
-                logger.error(f"Failed to analyze mismatch {mismatch.transcript_id}: {e}")
-                # Still include the original mismatch even if analysis failed
-                analyzed.append(mismatch)
-        return analyzed 
+            task = asyncio.create_task(self._analyze_mismatch_with_error_handling(mismatch))
+            tasks.append(task)
+            
+        # Wait for all tasks to complete
+        analyzed = await asyncio.gather(*tasks)
+        return analyzed
+        
+    async def _analyze_mismatch_with_error_handling(self, mismatch: MismatchAnalysis) -> MismatchAnalysis:
+        """
+        Wrapper around analyze_mismatch that handles errors gracefully.
+        
+        Args:
+            mismatch: The mismatch to analyze
+            
+        Returns:
+            Analyzed mismatch or original mismatch if analysis fails
+        """
+        try:
+            return await self.analyze_mismatch(mismatch)
+        except Exception as e:
+            logger.error(f"Failed to analyze mismatch {mismatch.transcript_id}: {e}")
+            return mismatch 
