@@ -165,18 +165,26 @@ class LangGraphScore(Score, LangChainUser):
             default=None,
             description="Messages for LLM prompts"
         )
-        is_not_empty: Optional[bool] = None
-        value: Optional[str] = None
-        explanation: Optional[str] = None
-        reasoning: Optional[str] = None
+        is_not_empty: Optional[bool] = Field(default=None)
+        value: Optional[str] = Field(default=None)
+        explanation: Optional[str] = Field(default=None)
+        reasoning: Optional[str] = Field(default=None)
         chat_history: List[Any] = Field(default_factory=list)
-        completion: Optional[str] = None
-        classification: Optional[str] = None
-        confidence: Optional[float] = None
+        completion: Optional[str] = Field(default=None)
+        classification: Optional[str] = Field(default=None)
+        confidence: Optional[float] = Field(default=None)
         retry_count: Optional[int] = Field(default=0)
         at_llm_breakpoint: Optional[bool] = Field(default=False)
+        good_call: Optional[str] = Field(default=None)
+        good_call_explanation: Optional[str] = Field(default=None)
+        non_qualifying_reason: Optional[str] = Field(default=None)
+        non_qualifying_explanation: Optional[str] = Field(default=None)
 
-        model_config = ConfigDict(arbitrary_types_allowed=True)
+        model_config = ConfigDict(
+            arbitrary_types_allowed=True,
+            validate_default=True,
+            extra='allow'
+        )
 
     def __init__(self, **parameters):
         """
@@ -253,6 +261,7 @@ class LangGraphScore(Score, LangChainUser):
                     conditions = node_config['conditions']
                     if isinstance(conditions, list):
                         value_setters = {}
+                        # Create value setter nodes for each condition
                         for j, condition in enumerate(conditions):
                             value_setter_name = f"{previous_node}_value_setter_{j}"
                             value_setters[condition['value'].lower()] = value_setter_name
@@ -263,28 +272,35 @@ class LangGraphScore(Score, LangChainUser):
                                 )
                             )
 
-                        def create_routing_function(conditions, value_setters, node_name):
+                        def create_routing_function(conditions, value_setters, next_node):
                             def routing_function(state):
-                                for condition in conditions:
-                                    if hasattr(state, condition['state']) and \
-                                       getattr(state, condition['state']).lower() == \
-                                           condition['value'].lower():
-                                        return value_setters[condition['value'].lower()]
-                                return node_name
+                                if hasattr(state, 'classification'):
+                                    state_value = state.classification.lower()
+                                    # Check if we have a value setter for this classification
+                                    if state_value in value_setters:
+                                        return value_setters[state_value]
+                                # Default case - route to next node
+                                return next_node
                             return routing_function
 
+                        # Create a list of valid targets for conditional edges
+                        valid_targets = list(value_setters.values()) + [node_name]
+                        
+                        # Add conditional routing only to valid targets
                         workflow.add_conditional_edges(
                             previous_node,
-                            create_routing_function(conditions, value_setters, node_name)
+                            create_routing_function(conditions, value_setters, node_name),
+                            valid_targets
                         )
 
+                        # Add edges from value setters to their target nodes
                         for condition in conditions:
                             value_setter_name = value_setters[condition['value'].lower()]
-                            next_node = condition.get('node', 'final')
-                            if next_node != 'END':
-                                workflow.add_edge(value_setter_name, next_node)
-                            else:
+                            target_node = condition.get('node', node_name)
+                            if target_node == 'END':
                                 workflow.add_edge(value_setter_name, END)
+                            else:
+                                workflow.add_edge(value_setter_name, target_node)
                     else:
                         logging.error(f"Conditions is not a list: {conditions}")
                         workflow.add_edge(previous_node, node_name)
@@ -334,48 +350,53 @@ class LangGraphScore(Score, LangChainUser):
         logging.info(f"Created combined state class: {combined_state_class}")
         logging.info(f"Combined state fields: {combined_state_class.model_fields.keys()}")
         
-        # Use combined state class when creating workflow
-        workflow = StateGraph(combined_state_class)
-
-        # Process nodes - now using combined_state_class
-        for node_name, node_instance in node_instances:
-            workflow.add_node(
-                node_name, 
-                node_instance.build_compiled_workflow(
-                    graph_state_class=combined_state_class
-                )
-            )
-
-        # Set entry point to first node
-        first_node = node_instances[0][0]
-        workflow.set_entry_point(first_node)
-
-        # Add remaining edges
-        for i in range(len(node_instances) - 1):
-            current_node = node_instances[i][0]
-            next_node = node_instances[i + 1][0]
-            workflow.add_edge(current_node, next_node)
-
-        # Add final node and edge from last node to END
-        last_node = node_instances[-1][0]
-        
-        # Add output aliasing if needed
-        if hasattr(self.parameters, 'output') and self.parameters.output is not None:
-            logging.info(f"Adding output aliasing node with mapping: {self.parameters.output}")
-            output_aliasing_function = LangGraphScore.generate_output_aliasing_function(
-                self.parameters.output
-            )
-            workflow.add_node('output_aliasing', output_aliasing_function)
-            workflow.add_edge(last_node, 'output_aliasing')
-            workflow.add_edge('output_aliasing', END)
-            logging.info("Added output aliasing node to workflow")
-        else:
-            workflow.add_edge(last_node, END)
-            logging.info("No output aliasing needed, connected last node directly to END")
-
-        logging.info("=== Workflow Build Complete ===")
+        # Store the combined state class
+        self.combined_state_class = combined_state_class
 
         try:
+            # Use combined state class when creating workflow
+            workflow = StateGraph(combined_state_class)
+
+            try:
+                # Process nodes - now using combined_state_class
+                for node_name, node_instance in node_instances:
+                    workflow.add_node(
+                        node_name, 
+                        node_instance.build_compiled_workflow(
+                            graph_state_class=combined_state_class
+                        )
+                    )
+            except Exception as e:
+                logging.error(f"Error creating node {node_name}: {str(e)}")
+                logging.error(f"Full traceback: {traceback.format_exc()}")
+                raise
+
+            # Set entry point to first node
+            first_node = node_instances[0][0]
+            workflow.set_entry_point(first_node)
+
+            # Add edges using our add_edges method
+            LangGraphScore.add_edges(workflow, node_instances, None, self.parameters.graph)
+
+            # Add final node and edge from last node to END
+            last_node = node_instances[-1][0]
+            
+            # Add output aliasing if needed
+            if hasattr(self.parameters, 'output') and self.parameters.output is not None:
+                logging.info(f"Adding output aliasing node with mapping: {self.parameters.output}")
+                output_aliasing_function = LangGraphScore.generate_output_aliasing_function(
+                    self.parameters.output
+                )
+                workflow.add_node('output_aliasing', output_aliasing_function)
+                workflow.add_edge(last_node, 'output_aliasing')
+                workflow.add_edge('output_aliasing', END)
+                logging.info("Added output aliasing node to workflow")
+            else:
+                workflow.add_edge(last_node, END)
+                logging.info("No output aliasing needed, connected last node directly to END")
+
+            logging.info("=== Workflow Build Complete ===")
+
             # Compile with checkpointer only if configured
             app = workflow.compile(
                 checkpointer=self.checkpointer if self.checkpointer else None
@@ -385,6 +406,12 @@ class LangGraphScore(Score, LangChainUser):
             self.node_instances = node_instances
             
             logging.info(f"Created combined state class with fields: {combined_state_class.__annotations__}")
+            
+            # Store the compiled workflow before trying to visualize it
+            self.workflow = app
+            
+            # Generate and log the graph visualization
+            # self.generate_graph_visualization("./tmp/workflow_graph.png")
             
             return app
             
@@ -624,52 +651,55 @@ class LangGraphScore(Score, LangChainUser):
         """
         Dynamically create a combined GraphState class based on all nodes in the workflow.
         """
-        attributes: Dict[str, Any] = {}
-
-        # Start with all fields from the base GraphState
-        attributes.update(self.GraphState.__annotations__)
+        # Start with base annotations
+        base_annotations = self.GraphState.__annotations__.copy()
+        logging.info(f"Starting with base annotations: {base_annotations}")
 
         # First collect all attributes from node instances
         for instance in instances:
             # Add fields from the node's GraphState
             for attr_name, attr_type in instance.GraphState.__annotations__.items():
-                if attr_name in attributes:
-                    if attributes[attr_name] != attr_type:
-                        raise TypeError(f"Inconsistent type for attribute '{attr_name}': "
-                                      f"{attributes[attr_name]} != {attr_type}")
-                else:
-                    attributes[attr_name] = attr_type
+                # Always make fields Optional
+                if not (hasattr(attr_type, '__origin__') and attr_type.__origin__ is Union and type(None) in attr_type.__args__):
+                    attr_type = Optional[attr_type]
+                base_annotations[attr_name] = attr_type
 
-            # Add fields from the node's output mapping
+            # Add fields from output mappings
             if hasattr(instance.parameters, 'output') and instance.parameters.output is not None:
                 logging.info(f"Adding output fields from node {instance.__class__.__name__}: {instance.parameters.output}")
                 for alias, original in instance.parameters.output.items():
-                    if original in attributes:
-                        attributes[alias] = attributes[original]
-                        logging.info(f"Added node output alias {alias} with type {attributes[original]}")
-                    else:
-                        logging.warning(f"Original field '{original}' not found for node output alias '{alias}'")
+                    base_annotations[alias] = Optional[str]
+                    logging.info(f"Added node output alias {alias} with type Optional[str]")
 
-        # Then handle output aliases from the main LangGraphScore parameters
+        # Handle output aliases from main parameters
         if hasattr(self.parameters, 'output') and self.parameters.output is not None:
             logging.info(f"Adding score output fields: {self.parameters.output}")
             for alias, original in self.parameters.output.items():
-                if original in attributes:
-                    attributes[alias] = attributes[original]
-                    logging.info(f"Added score output alias {alias} with type {attributes[original]}")
-                else:
-                    # If original doesn't exist, default to Optional[str]
-                    attributes[alias] = Optional[str]
-                    logging.info(f"Added score output alias {alias} with default type Optional[str]")
+                base_annotations[alias] = Optional[str]
+                logging.info(f"Added score output alias {alias} with type Optional[str]")
 
-        # Create the combined class with all fields
-        CombinedGraphState = create_model(
-            "CombinedGraphState", 
-            **{k: (v, None) for k, v in attributes.items()}, 
-            __base__=LangGraphScore.GraphState,
-            model_config=ConfigDict(extra='allow')  # Allow extra fields
-        )
-        
+        # Create new class with updated configuration
+        class CombinedGraphState(self.GraphState):
+            __annotations__ = base_annotations
+            model_config = ConfigDict(
+                arbitrary_types_allowed=True,
+                validate_default=False,  # Don't validate defaults
+                extra='allow',  # Allow extra fields
+                validate_assignment=False,  # Don't validate on assignment
+                populate_by_name=True,  # Allow population by field name
+                use_enum_values=True,  # Use enum values instead of enum objects
+            )
+
+            def __init__(self, **data):
+                # Set all fields to None by default
+                defaults = {field: None for field in self.__annotations__}
+                # Special case for chat_history which should be an empty list
+                if 'chat_history' in self.__annotations__:
+                    defaults['chat_history'] = []
+                # Override defaults with provided data
+                defaults.update(data)
+                super().__init__(**defaults)
+
         logging.info(f"Base GraphState fields: {self.GraphState.__annotations__}")
         logging.info(f"Final combined state fields: {CombinedGraphState.__annotations__}")
         
@@ -819,188 +849,90 @@ class LangGraphScore(Score, LangChainUser):
             return state
         return value_setter
 
-    async def predict(self, context, model_input: Optional[Union[Score.Input, dict]]):
-        try:            
-            # Get thread_id from metadata
-            thread_id = model_input.metadata.get('content_id')
-            if not thread_id:
-                thread_id = str(uuid.uuid4())
-                logging.warning(
-                    f"No content_id found in metadata, using generated UUID: {thread_id}"
-                )
-            
-            # Check for required metadata, but allow evaluation mode
-            if not model_input.metadata.get('account_key'):
-                if model_input.metadata.get('evaluation_mode'):
-                    logging.info("Running in evaluation mode")
-                else:
-                    raise ValueError("No account_key found in metadata")
+    async def predict(
+        self,
+        model_input: Score.Input,
+        thread_id: Optional[str] = None,
+        batch_data: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ) -> Score.Result:
+        """
+        Make predictions using the LangGraph workflow.
 
-            # Set up thread config
-            thread = {
-                "configurable": {
-                    "thread_id": str(thread_id) if thread_id else None
-                }
+        Parameters
+        ----------
+        model_input : Score.Input
+            The input data containing text and metadata
+        thread_id : Optional[str]
+            Thread ID for checkpointing
+        batch_data : Optional[Dict[str, Any]]
+            Additional data for batch processing
+        **kwargs : Any
+            Additional keyword arguments
+
+        Returns
+        -------
+        Score.Result
+            The prediction result with value and explanation
+        """
+        # Generate checkpoint IDs if not provided
+        if not thread_id:
+            thread_id = str(uuid.uuid4())
+        checkpoint_ns = f"{self.parameters.name}_{thread_id}" if self.parameters.name else str(uuid.uuid4())
+        checkpoint_id = str(uuid.uuid4())
+
+        thread = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": checkpoint_ns,
+                "checkpoint_id": checkpoint_id
             }
-            if context and 'configurable' in context:
-                thread['configurable'].update(context['configurable'])
+        }
+        initial_results = {}
 
-            # Check if we have batch results to inject
-            batch_data = model_input.metadata.get('batch', {})
-            if batch_data and 'completion' in batch_data:
-                logging.info("Found batch completion - resuming from checkpoint")
-                logging.info(f"Full metadata from model_input: {model_input.metadata}")
-                
-                # Get existing checkpoint state
-                checkpoint_state = await self.workflow.aget_state(thread, subgraphs=True)
-                if not checkpoint_state:
-                    raise ValueError("No checkpoint state found")
+        initial_state = self.combined_state_class(
+            text=self.preprocess_text(model_input.text),
+            metadata=model_input.metadata,
+            results=initial_results,
+            retry_count=0,
+            at_llm_breakpoint=False
+        ).model_dump()
 
-                logging.info(f"Current checkpoint state: {checkpoint_state}")
-                
-                # Create client using metadata from model_input
-                client = PlexusDashboardClient.for_scorecard(
-                    account_key=model_input.metadata.get('account_key'),
-                    scorecard_key=model_input.metadata.get('scorecard_key'),
-                    score_name=model_input.metadata.get('score_name')
-                )
-                
-                # Get scoring job directly using content_id
-                query = """
-                query GetScoringJob($itemId: String!) {
-                    listScoringJobs(filter: { itemId: { eq: $itemId } }, limit: 1) {
-                        items {
-                            id
-                            itemId
-                            status
-                            metadata
-                        }
-                    }
+        if batch_data:
+            initial_state.update(batch_data)
+
+        try:
+            logging.info("=== Pre-invoke State Inspection ===")
+            logging.info(f"Initial state type: {type(initial_state)}")
+            logging.info(f"Initial state keys: {initial_state.keys()}")
+            logging.info(f"Workflow type: {type(self.workflow)}")
+            
+            graph_result = await self.workflow.ainvoke(
+                initial_state,
+                config=thread
+            )
+            
+            # Convert graph result to Score.Result
+            return Score.Result(
+                parameters=self.parameters,
+                value=graph_result.get('value', 'Error'),
+                metadata={
+                    'explanation': graph_result.get('explanation'),
+                    'good_call': graph_result.get('good_call'),
+                    'good_call_explanation': graph_result.get('good_call_explanation'),
+                    'non_qualifying_reason': graph_result.get('non_qualifying_reason'),
+                    'non_qualifying_explanation': graph_result.get('non_qualifying_explanation'),
+                    'confidence': graph_result.get('confidence'),
+                    'classification': graph_result.get('classification')
                 }
-                """
-                result = client.execute(query, {'itemId': str(thread_id)})
-                scoring_jobs = result.get('listScoringJobs', {}).get('items', [])
-                
-                if scoring_jobs and scoring_jobs[0].get('metadata'):
-                    try:
-                        metadata = json.loads(scoring_jobs[0]['metadata'])
-                        state = metadata.get('state', {})
-                        messages = state.get('messages', [])
-                        logging.info(f"Recovered {len(messages)} messages from scoring job metadata")
-                    except json.JSONDecodeError:
-                        logging.error("Could not parse scoring job metadata")
-                        messages = []
-                else:
-                    logging.warning("No messages found in scoring job metadata")
-                    messages = []
-
-                # Create state with both completion and messages
-                state = {
-                    **checkpoint_state.values,  # Keep all existing values
-                    'completion': batch_data['completion'],
-                    'messages': messages,  # Add recovered messages
-                    'at_llm_breakpoint': False
-                }
-                logging.info(f"Resuming with state: {state}")
-
-                # Resume execution from the checkpoint
-                logging.info("Resuming execution...")
-                final_result = await self.workflow.ainvoke(
-                    state,  # Pass in our modified state
-                    config=thread  # Use the parent thread config
-                )
-                logging.info(f"Execution completed with result: {final_result}")
-
-            else:
-                # Normal execution path - start from beginning
-                logging.info("Starting normal execution path")
-                
-                # Enhanced debugging for input
-                logging.info(f"Model input type: {type(model_input)}")
-                logging.info(f"Model input attributes: {dir(model_input)}")
-                logging.info(f"Model input results: {model_input.results if hasattr(model_input, 'results') else 'No results attribute'}")
-                
-                # Ensure required metadata fields are present
-                metadata = model_input.metadata or {}
-                if not metadata.get('account_key'):
-                    raise ValueError("No account_key found in metadata")
-                if not metadata.get('scorecard_key'):
-                    metadata['scorecard_key'] = self.parameters.scorecard_name
-                if not metadata.get('score_name'):
-                    metadata['score_name'] = self.parameters.name
-                
-                # Initialize results dictionary with dependencies
-                initial_results = {}
-                if hasattr(self.parameters, 'depends_on') and self.parameters.depends_on:
-                    logging.info(f"Dependencies found: {self.parameters.depends_on}")
-                    logging.info(f"Model input type: {type(model_input)}")
-                    logging.info(f"Model input dir: {dir(model_input)}")
-                    if hasattr(model_input, 'results'):
-                        logging.info(f"Raw results from model input: {model_input.results}")
-                        if isinstance(model_input.results, list):
-                            for result_entry in model_input.results:
-                                if isinstance(result_entry, dict) and 'name' in result_entry:
-                                    dependency_name = result_entry['name']
-                                    logging.info(f"Found dependency result for: {dependency_name}")
-                                    if dependency_name in self.parameters.depends_on:
-                                        initial_results[dependency_name] = result_entry.get('result')
-                                        logging.info(f"Added dependency {dependency_name} with value: {initial_results[dependency_name]}")
-                                else:
-                                    logging.warning(f"Invalid result entry format: {result_entry}")
-                        else:
-                            logging.warning(f"Results is not a list: {type(model_input.results)}")
-                    else:
-                        logging.error("Model input has no results attribute")
-                else:
-                    logging.info(f"No dependencies found in parameters: {self.parameters}")
-                    logging.info(f"Parameters type: {type(self.parameters)}")
-                    logging.info(f"Parameters attributes: {dir(self.parameters)}")
-                
-                # Convert initial_results to a dict that can be accessed via template
-                initial_state = self.GraphState(
-                    text=self.preprocess_text(model_input.text),
-                    metadata=metadata,
-                    messages=None,
-                    results=initial_results  # Add results dictionary to state
-                ).model_dump()
-                
-                # Ensure results can be accessed via dictionary notation in templates
-                if 'results' in initial_state:
-                    initial_state['results'] = dict(initial_state['results'])
-                    logging.info(f"Final results dictionary: {initial_state['results']}")
-                
-                logging.info(f"Initial state metadata: {metadata}")
-                logging.info(f"Initial state results: {initial_results}")
-                logging.info(f"Full initial state: {initial_state}")
-                
-                final_result = await self.workflow.ainvoke(
-                    initial_state,
-                    config=thread
-                )
-                
-                logging.info(f"Final workflow result: {truncate_dict_strings(final_result, max_length=80)}")
-                
-                # Create Score.Result from final state
-                if final_result:
-                    result = self.Result(
-                        parameters=self.parameters,
-                        explanation=final_result.get('explanation', ''),
-                        value=final_result.get('value', None),
-                        metadata=model_input.metadata
-                    )
-                    logging.info(f"Returning result: {truncate_dict_strings(result, max_length=80)}")
-                    return [result]  # Return as single-item list
-                else:
-                    logging.warning("No final result from workflow")
-                    return None
-
-        except BatchProcessingPause:
-            # Just let it propagate up
-            raise
+            )
         except Exception as e:
-            logging.error(f"Error during prediction: {e}")
-            logging.error(f"Full traceback: {traceback.format_exc()}")
-            raise
+            logging.error(f"Error in predict: {e}")
+            return Score.Result(
+                parameters=self.parameters,
+                value="Error",
+                error=str(e)
+            )
 
     def preprocess_text(self, text):
         # Join all text elements into a single string
