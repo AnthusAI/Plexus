@@ -95,7 +95,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                 ))}
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div ref={menuRef} className="flex items-center gap-4">
               {overflowPages.length > 0 && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
