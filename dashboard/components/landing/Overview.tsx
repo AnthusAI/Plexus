@@ -65,11 +65,7 @@ export const Overview = () => {
               Intelligent Workflow Orchestration
             </h3>
             <p className="text-xl text-muted-foreground">
-              Our platform seamlessly coordinates complex workflows, 
-              intelligently routing tasks and data through your organization. 
-              From initial data ingestion to final actions, every step is 
-              optimized for efficiency and accuracy, ensuring your processes 
-              run smoothly at any scale.
+              Plexus runs a scorecard on each item in your data, with multiple scores per scorecard. Each score can use AI, ML, logical rules, or any combination. Classify, predict, extract, and act on your data.
             </p>
           </div>
         </div>

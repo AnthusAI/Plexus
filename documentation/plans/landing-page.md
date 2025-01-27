@@ -14,6 +14,20 @@ The landing page introduces Plexus to new users and provides navigation to the d
   - Decorative glow effect behind logo matching current screenshot styling ✓
   - Logo size reduced to approximately 1/3 of viewport width ✓
 
+### Workflow Animation
+- Square responsive container with 1:1 aspect ratio
+- Initial 3x3 logical grid system for node placement
+- Scaling animation to demonstrate system growth:
+  - Grid expands from 9x9 to larger dimensions
+  - Original nodes maintain relative positions
+  - New nodes appear in emerging grid spaces
+  - Physical container size remains constant
+  - SVG viewBox animation for smooth scaling
+- Visual representation of "scaling" concept:
+  - Original workflow becomes proportionally smaller
+  - New nodes and connections appear in expanded space
+  - Continuous growth animation showing system expansion
+
 ### Applications Section ✓
 - Headline "AI Agents at Scale" ✓
 - Narrative introduction explaining AI agent capabilities ✓
