@@ -37,6 +37,12 @@ class ModelConfig:
     # LangChain specific settings
     cache_dir: str = ".langchain_cache"
     max_retries: int = 3
+    prompts: Dict[str, str] = None  # Dictionary containing system_template and human_template
+
+    def __post_init__(self):
+        """Initialize empty prompts dict if None."""
+        if self.prompts is None:
+            self.prompts = {}
 
 
 @dataclass
@@ -44,7 +50,9 @@ class APOSConfig:
     """Main configuration class for APOS."""
     optimization: OptimizationConfig
     analysis: AnalysisConfig
-    model: ModelConfig
+    optimizer_model: ModelConfig  # For generating prompt improvements
+    analyzer_model: ModelConfig  # For analyzing individual mismatches
+    pattern_analyzer_model: ModelConfig  # For analyzing patterns across mismatches
     persistence_path: str = "./optimization_history"
     log_level: str = "INFO"
 
@@ -53,12 +61,27 @@ class APOSConfig:
         """Create a config instance from a dictionary."""
         opt_config = OptimizationConfig(**config_dict.get('optimization', {}))
         analysis_config = AnalysisConfig(**config_dict.get('analysis', {}))
-        model_config = ModelConfig(**config_dict.get('model', {}))
+        
+        # Extract model configs, preserving the prompts
+        optimizer_model_dict = config_dict.get('optimizer_model', {})
+        analyzer_model_dict = config_dict.get('analyzer_model', {})
+        pattern_analyzer_model_dict = config_dict.get('pattern_analyzer_model', {})
+        
+        optimizer_model_config = ModelConfig(**{k: v for k, v in optimizer_model_dict.items() if k != 'prompts'})
+        analyzer_model_config = ModelConfig(**{k: v for k, v in analyzer_model_dict.items() if k != 'prompts'})
+        pattern_analyzer_model_config = ModelConfig(**{k: v for k, v in pattern_analyzer_model_dict.items() if k != 'prompts'})
+        
+        # Set prompts separately
+        optimizer_model_config.prompts = optimizer_model_dict.get('prompts', {})
+        analyzer_model_config.prompts = analyzer_model_dict.get('prompts', {})
+        pattern_analyzer_model_config.prompts = pattern_analyzer_model_dict.get('prompts', {})
         
         return cls(
             optimization=opt_config,
             analysis=analysis_config,
-            model=model_config,
+            optimizer_model=optimizer_model_config,
+            analyzer_model=analyzer_model_config,
+            pattern_analyzer_model=pattern_analyzer_model_config,
             persistence_path=config_dict.get('persistence_path', "./optimization_history"),
             log_level=config_dict.get('log_level', "INFO")
         )
@@ -94,7 +117,9 @@ def get_default_config() -> APOSConfig:
     return APOSConfig(
         optimization=OptimizationConfig(),
         analysis=AnalysisConfig(),
-        model=ModelConfig()
+        optimizer_model=ModelConfig(),
+        analyzer_model=ModelConfig(),
+        pattern_analyzer_model=ModelConfig()
     )
 
 

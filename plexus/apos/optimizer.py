@@ -51,78 +51,40 @@ class PromptImprovement(BaseModel):
 
 class PromptOptimizer:
     """
-    Optimizes prompts using LLMs based on identified patterns and recommendations.
+    Optimizes prompts using LLM-based analysis and improvement suggestions.
     """
     
     def __init__(self, config: APOSConfig):
         """Initialize the optimizer with configuration."""
         self.config = config
-        self._setup_model()
-        logger.info(f"Initialized prompt optimizer using {config.model.model_type}")
         
-    def _setup_model(self):
-        """Set up the LangChain LLM client based on configuration."""
-        model_config = self.config.model
+        # Initialize LLM with optimizer-specific model config
+        model_config = config.optimizer_model
         
-        # Setup LangChain caching
-        cache_dir = Path(model_config.cache_dir)
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        set_llm_cache(SQLiteCache(database_path=str(cache_dir / "langchain.db")))
+        # Setup LangChain caching if specified
+        if hasattr(model_config, 'cache_dir'):
+            from langchain_community.cache import SQLiteCache
+            from langchain_core.globals import set_llm_cache
+            set_llm_cache(SQLiteCache(database_path=f"{model_config.cache_dir}/optimizer_cache.db"))
         
-        # Initialize the LLM with structured output
+        # Initialize LLM with only valid OpenAI parameters
         self.llm = ChatOpenAI(
-            model_name=model_config.model_type,
+            model=model_config.model_type,
+            temperature=model_config.temperature,
             max_tokens=model_config.max_tokens,
-            top_p=model_config.top_p
+            top_p=model_config.top_p,
+            max_retries=model_config.max_retries
         ).with_structured_output(PromptImprovement)
+        
+        logger.info(f"Initialized prompt optimizer using {model_config.model_type}")
         
         # Setup prompt templates
         self.system_template = SystemMessagePromptTemplate.from_template(
-            """You are an expert at optimizing prompts for classification tasks.
-            Your goal is to improve accuracy by making substantial improvements to the existing prompts.
-            
-            You will be shown:
-            1. The current prompts being used
-            2. Analysis of why these prompts are causing incorrect answers
-            
-            IMPORTANT:
-            - Make bold, substantial changes that directly address the identified issues
-            - Don't be afraid to completely rewrite sections that aren't working
-            - Focus on clarity and precision in the instructions
-            - Keep the core rules and requirements, but feel free to restructure how they're presented
-            - If you can't identify meaningful improvements, say so in the rationale
-            - Small tweaks and minor clarifications are usually not enough to fix systemic issues"""
+            self.config.optimizer_model.prompts['system_template']
         )
         
         self.human_template = HumanMessagePromptTemplate.from_template(
-            """Here are the current prompts and analysis of why they're causing problems:
-
-            Current Prompts:
-            system_message: "{current_system_message}"
-            user_message: "{current_user_message}"
-
-            Analysis of Issues:
-            Common Problems:
-            {common_issues}
-
-            Summary:
-            {summary}
-            
-            Your task:
-            1. Start with the current prompts
-            2. Make substantial changes to fix the identified issues - don't be afraid to rewrite entire sections
-            3. Ensure the {{text}} variable is ONLY in the user_message
-            4. Focus on making the instructions clearer and more precise
-            5. Consider restructuring the information to make it easier to follow
-            6. Add explicit examples if they would help clarify the requirements
-            7. Provide a detailed rationale explaining your changes and how they address the identified issues
-            
-            Remember: Minor tweaks and small clarifications rarely fix systemic issues. Be bold with your changes while keeping the core requirements intact.
-            
-            Your response must include:
-            1. An improved system_message
-            2. An improved user_message (with {{text}} placeholder)
-            3. A detailed rationale explaining your changes and how they address the issues"""
+            self.config.optimizer_model.prompts['human_template']
         )
         
         self.chat_prompt = ChatPromptTemplate.from_messages([
