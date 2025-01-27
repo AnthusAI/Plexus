@@ -20,7 +20,17 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof Workflow>
 
-export const Default: Story = {}
+export const Default: Story = {
+  decorators: [
+    (Story) => (
+      <div className="bg-background p-4">
+        <div className="w-[400px] border-2 border-border">
+          <Story />
+        </div>
+      </div>
+    ),
+  ],
+}
 
 export const ResponsiveContainer: Story = {
   decorators: [
@@ -29,7 +39,9 @@ export const ResponsiveContainer: Story = {
         className="resize overflow-auto border border-border rounded-lg" 
         style={{ minWidth: '420px', width: '90vw', height: '90vh' }}
       >
-        <Story />
+        <div className="border-2 border-border">
+          <Story />
+        </div>
       </div>
     ),
   ],
