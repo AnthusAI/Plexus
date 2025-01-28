@@ -19,29 +19,30 @@ interface ExtendedWorkflowStep extends WorkflowStep {
   mediaType?: MediaNodeType
   result?: NodeResult
   processingStartTime?: number
+  addedTimestamp: number
 }
 
 const initialSteps: (ExtendedWorkflowStep & { mediaType?: MediaNodeType })[] = [
   // Row 1
-  { id: "1-1", label: "Item 1-1", status: "not-started", position: "r1-1", mediaType: "audio" },
-  { id: "1-2", label: "Item 1-2", status: "not-started", position: "r1-2" },
-  { id: "1-3", label: "Item 1-3", status: "not-started", position: "r1-3" },
-  { id: "1-4", label: "Item 1-4", status: "not-started", position: "r1-4" },
+  { id: "1-1", label: "Item 1-1", status: "not-started", position: "r1-1", mediaType: "audio", addedTimestamp: 0 },
+  { id: "1-2", label: "Item 1-2", status: "not-started", position: "r1-2", addedTimestamp: 0 },
+  { id: "1-3", label: "Item 1-3", status: "not-started", position: "r1-3", addedTimestamp: 0 },
+  { id: "1-4", label: "Item 1-4", status: "not-started", position: "r1-4", addedTimestamp: 0 },
   // Row 2
-  { id: "2-1", label: "Item 2-1", status: "not-started", position: "r2-1", mediaType: "image" },
-  { id: "2-2", label: "Item 2-2", status: "not-started", position: "r2-2" },
-  { id: "2-3", label: "Item 2-3", status: "not-started", position: "r2-3" },
-  { id: "2-4", label: "Item 2-4", status: "not-started", position: "r2-4" },
+  { id: "2-1", label: "Item 2-1", status: "not-started", position: "r2-1", mediaType: "image", addedTimestamp: 0 },
+  { id: "2-2", label: "Item 2-2", status: "not-started", position: "r2-2", addedTimestamp: 0 },
+  { id: "2-3", label: "Item 2-3", status: "not-started", position: "r2-3", addedTimestamp: 0 },
+  { id: "2-4", label: "Item 2-4", status: "not-started", position: "r2-4", addedTimestamp: 0 },
   // Row 3
-  { id: "3-1", label: "Item 3-1", status: "not-started", position: "r3-1", mediaType: "text" },
-  { id: "3-2", label: "Item 3-2", status: "not-started", position: "r3-2" },
-  { id: "3-3", label: "Item 3-3", status: "not-started", position: "r3-3" },
-  { id: "3-4", label: "Item 3-4", status: "not-started", position: "r3-4" },
+  { id: "3-1", label: "Item 3-1", status: "not-started", position: "r3-1", mediaType: "text", addedTimestamp: 0 },
+  { id: "3-2", label: "Item 3-2", status: "not-started", position: "r3-2", addedTimestamp: 0 },
+  { id: "3-3", label: "Item 3-3", status: "not-started", position: "r3-3", addedTimestamp: 0 },
+  { id: "3-4", label: "Item 3-4", status: "not-started", position: "r3-4", addedTimestamp: 0 },
   // Row 4
-  { id: "4-1", label: "Item 4-1", status: "not-started", position: "r4-1", mediaType: "audio" },
-  { id: "4-2", label: "Item 4-2", status: "not-started", position: "r4-2" },
-  { id: "4-3", label: "Item 4-3", status: "not-started", position: "r4-3" },
-  { id: "4-4", label: "Item 4-4", status: "not-started", position: "r4-4" },
+  { id: "4-1", label: "Item 4-1", status: "not-started", position: "r4-1", mediaType: "audio", addedTimestamp: 0 },
+  { id: "4-2", label: "Item 4-2", status: "not-started", position: "r4-2", addedTimestamp: 0 },
+  { id: "4-3", label: "Item 4-3", status: "not-started", position: "r4-3", addedTimestamp: 0 },
+  { id: "4-4", label: "Item 4-4", status: "not-started", position: "r4-4", addedTimestamp: 0 },
 ]
 
 const MEDIA_TYPES: MediaNodeType[] = ["audio", "image", "text"]
@@ -141,7 +142,8 @@ export default function ItemListWorkflow() {
       ...step,
       status: "not-started" as const,
       result: undefined,
-      processingStartTime: undefined
+      processingStartTime: undefined,
+      addedTimestamp: 0
     }))
     
     setSteps(resetSteps)
@@ -197,9 +199,15 @@ export default function ItemListWorkflow() {
       const position = getPosition(step.position)
       if (!position) return
 
-      // Only start processing if the node is in a fully visible row (not sliding in)
-      const isFullyVisible = position.y - baseRow + 1 <= visibleRows
-      if (step.status === "not-started" && !step.mediaType && isFullyVisible) {
+      // Only start processing if:
+      // 1. The node is in a visible row (not sliding in)
+      // 2. The row has completed its entrance animation (allow 800ms for animation)
+      const rowNumber = position.y - baseRow + 1
+      const isFullyVisible = rowNumber <= visibleRows
+      const hasCompletedEntrance = Date.now() - step.addedTimestamp > 800
+
+      if (step.status === "not-started" && !step.mediaType && 
+          isFullyVisible && hasCompletedEntrance) {
         const timer = setTimeout(() => {
           startNodeProcessing(step.id)
         }, getRandomDelay(200, 300))
@@ -218,9 +226,13 @@ export default function ItemListWorkflow() {
       const position = getPosition(step.position)
       if (!position) return
 
-      // Only complete processing if the node is in a fully visible row (not sliding in)
-      const isFullyVisible = position.y - baseRow + 1 <= visibleRows
-      if (step.status === "processing" && !step.mediaType && step.processingStartTime && isFullyVisible) {
+      // Apply same visibility and entrance completion checks for completion
+      const rowNumber = position.y - baseRow + 1
+      const isFullyVisible = rowNumber <= visibleRows
+      const hasCompletedEntrance = Date.now() - step.addedTimestamp > 800
+
+      if (step.status === "processing" && !step.mediaType && 
+          step.processingStartTime && isFullyVisible && hasCompletedEntrance) {
         const timer = setTimeout(() => {
           completeNodeProcessing(step.id)
         }, getRandomDelay(250, 300))
@@ -241,12 +253,14 @@ export default function ItemListWorkflow() {
         setVisibleRows(prev => prev + 1)
       } else {
         // Conveyor belt phase: Add new row and shift
+        const currentTime = Date.now()
         const newRow = Array.from({ length: 4 }).map((_, i) => ({
           id: `${nextId}-${i + 1}`,
           label: `Item ${nextId}-${i + 1}`,
           status: "not-started" as const,
           position: `r${nextId}-${i + 1}`,
-          mediaType: i === 0 ? getRandomMediaType() : undefined
+          mediaType: i === 0 ? getRandomMediaType() : undefined,
+          addedTimestamp: currentTime
         }))
 
         setSteps(currentSteps => {

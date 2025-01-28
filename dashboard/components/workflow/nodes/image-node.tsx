@@ -20,7 +20,7 @@ export function ImageNode({
         <Image
           className="stroke-muted-foreground" 
           size={24}
-          strokeWidth={2}
+          strokeWidth={1.5}
         />
       </g>
     </g>

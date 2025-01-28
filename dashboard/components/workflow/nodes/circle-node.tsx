@@ -9,7 +9,7 @@ export function CircleNode({
   isMain = false 
 }: BaseNodeProps) {
   const radius = isMain ? 0.4 : 0.3
-  const iconScale = isMain ? 0.5 : 0.35
+  const iconScale = isMain ? 0.4 : 0.3
 
   return (
     <g>
@@ -50,9 +50,9 @@ export function CircleNode({
       )}
       {status === "complete" && (
         <path
-          d={`M${-iconScale/2} ${isMain ? 0.08 : 0.05} l${iconScale/3} ${iconScale/3} l${iconScale/2} -${iconScale}`}
-          className="stroke-background"
-          strokeWidth={isMain ? 0.15 : 0.1}
+          d={`M${-iconScale/2.2} ${isMain ? 0.08 : 0.05} l${iconScale/3} ${iconScale/3} l${iconScale/2} -${iconScale}`}
+          className="stroke-foreground"
+          strokeWidth={isMain ? 0.12 : 0.08}
           strokeLinecap="round"
           strokeLinejoin="round"
           fill="none"

@@ -20,7 +20,7 @@ export function ThumbsDownNode({
           "transition-colors",
           status === "not-started" && "fill-card stroke-border",
           status === "processing" && "fill-card stroke-border",
-          status === "complete" && "fill-destructive stroke-none"
+          status === "complete" && "fill-false stroke-none"
         )}
         strokeWidth={0.02}
       />
@@ -52,9 +52,9 @@ export function ThumbsDownNode({
       {status === "complete" && (
         <g transform="scale(0.016) translate(-12, -12)">
           <ThumbsDown 
-            className="stroke-background" 
+            className="stroke-foreground" 
             size={24}
-            strokeWidth={2.5}
+            strokeWidth={1.5}
           />
         </g>
       )}

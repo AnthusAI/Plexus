@@ -9,45 +9,62 @@ import { Footer } from '@/components/landing/Footer'
 import { Layout } from '@/components/landing/Layout'
 import { Download, Brain, Workflow as WorkflowIcon } from 'lucide-react'
 import MultiModelWorkflow from '@/components/workflow/layouts/multi-model-workflow'
+import ItemListWorkflow from '@/components/workflow/layouts/item-list-workflow'
 
 export default function LandingPage() {
   return (
     <Layout>
       <Hero />
 
-      <section className="pt-0 pb-12 md:pb-20 bg-background">
+      <section className="pt-20 pb-12 md:pb-20 bg-background">
         <div className="container mx-auto px-4">
           <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-12">
             <div className="w-full md:w-2/5 relative p-4">
               <div className="relative z-10">
-                <MultiModelWorkflow />
+                <ItemListWorkflow />
               </div>
             </div>
             <div className="w-full md:w-3/5 text-center md:text-left">
-              <h2 className="text-4xl md:text-5xl font-bold mb-10 text-foreground 
-                           bg-gradient-to-r from-accent to-accent-foreground 
-                           bg-clip-text text-transparent pb-2">
-                Use Any Model
+              <h2 className="text-4xl md:text-5xl font-bold mb-10 text-foreground">
+                Intelligence at Scale
               </h2>
               <p className="text-xl text-muted-foreground">
-                AI changes every week! Don't lock yourself into one solution. 
-                Plexus is a toolbench for applying any newfangled AI model to 
-                solve your problems. Or simpler and cheaper ML models. Or 
-                logical rules -- anything your solution requires.
+                Plexus runs a scorecard on each item in your data, with multiple scores per scorecard. 
+                Each score can use AI, ML, logical rules, or any combination. Classify, predict, 
+                extract, and act on your data.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      <Overview />
+      <section className="pt-0 pb-12 md:pb-20 bg-background">
+        <div className="container mx-auto px-4">
+          <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-12">
+            <div className="w-full md:w-3/5 text-center md:text-left">
+              <h2 className="text-4xl md:text-5xl font-bold mb-10 text-foreground">
+                Use Any Model
+              </h2>
+              <p className="text-xl text-muted-foreground">
+                AI changes every week! Don't lock yourself into one solution. 
+                Plexus is a workbench for applying any newfangled AI model to 
+                solve your problems. Or simpler and cheaper ML models. Or 
+                logical rules -- anything your solution requires.
+              </p>
+            </div>
+            <div className="w-full md:w-2/5 relative p-4">
+              <div className="relative z-10">
+                <MultiModelWorkflow />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <div className="container mx-auto px-4">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl md:text-5xl font-bold mb-8 text-foreground 
-                       bg-gradient-to-r from-accent to-accent-foreground 
-                       bg-clip-text text-transparent">
-            Intelligence at Scale
+          <h2 className="text-4xl md:text-5xl font-bold mb-8 text-foreground">
+            Organizational Intelligence
           </h2>
           <p className="text-2xl font-semibold mb-12 text-foreground">
             Transform how your organization handles information

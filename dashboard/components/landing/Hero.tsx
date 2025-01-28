@@ -11,7 +11,7 @@ export const Hero = () => {
       <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-8">
         <div className="w-full md:w-2/3 flex flex-col items-center md:items-start text-center md:text-left">
           <h1 className="text-5xl md:text-7xl font-bold tracking-tighter mb-6 leading-tight">
-            Run <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text">AI agents</span> over <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text">your data</span> with <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text">no code</span>
+            Run <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text whitespace-nowrap">AI agents</span> over <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text whitespace-nowrap">your data</span> with <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text whitespace-nowrap">no code</span>
           </h1>
           <p className="text-xl md:text-2xl text-muted-foreground mb-8 max-w-3xl">
             Plexus is a battle-tested platform for building agent-based AI workflows that analyze streams of content and take action.
