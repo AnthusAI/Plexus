@@ -52,9 +52,9 @@ export function ThumbsUpNode({
       {status === "complete" && (
         <g transform="scale(0.016) translate(-12, -12)">
           <ThumbsUp 
-            className="stroke-background" 
+            className="stroke-foreground" 
             size={24}
-            strokeWidth={2.5}
+            strokeWidth={1.5}
           />
         </g>
       )}
