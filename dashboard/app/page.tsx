@@ -48,7 +48,7 @@ export default function LandingPage() {
                 AI changes every week! Don't lock yourself into one solution. 
                 Plexus is a workbench for applying any newfangled AI model to 
                 solve your problems. Or simpler and cheaper ML models. Or 
-                logical rules -- anything your solution requires.
+                logical rules. Anything your solution requires &mdash; and nothing more.
               </p>
             </div>
             <div className="w-full md:w-2/5 relative p-4">
