@@ -2,6 +2,8 @@
 Optimizer node for generating improved prompts.
 """
 import logging
+import os
+import json
 from typing import Dict, Any, Callable
 
 from langchain_openai import ChatOpenAI
@@ -135,6 +137,16 @@ class OptimizerNode(APOSNode):
                         }
                     }
                 
+                # Get iteration directory from state metadata or create default
+                iteration_dir = state.metadata.get("iteration_dir")
+                if not iteration_dir:
+                    iteration_dir = os.path.join(
+                        "optimization_history",
+                        f"iteration_{state.current_iteration}"
+                    )
+                    os.makedirs(iteration_dir, exist_ok=True)
+                    state.metadata["iteration_dir"] = iteration_dir
+                
                 # Log pattern analysis for debugging
                 logger.info(f"Pattern analysis: {state.pattern_analysis}")
                     
@@ -182,6 +194,25 @@ class OptimizerNode(APOSNode):
                         logger.info(f"- {change.component} change:")
                         logger.info(f"  Old length: {len(change.old_text)}")
                         logger.info(f"  New length: {len(change.new_text)}")
+                    
+                    # Save prompt changes to file
+                    changes_path = os.path.join(iteration_dir, "prompt_changes.json")
+                    changes_to_save = []
+                    for change in prompt_changes:
+                        changes_to_save.append({
+                            "component": change.component,
+                            "old_text": change.old_text,
+                            "new_text": change.new_text,
+                            "rationale": change.rationale,
+                            "metadata": {
+                                "iteration": state.current_iteration,
+                                "score_name": state.score_name
+                            }
+                        })
+                    
+                    with open(changes_path, 'w') as f:
+                        json.dump(changes_to_save, f, indent=4)
+                    logger.info(f"Saved prompt changes to {changes_path}")
                 
                 # Return state updates wrapped in state key
                 return {
@@ -189,7 +220,8 @@ class OptimizerNode(APOSNode):
                         "system_message": prompt_improvement.system_message,
                         "user_message": prompt_improvement.user_message,
                         "optimization_result": state.optimization_result,
-                        "current_iteration": state.current_iteration
+                        "current_iteration": state.current_iteration,
+                        "metadata": state.metadata
                     }
                 }
                 
