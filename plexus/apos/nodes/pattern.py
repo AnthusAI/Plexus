@@ -2,6 +2,8 @@
 Pattern analyzer node for finding patterns across analyzed mismatches.
 """
 import logging
+import os
+import json
 from typing import Dict, Any, Callable
 
 from langchain_openai import ChatOpenAI
@@ -87,6 +89,9 @@ Analysis: {mismatch.detailed_analysis}
                     summary=result.summary
                 )
                 
+                # Save pattern analysis results
+                self._save_pattern_results(synthesis, state)
+                
                 # Update state with results
                 return {
                     **state.dict(),
@@ -99,3 +104,23 @@ Analysis: {mismatch.detailed_analysis}
                 return self.handle_error(e, state)
                 
         return analyze_patterns 
+
+    def _save_pattern_results(self, synthesis: SynthesisResult, state: APOSState) -> None:
+        """Save pattern analysis results to disk."""
+        try:
+            # Get iteration directory from state metadata
+            iteration_dir = state.metadata.get("iteration_dir")
+            if not iteration_dir:
+                logger.warning("No iteration directory found in state metadata")
+                return
+                
+            output_path = os.path.join(iteration_dir, "patterns.json")
+            with open(output_path, 'w') as f:
+                json.dump({
+                    'common_issues': synthesis.common_issues,
+                    'summary': synthesis.summary
+                }, f, indent=4)
+            logger.info(f"Saved pattern analysis results to {output_path}")
+            
+        except Exception as e:
+            logger.error(f"Error saving pattern analysis results: {e}") 

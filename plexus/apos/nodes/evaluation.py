@@ -27,7 +27,6 @@ from plexus.apos.models import (
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.account import Account
 from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
-from plexus.apos.pattern_analyzer import PatternAnalyzer
 from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
 
 logger = logging.getLogger('plexus.apos.nodes.evaluation')
@@ -143,9 +142,6 @@ class EvaluationNode(APOSNode):
         self.scorecard_id = None
         self.score_id = None
         self.account_id = None
-        
-        # Initialize pattern analyzer
-        self.pattern_analyzer = PatternAnalyzer(config=self.config)
         
         # Initialize dashboard client
         self._setup_dashboard_client()
@@ -518,19 +514,15 @@ class EvaluationNode(APOSNode):
         """Set up directory for current iteration results."""
         # Use the iteration number from the instance
         self.iteration_dir = os.path.join(
-            self.config.persistence_path,
-            self.history_dir,
+            "optimization_history",  # Remove self.config.persistence_path since it's already included
             f"iteration_{self.current_iteration}"
         )
         os.makedirs(self.iteration_dir, exist_ok=True)
         logger.info(f"Created iteration directory: {self.iteration_dir}")
         
-        # Create initial JSON files
+        # Create only the files that evaluation node is responsible for
         files_to_create = [
             "current_prompts.json",
-            "mismatches.json",
-            "patterns.json",
-            "prompt_changes.json",
             "result.json"
         ]
         
@@ -541,37 +533,6 @@ class EvaluationNode(APOSNode):
                     json.dump({}, f, indent=2)
                 logger.debug(f"Created {filename}")
                 
-    def _save_mismatches(self, mismatches: List[Any], iteration_dir: Path) -> None:
-        """Save mismatches to disk in a consistent format."""
-        mismatches_path = iteration_dir / "mismatches.json"
-        formatted_mismatches = []
-        
-        for m in mismatches:
-            # Handle both dictionary and object formats
-            if isinstance(m, dict):
-                mismatch = {
-                    'form_id': m.get('form_id'),
-                    'question_name': m.get('question'),
-                    'ground_truth': m.get('ground_truth'),
-                    'model_answer': m.get('predicted'),
-                    'explanation': m.get('explanation', ''),
-                    'metadata': m.get('metadata', {})
-                }
-            else:
-                mismatch = {
-                    'form_id': getattr(m, 'transcript_id', None) or getattr(m, 'form_id', None),
-                    'question_name': getattr(m, 'question_name', None),
-                    'ground_truth': getattr(m, 'ground_truth', None),
-                    'model_answer': getattr(m, 'model_answer', None),
-                    'explanation': getattr(m, 'original_explanation', '') or getattr(m, 'explanation', ''),
-                    'metadata': getattr(m, 'metadata', {})
-                }
-            formatted_mismatches.append(mismatch)
-            
-        with open(mismatches_path, 'w') as f:
-            json.dump(formatted_mismatches, f, indent=2)
-        logger.info(f"Saved {len(formatted_mismatches)} mismatches to {mismatches_path}")
-
     def _save_iteration_results(self, iteration_result: IterationResult) -> None:
         """Save all iteration results to disk in a consistent format."""
         try:
@@ -586,29 +547,6 @@ class EvaluationNode(APOSNode):
             }
             with open(os.path.join(self.iteration_dir, "current_prompts.json"), 'w') as f:
                 json.dump(prompts, f, indent=2)
-            
-            # Save mismatches
-            self._save_mismatches(iteration_result.mismatches, Path(self.iteration_dir))
-        
-        # Save prompt changes
-            changes = []
-            for c in iteration_result.prompt_changes:
-                if isinstance(c, dict):
-                    changes.append({
-                        "component": c.get("component", ""),
-                        "old_text": c.get("old_text", ""),
-                        "new_text": c.get("new_text", ""),
-                        "rationale": c.get("rationale", "")
-                    })
-                else:
-                    changes.append({
-                        "component": c.component,
-                        "old_text": c.old_text,
-                        "new_text": c.new_text,
-                        "rationale": c.rationale
-                    })
-            with open(os.path.join(self.iteration_dir, "prompt_changes.json"), 'w') as f:
-                json.dump(changes, f, indent=2)
             
             # Save main result
             result = {
@@ -634,20 +572,6 @@ class EvaluationNode(APOSNode):
         """Redirect to _save_iteration_results for consistency."""
         self._save_iteration_results(result)
         
-    def _persist_synthesis_results(self, synthesis: SynthesisResult) -> None:
-        """Save pattern synthesis results to disk."""
-        if not self.iteration_dir:
-            self.iteration_dir = os.path.join(self.history_dir, f"iteration_{self.current_iteration}")
-            os.makedirs(self.iteration_dir, exist_ok=True)
-            
-        output_path = os.path.join(self.iteration_dir, "patterns.json")
-        with open(output_path, 'w') as f:
-            json.dump({
-                'common_issues': synthesis.common_issues,
-                'summary': synthesis.summary
-            }, f, indent=4)
-        logger.info(f"Saved pattern synthesis results to {output_path}")
-    
     def _setup_mlflow_run(self, scorecard_name: str) -> None:
         """Set up MLFlow run for tracking."""
         try:
