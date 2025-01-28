@@ -1,6 +1,9 @@
 import React from 'react'
 import { Layout } from '@/components/landing/Layout'
 import { LabelingStrategies } from '@/components/landing/LabelingStrategies'
+import { PlatformFeatures } from '@/components/landing/PlatformFeatures'
+import { CTASection } from '@/components/landing/CTASection'
+import { Footer } from '@/components/landing/Footer'
 
 export default function PlatformPage() {
   return (
@@ -22,7 +25,10 @@ export default function PlatformPage() {
         </div>
       </section>
 
+      <PlatformFeatures />
       <LabelingStrategies />
+      <CTASection />
+      <Footer />
     </Layout>
   )
 } 
