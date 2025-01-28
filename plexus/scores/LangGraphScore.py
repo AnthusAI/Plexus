@@ -485,7 +485,7 @@ class LangGraphScore(Score, LangChainUser):
         output_path = os.path.join(output_dir, clean_filename)
         
         logging.info("Getting workflow graph...")
-        graph = self.workflow.get_graph()
+        graph = self.workflow.get_graph(xray=True)
         logging.info(f"Graph nodes: {graph.nodes}")
         logging.info(f"Graph edges: {graph.edges}")
         
