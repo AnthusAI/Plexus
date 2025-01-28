@@ -8,6 +8,7 @@ import random
 import asyncio
 import mlflow
 import importlib
+import copy
 from typing import Dict, Any, Callable, Optional, List, Tuple
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,6 +39,8 @@ class ExtendedAccuracyEvaluation(AccuracyEvaluation):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.prompts = {}
+        self.system_message = None
+        self.user_message = None
     
     def set_prompts(self, prompts: Dict[str, Dict[str, str]]) -> None:
         """
@@ -47,7 +50,20 @@ class ExtendedAccuracyEvaluation(AccuracyEvaluation):
             prompts: Dictionary mapping score names to their prompts
                     Each prompt dict should have 'system_message' and 'user_message'
         """
+        logger.info("Setting prompts in ExtendedAccuracyEvaluation")
+        logger.info(f"Current system message length: {len(self.system_message) if self.system_message else 0}")
+        logger.info(f"Current user message length: {len(self.user_message) if self.user_message else 0}")
+        
         self.prompts = prompts
+        
+        # Set the first prompt's messages as the instance's messages
+        if prompts:
+            first_score = next(iter(prompts.values()))
+            self.system_message = first_score.get('system_message')
+            self.user_message = first_score.get('user_message')
+            logger.info(f"New system message length: {len(self.system_message) if self.system_message else 0}")
+            logger.info(f"New user message length: {len(self.user_message) if self.user_message else 0}")
+            
         logger.info(f"Set prompts for scores: {list(prompts.keys())}")
     
     async def _async_run(self) -> Dict[str, Any]:
@@ -89,9 +105,17 @@ class EvaluationNode(APOSNode):
     
     def _setup_node(self) -> None:
         """Set up evaluation components."""
-        # Initialize base evaluation state
+        self.evaluation_cache = {}  # Cache evaluation results
+        self.started_at = None
+        self.experiment_id = None
+        self.iteration_dir = None
+        self.current_iteration = 0
         self.total_correct = 0
         self.total_questions = 0
+        self.mismatches = []
+        self.evaluation = None
+        
+        # Initialize base evaluation state
         self.all_results = []
         self.results_by_score = {}
         self.processed_items_by_score = {}
@@ -114,12 +138,8 @@ class EvaluationNode(APOSNode):
         
         # History tracking
         self.history_dir = "optimization_history"
-        self.current_iteration = 0
-        self.iteration_dir = None
         
         # Experiment tracking
-        self.experiment_id = None
-        self.started_at = None
         self.scorecard_id = None
         self.score_id = None
         self.account_id = None
@@ -289,7 +309,7 @@ class EvaluationNode(APOSNode):
         if not self.scorecard_id:
             self._setup_scorecard(scorecard.name, score_name)
         
-        # Get score config
+        # Get score config and update with new prompts
         score_config = next((score for score in scorecard.scores 
                            if score['name'] == score_name), None)
         if not score_config:
@@ -297,7 +317,22 @@ class EvaluationNode(APOSNode):
         
         logger.info(f"Found score config for {score_name}")
         
-        # Get samples using score config
+        # Create a deep copy of the score config to avoid modifying the original
+        score_config = copy.deepcopy(score_config)
+        
+        # Update the prompts in the score config
+        if 'graph' in score_config and score_config['graph']:
+            # Update first node's prompts
+            score_config['graph'][0]['system_message'] = system_message
+            score_config['graph'][0]['user_message'] = user_message
+            logger.info("Updated prompts in score graph configuration")
+        else:
+            # Update direct score prompts
+            score_config['system_message'] = system_message
+            score_config['user_message'] = user_message
+            logger.info("Updated prompts in score configuration")
+        
+        # Get score class
         score_class_name = score_config['class']
         score_module_path = f'plexus.scores.{score_class_name}'
         logger.info(f"Loading score class {score_class_name} from {score_module_path}")
@@ -305,10 +340,10 @@ class EvaluationNode(APOSNode):
         score_module = importlib.import_module(score_module_path)
         score_class = getattr(score_module, score_class_name)
         
-        # Create score instance
+        # Create score instance with updated config
         score_config['scorecard_name'] = scorecard.name
         score_config['score_name'] = score_name
-        logger.info("Creating score instance")
+        logger.info("Creating score instance with updated prompts")
         score_instance = score_class(**score_config)
         
         # Load and process data
@@ -336,7 +371,8 @@ class EvaluationNode(APOSNode):
                 self.evaluation_samples = samples
                 logger.info(f"Using all {len(samples)} samples for evaluation")
         
-        # Create ExtendedAccuracyEvaluation instance
+        # Create ExtendedAccuracyEvaluation instance with updated scorecard
+        logger.info("Creating evaluation instance with updated prompts")
         self.evaluation = ExtendedAccuracyEvaluation(
             scorecard=scorecard,
             scorecard_name=scorecard.name,
@@ -358,29 +394,75 @@ class EvaluationNode(APOSNode):
             }
         })
         
+        # Also update the prompts in the scorecard's score configuration
+        for score in scorecard.scores:
+            if score['name'] == score_name:
+                if 'graph' in score and score['graph']:
+                    score['graph'][0]['system_message'] = system_message
+                    score['graph'][0]['user_message'] = user_message
+                else:
+                    score['system_message'] = system_message
+                    score['user_message'] = user_message
+                logger.info("Updated prompts in scorecard configuration")
+                break
+        
         logger.info("Evaluation setup complete")
     
     def _apply_prompt_changes(self, state: APOSState) -> Dict[str, Any]:
-        """Apply any pending prompt changes to the state."""
+        """Apply prompt changes to both state and current prompts.
+        
+        Args:
+            state: Current APOSState object
+            
+        Returns:
+            Dict with updated state values
+        """
         if not state.optimization_result:
             return state.dict()
             
         logger.info("Applying prompt changes from optimization")
         
         # Get the prompt changes
-        changes = state.optimization_result.prompt_changes
-        if not changes:
+        prompt_changes = state.optimization_result
+        if hasattr(state.optimization_result, 'prompt_changes'):
+            prompt_changes = state.optimization_result.prompt_changes
+        
+        if not prompt_changes:
             return state.dict()
             
+        logger.info(f"Number of prompt changes to apply: {len(prompt_changes)}")
+        
         # Apply each change
         state_updates = state.dict()
-        for change in changes:
-            if change.system_message:
-                logger.info("Applying system message change")
-                state_updates["system_message"] = change.system_message
-            if change.user_message:
-                logger.info("Applying user message change")
-                state_updates["user_message"] = change.user_message
+        for change in prompt_changes:
+            # Handle different change formats
+            if isinstance(change, dict):
+                # Format: {'component': 'system_message', 'new_text': '...'}
+                component = change.get('component')
+                new_text = change.get('new_text')
+            elif hasattr(change, 'component'):
+                # Format: change.component, change.new_text
+                component = change.component
+                new_text = change.new_text
+            else:
+                # Format: change.system_message, change.user_message
+                if hasattr(change, 'system_message') and change.system_message:
+                    state_updates["system_message"] = change.system_message
+                if hasattr(change, 'user_message') and change.user_message:
+                    state_updates["user_message"] = change.user_message
+                continue
+            
+            # Apply component-based changes
+            if component == "system_message" and new_text:
+                logger.info("Applying system message change:")
+                logger.info(f"Old length: {len(state.system_message)}")
+                logger.info(f"New length: {len(new_text)}")
+                state_updates["system_message"] = new_text
+            elif component == "user_message" and new_text:
+                logger.info("Applying user message change:")
+                logger.info(f"Old length: {len(state.user_message)}")
+                logger.info(f"New length: {len(new_text)}")
+                state_updates["user_message"] = new_text
                 
         return state_updates
     
@@ -700,77 +782,69 @@ class EvaluationNode(APOSNode):
             
             # Create iteration directory
             self._setup_iteration_directory()
-            
-            # Check for optimized prompts from previous iteration
-            current_system = state.system_message
-            current_user = state.user_message
-            
-            # Safely get prompt changes if they exist
-            prompt_changes = []
-            if state.optimization_result is not None:
+
+            # Store original prompts for comparison
+            original_system = state.system_message
+            original_user = state.user_message
+
+            # Apply any optimized prompts from previous iteration
+            if state.optimization_result:
                 logger.info("Found optimization result from previous iteration")
+                logger.info(f"Original system message length: {len(original_system)}")
+                logger.info(f"Original user message length: {len(original_user)}")
                 
-                # Handle dictionary format with prompt_improvement and prompt_changes
-                if isinstance(state.optimization_result, dict):
-                    prompt_improvement = state.optimization_result.get('prompt_improvement')
-                    if prompt_improvement:
-                        logger.info("Using prompt improvement from optimization result")
-                        current_system = prompt_improvement.system_message
-                        current_user = prompt_improvement.user_message
-                        prompt_changes = state.optimization_result.get('prompt_changes', [])
-                        
-                        logger.info("Applying optimized system message:")
-                        logger.info(f"Old: {state.system_message[:100]}...")
-                        logger.info(f"New: {current_system[:100]}...")
-                        logger.info("Applying optimized user message:")
-                        logger.info(f"Old: {state.user_message[:100]}...")
-                        logger.info(f"New: {current_user[:100]}...")
+                # Get prompt changes
+                prompt_changes = state.optimization_result
+                if hasattr(state.optimization_result, 'prompt_changes'):
+                    prompt_changes = state.optimization_result.prompt_changes
                 
-                # Handle list of PromptChange objects
-                elif isinstance(state.optimization_result, list):
-                    for change in state.optimization_result:
-                        if change.component == "system_message":
-                            current_system = change.new_text
-                            logger.info("Applying optimized system message:")
-                            logger.info(f"Old: {state.system_message[:100]}...")
-                            logger.info(f"New: {current_system[:100]}...")
-                        elif change.component == "user_message":
-                            current_user = change.new_text
-                            logger.info("Applying optimized user message:")
-                            logger.info(f"Old: {state.user_message[:100]}...")
-                            logger.info(f"New: {current_user[:100]}...")
-                    prompt_changes = state.optimization_result
-                
-                # Handle single PromptChange object
-                elif hasattr(state.optimization_result, 'component'):
-                    change = state.optimization_result
-                    if change.component == "system_message":
-                        current_system = change.new_text
-                        logger.info("Applying optimized system message:")
-                        logger.info(f"Old: {state.system_message[:100]}...")
-                        logger.info(f"New: {current_system[:100]}...")
-                    elif change.component == "user_message":
-                        current_user = change.new_text
-                        logger.info("Applying optimized user message:")
-                        logger.info(f"Old: {state.user_message[:100]}...")
-                        logger.info(f"New: {current_user[:100]}...")
-                    prompt_changes = [change]
-            
-            # Update state with new prompts before evaluation
-            state.system_message = current_system
-            state.user_message = current_user
-            logger.info("Updated state with new prompts")
-            
+                # Apply each change
+                for change in prompt_changes:
+                    if isinstance(change, dict):
+                        component = change.get('component')
+                        new_text = change.get('new_text')
+                    else:
+                        component = change.component
+                        new_text = change.new_text
+
+                    if component == "system_message" and new_text and new_text != original_system:
+                        logger.info("Applying system message change:")
+                        logger.info(f"Old length: {len(original_system)}")
+                        logger.info(f"New length: {len(new_text)}")
+                        state.system_message = new_text
+                    elif component == "user_message" and new_text and new_text != original_user:
+                        logger.info("Applying user message change:")
+                        logger.info(f"Old length: {len(original_user)}")
+                        logger.info(f"New length: {len(new_text)}")
+                        state.user_message = new_text
+
+                # Log final prompt state
+                logger.info("Final prompt state after changes:")
+                logger.info(f"System message length: {len(state.system_message)}")
+                logger.info(f"User message length: {len(state.user_message)}")
+                logger.info(f"System message changed: {original_system != state.system_message}")
+                logger.info(f"User message changed: {original_user != state.user_message}")
+
             # Create evaluation instance with current prompts
             self._create_evaluation(
                 scorecard=scorecard,
                 score_name=state.score_name,
-                system_message=current_system,
-                user_message=current_user
+                system_message=state.system_message,
+                user_message=state.user_message
             )
+            
+            # Set prompts in evaluation instance
+            self.evaluation.set_prompts({
+                state.score_name: {
+                    'system_message': state.system_message,
+                    'user_message': state.user_message
+                }
+            })
             
             # Run evaluation
             logger.info(f"Running evaluation for {state.score_name}")
+            logger.info(f"Using system message length: {len(state.system_message)}")
+            logger.info(f"Using user message length: {len(state.user_message)}")
             await self.evaluation._async_run()
             
             # Get evaluation results
@@ -786,11 +860,11 @@ class EvaluationNode(APOSNode):
                 iteration=state.current_iteration,
                 accuracy=accuracy,
                 mismatches=converted_mismatches,
-                prompt_changes=prompt_changes,
+                prompt_changes=state.optimization_result if state.optimization_result else [],
                 metrics={"accuracy": accuracy},
                 metadata={
-                    "system_message": current_system,
-                    "user_message": current_user,
+                    "system_message": state.system_message,
+                    "user_message": state.user_message,
                     "started_at": self.started_at.isoformat() if self.started_at else None,
                     "experiment_id": self.experiment_id,
                     "iteration_dir": self.iteration_dir
@@ -803,7 +877,7 @@ class EvaluationNode(APOSNode):
             # Save initial results
             self._save_iteration_results(iteration_result)
             
-            # Update state with results and new prompts
+            # Update state with results
             state.current_accuracy = accuracy
             state.mismatches = converted_mismatches
             state.metadata["iteration_dir"] = self.iteration_dir
@@ -820,7 +894,39 @@ class EvaluationNode(APOSNode):
             # Clean up resources
             await self.cleanup()
             logger.info("Cleaned up evaluation resources")
-    
+
     def get_node_handler(self) -> Callable[[APOSState], Dict[str, Any]]:
         """Get the handler function for this node."""
         return self.evaluate_prompts 
+
+    def apply_prompt_changes(self, changes: List[PromptChange]) -> None:
+        """
+        Apply prompt changes to the evaluation instance.
+        
+        Args:
+            changes: List of PromptChange objects to apply
+        """
+        logger.info(f"Applying {len(changes)} prompt changes")
+        
+        # Track current prompts
+        current_prompts = {
+            'system_message': self.evaluation.system_message if self.evaluation else None,
+            'user_message': self.evaluation.user_message if self.evaluation else None
+        }
+        
+        # Apply each change
+        for change in changes:
+            if change.component == "system_message":
+                current_prompts['system_message'] = change.new_text
+                logger.info("Applied system message change")
+            elif change.component == "user_message":
+                current_prompts['user_message'] = change.new_text
+                logger.info("Applied user message change")
+        
+        # Update evaluation prompts if we have an instance
+        if self.evaluation:
+            self.evaluation.system_message = current_prompts['system_message']
+            self.evaluation.user_message = current_prompts['user_message']
+            logger.info("Updated evaluation instance with new prompts")
+        else:
+            logger.warning("No evaluation instance to update prompts on") 

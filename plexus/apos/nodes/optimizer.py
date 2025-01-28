@@ -172,8 +172,16 @@ class OptimizerNode(APOSNode):
                         rationale=prompt_improvement.rationale
                     ))
                 
-                # Update state with the optimization result - use the first change if any exist
-                state.optimization_result = prompt_changes[0] if prompt_changes else None
+                # Update state with all optimization results
+                state.optimization_result = prompt_changes if prompt_changes else None
+                
+                # Log the changes for debugging
+                if prompt_changes:
+                    logger.info(f"Generated {len(prompt_changes)} prompt changes:")
+                    for change in prompt_changes:
+                        logger.info(f"- {change.component} change:")
+                        logger.info(f"  Old length: {len(change.old_text)}")
+                        logger.info(f"  New length: {len(change.new_text)}")
                 
                 # Return state updates wrapped in state key
                 return {
