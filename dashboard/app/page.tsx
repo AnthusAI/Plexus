@@ -28,7 +28,7 @@ export default function LandingPage() {
                 Intelligence at Scale
               </h2>
               <p className="text-xl text-muted-foreground">
-                Plexus runs a scorecard on each item in your data, with multiple scores per scorecard. 
+                Run a scorecard on each item of your data, with multiple scores per scorecard. 
                 Are your agents saying the right things? Are your inbound leads qualified? Classify, predict, 
                 extract, and act on your data.
               </p>
