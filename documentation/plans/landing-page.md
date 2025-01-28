@@ -14,19 +14,28 @@ The landing page introduces Plexus to new users and provides navigation to the d
   - Decorative glow effect behind logo matching current screenshot styling ✓
   - Logo size reduced to approximately 1/3 of viewport width ✓
 
-### Workflow Animation
-- Square responsive container with 1:1 aspect ratio
-- Initial 3x3 logical grid system for node placement
-- Scaling animation to demonstrate system growth:
-  - Grid expands from 9x9 to larger dimensions
-  - Original nodes maintain relative positions
-  - New nodes appear in emerging grid spaces
-  - Physical container size remains constant
-  - SVG viewBox animation for smooth scaling
-- Visual representation of "scaling" concept:
-  - Original workflow becomes proportionally smaller
-  - New nodes and connections appear in expanded space
-  - Continuous growth animation showing system expansion
+### Workflow Animation ✓
+- Square responsive container with 1:1 aspect ratio ✓
+- Initial 3x3 logical grid system for node placement ✓
+- Two distinct workflow variants implemented: ✓
+  - Basic workflow with consistent circle nodes ✓
+  - Multi-model workflow with diverse node shapes: ✓
+    - Main: Circle node ✓
+    - 1A: Square node with stepped rotation ✓
+    - 1B: Triangle node with throbbing animation ✓
+    - 2A: Hexagon node with spinning inner hexagon ✓
+    - 2B: Circle node with pulsing animation ✓
+- Node animations and states: ✓
+  - Not started: Static outline ✓
+  - Processing: Unique animation per shape ✓
+    - Square: 90-degree stepped rotation with pauses ✓
+    - Triangle: Smooth throbbing effect ✓
+    - Hexagon: Rotating inner hexagon ✓
+    - Circle: Pulsing animation ✓
+  - Complete: Checkmark with transition ✓
+- Smooth curved connection lines between nodes ✓
+- Automatic workflow progression with random delays ✓
+- Full reset after completion with pause ✓
 
 ### Applications Section ✓
 - Headline "AI Agents at Scale" ✓
