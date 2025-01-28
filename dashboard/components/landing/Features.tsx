@@ -33,9 +33,9 @@ export const Features = () => {
             Powerful Features for Agent Orchestration
           </h2>
           <p className="text-xl text-muted-foreground">
-            AI changes every week! Don't lock yourself into one solution. 
-            Plexus is a toolbench for applying any newfangled AI model to 
-            solve your problems.
+          Built by practitioners on the front lines of AI deployment, our features 
+          evolve as rapidly as AI itself, delivering battle-tested tools that 
+          transform cutting-edge capabilities into real business value.
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
