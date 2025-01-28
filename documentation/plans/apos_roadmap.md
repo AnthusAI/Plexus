@@ -42,6 +42,82 @@
 - [ ] Measure analysis and optimization performance
 - [ ] End-to-end testing of complete system
 
+## Phase 5: LangGraph Integration [In Progress]
+
+### 5.1 State Management [Complete]
+- [x] Create `APOSState` class extending BaseModel
+  - [x] Define core prompt fields (system_message, user_message)
+  - [x] Define analysis fields (mismatches, pattern_analysis)
+  - [x] Define optimization fields (optimization_result)
+  - [x] Add control flow fields (retry_count, max_retries)
+  - [x] Add metadata fields (score_name, iteration)
+
+### 5.2 Node Implementation [In Progress]
+- [x] Create base `APOSNode` class extending BaseNode
+- [x] Implement `PatternAnalyzerNode`
+  - [x] Convert existing analyzer to use state-based approach
+  - [x] Add flexible prompt templating using state fields
+  - [x] Implement retry logic
+- [x] Implement `OptimizerNode`
+  - [x] Convert optimizer to use state-based approach
+  - [x] Add state-aware prompt generation
+  - [x] Add validation checks
+- [ ] Implement `EvaluationNode`
+  - [ ] Convert evaluation logic to use state
+  - [ ] Add accuracy tracking to state
+  - [ ] Implement mismatch collection
+  - [ ] Add evaluation caching support
+
+### 5.3 Workflow Graph [In Progress]
+- [x] Create main APOS workflow graph
+  - [x] Define node connections and flow
+  - [x] Add conditional edges for retries
+  - [x] Add error handling paths
+- [ ] Implement state persistence between iterations
+  - [ ] Add state serialization/deserialization
+  - [ ] Create checkpoint system for long-running optimizations
+  - [ ] Add state recovery mechanisms
+- [ ] Add monitoring and logging for graph execution
+  - [ ] Add progress tracking
+  - [ ] Implement detailed logging
+  - [ ] Add performance metrics collection
+
+### 5.4 Integration and Testing [Planned]
+- [ ] Update CLI interface to use new graph-based system
+  - [ ] Create new CLI commands for graph workflow
+  - [ ] Add progress visualization
+  - [ ] Implement interactive mode
+- [ ] Create test suite for graph-based workflow
+  - [ ] Unit tests for each node
+  - [ ] Integration tests for full workflow
+  - [ ] State management tests
+- [ ] Add performance monitoring
+  - [ ] Track LLM usage and costs
+  - [ ] Measure optimization effectiveness
+  - [ ] Monitor state size and memory usage
+- [ ] Document new graph-based architecture
+  - [ ] Create architecture diagrams
+  - [ ] Write usage documentation
+  - [ ] Add example configurations
+- [ ] Create examples of custom node implementation
+  - [ ] Example analyzer node
+  - [ ] Example optimizer node
+  - [ ] Custom state fields example
+
+### 5.5 Advanced Features [Planned]
+- [ ] Implement parallel evaluation support
+  - [ ] Add batch processing node
+  - [ ] Implement result aggregation
+  - [ ] Add concurrency controls
+- [ ] Add dynamic prompt template system
+  - [ ] Template versioning
+  - [ ] A/B testing support
+  - [ ] Template validation
+- [ ] Create visualization tools
+  - [ ] Graph visualization
+  - [ ] Optimization progress charts
+  - [ ] State inspection tools
+
 ## Success Criteria
 - Individual mismatch analyses clearly identify what went wrong
 - LLM summarization identifies patterns and suggests improvements
