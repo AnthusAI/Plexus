@@ -30,7 +30,7 @@ export default function LandingPage() {
               </h2>
               <p className="text-xl text-muted-foreground">
                 Plexus runs a scorecard on each item in your data, with multiple scores per scorecard. 
-                Each score can use AI, ML, logical rules, or any combination. Classify, predict, 
+                Are your agents saying the right things? Are your inbound leads qualified? Classify, predict, 
                 extract, and act on your data.
               </p>
             </div>
