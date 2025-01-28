@@ -69,7 +69,7 @@ export function HexagonNode({
       {status === "complete" && (
         <path
           d={`M${-iconScale/2} ${isMain ? 0.08 : 0.05} l${iconScale/3} ${iconScale/3} l${iconScale/2} -${iconScale}`}
-          className="stroke-background"
+          className="stroke-foreground"
           strokeWidth={isMain ? 0.15 : 0.1}
           strokeLinecap="round"
           strokeLinejoin="round"
