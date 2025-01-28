@@ -21,7 +21,7 @@ const landingPages = [
   { href: '/resources', label: 'Resources' }
 ]
 
-export const Layout = ({ children }: { children: React.ReactNode }) => {
+export function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const [visiblePages, setVisiblePages] = useState(landingPages.slice(0, 1))
@@ -69,7 +69,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-background overflow-x-hidden">
       <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4">
           <div className="flex h-14 items-center" ref={containerRef}>
