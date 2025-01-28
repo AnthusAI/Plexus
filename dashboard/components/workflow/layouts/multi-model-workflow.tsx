@@ -1,10 +1,13 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { ContainerBase } from "../workflow/base/container-base"
-import { BaseConnection } from "../workflow/base/connection-base"
-import { CircleNode } from "../workflow/nodes/circle-node"
-import { WorkflowStep } from "../workflow/types"
+import { ContainerBase } from "../base/container-base"
+import { BaseConnection } from "../base/connection-base"
+import { CircleNode } from "../nodes/circle-node"
+import { SquareNode } from "../nodes/square-node"
+import { TriangleNode } from "../nodes/triangle-node"
+import { HexagonNode } from "../nodes/hexagon-node"
+import { WorkflowStep } from "../types"
 
 const initialSteps: WorkflowStep[] = [
   { id: "1", label: "Main Process", status: "not-started", position: "main" },
@@ -22,7 +25,24 @@ const POSITIONS = {
   "row2-b": { x: 3, y: 3 }
 } as const
 
-export default function Workflow() {
+const getNodeComponent = (position: string) => {
+  switch (position) {
+    case "main":
+      return CircleNode
+    case "row1-a":
+      return SquareNode
+    case "row1-b":
+      return TriangleNode
+    case "row2-a":
+      return HexagonNode
+    case "row2-b":
+      return SquareNode
+    default:
+      return CircleNode
+  }
+}
+
+export default function MultiModelWorkflow() {
   const [steps, setSteps] = useState<WorkflowStep[]>(initialSteps)
   const [sequence, setSequence] = useState(0)
 
@@ -119,9 +139,10 @@ export default function Workflow() {
         const position = POSITIONS[step.position as keyof typeof POSITIONS]
         if (!position) return null
 
+        const NodeComponent = getNodeComponent(step.position)
         return (
           <g key={step.id} transform={`translate(${position.x}, ${position.y})`}>
-            <CircleNode
+            <NodeComponent
               status={step.status}
               isMain={step.position === "main"}
             />
@@ -130,5 +151,4 @@ export default function Workflow() {
       })}
     </ContainerBase>
   )
-}
-
+} 
