@@ -47,7 +47,7 @@ class APOSState(BaseModel):
         default=None,
         description="Results of pattern analysis across mismatches"
     )
-    optimization_result: Optional[PromptChange] = Field(
+    optimization_result: Optional[List[PromptChange]] = Field(
         default=None,
         description="Latest optimization changes to prompts"
     )
