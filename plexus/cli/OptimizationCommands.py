@@ -4,11 +4,12 @@ import logging
 import click
 import os
 import pandas as pd
-from plexus.apos.optimize_evaluation import optimize_evaluation
+from plexus.apos.graph_workflow import APOSWorkflow
 from plexus.apos.config import load_config
 from plexus.Scorecard import Scorecard
 from plexus.Registries import scorecard_registry
 import asyncio
+from typing import Optional
 
 @click.group()
 def optimize():
@@ -45,18 +46,33 @@ def create_sample_data(scorecard_name: str, score_name: str) -> str:
     return samples_path
 
 @optimize.command()
-@click.option('--scorecard-name', required=True, help='Name of scorecard to optimize')
-@click.option('--score-name', help='Specific score to optimize')
+@click.option('--scorecard-name', required=True, help='Name of the scorecard to optimize')
+@click.option('--score-name', required=True, help='Name of the score to optimize')
 @click.option('--config', help='Path to configuration file')
-@click.option('--number-of-samples', type=int, help='Number of samples to use per iteration')
-def evaluation(scorecard_name: str, score_name: str = None, config: str = None, number_of_samples: int = None):
-    """Run automated evaluation optimization."""
-    asyncio.run(optimize_evaluation(
-        scorecard_name=scorecard_name,
-        score_name=score_name,
-        config=load_config(config) if config else None,
-        number_of_samples=number_of_samples
-    ))
+@click.option('--number-of-samples', type=int, default=None, help='Number of samples to use for evaluation')
+def evaluation(scorecard_name: str, score_name: str, config: Optional[str] = None, number_of_samples: Optional[int] = None):
+    """Run prompt optimization for a specific evaluation."""
+    try:
+        # Load config from file if provided, otherwise use default
+        apos_config = load_config(config) if config else load_config()
+        
+        # Update sample size if provided
+        if number_of_samples is not None:
+            apos_config.analysis.samples_per_iteration = number_of_samples
+        
+        # Create and run workflow
+        workflow = APOSWorkflow(
+            scorecard_name=scorecard_name,
+            score_name=score_name,
+            config=apos_config
+        )
+        
+        # Run workflow
+        asyncio.run(workflow.run())
+        
+    except Exception as e:
+        logging.error(f"Error running optimization: {e}")
+        raise
 
 def get_samples(scorecard_instance, score_name, score_config):
     score_class_name = score_config['class']

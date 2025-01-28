@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Dict, Optional, Any
 from enum import Enum, auto
+from langchain_core.pydantic_v1 import BaseModel
 
 
 class OptimizationStatus(Enum):
@@ -14,6 +15,19 @@ class OptimizationStatus(Enum):
     COMPLETED = auto()
     FAILED = auto()
     STOPPED = auto()
+
+
+class PatternAnalysisOutput(BaseModel):
+    """Output schema for pattern analysis."""
+    common_issues: List[str]
+    summary: str
+
+
+class PromptImprovement(BaseModel):
+    """Output schema for prompt improvements."""
+    system_message: str
+    user_message: str
+    rationale: str
 
 
 @dataclass
