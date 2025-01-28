@@ -7,29 +7,38 @@ import { CircleNode } from "../nodes/circle-node"
 import { AudioNode } from "../nodes/audio-node"
 import { ImageNode } from "../nodes/image-node"
 import { TextNode } from "../nodes/text-node"
+import { ThumbsUpNode } from "../nodes/thumbs-up-node"
+import { ThumbsDownNode } from "../nodes/thumbs-down-node"
 import { WorkflowStep } from "../types"
 import { motion, AnimatePresence } from "framer-motion"
 
 type MediaNodeType = "audio" | "image" | "text"
+type NodeResult = "thumbs-up" | "thumbs-down"
 
-const initialSteps: (WorkflowStep & { mediaType?: MediaNodeType })[] = [
+interface ExtendedWorkflowStep extends WorkflowStep {
+  mediaType?: MediaNodeType
+  result?: NodeResult
+  processingStartTime?: number
+}
+
+const initialSteps: (ExtendedWorkflowStep & { mediaType?: MediaNodeType })[] = [
   // Row 1
-  { id: "1-1", label: "Item 1-1", status: "not-started", position: "r1-1" },
+  { id: "1-1", label: "Item 1-1", status: "not-started", position: "r1-1", mediaType: "audio" },
   { id: "1-2", label: "Item 1-2", status: "not-started", position: "r1-2" },
   { id: "1-3", label: "Item 1-3", status: "not-started", position: "r1-3" },
   { id: "1-4", label: "Item 1-4", status: "not-started", position: "r1-4" },
   // Row 2
-  { id: "2-1", label: "Item 2-1", status: "not-started", position: "r2-1" },
+  { id: "2-1", label: "Item 2-1", status: "not-started", position: "r2-1", mediaType: "image" },
   { id: "2-2", label: "Item 2-2", status: "not-started", position: "r2-2" },
   { id: "2-3", label: "Item 2-3", status: "not-started", position: "r2-3" },
   { id: "2-4", label: "Item 2-4", status: "not-started", position: "r2-4" },
   // Row 3
-  { id: "3-1", label: "Item 3-1", status: "not-started", position: "r3-1" },
+  { id: "3-1", label: "Item 3-1", status: "not-started", position: "r3-1", mediaType: "text" },
   { id: "3-2", label: "Item 3-2", status: "not-started", position: "r3-2" },
   { id: "3-3", label: "Item 3-3", status: "not-started", position: "r3-3" },
   { id: "3-4", label: "Item 3-4", status: "not-started", position: "r3-4" },
   // Row 4
-  { id: "4-1", label: "Item 4-1", status: "not-started", position: "r4-1" },
+  { id: "4-1", label: "Item 4-1", status: "not-started", position: "r4-1", mediaType: "audio" },
   { id: "4-2", label: "Item 4-2", status: "not-started", position: "r4-2" },
   { id: "4-3", label: "Item 4-3", status: "not-started", position: "r4-3" },
   { id: "4-4", label: "Item 4-4", status: "not-started", position: "r4-4" },
@@ -48,22 +57,30 @@ const getPosition = (position: string) => {
 }
 
 interface RowProps {
-  steps: (WorkflowStep & { mediaType?: MediaNodeType })[]
+  steps: (ExtendedWorkflowStep & { mediaType?: MediaNodeType })[]
   rowY: number
   yOffset: number
 }
 
 function WorkflowRow({ steps, rowY, yOffset }: RowProps) {
-  const renderNode = useCallback((step: WorkflowStep & { mediaType?: MediaNodeType }) => {
+  const renderNode = useCallback((step: ExtendedWorkflowStep) => {
+    // Media nodes are always shown as-is, no state transitions
     if (step.mediaType) {
       switch (step.mediaType) {
         case "audio":
-          return <AudioNode status={step.status} />
+          return <AudioNode status="complete" />
         case "image":
-          return <ImageNode status={step.status} />
+          return <ImageNode status="complete" />
         case "text":
-          return <TextNode status={step.status} />
+          return <TextNode status="complete" />
       }
+    }
+
+    // Only non-media nodes go through state transitions
+    if (step.status === "complete") {
+      return step.result === "thumbs-down" ? 
+        <ThumbsDownNode status={step.status} /> : 
+        <ThumbsUpNode status={step.status} />
     }
     return <CircleNode status={step.status} isMain={false} />
   }, [])
@@ -112,10 +129,26 @@ function WorkflowRow({ steps, rowY, yOffset }: RowProps) {
 }
 
 export default function ItemListWorkflow() {
-  const [steps, setSteps] = useState<(WorkflowStep & { mediaType?: MediaNodeType })[]>(initialSteps)
+  const [steps, setSteps] = useState<ExtendedWorkflowStep[]>(initialSteps)
   const [visibleRows, setVisibleRows] = useState(1)
   const [nextId, setNextId] = useState(5)
   const [baseRow, setBaseRow] = useState(1)
+
+  // Reset everything when component mounts
+  useEffect(() => {
+    // Reset all nodes, keeping media nodes but resetting all others to not-started
+    const resetSteps = initialSteps.map(step => ({
+      ...step,
+      status: "not-started" as const,
+      result: undefined,
+      processingStartTime: undefined
+    }))
+    
+    setSteps(resetSteps)
+    setVisibleRows(1)
+    setNextId(5)
+    setBaseRow(1)
+  }, [])
 
   const getRandomDelay = useCallback((min: number, max: number) => {
     return Math.random() * (max - min) + min
@@ -126,14 +159,77 @@ export default function ItemListWorkflow() {
     return MEDIA_TYPES[index]
   }, [])
 
-  // Assign media node to first row immediately
-  useEffect(() => {
+  const startNodeProcessing = useCallback((stepId: string) => {
     setSteps(currentSteps => {
       const newSteps = [...currentSteps]
-      newSteps[0].mediaType = getRandomMediaType()
+      const stepIndex = newSteps.findIndex(s => s.id === stepId)
+      if (stepIndex === -1) return currentSteps
+
+      const step = newSteps[stepIndex]
+      if (step.status !== "not-started" || step.mediaType) return currentSteps
+
+      step.status = "processing"
+      step.processingStartTime = Date.now()
       return newSteps
     })
-  }, [getRandomMediaType])
+  }, [])
+
+  const completeNodeProcessing = useCallback((stepId: string) => {
+    setSteps(currentSteps => {
+      const newSteps = [...currentSteps]
+      const stepIndex = newSteps.findIndex(s => s.id === stepId)
+      if (stepIndex === -1) return currentSteps
+
+      const step = newSteps[stepIndex]
+      if (step.status !== "processing" || step.mediaType) return currentSteps
+
+      step.status = "complete"
+      step.result = Math.random() < 0.9 ? "thumbs-up" : "thumbs-down"
+      return newSteps
+    })
+  }, [])
+
+  // Start node processing after random delay
+  useEffect(() => {
+    const timers: NodeJS.Timeout[] = []
+
+    steps.forEach(step => {
+      const position = getPosition(step.position)
+      if (!position) return
+
+      // Only start processing if the node is in a fully visible row (not sliding in)
+      const isFullyVisible = position.y - baseRow + 1 <= visibleRows
+      if (step.status === "not-started" && !step.mediaType && isFullyVisible) {
+        const timer = setTimeout(() => {
+          startNodeProcessing(step.id)
+        }, getRandomDelay(200, 300))
+        timers.push(timer)
+      }
+    })
+
+    return () => timers.forEach(clearTimeout)
+  }, [steps, startNodeProcessing, getRandomDelay, baseRow, visibleRows])
+
+  // Complete node processing after random delay
+  useEffect(() => {
+    const timers: NodeJS.Timeout[] = []
+
+    steps.forEach(step => {
+      const position = getPosition(step.position)
+      if (!position) return
+
+      // Only complete processing if the node is in a fully visible row (not sliding in)
+      const isFullyVisible = position.y - baseRow + 1 <= visibleRows
+      if (step.status === "processing" && !step.mediaType && step.processingStartTime && isFullyVisible) {
+        const timer = setTimeout(() => {
+          completeNodeProcessing(step.id)
+        }, getRandomDelay(250, 300))
+        timers.push(timer)
+      }
+    })
+
+    return () => timers.forEach(clearTimeout)
+  }, [steps, completeNodeProcessing, getRandomDelay, baseRow, visibleRows])
 
   // Initial row appearance and conveyor belt effect
   useEffect(() => {
@@ -141,13 +237,7 @@ export default function ItemListWorkflow() {
 
     const heartbeat = () => {
       if (visibleRows < 4) {
-        // Initial phase: Add rows until we have 4
-        setSteps(currentSteps => {
-          const newSteps = [...currentSteps]
-          const leftmostIndex = visibleRows * 4
-          newSteps[leftmostIndex].mediaType = getRandomMediaType()
-          return newSteps
-        })
+        // Initial phase: Just increment visible rows, media nodes are already set
         setVisibleRows(prev => prev + 1)
       } else {
         // Conveyor belt phase: Add new row and shift
@@ -168,16 +258,16 @@ export default function ItemListWorkflow() {
       }
 
       // Schedule next heartbeat
-      timer = setTimeout(heartbeat, getRandomDelay(500, 1500))
+      timer = setTimeout(heartbeat, getRandomDelay(1050, 1400))
     }
 
     // Start the heartbeat
-    timer = setTimeout(heartbeat, getRandomDelay(500, 1500))
+    timer = setTimeout(heartbeat, getRandomDelay(1050, 1400))
 
     return () => clearTimeout(timer)
   }, [visibleRows, nextId, getRandomDelay, getRandomMediaType])
 
-  const getRowSteps = useCallback((steps: (WorkflowStep & { mediaType?: MediaNodeType })[], rowIndex: number) => {
+  const getRowSteps = useCallback((steps: (ExtendedWorkflowStep & { mediaType?: MediaNodeType })[], rowIndex: number) => {
     return steps.slice(rowIndex * 4, (rowIndex + 1) * 4)
   }, [])
 
