@@ -317,7 +317,8 @@ class EvaluationNode(APOSNode):
             number_of_texts_to_sample=len(self.evaluation_samples),
             account_key='call-criteria',
             score_id=self.score_id,
-            subset_of_score_names=[score_name]
+            subset_of_score_names=[score_name],
+            max_mismatches_to_report=self.config.optimization.max_mismatches_to_report
         )
         
         # Set prompts in evaluation instance
