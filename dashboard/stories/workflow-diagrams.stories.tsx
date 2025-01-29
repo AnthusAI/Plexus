@@ -4,8 +4,15 @@ import Workflow from '../components/landing/workflow'
 import MultiModelWorkflow from '../components/workflow/layouts/multi-model-workflow'
 import ItemListWorkflow from '../components/workflow/layouts/item-list-workflow'
 
+const Container = ({ children }: { children: React.ReactNode }) => (
+  <div className="resize overflow-auto border border-border rounded-lg p-4 bg-background" 
+       style={{ width: '90vw', height: '90vh', minWidth: '420px' }}>
+    {children}
+  </div>
+)
+
 const meta = {
-  title: 'Workflow Pictograms',
+  title: 'Workflow Pictograms/Diagrams',
   component: Workflow,
   parameters: {
     layout: 'centered',
@@ -15,14 +22,7 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof Workflow>
 
-const Container = ({ children }: { children: React.ReactNode }) => (
-  <div className="resize overflow-auto border border-border rounded-lg p-4" 
-       style={{ width: '90vw', height: '90vh', minWidth: '420px' }}>
-    {children}
-  </div>
-)
-
-export const Base = {
+export const Base: Story = {
   render: () => (
     <Container>
       <Workflow />
@@ -30,7 +30,7 @@ export const Base = {
   ),
 }
 
-export const MultiModel = {
+export const MultiModel: Story = {
   render: () => (
     <Container>
       <MultiModelWorkflow />
@@ -38,7 +38,7 @@ export const MultiModel = {
   ),
 }
 
-export const ItemList = {
+export const ItemList: Story = {
   render: () => (
     <Container>
       <ItemListWorkflow />

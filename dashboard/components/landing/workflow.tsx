@@ -1,18 +1,10 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { ContainerBase } from "../workflow/base/container-base"
 import { BaseConnection } from "../workflow/base/connection-base"
 import { CircleNode } from "../workflow/nodes/circle-node"
 import { WorkflowStep } from "../workflow/types"
-
-const initialSteps: WorkflowStep[] = [
-  { id: "1", label: "Main Process", status: "not-started", position: "main" },
-  { id: "2", label: "Row 1A", status: "not-started", position: "row1-a" },
-  { id: "3", label: "Row 1B", status: "not-started", position: "row1-b" },
-  { id: "4", label: "Row 2A", status: "not-started", position: "row2-a" },
-  { id: "5", label: "Row 2B", status: "not-started", position: "row2-b" },
-]
 
 const POSITIONS = {
   main: { x: 1, y: 1 },
@@ -22,78 +14,66 @@ const POSITIONS = {
   "row2-b": { x: 3, y: 3 }
 } as const
 
-export default function Workflow() {
-  const [steps, setSteps] = useState<WorkflowStep[]>(initialSteps)
-  const [sequence, setSequence] = useState(0)
+const BASE_SEQUENCES = {
+  main: {
+    startDelay: 0,
+    processingDuration: 5000,
+    completionDelay: 5500
+  },
+  "row1-a": {
+    startDelay: 1000,
+    processingDuration: 2000,
+    completionDelay: 3000
+  },
+  "row2-a": {
+    startDelay: 1500,
+    processingDuration: 2000,
+    completionDelay: 3500
+  },
+  "row1-b": {
+    startDelay: 2000,
+    processingDuration: 2000,
+    completionDelay: 4000
+  },
+  "row2-b": {
+    startDelay: 2500,
+    processingDuration: 2000,
+    completionDelay: 4500
+  }
+} as const
 
-  const getRandomDelay = useCallback((min: number, max: number) => {
-    return Math.random() * (max - min) + min
+// Add 10% random variation to timing
+const addJitter = (value: number) => {
+  const jitterFactor = 1 + (Math.random() * 0.2 - 0.1) // ±10%
+  return Math.round(value * jitterFactor)
+}
+
+export default function Workflow() {
+  const [key, setKey] = useState(0)
+  
+  // Create new jittered sequences on each render cycle
+  const NODE_SEQUENCES = useMemo(() => {
+    return Object.entries(BASE_SEQUENCES).reduce((acc, [key, sequence]) => {
+      acc[key as keyof typeof BASE_SEQUENCES] = {
+        startDelay: key === 'main' ? 0 : addJitter(sequence.startDelay), // Keep main start exact
+        processingDuration: addJitter(sequence.processingDuration),
+        completionDelay: addJitter(sequence.completionDelay)
+      }
+      return acc
+    }, {} as typeof BASE_SEQUENCES)
+  }, [key]) // Recreate when key changes (on reset)
+  
+  useEffect(() => {
+    const totalDuration = 7000
+    const timer = setInterval(() => {
+      setKey(k => k + 1)
+    }, totalDuration)
+    
+    return () => clearInterval(timer)
   }, [])
 
-  const advanceWorkflow = useCallback(() => {
-    setSteps((currentSteps) => {
-      const newSteps = [...currentSteps]
-      switch (sequence) {
-        case 0:
-          newSteps[0].status = "processing" // Main starts
-          break
-        case 1:
-          newSteps[1].status = "processing" // Row 1A starts
-          break
-        case 2:
-          newSteps[3].status = "processing" // Row 2A starts
-          break
-        case 3:
-          newSteps[2].status = "processing" // Row 1B starts
-          break
-        case 4:
-          newSteps[4].status = "processing" // Row 2B starts
-          break
-        case 5:
-          newSteps[1].status = "complete" // Row 1A completes
-          break
-        case 6:
-          newSteps[3].status = "complete" // Row 2A completes
-          break
-        case 7:
-          newSteps[2].status = "complete" // Row 1B completes
-          break
-        case 8:
-          newSteps[4].status = "complete" // Row 2B completes
-          break
-        case 9:
-          newSteps[0].status = "complete" // Main completes
-          break
-      }
-      return newSteps
-    })
-    setSequence((prev) => prev + 1)
-  }, [sequence])
-
-  useEffect(() => {
-    let timer: NodeJS.Timeout
-
-    if (sequence < 10) {
-      const delay = getRandomDelay(1000, 2500)
-      timer = setTimeout(advanceWorkflow, delay)
-    } else {
-      const resetDelay = getRandomDelay(3000, 6000)
-      timer = setTimeout(() => {
-        setSteps((currentSteps) =>
-          currentSteps.map((step) => ({
-            ...step,
-            status: "not-started",
-          })),
-        )
-        setSequence(0)
-      }, resetDelay)
-    }
-
-    return () => clearTimeout(timer)
-  }, [sequence, advanceWorkflow, getRandomDelay])
-
   return (
-    <ContainerBase>
+    <ContainerBase key={key}>
       {/* Connection Lines */}
       <BaseConnection 
         startX={1} startY={1} 
@@ -115,19 +95,17 @@ export default function Workflow() {
       />
 
       {/* Nodes */}
-      {steps.map((step) => {
-        const position = POSITIONS[step.position as keyof typeof POSITIONS]
-        if (!position) return null
-
-        return (
-          <g key={step.id} transform={`translate(${position.x}, ${position.y})`}>
-            <CircleNode
-              status={step.status}
-              isMain={step.position === "main"}
-            />
-          </g>
-        )
-      })}
+      {Object.entries(POSITIONS).map(([position, coords]) => (
+        <g 
+          key={position} 
+          transform={`translate(${coords.x}, ${coords.y})`}
+        >
+          <CircleNode
+            sequence={NODE_SEQUENCES[position as keyof typeof NODE_SEQUENCES]}
+            isMain={position === "main"}
+          />
+        </g>
+      ))}
     </ContainerBase>
   )
 }
