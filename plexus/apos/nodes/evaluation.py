@@ -233,66 +233,7 @@ class EvaluationNode(APOSNode):
                         
         except Exception as e:
             logger.error(f"Error setting up scorecard: {e}")
-    
-    def _prepare_samples(self, labeled_samples: List[Any]) -> List[Any]:
-        """Prepare evaluation samples with fixed seed."""
-        if not labeled_samples:
-            logger.warning("No labeled samples provided")
-            return []
-            
-        # Store all samples first
-        self.all_labeled_samples = labeled_samples
         
-        # Use fixed seed for reproducibility
-        random.seed(42)
-        sample_size = min(len(labeled_samples), self.config.analysis.samples_per_iteration)
-        samples = random.sample(labeled_samples, sample_size)
-        random.seed()  # Reset seed
-        
-        logger.info(f"Prepared {len(samples)} samples for evaluation")
-        
-        # Store evaluation samples
-        self.evaluation_samples = samples
-        self.labeled_samples = samples  # This is used by the evaluation
-        
-        return samples
-    
-    def _reset_state(self) -> None:
-        """Reset evaluation state for a new iteration."""
-        # Store values we want to preserve
-        old_samples = self.evaluation_samples
-        old_all_samples = self.all_labeled_samples
-        old_samples_filename = self.labeled_samples_filename
-        old_override_folder = self.override_folder
-        old_override_data = self.override_data
-        
-        # Reset base evaluation state
-        self.total_correct = 0
-        self.total_questions = 0
-        self.all_results = []
-        self.results_by_score = {}
-        self.processed_items_by_score = {}
-        self.processed_items = 0
-        
-        # Reset queue and tasks
-        self.results_queue = asyncio.Queue()
-        self.metrics_tasks = {}
-        self.completed_scores = set()
-        
-        # Clear experiment ID for new iteration
-        self.experiment_id = None
-        self.started_at = None
-        
-        # Restore preserved values
-        self.evaluation_samples = old_samples
-        self.all_labeled_samples = old_all_samples
-        self.labeled_samples = self.evaluation_samples  # Use same samples for each iteration
-        self.labeled_samples_filename = old_samples_filename
-        self.override_folder = old_override_folder
-        self.override_data = old_override_data
-        
-        logger.info("Reset evaluation state for new iteration")
-    
     def _create_evaluation(
         self,
         scorecard: Any,
@@ -403,149 +344,34 @@ class EvaluationNode(APOSNode):
                 break
         
         logger.info("Evaluation setup complete")
-    
-    def _apply_prompt_changes(self, state: APOSState) -> Dict[str, Any]:
-        """Apply prompt changes to both state and current prompts.
-        
-        Args:
-            state: Current APOSState object
-            
-        Returns:
-            Dict with updated state values
-        """
-        if not state.optimization_result:
-            return state.dict()
-            
-        logger.info("Applying prompt changes from optimization")
-        
-        # Get the prompt changes
-        prompt_changes = state.optimization_result
-        if hasattr(state.optimization_result, 'prompt_changes'):
-            prompt_changes = state.optimization_result.prompt_changes
-        
-        if not prompt_changes:
-            return state.dict()
-            
-        logger.info(f"Number of prompt changes to apply: {len(prompt_changes)}")
-        
-        # Apply each change
-        state_updates = state.dict()
-        for change in prompt_changes:
-            # Handle different change formats
-            if isinstance(change, dict):
-                # Format: {'component': 'system_message', 'new_text': '...'}
-                component = change.get('component')
-                new_text = change.get('new_text')
-            elif hasattr(change, 'component'):
-                # Format: change.component, change.new_text
-                component = change.component
-                new_text = change.new_text
-            else:
-                # Format: change.system_message, change.user_message
-                if hasattr(change, 'system_message') and change.system_message:
-                    state_updates["system_message"] = change.system_message
-                if hasattr(change, 'user_message') and change.user_message:
-                    state_updates["user_message"] = change.user_message
-                continue
-            
-            # Apply component-based changes
-            if component == "system_message" and new_text:
-                logger.info("Applying system message change:")
-                logger.info(f"Old length: {len(state.system_message)}")
-                logger.info(f"New length: {len(new_text)}")
-                state_updates["system_message"] = new_text
-            elif component == "user_message" and new_text:
-                logger.info("Applying user message change:")
-                logger.info(f"Old length: {len(state.user_message)}")
-                logger.info(f"New length: {len(new_text)}")
-                state_updates["user_message"] = new_text
-                
-        return state_updates
-    
-    def _should_continue_evaluation(self, state: APOSState) -> bool:
-        """Check if evaluation should continue."""
-        # Check if we've reached target accuracy
-        if state.current_accuracy >= state.target_accuracy:
-            logger.info(f"Target accuracy {state.target_accuracy} reached")
-            return False
-            
-        # Check if we've hit max iterations
-        if state.current_iteration >= state.max_iterations:
-            logger.info(f"Maximum iterations {state.max_iterations} reached")
-            return False
-            
-        # Check if we've hit max retries
-        if state.retry_count >= state.max_retries:
-            logger.info(f"Maximum retries {state.max_retries} reached")
-            return False
-            
-        return True
-    
-    def _handle_evaluation_error(self, error: Exception, state: APOSState) -> Dict[str, Any]:
-        """Handle evaluation errors."""
-        logger.error(f"Error during evaluation: {str(error)}")
-        
-        state_updates = state.dict()
-        state_updates["retry_count"] = state.retry_count + 1
-        
-        if state_updates["retry_count"] >= state.max_retries:
-            logger.error("Max retries reached, marking as failed")
-            state_updates["status"] = OptimizationStatus.FAILED
-            state_updates["error"] = str(error)
-            
-        return state_updates
-    
-    def load_override_data(self) -> Dict[str, Any]:
-        """Load override data from the override folder."""
-        if not self.override_folder:
-            return {}
-            
-        try:
-            logger.info(f"Loading override data from {self.override_folder}")
-            override_file = os.path.join(self.override_folder, "overrides.json")
-            if os.path.exists(override_file):
-                with open(override_file, 'r') as f:
-                    return json.load(f)
-        except Exception as e:
-            logger.error(f"Error loading override data: {e}")
-        return {}
-    
-    def _setup_iteration_directory(self) -> None:
-        """Set up directory for current iteration results."""
-        # Use the iteration number from the instance
-        self.iteration_dir = os.path.join(
-            "optimization_history",  # Remove self.config.persistence_path since it's already included
-            f"iteration_{self.current_iteration}"
-        )
-        os.makedirs(self.iteration_dir, exist_ok=True)
-        logger.info(f"Created iteration directory: {self.iteration_dir}")
-        
-        # Create only the files that evaluation node is responsible for
-        files_to_create = [
-            "current_prompts.json",
-            "result.json"
-        ]
-        
-        for filename in files_to_create:
-            filepath = os.path.join(self.iteration_dir, filename)
-            if not os.path.exists(filepath):
-                with open(filepath, 'w') as f:
-                    json.dump({}, f, indent=2)
-                logger.debug(f"Created {filename}")
-                
+                    
     def _save_iteration_results(self, iteration_result: IterationResult) -> None:
         """Save all iteration results to disk in a consistent format."""
         try:
-            if not self.iteration_dir:
-                self.iteration_dir = os.path.join(self.history_dir, f"iteration_{self.current_iteration}")
-                os.makedirs(self.iteration_dir, exist_ok=True)
+            # Get scorecard and score names from metadata
+            scorecard_name = iteration_result.metadata.get("scorecard_name")
+            score_name = iteration_result.metadata.get("score_name")
+            
+            if not scorecard_name or not score_name:
+                logger.error("Missing scorecard_name or score_name in metadata")
+                return
+                
+            # Create directory structure
+            results_dir = os.path.join(
+                self.history_dir,
+                scorecard_name,
+                score_name,
+                f"iteration_{self.current_iteration}"
+            )
+            os.makedirs(results_dir, exist_ok=True)
+            self.iteration_dir = results_dir
 
             # Save current prompts
             prompts = {
                 "system_message": iteration_result.metadata["system_message"],
                 "user_message": iteration_result.metadata["user_message"]
             }
-            with open(os.path.join(self.iteration_dir, "current_prompts.json"), 'w') as f:
+            with open(os.path.join(results_dir, "current_prompts.json"), 'w') as f:
                 json.dump(prompts, f, indent=2)
             
             # Save main result
@@ -559,18 +385,77 @@ class EvaluationNode(APOSNode):
                     "created_at": datetime.now(timezone.utc).isoformat()
                 }
             }
-            with open(os.path.join(self.iteration_dir, "result.json"), 'w') as f:
+            with open(os.path.join(results_dir, "result.json"), 'w') as f:
                 json.dump(result, f, indent=2)
             
-            logger.info(f"Saved all iteration results to {self.iteration_dir}")
+            # Check if this is a new high accuracy mark
+            self._save_high_accuracy_mark(iteration_result)
+            
+            logger.info(f"Saved all iteration results to {results_dir}")
                 
         except Exception as e:
             logger.error(f"Error saving iteration results: {e}")
 
-    # Remove redundant methods
-    def _persist_results(self, result: IterationResult) -> None:
-        """Redirect to _save_iteration_results for consistency."""
-        self._save_iteration_results(result)
+    def _save_high_accuracy_mark(self, iteration_result: IterationResult) -> None:
+        """Save high accuracy mark if this iteration achieved a new best accuracy."""
+        try:
+            # Get scorecard and score names from metadata
+            scorecard_name = iteration_result.metadata.get("scorecard_name")
+            score_name = iteration_result.metadata.get("score_name")
+            
+            if not scorecard_name or not score_name:
+                logger.error("Missing scorecard_name or score_name in metadata")
+                return
+                
+            # Create directory structure
+            best_accuracy_dir = os.path.join(
+                self.history_dir,
+                scorecard_name,
+                score_name
+            )
+            os.makedirs(best_accuracy_dir, exist_ok=True)
+            
+            # Load previous best accuracy
+            best_accuracy_file = os.path.join(best_accuracy_dir, "best_accuracy.yaml")
+            best_accuracy = 0.0
+            if os.path.exists(best_accuracy_file):
+                try:
+                    with open(best_accuracy_file, 'r') as f:
+                        import yaml
+                        best_accuracy = yaml.safe_load(f).get('accuracy', 0.0)
+                except:
+                    pass
+            
+            # Check if current accuracy is better
+            current_accuracy = iteration_result.accuracy
+            if current_accuracy > best_accuracy:
+                logger.info(f"New best accuracy achieved: {current_accuracy:.3f} (previous: {best_accuracy:.3f})")
+                
+                # Get system and user messages, replacing escaped newlines with actual newlines
+                system_message = iteration_result.metadata.get("system_message", "").replace('\\n', '\n')
+                user_message = iteration_result.metadata.get("user_message", "").replace('\\n', '\n')
+                
+                # Create YAML content manually to ensure proper formatting
+                yaml_content = f"""accuracy: {current_accuracy}
+iteration: {iteration_result.iteration}
+prompts:
+  {score_name}:
+    system_message: |
+{os.linesep.join(f'      {line}' for line in system_message.splitlines())}
+    user_message: |
+{os.linesep.join(f'      {line}' for line in user_message.splitlines())}
+score_name: {score_name}
+scorecard_name: {scorecard_name}
+"""
+                
+                # Write the YAML content directly
+                with open(best_accuracy_file, 'w') as f:
+                    f.write(yaml_content)
+                    
+                logger.info(f"Saved new best accuracy mark to {best_accuracy_file}")
+                
+        except Exception as e:
+            logger.error(f"Error saving high accuracy mark: {e}")
         
     def _setup_mlflow_run(self, scorecard_name: str) -> None:
         """Set up MLFlow run for tracking."""
@@ -695,6 +580,11 @@ class EvaluationNode(APOSNode):
             if not scorecard:
                 raise ValueError("No scorecard found in state metadata")
             
+            # Set scorecard name and score name in metadata
+            state.metadata["scorecard_name"] = scorecard.name
+            state.metadata["score_name"] = state.score_name
+            logger.info(f"Set metadata - scorecard_name: {scorecard.name}, score_name: {state.score_name}")
+            
             # Set up MLFlow run
             try:
                 self._setup_mlflow_run(state.scorecard_name)
@@ -704,8 +594,16 @@ class EvaluationNode(APOSNode):
             # Get current iteration from state
             self.current_iteration = state.current_iteration
             
-            # Create iteration directory
-            self._setup_iteration_directory()
+            # Create iteration directory with new structure
+            iteration_dir = os.path.join(
+                "optimization_history",
+                scorecard.name,
+                state.score_name,
+                f"iteration_{self.current_iteration}"
+            )
+            os.makedirs(iteration_dir, exist_ok=True)
+            state.metadata["iteration_dir"] = iteration_dir
+            logger.info(f"Created iteration directory: {iteration_dir}")
 
             # Store original prompts for comparison
             original_system = state.system_message
@@ -791,7 +689,9 @@ class EvaluationNode(APOSNode):
                     "user_message": state.user_message,
                     "started_at": self.started_at.isoformat() if self.started_at else None,
                     "experiment_id": self.experiment_id,
-                    "iteration_dir": self.iteration_dir
+                    "iteration_dir": iteration_dir,
+                    "scorecard_name": scorecard.name,
+                    "score_name": state.score_name
                 }
             )
             
@@ -804,7 +704,7 @@ class EvaluationNode(APOSNode):
             # Update state with results
             state.current_accuracy = accuracy
             state.mismatches = converted_mismatches
-            state.metadata["iteration_dir"] = self.iteration_dir
+            state.metadata["iteration_dir"] = iteration_dir
             
             # Return just the state dict
             return state.dict()
@@ -822,35 +722,3 @@ class EvaluationNode(APOSNode):
     def get_node_handler(self) -> Callable[[APOSState], Dict[str, Any]]:
         """Get the handler function for this node."""
         return self.evaluate_prompts 
-
-    def apply_prompt_changes(self, changes: List[PromptChange]) -> None:
-        """
-        Apply prompt changes to the evaluation instance.
-        
-        Args:
-            changes: List of PromptChange objects to apply
-        """
-        logger.info(f"Applying {len(changes)} prompt changes")
-        
-        # Track current prompts
-        current_prompts = {
-            'system_message': self.evaluation.system_message if self.evaluation else None,
-            'user_message': self.evaluation.user_message if self.evaluation else None
-        }
-        
-        # Apply each change
-        for change in changes:
-            if change.component == "system_message":
-                current_prompts['system_message'] = change.new_text
-                logger.info("Applied system message change")
-            elif change.component == "user_message":
-                current_prompts['user_message'] = change.new_text
-                logger.info("Applied user message change")
-        
-        # Update evaluation prompts if we have an instance
-        if self.evaluation:
-            self.evaluation.system_message = current_prompts['system_message']
-            self.evaluation.user_message = current_prompts['user_message']
-            logger.info("Updated evaluation instance with new prompts")
-        else:
-            logger.warning("No evaluation instance to update prompts on") 

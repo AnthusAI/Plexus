@@ -137,15 +137,27 @@ class OptimizerNode(APOSNode):
                         }
                     }
                 
-                # Get iteration directory from state metadata or create default
-                iteration_dir = state.metadata.get("iteration_dir")
-                if not iteration_dir:
-                    iteration_dir = os.path.join(
-                        "optimization_history",
-                        f"iteration_{state.current_iteration}"
-                    )
-                    os.makedirs(iteration_dir, exist_ok=True)
-                    state.metadata["iteration_dir"] = iteration_dir
+                # Get scorecard and score names from metadata
+                scorecard_name = state.metadata.get("scorecard_name")
+                score_name = state.metadata.get("score_name")
+                
+                if not scorecard_name or not score_name:
+                    logger.error("Missing scorecard_name or score_name in metadata")
+                    return {
+                        "state": {
+                            "current_iteration": state.current_iteration
+                        }
+                    }
+                
+                # Create directory structure
+                iteration_dir = os.path.join(
+                    "optimization_history",
+                    scorecard_name,
+                    score_name,
+                    f"iteration_{state.current_iteration}"
+                )
+                os.makedirs(iteration_dir, exist_ok=True)
+                state.metadata["iteration_dir"] = iteration_dir
                 
                 # Log pattern analysis for debugging
                 logger.info(f"Pattern analysis: {state.pattern_analysis}")

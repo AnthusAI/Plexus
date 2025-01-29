@@ -150,15 +150,23 @@ class MismatchAnalyzerNode(APOSNode):
                 
                 logger.info(f"Analyzing {len(state.mismatches)} mismatches individually")
                 
-                # Get iteration directory from state metadata
-                iteration_dir = state.metadata.get("iteration_dir")
-                if not iteration_dir:
-                    logger.warning("No iteration directory found in state metadata")
-                    # Use default path if not provided
-                    iteration_dir = os.path.join(
-                        "optimization_history",
-                        f"iteration_{state.current_iteration}"
-                    )
+                # Get scorecard and score names from metadata
+                scorecard_name = state.metadata.get("scorecard_name")
+                score_name = state.metadata.get("score_name")
+                
+                if not scorecard_name or not score_name:
+                    logger.error("Missing scorecard_name or score_name in metadata")
+                    return state.dict()
+                
+                # Create directory structure
+                iteration_dir = os.path.join(
+                    "optimization_history",
+                    scorecard_name,
+                    score_name,
+                    f"iteration_{state.current_iteration}"
+                )
+                os.makedirs(iteration_dir, exist_ok=True)
+                state.metadata["iteration_dir"] = iteration_dir
                 
                 # Convert raw mismatches to MismatchAnalysis objects
                 mismatch_analyses = []
@@ -183,26 +191,24 @@ class MismatchAnalyzerNode(APOSNode):
                 analyzed_mismatches = await self.analyze_mismatches(mismatch_analyses)
                 
                 # Save analyses - convert back to dict format expected by evaluation
-                if iteration_dir:
-                    output_path = os.path.join(iteration_dir, "mismatches.json")
-                    mismatch_dicts = []
-                    for m in analyzed_mismatches:
-                        mismatch_dict = {
-                            'form_id': m.transcript_id,
-                            'question': m.question_name,
-                            'predicted': m.model_answer,
-                            'ground_truth': m.ground_truth,
-                            'original_explanation': m.original_explanation,
-                            'detailed_analysis': m.detailed_analysis,
-                            'error_category': m.error_category,
-                            'root_cause': m.root_cause
-                        }
-                        mismatch_dicts.append(mismatch_dict)
-                    
-                    os.makedirs(iteration_dir, exist_ok=True)
-                    with open(output_path, 'w') as f:
-                        json.dump(mismatch_dicts, f, indent=4)
-                    logger.info(f"Saved {len(analyzed_mismatches)} mismatch analyses to {output_path}")
+                output_path = os.path.join(iteration_dir, "mismatches.json")
+                mismatch_dicts = []
+                for m in analyzed_mismatches:
+                    mismatch_dict = {
+                        'form_id': m.transcript_id,
+                        'question': m.question_name,
+                        'predicted': m.model_answer,
+                        'ground_truth': m.ground_truth,
+                        'original_explanation': m.original_explanation,
+                        'detailed_analysis': m.detailed_analysis,
+                        'error_category': m.error_category,
+                        'root_cause': m.root_cause
+                    }
+                    mismatch_dicts.append(mismatch_dict)
+                
+                with open(output_path, 'w') as f:
+                    json.dump(mismatch_dicts, f, indent=4)
+                logger.info(f"Saved {len(analyzed_mismatches)} mismatch analyses to {output_path}")
                 
                 # Update state with analyzed mismatches
                 state.analyzed_mismatches = analyzed_mismatches

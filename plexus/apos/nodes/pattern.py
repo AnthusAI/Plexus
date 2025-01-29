@@ -108,19 +108,33 @@ Analysis: {mismatch.detailed_analysis}
     def _save_pattern_results(self, synthesis: SynthesisResult, state: APOSState) -> None:
         """Save pattern analysis results to disk."""
         try:
-            # Get iteration directory from state metadata
-            iteration_dir = state.metadata.get("iteration_dir")
-            if not iteration_dir:
-                logger.warning("No iteration directory found in state metadata")
+            # Get scorecard and score names from metadata
+            scorecard_name = state.metadata.get("scorecard_name")
+            score_name = state.metadata.get("score_name")
+            
+            if not scorecard_name or not score_name:
+                logger.error("Missing scorecard_name or score_name in metadata")
                 return
                 
-            output_path = os.path.join(iteration_dir, "patterns.json")
+            # Create directory structure
+            results_dir = os.path.join(
+                "optimization_history",
+                scorecard_name,
+                score_name,
+                f"iteration_{state.current_iteration}"
+            )
+            os.makedirs(results_dir, exist_ok=True)
+                
+            output_path = os.path.join(results_dir, "patterns.json")
             with open(output_path, 'w') as f:
                 json.dump({
                     'common_issues': synthesis.common_issues,
                     'summary': synthesis.summary
                 }, f, indent=4)
             logger.info(f"Saved pattern analysis results to {output_path}")
+            
+            # Update state metadata with new iteration directory
+            state.metadata["iteration_dir"] = results_dir
             
         except Exception as e:
             logger.error(f"Error saving pattern analysis results: {e}") 
