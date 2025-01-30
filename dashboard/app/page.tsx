@@ -16,22 +16,26 @@ export default function LandingPage() {
       <Hero />
 
       <section className="pt-20 pb-12 md:pb-20 bg-background">
-        <div className="container mx-auto px-4">
-          <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-12">
-            <div className="w-full md:w-2/5 relative p-4">
-              <div className="relative z-10">
-                <ItemListWorkflow />
+        <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
+          <div className="py-4">
+            <div className="bg-background rounded-xl py-12 md:py-16 px-4 md:px-8">
+              <div className="flex flex-col md:flex-row items-center gap-12">
+                <div className="w-full md:w-2/5 relative">
+                  <div className="relative z-10">
+                    <ItemListWorkflow />
+                  </div>
+                </div>
+                <div className="w-full md:w-3/5 text-center md:text-left">
+                  <h2 className="text-4xl md:text-5xl font-bold mb-10 text-foreground">
+                    Intelligence at Scale
+                  </h2>
+                  <p className="text-xl text-muted-foreground">
+                    Run a scorecard on each item of your data, with multiple scores per scorecard. 
+                    Are your agents saying the right things? Are your inbound leads qualified? Classify, predict, 
+                    extract, and act on your data.
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="w-full md:w-3/5 text-center md:text-left">
-              <h2 className="text-4xl md:text-5xl font-bold mb-10 text-foreground">
-                Intelligence at Scale
-              </h2>
-              <p className="text-xl text-muted-foreground">
-                Run a scorecard on each item of your data, with multiple scores per scorecard. 
-                Are your agents saying the right things? Are your inbound leads qualified? Classify, predict, 
-                extract, and act on your data.
-              </p>
             </div>
           </div>
         </div>

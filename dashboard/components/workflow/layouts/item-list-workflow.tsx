@@ -9,7 +9,7 @@ import { ImageNode } from "../nodes/image-node"
 import { TextNode } from "../nodes/text-node"
 import { ThumbsUpNode } from "../nodes/thumbs-up-node"
 import { ThumbsDownNode } from "../nodes/thumbs-down-node"
-import { WorkflowStep } from "../types"
+import { WorkflowStep, NodeSequence } from "../types"
 import { motion, AnimatePresence } from "framer-motion"
 
 type MediaNodeType = "audio" | "image" | "text"
@@ -18,8 +18,62 @@ type NodeResult = "thumbs-up" | "thumbs-down"
 interface ExtendedWorkflowStep extends WorkflowStep {
   mediaType?: MediaNodeType
   result?: NodeResult
-  processingStartTime?: number
   addedTimestamp: number
+  sequence?: NodeSequence
+}
+
+// Timing constants for animations
+const TIMING = {
+  ROW_ENTRANCE: 800,
+  NODE_STAGGER: 200,
+  INITIAL_DELAY: 800,
+  PROCESSING: 1200,
+  COMPLETION_BUFFER: 300,
+  EXIT: 800
+} as const
+
+// Add jitter to timing values (±10%)
+const addJitter = (value: number, factor: number = 0.1) => {
+  const jitterFactor = 1 + (Math.random() * factor * 2 - factor)
+  return Math.round(value * jitterFactor)
+}
+
+// Helper functions for sequence generation
+const createNodeSequence = (
+  position: number, 
+  rowStartTime: number, 
+  isMediaNode: boolean = false
+): NodeSequence => {
+  if (isMediaNode) {
+    return {
+      startDelay: 0,
+      processingDuration: 0,
+      completionDelay: 0
+    }
+  }
+
+  // Add jitter to each timing component
+  const initialDelay = addJitter(TIMING.INITIAL_DELAY, 0.3)
+  const staggerDelay = addJitter(position * TIMING.NODE_STAGGER, 0.25)
+  const baseDelay = TIMING.ROW_ENTRANCE + initialDelay + staggerDelay
+  const processingTime = addJitter(TIMING.PROCESSING, 0.2)
+  const completionBuffer = addJitter(TIMING.COMPLETION_BUFFER, 0.3)
+
+  return {
+    startDelay: baseDelay,
+    processingDuration: processingTime,
+    completionDelay: baseDelay + processingTime + completionBuffer
+  }
+}
+
+const createRowSequences = (
+  rowStartTime: number,
+  steps: ExtendedWorkflowStep[]
+): ExtendedWorkflowStep[] => {
+  return steps.map((step, index) => ({
+    ...step,
+    sequence: createNodeSequence(index, rowStartTime, !!step.mediaType)
+  }))
 }
 
 const initialSteps: (ExtendedWorkflowStep & { mediaType?: MediaNodeType })[] = [
@@ -28,21 +82,25 @@ const initialSteps: (ExtendedWorkflowStep & { mediaType?: MediaNodeType })[] = [
   { id: "1-2", label: "Item 1-2", status: "not-started", position: "r1-2", addedTimestamp: 0 },
   { id: "1-3", label: "Item 1-3", status: "not-started", position: "r1-3", addedTimestamp: 0 },
   { id: "1-4", label: "Item 1-4", status: "not-started", position: "r1-4", addedTimestamp: 0 },
+  { id: "1-5", label: "Item 1-5", status: "not-started", position: "r1-5", addedTimestamp: 0 },
   // Row 2
   { id: "2-1", label: "Item 2-1", status: "not-started", position: "r2-1", mediaType: "image", addedTimestamp: 0 },
   { id: "2-2", label: "Item 2-2", status: "not-started", position: "r2-2", addedTimestamp: 0 },
   { id: "2-3", label: "Item 2-3", status: "not-started", position: "r2-3", addedTimestamp: 0 },
   { id: "2-4", label: "Item 2-4", status: "not-started", position: "r2-4", addedTimestamp: 0 },
+  { id: "2-5", label: "Item 2-5", status: "not-started", position: "r2-5", addedTimestamp: 0 },
   // Row 3
   { id: "3-1", label: "Item 3-1", status: "not-started", position: "r3-1", mediaType: "text", addedTimestamp: 0 },
   { id: "3-2", label: "Item 3-2", status: "not-started", position: "r3-2", addedTimestamp: 0 },
   { id: "3-3", label: "Item 3-3", status: "not-started", position: "r3-3", addedTimestamp: 0 },
   { id: "3-4", label: "Item 3-4", status: "not-started", position: "r3-4", addedTimestamp: 0 },
+  { id: "3-5", label: "Item 3-5", status: "not-started", position: "r3-5", addedTimestamp: 0 },
   // Row 4
   { id: "4-1", label: "Item 4-1", status: "not-started", position: "r4-1", mediaType: "audio", addedTimestamp: 0 },
   { id: "4-2", label: "Item 4-2", status: "not-started", position: "r4-2", addedTimestamp: 0 },
   { id: "4-3", label: "Item 4-3", status: "not-started", position: "r4-3", addedTimestamp: 0 },
   { id: "4-4", label: "Item 4-4", status: "not-started", position: "r4-4", addedTimestamp: 0 },
+  { id: "4-5", label: "Item 4-5", status: "not-started", position: "r4-5", addedTimestamp: 0 },
 ]
 
 const MEDIA_TYPES: MediaNodeType[] = ["audio", "image", "text"]
@@ -52,7 +110,7 @@ const getPosition = (position: string) => {
   const [_, row, col] = position.match(/r(\d+)-(\d+)/) || []
   if (!row || !col) return null
   return {
-    x: parseInt(col),
+    x: 0.32 + (parseInt(col) - 1),  // Start at 0.32, increment by 1
     y: parseInt(row)
   }
 }
@@ -77,12 +135,27 @@ function WorkflowRow({ steps, rowY, yOffset }: RowProps) {
       }
     }
 
-    // Only non-media nodes go through state transitions
-    if (step.status === "complete") {
+    // Use sequence-based animation for non-media nodes
+    if (step.sequence) {
+      // Calculate current state based on time
+      const now = Date.now()
+      const startTime = step.addedTimestamp + step.sequence.startDelay
+      const processingTime = startTime + step.sequence.processingDuration
+      const completeTime = step.addedTimestamp + step.sequence.completionDelay
+
+      let currentStatus: "not-started" | "processing" | "complete" = "not-started"
+      if (now >= completeTime) {
+        currentStatus = "complete"
+      } else if (now >= startTime) {
+        currentStatus = "processing"
+      }
+
       return step.result === "thumbs-down" ? 
-        <ThumbsDownNode status={step.status} /> : 
-        <ThumbsUpNode status={step.status} />
+        <ThumbsDownNode status={currentStatus} sequence={step.sequence} /> : 
+        <ThumbsUpNode status={currentStatus} sequence={step.sequence} />
     }
+
+    // Fallback to status-based for backward compatibility
     return <CircleNode status={step.status} isMain={false} />
   }, [])
 
@@ -106,9 +179,10 @@ function WorkflowRow({ steps, rowY, yOffset }: RowProps) {
     >
       {/* Connections */}
       <g transform={`translate(0, 0)`}>
-        <BaseConnection startX={1} startY={0} endX={2} endY={0} />
-        <BaseConnection startX={2} startY={0} endX={3} endY={0} />
-        <BaseConnection startX={3} startY={0} endX={4} endY={0} />
+        <BaseConnection startX={0.32} startY={0} endX={1.32} endY={0} />
+        <BaseConnection startX={1.32} startY={0} endX={2.32} endY={0} />
+        <BaseConnection startX={2.32} startY={0} endX={3.32} endY={0} />
+        <BaseConnection startX={3.32} startY={0} endX={4.32} endY={0} />
       </g>
 
       {/* Nodes */}
@@ -135,23 +209,6 @@ export default function ItemListWorkflow() {
   const [nextId, setNextId] = useState(5)
   const [baseRow, setBaseRow] = useState(1)
 
-  // Reset everything when component mounts
-  useEffect(() => {
-    // Reset all nodes, keeping media nodes but resetting all others to not-started
-    const resetSteps = initialSteps.map(step => ({
-      ...step,
-      status: "not-started" as const,
-      result: undefined,
-      processingStartTime: undefined,
-      addedTimestamp: 0
-    }))
-    
-    setSteps(resetSteps)
-    setVisibleRows(1)
-    setNextId(5)
-    setBaseRow(1)
-  }, [])
-
   const getRandomDelay = useCallback((min: number, max: number) => {
     return Math.random() * (max - min) + min
   }, [])
@@ -161,87 +218,38 @@ export default function ItemListWorkflow() {
     return MEDIA_TYPES[index]
   }, [])
 
-  const startNodeProcessing = useCallback((stepId: string) => {
-    setSteps(currentSteps => {
-      const newSteps = [...currentSteps]
-      const stepIndex = newSteps.findIndex(s => s.id === stepId)
-      if (stepIndex === -1) return currentSteps
-
-      const step = newSteps[stepIndex]
-      if (step.status !== "not-started" || step.mediaType) return currentSteps
-
-      step.status = "processing"
-      step.processingStartTime = Date.now()
-      return newSteps
-    })
+  const getRandomResult = useCallback(() => {
+    return Math.random() < 0.95 ? "thumbs-up" as const : "thumbs-down" as const
   }, [])
 
-  const completeNodeProcessing = useCallback((stepId: string) => {
-    setSteps(currentSteps => {
-      const newSteps = [...currentSteps]
-      const stepIndex = newSteps.findIndex(s => s.id === stepId)
-      if (stepIndex === -1) return currentSteps
-
-      const step = newSteps[stepIndex]
-      if (step.status !== "processing" || step.mediaType) return currentSteps
-
-      step.status = "complete"
-      step.result = Math.random() < 0.9 ? "thumbs-up" : "thumbs-down"
-      return newSteps
-    })
-  }, [])
-
-  // Start node processing after random delay
+  // Reset everything when component mounts
   useEffect(() => {
-    const timers: NodeJS.Timeout[] = []
-
-    steps.forEach(step => {
-      const position = getPosition(step.position)
-      if (!position) return
-
-      // Only start processing if:
-      // 1. The node is in a visible row (not sliding in)
-      // 2. The row has completed its entrance animation (allow 800ms for animation)
-      const rowNumber = position.y - baseRow + 1
-      const isFullyVisible = rowNumber <= visibleRows
-      const hasCompletedEntrance = Date.now() - step.addedTimestamp > 800
-
-      if (step.status === "not-started" && !step.mediaType && 
-          isFullyVisible && hasCompletedEntrance) {
-        const timer = setTimeout(() => {
-          startNodeProcessing(step.id)
-        }, getRandomDelay(200, 300))
-        timers.push(timer)
+    const currentTime = Date.now()
+    // Reset all nodes, keeping media nodes but resetting all others to not-started
+    const resetSteps = initialSteps.map(step => ({
+      ...step,
+      status: "not-started" as const,
+      result: step.mediaType ? undefined : getRandomResult(),
+      addedTimestamp: currentTime
+    }))
+    
+    // Add sequences to initial rows
+    const sequencedSteps = resetSteps.reduce<ExtendedWorkflowStep[]>((acc, _, index) => {
+      if (index % 5 === 0) {
+        // Get the next row of 5 steps
+        const rowSteps = resetSteps.slice(index, index + 5)
+        // Create sequences for this row
+        const sequencedRow = createRowSequences(currentTime, rowSteps)
+        return [...acc, ...sequencedRow]
       }
-    })
+      return acc
+    }, [])
 
-    return () => timers.forEach(clearTimeout)
-  }, [steps, startNodeProcessing, getRandomDelay, baseRow, visibleRows])
-
-  // Complete node processing after random delay
-  useEffect(() => {
-    const timers: NodeJS.Timeout[] = []
-
-    steps.forEach(step => {
-      const position = getPosition(step.position)
-      if (!position) return
-
-      // Apply same visibility and entrance completion checks for completion
-      const rowNumber = position.y - baseRow + 1
-      const isFullyVisible = rowNumber <= visibleRows
-      const hasCompletedEntrance = Date.now() - step.addedTimestamp > 800
-
-      if (step.status === "processing" && !step.mediaType && 
-          step.processingStartTime && isFullyVisible && hasCompletedEntrance) {
-        const timer = setTimeout(() => {
-          completeNodeProcessing(step.id)
-        }, getRandomDelay(250, 300))
-        timers.push(timer)
-      }
-    })
-
-    return () => timers.forEach(clearTimeout)
-  }, [steps, completeNodeProcessing, getRandomDelay, baseRow, visibleRows])
+    setSteps(sequencedSteps)
+    setVisibleRows(1)
+    setNextId(5)
+    setBaseRow(1)
+  }, [getRandomResult])
 
   // Initial row appearance and conveyor belt effect
   useEffect(() => {
@@ -254,18 +262,22 @@ export default function ItemListWorkflow() {
       } else {
         // Conveyor belt phase: Add new row and shift
         const currentTime = Date.now()
-        const newRow = Array.from({ length: 4 }).map((_, i) => ({
+        const newSteps: ExtendedWorkflowStep[] = Array.from({ length: 5 }).map((_, i) => ({
           id: `${nextId}-${i + 1}`,
           label: `Item ${nextId}-${i + 1}`,
-          status: "not-started" as const,
+          status: "processing" as const,
           position: `r${nextId}-${i + 1}`,
           mediaType: i === 0 ? getRandomMediaType() : undefined,
-          addedTimestamp: currentTime
+          addedTimestamp: currentTime,
+          result: i === 0 ? undefined : getRandomResult() // Pre-determine results
         }))
 
+        // Add sequences to the new row
+        const sequencedNewSteps = createRowSequences(currentTime, newSteps)
+
         setSteps(currentSteps => {
-          // Keep only the last 16 items (4 rows) and add the new row
-          return [...currentSteps.slice(-16), ...newRow]
+          // Keep only the last 20 items (4 rows of 5) and add the new row
+          return [...currentSteps.slice(-20), ...sequencedNewSteps]
         })
         setNextId(prev => prev + 1)
         setBaseRow(prev => prev + 1)
@@ -279,16 +291,16 @@ export default function ItemListWorkflow() {
     timer = setTimeout(heartbeat, getRandomDelay(1050, 1400))
 
     return () => clearTimeout(timer)
-  }, [visibleRows, nextId, getRandomDelay, getRandomMediaType])
+  }, [visibleRows, nextId, getRandomDelay, getRandomMediaType, getRandomResult])
 
-  const getRowSteps = useCallback((steps: (ExtendedWorkflowStep & { mediaType?: MediaNodeType })[], rowIndex: number) => {
-    return steps.slice(rowIndex * 4, (rowIndex + 1) * 4)
+  const getRowSteps = useCallback((steps: ExtendedWorkflowStep[], rowIndex: number) => {
+    return steps.slice(rowIndex * 5, (rowIndex + 1) * 5)
   }, [])
 
   return (
-    <ContainerBase viewBox="0 0 5 5">
+    <ContainerBase viewBox="0 0 4.64 5">
       <AnimatePresence mode="sync">
-        {Array.from({ length: Math.ceil(steps.length / 4) }).map((_, index) => {
+        {Array.from({ length: Math.ceil(steps.length / 5) }).map((_, index) => {
           const rowSteps = getRowSteps(steps, index)
           const rowY = index + baseRow
 

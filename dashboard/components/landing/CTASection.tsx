@@ -28,42 +28,46 @@ export const CTASection = () => {
   }
 
   return (
-    <section className="py-20 bg-gradient-to-b from-background to-muted">
-      <div className="container mx-auto px-4">
-        <div className="flex flex-col md:flex-row items-center gap-12">
-          <div className="flex-1 text-center md:text-left">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Ready to get started with Plexus?
-            </h2>
-            <p className="text-xl text-muted-foreground mb-8">
-              Join the growing community of businesses building powerful AI workflows with Plexus.
-            </p>
-            <Button 
-              size="lg" 
-              className="bg-gradient-to-r from-secondary to-primary text-white hover:from-secondary/90 hover:to-primary/90 text-lg font-semibold"
-              onClick={handleEarlyAccess}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin" role="img" aria-label="loading" />
-              ) : (
-                <>
-                  Request Early Access
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </>
-              )}
-            </Button>
-            {error && (
-              <div className="mt-4 flex items-center justify-center md:justify-start gap-2 text-destructive">
-                <AlertCircle className="h-5 w-5" />
-                <span>{error}</span>
+    <section className="bg-muted">
+      <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
+        <div className="py-4">
+          <div className="py-12 md:py-16 px-4 md:px-8">
+            <div className="flex flex-col md:flex-row items-center gap-12">
+              <div className="flex-1 text-center md:text-left">
+                <h2 className="text-3xl md:text-4xl font-bold mb-4">
+                  Ready to get started with Plexus?
+                </h2>
+                <p className="text-xl text-muted-foreground mb-8">
+                  Join the growing community of businesses building powerful AI workflows with Plexus.
+                </p>
+                <Button 
+                  size="lg" 
+                  className="bg-gradient-to-r from-secondary to-primary text-white hover:from-secondary/90 hover:to-primary/90 text-lg font-semibold"
+                  onClick={handleEarlyAccess}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <Loader2 className="h-5 w-5 animate-spin" role="img" aria-label="loading" />
+                  ) : (
+                    <>
+                      Request Early Access
+                      <ArrowRight className="ml-2 h-5 w-5" />
+                    </>
+                  )}
+                </Button>
+                {error && (
+                  <div className="mt-4 flex items-center justify-center md:justify-start gap-2 text-destructive">
+                    <AlertCircle className="h-5 w-5" />
+                    <span>{error}</span>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <div className="w-48 h-48 md:w-64 md:h-64 flex-shrink-0 relative">
-            <div className="absolute inset-[-2rem] bg-gradient-to-r from-secondary to-primary rounded-[2rem] blur-2xl opacity-30"></div>
-            <div className="relative z-10">
-              <SquareLogo variant={LogoVariant.Square} className="w-full h-full" />
+              <div className="w-48 h-48 md:w-64 md:h-64 flex-shrink-0 relative">
+                <div className="absolute inset-[-2rem] bg-gradient-to-r from-secondary to-primary rounded-[2rem] blur-2xl opacity-30"></div>
+                <div className="relative z-10">
+                  <SquareLogo variant={LogoVariant.Square} className="w-full h-full" />
+                </div>
+              </div>
             </div>
           </div>
         </div>
