@@ -92,13 +92,13 @@ export default function MultiModelWorkflow() {
   // Create new jittered sequences on each render cycle
   const NODE_SEQUENCES = useMemo(() => {
     return Object.entries(BASE_SEQUENCES).reduce((acc, [key, sequence]) => {
-      acc[key as keyof typeof BASE_SEQUENCES] = {
+      (acc as any)[key] = {
         startDelay: key === 'main' ? 0 : addJitter(sequence.startDelay),
         processingDuration: addJitter(sequence.processingDuration),
         completionDelay: addJitter(sequence.completionDelay)
       }
       return acc
-    }, {} as typeof BASE_SEQUENCES)
+    }, {} as Record<keyof typeof BASE_SEQUENCES, typeof BASE_SEQUENCES[keyof typeof BASE_SEQUENCES]>)
   }, [key])
 
   useEffect(() => {
