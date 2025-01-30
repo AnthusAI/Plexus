@@ -4,21 +4,31 @@ export type NodeShape = "circle" | "square" | "triangle" | "hexagon"
 
 export type ResultType = "checkmark" | "text" | "rating"
 
+export interface NodeSequence {
+  startDelay: number
+  processingDuration: number
+  completionDelay: number
+}
+
 export interface BaseNodeProps {
-  status: NodeStatus
+  status?: NodeStatus
   size?: number
   className?: string
   isMain?: boolean
+  sequence?: NodeSequence
 }
 
 export interface WorkflowStep {
   id: string
   label: string
-  status: NodeStatus
+  status: "not-started" | "processing" | "complete"
   position: string
-  shape?: NodeShape
-  resultType?: ResultType
-  resultValue?: string | number
+}
+
+export interface SequenceTiming {
+  startDelay: number
+  processingDuration: number
+  completionDelay: number
 }
 
 export interface BaseLayoutProps {

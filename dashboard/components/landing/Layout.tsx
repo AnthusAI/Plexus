@@ -72,7 +72,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background overflow-x-hidden">
       <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
-          <div className="flex h-14 items-center" ref={containerRef}>
+          <div className="flex h-14 items-center px-4 md:px-8" ref={containerRef}>
             <div className="flex items-center flex-1">
               <Link href="/" className="mr-4 flex items-center">
                 <div className="relative">
