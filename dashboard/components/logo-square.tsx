@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { motion } from "framer-motion"
 
 enum LogoVariant {
   Square,
@@ -69,7 +70,7 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
     return Date.now() - (halfCycle + additionalOffset);
   });
 
-  const [jitterValues, setJitterValues] = useState(() => 
+  const [jitterValues] = useState(() => 
     Array(rows * columns).fill(0).map(() => ({ value: Math.random() * 0.1 - 0.05, target: Math.random() * 0.1 - 0.05 }))
   );
 
@@ -77,33 +78,41 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
     Array(rows * columns).fill(0).map(() => Math.random() * 0.2 - 0.1),
   [rows, columns]);
 
-  const initialGrid = useMemo(() => 
+  // Compute current and next colors for each cell
+  const [colorStates, setColorStates] = useState(() => 
     Array(rows * columns).fill(0).map((_, index) => {
       const row = Math.floor(index / columns);
       const col = index % columns;
       const baseProgress = (10 - (row + col)) / 10;
-      return getColorAtPosition(baseProgress);
-    }),
-  [rows, columns]);
-
-  const [grid, setGrid] = useState<string[]>(initialGrid);
+      const currentProgress = (baseProgress + ((Date.now() - startTime) / cycleDuration)) % 1;
+      const nextProgress = (currentProgress + (250 / cycleDuration)) % 1;
+      return {
+        current: getColorAtPosition((currentProgress + randomOffsets[index] + jitterValues[index].value + 1) % 1),
+        next: getColorAtPosition((nextProgress + randomOffsets[index] + jitterValues[index].value + 1) % 1)
+      };
+    })
+  );
 
   useEffect(() => {
     if (!isClient) return;
 
-    const updateGrid = () => {
-      setGrid(prev => 
+    const updateColors = () => {
+      setColorStates(prev => 
         prev.map((_, index) => {
           const row = Math.floor(index / columns);
           const col = index % columns;
           const baseProgress = ((10 - (row + col)) / 10 + ((Date.now() - startTime) / cycleDuration)) % 1;
-          const randomizedProgress = (baseProgress + randomOffsets[index] + jitterValues[index].value + 1) % 1;
-          return getColorAtPosition(randomizedProgress);
+          const currentProgress = (baseProgress + randomOffsets[index] + jitterValues[index].value + 1) % 1;
+          const nextProgress = (currentProgress + (250 / cycleDuration)) % 1;
+          return {
+            current: getColorAtPosition(currentProgress),
+            next: getColorAtPosition(nextProgress)
+          };
         })
       );
     };
 
-    const interval = setInterval(updateGrid, 50);
+    const interval = setInterval(updateColors, 250);
     return () => clearInterval(interval);
   }, [isClient, columns, startTime, cycleDuration, randomOffsets, jitterValues]);
 
@@ -157,10 +166,15 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
           gridArea: '1 / 1 / -1 / -1',
         }}
       >
-        {grid.map((color, index) => (
-          <div
+        {colorStates.map((colors, index) => (
+          <motion.div
             key={index}
-            style={{ backgroundColor: color }}
+            initial={{ backgroundColor: colors.current }}
+            animate={{ backgroundColor: colors.next }}
+            transition={{ 
+              duration: 0.25,
+              ease: "linear"
+            }}
           />
         ))}
       </div>

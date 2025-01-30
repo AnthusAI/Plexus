@@ -18,7 +18,7 @@ export function Hero() {
                 </h1>
                 <div className="flex flex-col md:flex-row xl:flex-col gap-8">
                   <div className="w-full md:w-1/2 xl:w-full flex flex-col items-center md:items-start text-center md:text-left md:justify-center">
-                    <p className="text-xl md:text-2xl text-muted-foreground mb-8">
+                    <p className="text-xl md:text-2xl text-muted-foreground mb-8 text-justify w-full">
                       Plexus is a battle-tested platform for building agent-based AI workflows that analyze streams of content and take action.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-4">
