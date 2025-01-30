@@ -88,91 +88,49 @@ The workflow pictograms provide visual representations of Plexus workflows, feat
   - Coordinated node transitions ✓
   - Automatic cycling ✓
 
-#### Transition Plan
-- Identify components using old system
-  - ItemListWorkflow still uses status-based
-  - Other components updated to sequence-based
-- Migration strategy
-  - Preserve existing functionality
-  - Gradual component updates
-  - Maintain backwards compatibility
-- Testing approach
-  - Visual regression testing
-  - Animation timing verification
-  - State transition validation
-
-## Planned Enhancements
-
-### Connection Lines
-- Animated flow indicators
-- Progress tracking along paths
-- Conditional styling based on workflow state
-- Dashed line variations for specific relationships
-
-### Node Enhancements
-- Additional shape variations
-  - Diamond for decision points
-  - Octagon for stop/validation points
-  - Rounded rectangle for grouped processes
-- Enhanced state indicators
-  - Error states with appropriate animations
-  - Warning states for edge cases
-  - Paused state visualization
-- Interaction capabilities
-  - Hover states with metadata
-  - Click handling for node details
-  - Context menu support
-
-### Layout System
-- Dynamic grid adaptation
-- Auto-layout capabilities
-- Multiple flow patterns
-  - Vertical progression
-  - Branching workflows
-  - Circular processes
-- Responsive sizing and spacing
-
-### Animation Improvements
-- Path-following animations
-- Particle effects for data flow
-- Smoother state transitions
-- Variable speed controls
-- Pause/resume capabilities
-
-### Accessibility
-- ARIA labels for nodes
-- Keyboard navigation
-- High contrast mode
-- Animation reduction options
-- Screen reader descriptions
+#### Migration Status ✓
+- All components migrated to sequence-based system ✓
+  - ItemListWorkflow successfully converted ✓
+  - Timing refinements implemented ✓
+  - Jitter added for organic feel ✓
+- Key improvements achieved:
+  - Predictable state transitions ✓
+  - Configurable timing parameters ✓
+  - Smoother animations ✓
+  - Better state management ✓
 
 ## Development Priorities
 
-1. Animation System Migration
-   - Convert ItemListWorkflow to sequence-based
-   - Update classifier nodes for sequence support
-   - Ensure consistent timing across all nodes
-   - Add transition animations between states
+1. Container Width Utilization
+   - Phase 1: Visual Debug Setup ⏳
+     - Add visible container boundaries in Storybook
+     - Red border for outer container edge
+     - Blue border for inner content area
+     - Checkered background to highlight whitespace
+   - Phase 2: Layout Adjustments
+     - Analyze current spacing in all three diagrams
+     - Adjust viewBox and coordinate systems
+     - Modify node positioning calculations
+     - Update connection line paths
+   - Success Criteria
+     - Diagrams touch left and right boundaries
+     - Consistent spacing between elements
+     - No unintended whitespace
+     - Maintains visual balance
 
-2. Connection Line Enhancements
-   - Flow indicators
-   - Progress tracking
-   - State-based styling
-   - Animated path following
-
-3. Layout System Improvements
+2. Layout System Improvements
    - Auto-layout capabilities
    - Multiple flow patterns
    - Responsive sizing
    - Dynamic grid adaptation
 
-4. Interactive Features
+3. Interactive Features
    - Hover states
    - Click handlers
    - Context menus
    - Tooltip integration
 
-5. Accessibility Implementation
+4. Accessibility Implementation
    - ARIA labels
    - Keyboard navigation
    - High contrast mode
@@ -184,11 +142,23 @@ The workflow pictograms provide visual representations of Plexus workflows, feat
 - Node component demonstrations ✓
   - Basic node states and sequences ✓
   - Media node types ✓
-  - Classifier nodes (static states only) ✓
+  - Classifier nodes (with sequence support) ✓
 - Full workflow diagrams ✓
   - Basic layouts ✓
   - Multi-model flows ✓
-  - Item list patterns ✓
+  - Item list patterns with conveyor belt animation ✓
+
+### Animation Timing ✓
+- Row entrance: 800ms ✓
+- Node stagger: 200ms ✓
+- Initial delay: 800ms ✓
+- Processing duration: 1200ms ✓
+- Completion buffer: 300ms ✓
+- Exit animation: 800ms ✓
+- Jitter factors:
+  - Node stagger: ±25% ✓
+  - Processing time: ±20% ✓
+  - Completion buffer: ±30% ✓
 
 ### Testing
 - Component unit tests
