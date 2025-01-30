@@ -19,17 +19,17 @@ export default function LandingPage() {
         <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
           <div className="py-4">
             <div className="bg-background rounded-xl py-12 md:py-16 px-4 md:px-8">
-              <div className="flex flex-col md:flex-row items-center gap-12">
+              <div className="flex flex-col md:flex-row items-center gap-32">
                 <div className="w-full md:w-2/5 relative">
                   <div className="relative z-10">
                     <ItemListWorkflow />
                   </div>
                 </div>
-                <div className="w-full md:w-3/5 text-center md:text-left">
+                <div className="w-full md:w-3/5 text-center md:text-left md:pr-4">
                   <h2 className="text-4xl md:text-5xl font-bold mb-10 text-foreground">
                     Intelligence at Scale
                   </h2>
-                  <p className="text-xl text-muted-foreground">
+                  <p className="text-xl text-muted-foreground text-justify">
                     Run a scorecard on each item of your data, with multiple scores per scorecard. 
                     Are your agents saying the right things? Are your inbound leads qualified? Classify, predict, 
                     extract, and act on your data.
