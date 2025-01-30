@@ -203,7 +203,7 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
               lineHeight: 1.2,
               position: 'absolute',
               left: `${54 + (100 / 6 / 40)}%`,  // Shifted slightly more right for narrow variant
-              top: '50%',
+              top: '53.5%',  // Shifted more down for narrow variant
               transform: 'translate(-50%, -50%)',
             }}
           >
