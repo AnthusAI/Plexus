@@ -39,6 +39,14 @@ class APOSState(BaseModel):
         default_factory=list,
         description="Current mismatches being analyzed"
     )
+    current_mismatch: Optional[MismatchAnalysis] = Field(
+        default=None,
+        description="The current mismatch being analyzed"
+    )
+    mismatch_summaries: Optional[str] = Field(
+        default=None,
+        description="Formatted summaries of all mismatches for pattern analysis"
+    )
     analyzed_mismatches: List[MismatchAnalysis] = Field(
         default_factory=list,
         description="Mismatches that have been analyzed"

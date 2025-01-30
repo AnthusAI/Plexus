@@ -2,11 +2,11 @@ optimization:
   max_iterations: 5
   target_accuracy: 0.95
   max_consecutive_no_improvement: 3  # Stop after this many iterations without improvement
-  max_mismatches_to_report: 100  # Maximum number of mismatches to analyze per iteration
+  max_mismatches_to_report: 10  # Maximum number of mismatches to analyze per iteration
 
 optimizer_model:  # For generating prompt improvements
   model_type: "gpt-4o-mini-2024-07-18"
-  # temperature: 0.1  # Slightly higher temperature for more creative improvements
+  #temperature: 0
   max_tokens: 2000
   top_p: 0.03
   cache_dir: ".langchain_cache"
@@ -14,49 +14,71 @@ optimizer_model:  # For generating prompt improvements
   prompts:
     system_template: |
       You are an expert at optimizing prompts for classification tasks.
-      Your goal is to improve accuracy by making substantial improvements to the existing prompts.
+      Your goal is to improve accuracy by making targeted, precise improvements to the existing prompts.
       
       You will be shown:
       1. The current prompts being used
       2. Analysis of why these prompts are causing incorrect answers
       
       IMPORTANT:
-      - Make bold, substantial changes that directly address the identified issues
-      - Don't be afraid to completely rewrite sections that aren't working
-      - Focus on clarity and precision in the instructions
-      - Keep the core rules and requirements, but feel free to restructure how they're presented
-      - If you can't identify meaningful improvements, say so in the rationale
-      - Small tweaks and minor clarifications are usually not enough to fix systemic issues
+      - Make specific, targeted changes that directly address the identified issues
+      - Focus on precise adjustments rather than complete rewrites
+      - Maintain the existing structure while improving clarity
+      - Keep all existing rules and requirements intact
+      - Each change should have a clear purpose tied to the analysis
+
+      YOUR RESPONSE MUST INCLUDE THESE TWO FIELDS:
+      - system_message: The improved system message
+      - user_message: The improved user message (must contain {{text}} placeholder)
+
+      RESPONSE FORMAT REQUIREMENTS:
+      - Both fields are required
+      - Both fields must be non-empty strings
+      - The user_message MUST contain the {{text}} placeholder
+      - No additional fields are allowed
 
     human_template: |
       Here are the current prompts and analysis of why they're causing problems:
 
       Current Prompts:
-      system_message: "{current_system_message}"
-      user_message: "{current_user_message}"
+      <system_message>
+      {system_message}
+      </system_message>
+
+      <user_message>
+      {user_message}
+      </user_message>
 
       Analysis of Issues:
       Common Problems:
-      {common_issues}
+      {pattern_analysis.common_issues}
 
       Summary:
-      {summary}
+      {pattern_analysis.summary}
       
       Your task:
       1. Start with the current prompts
-      2. Make substantial changes to fix the identified issues - don't be afraid to rewrite entire sections
+      2. Make targeted changes to address each identified issue
       3. Ensure the {{text}} variable is ONLY in the user_message
-      4. Focus on making the instructions clearer and more precise
-      5. Consider restructuring the information to make it easier to follow
-      6. Add explicit examples if they would help clarify the requirements
-      7. Provide a detailed rationale explaining your changes and how they address the issues
+      4. Focus on clarifying specific points of confusion
+      5. Keep the existing structure and only modify what needs improvement
+      6. Add clarifications or examples only where directly relevant to the issues
       
-      Remember: Minor tweaks and small clarifications rarely fix systemic issues. Be bold with your changes while keeping the core requirements intact.
+      Remember: Each change should have a clear purpose and directly address a specific issue from the analysis.
       
-      Your response must include:
-      1. An improved system_message
-      2. An improved user_message (with {{text}} placeholder)
-      3. A detailed rationale explaining your changes and how they address the issues
+      PROVIDE YOUR RESPONSE WITH THESE TWO FIELDS:
+      - system_message: Your improved system message
+      - user_message: Your improved user message (must contain {{text}} placeholder)
+
+      The user message should encourage a response in this format:
+      [Concise reasoning and analysis explaining the evaluator's thought process]
+
+      [Final answer from valid options]
+
+      IMPORTANT:
+      - Both fields must be provided
+      - Both fields must be non-empty
+      - The user_message must contain the {{text}} placeholder
 
 analyzer_model:  # For analyzing individual mismatches
   model_type: "gpt-4o-mini-2024-07-18"
@@ -74,36 +96,46 @@ analyzer_model:  # For analyzing individual mismatches
       1. The original transcript
       2. The model's prediction and explanation
       3. The correct ground truth answer
+      4. The prompts that were used to generate the prediction
       
       Focus on:
       - Identifying the exact reason for the error
       - Understanding the model's reasoning process
       - Finding specific details in the transcript that led to the mistake
       - Categorizing the type of error that occurred
+      - Analyzing what about the prompts contributed to the error
 
     human_template: |
       Analyze this specific case where the model's prediction did not match the ground truth.
 
-      Context:
-      The model was asked to evaluate a transcript and determine: {question_name}
+      Prompts used:
+      <system_message>
+      {system_message}
+      </system_message>
+
+      <user_message>
+      {user_message}
+      </user_message>
 
       Transcript:
-      {transcript_text}
+      {current_mismatch.transcript_text}
 
-      Model's Prediction: {model_answer}
-      Ground Truth: {ground_truth}
+      Model's Prediction: {current_mismatch.model_answer}
+      Ground Truth: {current_mismatch.ground_truth}
 
       Model's Original Explanation:
-      {original_explanation}
+      {current_mismatch.original_explanation}
 
       Your task is to:
       1. Analyze exactly why the model made the wrong prediction in this specific case
       2. Identify the root cause of the error
       3. Provide a detailed analysis of what went wrong
+      4. Consider what about the prompts themselves may have contributed to the error
 
       Remember to:
       - Be specific and reference exact details from the transcript
       - Consider both what the model did wrong AND why it thought it was right
+      - Analyze what about the prompts themselves could have led to confusion
 
 pattern_analyzer_model:  # For analyzing patterns across mismatches
   model_type: "gpt-4o-mini-2024-07-18"
@@ -120,12 +152,14 @@ pattern_analyzer_model:  # For analyzing patterns across mismatches
       You will be shown:
       1. Multiple cases where the model gave incorrect answers
       2. Detailed analysis of why each error occurred
+      3. The current prompts being used
       
       Focus on:
       - Finding common patterns across the mismatches
       - Identifying systematic issues in how the prompt guides the model
       - Understanding how the prompt's structure or content contributes to errors
       - Being specific about how these issues manifest across different cases
+      - Being specific about how the prompts are causing these problems
 
     human_template: |
       Review these mismatches where the model gave incorrect answers. For each mismatch, we've analyzed why the prompt misguided the model.
@@ -135,7 +169,16 @@ pattern_analyzer_model:  # For analyzing patterns across mismatches
       2. Identify the common issues in how the prompt is misguiding the model
       3. Create a clear summary explaining how the prompt is causing these problems
 
+      Current Prompts:
+      <system_message>
+      {system_message}
+      </system_message>
+
+      <user_message>
+      {user_message}
+      </user_message>
+
       Mismatches and their analyses:
       {mismatch_summaries}
 
-      Focus on being clear and specific about how the prompt is causing these issues.
+      Focus on being clear and specific about how the prompt is causing these issues. Provide recommendations for how to fix the prompt.
