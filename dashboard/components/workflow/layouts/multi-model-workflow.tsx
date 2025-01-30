@@ -43,12 +43,21 @@ const addJitter = (value: number) => {
   return Math.round(value * jitterFactor)
 }
 
-const POSITIONS = {
-  main: { x: 1, y: 1 },
-  "row1-a": { x: 2, y: 2 },
-  "row1-b": { x: 3, y: 2 },
-  "row2-a": { x: 2, y: 3 },
-  "row2-b": { x: 3, y: 3 }
+type Position = { x: number, y: number }
+type WorkflowPositions = {
+  main: Position
+  "row1-a": Position
+  "row1-b": Position
+  "row2-a": Position
+  "row2-b": Position
+}
+
+const POSITIONS: WorkflowPositions = {
+  main: { x: 0.42, y: 0.42 },
+  "row1-a": { x: 1.42, y: 1.42 },
+  "row1-b": { x: 2.42, y: 1.42 },
+  "row2-a": { x: 1.42, y: 2.42 },
+  "row2-b": { x: 2.42, y: 2.42 }
 } as const
 
 const getNodeComponent = (position: string) => {
@@ -103,25 +112,25 @@ export default function MultiModelWorkflow() {
   }, [])
 
   return (
-    <ContainerBase key={key}>
+    <ContainerBase key={key} viewBox="0 0 2.79 2.84">
       {/* Connection Lines */}
       <BaseConnection 
-        startX={1} startY={1} 
-        endX={2} endY={2} 
+        startX={0.42} startY={0.42} 
+        endX={1.42} endY={1.42} 
         type="curve-right"
       />
       <BaseConnection 
-        startX={1} startY={1} 
-        endX={2} endY={3} 
+        startX={0.42} startY={0.42} 
+        endX={1.42} endY={2.42} 
         type="curve-down"
       />
       <BaseConnection 
-        startX={2} startY={2} 
-        endX={3} endY={2} 
+        startX={1.42} startY={1.42} 
+        endX={2.42} endY={1.42} 
       />
       <BaseConnection 
-        startX={2} startY={3} 
-        endX={3} endY={3} 
+        startX={1.42} startY={2.42} 
+        endX={2.42} endY={2.42} 
       />
 
       {/* Nodes */}
