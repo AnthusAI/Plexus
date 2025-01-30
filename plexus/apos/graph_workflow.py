@@ -49,8 +49,13 @@ def create_apos_workflow(config: APOSConfig) -> StateGraph:
     # Define conditional routing
     def should_continue(state: APOSState) -> str:
         """Determine next node based on state."""
+        # Check if we've reached max iterations
+        if state.current_iteration >= state.max_iterations - 1:  # -1 because we increment after
+            state.status = OptimizationStatus.COMPLETED
+            return END
+            
         # Check for completion conditions
-        if state.is_complete:
+        if state.status == OptimizationStatus.COMPLETED:
             return END
             
         # Check for errors
@@ -137,8 +142,13 @@ class APOSWorkflow:
         # Add conditional edges from optimizer back to evaluation or end
         def should_continue(state: APOSState) -> str:
             """Determine next node based on state."""
+            # Check if we've reached max iterations
+            if state.current_iteration >= state.max_iterations - 1:  # -1 because we increment after
+                state.status = OptimizationStatus.COMPLETED
+                return END
+                
             # Check for completion conditions
-            if state.is_complete:
+            if state.status == OptimizationStatus.COMPLETED:
                 return END
                 
             # Check for errors
@@ -217,11 +227,17 @@ class APOSWorkflow:
         try:
             result = await self.app.ainvoke(state.dict())
             
-            # Increment iteration counter for next run
-            state_dict = result["state"]
-            state_dict["current_iteration"] += 1
-            
-            return result
+            # Handle both wrapped and unwrapped states
+            if isinstance(result, dict):
+                if "state" in result:
+                    # State is wrapped
+                    return result
+                else:
+                    # State is unwrapped, wrap it
+                    return {"state": result}
+            else:
+                raise ValueError("Invalid workflow result type")
+                
         except Exception as e:
             logger.error(f"Error running workflow: {e}")
             raise
