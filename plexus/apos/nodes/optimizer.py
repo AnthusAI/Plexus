@@ -5,10 +5,11 @@ import logging
 import os
 import json
 from typing import Dict, Any, Callable
+from pydantic import ValidationError
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
-from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_core.pydantic_v1 import BaseModel, Field, validator
 
 from plexus.apos.nodes.base import APOSNode
 from plexus.apos.graph_state import APOSState
@@ -21,9 +22,36 @@ logger = logging.getLogger('plexus.apos.nodes.optimizer')
 
 class OptimizerOutput(BaseModel):
     """Schema for optimizer response."""
-    system_message: str = Field(description="The improved system message")
-    user_message: str = Field(description="The improved user message")
-    rationale: str = Field(description="The rationale for the improvements made")
+    system_message: str = Field(
+        description="The improved system message",
+        min_length=1,
+        error_messages={
+            "type": "System message must be a string",
+            "required": "System message is required",
+            "min_length": "System message cannot be empty"
+        }
+    )
+    user_message: str = Field(
+        description="The improved user message. IMPORTANT: Must contain the literal string '{{text}}' as a placeholder for the input text.",
+        min_length=1,
+        error_messages={
+            "type": "User message must be a string",
+            "required": "User message is required",
+            "min_length": "User message cannot be empty"
+        }
+    )
+
+    class Config:
+        validate_assignment = True
+        extra = "forbid"  # Prevent extra fields
+
+    @validator('user_message', pre=True, always=True)
+    def validate_placeholder(cls, v):
+        if not isinstance(v, str):
+            raise ValueError("User message must be a string")
+        if '{{text}}' not in v:
+            raise ValueError("User message MUST contain the literal string '{{text}}' as a placeholder. This is required for text substitution.")
+        return v
 
 
 class OptimizerNode(APOSNode):
@@ -32,6 +60,10 @@ class OptimizerNode(APOSNode):
     def _setup_node(self) -> None:
         """Set up the optimizer components."""
         model_config = self.config.optimizer_model
+        
+        # Create cache directory if it doesn't exist
+        os.makedirs(model_config.cache_dir, exist_ok=True)
+        logger.info(f"Ensuring cache directory exists: {model_config.cache_dir}")
         
         # Initialize LLM with structured output
         self.llm = ChatOpenAI(
@@ -162,20 +194,41 @@ class OptimizerNode(APOSNode):
                 # Log pattern analysis for debugging
                 logger.info(f"Pattern analysis: {state.pattern_analysis}")
                     
-                # Run optimization using LLM
+                # Run optimization using LLM with retries
                 prompt_vars = {
-                    "current_system_message": state.system_message,
-                    "current_user_message": state.user_message,
-                    "common_issues": state.pattern_analysis.common_issues,
-                    "summary": state.pattern_analysis.summary
+                    **state.dict()
                 }
+
+                max_retries = 3
+                retry_count = 0
+                last_error = None
+
+                while retry_count < max_retries:
+                    try:
+                        # If this is a retry, add error context to the prompt
+                        if retry_count > 0 and last_error:
+                            prompt_vars["error_context"] = (
+                                f"Previous attempt failed with error: {str(last_error)}. "
+                                "CRITICAL REQUIREMENT: The user_message MUST contain the exact string '{{text}}' (including the curly braces) "
+                                "as a placeholder where the input text will be inserted. "
+                                "Example format: 'Analyze the following text: {{text}}'"
+                            )
+                        
+                        # Get optimization suggestions from LLM
+                        prompt_improvement = await self.llm.ainvoke(
+                            self.chat_prompt.format_messages(**prompt_vars)
+                        )
+                        break  # If successful, exit the retry loop
+                        
+                    except (ValidationError, ValueError) as e:
+                        last_error = e
+                        retry_count += 1
+                        logger.warning(f"Validation error on attempt {retry_count}: {e}")
+                        if retry_count >= max_retries:
+                            raise  # Re-raise if we've exhausted retries
+                        continue
                 
-                # Get optimization suggestions from LLM
-                prompt_improvement = await self.llm.ainvoke(
-                    self.chat_prompt.format_messages(**prompt_vars)
-                )
-                
-                # Create separate PromptChange objects for system and user messages
+                # Create prompt changes
                 prompt_changes = []
                 
                 # Add system message change
@@ -183,8 +236,7 @@ class OptimizerNode(APOSNode):
                     prompt_changes.append(PromptChange(
                         component="system_message",
                         old_text=state.system_message,
-                        new_text=prompt_improvement.system_message,
-                        rationale=prompt_improvement.rationale
+                        new_text=prompt_improvement.system_message
                     ))
                 
                 # Add user message change
@@ -192,8 +244,7 @@ class OptimizerNode(APOSNode):
                     prompt_changes.append(PromptChange(
                         component="user_message",
                         old_text=state.user_message,
-                        new_text=prompt_improvement.user_message,
-                        rationale=prompt_improvement.rationale
+                        new_text=prompt_improvement.user_message
                     ))
                 
                 # Update state with all optimization results
@@ -215,7 +266,6 @@ class OptimizerNode(APOSNode):
                             "component": change.component,
                             "old_text": change.old_text,
                             "new_text": change.new_text,
-                            "rationale": change.rationale,
                             "metadata": {
                                 "iteration": state.current_iteration,
                                 "score_name": state.score_name

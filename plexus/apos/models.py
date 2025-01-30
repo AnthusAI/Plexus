@@ -27,7 +27,6 @@ class PromptImprovement(BaseModel):
     """Output schema for prompt improvements."""
     system_message: str
     user_message: str
-    rationale: str
 
 
 @dataclass
@@ -36,7 +35,6 @@ class PromptChange:
     component: str
     old_text: str
     new_text: str
-    rationale: str
     timestamp: datetime = field(default_factory=datetime.utcnow)
     metadata: Dict[str, Any] = field(default_factory=dict)
 

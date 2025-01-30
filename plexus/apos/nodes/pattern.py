@@ -65,19 +65,13 @@ Analysis: {mismatch.detailed_analysis}
                 
                 logger.info("Starting pattern analysis across mismatches")
                 
-                # Format mismatches for analysis
-                mismatch_summaries = "\n".join(
+                # Format mismatches and store in state
+                state.mismatch_summaries = "\n".join(
                     self._format_mismatch_summary(m) for m in state.mismatches
                 )
                 
-                # Prepare context with all available state
-                context = {
-                    **state.dict(),
-                    "mismatch_summaries": mismatch_summaries
-                }
-                
-                # Get analysis from LLM
-                messages = self.chat_prompt.format_messages(**context)
+                # Get analysis from LLM using state dict
+                messages = self.chat_prompt.format_messages(**state.dict())
                 result = self.llm.invoke(messages)
                 
                 logger.info("Pattern analysis complete")
@@ -103,7 +97,7 @@ Analysis: {mismatch.detailed_analysis}
                 logger.error(f"Error analyzing patterns: {e}")
                 return self.handle_error(e, state)
                 
-        return analyze_patterns 
+        return analyze_patterns
 
     def _save_pattern_results(self, synthesis: SynthesisResult, state: APOSState) -> None:
         """Save pattern analysis results to disk."""

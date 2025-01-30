@@ -1,8 +1,8 @@
 """
 Mismatch analyzer node for analyzing individual mismatches.
 """
-import logging
 import os
+import logging
 import json
 from typing import Dict, Any, Callable, List
 from dataclasses import asdict
@@ -21,9 +21,9 @@ logger = logging.getLogger('plexus.apos.nodes.mismatch')
 
 class MismatchAnalysisOutput(BaseModel):
     """Schema for mismatch analysis response."""
-    error_category: str = Field(description="The type of error that occurred (e.g., 'Misinterpretation of Context', 'Overlooked Detail', 'Script Adherence Issue')")
-    root_cause: str = Field(description="The fundamental reason why the model made this specific mistake")
-    detailed_analysis: str = Field(description="A thorough analysis of why this mismatch occurred, including specific details from the transcript and model's reasoning")
+    error_category: str
+    root_cause: str
+    detailed_analysis: str
 
 
 class MismatchAnalyzerNode(APOSNode):
@@ -31,14 +31,16 @@ class MismatchAnalyzerNode(APOSNode):
     
     def _setup_node(self) -> None:
         """Set up the mismatch analyzer components."""
-        # Initialize LLM with analyzer-specific model config
         model_config = self.config.analyzer_model
         
-        # Setup LangChain caching if specified
-        if hasattr(model_config, 'cache_dir'):
-            from langchain_community.cache import SQLiteCache
-            from langchain_core.globals import set_llm_cache
-            set_llm_cache(SQLiteCache(database_path=f"{model_config.cache_dir}/analyzer_cache.db"))
+        # Create cache directory if it doesn't exist
+        os.makedirs(model_config.cache_dir, exist_ok=True)
+        logger.info(f"Ensuring cache directory exists: {model_config.cache_dir}")
+        
+        # Initialize LLM and cache
+        from langchain_community.cache import SQLiteCache
+        from langchain_core.globals import set_llm_cache
+        set_llm_cache(SQLiteCache(database_path=f"{model_config.cache_dir}/analyzer_cache.db"))
         
         # Initialize LLM with only valid OpenAI parameters
         self.llm = ChatOpenAI(
@@ -78,14 +80,18 @@ class MismatchAnalyzerNode(APOSNode):
             Updated MismatchAnalysis with detailed analysis
         """
         try:
-            # Prepare the prompt
-            messages = self.prompt.format_messages(
-                question_name=mismatch.question_name,
-                transcript_text=mismatch.transcript_text,
-                model_answer=mismatch.model_answer,
-                ground_truth=mismatch.ground_truth,
-                original_explanation=mismatch.original_explanation
-            )
+            # Set current mismatch in state
+            self.state.current_mismatch = mismatch
+            
+            # Debug logging
+            state_dict = self.state.dict(exclude_unset=True, exclude_none=True)
+            
+            # Convert any non-serializable objects to their string representation for logging
+            state_dict_serializable = {k: str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v 
+                                     for k, v in state_dict.items()}
+            
+            # Prepare the prompt with all variables
+            messages = self.prompt.format_messages(**state_dict)
             
             # Get analysis from LLM
             analysis_result = await self.llm.ainvoke(messages)
@@ -149,6 +155,9 @@ class MismatchAnalyzerNode(APOSNode):
                     return state.dict()
                 
                 logger.info(f"Analyzing {len(state.mismatches)} mismatches individually")
+                
+                # Store state for access in analyze_mismatch
+                self.state = state
                 
                 # Get scorecard and score names from metadata
                 scorecard_name = state.metadata.get("scorecard_name")
