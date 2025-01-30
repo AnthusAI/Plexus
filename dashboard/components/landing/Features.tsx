@@ -26,10 +26,10 @@ const features = [
 
 export const Features = () => {
   return (
-    <section className="py-20 bg-background">
+    <section className="pt-8 pb-4 md:pb-8 bg-background">
       <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
-        <div className="py-4">
-          <div className="bg-background rounded-xl py-12 md:py-16 px-4 md:px-8">
+        <div className="py-2">
+          <div className="bg-background rounded-xl py-2 md:py-4 px-4 md:px-8">
             <div className="max-w-3xl mx-auto text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">
                 Powerful Features for Agent Orchestration

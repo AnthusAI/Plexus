@@ -15,10 +15,10 @@ export default function LandingPage() {
     <Layout>
       <Hero />
 
-      <section className="pt-20 pb-12 md:pb-20 bg-background">
+      <section className="pt-12 pb-8 md:pb-12 bg-background">
         <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
-          <div className="py-4">
-            <div className="bg-background rounded-xl py-12 md:py-16 px-4 md:px-8">
+          <div className="py-2">
+            <div className="bg-background rounded-xl py-2 md:py-4 px-4 md:px-8">
               <div className="flex flex-col md:flex-row items-center gap-32">
                 <div className="w-full md:w-2/5 relative">
                   <div className="relative z-10">
@@ -44,7 +44,7 @@ export default function LandingPage() {
       <section className="bg-muted">
         <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
           <div className="py-4">
-            <div className="bg-background rounded-xl py-12 md:py-16 px-4 md:px-8">
+            <div className="bg-background rounded-xl py-8 md:py-12 px-4 md:px-8">
               <div className="flex flex-col xl:flex-row gap-8">
                 <div className="flex-1 min-w-0">
                   <h2 className="text-4xl md:text-5xl font-bold mb-6 md:mb-12 text-foreground text-center md:text-center xl:text-left">
@@ -82,7 +82,7 @@ export default function LandingPage() {
       <section className="bg-muted">
         <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
           <div className="py-4">
-            <div className="bg-background rounded-xl py-12 md:py-16 px-4 md:px-8">
+            <div className="bg-background rounded-xl py-8 md:py-12 px-4 md:px-8">
               <div className="max-w-4xl mx-auto text-center">
                 <h2 className="text-4xl md:text-5xl font-bold mb-8 text-foreground">
                   Organizational Intelligence
