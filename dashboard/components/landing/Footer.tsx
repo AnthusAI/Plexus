@@ -7,7 +7,7 @@ export const Footer = () => {
     <footer className="bg-muted py-12">
       <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
         <div className="py-4">
-          <div className="rounded-xl py-12 md:py-16 px-4 md:px-8">
+          <div className="py-12 md:py-16 px-4 md:px-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <div>
                 <h3 className="text-lg font-semibold mb-4">About</h3>

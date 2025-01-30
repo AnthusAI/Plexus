@@ -28,10 +28,10 @@ export const CTASection = () => {
   }
 
   return (
-    <section className="py-20 bg-gradient-to-b from-background to-muted">
+    <section className="bg-muted">
       <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
         <div className="py-4">
-          <div className="rounded-xl py-12 md:py-16 px-4 md:px-8">
+          <div className="py-12 md:py-16 px-4 md:px-8">
             <div className="flex flex-col md:flex-row items-center gap-12">
               <div className="flex-1 text-center md:text-left">
                 <h2 className="text-3xl md:text-4xl font-bold mb-4">
