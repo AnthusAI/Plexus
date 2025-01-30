@@ -112,10 +112,10 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
       if (containerRef.current) {
         const containerWidth = containerRef.current.offsetWidth;
         const newFontSize = variant === LogoVariant.Wide ? 
-          `${containerWidth / 2.5}px` :
+          `${containerWidth / 2.8}px` :
           variant === LogoVariant.Narrow ?
-            `${containerWidth}px` :  // Full container width for narrow variant
-            `${containerWidth / 2.5}px`;  // Changed from 3 to 2.5
+            `${containerWidth / 0.65}px` :  // Compromise size for narrow variant
+            `${containerWidth / 2.8}px`;  // Slightly smaller for square variant
         setFontSize(newFontSize);
       }
     };
@@ -202,7 +202,7 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
               color: 'var(--muted)',
               lineHeight: 1.2,
               position: 'absolute',
-              left: `${50 + (100 / 6 / 40)}%`,  // Center + same offset for narrow variant
+              left: `${54 + (100 / 6 / 40)}%`,  // Shifted slightly more right for narrow variant
               top: '50%',
               transform: 'translate(-50%, -50%)',
             }}
