@@ -8,7 +8,7 @@ interface ExtendedConnectionProps extends ConnectionProps {
   type?: "straight" | "curve-down" | "curve-right"
 }
 
-export function BaseConnection({
+export function ConnectionLine({
   startX,
   startY,
   endX,
@@ -16,7 +16,9 @@ export function BaseConnection({
   type = "straight",
   className,
   animated = false
-}: ExtendedConnectionProps) {
+}: ConnectionProps & {
+  type?: "straight" | "curve-right" | "curve-down"
+}) {
   const pathData = (() => {
     switch (type) {
       case "curve-down":

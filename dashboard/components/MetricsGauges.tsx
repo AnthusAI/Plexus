@@ -30,10 +30,37 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
   variant = 'detail',
   metricsExplanation
 }) => {
+  const [key, setKey] = React.useState(0)
+  const ref = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            setKey(prev => prev + 1)
+          }
+        })
+      },
+      { threshold: 0.5 }
+    )
+
+    if (ref.current) {
+      observer.observe(ref.current)
+    }
+
+    return () => {
+      if (ref.current) {
+        observer.unobserve(ref.current)
+      }
+    }
+  }, [])
+
   return (
     <div 
       data-testid="metrics-gauges" 
       className="flex flex-col items-center w-full"
+      ref={ref}
     >
       {metricsExplanation && variant === 'detail' && (
         <p className="text-sm text-muted-foreground mb-4 text-left w-full">
@@ -48,7 +75,7 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
       )}>
         {gauges.map((gauge, index) => (
           <div 
-            key={index}
+            key={`${index}-${key}`}
             data-testid="gauge-container"
             className={cn(
               "flex justify-center rounded-lg p-2",

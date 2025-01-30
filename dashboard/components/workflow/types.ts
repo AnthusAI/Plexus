@@ -16,6 +16,7 @@ export interface BaseNodeProps {
   className?: string
   isMain?: boolean
   sequence?: NodeSequence
+  isDemo?: boolean
 }
 
 export interface WorkflowStep {
@@ -44,4 +45,8 @@ export interface ConnectionProps {
   endY: number
   className?: string
   animated?: boolean
+}
+
+export interface WorkflowPositions {
+  [key: string]: { x: number; y: number }
 } 
