@@ -154,19 +154,14 @@ class OptimizerNode(APOSNode):
                     logger.info("Optimization complete")
                     state.status = OptimizationStatus.COMPLETED
                     return {
-                        "state": {
-                            "current_iteration": state.current_iteration,
-                            "status": state.status
-                        }
+                        "state": state.dict()
                     }
                 
                 # Get pattern analysis results
                 if not state.pattern_analysis:
                     logger.warning("No pattern analysis results available")
                     return {
-                        "state": {
-                            "current_iteration": state.current_iteration
-                        }
+                        "state": state.dict()
                     }
                 
                 # Get scorecard and score names from metadata
@@ -176,9 +171,7 @@ class OptimizerNode(APOSNode):
                 if not scorecard_name or not score_name:
                     logger.error("Missing scorecard_name or score_name in metadata")
                     return {
-                        "state": {
-                            "current_iteration": state.current_iteration
-                        }
+                        "state": state.dict()
                     }
                 
                 # Create directory structure
@@ -238,6 +231,8 @@ class OptimizerNode(APOSNode):
                         old_text=state.system_message,
                         new_text=prompt_improvement.system_message
                     ))
+                    # Update state's system message
+                    state.system_message = prompt_improvement.system_message
                 
                 # Add user message change
                 if prompt_improvement.user_message != state.user_message:
@@ -246,6 +241,8 @@ class OptimizerNode(APOSNode):
                         old_text=state.user_message,
                         new_text=prompt_improvement.user_message
                     ))
+                    # Update state's user message
+                    state.user_message = prompt_improvement.user_message
                 
                 # Update state with all optimization results
                 state.optimization_result = prompt_changes if prompt_changes else None
@@ -278,13 +275,7 @@ class OptimizerNode(APOSNode):
                 
                 # Return state updates wrapped in state key
                 return {
-                    "state": {
-                        "system_message": prompt_improvement.system_message,
-                        "user_message": prompt_improvement.user_message,
-                        "optimization_result": state.optimization_result,
-                        "current_iteration": state.current_iteration,
-                        "metadata": state.metadata
-                    }
+                    "state": state.dict()
                 }
                 
             except Exception as e:
@@ -292,11 +283,7 @@ class OptimizerNode(APOSNode):
                 state.status = OptimizationStatus.FAILED
                 state.metadata["error"] = str(e)
                 return {
-                    "state": {
-                        "status": state.status,
-                        "metadata": state.metadata,
-                        "current_iteration": state.current_iteration
-                    }
+                    "state": state.dict()
                 }
                 
         return optimize_prompts 
