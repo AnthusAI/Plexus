@@ -26,15 +26,15 @@ const features = [
 
 export const Features = () => {
   return (
-    <section className="pt-8 pb-4 md:pb-8 bg-background">
+    <section className="py-20 bg-background">
       <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
-        <div className="py-2">
-          <div className="bg-background rounded-xl py-2 md:py-4 px-4 md:px-8">
+        <div className="py-4">
+          <div className="bg-background rounded-xl py-12 md:py-16 px-4 md:px-8">
             <div className="max-w-3xl mx-auto text-center mb-12">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">
+              <h2 className="text-4xl md:text-5xl font-bold mb-8 text-foreground">
                 Powerful Features for Agent Orchestration
               </h2>
-              <p className="text-xl text-muted-foreground">
+              <p className="text-2xl text-muted-foreground mb-12">
                 Built by practitioners on the front lines of AI deployment, our features 
                 evolve as rapidly as AI itself, delivering battle-tested tools that 
                 transform cutting-edge capabilities into real business value.
