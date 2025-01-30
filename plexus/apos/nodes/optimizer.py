@@ -88,57 +88,6 @@ class OptimizerNode(APOSNode):
         
         logger.info(f"Initialized optimizer node using {model_config.model_type}")
     
-    def get_current_prompts(self, score_name: str) -> Dict[str, str]:
-        """Get the current prompts for a given score from scorecard."""
-        try:
-            # Load scorecard
-            logger.info(f"Loading scorecards for {score_name}")
-            Scorecard.load_and_register_scorecards('scorecards/')
-            
-            # Get score configuration from the scorecard
-            for scorecard_class in scorecard_registry._classes_by_key.values():
-                scorecard_key = scorecard_class.properties.get('key') or scorecard_class.name
-                logger.info(f"Checking scorecard: {scorecard_key}")
-                
-                scorecard = scorecard_class(scorecard=scorecard_key)
-                score_config = next((score for score in scorecard.scores 
-                                if score['name'] == score_name), None)
-                
-                if score_config:
-                    logger.info(f"Found score config for {score_name}")
-                    
-                    # Look for Classifier node in graph
-                    if 'graph' in score_config:
-                        for node in score_config['graph']:
-                            if node.get('class') == 'Classifier':
-                                logger.info(f"Found Classifier node: {node}")
-                                prompts = {
-                                    'system_message': node.get('system_message', ''),
-                                    'user_message': node.get('user_message', '')
-                                }
-                                if prompts['system_message'] and prompts['user_message']:
-                                    logger.info("Found prompts in Classifier node")
-                                    return prompts
-                    
-                    # Try top-level prompts
-                    prompts = {
-                        'system_message': score_config.get('system_message', ''),
-                        'user_message': score_config.get('user_message', '')
-                    }
-                    
-                    if prompts['system_message'] and prompts['user_message']:
-                        logger.info("Using top-level prompts")
-                        return prompts
-                    else:
-                        logger.error("No valid prompts found in score config")
-                        raise ValueError(f"No prompts found for score: {score_name}")
-            
-            raise ValueError(f"No configuration found for score: {score_name}")
-            
-        except Exception as e:
-            logger.error(f"Error getting current prompts for {score_name}: {e}")
-            raise
-    
     def get_node_handler(self) -> Callable[[APOSState], Dict[str, Any]]:
         """Get the handler function for this node."""
         

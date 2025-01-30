@@ -389,15 +389,12 @@ class EvaluationNode(APOSNode):
             with open(os.path.join(results_dir, "result.json"), 'w') as f:
                 json.dump(result, f, indent=2)
             
-            # Check if this is a new high accuracy mark
-            self._save_high_accuracy_mark(iteration_result)
-            
             logger.info(f"Saved all iteration results to {results_dir}")
                 
         except Exception as e:
             logger.error(f"Error saving iteration results: {e}")
 
-    def _save_high_accuracy_mark(self, iteration_result: IterationResult) -> None:
+    def _save_high_accuracy_mark(self, iteration_result: IterationResult, state: APOSState) -> None:
         """Save high accuracy mark if this iteration achieved a new best accuracy."""
         try:
             # Get scorecard and score names from metadata
@@ -416,22 +413,13 @@ class EvaluationNode(APOSNode):
             )
             os.makedirs(best_accuracy_dir, exist_ok=True)
             
-            # Load previous best accuracy
-            best_accuracy_file = os.path.join(best_accuracy_dir, "best_accuracy.yaml")
-            best_accuracy = 0.0
-            if os.path.exists(best_accuracy_file):
-                try:
-                    with open(best_accuracy_file, 'r') as f:
-                        import yaml
-                        best_accuracy = yaml.safe_load(f).get('accuracy', 0.0)
-                except:
-                    pass
-            
-            # Check if current accuracy is better
+            # Get current accuracy and previous best accuracy
             current_accuracy = iteration_result.accuracy
-            if current_accuracy > best_accuracy:
-                logger.info(f"New best accuracy achieved: {current_accuracy:.3f} (previous: {best_accuracy:.3f})")
-                
+            previous_best_accuracy = iteration_result.metadata.get("previous_best_accuracy", 0.0)
+            
+            # Only save to disk if this was indeed better than the previous best accuracy
+            if current_accuracy > previous_best_accuracy:
+                logger.info(f"New best accuracy achieved: {current_accuracy:.3f} (previous: {previous_best_accuracy:.3f})")
                 # Get system and user messages, replacing escaped newlines with actual newlines
                 system_message = iteration_result.metadata.get("system_message", "").replace('\\n', '\n')
                 user_message = iteration_result.metadata.get("user_message", "").replace('\\n', '\n')
@@ -450,6 +438,7 @@ scorecard_name: {scorecard_name}
 """
                 
                 # Write the YAML content directly
+                best_accuracy_file = os.path.join(best_accuracy_dir, "best_accuracy.yaml")
                 with open(best_accuracy_file, 'w') as f:
                     f.write(yaml_content)
                     
@@ -673,6 +662,9 @@ scorecard_name: {scorecard_name}
             # Get evaluation results
             accuracy = self.evaluation.total_correct / self.evaluation.total_questions if self.evaluation.total_questions > 0 else 0
             
+            # Store previous best accuracy for comparison
+            previous_best_accuracy = state.best_accuracy
+            
             # Get mismatches from evaluation and convert them
             raw_mismatches = self.evaluation.mismatches or []
             converted_mismatches = self._convert_mismatches(raw_mismatches)
@@ -692,15 +684,19 @@ scorecard_name: {scorecard_name}
                     "experiment_id": self.experiment_id,
                     "iteration_dir": iteration_dir,
                     "scorecard_name": scorecard.name,
-                    "score_name": state.score_name
+                    "score_name": state.score_name,
+                    "previous_best_accuracy": previous_best_accuracy  # Store for comparison
                 }
             )
             
-            # Add to history
+            # Add to history and update state's best accuracy
             state.add_iteration_result(iteration_result)
             
             # Save initial results
             self._save_iteration_results(iteration_result)
+            
+            # Save high accuracy mark if needed
+            self._save_high_accuracy_mark(iteration_result, state)
             
             # Update state with results
             state.current_accuracy = accuracy
