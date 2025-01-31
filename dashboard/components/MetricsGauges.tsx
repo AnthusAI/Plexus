@@ -22,13 +22,15 @@ interface MetricsGaugesProps {
   className?: string
   variant?: 'grid' | 'detail'
   metricsExplanation?: string | null
+  selectedIndex?: number
 }
 
 const MetricsGauges: React.FC<MetricsGaugesProps> = ({ 
   gauges, 
   className = '',
   variant = 'detail',
-  metricsExplanation
+  metricsExplanation,
+  selectedIndex
 }) => {
   const [key, setKey] = React.useState(0)
   const ref = React.useRef<HTMLDivElement>(null)
@@ -79,7 +81,7 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
             data-testid="gauge-container"
             className={cn(
               "flex justify-center rounded-lg p-2",
-              gauge.priority && variant === 'detail' ? "bg-card-light" : "bg-card"
+              index === selectedIndex && variant === 'detail' ? "bg-card-light" : "bg-card"
             )}
           >
             <Gauge
@@ -87,10 +89,10 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
               title={gauge.label}
               min={gauge.min}
               max={gauge.max}
-              backgroundColor={gauge.priority ? gauge.backgroundColor : 'var(--card-light)'}
+              backgroundColor={index === selectedIndex ? gauge.backgroundColor : 'var(--card-light)'}
               showTicks={variant === 'detail'}
               information={gauge.information}
-              priority={gauge.priority}
+              priority={index === selectedIndex}
             />
           </div>
         ))}
