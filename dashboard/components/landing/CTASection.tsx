@@ -63,7 +63,10 @@ export const CTASection = () => {
                 )}
               </div>
               <div className="w-48 h-48 md:w-64 md:h-64 flex-shrink-0 relative">
-                <div className="absolute inset-[-2rem] bg-gradient-to-r from-secondary to-primary rounded-[2rem] blur-2xl opacity-30"></div>
+                <div
+                  className="absolute inset-[-2rem] bg-gradient-to-r from-secondary to-primary rounded-[2rem] blur-2xl opacity-30"
+                  style={{ transform: "translateZ(0)", willChange: "opacity, transform" }}
+                ></div>
                 <div className="relative z-10">
                   <SquareLogo variant={LogoVariant.Square} className="w-full h-full" />
                 </div>
