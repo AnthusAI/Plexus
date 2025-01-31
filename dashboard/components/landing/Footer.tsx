@@ -12,7 +12,7 @@ export const Footer = () => {
               <div>
                 <h3 className="text-lg font-semibold mb-4">About</h3>
                 <p className="text-muted-foreground mb-4">
-                  Plexus is a product of Anth.us. We deliver serverless business 
+                  Plexus is a product of Anthus AI Solutions. We deliver serverless business 
                   solutions using collaboration between human and artificial 
                   intelligence.
                 </p>
@@ -22,7 +22,7 @@ export const Footer = () => {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Learn more about Anth.us →
+                  Learn more about Anthus AI Solutions →
                 </Link>
               </div>
               
@@ -31,32 +31,32 @@ export const Footer = () => {
                 <ul className="space-y-2">
                   <li>
                     <Link 
-                      href="https://anth.us/articles" 
+                      href="https://anthusai.github.io/Plexus/"
+                      className="text-muted-foreground hover:text-foreground"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Documentation
+                    </Link>
+                  </li>
+                  <li>
+                    <Link 
+                      href="https://github.com/AnthusAI/Plexus/blob/main/CHANGELOG.md"
+                      className="text-muted-foreground hover:text-foreground"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Change Log
+                    </Link>
+                  </li>
+                  <li>
+                    <Link 
+                      href="https://anth.us/blog" 
                       className="text-muted-foreground hover:text-foreground"
                       target="_blank"
                       rel="noopener noreferrer"
                     >
                       Articles
-                    </Link>
-                  </li>
-                  <li>
-                    <Link 
-                      href="https://anth.us/posts" 
-                      className="text-muted-foreground hover:text-foreground"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Posts
-                    </Link>
-                  </li>
-                  <li>
-                    <Link 
-                      href="https://x.com/Anthus_AI"
-                      className="text-muted-foreground hover:text-foreground"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Updates
                     </Link>
                   </li>
                 </ul>
