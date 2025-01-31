@@ -79,7 +79,7 @@ export const NodeStates = {
             <TextNode status="not-started" shape="square" text="No" color="false" />
           </g>
           <g transform="translate(3.5, 1.5)">
-            <TextNode status="not-started" shape="pill" text="Very" color="true" />
+            <TextNode status="not-started" shape="pill" text="Text" color="true" />
           </g>
           <g transform="translate(1, 2.5)">
             <TextNode status="not-started" shape="pill" text="stars:1/3" color="true" />
@@ -121,7 +121,7 @@ export const NodeStates = {
             <TextNode status="processing" shape="square" text="No" color="false" />
           </g>
           <g transform="translate(3.5, 1.5)">
-            <TextNode status="processing" shape="pill" text="Very" color="true" />
+            <TextNode status="processing" shape="pill" text="Text" color="true" />
           </g>
           <g transform="translate(1, 2.5)">
             <TextNode status="processing" shape="pill" text="stars:1/3" color="true" />
@@ -163,7 +163,7 @@ export const NodeStates = {
             <TextNode status="complete" shape="square" text="No" color="false" />
           </g>
           <g transform="translate(3.5, 1.5)">
-            <TextNode status="complete" shape="pill" text="Very" color="true" />
+            <TextNode status="complete" shape="pill" text="Text" color="true" />
           </g>
           <g transform="translate(1, 2.5)">
             <TextNode status="complete" shape="pill" text="stars:1/3" color="true" />
@@ -241,7 +241,7 @@ const DemoSequence = () => {
             <TextNode status={demoState} shape="square" text="No" color="false" />
           </g>
           <g transform="translate(3.5, 1.5)">
-            <TextNode status={demoState} shape="pill" text="Very" color="true" />
+            <TextNode status={demoState} shape="pill" text="Text" color="true" />
           </g>
           <g transform="translate(1, 2.5)">
             <TextNode status={demoState} shape="pill" text="stars:1/3" color="true" />
@@ -278,4 +278,4 @@ export const MediaNodes = {
       </ContainerBase>
     </Container>
   ),
-} 
+}
