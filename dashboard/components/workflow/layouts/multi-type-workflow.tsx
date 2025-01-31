@@ -1,79 +1,83 @@
 "use client"
 
-import { TextNode } from "../nodes/text-node"
-import { ThumbsUpNode } from "../nodes"
-import React from "react"
-import WorkflowBase, { WorkflowTiming, POSITIONS } from "../base/workflow-base"
+import React from 'react'
+import { TextNode } from '../nodes/text-node'
+import { ThumbsUpNode, ThumbsDownNode, WorkflowNode, SquareNode } from '../nodes'
+import WorkflowBase, { POSITIONS, WorkflowTiming } from '../base/workflow-base'
+import type { ComponentType } from 'react'
+import type { BaseNodeProps } from '../types'
 
-// Modify the base positions for this specific workflow
+type NodeProps = BaseNodeProps & {
+  status: "not-started" | "processing" | "complete"
+  isMain?: boolean
+}
+
 const MULTI_TYPE_POSITIONS = {
   ...POSITIONS,
-  "row1-a": { x: 1.12, y: 1.42 }, // Shifted left
-  "row2-a": { x: 1.12, y: 2.42 }  // Shifted left
+  'row1-a': { x: 1.12, y: 1.5 },
+  'row1-b': { x: 1.88, y: 1.5 },
+  'row2-a': { x: 0.92, y: 2.5 },
+  'row2-b': { x: 2.08, y: 2.5 },
 }
 
-const getNodeComponent = (position: string) => {
-  switch (position) {
-    case "main":
-      return (props: any) => (
-        <TextNode {...props} shape="hexagon" text="92%" color="true" />
-      )
-    case "row1-a":
-      return (props: any) => (
-        <TextNode {...props} shape="pill" text="stars:4/5" color="primary" />
-      )
-    case "row1-b":
-      return (props: any) => (
-        <TextNode {...props} shape="square" text="N/A" color="false" />
-      )
-    case "row2-a":
-      return (props: any) => (
-        <TextNode {...props} shape="pill" text="gamma" color="primary" />
-      )
-    case "row2-b":
-      return (props: any) => (
-        <ThumbsUpNode {...props} shape="hexagon" />
-      )
-    default:
-      return (props: any) => <TextNode {...props} />
-  }
-}
-
-// Custom timing configuration that emphasizes processing states
-const MULTI_TYPE_TIMING: WorkflowTiming = {
+// Timing adjusted for quick processing and long completion phase
+// Main node stays processing until all worker nodes complete
+const TIMING: WorkflowTiming = {
   main: {
-    processingDelay: 0,
-    completionDelay: 15000, // 15 seconds of processing
+    processingDelay: 0,      // Start immediately
+    completionDelay: 6000,   // Complete after all workers
   },
-  "row1-a": {
-    processingDelay: 1000,
-    completionDelay: 11000, // 10 seconds of processing
+  'row1-a': {
+    processingDelay: 1000,    // Start at 1s
+    completionDelay: 2000,    // Process for 1s
   },
-  "row1-b": {
-    processingDelay: 2000,
-    completionDelay: 13000, // 11 seconds of processing
+  'row1-b': {
+    processingDelay: 2000,    // Start at 2s
+    completionDelay: 3000,    // Process for 1s
   },
-  "row2-a": {
-    processingDelay: 1500,
-    completionDelay: 11500, // 10 seconds of processing
+  'row2-a': {
+    processingDelay: 3000,    // Start at 3s
+    completionDelay: 4000,    // Process for 1s
   },
-  "row2-b": {
-    processingDelay: 2500,
-    completionDelay: 13500, // 11 seconds of processing
-  }
+  'row2-b': {
+    processingDelay: 4000,    // Start at 4s
+    completionDelay: 5000,    // Process for 1s
+  },
 }
 
-const MultiTypeWorkflow = React.forwardRef<SVGGElement>((props, ref) => {
+export default function MultiTypeWorkflow() {
+  const getNodeComponent = (id: string): ComponentType<NodeProps> => {
+    switch (id) {
+      case 'main':
+        return (props: NodeProps) => (
+          <WorkflowNode {...props} shape="hexagon" text="92%" color="true" />
+        )
+      case 'row1-a':
+        return (props: NodeProps) => (
+          <ThumbsUpNode {...props} />
+        )
+      case 'row1-b':
+        return (props: NodeProps) => (
+          <WorkflowNode {...props} shape="square" text="N/A" color="true" />
+        )
+      case 'row2-a':
+        return (props: NodeProps) => (
+          <TextNode {...props} shape="pill" text="stars:4/5" color="primary" />
+        )
+      case 'row2-b':
+        return (props: NodeProps) => (
+          <ThumbsDownNode {...props} />
+        )
+      default:
+        return TextNode
+    }
+  }
+
   return (
-    <WorkflowBase 
-      ref={ref} 
-      getNodeComponent={getNodeComponent} 
-      timing={MULTI_TYPE_TIMING}
+    <WorkflowBase
       positions={MULTI_TYPE_POSITIONS}
+      getNodeComponent={getNodeComponent}
+      timing={TIMING}
     />
   )
-})
-
-MultiTypeWorkflow.displayName = 'MultiTypeWorkflow'
-
-export default React.memo(MultiTypeWorkflow) 
+} 
