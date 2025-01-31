@@ -34,13 +34,13 @@ export const StandardSection: React.FC<StandardSectionProps> = ({
             {fullWidth ? (
               children
             ) : (
-              <div className="flex flex-col md:flex-row justify-between">
-                <div className="w-full md:w-[45%] relative">
+              <div className="flex flex-col md:flex-row justify-between gap-8">
+                <div className="w-full md:w-[calc(50%-2rem)] relative">
                   <div className="relative z-10">
                     {leftContent}
                   </div>
                 </div>
-                <div className="w-full md:w-1/2 text-center md:text-left">
+                <div className="w-full md:w-[calc(50%-2rem)] text-center md:text-left">
                   {headlinePosition === 'inline' && (
                     <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">
                       {headline}

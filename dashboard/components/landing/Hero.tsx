@@ -12,7 +12,7 @@ export function Hero() {
         <div className="py-4">
           <div className="bg-background rounded-xl py-12 md:py-16 px-4 md:px-8">
             <div className="flex flex-col xl:flex-row gap-8">
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 xl:w-[calc(50%-2rem)]">
                 <h1 className="text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tighter mb-6 md:mb-12 leading-tight text-center md:text-center xl:text-left">
                   Run <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text whitespace-nowrap">AI agents</span> over <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text whitespace-nowrap">your data</span> with <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text whitespace-nowrap">no code</span>
                 </h1>
@@ -37,7 +37,7 @@ export function Hero() {
                   </div>
                 </div>
               </div>
-              <div className="hidden xl:flex flex-1 min-w-0 justify-center md:justify-end items-center">
+              <div className="hidden xl:flex flex-1 min-w-0 xl:w-[calc(50%-2rem)] justify-center md:justify-end items-center">
                 <div className="w-full max-w-[400px]">
                   <WorkflowIllustration />
                 </div>
