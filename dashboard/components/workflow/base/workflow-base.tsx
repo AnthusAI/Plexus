@@ -30,7 +30,7 @@ export type WorkflowTiming = {
 export const TIMING: WorkflowTiming = {
   main: {
     processingDelay: 0,
-    completionDelay: 3000,
+    completionDelay: 6000,  // Complete 500ms after last worker
   },
   "row1-a": {
     processingDelay: 1000,
