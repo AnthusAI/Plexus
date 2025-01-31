@@ -180,84 +180,86 @@ export const NodeStates = {
   )
 }
 
-export const NodeSequences = {
-  render: () => {
-    const [demoState, setDemoState] = useState<NodeStatus>("not-started")
+const DemoSequence = () => {
+  const [demoState, setDemoState] = useState<NodeStatus>("not-started")
 
-    useEffect(() => {
-      const cycleStates = () => {
-        setDemoState("not-started")
-        
-        const processingTimer = setTimeout(() => {
-          setDemoState("processing")
-        }, DEMO_DURATION)
+  useEffect(() => {
+    const cycleStates = () => {
+      setDemoState("not-started")
+      
+      const processingTimer = setTimeout(() => {
+        setDemoState("processing")
+      }, DEMO_DURATION)
 
-        const completeTimer = setTimeout(() => {
-          setDemoState("complete")
-        }, DEMO_DURATION * 2)
+      const completeTimer = setTimeout(() => {
+        setDemoState("complete")
+      }, DEMO_DURATION * 2)
 
-        // Reset after full cycle
-        const resetTimer = setTimeout(() => {
-          cycleStates()
-        }, DEMO_DURATION * 3)
+      // Reset after full cycle
+      const resetTimer = setTimeout(() => {
+        cycleStates()
+      }, DEMO_DURATION * 3)
 
-        return () => {
-          clearTimeout(processingTimer)
-          clearTimeout(completeTimer)
-          clearTimeout(resetTimer)
-        }
+      return () => {
+        clearTimeout(processingTimer)
+        clearTimeout(completeTimer)
+        clearTimeout(resetTimer)
       }
+    }
 
-      cycleStates() // Start the cycle
-      return () => {} // Cleanup handled by cycleStates
-    }, [])
+    cycleStates() // Start the cycle
+    return () => {} // Cleanup handled by cycleStates
+  }, [])
 
-    return (
-      <div className="space-y-4">
-        <div>
-          <h3 className="mb-2 font-medium">Sequence Demo</h3>
-          <NodeContainer>
-            <g transform="translate(0.5, 0.5)">
-              <CircleNode status={demoState} />
-            </g>
-            <g transform="translate(1.5, 0.5)">
-              <SquareNode status={demoState} />
-            </g>
-            <g transform="translate(2.5, 0.5)">
-              <TriangleNode status={demoState} />
-            </g>
-            <g transform="translate(3.5, 0.5)">
-              <HexagonNode status={demoState} />
-            </g>
-            <g transform="translate(4.5, 0.5)">
-              <ThumbsUpNode status={demoState} />
-            </g>
-            <g transform="translate(5.5, 0.5)">
-              <ThumbsDownNode status={demoState} />
-            </g>
-            <g transform="translate(0.5, 1.5)">
-              <TextNode status={demoState} shape="circle" text="Yes" color="true" />
-            </g>
-            <g transform="translate(1.5, 1.5)">
-              <TextNode status={demoState} shape="square" text="No" color="false" />
-            </g>
-            <g transform="translate(3.5, 1.5)">
-              <TextNode status={demoState} shape="pill" text="Very" color="true" />
-            </g>
-            <g transform="translate(1, 2.5)">
-              <TextNode status={demoState} shape="pill" text="stars:1/3" color="true" />
-            </g>
-            <g transform="translate(3, 2.5)">
-              <TextNode status={demoState} shape="pill" text="stars:2/3" color="true" />
-            </g>
-            <g transform="translate(5, 2.5)">
-              <TextNode status={demoState} shape="pill" text="stars:3/5" color="true" />
-            </g>
-          </NodeContainer>
-        </div>
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="mb-2 font-medium">Sequence Demo</h3>
+        <NodeContainer>
+          <g transform="translate(0.5, 0.5)">
+            <CircleNode status={demoState} />
+          </g>
+          <g transform="translate(1.5, 0.5)">
+            <SquareNode status={demoState} />
+          </g>
+          <g transform="translate(2.5, 0.5)">
+            <TriangleNode status={demoState} />
+          </g>
+          <g transform="translate(3.5, 0.5)">
+            <HexagonNode status={demoState} />
+          </g>
+          <g transform="translate(4.5, 0.5)">
+            <ThumbsUpNode status={demoState} />
+          </g>
+          <g transform="translate(5.5, 0.5)">
+            <ThumbsDownNode status={demoState} />
+          </g>
+          <g transform="translate(0.5, 1.5)">
+            <TextNode status={demoState} shape="circle" text="Yes" color="true" />
+          </g>
+          <g transform="translate(1.5, 1.5)">
+            <TextNode status={demoState} shape="square" text="No" color="false" />
+          </g>
+          <g transform="translate(3.5, 1.5)">
+            <TextNode status={demoState} shape="pill" text="Very" color="true" />
+          </g>
+          <g transform="translate(1, 2.5)">
+            <TextNode status={demoState} shape="pill" text="stars:1/3" color="true" />
+          </g>
+          <g transform="translate(3, 2.5)">
+            <TextNode status={demoState} shape="pill" text="stars:2/3" color="true" />
+          </g>
+          <g transform="translate(5, 2.5)">
+            <TextNode status={demoState} shape="pill" text="stars:3/5" color="true" />
+          </g>
+        </NodeContainer>
       </div>
-    )
-  }
+    </div>
+  )
+}
+
+export const NodeSequences = {
+  render: () => <DemoSequence />
 }
 
 export const MediaNodes = {
