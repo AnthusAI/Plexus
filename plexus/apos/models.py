@@ -42,7 +42,7 @@ class PromptChange:
 @dataclass
 class MismatchAnalysis:
     """Analysis of a single mismatch case."""
-    transcript_id: str
+    form_id: str
     question_name: str
     ground_truth: str
     model_answer: str
@@ -132,7 +132,7 @@ class OptimizationState:
 @dataclass
 class Mismatch:
     """Represents a single mismatch between expected and actual results."""
-    transcript_id: str
+    form_id: str
     ground_truth: str
     model_answer: str
     analysis: str

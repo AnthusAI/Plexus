@@ -145,30 +145,57 @@ class EvaluationNode(APOSNode):
         """Convert raw mismatches to the format expected by APOSState."""
         converted_mismatches = []
         for m in raw_mismatches:
+            # Initialize metadata
+            metadata = {}
+            
             # Handle both dictionary and object formats
             if isinstance(m, dict):
-                # Get transcript_id with fallback to empty string to avoid None
-                transcript_id = m.get('form_id') or m.get('transcript_id') or ''
+                # Get form_id from direct attribute or metadata
+                form_id = m.get('form_id')
+                if not form_id:
+                    # Try to get form_id from metadata
+                    raw_metadata = m.get('metadata', {})
+                    if isinstance(raw_metadata, str):
+                        try:
+                            metadata = json.loads(raw_metadata)
+                        except:
+                            metadata = {}
+                    else:
+                        metadata = raw_metadata
+                    form_id = metadata.get('form_id', '')
+                
                 mismatch = {
-                    'transcript_id': transcript_id,
+                    'form_id': form_id,
                     'question_name': m.get('question') or m.get('question_name') or '',
                     'model_answer': m.get('predicted') or m.get('model_answer') or '',
-                    'transcript_text': m.get('transcript', ''),  # Default to empty string if not present
-                    'original_explanation': m.get('explanation', ''),  # Default to empty string if not present
+                    'transcript_text': m.get('transcript', ''),
+                    'original_explanation': m.get('explanation', ''),
                     'ground_truth': m.get('ground_truth') or '',
-                    'metadata': m.get('metadata', {})
+                    'metadata': metadata
                 }
             else:
-                # Get transcript_id with fallback to empty string to avoid None
-                transcript_id = getattr(m, 'transcript_id', '') or getattr(m, 'form_id', '') or ''
+                # Get form_id from direct attribute or metadata
+                form_id = getattr(m, 'form_id', None)
+                if not form_id:
+                    # Try to get form_id from metadata
+                    raw_metadata = getattr(m, 'metadata', {})
+                    if isinstance(raw_metadata, str):
+                        try:
+                            metadata = json.loads(raw_metadata)
+                        except:
+                            metadata = {}
+                    else:
+                        metadata = raw_metadata
+                    form_id = metadata.get('form_id', '')
+                
                 mismatch = {
-                    'transcript_id': transcript_id,
+                    'form_id': form_id,
                     'question_name': getattr(m, 'question_name', '') or '',
                     'model_answer': getattr(m, 'model_answer', '') or getattr(m, 'predicted', '') or '',
                     'transcript_text': getattr(m, 'transcript_text', '') or getattr(m, 'transcript', ''),
                     'original_explanation': getattr(m, 'original_explanation', '') or getattr(m, 'explanation', ''),
                     'ground_truth': getattr(m, 'ground_truth', '') or '',
-                    'metadata': getattr(m, 'metadata', {})
+                    'metadata': metadata
                 }
             converted_mismatches.append(mismatch)
         return converted_mismatches
@@ -223,10 +250,69 @@ class EvaluationNode(APOSNode):
         score_instance.load_data(data=score_config['data'])
         score_instance.process_data()
         
-        # Get samples
+        # Get samples and ensure form_ids are preserved
         logger.info("Converting dataframe to samples")
-        samples = score_instance.dataframe.to_dict('records')
-        logger.info(f"Got {len(samples)} total samples")
+        df = score_instance.dataframe
+        
+        # Ensure form_id is in the dataframe
+        if 'form_id' not in df.columns:
+            # Try to get form_id from metadata if it exists
+            if 'metadata' in df.columns:
+                def extract_form_id(metadata):
+                    if isinstance(metadata, str):
+                        try:
+                            metadata = json.loads(metadata)
+                        except:
+                            return None
+                    return metadata.get('form_id')
+                df['form_id'] = df['metadata'].apply(extract_form_id)
+            
+            # If still no form_id, use f_id if available
+            if 'form_id' not in df.columns and 'f_id' in df.columns:
+                df['form_id'] = df['f_id']
+            
+            # If still no form_id, use index as last resort
+            if 'form_id' not in df.columns:
+                logger.warning("No form_id found in data, using index as form_id")
+                df['form_id'] = df.index.astype(str)  # Convert index to string for consistency
+        
+        # Convert to records while preserving form_id and ensuring proper structure
+        df_dict = df.to_dict('records')
+        samples = []
+        for record in df_dict:
+            # Ensure form_id is included in both top level and columns
+            form_id = record.get('form_id', '')
+            metadata = record.get('metadata', {})
+            if isinstance(metadata, str):
+                try:
+                    metadata = json.loads(metadata)
+                except:
+                    metadata = {}
+            
+            # Create properly structured sample with evaluation fields at top level
+            sample = {
+                'text': record.get('text', ''),
+                'content_id': record.get('content_id', ''),
+                'form_id': form_id,
+                'Session ID': record.get('Session ID', ''),
+                'columns': {
+                    'form_id': form_id,
+                    'metadata': metadata
+                }
+            }
+            
+            # Add any additional columns that might be needed for evaluation
+            for key, value in record.items():
+                if key not in ['text', 'content_id', 'form_id', 'metadata', 'Session ID']:
+                    # Keep label fields at top level for evaluation
+                    if key.endswith('_label') or key in score_config.get('scores', [{'name': score_name}])[0]['name']:
+                        sample[key] = value
+                    # Everything else goes in columns
+                    sample['columns'][key] = value
+            
+            samples.append(sample)
+            
+        logger.info(f"Got {len(samples)} total samples with columns: {list(samples[0].keys()) if samples else []}")
         
         # Store all samples and create fixed evaluation set if needed
         if not self.all_labeled_samples:

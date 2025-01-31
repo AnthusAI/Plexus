@@ -101,11 +101,11 @@ class MismatchAnalyzerNode(APOSNode):
             mismatch.error_category = analysis_result.error_category
             mismatch.root_cause = analysis_result.root_cause
             
-            logger.info(f"Completed analysis for mismatch {mismatch.transcript_id}")
+            logger.info(f"Completed analysis for mismatch {mismatch.form_id}")
             return mismatch
             
         except Exception as e:
-            logger.error(f"Error analyzing mismatch {mismatch.transcript_id}: {e}")
+            logger.error(f"Error analyzing mismatch {mismatch.form_id}: {e}")
             raise
     
     async def analyze_mismatches(self, mismatches: List[MismatchAnalysis]) -> List[MismatchAnalysis]:
@@ -141,7 +141,7 @@ class MismatchAnalyzerNode(APOSNode):
         try:
             return await self.analyze_mismatch(mismatch)
         except Exception as e:
-            logger.error(f"Failed to analyze mismatch {mismatch.transcript_id}: {e}")
+            logger.error(f"Failed to analyze mismatch {mismatch.form_id}: {e}")
             return mismatch
     
     def get_node_handler(self) -> Callable[[APOSState], Dict[str, Any]]:
@@ -182,9 +182,8 @@ class MismatchAnalyzerNode(APOSNode):
                 for mismatch in state.mismatches:
                     # Handle both dict and MismatchAnalysis objects
                     if isinstance(mismatch, dict):
-                        # Convert form_id to transcript_id and other field mappings
                         analysis = MismatchAnalysis(
-                            transcript_id=mismatch.get('form_id'),
+                            form_id=mismatch.get('form_id'),
                             question_name=mismatch.get('question'),
                             transcript_text=mismatch.get('transcript', ''),
                             model_answer=mismatch.get('predicted', ''),
@@ -204,7 +203,7 @@ class MismatchAnalyzerNode(APOSNode):
                 mismatch_dicts = []
                 for m in analyzed_mismatches:
                     mismatch_dict = {
-                        'form_id': m.transcript_id,
+                        'form_id': m.form_id,
                         'question': m.question_name,
                         'predicted': m.model_answer,
                         'ground_truth': m.ground_truth,
