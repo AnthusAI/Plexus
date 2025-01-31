@@ -36,7 +36,7 @@ export const FrameSection: React.FC<FrameSectionProps> = ({
               </>
             ) : layout === 'twoColumn' ? (
               <div className="flex flex-col xl:flex-row gap-8">
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 xl:w-[calc(50%-2rem)]">
                   <div className="flex flex-col md:flex-row xl:flex-col gap-8">
                     <div className="w-full md:w-1/2 xl:w-full flex flex-col items-center md:items-start text-center md:text-left md:justify-center">
                       <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground w-full">
@@ -49,7 +49,7 @@ export const FrameSection: React.FC<FrameSectionProps> = ({
                     </div>
                   </div>
                 </div>
-                <div className="hidden xl:flex flex-1 min-w-0 justify-center items-center">
+                <div className="hidden xl:flex flex-1 min-w-0 xl:w-[calc(50%-2rem)] justify-center items-center">
                   {rightContent}
                 </div>
               </div>
