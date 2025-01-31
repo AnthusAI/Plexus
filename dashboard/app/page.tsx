@@ -1,3 +1,5 @@
+'use client'
+
 import React from 'react'
 import { Hero } from '@/components/landing/Hero'
 import { Features } from '@/components/landing/Features'
@@ -12,7 +14,23 @@ import MultiTypeWorkflow from '@/components/workflow/layouts/multi-type-workflow
 import ItemListWorkflow from '@/components/workflow/layouts/item-list-workflow'
 import MetricsGauges from '@/components/MetricsGauges'
 
+const CLOCKWISE_SEQUENCE = [0, 1, 3, 2] // accuracy -> precision -> specificity -> sensitivity
+
 export default function LandingPage() {
+  const [selectedMetricIndex, setSelectedMetricIndex] = React.useState(0)
+  const [rotationIndex, setRotationIndex] = React.useState(0)
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setRotationIndex(prev => (prev + 1) % CLOCKWISE_SEQUENCE.length)
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  // Map rotation index to actual gauge index for clockwise movement
+  const selectedIndex = CLOCKWISE_SEQUENCE[rotationIndex]
+
   return (
     <Layout>
       <Hero />
@@ -92,10 +110,16 @@ export default function LandingPage() {
                   <div className="relative z-10">
                     <MetricsGauges
                       variant="detail"
+                      selectedIndex={selectedIndex}
                       gauges={[
                         {
                           value: 92,
                           label: 'Accuracy',
+                          segments: [
+                            { start: 0, end: 60, color: 'var(--gauge-inviable)' },
+                            { start: 60, end: 85, color: 'var(--gauge-converging)' },
+                            { start: 85, end: 100, color: 'var(--gauge-great)' }
+                          ],
                           backgroundColor: 'var(--gauge-background)',
                         },
                         {
@@ -109,19 +133,18 @@ export default function LandingPage() {
                           backgroundColor: 'var(--gauge-background)',
                         },
                         {
-                          value: 89,
-                          label: 'Sensitivity',
+                          value: 95,
+                          label: 'Specificity',
                           segments: [
                             { start: 0, end: 60, color: 'var(--gauge-inviable)' },
                             { start: 60, end: 85, color: 'var(--gauge-converging)' },
                             { start: 85, end: 100, color: 'var(--gauge-great)' }
                           ],
                           backgroundColor: 'var(--gauge-background)',
-                          priority: true
                         },
                         {
-                          value: 95,
-                          label: 'Specificity',
+                          value: 89,
+                          label: 'Sensitivity',
                           segments: [
                             { start: 0, end: 60, color: 'var(--gauge-inviable)' },
                             { start: 60, end: 85, color: 'var(--gauge-converging)' },
