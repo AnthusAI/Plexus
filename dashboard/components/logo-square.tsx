@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { motion } from "framer-motion"
 
 enum LogoVariant {
   Square,
@@ -47,8 +48,12 @@ interface SquareLogoProps {
 }
 
 const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
-  const columns = variant === LogoVariant.Wide ? 6 : variant === LogoVariant.Square ? 6 : 1;
-  const rows = variant === LogoVariant.Square ? 6 : variant === LogoVariant.Wide ? 2 : 1;
+  const columns = variant === LogoVariant.Wide ? 6 : 
+                 variant === LogoVariant.Square ? 6 : 
+                 2;  // 2x2 grid for Narrow
+  const rows = variant === LogoVariant.Square ? 6 : 
+              variant === LogoVariant.Wide ? 2 : 
+              2;  // 2x2 grid for Narrow
   const containerRef = useRef<HTMLDivElement>(null);
   const [fontSize, setFontSize] = useState('16px');
   const [isClient, setIsClient] = useState(false);
@@ -65,7 +70,7 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
     return Date.now() - (halfCycle + additionalOffset);
   });
 
-  const [jitterValues, setJitterValues] = useState(() => 
+  const [jitterValues] = useState(() => 
     Array(rows * columns).fill(0).map(() => ({ value: Math.random() * 0.1 - 0.05, target: Math.random() * 0.1 - 0.05 }))
   );
 
@@ -73,34 +78,41 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
     Array(rows * columns).fill(0).map(() => Math.random() * 0.2 - 0.1),
   [rows, columns]);
 
-  // Use a fixed initial grid for server-side rendering
-  const initialGrid = useMemo(() => 
+  // Compute current and next colors for each cell
+  const [colorStates, setColorStates] = useState(() => 
     Array(rows * columns).fill(0).map((_, index) => {
       const row = Math.floor(index / columns);
       const col = index % columns;
       const baseProgress = (10 - (row + col)) / 10;
-      return getColorAtPosition(baseProgress);
-    }),
-  [rows, columns]);
-
-  const [grid, setGrid] = useState<string[]>(initialGrid);
+      const currentProgress = (baseProgress + ((Date.now() - startTime) / cycleDuration)) % 1;
+      const nextProgress = (currentProgress + (250 / cycleDuration)) % 1;
+      return {
+        current: getColorAtPosition((currentProgress + randomOffsets[index] + jitterValues[index].value + 1) % 1),
+        next: getColorAtPosition((nextProgress + randomOffsets[index] + jitterValues[index].value + 1) % 1)
+      };
+    })
+  );
 
   useEffect(() => {
     if (!isClient) return;
 
-    const updateGrid = () => {
-      setGrid(prev => 
+    const updateColors = () => {
+      setColorStates(prev => 
         prev.map((_, index) => {
           const row = Math.floor(index / columns);
           const col = index % columns;
           const baseProgress = ((10 - (row + col)) / 10 + ((Date.now() - startTime) / cycleDuration)) % 1;
-          const randomizedProgress = (baseProgress + randomOffsets[index] + jitterValues[index].value + 1) % 1;
-          return getColorAtPosition(randomizedProgress);
+          const currentProgress = (baseProgress + randomOffsets[index] + jitterValues[index].value + 1) % 1;
+          const nextProgress = (currentProgress + (250 / cycleDuration)) % 1;
+          return {
+            current: getColorAtPosition(currentProgress),
+            next: getColorAtPosition(nextProgress)
+          };
         })
       );
     };
 
-    const interval = setInterval(updateGrid, 50);
+    const interval = setInterval(updateColors, 250);
     return () => clearInterval(interval);
   }, [isClient, columns, startTime, cycleDuration, randomOffsets, jitterValues]);
 
@@ -109,10 +121,10 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
       if (containerRef.current) {
         const containerWidth = containerRef.current.offsetWidth;
         const newFontSize = variant === LogoVariant.Wide ? 
-          `${containerWidth / 3}px` :
+          `${containerWidth / 2.8}px` :
           variant === LogoVariant.Narrow ?
-            `${containerWidth * 1.4}px` :
-            `${containerWidth / 3}px`;
+            `${containerWidth / 0.65}px` :  // Compromise size for narrow variant
+            `${containerWidth / 2.8}px`;  // Slightly smaller for square variant
         setFontSize(newFontSize);
       }
     };
@@ -131,64 +143,88 @@ const SquareLogo = ({ variant, className = '' }: SquareLogoProps) => {
     };
   }, [variant]);
 
-  const containerStyle = {
-    aspectRatio: `${columns} / ${rows}`,
-  };
-
-  const letterStyle = {
-    fontFamily: "'Jersey 20', sans-serif",
-    fontSize: fontSize,
-    fontWeight: 400,
-    color: 'var(--muted)',
-    position: 'absolute' as const,
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    width: variant === LogoVariant.Wide ? `${100 / columns}%` : '100%',
-    textAlign: 'center' as const,
-  };
-
   return (
     <div 
       ref={containerRef}
-      className={`relative flex items-center justify-center overflow-hidden ${className}`} 
-      style={containerStyle}
+      className={className}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${columns}, 1fr)`,
+        gridTemplateRows: `repeat(${rows}, 1fr)`,
+        aspectRatio: `${columns} / ${rows}`,
+        position: 'relative',
+        minWidth: '100%',
+        minHeight: '100%',
+      }}
     >
-      <div
-        className={`absolute inset-0 grid ${
-          variant === LogoVariant.Wide || variant === LogoVariant.Square ? 'grid-cols-6' : 'grid-cols-1'
-        }`}
-        style={{ gridTemplateRows: `repeat(${rows}, 1fr)` }}
+      {/* Background color grid */}
+      <div 
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${columns}, 1fr)`,
+          gridTemplateRows: `repeat(${rows}, 1fr)`,
+          gridArea: '1 / 1 / -1 / -1',
+        }}
       >
-        {grid.map((color, index) => (
-          <div
+        {colorStates.map((colors, index) => (
+          <motion.div
             key={index}
-            className="w-full h-full"
-            style={{ backgroundColor: color }}
+            initial={{ backgroundColor: colors.current }}
+            animate={{ backgroundColor: colors.next }}
+            transition={{ 
+              duration: 0.25,
+              ease: "linear"
+            }}
           />
         ))}
       </div>
-      {variant === LogoVariant.Wide || variant === LogoVariant.Square ? (
-        <div className="absolute inset-0 flex">
-          {['P', 'L', 'E', 'X', 'U', 'S'].map((letter, index) => (
-            <span 
-              key={letter} 
-              style={{ 
-                ...letterStyle,
-                left: `${((index + 0.53) * 100) / columns}%`,
-                top: variant === LogoVariant.Square ? '50%' : '50%',
-                width: `${100 / columns}%`,
+
+      {/* Letters overlay */}
+      <div 
+        style={{
+          position: 'relative',
+          gridArea: '1 / 1 / -1 / -1',
+          width: '100%',
+          height: '100%',
+        }}
+      >
+        {variant === LogoVariant.Wide || variant === LogoVariant.Square ? (
+          ['P', 'L', 'E', 'X', 'U', 'S'].map((letter, index) => (
+            <span
+              key={letter}
+              style={{
+                fontFamily: "'Jersey 20', sans-serif",
+                fontSize: fontSize,
+                fontWeight: 400,
+                color: 'var(--muted)',
+                lineHeight: 1.2,
+                position: 'absolute',
+                left: `${(index + 0.5) * (100 / 6) + (100 / 6 / 40)}%`,  // Center + 1/40 column width
+                top: '50%',
+                transform: 'translate(-50%, -50%)',  // Center the letter on its point
               }}
             >
               {letter}
             </span>
-          ))}
-        </div>
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span style={{ ...letterStyle, left: `55%`}}>P</span>
-        </div>
-      )}
+          ))
+        ) : (
+          <span
+            style={{
+              fontFamily: "'Jersey 20', sans-serif",
+              fontSize: fontSize,
+              fontWeight: 400,
+              color: 'var(--muted)',
+              lineHeight: 1.2,
+              position: 'absolute',
+              left: `${54 + (100 / 6 / 40)}%`,  // Shifted slightly more right for narrow variant
+              top: '53.5%',  // Shifted more down for narrow variant
+              transform: 'translate(-50%, -50%)',
+            }}
+          >
+            P
+          </span>
+        )}
+      </div>
     </div>
   );
 };
