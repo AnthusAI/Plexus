@@ -1,5 +1,7 @@
 import React from 'react'
 import { Card, CardContent } from '@/components/ui/card'
+import { FrameSection } from '@/components/landing/FrameSection'
+import { StandardSection } from '@/components/landing/StandardSection'
 import { 
   Cpu,
   Network, 
@@ -60,11 +62,12 @@ const capabilities = [
 export const PlatformFeatures = () => {
   return (
     <>
-      <section className="py-20">
+      <StandardSection
+        headline="Platform Features"
+        headlinePosition="top"
+        fullWidth
+      >
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-bold mb-12 text-center text-foreground">
-            Platform Features
-          </h2>
           <div className="grid md:grid-cols-2 gap-8">
             {features.map((feature, index) => {
               const Icon = feature.icon
@@ -85,13 +88,13 @@ export const PlatformFeatures = () => {
             })}
           </div>
         </div>
-      </section>
+      </StandardSection>
 
-      <section className="py-20 bg-accent/5">
+      <FrameSection
+        headline="Advanced Capabilities"
+        fullWidth
+      >
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-bold mb-12 text-center text-foreground">
-            Advanced Capabilities
-          </h2>
           <div className="grid md:grid-cols-2 gap-8">
             {capabilities.map((capability, index) => {
               const Icon = capability.icon
@@ -111,7 +114,7 @@ export const PlatformFeatures = () => {
             })}
           </div>
         </div>
-      </section>
+      </FrameSection>
     </>
   )
 } 

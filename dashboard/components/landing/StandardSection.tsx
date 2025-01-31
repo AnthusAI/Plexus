@@ -3,8 +3,11 @@ import React from 'react'
 export interface StandardSectionProps {
   headline: string;
   headlinePosition: 'top' | 'inline';
-  leftContent: React.ReactNode;
-  rightContent: React.ReactNode;
+  leftContent?: React.ReactNode;
+  rightContent?: React.ReactNode;
+  // For full-width content:
+  fullWidth?: boolean;
+  children?: React.ReactNode;
   // Optional: additional container classes if needed
   containerClassName?: string;
 }
@@ -14,6 +17,8 @@ export const StandardSection: React.FC<StandardSectionProps> = ({
   headlinePosition,
   leftContent,
   rightContent,
+  fullWidth,
+  children,
   containerClassName
 }) => {
   return (
@@ -26,21 +31,25 @@ export const StandardSection: React.FC<StandardSectionProps> = ({
                 {headline}
               </h2>
             )}
-            <div className="flex flex-col md:flex-row justify-between">
-              <div className="w-full md:w-[45%] relative">
-                <div className="relative z-10">
-                  {leftContent}
+            {fullWidth ? (
+              children
+            ) : (
+              <div className="flex flex-col md:flex-row justify-between">
+                <div className="w-full md:w-[45%] relative">
+                  <div className="relative z-10">
+                    {leftContent}
+                  </div>
+                </div>
+                <div className="w-full md:w-1/2 text-center md:text-left">
+                  {headlinePosition === 'inline' && (
+                    <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">
+                      {headline}
+                    </h2>
+                  )}
+                  {rightContent}
                 </div>
               </div>
-              <div className="w-full md:w-1/2 text-center md:text-left">
-                {headlinePosition === 'inline' && (
-                  <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">
-                    {headline}
-                  </h2>
-                )}
-                {rightContent}
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

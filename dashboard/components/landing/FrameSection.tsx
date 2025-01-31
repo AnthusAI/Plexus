@@ -6,7 +6,9 @@ export interface FrameSectionProps {
   // For the two-column layout:
   leftContent?: React.ReactNode;
   rightContent?: React.ReactNode;
-  // For the single layout:
+  // For full-width content:
+  fullWidth?: boolean;
+  // For the single layout or full-width:
   children?: React.ReactNode;
   containerClassName?: string;
 }
@@ -16,6 +18,7 @@ export const FrameSection: React.FC<FrameSectionProps> = ({
   layout = 'twoColumn',
   leftContent,
   rightContent,
+  fullWidth,
   children,
   containerClassName,
 }) => {
@@ -24,7 +27,14 @@ export const FrameSection: React.FC<FrameSectionProps> = ({
       <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
         <div className="py-4">
           <div className="bg-background rounded-xl py-24 md:py-32 px-4 md:px-8">
-            {layout === 'twoColumn' ? (
+            {fullWidth ? (
+              <>
+                <h2 className="text-4xl md:text-5xl font-bold mb-10 text-foreground text-center">
+                  {headline}
+                </h2>
+                {children}
+              </>
+            ) : layout === 'twoColumn' ? (
               <div className="flex flex-col xl:flex-row gap-8">
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-col md:flex-row xl:flex-col gap-8">
