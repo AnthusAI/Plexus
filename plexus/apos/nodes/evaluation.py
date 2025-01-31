@@ -105,8 +105,6 @@ class EvaluationNode(APOSNode):
     def _setup_node(self) -> None:
         """Set up evaluation components."""
         self.evaluation_cache = {}  # Cache evaluation results
-        self.started_at = None
-        self.experiment_id = None
         self.iteration_dir = None
         self.current_iteration = 0
         self.total_correct = 0
@@ -138,102 +136,43 @@ class EvaluationNode(APOSNode):
         # History tracking
         self.history_dir = "optimization_history"
         
-        # Experiment tracking
-        self.scorecard_id = None
-        self.score_id = None
-        self.account_id = None
-        
-        # Initialize dashboard client
-        self._setup_dashboard_client()
-        
         # Ensure persistence directory exists
         os.makedirs(self.config.persistence_path, exist_ok=True)
         
-        logger.info("Initialized evaluation node with caching and dashboard integration")
+        logger.info("Initialized evaluation node")
     
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-    def _setup_dashboard_client(self) -> None:
-        """Initialize the Plexus Dashboard client."""
-        try:
-            logger.info("Initializing Plexus Dashboard client...")
-            self.dashboard_client = PlexusDashboardClient.for_account('call-criteria')
-            
-            # Look up account
-            logger.info("Looking up account")
-            account = Account.get_by_key('call-criteria', self.dashboard_client)
-            logger.info(f"Found account: {account.name} ({account.id})")
-            self.account_id = account.id
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize dashboard client: {str(e)}")
-            self.dashboard_client = None
-            self.experiment_id = None
-    
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-    def _setup_scorecard(self, scorecard_name: str, score_name: Optional[str] = None) -> None:
-        """Set up scorecard and score IDs."""
-        if not self.dashboard_client:
-            return
-            
-        try:
-            # Look up scorecard using available identifiers
-            logger.info(f"Looking up scorecard: {scorecard_name}")
-            try:
-                # Try by key first
-                dashboard_scorecard = DashboardScorecard.get_by_key(scorecard_name, self.dashboard_client)
-                logger.info("Found scorecard by key")
-            except:
-                try:
-                    # Try by ID next
-                    dashboard_scorecard = DashboardScorecard.get_by_id(scorecard_name, self.dashboard_client)
-                    logger.info("Found scorecard by ID")
-                except:
-                    # Finally try by name
-                    dashboard_scorecard = DashboardScorecard.get_by_name(scorecard_name, self.dashboard_client)
-                    logger.info("Found scorecard by name")
-                    
-            logger.info(f"Found scorecard: {dashboard_scorecard.name} ({dashboard_scorecard.id})")
-            self.scorecard_id = dashboard_scorecard.id
-            
-            # Look up score if specified
-            if score_name:
-                logger.info(f"Looking up score: {score_name}")
-                query = """
-                query GetScoreFromScorecard($scorecardId: ID!, $name: String!) {
-                    getScorecard(id: $scorecardId) {
-                        sections {
-                            items {
-                                scores(filter: {name: {eq: $name}}) {
-                                    items {
-                                        id
-                                        name
-                                    }
-                                }
-                            }
-                        }
-                    }
+    def _convert_mismatches(self, raw_mismatches: List[Any]) -> List[Dict[str, Any]]:
+        """Convert raw mismatches to the format expected by APOSState."""
+        converted_mismatches = []
+        for m in raw_mismatches:
+            # Handle both dictionary and object formats
+            if isinstance(m, dict):
+                # Get transcript_id with fallback to empty string to avoid None
+                transcript_id = m.get('form_id') or m.get('transcript_id') or ''
+                mismatch = {
+                    'transcript_id': transcript_id,
+                    'question_name': m.get('question') or m.get('question_name') or '',
+                    'model_answer': m.get('predicted') or m.get('model_answer') or '',
+                    'transcript_text': m.get('transcript', ''),  # Default to empty string if not present
+                    'original_explanation': m.get('explanation', ''),  # Default to empty string if not present
+                    'ground_truth': m.get('ground_truth') or '',
+                    'metadata': m.get('metadata', {})
                 }
-                """
-                variables = {
-                    "scorecardId": dashboard_scorecard.id,
-                    "name": score_name
+            else:
+                # Get transcript_id with fallback to empty string to avoid None
+                transcript_id = getattr(m, 'transcript_id', '') or getattr(m, 'form_id', '') or ''
+                mismatch = {
+                    'transcript_id': transcript_id,
+                    'question_name': getattr(m, 'question_name', '') or '',
+                    'model_answer': getattr(m, 'model_answer', '') or getattr(m, 'predicted', '') or '',
+                    'transcript_text': getattr(m, 'transcript_text', '') or getattr(m, 'transcript', ''),
+                    'original_explanation': getattr(m, 'original_explanation', '') or getattr(m, 'explanation', ''),
+                    'ground_truth': getattr(m, 'ground_truth', '') or '',
+                    'metadata': getattr(m, 'metadata', {})
                 }
-                result = self.dashboard_client.execute(query, variables)
-                
-                # Find matching score
-                scorecard_data = result.get('getScorecard', {})
-                sections = scorecard_data.get('sections', {}).get('items', [])
-                
-                for section in sections:
-                    scores = section.get('scores', {}).get('items', [])
-                    if scores:
-                        self.score_id = scores[0]['id']
-                        logger.info(f"Found score: {scores[0]['name']} ({self.score_id})")
-                        break
-                        
-        except Exception as e:
-            logger.error(f"Error setting up scorecard: {e}")
-        
+            converted_mismatches.append(mismatch)
+        return converted_mismatches
+
     def _create_evaluation(
         self,
         scorecard: Any,
@@ -242,10 +181,6 @@ class EvaluationNode(APOSNode):
         user_message: str
     ) -> None:
         """Set up evaluation with current state."""
-        # Set up scorecard if needed
-        if not self.scorecard_id:
-            self._setup_scorecard(scorecard.name, score_name)
-        
         # Get score config and update with new prompts
         score_config = next((score for score in scorecard.scores 
                            if score['name'] == score_name), None)
@@ -307,7 +242,7 @@ class EvaluationNode(APOSNode):
             else:
                 self.evaluation_samples = samples
                 logger.info(f"Using all {len(samples)} samples for evaluation")
-        
+
         # Create ExtendedAccuracyEvaluation instance with updated scorecard
         logger.info("Creating evaluation instance with updated prompts")
         self.evaluation = ExtendedAccuracyEvaluation(
@@ -316,7 +251,6 @@ class EvaluationNode(APOSNode):
             labeled_samples=self.evaluation_samples,
             number_of_texts_to_sample=len(self.evaluation_samples),
             account_key='call-criteria',
-            score_id=self.score_id,
             subset_of_score_names=[score_name],
             max_mismatches_to_report=self.config.optimization.max_mismatches_to_report
         )
@@ -447,66 +381,11 @@ scorecard_name: {scorecard_name}
         except Exception as e:
             logger.error(f"Error saving high accuracy mark: {e}")
         
-    def _setup_mlflow_run(self, scorecard_name: str) -> None:
-        """Set up MLFlow run for tracking."""
-        try:
-            # End any existing run
-            try:
-                mlflow.end_run()
-            except:
-                pass
-                
-            mlflow.set_experiment(f"apos_{scorecard_name}")
-            run = mlflow.start_run(nested=True)  # Allow nested runs
-            self.experiment_id = run.info.run_id
-            logger.info(f"Started MLFlow run: {self.experiment_id}")
-        except Exception as e:
-            logger.error(f"Error setting up MLFlow run: {e}")
-    
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-    def _create_dashboard_evaluation(self) -> None:
-        """Create a dashboard evaluation record."""
-        if not self.dashboard_client:
-            return
-            
-        try:
-            started_at = datetime.now(timezone.utc)
-            experiment_params = {
-                "type": "accuracy",
-                "accountId": self.account_id,
-                "scorecardId": self.scorecard_id,
-                "scoreId": self.score_id,
-                "status": "RUNNING",
-                "accuracy": 0.0,
-                "createdAt": started_at.isoformat().replace('+00:00', 'Z'),
-                "updatedAt": started_at.isoformat().replace('+00:00', 'Z'),
-                "totalItems": len(self.evaluation_samples) if self.evaluation_samples else 0,
-                "processedItems": 0,
-                "parameters": json.dumps({
-                    "sampling_method": "random",
-                    "sample_size": self.config.analysis.samples_per_iteration,
-                    "iteration": self.current_iteration
-                }),
-                "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
-                "estimatedRemainingSeconds": len(self.evaluation_samples) if self.evaluation_samples else 0
-            }
-            
-            response = DashboardEvaluation.create(
-                client=self.dashboard_client,
-                **experiment_params
-            )
-            self.experiment_id = response.id
-            self.started_at = started_at
-            logger.info(f"Created new evaluation for iteration {self.current_iteration}: {self.experiment_id}")
-            
-        except Exception as e:
-            logger.error(f"Error creating dashboard evaluation: {e}")
-    
     async def cleanup(self) -> None:
         """Clean up resources."""
         try:
-            # End MLFlow run if active
-            if self.experiment_id:
+            # End MLFlow run if active - only if evaluation exists and has experiment_id
+            if self.evaluation and hasattr(self.evaluation, 'experiment_id') and self.evaluation.experiment_id:
                 try:
                     mlflow.end_run()
                 except:
@@ -530,38 +409,6 @@ scorecard_name: {scorecard_name}
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
     
-    def _convert_mismatches(self, raw_mismatches: List[Any]) -> List[Dict[str, Any]]:
-        """Convert raw mismatches to the format expected by APOSState."""
-        converted_mismatches = []
-        for m in raw_mismatches:
-            # Handle both dictionary and object formats
-            if isinstance(m, dict):
-                # Get transcript_id with fallback to empty string to avoid None
-                transcript_id = m.get('form_id') or m.get('transcript_id') or ''
-                mismatch = {
-                    'transcript_id': transcript_id,
-                    'question_name': m.get('question') or m.get('question_name') or '',
-                    'model_answer': m.get('predicted') or m.get('model_answer') or '',
-                    'transcript_text': m.get('transcript', ''),  # Default to empty string if not present
-                    'original_explanation': m.get('explanation', ''),  # Default to empty string if not present
-                    'ground_truth': m.get('ground_truth') or '',
-                    'metadata': m.get('metadata', {})
-                }
-            else:
-                # Get transcript_id with fallback to empty string to avoid None
-                transcript_id = getattr(m, 'transcript_id', '') or getattr(m, 'form_id', '') or ''
-                mismatch = {
-                    'transcript_id': transcript_id,
-                    'question_name': getattr(m, 'question_name', '') or '',
-                    'model_answer': getattr(m, 'model_answer', '') or getattr(m, 'predicted', '') or '',
-                    'transcript_text': getattr(m, 'transcript_text', '') or getattr(m, 'transcript', ''),
-                    'original_explanation': getattr(m, 'original_explanation', '') or getattr(m, 'explanation', ''),
-                    'ground_truth': getattr(m, 'ground_truth', '') or '',
-                    'metadata': getattr(m, 'metadata', {})
-                }
-            converted_mismatches.append(mismatch)
-        return converted_mismatches
-
     async def evaluate_prompts(self, state: APOSState) -> Dict[str, Any]:
         """Run evaluation and collect mismatches."""
         try:
@@ -574,12 +421,6 @@ scorecard_name: {scorecard_name}
             state.metadata["scorecard_name"] = scorecard.name
             state.metadata["score_name"] = state.score_name
             logger.info(f"Set metadata - scorecard_name: {scorecard.name}, score_name: {state.score_name}")
-            
-            # Set up MLFlow run
-            try:
-                self._setup_mlflow_run(state.scorecard_name)
-            except Exception as e:
-                logger.error(f"Error setting up MLFlow run: {e}")
             
             # Get current iteration from state
             self.current_iteration = state.current_iteration
@@ -680,8 +521,8 @@ scorecard_name: {scorecard_name}
                 metadata={
                     "system_message": state.system_message,
                     "user_message": state.user_message,
-                    "started_at": self.started_at.isoformat() if self.started_at else None,
-                    "experiment_id": self.experiment_id,
+                    "started_at": self.evaluation.started_at.isoformat() if self.evaluation.started_at else None,
+                    "experiment_id": self.evaluation.experiment_id,
                     "iteration_dir": iteration_dir,
                     "scorecard_name": scorecard.name,
                     "score_name": state.score_name,
