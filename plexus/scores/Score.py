@@ -422,20 +422,21 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         # self.model = mlflow.keras.load_model(context.artifacts["model"])
 
     @abstractmethod
-    def predict(self, context, model_input: Input):
+    def predict(self, context, model_input: Input) -> Union[Result, List[Result]]:
         """
         Make predictions on the input data.
 
         Parameters
         ----------
+        context : Any
+            Context for the prediction (e.g., MLflow context)
         model_input : Score.Input
             The input data for making predictions.
 
         Returns
         -------
-        dict
-            The predictions, which can be one of the supported output types (numpy.ndarray, pandas.Series,
-            pandas.DataFrame, List, Dict, pyspark.sql.DataFrame).
+        Union[Score.Result, List[Score.Result]]
+            Either a single Score.Result or a list of Score.Results
         """
         pass
 

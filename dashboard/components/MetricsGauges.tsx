@@ -22,18 +22,47 @@ interface MetricsGaugesProps {
   className?: string
   variant?: 'grid' | 'detail'
   metricsExplanation?: string | null
+  selectedIndex?: number
 }
 
 const MetricsGauges: React.FC<MetricsGaugesProps> = ({ 
   gauges, 
   className = '',
   variant = 'detail',
-  metricsExplanation
+  metricsExplanation,
+  selectedIndex
 }) => {
+  const [key, setKey] = React.useState(0)
+  const ref = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            setKey(prev => prev + 1)
+          }
+        })
+      },
+      { threshold: 0.5 }
+    )
+
+    if (ref.current) {
+      observer.observe(ref.current)
+    }
+
+    return () => {
+      if (ref.current) {
+        observer.unobserve(ref.current)
+      }
+    }
+  }, [])
+
   return (
     <div 
       data-testid="metrics-gauges" 
       className="flex flex-col items-center w-full"
+      ref={ref}
     >
       {metricsExplanation && variant === 'detail' && (
         <p className="text-sm text-muted-foreground mb-4 text-left w-full">
@@ -48,11 +77,11 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
       )}>
         {gauges.map((gauge, index) => (
           <div 
-            key={index}
+            key={`${index}-${key}`}
             data-testid="gauge-container"
             className={cn(
               "flex justify-center rounded-lg p-2",
-              gauge.priority && variant === 'detail' ? "bg-card-light" : "bg-card"
+              index === selectedIndex && variant === 'detail' ? "bg-card-light" : "bg-card"
             )}
           >
             <Gauge
@@ -60,10 +89,10 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
               title={gauge.label}
               min={gauge.min}
               max={gauge.max}
-              backgroundColor={gauge.priority ? gauge.backgroundColor : 'var(--card-light)'}
+              backgroundColor={index === selectedIndex ? gauge.backgroundColor : 'var(--card-light)'}
               showTicks={variant === 'detail'}
               information={gauge.information}
-              priority={gauge.priority}
+              priority={index === selectedIndex}
             />
           </div>
         ))}
