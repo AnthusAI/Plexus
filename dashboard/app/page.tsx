@@ -105,7 +105,10 @@ export default function LandingPage() {
         <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
           <div className="py-4">
             <div className="bg-background rounded-xl py-8 md:py-12 px-4 md:px-8">
-              <div className="flex flex-col md:flex-row items-center justify-between">
+              <h2 className="text-4xl md:text-5xl font-bold mb-10 text-foreground text-center">
+                Don't Just Guess — Guess and Test
+              </h2>
+              <div className="flex flex-col md:flex-row justify-between">
                 <div className="w-full md:w-[45%] relative">
                   <div className="relative z-10">
                     <MetricsGauges
@@ -157,14 +160,11 @@ export default function LandingPage() {
                   </div>
                 </div>
                 <div className="w-full md:w-1/2 text-center md:text-left">
-                  <h2 className="text-4xl md:text-5xl font-bold mb-10 text-foreground">
-                    Don't Just Guess — Guess and Test
-                  </h2>
                   <p className="text-xl text-muted-foreground text-justify">
                     You can't just write prompts and put them into production and hope they work, you need a way to evaluate them quantitatively to see if they meet your needs.  You can't optimize a metric you're not measuring.
                   </p>
                   <p className="text-xl text-muted-foreground text-justify mt-4">
-                    Different needs require different metrics: Is this a regulatory compliance question where we need high sensitivity? Do we need to use balanced accuracy because the data is unbalanced? Plexus gives you the gauges you need.
+                    Each use case demands its own success metrics: Is this a regulatory compliance question where we need high sensitivity? Do we need to use balanced accuracy because the data is unbalanced? Plexus gives you the gauges you need.
                   </p>
                 </div>
               </div>
@@ -185,10 +185,14 @@ export default function LandingPage() {
                         Any Result Type
                       </h2>
                       <p className="text-xl text-muted-foreground text-justify w-full">
-                        Different problems need different types of answers. Sometimes you need a simple yes/no, 
-                        sometimes a 5-star rating, sometimes a percentage score, and sometimes just a thumbs up. 
+                        Your answers should match your questions. Sometimes a simple yes/no will do, 
+                        other times you need a 5-star rating, a percentage score, or just a thumbs up. 
                         Plexus gives you the flexibility to express your results in the format that makes sense 
                         for your use case.
+                      </p>
+                      <p className="text-xl text-muted-foreground text-justify w-full mt-4">
+                        Binary classifiers, multi-class classifiers, scalar values, entity extraction, quote extraction, 
+                        and more.  The framework is flexible enough to support anything your solution requires.
                       </p>
                     </div>
                     <div className="w-full md:w-1/2 xl:hidden flex justify-center md:justify-end items-center">
