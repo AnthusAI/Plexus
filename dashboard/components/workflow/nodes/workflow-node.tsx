@@ -61,6 +61,57 @@ export function WorkflowNode({
   const radius = isMain ? 0.4 : 0.3
   const iconScale = 0.0016  // Reduced by factor of 10
   
+  // Move hooks to the top level
+  const [currentState, setCurrentState] = useState<"notStarted" | "processing" | "complete">("notStarted")
+
+  useEffect(() => {
+    // Only run effect if we're in demo mode or have a sequence
+    if (!isDemo && !sequence) return;
+
+    if (isDemo) {
+      // Demo mode: cycle through states every DEMO_DURATION ms
+      const cycleStates = () => {
+        setCurrentState("notStarted")
+        
+        const processingTimer = setTimeout(() => {
+          setCurrentState("processing")
+        }, DEMO_DURATION)
+
+        const completeTimer = setTimeout(() => {
+          setCurrentState("complete")
+        }, DEMO_DURATION * 2)
+
+        // Reset after full cycle
+        const resetTimer = setTimeout(() => {
+          cycleStates()
+        }, DEMO_DURATION * 3)
+
+        return () => {
+          clearTimeout(processingTimer)
+          clearTimeout(completeTimer)
+          clearTimeout(resetTimer)
+        }
+      }
+
+      cycleStates() // Call immediately to start the cycle
+      return () => {} // Cleanup will be handled by cycleStates
+    } else if (sequence) {
+      // Normal sequence mode
+      const processingTimer = setTimeout(() => {
+        setCurrentState("processing")
+      }, sequence.startDelay)
+
+      const completeTimer = setTimeout(() => {
+        setCurrentState("complete")
+      }, sequence.startDelay + sequence.processingDuration)
+
+      return () => {
+        clearTimeout(processingTimer)
+        clearTimeout(completeTimer)
+      }
+    }
+  }, [sequence, isDemo])
+  
   // Calculate triangle offset if needed
   const triangleYOffset = shape === "triangle" ? 
     ((radius * 1.1) * 1.732) / 6 : // height/6 for triangles
@@ -398,59 +449,13 @@ export function WorkflowNode({
     )
   }
 
-  // If using sequence-based props or demo mode
+  // Early return if no sequence or demo mode
   if (!sequence && !isDemo) {
     console.warn('WorkflowNode: Neither status nor sequence provided')
     return null
   }
 
-  const [currentState, setCurrentState] = useState<"notStarted" | "processing" | "complete">("notStarted")
-
-  useEffect(() => {
-    if (isDemo) {
-      // Demo mode: cycle through states every DEMO_DURATION ms
-      const cycleStates = () => {
-        setCurrentState("notStarted")
-        
-        const processingTimer = setTimeout(() => {
-          setCurrentState("processing")
-        }, DEMO_DURATION)
-
-        const completeTimer = setTimeout(() => {
-          setCurrentState("complete")
-        }, DEMO_DURATION * 2)
-
-        // Reset after full cycle
-        const resetTimer = setTimeout(() => {
-          cycleStates()
-        }, DEMO_DURATION * 3)
-
-        return () => {
-          clearTimeout(processingTimer)
-          clearTimeout(completeTimer)
-          clearTimeout(resetTimer)
-        }
-      }
-
-      cycleStates() // Call immediately to start the cycle
-      return () => {} // Cleanup will be handled by cycleStates
-    } else if (sequence) {
-      // Normal sequence mode
-      const processingTimer = setTimeout(() => {
-        setCurrentState("processing")
-      }, sequence.startDelay)
-
-      const completeTimer = setTimeout(() => {
-        setCurrentState("complete")
-      }, sequence.startDelay + sequence.processingDuration)
-
-      return () => {
-        clearTimeout(processingTimer)
-        clearTimeout(completeTimer)
-      }
-    }
-  }, [sequence, isDemo])
-
+  // Sequence-based or demo mode rendering
   return (
     <g>
       {/* Base Shape */}
