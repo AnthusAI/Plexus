@@ -35,7 +35,7 @@ export const Features = () => {
                 Powerful Features for Agent Orchestration
               </h2>
               <p className="text-2xl text-muted-foreground mb-12">
-                Built by practitioners on the front lines of AI deployment, our features 
+                Built by practitioners on the front lines of AI deployment.  Our features 
                 evolve as rapidly as AI itself, delivering battle-tested tools that 
                 transform cutting-edge capabilities into real business value.
               </p>

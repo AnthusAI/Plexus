@@ -35,7 +35,7 @@ export const CTASection = () => {
             <div className="flex flex-col md:flex-row items-center gap-12">
               <div className="flex-1 text-center md:text-left">
                 <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                  Ready to get started with Plexus?
+                  Ready to get started?
                 </h2>
                 <p className="text-xl text-muted-foreground mb-8">
                   Join the growing community of businesses building powerful AI workflows with Plexus.

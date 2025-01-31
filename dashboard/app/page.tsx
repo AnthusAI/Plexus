@@ -49,16 +49,20 @@ export default function LandingPage() {
             <div className="bg-background rounded-xl py-8 md:py-12 px-4 md:px-8">
               <div className="flex flex-col xl:flex-row gap-8">
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-4xl md:text-5xl font-bold mb-6 md:mb-12 text-foreground text-center md:text-center xl:text-left">
-                    Use Any Model
-                  </h2>
                   <div className="flex flex-col md:flex-row xl:flex-col gap-8">
                     <div className="w-full md:w-1/2 xl:w-full flex flex-col items-center md:items-start text-center md:text-left md:justify-center">
+                      <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground text-center md:text-left w-full">
+                        Use Any Model
+                      </h2>
                       <p className="text-xl text-muted-foreground text-justify w-full">
                         AI changes every week! Don't lock yourself into one solution. 
                         Plexus is a workbench for applying any newfangled AI model to 
                         solve your problems. Or simpler and cheaper ML models. Or 
                         logical rules -- anything your solution requires.
+                      </p>
+                      <p className="text-xl text-muted-foreground text-justify w-full mt-4">
+                        OpenAI, Anthropic, Google, Deepseek, Azure, AWS Bedrock, Hugging Face, PyTorch, TensorFlow — 
+                        Plexus supports them all.
                       </p>
                     </div>
                     <div className="w-full md:w-1/2 xl:hidden flex justify-center md:justify-end items-center">
@@ -152,11 +156,11 @@ export default function LandingPage() {
             <div className="bg-background rounded-xl py-8 md:py-12 px-4 md:px-8">
               <div className="flex flex-col xl:flex-row gap-8">
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-4xl md:text-5xl font-bold mb-6 md:mb-12 text-foreground text-center md:text-center xl:text-left">
-                    Any Result Type
-                  </h2>
                   <div className="flex flex-col md:flex-row xl:flex-col gap-8">
                     <div className="w-full md:w-1/2 xl:w-full flex flex-col items-center md:items-start text-center md:text-left md:justify-center">
+                      <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground text-center md:text-left w-full">
+                        Any Result Type
+                      </h2>
                       <p className="text-xl text-muted-foreground text-justify w-full">
                         Different problems need different types of answers. Sometimes you need a simple yes/no, 
                         sometimes a 5-star rating, sometimes a percentage score, and sometimes just a thumbs up. 
