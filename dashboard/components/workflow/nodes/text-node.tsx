@@ -1,26 +1,28 @@
 "use client"
 
-import { WorkflowNode } from "./workflow-node"
+import { cn } from "@/lib/utils"
 import { BaseNodeProps } from "../types"
-
-type TextNodeProps = BaseNodeProps & {
-  text?: string
-  shape?: "circle" | "square" | "pill"
-  color?: "true" | "false"
-}
+import { FileText } from "lucide-react"
 
 export function TextNode({ 
-  text = "",
-  shape = "circle",
-  color = "true",
-  ...props 
-}: TextNodeProps) {
+  isMain = false 
+}: BaseNodeProps) {
+  const radius = isMain ? 0.4 : 0.3
+
   return (
-    <WorkflowNode
-      {...props}
-      shape={shape}
-      text={text}
-      color={color}
-    />
+    <g>
+      <circle
+        r={radius}
+        className="fill-card stroke-border"
+        strokeWidth={0.02}
+      />
+      <g transform="scale(0.016) translate(-12, -12)">
+        <FileText
+          className="stroke-muted-foreground" 
+          size={24}
+          strokeWidth={1.5}
+        />
+      </g>
+    </g>
   )
 } 

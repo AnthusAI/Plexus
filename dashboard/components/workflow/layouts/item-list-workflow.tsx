@@ -101,10 +101,21 @@ const createRowSequences = (
   rowStartTime: number,
   steps: ExtendedWorkflowStep[]
 ): ExtendedWorkflowStep[] => {
-  return steps.map((step, index) => ({
-    ...step,
-    sequence: createNodeSequence(index, rowStartTime, !!step.mediaType)
-  }))
+  return steps.map((step, index) => {
+    // Preserve media nodes exactly as they are
+    if (step.mediaType) {
+      return {
+        ...step,
+        status: "complete" // Ensure media nodes are always complete
+      }
+    }
+    
+    // Only add sequences to non-media nodes
+    return {
+      ...step,
+      sequence: createNodeSequence(index, rowStartTime, false)
+    }
+  })
 }
 
 const initialSteps: (ExtendedWorkflowStep & { mediaType?: MediaNodeType })[] = [
@@ -150,9 +161,10 @@ interface RowProps {
   steps: (ExtendedWorkflowStep & { mediaType?: MediaNodeType })[]
   rowY: number
   yOffset: number
+  onCleanup: () => void
 }
 
-const WorkflowRow = React.forwardRef<SVGGElement, RowProps>(({ steps, rowY, yOffset }, ref) => {
+const WorkflowRow = React.forwardRef<SVGGElement, RowProps>(({ steps, rowY, yOffset, onCleanup }, ref) => {
   const renderNode = useCallback((step: ExtendedWorkflowStep) => {
     // Media nodes are always shown as-is, no state transitions
     if (step.mediaType) {
@@ -163,6 +175,9 @@ const WorkflowRow = React.forwardRef<SVGGElement, RowProps>(({ steps, rowY, yOff
           return <ImageNode status="complete" />
         case "text":
           return <TextNode status="complete" />
+        default:
+          console.error('Invalid media type:', step.mediaType)
+          return <AudioNode status="complete" /> // Fallback to audio if somehow invalid
       }
     }
 
@@ -190,8 +205,8 @@ const WorkflowRow = React.forwardRef<SVGGElement, RowProps>(({ steps, rowY, yOff
         <ThumbsUpNode status="complete" sequence={step.sequence} />
     }
 
-    // Fallback to status-based for backward compatibility
-    return <CircleNode status={step.status} isMain={false} />
+    // For non-media nodes without sequence, default to thumbs up
+    return <ThumbsUpNode status="complete" />
   }, [])
 
   // Calculate the target Y position
@@ -218,7 +233,13 @@ const WorkflowRow = React.forwardRef<SVGGElement, RowProps>(({ steps, rowY, yOff
       }}
       transition={{ 
         duration: 0.3, // Faster transitions to match accelerated pace
-        ease: "linear"
+        ease: "linear",
+        onComplete: () => {
+          // If row has moved out of view, force a cleanup
+          if (targetY <= 0.5 || targetY >= 4.5) {
+            onCleanup()
+          }
+        }
       }}
       layout="position"
     >
@@ -277,18 +298,26 @@ const ItemListWorkflow = React.forwardRef<SVGGElement>((props, ref) => {
   // Helper to create sequences with scaled timing
   const createScaledSequences = useCallback((currentTime: number, steps: ExtendedWorkflowStep[]) => {
     const scale = getTimingScale(startTime)
-    return steps.map((step, index) => ({
-      ...step,
-      sequence: step.mediaType ? undefined : {
-        // Higher base jitter with occasional outliers
-        startDelay: Math.max(addJitter(TIMING.INITIAL_DELAY / scale, 1.2), 50), // 120% base jitter
-        processingDuration: Math.max(addJitter(TIMING.PROCESSING / scale, 1.5), 300), // 150% base jitter
-        completionDelay: Math.max(
-          addJitter((TIMING.INITIAL_DELAY + TIMING.PROCESSING + TIMING.COMPLETION_BUFFER) / scale, 1.8),
-          50
-        ) + addJitter(index * TIMING.NODE_STAGGER / scale, 2.0) // 200% jitter on stagger
+    return steps.map((step, index) => {
+      // Preserve media nodes exactly as they are
+      if (step.mediaType) {
+        return step
       }
-    }))
+      
+      // Only add sequences to non-media nodes
+      return {
+        ...step,
+        sequence: {
+          // Higher base jitter with occasional outliers
+          startDelay: Math.max(addJitter(TIMING.INITIAL_DELAY / scale, 1.2), 50), // 120% base jitter
+          processingDuration: Math.max(addJitter(TIMING.PROCESSING / scale, 1.5), 300), // 150% base jitter
+          completionDelay: Math.max(
+            addJitter((TIMING.INITIAL_DELAY + TIMING.PROCESSING + TIMING.COMPLETION_BUFFER) / scale, 1.8),
+            50
+          ) + addJitter(index * TIMING.NODE_STAGGER / scale, 2.0) // 200% jitter on stagger
+        }
+      }
+    })
   }, [startTime])
 
   // Reset everything when component mounts
@@ -337,17 +366,21 @@ const ItemListWorkflow = React.forwardRef<SVGGElement>((props, ref) => {
       } else {
         // Create new row
         const now = Date.now()
-        const newSteps: ExtendedWorkflowStep[] = Array.from({ length: 5 }).map((_, i) => ({
-          id: `${nextId}-${i + 1}`,
-          label: `Item ${nextId}-${i + 1}`,
-          status: "processing" as const,
-          position: `r4-${i + 1}`, // Always start at row 4
-          mediaType: i === 0 ? getRandomMediaType() : undefined,
-          addedTimestamp: now,
-          result: i === 0 ? undefined : getRandomResult()
-        }))
+        const newSteps: ExtendedWorkflowStep[] = Array.from({ length: 5 }).map((_, i) => {
+          const isFirstNode = i === 0
+          return {
+            id: `${nextId}-${i + 1}`,
+            label: `Item ${nextId}-${i + 1}`,
+            status: isFirstNode ? "complete" : "processing",
+            position: `r4-${i + 1}`, // Always start at row 4
+            mediaType: isFirstNode ? getRandomMediaType() : undefined,
+            addedTimestamp: now,
+            result: isFirstNode ? undefined : getRandomResult(), // Only set result for non-media nodes
+            sequence: undefined // Let createScaledSequences handle this
+          }
+        })
 
-        // Add sequences with scaled timing
+        // Add sequences with scaled timing - but preserve media nodes
         const sequencedNewSteps = createScaledSequences(now, newSteps)
 
         // Update all rows - shift everything up and add new row at bottom
@@ -387,13 +420,22 @@ const ItemListWorkflow = React.forwardRef<SVGGElement>((props, ref) => {
       const currentTime = Date.now()
       setSteps(currentSteps => {
         return currentSteps.filter(step => {
+          // Get the row number from the position
+          const rowMatch = step.position.match(/r(\d+)-/)
+          if (!rowMatch) return false
+          const rowNum = parseInt(rowMatch[1])
+          
+          // Remove steps that are:
+          // 1. Too old (5 seconds instead of 10)
+          // 2. In rows that have moved above the viewport (row 0 or negative)
           const age = currentTime - step.addedTimestamp
-          return age < 10000 // Remove steps older than 10 seconds
+          return age < 5000 && rowNum > 0
         })
       })
     }
 
-    const cleanupTimer = setInterval(cleanup, 5000)
+    // Run cleanup more frequently (every 2 seconds instead of 5)
+    const cleanupTimer = setInterval(cleanup, 2000)
     return () => clearInterval(cleanupTimer)
   }, [])
 
@@ -453,6 +495,16 @@ const ItemListWorkflow = React.forwardRef<SVGGElement>((props, ref) => {
                 steps={rowSteps}
                 rowY={rowY}
                 yOffset={baseRow - 1}
+                onCleanup={() => {
+                  setSteps(currentSteps => 
+                    currentSteps.filter(step => {
+                      const rowMatch = step.position.match(/r(\d+)-/)
+                      if (!rowMatch) return false
+                      const rowNum = parseInt(rowMatch[1])
+                      return rowNum > 0 && rowNum < 5
+                    })
+                  )
+                }}
               />
             )
           })}
