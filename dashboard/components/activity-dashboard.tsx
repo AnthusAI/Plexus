@@ -9,23 +9,30 @@ import { Schema } from '@/amplify/data/resource'
 import { listRecentTasks, observeRecentTasks } from '@/utils/data-operations'
 import { useMediaQuery } from '@/hooks/use-media-query'
 
-function transformTaskToActivity(task: Schema['Task']['type']) {
+// Import the types from data-operations
+import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
+
+function transformTaskToActivity(task: ProcessedTask) {
+  if (!task || !task.id) {
+    throw new Error('Invalid task: task or task.id is null')
+  }
+
   // Transform stages if present
-  const stages = ((task as any).stages || [])
-    .sort((a: Schema['TaskStage']['type'], b: Schema['TaskStage']['type']) => a.order - b.order)
-    .map((stage: Schema['TaskStage']['type']) => ({
+  const stages = (task.stages || [])
+    .sort((a: ProcessedTask['stages'][0], b: ProcessedTask['stages'][0]) => a.order - b.order)
+    .map((stage: ProcessedTask['stages'][0]): TaskStageConfig => ({
       key: stage.name,
       label: stage.name,
       color: stage.name.toLowerCase() === 'processing' ? 'bg-secondary' : 'bg-primary',
       name: stage.name,
       order: stage.order,
       status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-      processedItems: stage.processedItems,
-      totalItems: stage.totalItems,
-      startedAt: stage.startedAt,
-      completedAt: stage.completedAt,
-      estimatedCompletionAt: stage.estimatedCompletionAt,
-      statusMessage: stage.statusMessage
+      processedItems: stage.processedItems ?? undefined,
+      totalItems: stage.totalItems ?? undefined,
+      startedAt: stage.startedAt ?? undefined,
+      completedAt: stage.completedAt ?? undefined,
+      estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+      statusMessage: stage.statusMessage ?? undefined
     }))
 
   // Get current stage info - highest order non-completed stage, or last stage if all completed
@@ -62,22 +69,22 @@ function transformTaskToActivity(task: Schema['Task']['type']) {
     id: task.id,
     stages,
     currentStageName: currentStage?.name,
-    processedItems: currentStage?.processedItems || 0,
-    totalItems: currentStage?.totalItems || 0,
-    startedAt: currentStage?.startedAt || undefined,
-    estimatedCompletionAt: currentStage?.estimatedCompletionAt || undefined,
-    completedAt: currentStage?.completedAt || undefined,
+    processedItems: currentStage?.processedItems ?? 0,
+    totalItems: currentStage?.totalItems ?? 0,
+    startedAt: currentStage?.startedAt ?? undefined,
+    estimatedCompletionAt: currentStage?.estimatedCompletionAt ?? undefined,
+    completedAt: currentStage?.completedAt ?? undefined,
     status: task.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
     stageConfigs: stages,
-    command: task.command || '',
-    statusMessage: currentStage?.statusMessage
+    command: task.command ?? '',
+    statusMessage: currentStage?.statusMessage ?? undefined
   }
 }
 
 export default function ActivityDashboard() {
   const [displayedTasks, setDisplayedTasks] = useState<ReturnType<typeof transformTaskToActivity>[]>([])
   const [isInitialLoading, setIsInitialLoading] = useState(true)
-  const [recentTasks, setRecentTasks] = useState<Schema['Task']['type'][]>([])
+  const [recentTasks, setRecentTasks] = useState<ProcessedTask[]>([])
   const [selectedTask, setSelectedTask] = useState<string | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(50)
