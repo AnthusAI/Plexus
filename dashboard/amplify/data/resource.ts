@@ -1,5 +1,6 @@
 import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
 import * as aws_dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import { Construct } from 'constructs';
 
 // Define types for authorization callback
 type AuthorizationCallback = {
@@ -306,7 +307,7 @@ const schema = a.schema({
             idx("batchJobId" as BatchJobScoringJobIndexFields)
         ]),
 
-    Task: a
+    Task: (a
         .model({
             accountId: a.string().required(),
             type: a.string().required(),
@@ -337,7 +338,11 @@ const schema = a.schema({
             idx("updatedAt" as TaskIndexFields),
             idx("scorecardId" as TaskIndexFields),
             idx("scoreId" as TaskIndexFields)
-        ]),
+        ]) as any).cdk((scope: Construct, table: aws_dynamodb.Table) => {
+            (table.node.defaultChild as aws_dynamodb.CfnTable).streamSpecification = {
+                streamViewType: aws_dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+            };
+        }),
 
     TaskStage: a
         .model({
