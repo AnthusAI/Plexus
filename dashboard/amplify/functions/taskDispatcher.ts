@@ -1,9 +1,17 @@
 import { DynamoDBStreamEvent } from 'aws-lambda';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { AttributeValue } from '@aws-sdk/client-dynamodb';
 
 const sqs = new SQSClient({});
 const CELERY_QUEUE_URL = process.env.CELERY_QUEUE_URL;
+
+interface TaskRecord {
+    id: string;
+    command: string;
+    target?: string;
+    dispatchStatus?: string;
+}
 
 export const handler = async (event: DynamoDBStreamEvent) => {
     try {
@@ -14,13 +22,13 @@ export const handler = async (event: DynamoDBStreamEvent) => {
             }
 
             // Get the new image of the record
-            const newImage = record.dynamodb?.NewImage;
+            const newImage = record.dynamodb?.NewImage as Record<string, AttributeValue>;
             if (!newImage) {
                 continue;
             }
 
             // Convert DynamoDB record to regular JSON
-            const task = unmarshall(newImage);
+            const task = unmarshall(newImage) as TaskRecord;
 
             // Only process tasks that need to be dispatched
             if (task.dispatchStatus !== 'PENDING') {
