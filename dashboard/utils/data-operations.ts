@@ -31,19 +31,20 @@ export type AmplifyTask = {
   }>;
 }
 
-export type ProcessedTask = AmplifyTask & {
-  stages: Array<{
-    name: string;
-    order: number;
-    status: string;
-    processedItems?: number | null;
-    totalItems?: number | null;
-    startedAt?: string | null;
-    completedAt?: string | null;
-    estimatedCompletionAt?: string | null;
-    statusMessage?: string | null;
-  }>;
-}
+export type ProcessedTask = {
+  id: string;
+  type: string;
+  status: string;
+  target?: string;
+  currentStageId?: string;
+  updatedAt?: string;
+  scorecardId?: string;
+  scoreId?: string;
+  command?: string;
+  dispatchStatus?: string;
+  createdAt: string;
+  stages: Schema['TaskStage']['type'][];
+};
 
 type AmplifyClient = ReturnType<typeof generateClient<Schema>> & {
   models: {
@@ -127,42 +128,67 @@ export async function listFromModel<T extends { id: string }>(
   }
 }
 
-export async function listRecentTasks(limit: number = 12): Promise<AmplifyListResult<ProcessedTask>> {
-  const currentClient = getClient();
-  console.log('client at time of call:', currentClient);
-  console.log('client.models at time of call:', currentClient.models);
+async function processTask(task: Schema['Task']['type']): Promise<ProcessedTask> {
+  let stages: Schema['TaskStage']['type'][] = [];
   try {
+    if (task.stages) {
+      const stagesResponse = await task.stages();
+      stages = stagesResponse.data || [];
+    }
+  } catch (error) {
+    console.error('Error loading stages for task:', error);
+  }
+  
+  return {
+    id: task.id,
+    type: task.type,
+    status: task.status,
+    target: task.target,
+    currentStageId: task.currentStageId,
+    updatedAt: task.updatedAt,
+    scorecardId: task.scorecardId,
+    scoreId: task.scoreId,
+    command: task.command,
+    dispatchStatus: task.dispatchStatus,
+    createdAt: task.createdAt,
+    stages
+  };
+}
+
+export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask[]> {
+  try {
+    const currentClient = getClient();
+    if (!currentClient.models.Task) {
+      throw new Error('Task model not found');
+    }
+
+    // Explicitly type the response to avoid complex union type
+    type TaskListResponse = {
+      data: Schema['Task']['type'][];
+      nextToken?: string | null;
+    };
+
     const response = await currentClient.models.Task.list({
       limit,
       include: ['stages']
-    });
-    
-    // Fetch stages for each task
-    const tasksWithStages = await Promise.all(
-      response.data.map(async (task: AmplifyTask) => {
-        const stagesResponse = await task.stages();
-        return {
-          ...task,
-          stages: stagesResponse.data
-        } as ProcessedTask;
-      })
+    }) as TaskListResponse;
+
+    if (!response.data) {
+      return [];
+    }
+
+    // Process tasks and load their stages
+    const processedTasks = await Promise.all(
+      response.data.map(processTask)
     );
-    
+
     // Sort by createdAt in reverse chronological order
-    const sortedTasks = [...tasksWithStages].sort((a, b) => 
+    return processedTasks.sort((a, b) => 
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-    
-    console.log('Task list response:', {
-      data: sortedTasks,
-      count: sortedTasks.length,
-      firstRecord: sortedTasks[0],
-      nextToken: response.nextToken
-    });
-    return { data: sortedTasks, nextToken: response.nextToken };
   } catch (error) {
-    console.error('Error listing tasks:', error);
-    return { data: [], nextToken: null };
+    console.error('Error listing recent tasks:', error);
+    return [];
   }
 }
 
@@ -172,14 +198,14 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
 
     // Initial fetch
     listRecentTasks(limit).then(response => {
-      handlers.next({ items: response.data, isSynced: true });
+      handlers.next({ items: response, isSynced: true });
     }).catch(handlers.error);
 
     // Subscribe to changes
     const createSub = currentClient.models.Task.onCreate({}).subscribe({
       next: async () => {
         const response = await listRecentTasks(limit);
-        handlers.next({ items: response.data, isSynced: true });
+        handlers.next({ items: response, isSynced: true });
       },
       error: handlers.error
     });
@@ -187,7 +213,7 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
     const updateSub = currentClient.models.Task.onUpdate({}).subscribe({
       next: async () => {
         const response = await listRecentTasks(limit);
-        handlers.next({ items: response.data, isSynced: true });
+        handlers.next({ items: response, isSynced: true });
       },
       error: handlers.error
     });
@@ -195,7 +221,7 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
     const stageSub = currentClient.models.TaskStage.onUpdate({}).subscribe({
       next: async () => {
         const response = await listRecentTasks(limit);
-        handlers.next({ items: response.data, isSynced: true });
+        handlers.next({ items: response, isSynced: true });
       },
       error: handlers.error
     });
