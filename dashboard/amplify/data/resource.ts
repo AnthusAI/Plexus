@@ -1,4 +1,5 @@
 import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
+import * as aws_dynamodb from 'aws-cdk-lib/aws-dynamodb';
 
 // Define types for authorization callback
 type AuthorizationCallback = {
@@ -308,45 +309,33 @@ const schema = a.schema({
     Task: a
         .model({
             accountId: a.string().required(),
-            account: a.belongsTo('Account', 'accountId'),
-            scorecardId: a.string(),
-            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
-            scoreId: a.string(),
-            score: a.belongsTo('Score', 'scoreId'),
             type: a.string().required(),
             status: a.string().required(),
-            target: a.string().required(),
-            command: a.string(),
-            metadata: a.json(),
-            createdAt: a.datetime().required(),
-            updatedAt: a.datetime().required(),
+            target: a.string(),
             currentStageId: a.string(),
-            currentStage: a.belongsTo('TaskStage', 'currentStageId'),
+            updatedAt: a.datetime(),
+            scorecardId: a.string(),
+            scoreId: a.string(),
+            account: a.belongsTo('Account', 'accountId'),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            score: a.belongsTo('Score', 'scoreId'),
             stages: a.hasMany('TaskStage', 'taskId'),
-            dispatchStatus: a.string(),
-            startedAt: a.datetime(),
-            completedAt: a.datetime(),
-            estimatedCompletionAt: a.datetime(),
-            celeryTaskId: a.string(),
-            workerNodeId: a.string(),
-            stdout: a.string(),
-            stderr: a.string(),
-            errorMessage: a.string(),
-            errorDetails: a.json(),
+            command: a.string(),
+            dispatchStatus: a.string()
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx: (field: TaskIndexFields) => any) => [
-            idx("accountId"),
-            idx("scorecardId"),
-            idx("scoreId"),
-            idx("updatedAt"),
-            idx("type"),
-            idx("status"),
-            idx("target"),
-            idx("currentStageId")
+        .secondaryIndexes((idx) => [
+            idx("accountId" as TaskIndexFields),
+            idx("type" as TaskIndexFields),
+            idx("status" as TaskIndexFields),
+            idx("target" as TaskIndexFields),
+            idx("currentStageId" as TaskIndexFields),
+            idx("updatedAt" as TaskIndexFields),
+            idx("scorecardId" as TaskIndexFields),
+            idx("scoreId" as TaskIndexFields)
         ]),
 
     TaskStage: a
