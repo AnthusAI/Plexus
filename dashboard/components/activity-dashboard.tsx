@@ -151,6 +151,7 @@ export default function ActivityDashboard() {
           stageConfigs={task.stageConfigs}
           command={task.command}
           statusMessage={task.statusMessage}
+          completedAt={task.completedAt}
           isFullWidth={isFullWidth}
           onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
           onClose={() => {
@@ -198,6 +199,7 @@ export default function ActivityDashboard() {
                   stageConfigs={task.stageConfigs}
                   command={task.command}
                   statusMessage={task.statusMessage}
+                  completedAt={task.completedAt}
                 />
               </div>
             ))}

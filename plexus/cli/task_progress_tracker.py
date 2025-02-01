@@ -6,15 +6,15 @@ import time
 @dataclass
 class StageConfig:
     order: int
-    total_items: int
+    total_items: Optional[int] = None
     status_message: Optional[str] = None
 
 @dataclass
 class Stage:
     name: str
     order: int
-    total_items: int
-    processed_items: int = 0
+    total_items: Optional[int] = None
+    processed_items: Optional[int] = None
     status_message: Optional[str] = None
     start_time: Optional[float] = None
     end_time: Optional[float] = None
@@ -24,7 +24,8 @@ class Stage:
 
     def complete(self):
         self.end_time = time.time()
-        self.processed_items = self.total_items
+        if self.total_items is not None:
+            self.processed_items = self.total_items
 
 class TaskProgressTracker:
     def __init__(
@@ -165,7 +166,7 @@ class TaskProgressTracker:
 
     @property
     def elapsed_time(self) -> float:
-        if self.end_time:
+        if self.is_complete:
             return self.end_time - self.start_time
         return time.time() - self.start_time
 

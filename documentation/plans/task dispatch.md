@@ -109,6 +109,12 @@ This document outlines the implementation of Plexus's two-level dispatch system:
      - Direct execution ✓
      - Celery dispatch ✓
      - Task API integration ✓
+   - Improvements:
+     - Fixed elapsed time calculation to use completion time ✓
+     - Corrected stage status updates through Task API ✓
+     - Added real-time status message updates during processing ✓
+     - Implemented proper stage transitions with status messages ✓
+     - Added final completion status message ✓
 
 3. **Refactor ReportTask** ✓
    - Update `ReportTask` to use `TaskProgressTracker` ✓
@@ -295,13 +301,13 @@ plexus command status <task-id>
 
 The demo command processes 2000 items over 20 seconds, displaying:
 - Current progress and item count
-- Status messages that update based on progress
+- Real-time status messages with items/sec rate ✓
 - Time elapsed and estimated time remaining
 - A Rich progress bar with visual feedback
 - When run with `--task-id`, updates Task stages:
-  1. Initialization (4-6 seconds)
-  2. Processing (2000 items over ~20 seconds)
-  3. Finalizing (2-4 seconds)
+  1. Initialization (4-6 seconds) with "Setting up..." message ✓
+  2. Processing (2000 items over ~20 seconds) with live progress updates ✓
+  3. Finalizing (2-4 seconds) with proper completion message ✓
 
 The evaluation command processes scorecard evaluations with:
 - Real-time progress updates
