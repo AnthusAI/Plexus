@@ -183,7 +183,7 @@ export default function BatchJobTask({
             if (!data?.batchJobId || !data?.scoringJobId) return;
             
             if (data.batchJobId === taskData.id) {
-              const jobResult = await getFromModel('ScoringJob', data.scoringJobId);
+              const jobResult = await getFromModel<Schema['ScoringJob']['type']>('ScoringJob', data.scoringJobId);
               const scoringJob = jobResult?.data;
               
               if (scoringJob) {
