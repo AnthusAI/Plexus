@@ -40,6 +40,7 @@ export default function LandingPage() {
       <StandardSection
         headline="Intelligence at Scale"
         headlinePosition="inline"
+        rightColumnAlign="middle"
         leftContent={<ItemListWorkflow />}
         rightContent={
           <p className="text-xl text-muted-foreground text-justify">
