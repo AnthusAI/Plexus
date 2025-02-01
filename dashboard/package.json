@@ -69,9 +69,13 @@
     "react-intersection-observer": "^9.13.1",
     "react-markdown": "^9.0.1",
     "recharts": "^2.12.7",
+    "rxjs": "^7.8.1",
     "tailwind-merge": "^2.5.2",
     "tailwindcss": "^3.3.0",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "@aws-sdk/client-sqs": "^3.0.0",
+    "@aws-sdk/util-dynamodb": "^3.0.0",
+    "@types/aws-lambda": "^8.10.0"
   },
   "devDependencies": {
     "@aws-amplify/backend": "^1.8.0",
