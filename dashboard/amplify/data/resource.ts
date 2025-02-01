@@ -169,10 +169,9 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("accountId" as EvaluationIndexFields),
-            idx("scorecardId" as EvaluationIndexFields),
-            idx("scoreId" as EvaluationIndexFields),
-            idx("updatedAt" as EvaluationIndexFields)
+            idx("accountId" as EvaluationIndexFields).sortKey("updatedAt" as EvaluationIndexFields),
+            idx("scorecardId" as EvaluationIndexFields).sortKey("updatedAt" as EvaluationIndexFields),
+            idx("scoreId" as EvaluationIndexFields).sortKey("updatedAt" as EvaluationIndexFields)            
         ]),
 
     BatchJob: a
