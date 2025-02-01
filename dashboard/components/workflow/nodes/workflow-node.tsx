@@ -13,7 +13,8 @@ type NodeProps = BaseNodeProps & {
   shape: Shape
   icon?: LucideIcon
   text?: string
-  color?: "true" | "false"
+  color?: "true" | "false" | "card" | "muted-foreground"
+  pillWidth?: number
 }
 
 const CheckIcon = () => (
@@ -56,7 +57,8 @@ export function WorkflowNode({
   shape,
   icon: Icon,
   text,
-  color
+  color,
+  pillWidth = 4
 }: NodeProps) {
   const radius = isMain ? 0.4 : 0.3
   const iconScale = 0.0016  // Reduced by factor of 10
@@ -136,10 +138,10 @@ export function WorkflowNode({
         }
         return `M${points.join(" L")} Z`
       case "pill":
-        const pillWidth = radius * 4 // Make pill wider to fit 5 stars
+        const pillWidthValue = radius * (pillWidth || 4) // Use the pillWidth prop with default
         const pillHeight = radius * 1.2
         const rx = pillHeight / 2 // Rounded corners radius
-        return `M${-pillWidth/2},${-pillHeight/2} h${pillWidth} a${rx},${rx} 0 0 1 0,${pillHeight} h${-pillWidth} a${rx},${rx} 0 0 1 0,${-pillHeight}`
+        return `M${-pillWidthValue/2},${-pillHeight/2} h${pillWidthValue} a${rx},${rx} 0 0 1 0,${pillHeight} h${-pillWidthValue} a${rx},${rx} 0 0 1 0,${-pillHeight}`
       default: // circle doesn't need a path
         return ""
     }
@@ -190,12 +192,12 @@ export function WorkflowNode({
           />
         )
       case "pill":
-        const pillWidth = radius * 4 * 0.6 // Scale down by 0.6
+        const pillWidthValue = radius * (pillWidth || 4) * 0.6 // Scale down by 0.6 for inner shape
         const pillHeight = radius * 1.2 * 0.6
         const rx = pillHeight / 2
         return (
           <path
-            d={`M${-pillWidth/2},${-pillHeight/2} h${pillWidth} a${rx},${rx} 0 0 1 0,${pillHeight} h${-pillWidth} a${rx},${rx} 0 0 1 0,${-pillHeight}`}
+            d={`M${-pillWidthValue/2},${-pillHeight/2} h${pillWidthValue} a${rx},${rx} 0 0 1 0,${pillHeight} h${-pillWidthValue} a${rx},${rx} 0 0 1 0,${-pillHeight}`}
             className="stroke-border fill-none"
             strokeWidth={0.05}
           />
@@ -240,13 +242,13 @@ export function WorkflowNode({
         )
       case "pill":
         // Pill: Horizontal sliding animation with inset shape
-        const pillWidth = radius * 4 * 0.6 // Scale down by 0.6
+        const pillWidthValue = radius * (pillWidth || 4) * 0.6 // Scale down by 0.6 for spinner
         const pillHeight = radius * 1.2 * 0.6
         const rx = pillHeight / 2
         return (
           <motion.g>
             <path
-              d={`M${-pillWidth/2},${-pillHeight/2} h${pillWidth} a${rx},${rx} 0 0 1 0,${pillHeight} h${-pillWidth} a${rx},${rx} 0 0 1 0,${-pillHeight}`}
+              d={`M${-pillWidthValue/2},${-pillHeight/2} h${pillWidthValue} a${rx},${rx} 0 0 1 0,${pillHeight} h${-pillWidthValue} a${rx},${rx} 0 0 1 0,${-pillHeight}`}
               className="stroke-secondary fill-none"
               strokeWidth={0.1}
               strokeLinecap="round"
@@ -254,8 +256,8 @@ export function WorkflowNode({
             <motion.circle
               r={pillHeight * 0.3}
               className="fill-secondary"
-              initial={{ x: -pillWidth/2 + rx }}
-              animate={{ x: pillWidth/2 - rx }}
+              initial={{ x: -pillWidthValue/2 + rx }}
+              animate={{ x: pillWidthValue/2 - rx }}
               transition={{
                 duration: 1.5,
                 repeat: Infinity,
@@ -354,6 +356,8 @@ export function WorkflowNode({
               status === "complete" && (
                 isStarNode ? "fill-primary stroke-none" :
                 color === "false" ? "fill-false stroke-none" :
+                color === "card" ? "fill-card stroke-border" :
+                color === "muted-foreground" ? "fill-muted-foreground stroke-none" :
                 Icon === ThumbsDown ? "fill-false stroke-none" : 
                 "fill-true stroke-none"
               )
@@ -370,6 +374,8 @@ export function WorkflowNode({
               status === "complete" && (
                 isStarNode ? "fill-primary stroke-none" :
                 color === "false" ? "fill-false stroke-none" :
+                color === "card" ? "fill-card stroke-border" :
+                color === "muted-foreground" ? "fill-muted-foreground stroke-none" :
                 Icon === ThumbsDown ? "fill-false stroke-none" : 
                 "fill-true stroke-none"
               )
