@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useEffect, useRef } from "react"
-import { Activity, StickyNote, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3 } from "lucide-react"
+import { Activity, StickyNote, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -343,14 +343,16 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                       onClick={toggleTheme}
                     >
                       {theme === "dark" ? (
+                        <Moon className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                      ) : theme === "light" ? (
                         <Sun className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
                       ) : (
-                        <Moon className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                        <Monitor className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
                       )}
                     </DashboardButton>
                   </TooltipTrigger>
                   <TooltipContent side="right">
-                    Toggle {theme === "dark" ? "Light" : "Dark"} Mode
+                    Toggle {theme === "dark" ? "Light" : theme === "light" ? "System" : "Dark"} Mode
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -537,7 +539,9 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   }
 
   const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark")
+    setTheme(theme === "dark" ? "light" : 
+            theme === "light" ? "system" : 
+            "dark")
   }
 
   useEffect(() => {
