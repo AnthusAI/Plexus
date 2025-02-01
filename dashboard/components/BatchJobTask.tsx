@@ -136,10 +136,10 @@ export default function BatchJobTask({
 
         // Fetch each scoring job individually
         const jobResults = await Promise.all(
-          scoringJobIds.map(id => getFromModel('ScoringJob', id))
+          scoringJobIds.map(id => getFromModel<Schema['ScoringJob']['type']>('ScoringJob', id))
         );
 
-        type ScoringJobResult = Awaited<ReturnType<typeof getFromModel<'ScoringJob'>>>;
+        type ScoringJobResult = Awaited<ReturnType<typeof getFromModel<Schema['ScoringJob']['type']>>>;
         
         const validJobs = jobResults
           .filter((result: ScoringJobResult): result is ScoringJobResult & { data: NonNullable<ScoringJobResult['data']> } => 
