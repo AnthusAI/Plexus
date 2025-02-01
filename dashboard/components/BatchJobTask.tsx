@@ -105,7 +105,7 @@ export default function BatchJobTask({
         console.log('Loading scoring jobs for batch:', taskData.id);
         
         // Use listFromModel helper instead of direct dataClient access
-        const linksResult = await listFromModel('BatchJobScoringJob', {
+        const linksResult = await listFromModel<Schema['BatchJobScoringJob']['type']>('BatchJobScoringJob', {
           filter: {
             batchJobId: { eq: taskData.id }
           }
