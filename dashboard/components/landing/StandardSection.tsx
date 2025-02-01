@@ -24,12 +24,12 @@ export const StandardSection: React.FC<StandardSectionProps> = ({
   containerClassName
 }) => {
   return (
-    <section className={`py-12 ${containerClassName || 'bg-background'}`}>
+    <section className={`py-8 ${containerClassName || 'bg-background'}`}>
       <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
-        <div className="py-4">
-          <div className="bg-background rounded-xl py-16 md:py-20 px-4 md:px-8">
+        <div className="py-2">
+          <div className="bg-background rounded-xl py-8 md:py-12 px-4 md:px-8">
             {headlinePosition === 'top' && (
-              <h2 className="text-4xl md:text-5xl font-bold mb-10 text-foreground text-center">
+              <h2 className="text-4xl md:text-5xl font-bold mb-8 text-foreground text-center">
                 {headline}
               </h2>
             )}
