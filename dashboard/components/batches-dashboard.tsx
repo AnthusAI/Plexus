@@ -76,17 +76,17 @@ interface SimpleBatchJob {
 
 async function listAccounts(): Promise<SimpleResponse<SimpleAccount[]>> {
   try {
-    const result = await listFromModel('Account', {
+    const result = await listFromModel<Schema['Account']['type']>('Account', {
       filter: {
         key: { eq: ACCOUNT_KEY }
       }
     });
-    return { 
+    return {
       data: result.data?.map(account => ({
         id: account.id as string,
         name: account.name as string,
         key: account.key as string
-      })) || null 
+      })) || null
     };
   } catch (error) {
     console.error('Error listing accounts:', error);
