@@ -5,7 +5,6 @@ import os
 import logging
 import json
 from typing import Dict, Any, Callable, List
-from dataclasses import asdict
 import asyncio
 
 from langchain_openai import ChatOpenAI
@@ -15,9 +14,9 @@ from langchain_core.pydantic_v1 import BaseModel, Field
 from plexus.apos.nodes.base import APOSNode
 from plexus.apos.graph_state import APOSState
 from plexus.apos.models import MismatchAnalysis
+from plexus.apos.utils import TokenCounterCallback
 
 logger = logging.getLogger('plexus.apos.nodes.mismatch')
-
 
 class MismatchAnalysisOutput(BaseModel):
     """Schema for mismatch analysis response."""
@@ -90,11 +89,25 @@ class MismatchAnalyzerNode(APOSNode):
             state_dict_serializable = {k: str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v 
                                      for k, v in state_dict.items()}
             
+            # Create token counter callback
+            token_counter = TokenCounterCallback()
+            
             # Prepare the prompt with all variables
             messages = self.prompt.format_messages(**state_dict)
             
-            # Get analysis from LLM
-            analysis_result = await self.llm.ainvoke(messages)
+            # Get analysis from LLM with token counting
+            analysis_result = await self.llm.ainvoke(
+                messages,
+                config={"callbacks": [token_counter]}
+            )
+            
+            # Track cost
+            self.track_llm_cost(
+                state=self.state,
+                model_name=self.config.analyzer_model.model_type,
+                input_tokens=token_counter.input_tokens,
+                output_tokens=token_counter.output_tokens
+            )
             
             # Update mismatch with analysis results
             mismatch.detailed_analysis = analysis_result.detailed_analysis
@@ -220,6 +233,13 @@ class MismatchAnalyzerNode(APOSNode):
                 
                 # Update state with analyzed mismatches
                 state.analyzed_mismatches = analyzed_mismatches
+                
+                # Log current iteration costs
+                logger.info(
+                    f"Iteration {state.current_iteration} costs - "
+                    f"This iteration: ${float(state.current_iteration_cost):.4f}, "
+                    f"Total so far: ${float(state.total_cost):.4f}"
+                )
                 
                 return state.dict()
                 

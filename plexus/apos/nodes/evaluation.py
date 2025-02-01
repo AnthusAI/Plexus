@@ -9,25 +9,17 @@ import asyncio
 import mlflow
 import importlib
 import copy
-from typing import Dict, Any, Callable, Optional, List, Tuple
+from typing import Dict, Any, Callable, List
 from datetime import datetime, timezone
-from pathlib import Path
-from tenacity import retry, stop_after_attempt, wait_exponential
+from decimal import Decimal
 
 from plexus.Evaluation import AccuracyEvaluation
 from plexus.apos.nodes.base import APOSNode
 from plexus.apos.graph_state import APOSState
 from plexus.apos.models import (
     IterationResult,
-    OptimizationStatus,
-    SynthesisResult,
-    EvaluationResult,
-    PromptChange
+    OptimizationStatus
 )
-from plexus.dashboard.api.client import PlexusDashboardClient
-from plexus.dashboard.api.models.account import Account
-from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
-from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
 
 logger = logging.getLogger('plexus.apos.nodes.evaluation')
 
@@ -395,11 +387,19 @@ class EvaluationNode(APOSNode):
             with open(os.path.join(results_dir, "current_prompts.json"), 'w') as f:
                 json.dump(prompts, f, indent=2)
             
+            # Convert Decimal values to float in metrics
+            metrics = {}
+            for key, value in iteration_result.metrics.items():
+                if isinstance(value, Decimal):
+                    metrics[key] = float(value)
+                else:
+                    metrics[key] = value
+            
             # Save main result
             result = {
                 "iteration": iteration_result.iteration,
                 "accuracy": iteration_result.accuracy,
-                "metrics": iteration_result.metrics,
+                "metrics": metrics,
                 "metadata": {
                     **iteration_result.metadata,
                     "started_at": iteration_result.metadata.get("started_at"),
@@ -589,6 +589,12 @@ scorecard_name: {scorecard_name}
             # Get evaluation results
             accuracy = self.evaluation.total_correct / self.evaluation.total_questions if self.evaluation.total_questions > 0 else 0
             
+            # Get accumulated costs from the scorecard
+            expenses = self.evaluation.scorecard.get_accumulated_costs()
+            
+            # Calculate cost per call from total cost and number of calls
+            cost_per_call = expenses['total_cost'] / expenses['llm_calls'] if expenses['llm_calls'] > 0 else Decimal('0')
+            
             # Store previous best accuracy for comparison
             previous_best_accuracy = state.best_accuracy
             
@@ -597,13 +603,23 @@ scorecard_name: {scorecard_name}
             converted_mismatches = self._convert_mismatches(raw_mismatches)
             logger.info(f"Found {len(converted_mismatches)} mismatches")
             
-            # Create iteration result with converted mismatches
+            # Create iteration result with converted mismatches and costs
             iteration_result = IterationResult(
                 iteration=state.current_iteration,
                 accuracy=accuracy,
                 mismatches=converted_mismatches,
                 prompt_changes=state.optimization_result if state.optimization_result else [],
-                metrics={"accuracy": accuracy},
+                metrics={
+                    "accuracy": accuracy,
+                    "total_cost": expenses['total_cost'],
+                    "cost_per_call": float(cost_per_call),  # Convert Decimal to float for serialization
+                    "total_calls": expenses['llm_calls'],
+                    "input_cost": expenses['input_cost'],
+                    "output_cost": expenses['output_cost'],
+                    "prompt_tokens": expenses['prompt_tokens'],
+                    "completion_tokens": expenses['completion_tokens'],
+                    "cached_tokens": expenses['cached_tokens']
+                },
                 metadata={
                     "system_message": state.system_message,
                     "user_message": state.user_message,
