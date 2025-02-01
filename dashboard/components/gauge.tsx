@@ -35,8 +35,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   min = 0, 
   max = 100,
   title,
-  backgroundColor = 'var(--card)',
-  showTicks = true,
+  backgroundColor = 'var(--gauge-background)',
+  showTicks = false,
   information,
   informationUrl,
   priority = false
@@ -238,6 +238,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                 cy="0" 
                 r={radius} 
                 fill={backgroundColor}
+                className="transition-[fill] duration-500 ease-in-out"
               />
               <g transform="rotate(-105)">
                 {renderSegments()}
@@ -246,7 +247,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                   {beforeValue !== undefined && (
                     <path
                       d={`M 0,-${radius} L -6,0 L 6,0 Z`}
-                      className="fill-muted-foreground opacity-40"
+                      className="fill-muted-foreground opacity-40 transition-[fill] duration-500 ease-in-out"
                       transform={`rotate(${(animatedBeforeValue * 210) / 100})`}
                     />
                   )}
@@ -254,7 +255,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                     d={`M 0,-${radius} L -6,0 L 6,0 Z`}
                     className={cn(
                       priority ? "fill-focus" : "fill-foreground",
-                      value === undefined && "fill-card"
+                      value === undefined && "fill-card",
+                      "transition-[fill] duration-500 ease-in-out"
                     )}
                     transform={`rotate(${(animatedValue * 210) / 100})`}
                   />
@@ -262,7 +264,10 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                     cx="0" 
                     cy="0" 
                     r="10" 
-                    className={priority ? "fill-focus" : "fill-foreground"} 
+                    className={cn(
+                      priority ? "fill-focus" : "fill-foreground",
+                      "transition-[fill] duration-500 ease-in-out"
+                    )}
                   />
                 </g>
               </g>
@@ -271,7 +276,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                 y={textY}
                 textAnchor="middle" 
                 className={cn(
-                  "text-[2.25rem] font-bold",
+                  "text-[2.25rem] font-bold transition-[fill] duration-500 ease-in-out",
                   priority ? "fill-focus" : "fill-foreground"
                 )}
                 dominantBaseline="middle"
@@ -286,7 +291,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
             <div 
               className={cn(
                 "absolute left-1/2 -translate-x-1/2 flex items-center gap-2 whitespace-nowrap",
-                "text-[clamp(0.75rem,4vw,1rem)]",
+                "text-[clamp(0.75rem,4vw,1rem)] transition-colors duration-500 ease-in-out",
                 priority ? "text-focus" : "text-foreground"
               )}
               style={{
@@ -297,7 +302,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
               {information && (
                 <button 
                   onClick={() => setShowInfo(!showInfo)} 
-                  className="text-muted-foreground hover:text-foreground"
+                  className="text-muted-foreground hover:text-foreground transition-colors duration-500 ease-in-out"
                   aria-label="Toggle information"
                 >
                   <svg 
@@ -307,6 +312,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                     fill="none" 
                     stroke="currentColor" 
                     strokeWidth="2"
+                    className="transition-[stroke] duration-500 ease-in-out"
                   >
                     <circle cx="12" cy="12" r="10" />
                     <path d="M12 16v-4M12 8h.01" />
