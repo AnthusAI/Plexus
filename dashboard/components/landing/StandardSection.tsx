@@ -5,6 +5,7 @@ export interface StandardSectionProps {
   headlinePosition: 'top' | 'inline';
   leftContent?: React.ReactNode;
   rightContent?: React.ReactNode;
+  rightColumnAlign?: 'top' | 'middle';
   // For full-width content:
   fullWidth?: boolean;
   children?: React.ReactNode;
@@ -17,6 +18,7 @@ export const StandardSection: React.FC<StandardSectionProps> = ({
   headlinePosition,
   leftContent,
   rightContent,
+  rightColumnAlign = 'top',
   fullWidth,
   children,
   containerClassName
@@ -40,7 +42,7 @@ export const StandardSection: React.FC<StandardSectionProps> = ({
                     {leftContent}
                   </div>
                 </div>
-                <div className="w-full md:w-[calc(50%-2rem)] text-center md:text-left">
+                <div className={`w-full md:w-[calc(50%-2rem)] text-center md:text-left ${headlinePosition === 'inline' && rightColumnAlign === 'middle' ? 'md:flex md:flex-col md:justify-center' : ''}`}>
                   {headlinePosition === 'inline' && (
                     <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">
                       {headline}
