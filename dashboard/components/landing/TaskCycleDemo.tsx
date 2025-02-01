@@ -117,7 +117,7 @@ export const TaskCycleDemo = () => {
       leftContent={
         <div className="space-y-6 max-w-2xl">
           <p className="text-lg text-muted-foreground leading-relaxed">
-            Transform any computer into a powerful worker node in your distributed network. From cloud instances to local machines, Plexus seamlessly orchestrates your computational resources.
+            Transform any computer into a worker node in your distributed network. From cloud instances to local machines, Plexus seamlessly orchestrates your computational resources.
           </p>
           <div className="space-y-4 text-muted-foreground leading-relaxed">
             <p>
