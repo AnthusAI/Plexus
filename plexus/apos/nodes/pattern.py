@@ -8,13 +8,14 @@ from typing import Dict, Any, Callable
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+from langchain_core.callbacks import AsyncCallbackHandler
 
 from plexus.apos.nodes.base import APOSNode
 from plexus.apos.graph_state import APOSState
 from plexus.apos.models import PatternAnalysisOutput, SynthesisResult
+from plexus.apos.utils import TokenCounterCallback
 
 logger = logging.getLogger('plexus.apos.nodes.pattern')
-
 
 class PatternAnalyzerNode(APOSNode):
     """Node for analyzing patterns across mismatches."""
@@ -70,9 +71,23 @@ Analysis: {mismatch.detailed_analysis}
                     self._format_mismatch_summary(m) for m in state.mismatches
                 )
                 
-                # Get analysis from LLM using state dict
+                # Create token counter callback
+                token_counter = TokenCounterCallback()
+                
+                # Get analysis from LLM using state dict with token counting
                 messages = self.chat_prompt.format_messages(**state.dict())
-                result = self.llm.invoke(messages)
+                result = await self.llm.ainvoke(
+                    messages,
+                    config={"callbacks": [token_counter]}
+                )
+                
+                # Track cost
+                self.track_llm_cost(
+                    state=state,
+                    model_name=self.config.pattern_analyzer_model.model_type,
+                    input_tokens=token_counter.input_tokens,
+                    output_tokens=token_counter.output_tokens
+                )
                 
                 logger.info("Pattern analysis complete")
                 logger.info(f"Found {len(result.common_issues)} common issues")
@@ -85,6 +100,13 @@ Analysis: {mismatch.detailed_analysis}
                 
                 # Save pattern analysis results
                 self._save_pattern_results(synthesis, state)
+                
+                # Log current iteration costs
+                logger.info(
+                    f"Pattern analysis costs - "
+                    f"This iteration: ${float(state.current_iteration_cost):.4f}, "
+                    f"Total so far: ${float(state.total_cost):.4f}"
+                )
                 
                 # Update state with results
                 return {

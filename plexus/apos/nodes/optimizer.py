@@ -6,6 +6,7 @@ import os
 import json
 from typing import Dict, Any, Callable
 from pydantic import ValidationError
+from decimal import Decimal
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
@@ -13,12 +14,10 @@ from langchain_core.pydantic_v1 import BaseModel, Field, validator
 
 from plexus.apos.nodes.base import APOSNode
 from plexus.apos.graph_state import APOSState
-from plexus.apos.models import PromptChange, PromptImprovement, OptimizationStatus
-from plexus.Registries import scorecard_registry
-from plexus.Scorecard import Scorecard
+from plexus.apos.models import PromptChange, OptimizationStatus
+from plexus.apos.utils import TokenCounterCallback
 
 logger = logging.getLogger('plexus.apos.nodes.optimizer')
-
 
 class OptimizerOutput(BaseModel):
     """Schema for optimizer response."""
@@ -95,8 +94,49 @@ class OptimizerNode(APOSNode):
             """Optimize prompts based on pattern analysis."""
             try:
                 # First increment the iteration count since we're completing a cycle
+                completed_iteration = state.current_iteration  # Store the iteration we just completed
                 state.current_iteration += 1
-                logger.info(f"Completed iteration {state.current_iteration - 1}, starting iteration {state.current_iteration}")
+                logger.info(f"Completed iteration {completed_iteration}, starting iteration {state.current_iteration}")
+                
+                # Log full iteration cost summary before checking if we should continue
+                if completed_iteration >= 0:  # Only log if we completed an iteration
+                    # Get evaluation costs from the latest iteration result
+                    evaluation_cost = Decimal('0.0')
+                    if state.history and len(state.history) > completed_iteration:
+                        latest_result = state.history[completed_iteration]
+                        # Debug log the iteration result
+                        logger.info(f"Latest iteration result metrics: {latest_result.metrics}")
+                        logger.info(f"Latest iteration result metadata: {latest_result.metadata}")
+                        
+                        # Try to get cost from different possible locations
+                        if 'total_cost' in latest_result.metrics:
+                            evaluation_cost = Decimal(str(latest_result.metrics['total_cost']))
+                        elif 'cost_per_call' in latest_result.metrics:
+                            # If we have cost per call, multiply by number of calls
+                            cost_per_call = Decimal(str(latest_result.metrics['cost_per_call']))
+                            total_calls = latest_result.metrics.get('total_calls', 1)
+                            evaluation_cost = cost_per_call * Decimal(str(total_calls))
+                        elif 'total_cost' in latest_result.metadata:
+                            evaluation_cost = Decimal(str(latest_result.metadata['total_cost']))
+                        
+                        logger.info(f"Found evaluation cost: ${float(evaluation_cost):.4f}")
+                        
+                        # Add evaluation cost to the iteration and total costs
+                        state.current_iteration_cost += evaluation_cost
+                        state.total_cost += evaluation_cost
+                    
+                    # Calculate optimization costs (convert to Decimal for consistency)
+                    optimization_cost = state.current_iteration_cost - evaluation_cost
+                    
+                    logger.info(
+                        f"\n=== Iteration {completed_iteration} Cost Summary ===\n"
+                        f"Optimization costs this iteration: ${float(optimization_cost):.4f}\n"
+                        f"Evaluation costs this iteration: ${float(evaluation_cost):.4f}\n"
+                        f"Total cost this iteration: ${float(state.current_iteration_cost):.4f}\n"
+                        f"Cumulative cost so far: ${float(state.total_cost):.4f}\n"
+                        f"Average cost per iteration: ${float(state.total_cost / (completed_iteration + 1)):.4f}\n"
+                        f"========================================="
+                    )
                 
                 # Check if we should continue
                 if not state.should_continue():
@@ -144,6 +184,7 @@ class OptimizerNode(APOSNode):
                 max_retries = 3
                 retry_count = 0
                 last_error = None
+                token_counter = TokenCounterCallback()
 
                 while retry_count < max_retries:
                     try:
@@ -156,10 +197,20 @@ class OptimizerNode(APOSNode):
                                 "Example format: 'Analyze the following text: {{text}}'"
                             )
                         
-                        # Get optimization suggestions from LLM
+                        # Get optimization suggestions from LLM with token counting
                         prompt_improvement = await self.llm.ainvoke(
-                            self.chat_prompt.format_messages(**prompt_vars)
+                            self.chat_prompt.format_messages(**prompt_vars),
+                            config={"callbacks": [token_counter]}
                         )
+                        
+                        # Track cost (only on successful attempt)
+                        self.track_llm_cost(
+                            state=state,
+                            model_name=self.config.optimizer_model.model_type,
+                            input_tokens=token_counter.input_tokens,
+                            output_tokens=token_counter.output_tokens
+                        )
+                        
                         break  # If successful, exit the retry loop
                         
                     except (ValidationError, ValueError) as e:
@@ -221,6 +272,13 @@ class OptimizerNode(APOSNode):
                     with open(changes_path, 'w') as f:
                         json.dump(changes_to_save, f, indent=4)
                     logger.info(f"Saved prompt changes to {changes_path}")
+                
+                # Log optimizer node costs
+                logger.info(
+                    f"Optimizer costs - "
+                    f"This iteration: ${float(state.current_iteration_cost):.4f}, "
+                    f"Total so far: ${float(state.total_cost):.4f}"
+                )
                 
                 # Return state updates wrapped in state key
                 return {

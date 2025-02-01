@@ -4,6 +4,7 @@ State management for APOS LangGraph implementation.
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from enum import Enum, auto
+from decimal import Decimal
 
 from langchain_core.pydantic_v1 import BaseModel, Field
 
@@ -33,6 +34,20 @@ class APOSState(BaseModel):
     current_iteration: int = Field(default=0, description="Current iteration number")
     best_accuracy: float = Field(default=0.0, description="Best accuracy achieved so far")
     current_accuracy: float = Field(default=0.0, description="Current iteration accuracy")
+    
+    # Cost tracking
+    total_cost: Decimal = Field(
+        default=Decimal('0.0'),
+        description="Total cost of all iterations"
+    )
+    current_iteration_cost: Decimal = Field(
+        default=Decimal('0.0'),
+        description="Cost of current iteration"
+    )
+    cost_history: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="History of costs per iteration"
+    )
     
     # Analysis components
     mismatches: List[MismatchAnalysis] = Field(
@@ -115,6 +130,16 @@ class APOSState(BaseModel):
         
         if result.accuracy > self.best_accuracy:
             self.best_accuracy = result.accuracy
+            
+        # Log costs for this iteration
+        self.cost_history.append({
+            'iteration': self.current_iteration,
+            'cost': float(self.current_iteration_cost),
+            'total_cost': float(self.total_cost)
+        })
+        
+        # Reset iteration cost for next iteration
+        self.current_iteration_cost = Decimal('0.0')
 
     @property
     def is_complete(self) -> bool:
