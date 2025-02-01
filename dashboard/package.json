@@ -75,7 +75,10 @@
     "tailwindcss-animate": "^1.0.7",
     "@aws-sdk/client-sqs": "^3.0.0",
     "@aws-sdk/util-dynamodb": "^3.0.0",
-    "@types/aws-lambda": "^8.10.0"
+    "@types/aws-lambda": "^8.10.0",
+    "@smithy/util-hex-encoding": "^4.0.0",
+    "@smithy/querystring-parser": "^4.0.1",
+    "@smithy/credential-provider-imds": "^4.0.1"
   },
   "devDependencies": {
     "@aws-amplify/backend": "^1.8.0",
