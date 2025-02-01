@@ -441,10 +441,14 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
     
     # Create stage configs for TaskProgressTracker
     stage_configs = {
-        "Setup": StageConfig(order=1, total_items=1),
+        "Setup": StageConfig(order=1, status_message="Setting up..."),
         "Running": StageConfig(order=2, total_items=total_items),
-        "Finishing": StageConfig(order=3, total_items=1)
+        "Finishing": StageConfig(order=3, status_message="Finalizing...")
     }
+    
+    logging.info("Stage configs:")
+    for name, config in stage_configs.items():
+        logging.info(f"  {name}: order={config.order}, total_items={config.total_items}, message={config.status_message}")
     
     # Initialize progress tracker
     tracker = TaskProgressTracker(total_items=total_items, stage_configs=stage_configs)
@@ -471,6 +475,23 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
             # Initialization stage
             init_time = random.uniform(4.0, 6.0)  # Random time between 4-6 seconds
             time.sleep(init_time)
+            
+            # Update Setup stage status before advancing
+            if task:
+                task.update_progress(
+                    0,  # current items
+                    total_items,
+                    {
+                        "Setup": {
+                            "order": stage_configs["Setup"].order,
+                            "totalItems": stage_configs["Setup"].total_items,
+                            "processedItems": 0,
+                            "statusMessage": "Setup complete",
+                            "status": "COMPLETED"
+                        }
+                    }
+                )
+            
             tracker.advance_stage()  # Complete Setup stage
             
             if task:
@@ -520,6 +541,7 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
                     
                     # Update Task progress if we have a task ID
                     if task:
+                        current_status = f"{tracker.status} ({tracker.items_per_second:.1f} items/sec)"
                         task.update_progress(
                             tracker.current_items,
                             tracker.total_items,
@@ -528,7 +550,7 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
                                     "order": config.order,
                                     "totalItems": config.total_items,
                                     "processedItems": stage.processed_items if stage else 0,
-                                    "statusMessage": stage.status_message if stage else "",
+                                    "statusMessage": current_status if name == "Running" else (stage.status_message if stage else ""),
                                     "itemsPerSecond": tracker.items_per_second
                                 }
                                 for name, (config, stage) in zip(
@@ -541,6 +563,22 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
                 
                 time.sleep(sleep_per_item)
             
+            # Update Running stage status before advancing
+            if task:
+                task.update_progress(
+                    total_items,  # All items processed
+                    total_items,
+                    {
+                        "Running": {
+                            "order": stage_configs["Running"].order,
+                            "totalItems": stage_configs["Running"].total_items,
+                            "processedItems": total_items,
+                            "statusMessage": "Processing complete",
+                            "status": "COMPLETED"
+                        }
+                    }
+                )
+            
             # Finishing stage
             tracker.advance_stage()  # Move to Finishing stage
             finish_time = random.uniform(2.0, 4.0)  # Random time between 2-4 seconds
@@ -552,25 +590,70 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
             
             time.sleep(finish_time)
             
+            # Update Finishing stage status before completing
+            if task:
+                task.update_progress(
+                    total_items,
+                    total_items,
+                    {
+                        "Finishing": {
+                            "order": stage_configs["Finishing"].order,
+                            "totalItems": stage_configs["Finishing"].total_items,
+                            "processedItems": 0,
+                            "statusMessage": "Finalizing...",
+                            "status": "COMPLETED"
+                        }
+                    }
+                )
+            
+            time.sleep(finish_time)
+            
+            # Update final status after finishing
+            if task:
+                task.update_progress(
+                    total_items,
+                    total_items,
+                    {
+                        "Finishing": {
+                            "order": stage_configs["Finishing"].order,
+                            "totalItems": stage_configs["Finishing"].total_items,
+                            "processedItems": 0,
+                            "statusMessage": "Processing complete",
+                            "status": "COMPLETED"
+                        }
+                    }
+                )
+            
             # Complete all stages
             tracker.complete()
             
             if task:
+                # Debug log current state
+                logging.info("Final tracker state:")
+                for name, stage in tracker._stages.items():
+                    logging.info(f"  {name}: processed={stage.processed_items}/{stage.total_items}, status={stage.status_message}")
+                
+                # Debug log what we're sending to the API
+                stage_updates = {
+                    name: {
+                        "order": config.order,
+                        "totalItems": config.total_items,
+                        "processedItems": stage.processed_items if stage else 0,
+                        "statusMessage": stage.status_message if stage else ""
+                    }
+                    for name, (config, stage) in zip(
+                        stage_configs.keys(),
+                        [(c, tracker._stages.get(n)) for n, c in stage_configs.items()]
+                    )
+                }
+                logging.info("Sending stage updates to API:")
+                for name, update in stage_updates.items():
+                    logging.info(f"  {name}: {update}")
+                
                 task.update_progress(
                     tracker.current_items,
                     tracker.total_items,
-                    {
-                        name: {
-                            "order": config.order,
-                            "totalItems": config.total_items,
-                            "processedItems": stage.processed_items if stage else 0,
-                            "statusMessage": stage.status_message if stage else ""
-                        }
-                        for name, (config, stage) in zip(
-                            stage_configs.keys(),
-                            [(c, tracker._stages.get(n)) for n, c in stage_configs.items()]
-                        )
-                    }
+                    stage_updates
                 )
                 
                 # Now mark as completed
