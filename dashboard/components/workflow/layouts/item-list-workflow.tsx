@@ -372,11 +372,11 @@ const ItemListWorkflow = React.forwardRef<SVGGElement>((props, ref) => {
             id: `${nextId}-${i + 1}`,
             label: `Item ${nextId}-${i + 1}`,
             status: isFirstNode ? "complete" : "processing",
-            position: `r4-${i + 1}`, // Always start at row 4
+            position: `r${visibleRows}-${i + 1}`, // Use visibleRows instead of hardcoded 4
             mediaType: isFirstNode ? getRandomMediaType() : undefined,
             addedTimestamp: now,
-            result: isFirstNode ? undefined : getRandomResult(), // Only set result for non-media nodes
-            sequence: undefined // Let createScaledSequences handle this
+            result: isFirstNode ? undefined : getRandomResult(),
+            sequence: undefined
           }
         })
 
@@ -385,12 +385,12 @@ const ItemListWorkflow = React.forwardRef<SVGGElement>((props, ref) => {
 
         // Update all rows - shift everything up and add new row at bottom
         setSteps(currentSteps => {
-          // Keep only the most recent 15 items (3 complete rows)
-          const existingRows = currentSteps.slice(-15)
+          // Keep only the most recent rows based on visibleRows
+          const existingRows = currentSteps.slice(-(visibleRows * 5))
           
           // Update positions for existing rows to shift up
           const updatedExistingRows = existingRows.map((step, index) => {
-            const rowNum = Math.floor(index / 5) + 1 // Start at row 1
+            const rowNum = Math.floor(index / 5) + 1
             const colNum = (index % 5) + 1
             return {
               ...step,
@@ -402,6 +402,9 @@ const ItemListWorkflow = React.forwardRef<SVGGElement>((props, ref) => {
         })
 
         setNextId(prev => (prev % 50) + 1)
+        // Increment both baseRow and visibleRows together
+        setBaseRow(prev => prev + 1)
+        setVisibleRows(prev => prev + 1)
       }
 
       // Schedule next heartbeat with current scale
@@ -485,7 +488,7 @@ const ItemListWorkflow = React.forwardRef<SVGGElement>((props, ref) => {
     <ContainerBase viewBox="0 0 4.64 5">
       <g ref={ref}>
         <AnimatePresence mode="popLayout">
-          {Array.from({ length: Math.min(4, Math.ceil(steps.length / 5)) }).map((_, index) => {
+          {Array.from({ length: Math.min(4, visibleRows) }).map((_, index) => {
             const rowSteps = getRowSteps(steps, index)
             const rowY = index + baseRow
 
@@ -501,7 +504,7 @@ const ItemListWorkflow = React.forwardRef<SVGGElement>((props, ref) => {
                       const rowMatch = step.position.match(/r(\d+)-/)
                       if (!rowMatch) return false
                       const rowNum = parseInt(rowMatch[1])
-                      return rowNum > 0 && rowNum < 5
+                      return rowNum > 0 && rowNum <= 4
                     })
                   )
                 }}
