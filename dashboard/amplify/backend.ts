@@ -4,9 +4,8 @@ import { auth } from './auth/resource';
 import { defineFunction } from '@aws-amplify/backend-function';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
-import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import type { Schema } from './data/resource';
 import { Duration, Stack } from 'aws-cdk-lib';
+import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 
 // First define the function
 const taskDispatcher = defineFunction({
@@ -36,37 +35,32 @@ taskDispatcherLambda.addToRolePolicy(
     })
 );
 
-// Get the Task table and enable streams
+// Get the Task table
 const taskTable = backend.data.resources.tables.Task;
-const taskTableCfn = taskTable.node.defaultChild as dynamodb.CfnTable;
-taskTableCfn.streamSpecification = {
-    streamViewType: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
-};
+
+// Create a DynamoDB stream event source
+const eventSource = new DynamoEventSource(taskTable, {
+    startingPosition: lambda.StartingPosition.LATEST,
+    batchSize: 1,
+    retryAttempts: 3,
+    maxBatchingWindow: Duration.seconds(1)
+});
+
+// Add the event source to the Lambda function
+taskDispatcherLambda.addEventSource(eventSource);
 
 // Add DynamoDB stream permissions
-const streamArn = taskTableCfn.attrStreamArn;
-if (streamArn) {
-    taskDispatcherLambda.addToRolePolicy(
-        new iam.PolicyStatement({
-            actions: [
-                'dynamodb:GetRecords',
-                'dynamodb:GetShardIterator',
-                'dynamodb:DescribeStream',
-                'dynamodb:ListStreams'
-            ],
-            resources: [streamArn]
-        })
-    );
-
-    // Add the stream as an event source
-    taskDispatcherLambda.addEventSourceMapping('TaskStreamTrigger', {
-        eventSourceArn: streamArn,
-        startingPosition: lambda.StartingPosition.LATEST,
-        batchSize: 1,
-        retryAttempts: 3,
-        maxBatchingWindow: Duration.seconds(1)
-    });
-}
+taskDispatcherLambda.addToRolePolicy(
+    new iam.PolicyStatement({
+        actions: [
+            'dynamodb:GetRecords',
+            'dynamodb:GetShardIterator',
+            'dynamodb:DescribeStream',
+            'dynamodb:ListStreams'
+        ],
+        resources: [taskTable.tableArn + '/stream/*']
+    })
+);
 
 // Configure stream trigger in the data model schema
 // Note: The stream configuration should be defined in the data/resource.ts schema
