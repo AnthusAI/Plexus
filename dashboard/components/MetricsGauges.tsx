@@ -80,9 +80,13 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
             key={`${index}-${key}`}
             data-testid="gauge-container"
             className={cn(
-              "flex justify-center rounded-lg p-2",
+              "flex justify-center rounded-lg p-2 transition-colors duration-500 ease-in-out",
               index === selectedIndex && variant === 'detail' ? "bg-card-light" : "bg-card"
             )}
+            style={{
+              '--gauge-background-transition': index === selectedIndex ? gauge.backgroundColor : 'var(--card-light)',
+              transition: 'background-color 0.5s ease-in-out, --gauge-background-transition 0.5s ease-in-out'
+            } as React.CSSProperties}
           >
             <Gauge
               value={gauge.value}

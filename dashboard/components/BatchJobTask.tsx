@@ -105,7 +105,7 @@ export default function BatchJobTask({
         console.log('Loading scoring jobs for batch:', taskData.id);
         
         // Use listFromModel helper instead of direct dataClient access
-        const linksResult = await listFromModel('BatchJobScoringJob', {
+        const linksResult = await listFromModel<Schema['BatchJobScoringJob']['type']>('BatchJobScoringJob', {
           filter: {
             batchJobId: { eq: taskData.id }
           }
@@ -136,10 +136,10 @@ export default function BatchJobTask({
 
         // Fetch each scoring job individually
         const jobResults = await Promise.all(
-          scoringJobIds.map(id => getFromModel('ScoringJob', id))
+          scoringJobIds.map(id => getFromModel<Schema['ScoringJob']['type']>('ScoringJob', id))
         );
 
-        type ScoringJobResult = Awaited<ReturnType<typeof getFromModel<'ScoringJob'>>>;
+        type ScoringJobResult = Awaited<ReturnType<typeof getFromModel<Schema['ScoringJob']['type']>>>;
         
         const validJobs = jobResults
           .filter((result: ScoringJobResult): result is ScoringJobResult & { data: NonNullable<ScoringJobResult['data']> } => 
@@ -183,7 +183,7 @@ export default function BatchJobTask({
             if (!data?.batchJobId || !data?.scoringJobId) return;
             
             if (data.batchJobId === taskData.id) {
-              const jobResult = await getFromModel('ScoringJob', data.scoringJobId);
+              const jobResult = await getFromModel<Schema['ScoringJob']['type']>('ScoringJob', data.scoringJobId);
               const scoringJob = jobResult?.data;
               
               if (scoringJob) {
