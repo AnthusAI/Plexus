@@ -365,9 +365,7 @@ async function listEvaluations(accountId: string): ModelListResult<Schema['Evalu
   
   return listFromModel<Schema['Evaluation']['type']>(
     client.models.Evaluation,
-    { accountId: { eq: accountId } },
-    undefined,
-    100  // Limit to 100 most recent evaluations
+    { accountId: { eq: accountId } }
   )
 }
 

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from langgraph.graph import StateGraph
-from typing import Type, Optional, Literal
+from typing import Type, Optional, Literal, Any
 import pydantic
 from pydantic import ConfigDict, BaseModel
 from plexus.CustomLogging import logging
@@ -30,10 +30,18 @@ class BaseNode(ABC, LangChainUser):
         user_message: Optional[str] = None
         example_refinement_message: Optional[str] = None
         single_line_messages: bool = False
+        name: Optional[str] = None
 
     def __init__(self, **parameters):
         super().__init__(**parameters)
         self.parameters = self.Parameters(**parameters)
+
+    @property
+    def node_name(self) -> str:
+        """Get the node name from parameters."""
+        if not hasattr(self, 'parameters') or not self.parameters.name:
+            raise ValueError("Node name is required but not provided in parameters")
+        return self.parameters.name
 
     def get_prompt_templates(self):
         """
@@ -70,8 +78,8 @@ class BaseNode(ABC, LangChainUser):
 
     @abstractmethod
     def add_core_nodes(self, workflow: StateGraph) -> StateGraph:
-        """
-        Build and return a core LangGraph workflow.
+        """Build and return a core LangGraph workflow.
+        The node name is available as self.node_name when needed.
         """
         pass
 
@@ -93,6 +101,7 @@ class BaseNode(ABC, LangChainUser):
             input_aliasing_function = LangGraphScore.generate_input_aliasing_function(self.parameters.input)
             workflow.add_node('input_aliasing', input_aliasing_function)
 
+        # Call add_core_nodes (node name is available via self.node_name)
         workflow = self.add_core_nodes(workflow)
         
         if 'input_aliasing' in workflow.nodes:

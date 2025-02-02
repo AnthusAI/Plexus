@@ -34,11 +34,13 @@ class Extractor(BaseNode, LangChainUser):
     class Parameters(BaseNode.Parameters):
         fuzzy_match_score_cutoff: int = Field(default=50, description="Cutoff score for fuzzy matching")
         use_exact_matching: bool = Field(default=False, description="Use exact matching instead of sliding window approach")
+        trust_model_output: bool = Field(default=False, description="Trust the model output without verification")
 
     class ExtractionOutputParser(BaseOutputParser[dict]):
         FUZZY_MATCH_SCORE_CUTOFF: int = Field(...)
         text: str = Field(...)
         use_exact_matching: bool = Field(default=False)
+        trust_model_output: bool = Field(default=False)
         __tokenizer: Optional[PunktSentenceTokenizer] = None
 
         class Config:
@@ -68,6 +70,8 @@ class Extractor(BaseNode, LangChainUser):
             return "custom_output_parser"
 
         def parse(self, output: str) -> Dict[str, Any]:
+            logging.info(f"Raw LLM output: {output}")
+            
             output = output.strip().strip('"')
             
             prefix = "Quote:"
@@ -79,6 +83,9 @@ class Extractor(BaseNode, LangChainUser):
             logging.info(f"Cleaned output: {output}")
             
             if "No clear example" in output:
+                return {"extracted_text": output}
+
+            if self.trust_model_output:
                 return {"extracted_text": output}
 
             if self.use_exact_matching:
@@ -139,7 +146,8 @@ class Extractor(BaseNode, LangChainUser):
             chain = prompt | model | self.ExtractionOutputParser(
                 FUZZY_MATCH_SCORE_CUTOFF=self.parameters.fuzzy_match_score_cutoff,
                 text=state.text,
-                use_exact_matching=self.parameters.use_exact_matching
+                use_exact_matching=self.parameters.use_exact_matching,
+                trust_model_output=self.parameters.trust_model_output
             )
             return chain.invoke({
                 **state.dict()
