@@ -13,12 +13,14 @@
 - `dashboard/components/workflow/base/`
   - `container-base.tsx` - SVG container wrapper
   - `connection-base.tsx` - Connection line renderer
+  - `workflow-base.tsx` - Base workflow implementation with configurable timing and nodes
 
 ### Types and Utilities
 - `dashboard/components/workflow/types.ts` - Shared types and interfaces
 
 ### Implementation Examples
-- `dashboard/components/landing/workflow.tsx` - Landing page workflow demo
+- `dashboard/components/landing/workflow.tsx` - Landing page workflow demo (circle nodes only)
+- `dashboard/components/workflow/layouts/multi-model-workflow.tsx` - Multi-model workflow with varied node types
 
 ### Storybook Stories
 - `dashboard/stories/workflow-nodes.stories.tsx` - Individual node demonstrations
@@ -27,8 +29,8 @@
   - Media Nodes - Audio, Image, and Text node types
   - Classifier Nodes - Thumbs Up/Down node demonstrations
 - `dashboard/stories/workflow-diagrams.stories.tsx` - Full workflow demonstrations
-  - Base - Standard workflow layout
-  - MultiModel - Complex workflow with multiple model types
+  - Base - Standard workflow layout with circle nodes
+  - MultiModel - Complex workflow with diverse node shapes
   - ItemList - List-based workflow visualization
 
 ## Overview
@@ -40,15 +42,40 @@ The workflow pictograms provide visual representations of Plexus workflows, feat
 - Circle Node: Standard processing node ✓
   - Spinning ring animation during processing ✓
   - Simple, clean design for main processes ✓
+  - Used exclusively in base workflow diagram ✓
 - Square Node: Alternative processing style ✓
   - Stepped 90-degree rotation with pauses ✓
-  - Used for structured, systematic processes ✓
+  - Used for structured, systematic processes in multi-model ✓
 - Triangle Node: Alert/Decision node ✓
   - Throbbing scale animation ✓
   - Positioned slightly larger than other nodes ✓
+  - Custom icon positioning for better visibility ✓
 - Hexagon Node: Complex processing node ✓
   - Counter-rotating inner hexagon ✓
-  - Used for multi-step or advanced processes ✓
+  - Used for multi-step or advanced processes in multi-model ✓
+
+### Workflow Variants ✓
+#### Base Workflow ✓
+- Simple, consistent circle nodes throughout ✓
+- Quick processing animations (3-5.5s cycle) ✓
+- Standard timing sequence: ✓
+  - Main node: 0-3s ✓
+  - Row 1A: 1-4s ✓
+  - Row 1B: 2-5s ✓
+  - Row 2A: 1.5-4.5s ✓
+  - Row 2B: 2.5-5.5s ✓
+- 2s pause before reset ✓
+
+#### Multi-Model Workflow ✓
+- Varied node shapes for different processes ✓
+- Extended processing animations to showcase each type ✓
+- Custom timing configuration: ✓
+  - Main (Circle): 15s processing ✓
+  - Row 1A (Hexagon): 10s processing ✓
+  - Row 1B (Triangle): 11s processing ✓
+  - Row 2A (Square): 10s processing ✓
+  - Row 2B (Hexagon): 11s processing ✓
+- Quick reset (1s) to maximize processing display ✓
 
 ### Node States ✓
 - Not Started ✓
@@ -61,128 +88,40 @@ The workflow pictograms provide visual representations of Plexus workflows, feat
   - Filled background ✓
   - Checkmark with custom positioning per shape ✓
   - Success color scheme ✓
+  - Enhanced completion animations ✓
+    - Check mark: Throb to 140% scale ✓
+    - Color-coded backgrounds ✓
 
-### Connection Lines ✓
-- Curved Bezier paths between nodes ✓
-- Consistent stroke width and color ✓
-- Responsive to node positioning ✓
+### Animation System ✓
+- Improved cycle management ✓
+  - Proper timer cleanup ✓
+  - Race condition prevention ✓
+  - Cycle tracking with flags ✓
+- Configurable timing ✓
+  - Processing delay control ✓
+  - Completion delay control ✓
+  - Custom reset timing ✓
+- State management ✓
+  - Clean state transitions ✓
+  - No flickering or duplicates ✓
+  - Proper cleanup on unmount ✓
 
-### Animation System
-#### Current Implementation ✓
-- Status-based animation control ✓
-  - Manual state management ✓
-  - useEffect-based timing ✓
-  - Direct state transitions ✓
-- Basic sequence support ✓
-  - Start delay handling ✓
-  - Processing duration ✓
-  - Completion timing ✓
+## Next Steps
 
-#### Sequence-Based System ✓
-- Declarative animation control ✓
-  - Framer Motion integration ✓
-  - Predefined sequences ✓
-  - Consistent timing management ✓
-- Enhanced features ✓
-  - Jittered timing variations ✓
-  - Coordinated node transitions ✓
-  - Automatic cycling ✓
+1. Performance Optimization
+   - Monitor memory usage during long cycles
+   - Profile animation performance
+   - Optimize state updates
+   - Add performance monitoring
 
-#### Migration Status ✓
-- All components migrated to sequence-based system ✓
-  - ItemListWorkflow successfully converted ✓
-  - Timing refinements implemented ✓
-  - Jitter added for organic feel ✓
-- Key improvements achieved:
-  - Predictable state transitions ✓
-  - Configurable timing parameters ✓
-  - Smoother animations ✓
-  - Better state management ✓
+2. Testing and Validation
+   - Add unit tests for animation behavior
+   - Verify proper cleanup on unmount
+   - Test edge cases in animation sequences
+   - Validate performance in different scenarios
 
-## Development Priorities
-
-1. Container Width Utilization
-   - Phase 1: Visual Debug Setup ⏳
-     - Add visible container boundaries in Storybook
-     - Red border for outer container edge
-     - Blue border for inner content area
-     - Checkered background to highlight whitespace
-   - Phase 2: Layout Adjustments
-     - Analyze current spacing in all three diagrams
-     - Adjust viewBox and coordinate systems
-     - Modify node positioning calculations
-     - Update connection line paths
-   - Success Criteria
-     - Diagrams touch left and right boundaries
-     - Consistent spacing between elements
-     - No unintended whitespace
-     - Maintains visual balance
-
-2. Layout System Improvements
-   - Auto-layout capabilities
-   - Multiple flow patterns
-   - Responsive sizing
-   - Dynamic grid adaptation
-
-3. Interactive Features
-   - Hover states
-   - Click handlers
-   - Context menus
-   - Tooltip integration
-
-4. Accessibility Implementation
-   - ARIA labels
-   - Keyboard navigation
-   - High contrast mode
-   - Reduced motion support
-
-## Technical Implementation
-
-### Stories ✓
-- Node component demonstrations ✓
-  - Basic node states and sequences ✓
-  - Media node types ✓
-  - Classifier nodes (with sequence support) ✓
-- Full workflow diagrams ✓
-  - Basic layouts ✓
-  - Multi-model flows ✓
-  - Item list patterns with conveyor belt animation ✓
-
-### Animation Timing ✓
-- Row entrance: 800ms ✓
-- Node stagger: 200ms ✓
-- Initial delay: 800ms ✓
-- Processing duration: 1200ms ✓
-- Completion buffer: 300ms ✓
-- Exit animation: 800ms ✓
-- Jitter factors:
-  - Node stagger: ±25% ✓
-  - Processing time: ±20% ✓
-  - Completion buffer: ±30% ✓
-
-### Testing
-- Component unit tests
-- Animation timing verification
-- State transition testing
-- Responsive layout validation
-- Accessibility compliance checks
-
-### Performance
-- Animation optimization
-- SVG rendering efficiency
-- State management overhead
-- Transition smoothness
-
-## Usage Patterns
-
-### Dashboard Integration
-- Workflow status displays
-- Process monitoring
-- Real-time updates
-- Interactive controls
-
-### Landing Page
-- Feature demonstrations
-- Interactive examples
-- Marketing animations
-- Process explanations 
+3. Documentation
+   - Add inline code comments
+   - Document timing configuration options
+   - Create usage examples
+   - Add troubleshooting guide 

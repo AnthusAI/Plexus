@@ -35,7 +35,7 @@ export const CTASection = () => {
             <div className="flex flex-col md:flex-row items-center gap-12">
               <div className="flex-1 text-center md:text-left">
                 <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                  Ready to get started with Plexus?
+                  Ready to get started?
                 </h2>
                 <p className="text-xl text-muted-foreground mb-8">
                   Join the growing community of businesses building powerful AI workflows with Plexus.
@@ -63,7 +63,10 @@ export const CTASection = () => {
                 )}
               </div>
               <div className="w-48 h-48 md:w-64 md:h-64 flex-shrink-0 relative">
-                <div className="absolute inset-[-2rem] bg-gradient-to-r from-secondary to-primary rounded-[2rem] blur-2xl opacity-30"></div>
+                <div
+                  className="absolute inset-[-2rem] bg-gradient-to-r from-secondary to-primary rounded-[2rem] blur-2xl opacity-30"
+                  style={{ transform: "translateZ(0)", willChange: "opacity, transform" }}
+                ></div>
                 <div className="relative z-10">
                   <SquareLogo variant={LogoVariant.Square} className="w-full h-full" />
                 </div>

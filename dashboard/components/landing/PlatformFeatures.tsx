@@ -1,5 +1,4 @@
 import React from 'react'
-import { Card, CardContent } from '@/components/ui/card'
 import { 
   Cpu,
   Network, 
@@ -10,6 +9,9 @@ import {
   Gauge,
   GitMerge,
 } from 'lucide-react'
+import { FrameSection } from '@/components/landing/FrameSection'
+import { StandardSection } from '@/components/landing/StandardSection'
+import { FeatureCard } from './FeatureCard'
 
 const features = [
   {
@@ -60,58 +62,42 @@ const capabilities = [
 export const PlatformFeatures = () => {
   return (
     <>
-      <section className="py-20">
+      <StandardSection
+        headline="Platform Features"
+        headlinePosition="top"
+        fullWidth
+      >
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-bold mb-12 text-center text-foreground">
-            Platform Features
-          </h2>
           <div className="grid md:grid-cols-2 gap-8">
-            {features.map((feature, index) => {
-              const Icon = feature.icon
-              return (
-                <Card key={index} className="border-none shadow-lg hover:shadow-xl 
-                                          transition-shadow duration-300">
-                  <CardContent className="p-6">
-                    <Icon className="h-12 w-12 mb-4 text-accent" />
-                    <h3 className="text-xl font-semibold mb-2 text-foreground">
-                      {feature.title}
-                    </h3>
-                    <p className="text-muted-foreground">
-                      {feature.description}
-                    </p>
-                  </CardContent>
-                </Card>
-              )
-            })}
+            {features.map((feature, index) => (
+              <FeatureCard
+                key={index}
+                title={feature.title}
+                description={feature.description}
+                icon={feature.icon}
+              />
+            ))}
           </div>
         </div>
-      </section>
+      </StandardSection>
 
-      <section className="py-20 bg-accent/5">
+      <FrameSection
+        headline="Advanced Capabilities"
+        fullWidth
+      >
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-bold mb-12 text-center text-foreground">
-            Advanced Capabilities
-          </h2>
           <div className="grid md:grid-cols-2 gap-8">
-            {capabilities.map((capability, index) => {
-              const Icon = capability.icon
-              return (
-                <Card key={index} className="border-none shadow-lg">
-                  <CardContent className="p-6">
-                    <Icon className="h-12 w-12 mb-4 text-accent" />
-                    <h3 className="text-xl font-semibold mb-2 text-foreground">
-                      {capability.title}
-                    </h3>
-                    <p className="text-muted-foreground">
-                      {capability.description}
-                    </p>
-                  </CardContent>
-                </Card>
-              )
-            })}
+            {capabilities.map((capability, index) => (
+              <FeatureCard
+                key={index}
+                title={capability.title}
+                description={capability.description}
+                icon={capability.icon}
+              />
+            ))}
           </div>
         </div>
-      </section>
+      </FrameSection>
     </>
   )
 } 

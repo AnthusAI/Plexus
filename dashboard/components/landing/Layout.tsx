@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { Menu, ArrowRight, Loader2, AlertCircle } from 'lucide-react'
 import SquareLogo, { LogoVariant } from '../logo-square'
 import { Button } from '../ui/button'
+import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -87,8 +88,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Link
                     key={page.href}
                     href={page.href}
-                    className={`text-sm font-medium transition-colors hover:text-foreground/80 whitespace-nowrap
-                      ${pathname === page.href ? 'text-foreground' : 'text-foreground/60'}`}
+                    className={cn(
+                      "text-sm font-medium transition-colors hover:text-foreground/80 whitespace-nowrap relative",
+                      pathname === page.href ? "text-foreground after:absolute after:left-0 after:right-0 after:-bottom-1 after:h-[2px] after:bg-foreground" : "text-foreground/60"
+                    )}
                   >
                     {page.label}
                   </Link>
