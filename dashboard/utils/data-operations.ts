@@ -35,13 +35,13 @@ export type ProcessedTask = {
   id: string;
   type: string;
   status: string;
-  target?: string;
-  currentStageId?: string;
-  updatedAt?: string;
-  scorecardId?: string;
-  scoreId?: string;
-  command?: string;
-  dispatchStatus?: string;
+  target?: string | null;
+  currentStageId?: string | null;
+  updatedAt?: string | null;
+  scorecardId?: string | null;
+  scoreId?: string | null;
+  command?: string | null;
+  dispatchStatus?: string | null;
   createdAt: string;
   stages: Schema['TaskStage']['type'][];
 };
@@ -49,7 +49,13 @@ export type ProcessedTask = {
 type AmplifyClient = ReturnType<typeof generateClient<Schema>> & {
   models: {
     Task: {
-      list: (options: { limit?: number; include?: string[] }) => Promise<{ data: AmplifyTask[]; nextToken?: string }>;
+      list: (options: { 
+        limit?: number; 
+        include?: string[];
+      }) => Promise<{
+        data: Array<Schema['Task']['type']>;
+        nextToken?: string | null;
+      }>;
       onCreate: (options: {}) => { subscribe: (handlers: { next: () => void; error: (error: any) => void }) => { unsubscribe: () => void } };
       onUpdate: (options: {}) => { subscribe: (handlers: { next: () => void; error: (error: any) => void }) => { unsubscribe: () => void } };
     };
@@ -162,16 +168,20 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
       throw new Error('Task model not found');
     }
 
-    // Explicitly type the response to avoid complex union type
     type TaskListResponse = {
       data: Schema['Task']['type'][];
       nextToken?: string | null;
     };
 
-    const response = await currentClient.models.Task.list({
+    // Cast the client.models.Task to a more specific type
+    const taskModel = currentClient.models.Task as {
+      list: (options: { limit?: number; include?: string[] }) => Promise<TaskListResponse>;
+    };
+
+    const response = await taskModel.list({
       limit,
       include: ['stages']
-    }) as TaskListResponse;
+    });
 
     if (!response.data) {
       return [];
@@ -201,8 +211,28 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
       handlers.next({ items: response, isSynced: true });
     }).catch(handlers.error);
 
+    // Define subscription type
+    type SubscriptionType = {
+      subscribe: (handlers: { 
+        next: () => void; 
+        error: (error: any) => void 
+      }) => { 
+        unsubscribe: () => void 
+      };
+    };
+
+    // Cast subscription methods to specific types
+    const taskModel = currentClient.models.Task as {
+      onCreate: (options: {}) => SubscriptionType;
+      onUpdate: (options: {}) => SubscriptionType;
+    };
+
+    const taskStageModel = currentClient.models.TaskStage as {
+      onUpdate: (options: {}) => SubscriptionType;
+    };
+
     // Subscribe to changes
-    const createSub = currentClient.models.Task.onCreate({}).subscribe({
+    const createSub = taskModel.onCreate({}).subscribe({
       next: async () => {
         const response = await listRecentTasks(limit);
         handlers.next({ items: response, isSynced: true });
@@ -210,7 +240,7 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
       error: handlers.error
     });
 
-    const updateSub = currentClient.models.Task.onUpdate({}).subscribe({
+    const updateSub = taskModel.onUpdate({}).subscribe({
       next: async () => {
         const response = await listRecentTasks(limit);
         handlers.next({ items: response, isSynced: true });
@@ -218,7 +248,7 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
       error: handlers.error
     });
 
-    const stageSub = currentClient.models.TaskStage.onUpdate({}).subscribe({
+    const stageSub = taskStageModel.onUpdate({}).subscribe({
       next: async () => {
         const response = await listRecentTasks(limit);
         handlers.next({ items: response, isSynced: true });
