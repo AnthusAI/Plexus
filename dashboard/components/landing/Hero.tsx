@@ -3,7 +3,12 @@
 import React from 'react'
 import { Button } from "@/components/ui/button"
 import { ArrowRight } from 'lucide-react'
-import WorkflowIllustration from './workflow'
+import dynamic from 'next/dynamic'
+
+const WorkflowClient = dynamic(
+  () => import('@/components/workflow/base/workflow-base'),
+  { ssr: false }
+)
 
 export function Hero() {
   return (
@@ -32,14 +37,14 @@ export function Hero() {
                   </div>
                   <div className="w-full md:w-1/2 xl:hidden flex justify-center md:justify-end items-center">
                     <div className="w-full max-w-[400px]">
-                      <WorkflowIllustration />
+                      <WorkflowClient />
                     </div>
                   </div>
                 </div>
               </div>
               <div className="hidden xl:flex flex-1 min-w-0 xl:w-[calc(50%-2rem)] justify-center md:justify-end items-center">
                 <div className="w-full max-w-[400px]">
-                  <WorkflowIllustration />
+                  <WorkflowClient />
                 </div>
               </div>
             </div>

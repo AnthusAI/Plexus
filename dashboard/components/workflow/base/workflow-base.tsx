@@ -13,9 +13,14 @@ export const POSITIONS = {
   main: { x: 0.42, y: 0.42 },
   "row1-a": { x: 1.42, y: 1.42 },
   "row1-b": { x: 2.42, y: 1.42 },
+  "row1-c": { x: 3.42, y: 1.42 },
   "row2-a": { x: 1.42, y: 2.42 },
-  "row2-b": { x: 2.42, y: 2.42 }
-}
+  "row2-b": { x: 2.42, y: 2.42 },
+  "row2-c": { x: 3.42, y: 2.42 },
+  "row3-a": { x: 1.42, y: 3.42 },
+  "row3-b": { x: 2.42, y: 3.42 },
+  "row3-c": { x: 3.42, y: 3.42 }
+} as const
 
 type Position = { x: number, y: number }
 type WorkflowPositions = Record<keyof typeof POSITIONS, Position>
@@ -30,7 +35,7 @@ export type WorkflowTiming = {
 export const TIMING: WorkflowTiming = {
   main: {
     processingDelay: 0,
-    completionDelay: 6000,  // Complete 500ms after last worker
+    completionDelay: 8000,  // Complete after all workers
   },
   "row1-a": {
     processingDelay: 1000,
@@ -40,6 +45,10 @@ export const TIMING: WorkflowTiming = {
     processingDelay: 2000,
     completionDelay: 5000,
   },
+  "row1-c": {
+    processingDelay: 3000,
+    completionDelay: 6000,
+  },
   "row2-a": {
     processingDelay: 1500,
     completionDelay: 4500,
@@ -47,6 +56,22 @@ export const TIMING: WorkflowTiming = {
   "row2-b": {
     processingDelay: 2500,
     completionDelay: 5500,
+  },
+  "row2-c": {
+    processingDelay: 3500,
+    completionDelay: 6500,
+  },
+  "row3-a": {
+    processingDelay: 2000,
+    completionDelay: 5000,
+  },
+  "row3-b": {
+    processingDelay: 3000,
+    completionDelay: 6000,
+  },
+  "row3-c": {
+    processingDelay: 4000,
+    completionDelay: 7000,
   }
 } as const
 
@@ -62,9 +87,10 @@ type WorkflowBaseProps = {
   positions?: WorkflowPositions
 }
 
-const CYCLE_DURATION = 8000 // Base duration of a full cycle (slightly longer than longest completion delay + reset buffer)
+const CYCLE_DURATION = 18000 // Base duration of a full cycle (15s completion + 3s pause)
 const WATCHDOG_INTERVAL = 2000 // Check every 2 seconds
 const MAX_CYCLE_AGE = CYCLE_DURATION * 1.5 // Allow 50% extra time before forcing reset
+const COMPLETION_PAUSE = 3000 // Pause for 3 seconds after completion before resetting
 
 const WorkflowBase = React.forwardRef<SVGGElement, WorkflowBaseProps>(
   ({ getNodeComponent, timing = TIMING, positions = POSITIONS }, ref) => {
@@ -154,11 +180,11 @@ const WorkflowBase = React.forwardRef<SVGGElement, WorkflowBaseProps>(
         timersRef.current.push(timer)
       })
 
-      // Reset after full cycle
+      // Reset after full cycle plus pause
       const resetTimer = setTimeout(() => {
         if (!isCurrentCycle) return
         cycleStates()
-      }, Math.max(...Object.values(timing).map(t => t.completionDelay)) + 2000)
+      }, Math.max(...Object.values(timing).map(t => t.completionDelay)) + COMPLETION_PAUSE)
       timersRef.current.push(resetTimer)
     }
 
@@ -175,7 +201,7 @@ const WorkflowBase = React.forwardRef<SVGGElement, WorkflowBaseProps>(
   }, [timing, positions])
 
   return (
-    <ContainerBase viewBox="0 0 2.79 2.84">
+    <ContainerBase viewBox="0 0 3.79 3.84">
       <g ref={ref}>
         {/* Connection Lines */}
         <ConnectionLine 
@@ -189,12 +215,33 @@ const WorkflowBase = React.forwardRef<SVGGElement, WorkflowBaseProps>(
           type="curve-down"
         />
         <ConnectionLine 
+          startX={positions.main.x} startY={positions.main.y} 
+          endX={positions["row3-a"].x} endY={positions["row3-a"].y} 
+          type="curve-down"
+        />
+        <ConnectionLine 
           startX={positions["row1-a"].x} startY={positions["row1-a"].y} 
           endX={positions["row1-b"].x} endY={positions["row1-b"].y} 
         />
         <ConnectionLine 
+          startX={positions["row1-b"].x} startY={positions["row1-b"].y} 
+          endX={positions["row1-c"].x} endY={positions["row1-c"].y} 
+        />
+        <ConnectionLine 
           startX={positions["row2-a"].x} startY={positions["row2-a"].y} 
           endX={positions["row2-b"].x} endY={positions["row2-b"].y} 
+        />
+        <ConnectionLine 
+          startX={positions["row2-b"].x} startY={positions["row2-b"].y} 
+          endX={positions["row2-c"].x} endY={positions["row2-c"].y} 
+        />
+        <ConnectionLine 
+          startX={positions["row3-a"].x} startY={positions["row3-a"].y} 
+          endX={positions["row3-b"].x} endY={positions["row3-b"].y} 
+        />
+        <ConnectionLine 
+          startX={positions["row3-b"].x} startY={positions["row3-b"].y} 
+          endX={positions["row3-c"].x} endY={positions["row3-c"].y} 
         />
 
         {/* Nodes */}

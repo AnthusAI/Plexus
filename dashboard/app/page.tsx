@@ -9,14 +9,28 @@ import { CTASection } from '@/components/landing/CTASection'
 import { Footer } from '@/components/landing/Footer'
 import { Layout } from '@/components/landing/Layout'
 import { Download, Brain, Workflow as WorkflowIcon } from 'lucide-react'
-import MultiModelWorkflow from '@/components/workflow/layouts/multi-model-workflow'
-import MultiTypeWorkflow from '@/components/workflow/layouts/multi-type-workflow'
+import dynamic from 'next/dynamic'
 import ItemListWorkflow from '@/components/workflow/layouts/item-list-workflow'
 import MetricsGauges from '@/components/MetricsGauges'
 import { StandardSection } from '@/components/landing/StandardSection'
 import { FrameSection } from '@/components/landing/FrameSection'
 
 const CLOCKWISE_SEQUENCE = [0, 1, 3, 2] // accuracy -> precision -> specificity -> sensitivity
+
+const MultiModelWorkflowClient = dynamic(
+  () => import('@/components/workflow/layouts/multi-model-workflow'),
+  { ssr: false }
+)
+
+const MultiTypeWorkflowClient = dynamic(
+  () => import('@/components/workflow/layouts/multi-type-workflow'),
+  { ssr: false }
+)
+
+const ItemListWorkflowClient = dynamic(
+  () => import('@/components/workflow/layouts/item-list-workflow'),
+  { ssr: false }
+)
 
 export default function LandingPage() {
   const [selectedMetricIndex, setSelectedMetricIndex] = React.useState(0)
@@ -41,7 +55,7 @@ export default function LandingPage() {
         headline="Intelligence at Scale"
         headlinePosition="top"
         rightColumnAlign="middle"
-        leftContent={<ItemListWorkflow />}
+        leftContent={<ItemListWorkflowClient />}
         rightContent={
           <p className="text-xl text-muted-foreground">
             Run a scorecard on each item of your data, with multiple scores per scorecard. Are your agents saying the right things? Are your inbound leads qualified? Classify, predict, extract, and act on your data.
@@ -69,7 +83,7 @@ export default function LandingPage() {
         }
         rightContent={
           <div className="w-full max-w-[400px]">
-            <MultiModelWorkflow />
+            <MultiModelWorkflowClient />
           </div>
         }
       />
@@ -157,7 +171,7 @@ export default function LandingPage() {
         }
         rightContent={
           <div className="w-full max-w-[400px]">
-            <MultiTypeWorkflow />
+            <MultiTypeWorkflowClient />
           </div>
         }
       />
