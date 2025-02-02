@@ -65,28 +65,27 @@ from threading import Thread, Event
 import time
 from datetime import datetime, timezone
 import logging
+logging.basicConfig(level=logging.DEBUG)
 
-# Configure GQL loggers to not propagate to root
+# Configure GQL loggers to show output
 gql_logger = logging.getLogger('gql')
-gql_logger.setLevel(logging.INFO)
-gql_logger.propagate = False
-if not gql_logger.handlers:
-    null_handler = logging.NullHandler()
-    gql_logger.addHandler(null_handler)
+gql_logger.setLevel(logging.DEBUG)
+gql_logger.propagate = True
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+stream_handler.setFormatter(formatter)
+gql_logger.addHandler(stream_handler)
 
+# Disable noisy transport logging
 transport_logger = logging.getLogger('gql.transport')
-transport_logger.setLevel(logging.INFO)
+transport_logger.setLevel(logging.WARNING)
 transport_logger.propagate = False
-if not transport_logger.handlers:
-    null_handler = logging.NullHandler()
-    transport_logger.addHandler(null_handler)
 
+# Disable noisy requests logging
 requests_logger = logging.getLogger('urllib3')
-requests_logger.setLevel(logging.INFO)
+requests_logger.setLevel(logging.WARNING)
 requests_logger.propagate = False
-if not requests_logger.handlers:
-    null_handler = logging.NullHandler()
-    requests_logger.addHandler(null_handler)
 
 if TYPE_CHECKING:
     from .models.scoring_job import ScoringJob

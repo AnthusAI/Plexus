@@ -21,7 +21,7 @@ from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
 import plexus.scores
 from plexus.scores.Score import Score
-from plexus.logging.Cloudwatch import CloudWatchLogger
+from plexus.plexus_logging.Cloudwatch import CloudWatchLogger
 from plexus.scores.LangGraphScore import BatchProcessingPause, LangGraphScore
 
 class Scorecard:
@@ -210,7 +210,7 @@ class Scorecard:
         :param text: The transcript.
         :param metadata: The metadata.
         :param modality: The modality.
-        :return: The score result.
+        :return: A list of score results.
         :raises BatchProcessingPause: When scoring needs to be suspended for batch processing
         """
         logging.info(f"Getting score result for: {score}")
@@ -218,7 +218,7 @@ class Scorecard:
         score_class = self.score_registry.get(score)
         if score_class is None:
             logging.error(f"Score with name '{score}' not found.")
-            return
+            return [plexus.scores.Score.Result(value="Error", error=f"Score with name '{score}' not found.")]
 
         score_configuration = self.score_registry.get_properties(score)
         if (score_class is not None):
@@ -237,7 +237,7 @@ class Scorecard:
 
             if score_instance is None:
                 logging.error(f"Score with name '{score}' not found in scorecard '{self.name}'.")
-                return
+                return [plexus.scores.Score.Result(value="Error", error=f"Score with name '{score}' not found in scorecard '{self.name}'.")]
 
             # Add required metadata for LangGraphScore
             if isinstance(score_instance, LangGraphScore):
@@ -262,6 +262,8 @@ class Scorecard:
                 )
             )
             logging.info(f"Prediction complete for: {score}")
+            logging.info(f"Score result type: {type(score_result)}")
+            logging.info(f"Score result contents: {score_result}")
             logging.debug(f"Score result for {score}: {score_result}")
 
             if hasattr(score_instance, 'get_accumulated_costs'):
@@ -279,11 +281,6 @@ class Scorecard:
 
                 total_tokens = self.prompt_tokens + self.completion_tokens
 
-                # TODO: Find a different way of passing the costs with the score result.
-                # Maybe add support for `costs` and `metadata` in Score.Result?
-                # score_result[0].metadata.update(score_total_cost)
-                
-                # Log the cost for this individual score
                 dimensions = {
                     'ScoreCardID': str(self.properties['id']),
                     'ScoreCardName': str(self.properties['name']),
@@ -314,12 +311,16 @@ class Scorecard:
                 self.cloudwatch_logger.log_metric('ExternalAIRequestsByScorecard', score_total_cost.get('llm_calls', 0), scorecard_dimensions)
                 self.cloudwatch_logger.log_metric('ItemTokensByScorecard', item_tokens, scorecard_dimensions)
 
-            return score_result
+            # Ensure we always return a list of results
+            if isinstance(score_result, list):
+                return score_result
+            else:
+                return [score_result]
 
         else:
             error_string = f"No score found for question: \"{score}\""
             logging.error(error_string)
-            return plexus.scores.Score.Result(value="Error", error=error_string)
+            return [plexus.scores.Score.Result(value="Error", error=error_string)]
 
     async def score_entire_text(self, *, text: str, metadata: dict, modality: Optional[str] = None, subset_of_score_names: Optional[List[str]] = None) -> Dict[str, Score.Result]:
         if subset_of_score_names is None:

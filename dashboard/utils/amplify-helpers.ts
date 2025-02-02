@@ -21,37 +21,49 @@ export async function listFromModel<T extends { id: string }>(
   nextToken?: string,
   limit?: number
 ): Promise<AmplifyListResult<T>> {
-
-  const options: any = {}
-  if (filter) options.filter = filter
-  if (nextToken) options.nextToken = nextToken
-  if (limit) options.limit = limit
-
+  const isEvaluation = typeof model.listEvaluationByAccountIdAndUpdatedAt === 'function';
+  
   try {
-    // Collect all results across pages
-    let allData: T[] = []
-    let currentNextToken = nextToken
-
-    do {
-      if (currentNextToken) options.nextToken = currentNextToken
+    let response;
+    
+    if (isEvaluation) {
+      const accountId = filter?.accountId?.eq;
       
-      const response = await model.list(options)
-
-      if (response.data?.length) {
-        allData = [...allData, ...response.data]
+      if (!accountId) {
+        console.error('Missing accountId in filter:', filter);
+        return { data: [], nextToken: null };
       }
 
-      currentNextToken = response.nextToken
-    } while (currentNextToken)
+      response = await model.listEvaluationByAccountIdAndUpdatedAt({
+        accountId,
+        limit: 100,
+        nextToken,
+        sortDirection: 'DESC'
+      });
+
+    } else {
+      const options: any = {}
+      if (filter) options.filter = filter
+      if (nextToken) options.nextToken = nextToken
+      if (limit) options.limit = limit
+      
+      response = await model.list(options)
+    }
 
     return {
-      data: allData,
-      nextToken: null  // No more pages
+      data: response?.data || [],
+      nextToken: response?.nextToken
     } as AmplifyListResult<T>
 
-  } catch (error) {
-    console.error('Error listing from model:', error)
-    throw error
+  } catch (error: any) {
+    console.error('Error listing from model:', {
+      error,
+      errorMessage: error.message,
+      errorStack: error.stack,
+      isEvaluation,
+      filter
+    });
+    throw error;
   }
 }
 

@@ -130,5 +130,5 @@ class YesOrNoClassifier(BaseNode):
         return classifier_node
 
     def add_core_nodes(self, workflow: StateGraph) -> StateGraph:
-        workflow.add_node("classify", self.get_classifier_node())
+        workflow.add_node(self.node_name, self.get_classifier_node())
         return workflow

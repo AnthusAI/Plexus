@@ -34,7 +34,7 @@ export const LabelingStrategies = () => {
           </h2>
           <p className="text-xl text-muted-foreground">
             You need an efficient way to use your team's input to align AI 
-            behavior -- without depending on nerds who can write code.
+            behavior &mdash; without depending on nerds who can write code.
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">

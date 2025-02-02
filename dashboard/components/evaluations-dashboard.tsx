@@ -700,21 +700,12 @@ function parseScoreResult(result: Schema['ScoreResult']['type']): ParsedScoreRes
   }
 }
 
-// Add sorting helper at the top
-const sortByCreatedAt = (evaluations: Schema['Evaluation']['type'][]) => {
-  return [...evaluations].sort((a, b) => {
-    const aTime = new Date(a.createdAt).getTime();
-    const bTime = new Date(b.createdAt).getTime();
-    return bTime - aTime;
-  });
-};
-
 // Handle delete evaluation
 const handleDeleteEvaluation = async (client: any, evaluationId: string) => {
   try {
     // First, get all score results for this evaluation
-    const scoreResultsResponse = await client.models.ScoreResult.listScoreResultByEvaluationId({
-      evaluationId,
+    const scoreResultsResponse = await client.models.ScoreResult.list({
+      filter: { evaluationId: { eq: evaluationId } },
       limit: 10000,
       fields: ['id']
     });
@@ -730,8 +721,8 @@ const handleDeleteEvaluation = async (client: any, evaluationId: string) => {
     }
 
     // Get and delete all scoring jobs for this evaluation
-    const scoringJobsResponse = await client.models.ScoringJob.listScoringJobByEvaluationId({
-      evaluationId,
+    const scoringJobsResponse = await client.models.ScoringJob.list({
+      filter: { evaluationId: { eq: evaluationId } },
       limit: 10000,
       fields: ['id']
     });
@@ -1075,7 +1066,7 @@ export default function EvaluationsDashboard(): JSX.Element {
 
         console.log('Raw evaluations from listEvaluations:', evaluations.map(e => ({
           id: e.id,
-          createdAt: e.createdAt,
+          updatedAt: e.updatedAt,
           type: e.type
         })));
 
@@ -1085,21 +1076,7 @@ export default function EvaluationsDashboard(): JSX.Element {
           setScoreNames
         );
 
-        console.log('Transformed evaluations before sort:', transformedEvaluations.map(e => ({
-          id: e.id,
-          createdAt: e.createdAt,
-          type: e.type
-        })));
-
-        const sortedEvaluations = sortByCreatedAt(transformedEvaluations);
-
-        console.log('Transformed evaluations after sort:', sortedEvaluations.map(e => ({
-          id: e.id,
-          createdAt: e.createdAt,
-          type: e.type
-        })));
-
-        setEvaluations(sortedEvaluations);
+        setEvaluations(transformedEvaluations);
         setIsLoading(false);
 
         // Set up subscriptions for real-time updates
@@ -1111,7 +1088,7 @@ export default function EvaluationsDashboard(): JSX.Element {
             processedItems: data.processedItems,
             totalItems: data.totalItems,
             accuracy: data.accuracy,
-            createdAt: data.createdAt
+            updatedAt: data.updatedAt
           });
 
           if (!foundAccountId) return;
@@ -1121,7 +1098,7 @@ export default function EvaluationsDashboard(): JSX.Element {
           if (isCreate) {
             console.log('Handling onCreate for evaluation:', {
               id: data.id,
-              createdAt: data.createdAt,
+              updatedAt: data.updatedAt,
               existingIds: Evaluations.map(e => e.id)
             });
 
@@ -1140,26 +1117,25 @@ export default function EvaluationsDashboard(): JSX.Element {
               // If evaluation exists, update it
               if (prev.some(e => e.id === data.id)) {
                 console.log('Updating existing evaluation:', data.id);
-                return sortByCreatedAt(prev.map(e => e.id === data.id ? {
+                return prev.map(e => e.id === data.id ? {
                   ...e,
                   ...transformedEvaluation[0],
                   // Preserve the async functions
                   account: e.account,
                   scorecard: e.scorecard,
                   score: e.score
-                } : e));
+                } : e);
               }
 
               // Otherwise add as new
-              const newList = sortByCreatedAt([transformedEvaluation[0], ...prev]);
               console.log('Adding new evaluation:', data.id);
-              return newList;
+              return [transformedEvaluation[0], ...prev];
             });
           } else {
             // For updates, we'll update the specific evaluation in place
             // but preserve the existing names
             setEvaluations(prev => {
-              const updatedList = prev.map(e => e.id === data.id ? {
+              return prev.map(e => e.id === data.id ? {
                 ...e,
                 ...data,
                 // Preserve the async functions
@@ -1167,18 +1143,6 @@ export default function EvaluationsDashboard(): JSX.Element {
                 scorecard: e.scorecard,
                 score: e.score
               } : e);
-
-              // Re-sort after update in case createdAt changed
-              const sortedList = sortByCreatedAt(updatedList);
-              console.log('Updated evaluation list order:', sortedList.map(e => ({
-                id: e.id,
-                createdAt: e.createdAt,
-                type: e.type,
-                scorecardName: scorecardNames[e.id],
-                scoreName: scoreNames[e.id]
-              })));
-
-              return sortedList;
             });
           }
 
@@ -1221,18 +1185,18 @@ export default function EvaluationsDashboard(): JSX.Element {
             console.log('Evaluation delete received:', {
               id: data.id,
               type: data.type,
-              createdAt: data.createdAt
+              updatedAt: data.updatedAt
             });
 
             // Remove from evaluations list
             setEvaluations(prev => {
-              const updatedList = prev.filter(e => e.id !== data.id);
+              const filteredList = prev.filter(e => e.id !== data.id);
               console.log('Removing deleted evaluation:', {
                 deletedId: data.id,
                 previousCount: prev.length,
-                newCount: updatedList.length
+                newCount: filteredList.length
               });
-              return sortByCreatedAt(updatedList);
+              return filteredList;
             });
 
             // Clear selection if the deleted evaluation was selected
