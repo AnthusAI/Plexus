@@ -25,7 +25,7 @@ type ItemIndexFields = "name" | "description" | "accountId";
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
-    "scoringJobId";
+    "scoringJobId" | "evaluationId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
