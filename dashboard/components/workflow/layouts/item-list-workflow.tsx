@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { ContainerBase } from "../base/container-base"
 import { ConnectionLine } from "../base/connection-line"
 import { 
@@ -356,17 +356,74 @@ const getRandomValue = (config: MockValueConfig): { result?: NodeResult; value?:
   }
 }
 
+// Add new constants for key generation and cleanup
+const KEY_PREFIX = 'row' // Prefix for row keys to avoid conflicts
+const MAX_ROWS = 4 // Maximum number of visible rows
+const ROWS_PER_CLEANUP = 5 // Number of rows to process in each cleanup cycle
+const MAX_CYCLE_AGE = TIMING.CYCLE_DURATION * 2.5 // Allow 150% more time before forcing reset
+
 const ItemListWorkflow = React.forwardRef<SVGGElement, ItemListWorkflowProps>(({ 
   allowedMediaTypes = MEDIA_TYPES,
   allowedShapes = ["circle"],
   fixedShapeSequence,
-  resultTypes = [{ type: "check" }]  // Default to check type
+  resultTypes = [{ type: "check" }]
 }, ref) => {
   const [steps, setSteps] = useState<ExtendedWorkflowStep[]>([])
   const [visibleRows, setVisibleRows] = useState(0)
   const [nextId, setNextId] = useState(1)
   const [cycleStartTime, setCycleStartTime] = useState(Date.now())
   const [isResetting, setIsResetting] = useState(false)
+  const globalKeyCounterRef = useRef(0)
+  const timerRef = useRef<NodeJS.Timeout>()
+
+  // Add cleanup effect to detect and remove duplicate keys
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      setSteps(currentSteps => {
+        // Get all keys currently in use
+        const keys = new Set<string>()
+        const duplicates = new Set<string>()
+        const keptSteps: ExtendedWorkflowStep[] = []
+
+        // First pass: identify duplicates
+        currentSteps.forEach(step => {
+          if (keys.has(step.id)) {
+            duplicates.add(step.id)
+          } else {
+            keys.add(step.id)
+          }
+        })
+
+        // If we found duplicates, clean them up and log
+        if (duplicates.size > 0) {
+          console.warn(`Found ${duplicates.size} duplicate keys, cleaning up...`, 
+            Array.from(duplicates))
+
+          // Keep only the most recent instance of each duplicate
+          const seen = new Set<string>()
+          for (let i = currentSteps.length - 1; i >= 0; i--) {
+            const step = currentSteps[i]
+            if (!duplicates.has(step.id) || !seen.has(step.id)) {
+              keptSteps.unshift(step)
+              seen.add(step.id)
+            }
+          }
+
+          return keptSteps
+        }
+
+        return currentSteps
+      })
+    }, 1000) // Check every second
+
+    return () => clearInterval(cleanupInterval)
+  }, [])
+
+  // Generate a unique key that includes timestamp
+  const generateUniqueKey = useCallback((index: number) => {
+    globalKeyCounterRef.current += 1
+    return `${KEY_PREFIX}-${nextId}-${index}-${globalKeyCounterRef.current}-${Date.now()}`
+  }, [nextId])
 
   const getRandomDelay = useCallback((min: number, max: number) => {
     return Math.random() * (max - min) + min
@@ -420,123 +477,139 @@ const ItemListWorkflow = React.forwardRef<SVGGElement, ItemListWorkflowProps>(({
     resetWorkflow()
   }, [resetWorkflow])
 
-  // Initial row appearance and conveyor belt effect
-  useEffect(() => {
-    let timer: NodeJS.Timeout
+  const heartbeat = useCallback(() => {
+    const now = Date.now()
+    const cycleElapsed = now - cycleStartTime
 
-    const scheduleNextHeartbeat = () => {
-      const scale = getTimingScale(cycleStartTime)
-      const interval = Math.max(Math.round(TIMING.HEARTBEAT / scale), 100)
-      timer = setTimeout(heartbeat, interval)
+    // Check if we need to start resetting
+    if (cycleElapsed >= TIMING.CYCLE_DURATION && !isResetting) {
+      setIsResetting(true)
+      return
     }
 
-    const heartbeat = () => {
-      const now = Date.now()
-      const cycleElapsed = now - cycleStartTime
+    // If we're resetting and all rows are gone, start a new cycle
+    if (isResetting && steps.length === 0) {
+      resetWorkflow()
+      return
+    }
 
-      // Check if we need to start resetting
-      if (cycleElapsed >= TIMING.CYCLE_DURATION && !isResetting) {
-        setIsResetting(true)
-        // Let existing rows cycle off naturally
-        return scheduleNextHeartbeat()
-      }
+    // Normal row creation logic
+    const newSteps: ExtendedWorkflowStep[] = Array.from({ length: 5 }).map((_, i) => {
+      const isFirstNode = i === 0
+      const rowPosition = visibleRows + 1
+      const uniqueKey = generateUniqueKey(i)
 
-      // If we're resetting and all rows are gone, start a new cycle
-      if (isResetting && steps.length === 0) {
-        resetWorkflow()
-        return scheduleNextHeartbeat()
-      }
-
-      // Normal row creation logic
-      const newSteps: ExtendedWorkflowStep[] = Array.from({ length: 5 }).map((_, i) => {
-        const isFirstNode = i === 0
-        const rowPosition = visibleRows + 1
-
-        // Handle media node (first node)
-        if (isFirstNode) {
-          return {
-            id: `${nextId}-${i + 1}`,
-            label: `Item ${nextId}-${i + 1}`,
-            status: "complete",
-            position: `r${rowPosition}-${i + 1}`,
-            mediaType: getRandomMediaType(allowedMediaTypes),
-            addedTimestamp: now
-          }
-        }
-
-        // Handle result nodes (non-first nodes)
-        const nodeIndex = i - 1 // Index in the sequence (0-3 for nodes after media)
-        
-        // Get shape based on sequence or random
-        const shape = fixedShapeSequence ? 
-          getRandomFromSequence(fixedShapeSequence, nodeIndex) : 
-          getRandomShape(allowedShapes)
-
-        // Get result type and value based on sequence
-        let result: NodeResult | undefined
-        let resultValue: string | undefined
-        let resultColor: NodeColor = undefined
-        let pillWidth: number | undefined
-
-        if (resultTypes && resultTypes.length > 0) {
-          const config = getRandomFromSequence(resultTypes, nodeIndex)
-          const value = getRandomValue(config)
-          result = value.result
-          resultValue = value.value
-          resultColor = value.color
-          pillWidth = value.pillWidth
-        }
-
+      // Handle media node (first node)
+      if (isFirstNode) {
         return {
-          id: `${nextId}-${i + 1}`,
-          label: `Item ${nextId}-${i + 1}`,
-          status: "processing",
+          id: uniqueKey,
+          label: `Item ${uniqueKey}`,
+          status: "complete",
           position: `r${rowPosition}-${i + 1}`,
-          addedTimestamp: now,
-          shape,
-          result,
-          resultValue,
-          resultColor,
-          pillWidth
+          mediaType: getRandomMediaType(allowedMediaTypes),
+          addedTimestamp: now
         }
-      })
-
-      const sequencedNewSteps = createScaledSequences(now, newSteps)
-
-      if (isResetting) {
-        // During reset, only remove rows, don't add new ones
-        setSteps(currentSteps => {
-          const withoutFirstRow = currentSteps.slice(5)
-          const updatedPositions = withoutFirstRow.map((step, index) => ({
-            ...step,
-            position: `r${Math.floor(index / 5) + 1}-${(index % 5) + 1}`
-          }))
-          return updatedPositions
-        })
-      } else if (visibleRows < 4) {
-        // Initial phase: Just append the new row
-        setSteps(currentSteps => [...currentSteps, ...sequencedNewSteps])
-        setNextId(prev => prev + 1)
-        setVisibleRows(prev => prev + 1)
-      } else {
-        // Ongoing phase: remove first row, shift others up, add new row
-        setSteps(currentSteps => {
-          const withoutFirstRow = currentSteps.slice(5)
-          const updatedPositions = withoutFirstRow.map((step, index) => ({
-            ...step,
-            position: `r${Math.floor(index / 5) + 1}-${(index % 5) + 1}`
-          }))
-          return [...updatedPositions, ...sequencedNewSteps]
-        })
-        setNextId(prev => prev + 1)
       }
 
-      scheduleNextHeartbeat()
-    }
+      // Handle result nodes (non-first nodes)
+      const nodeIndex = i - 1
+      const shape = fixedShapeSequence ? 
+        getRandomFromSequence(fixedShapeSequence, nodeIndex) : 
+        getRandomShape(allowedShapes)
 
+      let result: NodeResult | undefined
+      let resultValue: string | undefined
+      let resultColor: NodeColor = undefined
+      let pillWidth: number | undefined
+
+      if (resultTypes && resultTypes.length > 0) {
+        const config = getRandomFromSequence(resultTypes, nodeIndex)
+        const value = getRandomValue(config)
+        result = value.result
+        resultValue = value.value
+        resultColor = value.color
+        pillWidth = value.pillWidth
+      }
+
+      return {
+        id: uniqueKey,
+        label: `Item ${uniqueKey}`,
+        status: "processing",
+        position: `r${rowPosition}-${i + 1}`,
+        addedTimestamp: now,
+        shape,
+        result,
+        resultValue,
+        resultColor,
+        pillWidth
+      }
+    })
+
+    const sequencedNewSteps = createScaledSequences(now, newSteps)
+
+    if (isResetting) {
+      // During reset, only remove rows, don't add new ones
+      setSteps(currentSteps => {
+        const withoutFirstRow = currentSteps.slice(5)
+        const updatedPositions = withoutFirstRow.map((step, index) => ({
+          ...step,
+          position: `r${Math.floor(index / 5) + 1}-${(index % 5) + 1}`
+        }))
+        return updatedPositions
+      })
+    } else if (visibleRows < MAX_ROWS) {
+      // Initial phase: Just append the new row
+      setSteps(currentSteps => [...currentSteps, ...sequencedNewSteps])
+      setNextId(prev => prev + 1)
+      setVisibleRows(prev => prev + 1)
+    } else {
+      // Ongoing phase: remove first row, shift others up, add new row
+      setSteps(currentSteps => {
+        const withoutFirstRow = currentSteps.slice(5)
+        const updatedPositions = withoutFirstRow.map((step, index) => ({
+          ...step,
+          position: `r${Math.floor(index / 5) + 1}-${(index % 5) + 1}`
+        }))
+        return [...updatedPositions, ...sequencedNewSteps]
+      })
+      setNextId(prev => prev + 1)
+    }
+  }, [
+    cycleStartTime,
+    isResetting,
+    steps.length,
+    visibleRows,
+    resetWorkflow,
+    generateUniqueKey,
+    allowedMediaTypes,
+    allowedShapes,
+    fixedShapeSequence,
+    resultTypes,
+    createScaledSequences
+  ])
+
+  // Schedule next heartbeat
+  const scheduleNextHeartbeat = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+    }
+    const scale = getTimingScale(cycleStartTime)
+    const interval = Math.max(Math.round(TIMING.HEARTBEAT / scale), 100)
+    timerRef.current = setTimeout(() => {
+      heartbeat()
+      scheduleNextHeartbeat()
+    }, interval)
+  }, [cycleStartTime, heartbeat])
+
+  // Effect to manage the heartbeat lifecycle
+  useEffect(() => {
     scheduleNextHeartbeat()
-    return () => clearTimeout(timer)
-  }, [visibleRows, steps, nextId, cycleStartTime, isResetting, allowedMediaTypes, allowedShapes, fixedShapeSequence, resultTypes, resetWorkflow])
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+      }
+    }
+  }, [scheduleNextHeartbeat])
 
   const getRowSteps = useCallback((steps: ExtendedWorkflowStep[], rowIndex: number) => {
     return steps.slice(rowIndex * 5, (rowIndex + 1) * 5)
