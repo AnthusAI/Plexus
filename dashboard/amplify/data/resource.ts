@@ -262,6 +262,7 @@ const schema = a.schema({
             idx("itemId"),
             idx("scorecardId"),
             idx("scoreId")
+            idx("evaluationId"),
         ]),
 
     ScoreResult: a
@@ -289,7 +290,8 @@ const schema = a.schema({
             idx("accountId"),
             idx("itemId"),
             idx("scoringJobId"),
-            idx("scorecardId")
+            idx("scorecardId"),
+            idx("evaluationId")
         ]),
 
     BatchJobScoringJob: a
