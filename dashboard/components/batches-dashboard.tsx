@@ -96,28 +96,40 @@ async function listAccounts(): Promise<SimpleResponse<SimpleAccount[]>> {
 
 async function listBatchJobs(accountId: string): Promise<SimpleResponse<SimpleBatchJob[]>> {
   try {
-    const result = await listFromModel('BatchJob', {
+    const result = await listFromModel<Schema['BatchJob']['type']>('BatchJob', {
       filter: {
         accountId: { eq: accountId }
       }
     });
-    return { 
-      data: result.data?.map(job => ({
-        ...job,
-        startedAt: (job.startedAt as string) || null,
-        estimatedEndAt: (job.estimatedEndAt as string) || null,
-        completedAt: (job.completedAt as string) || null,
-        errorMessage: (job.errorMessage as string) || null,
-        errorDetails: typeof job.errorDetails === 'object' && job.errorDetails !== null
-          ? job.errorDetails as Record<string, unknown>
-          : {} as Record<string, unknown>,
-        completedRequests: (job.completedRequests as number) || 0,
-        failedRequests: (job.failedRequests as number) || null,
-        scorecardId: (job.scorecardId as string) || null,
-        scoreId: (job.scoreId as string) || null,
-        scoringJobCountCache: (job.scoringJobCountCache as number) || null
-      })) || null 
-    };
+
+    if (!result.data) {
+      return { data: null };
+    }
+
+    const batchJobs: SimpleBatchJob[] = result.data.map(job => ({
+      id: job.id,
+      type: job.type,
+      status: job.status,
+      startedAt: job.startedAt || null,
+      estimatedEndAt: job.estimatedEndAt || null,
+      completedAt: job.completedAt || null,
+      errorMessage: job.errorMessage || null,
+      errorDetails: typeof job.errorDetails === 'object' && job.errorDetails !== null
+        ? job.errorDetails as Record<string, unknown>
+        : {} as Record<string, unknown>,
+      completedRequests: job.completedRequests || 0,
+      failedRequests: job.failedRequests || null,
+      scorecardId: job.scorecardId || null,
+      scoreId: job.scoreId || null,
+      scoringJobCountCache: job.scoringJobCountCache || null,
+      accountId: job.accountId,
+      modelProvider: job.modelProvider,
+      modelName: job.modelName,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt
+    }));
+
+    return { data: batchJobs };
   } catch (error) {
     console.error('Error listing batch jobs:', error);
     return { data: null };
@@ -138,13 +150,13 @@ type ScoreData = {
   sectionId: string
 }
 
-async function getScorecard(id: string): Promise<SimpleResponse<ScorecardType>> {
-  const result = await getFromModel('Scorecard', id);
+async function getScorecard(id: string): Promise<SimpleResponse<Schema['Scorecard']['type']>> {
+  const result = await getFromModel<Schema['Scorecard']['type']>('Scorecard', id);
   return result;
 }
 
-async function getScore(id: string): Promise<SimpleResponse<ScoreType>> {
-  const result = await getFromModel('Score', id);
+async function getScore(id: string): Promise<SimpleResponse<Schema['Score']['type']>> {
+  const result = await getFromModel<Schema['Score']['type']>('Score', id);
   return result;
 }
 
@@ -337,40 +349,47 @@ async function loadRelatedData(batchJobs: SimpleBatchJob[]): Promise<BatchJobWit
     scoreIds
   });
 
-  const [scorecards, scores] = await Promise.all([
-    Promise.all(scorecardIds.map(id => getFromModel('Scorecard', id))),
-    Promise.all(scoreIds.map(id => getFromModel('Score', id)))
-  ])
+  const [scorecardResults, scoreResults] = await Promise.all([
+    Promise.all(scorecardIds.map(id => getFromModel<Schema['Scorecard']['type']>('Scorecard', id))),
+    Promise.all(scoreIds.map(id => getFromModel<Schema['Score']['type']>('Score', id)))
+  ]);
 
   console.log('Loaded related data:', {
-    scorecards: scorecards.map((s: SimpleResponse<ScorecardType>) => ({ 
-      id: s.data?.id, 
-      name: s.data?.name 
-    })),
-    scores: scores.map((s: SimpleResponse<ScoreType>) => ({ 
-      id: s.data?.id, 
-      name: s.data?.name 
-    }))
+    scorecards: scorecardResults
+      .filter((s): s is SimpleResponse<Schema['Scorecard']['type']> => s.data !== null)
+      .map(s => ({ 
+        id: s.data?.id, 
+        name: s.data?.name 
+      })),
+    scores: scoreResults
+      .filter((s): s is SimpleResponse<Schema['Score']['type']> => s.data !== null)
+      .map(s => ({ 
+        id: s.data?.id, 
+        name: s.data?.name 
+      }))
   });
 
   const scorecardMap = new Map(
-    scorecards.map((result: SimpleResponse<ScorecardType>) => {
-      const data = result.data as ScorecardType
-      return [data.id, data]
-    })
-  )
+    scorecardResults
+      .filter((result): result is SimpleResponse<Schema['Scorecard']['type']> & { data: NonNullable<Schema['Scorecard']['type']> } => 
+        result.data !== null
+      )
+      .map(result => [result.data.id, result.data])
+  );
+
   const scoreMap = new Map(
-    scores.map((result: SimpleResponse<ScoreType>) => {
-      const data = result.data as ScoreType
-      return [data.id, data]
-    })
-  )
+    scoreResults
+      .filter((result): result is SimpleResponse<Schema['Score']['type']> & { data: NonNullable<Schema['Score']['type']> } => 
+        result.data !== null
+      )
+      .map(result => [result.data.id, result.data])
+  );
 
   const transformedJobs = batchJobs.map((job): BatchJobWithRelatedData => ({
     ...job,
     completedRequests: job.completedRequests ?? 0,
-    scorecard: (scorecardMap.get(job.scorecardId || '') || null) as Schema['Scorecard']['type'] | null,
-    score: (scoreMap.get(job.scoreId || '') || null) as Schema['Score']['type'] | null,
+    scorecard: (job.scorecardId && scorecardMap.get(job.scorecardId)) || null,
+    score: (job.scoreId && scoreMap.get(job.scoreId)) || null,
     scoringJobs: [],
     account: {} as Schema['Account']['type'],
     scoringJobsCount: job.scoringJobCountCache || 0,
