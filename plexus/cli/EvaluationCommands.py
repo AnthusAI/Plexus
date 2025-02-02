@@ -52,6 +52,7 @@ def load_configuration_from_yaml_file(configuration_file_path):
 @click.option('--score-name', default='', type=str, help='Comma-separated list of score names to evaluate')
 @click.option('--experiment-label', default='', type=str, help='Label for the experiment')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
+@click.option('--visualize', is_flag=True, default=False, help='Generate PNG visualization of LangGraph scores')
 def accuracy(
     scorecard_name: str,
     use_langsmith_trace: bool,
@@ -61,7 +62,8 @@ def accuracy(
     content_ids_to_sample: str,
     score_name: str,
     experiment_label: str,
-    fresh: bool
+    fresh: bool,
+    visualize: bool
     ):
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
@@ -146,7 +148,8 @@ def accuracy(
                     'random_seed': random_seed,
                     'subset_of_score_names': [single_score_name],
                     'experiment_label': experiment_label,
-                    'score_id': score_id
+                    'score_id': score_id,
+                    'visualize': visualize
                 }
                 
                 if uses_data_driven:

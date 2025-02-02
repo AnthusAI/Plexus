@@ -27,31 +27,35 @@ const features = [
 export const Features = () => {
   return (
     <section className="py-20 bg-background">
-      <div className="container mx-auto px-4">
-        <div className="max-w-3xl mx-auto text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">
-            Powerful Features for Agent Orchestration
-          </h2>
-          <p className="text-xl text-muted-foreground">
-            AI changes every week! Don't lock yourself into one solution. 
-            Plexus is a toolbench for applying any newfangled AI model to 
-            solve your problems.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {features.map((feature, index) => (
-            <div key={index} 
-                 className="bg-card p-6 rounded-lg shadow-md 
-                           transition-all duration-300 hover:shadow-xl">
-              <feature.icon className="float-right ml-4 w-12 h-12 text-accent" />
-              <h3 className="text-xl font-semibold mb-2 text-foreground">
-                {feature.title}
-              </h3>
-              <p className="text-muted-foreground">
-                {feature.description}
+      <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
+        <div className="py-4">
+          <div className="bg-background rounded-xl py-12 md:py-16 px-4 md:px-8">
+            <div className="max-w-3xl mx-auto text-center mb-12">
+              <h2 className="text-4xl md:text-5xl font-bold mb-8 text-foreground">
+                Powerful Features for Agent Orchestration
+              </h2>
+              <p className="text-2xl text-muted-foreground mb-12">
+                Built by practitioners on the front lines of AI deployment.  Our features 
+                evolve as rapidly as AI itself, delivering battle-tested tools that 
+                transform cutting-edge capabilities into real business value.
               </p>
             </div>
-          ))}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              {features.map((feature, index) => (
+                <div key={index} 
+                     className="bg-card p-6 rounded-lg shadow-md 
+                               transition-all duration-300 hover:shadow-xl">
+                  <feature.icon className="float-right ml-4 w-12 h-12 text-accent" />
+                  <h3 className="text-xl font-semibold mb-2 text-foreground">
+                    {feature.title}
+                  </h3>
+                  <p className="text-muted-foreground">
+                    {feature.description}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </section>

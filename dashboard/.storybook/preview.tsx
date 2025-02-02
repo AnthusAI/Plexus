@@ -4,6 +4,20 @@ import '../app/globals.css';
 import { ThemeProvider } from '../components/theme-provider';
 import { withThemeByClassName } from "@storybook/addon-themes";
 
+// Add Google Font
+const GoogleFontDecorator = (Story: React.ComponentType) => {
+  React.useEffect(() => {
+    const link = document.createElement('link');
+    link.href = 'https://fonts.googleapis.com/css2?family=Jersey+20&display=swap';
+    link.rel = 'stylesheet';
+    document.head.appendChild(link);
+    return () => {
+      document.head.removeChild(link);
+    };
+  }, []);
+  return <Story />;
+};
+
 const mockNextNavigation = (Story: React.ComponentType) => {
   // Mock the Next.js app router
   // @ts-ignore - we're mocking the router
@@ -61,6 +75,7 @@ const preview: Preview = {
     },
   },
   decorators: [
+    GoogleFontDecorator,
     mockNextNavigation,
     withThemeByClassName({ 
       themes: { light: "light", dark: "dark" }, 

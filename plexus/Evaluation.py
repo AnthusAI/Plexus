@@ -16,11 +16,12 @@ import asyncio
 from decimal import Decimal
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from tenacity import retry, wait_fixed, stop_after_attempt, before_log, retry_if_exception_type, wait_exponential
+from tenacity import retry, wait_fixed, stop_after_attempt, before_log, retry_if_exception_type, AsyncRetrying, wait_exponential
 from requests.exceptions import Timeout, RequestException
 import mlflow
 from concurrent.futures import ThreadPoolExecutor
 from asyncio import Queue
+import importlib
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -117,7 +118,8 @@ class Evaluation:
         experiment_label = None,
         max_mismatches_to_report=5,
         account_key: str = 'call-criteria',
-        score_id: str = None
+        score_id: str = None,
+        visualize: bool = False
     ):
         self.scorecard_name = scorecard_name
         self.scorecard = scorecard
@@ -129,6 +131,7 @@ class Evaluation:
         self.random_seed = random_seed
         self.score_id = score_id
         self.account_key = account_key  # Store the account key
+        self.visualize = visualize
         
         # Parse lists, if available.
         self.session_ids_to_sample = session_ids_to_sample
@@ -921,7 +924,7 @@ class Evaluation:
                         'question': question,
                         'predicted': score_value,
                         'ground_truth': human_label,
-                        'explanation': score_result.explanation if score_result and hasattr(score_result, 'explanation') else None,
+                        'explanation': score_result.metadata['explanation'] if score_result and hasattr(score_result, 'metadata') and 'explanation' in score_result.metadata else None,
                         'transcript': score_result.metadata['text'] if score_result and hasattr(score_result, 'metadata') and 'text' in score_result.metadata else None
                     }
                     # Only append if we have either a transcript or an explanation
@@ -1073,6 +1076,7 @@ class Evaluation:
                     await self.maybe_start_metrics_task(score_name, is_final_result)
             except Exception as e:
                 logging.error(f"Error scoring text for {score_name}: {e}")
+                raise
         
         return self.results_by_score[score_name]
 
@@ -1173,7 +1177,7 @@ class Evaluation:
                         'human_explanation': score_result.metadata['human_explanation'],
                         'predicted_answer': score_result.value,
                         'match': score_result.metadata['correct'],
-                        'explanation': score_result.explanation,
+                        'explanation': score_result.metadata.get('explanation'),
                         'original_text': score_result.metadata['text'],
                     })
 
@@ -1361,194 +1365,242 @@ Total cost:       ${expenses['total_cost']:.6f}
 
     async def score_text(self, row, score_name: str = None):
         """Score text with retry logic for handling timeouts and request exceptions"""
-        logging.info("Scoring text...")
-
-        text = row['text']
-        content_id = row.get('content_id', '')
-        session_id = row.get('Session ID', content_id)
-        columns = row.get('columns', {})
-        form_id = columns.get('form_id', '')
-        metadata_string = columns.get('metadata', {})
+        max_attempts = 5
+        base_delay = 4
+        max_delay = 10
         
-        # Initialize human_labels dictionary
-        human_labels = {}
-        
-        if isinstance(metadata_string, dict):
-            metadata = metadata_string
-        else:
+        for attempt in range(max_attempts):
             try:
-                metadata = json.loads(metadata_string)
-            except json.JSONDecodeError:
-                logging.warning(f"Failed to parse metadata as JSON. Using empty dict. Metadata: {metadata_string}")
-                metadata = {}
-
-        logging.info(f"Processing text for content_id: {content_id}, session_id: {session_id}, form_id: {form_id}")
-
-        # If score_name is provided, only process that score
-        score_names_to_process = [score_name] if score_name else self.score_names_to_process()
-        scorecard_results = await self.scorecard.score_entire_text(
-            text=text,
-            metadata=metadata,
-            subset_of_score_names=score_names_to_process
-        )
-
-        # Create a new dictionary for filtered results
-        filtered_results = {}
-
-        result = {
-            'content_id': content_id,
-            'session_id': session_id,
-            'form_id': form_id,
-            'results': filtered_results,  # Use the filtered results dictionary
-            'human_labels': human_labels
-        }
-
-        # Track if we've processed any scores for this text
-        has_processed_scores = False
-
-        # Get the primary score name if we're evaluating a specific score
-        primary_score_name = score_name if score_name else (
-            self.subset_of_score_names[0] if self.subset_of_score_names and len(self.subset_of_score_names) == 1 
-            else None
-        )
-
-        for score_identifier in scorecard_results.keys():
-            try:
-                score_result = scorecard_results[score_identifier]
-                score_instance = Score.from_name(self.scorecard.name, score_identifier)
-                label_score_name = score_instance.get_label_score_name()
-                score_name = score_instance.parameters.name
-
-                # Skip if this is a dependency score and not our primary score
-                if primary_score_name and score_name != primary_score_name:
-                    logging.info(f"Skipping result creation for dependency score: {score_name}")
-                    continue
-
-                # First check for override
-                human_label = None
-                if form_id in self.override_data and score_name in self.override_data[form_id]:
-                    human_label = self.override_data[form_id][score_name]
-                    logging.info(f"Using override for form {form_id}, score {score_name}: {human_label}")
+                text = row['text']
+                content_id = row.get('content_id', '')
+                session_id = row.get('Session ID', content_id)
+                columns = row.get('columns', {})
+                form_id = columns.get('form_id', '')
+                metadata_string = columns.get('metadata', {})
+                
+                # Initialize human_labels dictionary
+                human_labels = {}
+                
+                if isinstance(metadata_string, dict):
+                    metadata = metadata_string
                 else:
-                    # Fall back to row data if no override exists
-                    label_column = label_score_name + '_label'
-                    if label_column in row.index:
-                        human_label = row[label_column]
-                    elif label_score_name in row.index:
-                        human_label = row[label_score_name]
-                    else:
-                        logging.warning(f"Neither '{score_identifier}' nor '{label_score_name}' found in the row. Available columns: {row.index.tolist()}")
-                        continue
+                    try:
+                        metadata = json.loads(metadata_string)
+                    except json.JSONDecodeError:
+                        logging.warning(f"Failed to parse metadata as JSON. Using empty dict. Metadata: {metadata_string}")
+                        metadata = {}
 
-                human_label = str(human_label).lower().rstrip('.!?')
-                if human_label == 'nan':
-                    human_label = ''
-                if human_label == 'n/a':
-                    human_label = 'na'
+                logging.info(f"Processing text for content_id: {content_id}, session_id: {session_id}, form_id: {form_id}")
 
-                human_explanation = columns.get(f"{label_score_name} comment", 'None')
-
-                score_result_value = ' '.join(str(score_result.value).lower().strip().split())
-
-                if form_id in self.override_data:
-                    for override_question_name, correct_value in self.override_data[form_id].items():
-                        if str(override_question_name) in human_labels:
-                            logging.info(f"OVERRIDING human label for question '{override_question_name}' in form '{form_id}' from '{human_labels[str(override_question_name)]}' to '{correct_value}'")
-                            human_labels[str(override_question_name)] = correct_value
-
-                score_result.metadata['human_label'] = human_label
-                score_result.metadata['human_explanation'] = human_explanation
-                score_result.metadata['correct'] = score_result_value == human_label
-                score_result.metadata['text'] = text
-
-                # Add to filtered results only if we get here (i.e., all conditions are met)
-                filtered_results[score_identifier] = score_result
-                has_processed_scores = True
-
-                # Create ScoreResult in a non-blocking way only for the primary score
-                if self.dashboard_client and self.experiment_id:
-                    await asyncio.create_task(self._create_score_result(
-                        score_result=score_result,
-                        content_id=content_id,
-                        result=result
-                    ))
-
-            except Exception as e:
-                logging.exception(f"Error processing {score_identifier}: {e}")
-                score_result = Score.Result(
-                    value="Error", 
-                    error=str(e),
-                    parameters=Score.Parameters(
-                        name=score_identifier,
-                        scorecard=self.scorecard_name
-                    )
+                # If score_name is provided, only process that score
+                score_names_to_process = [score_name] if score_name else self.score_names_to_process()
+                
+                # Check if we need to generate visualization for any LangGraphScores
+                if hasattr(self, 'visualize') and self.visualize:
+                    for score_to_process in score_names_to_process:
+                        # Find score config in the scores list
+                        score_config = next(
+                            (score for score in self.scorecard.properties['scores'] 
+                             if score.get('name') == score_to_process),
+                            {}
+                        )
+                        if score_config.get('class') == 'LangGraphScore':
+                            score_instance = Score.from_name(self.scorecard_name, score_to_process)
+                            if isinstance(score_instance, LangGraphScore):
+                                await score_instance.async_setup()  # Ensure the graph is built
+                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                output_path = os.path.join('tmp', f'graph_{score_to_process}_{timestamp}.png')
+                                score_instance.generate_graph_visualization(output_path)
+                                logging.info(f"Generated graph visualization at {output_path}")
+                
+                scorecard_results = await self.scorecard.score_entire_text(
+                    text=text,
+                    metadata=metadata,
+                    subset_of_score_names=score_names_to_process
                 )
 
-        # Update progress tracking
-        CommandProgress.update(
-            current=self.processed_items,
-            total=self.number_of_texts_to_sample,
-            status=f"Evaluating accuracy ({self.processed_items}/{self.number_of_texts_to_sample})"
-        )
-        # Add result to all_results and increment processed_items only if we processed any scores
-        if has_processed_scores:
-            self.processed_items += 1
+                # Create a new dictionary for filtered results
+                filtered_results = {}
 
-        return result
+                result = {
+                    'content_id': content_id,
+                    'session_id': session_id,
+                    'form_id': form_id,
+                    'results': filtered_results,  # Use the filtered results dictionary
+                    'human_labels': human_labels
+                }
 
-    async def _create_score_result(self, score_result, content_id, result):
-        """Helper method to create score result asynchronously"""
-        max_retries = 3
-        retry_delay = 1  # seconds
-        
-        for attempt in range(max_retries):
-            try:
-                # Store the account key when initializing the evaluation
-                if not hasattr(self, 'account_key'):
-                    self.account_key = 'call-criteria'  # default value
+                # Track if we've processed any scores for this text
+                has_processed_scores = False
+
+                # Get the primary score name if we're evaluating a specific score
+                primary_score_name = score_name if score_name else (
+                    self.subset_of_score_names[0] if self.subset_of_score_names and len(self.subset_of_score_names) == 1 
+                    else None
+                )
+
+                for score_identifier in scorecard_results.keys():
+                    try:
+                        score_result = scorecard_results[score_identifier]
+                        score_instance = Score.from_name(self.scorecard.name, score_identifier)
+                        label_score_name = score_instance.get_label_score_name()
+                        score_name = score_instance.parameters.name
+
+                        # Skip if this is a dependency score and not our primary score
+                        if primary_score_name and score_name != primary_score_name:
+                            logging.info(f"Skipping result creation for dependency score: {score_name}")
+                            continue
+
+                        # First check for override
+                        human_label = None
+                        if form_id in self.override_data and score_name in self.override_data[form_id]:
+                            human_label = self.override_data[form_id][score_name]
+                            logging.info(f"Using override for form {form_id}, score {score_name}: {human_label}")
+                        else:
+                            # Fall back to row data if no override exists
+                            label_column = label_score_name + '_label'
+                            if label_column in row.index:
+                                human_label = row[label_column]
+                            elif label_score_name in row.index:
+                                human_label = row[label_score_name]
+                            else:
+                                logging.warning(f"Neither '{score_identifier}' nor '{label_score_name}' found in the row. Available columns: {row.index.tolist()}")
+                                continue
+
+                        human_label = str(human_label).lower().rstrip('.!?')
+                        if human_label == 'nan':
+                            human_label = ''
+                        if human_label == 'n/a':
+                            human_label = 'na'
+
+                        human_explanation = columns.get(f"{label_score_name} comment", 'None')
+
+                        score_result_value = ' '.join(str(score_result.value).lower().strip().split())
+
+                        if form_id in self.override_data:
+                            for override_question_name, correct_value in self.override_data[form_id].items():
+                                if str(override_question_name) in human_labels:
+                                    logging.info(f"OVERRIDING human label for question '{override_question_name}' in form '{form_id}' from '{human_labels[str(override_question_name)]}' to '{correct_value}'")
+                                    human_labels[str(override_question_name)] = correct_value
+
+                        score_result.metadata['human_label'] = human_label
+                        score_result.metadata['human_explanation'] = human_explanation
+                        score_result.metadata['correct'] = score_result_value == human_label
+                        score_result.metadata['text'] = text
+
+                        # Add to filtered results only if we get here (i.e., all conditions are met)
+                        filtered_results[score_identifier] = score_result
+                        has_processed_scores = True
+
+                        # Create ScoreResult in a non-blocking way only for the primary score
+                        if self.dashboard_client and self.experiment_id:
+                            await self._create_score_result(
+                                score_result=score_result,
+                                content_id=content_id,
+                                result=result
+                            )
+
+                    except Exception as e:
+                        logging.exception(f"Error processing {score_identifier}: {e}")
+                        score_result = Score.Result(
+                            value="Error", 
+                            error=str(e),
+                            parameters=Score.Parameters(
+                                name=score_identifier,
+                                scorecard=self.scorecard_name
+                            )
+                        )
+
+                # Remove the result accumulation from here since it's now handled in _async_run
+                if has_processed_scores:
+                    self.processed_items += 1
+
+                return result
+
+            except (Timeout, RequestException) as e:
+                if attempt == max_attempts - 1:  # Last attempt
+                    raise  # Re-raise the last error
                 
-                # Create a new client instance for each request to avoid connection reuse issues
-                temp_client = PlexusDashboardClient.for_account(self.account_key)
-                
-                await asyncio.to_thread(
-                    ScoreResult.create,
-                    client=temp_client,
-                    value=1.0 if score_result.metadata['correct'] else 0.0,
-                    confidence=None,
-                    correct=score_result.metadata['correct'],
-                    itemId=content_id,
-                    accountId=self.account_id,
-                    evaluationId=self.experiment_id,
-                    scorecardId=self.scorecard_id,
-                    scoringJobId=None,
-                    metadata=json.dumps({
-                        'item_id': result['form_id'],
-                        'session_id': result['session_id'],
-                        'form_id': result['form_id'],
-                        'results': {
-                            k: {
-                                'value': v.value,
-                                'explanation': v.explanation,
-                                'metadata': v.metadata,
-                                'parameters': {
-                                    'name': v.parameters.name,
-                                    'scorecard_name': v.parameters.scorecard_name
-                                }
-                            } for k, v in result['results'].items()
+                # Calculate exponential backoff delay
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                logging.info(f"Attempt {attempt + 1} failed with error: {e}. Retrying in {delay} seconds...")
+                await asyncio.sleep(delay)
+
+    async def _create_score_result(self, *, score_result, content_id, result):
+        """Create a score result in the dashboard."""
+        try:
+            # Log the raw inputs
+            logging.info("Creating score result with raw inputs:")
+            logging.info(f"score_result value: {score_result.value}")
+            logging.info(f"score_result metadata: {score_result.metadata}")
+            logging.info(f"content_id: {content_id}")
+            logging.info(f"result dict: {result}")
+
+            # Create ScoreResult in a non-blocking way
+            data = {
+                'evaluationId': self.experiment_id,
+                'itemId': result['form_id'],  # Using form_id as the itemId
+                'accountId': self.account_id,
+                'scorecardId': self.scorecard_id,
+                'value': str(score_result.value),
+                'metadata': json.dumps({
+                    'item_id': result['form_id'],
+                    'results': {
+                        score_result.parameters.name: {
+                            'value': str(score_result.value),
+                            'confidence': None,
+                            'explanation': score_result.metadata.get('explanation'),
+                            'metadata': {
+                                'human_label': score_result.metadata.get('human_label'),
+                                'correct': score_result.metadata.get('correct'),
+                                'human_explanation': score_result.metadata.get('human_explanation'),
+                                'text': score_result.metadata.get('text')
+                            }
                         }
-                    })
-                )
-                break  # If successful, break out of retry loop
-                
-            except Exception as e:
-                if "Transport is already connected" in str(e):
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(retry_delay)
-                        continue
-                logging.error(f"Error creating score result (attempt {attempt + 1}/{max_retries}): {e}")
-                if attempt == max_retries - 1:
-                    # Log final attempt failure but don't raise to avoid breaking the main flow
-                    logging.error(f"Failed to create score result after {max_retries} attempts")
+                    }
+                })
+            }
+
+            mutation = """
+            mutation CreateScoreResult($input: CreateScoreResultInput!) {
+                createScoreResult(input: $input) {
+                    id
+                    evaluationId
+                    itemId
+                    accountId
+                    scorecardId
+                    value
+                    metadata
+                }
+            }
+            """
+            
+            variables = {
+                "input": data
+            }
+            
+            # Log the exact mutation and variables being sent
+            logging.info("Sending GraphQL mutation:")
+            logging.info(f"Mutation: {mutation}")
+            logging.info("Variables:")
+            logging.info(f"evaluationId: {data['evaluationId']}")
+            logging.info(f"itemId: {data['itemId']}")
+            logging.info(f"accountId: {data['accountId']}")
+            logging.info(f"scorecardId: {data['scorecardId']}")
+            logging.info(f"value: {data['value']}")
+            logging.info(f"metadata: {data['metadata']}")
+            
+            # Execute the API call in a non-blocking way
+            response = await asyncio.to_thread(self.dashboard_client.execute, mutation, variables)
+            
+            # Log the response
+            logging.info("Received response from GraphQL:")
+            logging.info(f"Response: {response}")
+            
+        except Exception as e:
+            logging.error(f"Error creating score result: {e}")
+            logging.error(f"Error details:", exc_info=True)
+            raise
 
     async def cleanup(self):
         """Clean up all resources"""
@@ -1644,142 +1696,6 @@ Total cost:       ${expenses['total_cost']:.6f}
                 
                 logging.info("Metrics task cleanup completed")
 
-    @retry(
-        wait=wait_fixed(2),
-        stop=stop_after_attempt(5),
-        before=before_log(logging.getLogger(), logging.INFO),
-        retry=retry_if_exception_type((Timeout, RequestException)))
-    async def score_text(self, row, score_name: str = None):
-        """Score text with retry logic for handling timeouts and request exceptions"""
-        logging.info("Scoring text...")
-
-        text = row['text']
-        content_id = row.get('content_id', '')
-        session_id = row.get('Session ID', content_id)
-        columns = row.get('columns', {})
-        form_id = columns.get('form_id', '')
-        metadata_string = columns.get('metadata', {})
-        
-        # Initialize human_labels dictionary
-        human_labels = {}
-        
-        if isinstance(metadata_string, dict):
-            metadata = metadata_string
-        else:
-            try:
-                metadata = json.loads(metadata_string)
-            except json.JSONDecodeError:
-                logging.warning(f"Failed to parse metadata as JSON. Using empty dict. Metadata: {metadata_string}")
-                metadata = {}
-
-        logging.info(f"Processing text for content_id: {content_id}, session_id: {session_id}, form_id: {form_id}")
-
-        # If score_name is provided, only process that score
-        score_names_to_process = [score_name] if score_name else self.score_names_to_process()
-        scorecard_results = await self.scorecard.score_entire_text(
-            text=text,
-            metadata=metadata,
-            subset_of_score_names=score_names_to_process
-        )
-
-        # Create a new dictionary for filtered results
-        filtered_results = {}
-
-        result = {
-            'content_id': content_id,
-            'session_id': session_id,
-            'form_id': form_id,
-            'results': filtered_results,  # Use the filtered results dictionary
-            'human_labels': human_labels
-        }
-
-        # Track if we've processed any scores for this text
-        has_processed_scores = False
-
-        # Get the primary score name if we're evaluating a specific score
-        primary_score_name = score_name if score_name else (
-            self.subset_of_score_names[0] if self.subset_of_score_names and len(self.subset_of_score_names) == 1 
-            else None
-        )
-
-        for score_identifier in scorecard_results.keys():
-            try:
-                score_result = scorecard_results[score_identifier]
-                score_instance = Score.from_name(self.scorecard.name, score_identifier)
-                label_score_name = score_instance.get_label_score_name()
-                score_name = score_instance.parameters.name
-
-                # Skip if this is a dependency score and not our primary score
-                if primary_score_name and score_name != primary_score_name:
-                    logging.info(f"Skipping result creation for dependency score: {score_name}")
-                    continue
-
-                # First check for override
-                human_label = None
-                if form_id in self.override_data and score_name in self.override_data[form_id]:
-                    human_label = self.override_data[form_id][score_name]
-                    logging.info(f"Using override for form {form_id}, score {score_name}: {human_label}")
-                else:
-                    # Fall back to row data if no override exists
-                    label_column = label_score_name + '_label'
-                    if label_column in row.index:
-                        human_label = row[label_column]
-                    elif label_score_name in row.index:
-                        human_label = row[label_score_name]
-                    else:
-                        logging.warning(f"Neither '{score_identifier}' nor '{label_score_name}' found in the row. Available columns: {row.index.tolist()}")
-                        continue
-
-                human_label = str(human_label).lower().rstrip('.!?')
-                if human_label == 'nan':
-                    human_label = ''
-                if human_label == 'n/a':
-                    human_label = 'na'
-
-                human_explanation = columns.get(f"{label_score_name} comment", 'None')
-
-                score_result_value = ' '.join(str(score_result.value).lower().strip().split())
-
-                if form_id in self.override_data:
-                    for override_question_name, correct_value in self.override_data[form_id].items():
-                        if str(override_question_name) in human_labels:
-                            logging.info(f"OVERRIDING human label for question '{override_question_name}' in form '{form_id}' from '{human_labels[str(override_question_name)]}' to '{correct_value}'")
-                            human_labels[str(override_question_name)] = correct_value
-
-                score_result.metadata['human_label'] = human_label
-                score_result.metadata['human_explanation'] = human_explanation
-                score_result.metadata['correct'] = score_result_value == human_label
-                score_result.metadata['text'] = text
-
-                # Add to filtered results only if we get here (i.e., all conditions are met)
-                filtered_results[score_identifier] = score_result
-                has_processed_scores = True
-
-                # Create ScoreResult in a non-blocking way only for the primary score
-                if self.dashboard_client and self.experiment_id:
-                    await asyncio.create_task(self._create_score_result(
-                        score_result=score_result,
-                        content_id=content_id,
-                        result=result
-                    ))
-
-            except Exception as e:
-                logging.exception(f"Error processing {score_identifier}: {e}")
-                score_result = Score.Result(
-                    value="Error", 
-                    error=str(e),
-                    parameters=Score.Parameters(
-                        name=score_identifier,
-                        scorecard=self.scorecard_name
-                    )
-                )
-
-        # Remove the result accumulation from here since it's now handled in _async_run
-        if has_processed_scores:
-            self.processed_items += 1
-
-        return result
-
 class ConsistencyEvaluation(Evaluation):
     def __init__(self, *, number_of_times_to_sample_each_text, **kwargs):
         super().__init__(**kwargs)
@@ -1790,7 +1706,7 @@ class ConsistencyEvaluation(Evaluation):
         mlflow.log_param("number_of_times_to_sample_each_text", self.number_of_times_to_sample_each_text)
 
 class AccuracyEvaluation(Evaluation):
-    def __init__(self, *, override_folder=None, labeled_samples=None, labeled_samples_filename=None, score_id=None, **kwargs):
+    def __init__(self, *, override_folder=None, labeled_samples=None, labeled_samples_filename=None, score_id=None, visualize=False, **kwargs):
         super().__init__(**kwargs)
         self.scorecard_name = kwargs.get('scorecard_name')
         self.override_folder = override_folder
@@ -1798,6 +1714,7 @@ class AccuracyEvaluation(Evaluation):
         self.labeled_samples = labeled_samples
         self.labeled_samples_filename = labeled_samples_filename
         self.score_id = score_id
+        self.visualize = visualize
         self.results_queue = Queue()
         self.metrics_tasks = {}  # Dictionary to track metrics computation tasks per score
         self.should_stop = False
