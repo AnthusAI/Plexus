@@ -144,18 +144,38 @@ This document outlines the implementation of Plexus's two-level dispatch system:
 
 ### Phase 4: Backend Integration
 
-1. **Lambda Integration**
-   - Create Lambda function for Task-to-Celery dispatch
-   - Set up secure communication channels
-   - Implement error handling
-   - Add monitoring and logging
+1. **Lambda Integration** (In Progress)
+   - ✓ Create Lambda function for Task-to-Celery dispatch
+   - ✓ Set up DynamoDB stream trigger
+   - ✓ Basic dispatch logic implemented
+   - Remaining tasks:
+     - Replace direct SQS message construction with Celery library
+     - Add Celery environment variables to Lambda
+     - Test end-to-end dispatch flow
+
+2. **DynamoDB Indexes** (In Progress)
+   - Current state:
+     ```typescript
+     .secondaryIndexes((idx) => [
+         idx("accountId").sortKeys(["updatedAt"]),
+         idx("scorecardId"),
+         idx("scoreId"),
+         idx("updatedAt")
+     ])
+     ```
+   - Planned changes (one per deployment):
+     1. Add `updatedAt` sort key to `scorecardId` index
+     2. Add `updatedAt` sort key to `scoreId` index
+     3. Remove standalone `updatedAt` index (redundant)
 
 3. **System Testing**
-   - Test end-to-end flow from UI to worker
-   - Validate error handling
-   - Test progress reporting
-   - Verify state transitions
-   - Test concurrent operations
+   - ✓ Initial test successful - Lambda triggered by Task creation
+   - ✓ DynamoDB stream configuration working
+   - Pending tests:
+     - Celery task dispatch with environment variables
+     - Progress reporting
+     - State transitions
+     - Concurrent operations
 
 ### Phase 5: System Maintenance
 
@@ -320,3 +340,37 @@ The evaluation command processes scorecard evaluations with:
 - Proper async execution handling
 - Detailed status reporting
 - Error handling and cleanup 
+
+## Next Steps
+
+1. **Lambda Function Updates**
+   - Refactor to use Celery library instead of direct SQS messages
+   - Add proper environment configuration:
+     - `CELERY_AWS_ACCESS_KEY_ID`
+     - `CELERY_AWS_SECRET_ACCESS_KEY`
+     - `CELERY_AWS_REGION_NAME`
+     - `CELERY_RESULT_BACKEND_TEMPLATE`
+   - Add error handling and retries
+   - Add logging and monitoring
+
+2. **DynamoDB Index Updates**
+   - Deploy changes one at a time:
+     1. Add sort key to `scorecardId` index
+     2. Add sort key to `scoreId` index
+     3. Remove redundant `updatedAt` index
+   - Verify query performance after each change
+   - Update application code to use new index patterns
+
+3. **Testing & Validation**
+   - Test Task creation through UI
+   - Verify Lambda triggers
+   - Confirm Celery task dispatch
+   - Check task progress updates
+   - Validate error handling
+   - Test concurrent operations
+
+4. **Documentation**
+   - Update deployment procedures
+   - Document environment configuration
+   - Add troubleshooting guides
+   - Document index usage patterns 
