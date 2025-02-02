@@ -48,7 +48,7 @@ export class TaskDispatcherStack extends Stack {
 
     new CfnOutput(this, 'TaskDispatcherFunctionArn', {
       value: this.taskDispatcherFunction.functionArn,
-      exportName: 'TaskDispatcherFunctionArn'
+      exportName: `${this.stackName}-TaskDispatcherFunctionArn`
     });
   }
 } 
