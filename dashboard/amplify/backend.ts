@@ -23,11 +23,11 @@ const taskDispatcherStack = new TaskDispatcherStack(
 // Get the Task table
 const taskTable = backend.data.resources.tables.Task;
 
-// Get the Lambda function from the stack
-const taskDispatcherLambda = lambda.Function.fromFunctionArn(
-    backend.createStack('TaskDispatcherStack'),
+// Get the Lambda function from the stack outputs
+const taskDispatcherLambda = lambda.Function.fromFunctionName(
+    taskDispatcherStack,
     'TaskDispatcherFunction',
-    taskDispatcherStack.exportValue('TaskDispatcherFunctionArn')
+    'TaskDispatcherFunction'
 );
 
 // Create a DynamoDB stream event source
