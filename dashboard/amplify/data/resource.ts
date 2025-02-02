@@ -261,8 +261,8 @@ const schema = a.schema({
             idx("accountId"),
             idx("itemId"),
             idx("scorecardId"),
-            idx("scoreId")
-            idx("evaluationId"),
+            idx("scoreId"),
+            idx("evaluationId")
         ]),
 
     ScoreResult: a
