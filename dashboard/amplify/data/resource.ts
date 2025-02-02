@@ -171,7 +171,7 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("accountId").sortKeys(["updatedAt", "status"]),
+            idx("accountId").sortKey("updatedAt"),
             idx("scorecardId"),
             idx("scoreId"),
             idx("updatedAt")
