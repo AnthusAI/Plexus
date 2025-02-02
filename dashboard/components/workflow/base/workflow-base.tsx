@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { ContainerBase } from "./container-base"
 import { ConnectionLine } from "./connection-line"
 import { CircleNode } from "../nodes"
@@ -62,21 +62,77 @@ type WorkflowBaseProps = {
   positions?: WorkflowPositions
 }
 
+const CYCLE_DURATION = 8000 // Base duration of a full cycle (slightly longer than longest completion delay + reset buffer)
+const WATCHDOG_INTERVAL = 2000 // Check every 2 seconds
+const MAX_CYCLE_AGE = CYCLE_DURATION * 1.5 // Allow 50% extra time before forcing reset
+
 const WorkflowBase = React.forwardRef<SVGGElement, WorkflowBaseProps>(
   ({ getNodeComponent, timing = TIMING, positions = POSITIONS }, ref) => {
   const [nodeStates, setNodeStates] = useState<Record<string, "not-started" | "processing" | "complete">>(
     Object.keys(positions).reduce((acc, key) => ({ ...acc, [key]: "not-started" }), {})
   )
+  const isPageVisibleRef = useRef(true)
+  const timersRef = useRef<NodeJS.Timeout[]>([])
+  const cycleStatesFnRef = useRef<() => void>()
+  const lastCycleTimeRef = useRef(Date.now())
+
+  // Add watchdog effect
+  useEffect(() => {
+    const watchdogInterval = setInterval(() => {
+      const now = Date.now()
+      const timeSinceLastCycle = now - lastCycleTimeRef.current
+
+      // If too much time has passed and we have a cycle function, force a restart
+      if (timeSinceLastCycle > MAX_CYCLE_AGE && cycleStatesFnRef.current && isPageVisibleRef.current) {
+        console.log('Watchdog detected stale cycle, forcing restart')
+        cycleStatesFnRef.current()
+      }
+    }, WATCHDOG_INTERVAL)
+
+    return () => clearInterval(watchdogInterval)
+  }, [])
+
+  // Handle page visibility changes
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const wasVisible = isPageVisibleRef.current
+      isPageVisibleRef.current = !document.hidden
+      
+      // Clear timers when page becomes hidden
+      if (!isPageVisibleRef.current) {
+        timersRef.current.forEach(timer => clearTimeout(timer))
+        timersRef.current = []
+      }
+      // Restart cycle when page becomes visible again
+      else if (!wasVisible && cycleStatesFnRef.current) {
+        cycleStatesFnRef.current()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [])
 
   useEffect(() => {
     let isCurrentCycle = true
-    let timers: NodeJS.Timeout[] = []
 
     const cycleStates = () => {
       if (!isCurrentCycle) return
 
+      // Update last cycle time
+      lastCycleTimeRef.current = Date.now()
+
+      // Clear any existing timers
+      timersRef.current.forEach(timer => clearTimeout(timer))
+      timersRef.current = []
+
       // Reset all nodes to not-started
       setNodeStates(Object.keys(positions).reduce((acc, key) => ({ ...acc, [key]: "not-started" }), {}))
+
+      // Don't schedule new timers if page is hidden
+      if (!isPageVisibleRef.current) return
 
       // Schedule processing states
       Object.entries(timing).forEach(([node, timing]) => {
@@ -85,7 +141,7 @@ const WorkflowBase = React.forwardRef<SVGGElement, WorkflowBaseProps>(
           if (!isCurrentCycle) return
           setNodeStates(prev => ({ ...prev, [node]: "processing" }))
         }, timing.processingDelay)
-        timers.push(timer)
+        timersRef.current.push(timer)
       })
 
       // Schedule completion states
@@ -95,7 +151,7 @@ const WorkflowBase = React.forwardRef<SVGGElement, WorkflowBaseProps>(
           if (!isCurrentCycle) return
           setNodeStates(prev => ({ ...prev, [node]: "complete" }))
         }, timing.completionDelay)
-        timers.push(timer)
+        timersRef.current.push(timer)
       })
 
       // Reset after full cycle
@@ -103,14 +159,18 @@ const WorkflowBase = React.forwardRef<SVGGElement, WorkflowBaseProps>(
         if (!isCurrentCycle) return
         cycleStates()
       }, Math.max(...Object.values(timing).map(t => t.completionDelay)) + 2000)
-      timers.push(resetTimer)
+      timersRef.current.push(resetTimer)
     }
+
+    // Store cycleStates in ref for visibility handler and watchdog
+    cycleStatesFnRef.current = cycleStates
 
     cycleStates() // Start the cycle
 
     return () => {
       isCurrentCycle = false
-      timers.forEach(timer => clearTimeout(timer))
+      timersRef.current.forEach(timer => clearTimeout(timer))
+      timersRef.current = []
     }
   }, [timing, positions])
 
