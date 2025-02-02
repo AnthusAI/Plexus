@@ -101,9 +101,9 @@ export default function EnterprisePage() {
           </div>
           <div className="flex flex-col items-center text-center p-6 rounded-lg transition-all duration-300 hover:bg-accent/5">
             <Lock className="w-16 h-16 mb-6 text-accent" />
-            <h3 className="text-xl font-semibold mb-2">Data Privacy</h3>
+            <h3 className="text-xl font-semibold mb-2">Enterprise-grade Security & Privacy</h3>
             <p className="text-muted-foreground">
-              GDPR and HIPAA compliant with data residency options.
+              SOC 2, GDPR, and CCPA compliant with data residency option.
             </p>
           </div>
         </div>
