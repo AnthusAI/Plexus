@@ -3,6 +3,8 @@ import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+import { execSync } from 'child_process';
 
 // Get the directory path in ES module context
 const __filename = fileURLToPath(import.meta.url);
@@ -26,13 +28,12 @@ export class TaskDispatcherStack extends Stack {
           image: lambda.Runtime.PYTHON_3_11.bundlingImage,
           local: {
             tryBundle(outputDir: string) {
-              const child_process = require('child_process');
               // Install Python dependencies using pip
-              child_process.execSync(
+              execSync(
                 `python3 -m pip install -r ${path.join(functionDir, 'requirements.txt')} -t ${outputDir} --platform manylinux2014_x86_64 --only-binary=:all:`
               );
               // Copy function code to output directory
-              child_process.execSync(`cp -r ${functionDir}/* ${outputDir}`);
+              execSync(`cp -r ${functionDir}/* ${outputDir}`);
               return true;
             }
           }
