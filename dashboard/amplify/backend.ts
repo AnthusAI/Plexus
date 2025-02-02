@@ -7,7 +7,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { Duration } from 'aws-cdk-lib';
 import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 
-// Create the backend with the function
+// Create the backend
 const backend = defineBackend({
     auth,
     data
