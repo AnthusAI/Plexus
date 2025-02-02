@@ -85,6 +85,7 @@ type WorkflowBaseProps = {
   getNodeComponent?: (position: string) => ComponentType<NodeProps>
   timing?: WorkflowTiming
   positions?: WorkflowPositions
+  cycle?: boolean
 }
 
 const CYCLE_DURATION = 18000 // Base duration of a full cycle (15s completion + 3s pause)
@@ -93,7 +94,7 @@ const MAX_CYCLE_AGE = CYCLE_DURATION * 1.5 // Allow 50% extra time before forcin
 const COMPLETION_PAUSE = 3000 // Pause for 3 seconds after completion before resetting
 
 const WorkflowBase = React.forwardRef<SVGGElement, WorkflowBaseProps>(
-  ({ getNodeComponent, timing = TIMING, positions = POSITIONS }, ref) => {
+  ({ getNodeComponent, timing = TIMING, positions = POSITIONS, cycle = true }, ref) => {
   const [nodeStates, setNodeStates] = useState<Record<string, "not-started" | "processing" | "complete">>(
     Object.keys(positions).reduce((acc, key) => ({ ...acc, [key]: "not-started" }), {})
   )
@@ -144,61 +145,59 @@ const WorkflowBase = React.forwardRef<SVGGElement, WorkflowBaseProps>(
   useEffect(() => {
     let isCurrentCycle = true
 
+    const processStates = () => {
+      // Only process states without automatic reset
+      Object.entries(timing).forEach(([node, timing]) => {
+        const processingTimer = setTimeout(() => {
+          setNodeStates(prev => ({ ...prev, [node]: "processing" }));
+        }, timing.processingDelay);
+        
+        const completeTimer = setTimeout(() => {
+          setNodeStates(prev => ({ ...prev, [node]: "complete" }));
+        }, timing.completionDelay);
+
+        timersRef.current.push(processingTimer, completeTimer);
+      });
+    };
+
+    // Define cycleStates function and store in ref for visibility handler
     const cycleStates = () => {
-      if (!isCurrentCycle) return
-
-      // Update last cycle time
-      lastCycleTimeRef.current = Date.now()
-
-      // Clear any existing timers
-      timersRef.current.forEach(timer => clearTimeout(timer))
-      timersRef.current = []
-
+      if (!isCurrentCycle) return;
+      
+      lastCycleTimeRef.current = Date.now();
+      timersRef.current.forEach(timer => clearTimeout(timer));
+      timersRef.current = [];
+      
       // Reset all nodes to not-started
-      setNodeStates(Object.keys(positions).reduce((acc, key) => ({ ...acc, [key]: "not-started" }), {}))
-
+      setNodeStates(Object.keys(positions).reduce(
+        (acc, key) => ({ ...acc, [key]: "not-started" }),
+        {}
+      ));
+      
       // Don't schedule new timers if page is hidden
-      if (!isPageVisibleRef.current) return
-
-      // Schedule processing states
-      Object.entries(timing).forEach(([node, timing]) => {
-        if (!isCurrentCycle) return
-        const timer = setTimeout(() => {
-          if (!isCurrentCycle) return
-          setNodeStates(prev => ({ ...prev, [node]: "processing" }))
-        }, timing.processingDelay)
-        timersRef.current.push(timer)
-      })
-
-      // Schedule completion states
-      Object.entries(timing).forEach(([node, timing]) => {
-        if (!isCurrentCycle) return
-        const timer = setTimeout(() => {
-          if (!isCurrentCycle) return
-          setNodeStates(prev => ({ ...prev, [node]: "complete" }))
-        }, timing.completionDelay)
-        timersRef.current.push(timer)
-      })
-
-      // Reset after full cycle plus pause
-      const resetTimer = setTimeout(() => {
-        if (!isCurrentCycle) return
-        cycleStates()
-      }, Math.max(...Object.values(timing).map(t => t.completionDelay)) + COMPLETION_PAUSE)
-      timersRef.current.push(resetTimer)
-    }
+      if (!isPageVisibleRef.current) return;
+      
+      processStates();
+    };
 
     // Store cycleStates in ref for visibility handler and watchdog
-    cycleStatesFnRef.current = cycleStates
+    cycleStatesFnRef.current = cycleStates;
 
-    cycleStates() // Start the cycle
+    processStates();
+    
+    if (cycle) {
+      // Add reset timer only if cycling is enabled
+      const resetTimer = setTimeout(() => {
+        cycleStates();
+      }, Math.max(...Object.values(timing).map(t => t.completionDelay)) + COMPLETION_PAUSE);
+      timersRef.current.push(resetTimer);
+    }
 
     return () => {
-      isCurrentCycle = false
-      timersRef.current.forEach(timer => clearTimeout(timer))
-      timersRef.current = []
-    }
-  }, [timing, positions])
+      isCurrentCycle = false;
+      timersRef.current.forEach(clearTimeout);
+    };
+  }, [timing, cycle, positions]); // Added positions to dependencies
 
   return (
     <ContainerBase viewBox="0 0 3.79 3.84">
