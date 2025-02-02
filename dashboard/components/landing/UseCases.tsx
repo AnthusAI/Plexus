@@ -5,7 +5,7 @@ import {
   Shield,
   Target
 } from 'lucide-react'
-import Link from 'next/link'
+import { FeatureCard } from './FeatureCard'
 
 const applications = [
   {
@@ -48,26 +48,13 @@ export const UseCases = () => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
               {applications.map((app, index) => (
-                <div key={index} 
-                     className="bg-card p-6 rounded-lg shadow-md 
-                               transition-all duration-300 hover:shadow-xl">
-                  <app.icon className="float-right ml-4 w-12 h-12 text-accent" />
-                  {app.href ? (
-                    <Link href={app.href}>
-                      <h3 className="text-xl font-semibold mb-2 text-foreground 
-                                   hover:text-accent">
-                        {app.title}
-                      </h3>
-                    </Link>
-                  ) : (
-                    <h3 className="text-xl font-semibold mb-2 text-foreground">
-                      {app.title}
-                    </h3>
-                  )}
-                  <p className="text-muted-foreground">
-                    {app.description}
-                  </p>
-                </div>
+                <FeatureCard
+                  key={index}
+                  title={app.title}
+                  description={app.description}
+                  icon={app.icon}
+                  href={app.href}
+                />
               ))}
             </div>
           </div>

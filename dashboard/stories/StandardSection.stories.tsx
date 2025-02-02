@@ -1,13 +1,15 @@
 import React from 'react'
 import { StandardSection } from '../components/landing/StandardSection'
 
-export default {
+const meta = {
   title: 'Landing/StandardSection',
   component: StandardSection,
   argTypes: {
     headlinePosition: { control: { type: 'radio', options: ['top', 'inline'] } },
   },
 };
+
+export default meta;
 
 const Template = (args) => <StandardSection {...args} />;
 

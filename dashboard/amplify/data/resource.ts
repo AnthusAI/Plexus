@@ -1,4 +1,6 @@
 import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
+import * as aws_dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import { Construct } from 'constructs';
 
 // Define types for authorization callback
 type AuthorizationCallback = {
@@ -17,11 +19,11 @@ type EvaluationIndexFields = "accountId" | "scorecardId" | "type" | "accuracy" |
     "scoreId" | "status" | "updatedAt";
 type BatchJobIndexFields = "accountId" | "scorecardId" | "type" | "scoreId" | 
     "status" | "modelProvider" | "modelName" | "batchId";
-type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId";
+type ItemIndexFields = "name" | "description" | "accountId";
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
-    "evaluationId" | "scoreId";
+    "scoreId";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
-    "evaluationId" | "scoringJobId";
+    "scoringJobId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
@@ -257,7 +259,6 @@ const schema = a.schema({
             idx("accountId" as ScoringJobIndexFields),
             idx("itemId" as ScoringJobIndexFields),
             idx("scorecardId" as ScoringJobIndexFields),
-            idx("evaluationId" as ScoringJobIndexFields),
             idx("scoreId" as ScoringJobIndexFields)
         ]),
 
@@ -286,7 +287,6 @@ const schema = a.schema({
             idx("accountId"),
             idx("itemId"),
             idx("scoringJobId"),
-            idx("evaluationId"),
             idx("scorecardId")
         ]),
 
@@ -308,45 +308,34 @@ const schema = a.schema({
     Task: a
         .model({
             accountId: a.string().required(),
-            account: a.belongsTo('Account', 'accountId'),
-            scorecardId: a.string(),
-            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
-            scoreId: a.string(),
-            score: a.belongsTo('Score', 'scoreId'),
             type: a.string().required(),
             status: a.string().required(),
-            target: a.string().required(),
-            command: a.string(),
-            metadata: a.json(),
-            createdAt: a.datetime().required(),
-            updatedAt: a.datetime().required(),
+            target: a.string(),
             currentStageId: a.string(),
-            currentStage: a.belongsTo('TaskStage', 'currentStageId'),
+            updatedAt: a.datetime(),
+            scorecardId: a.string(),
+            scoreId: a.string(),
+            account: a.belongsTo('Account', 'accountId'),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            score: a.belongsTo('Score', 'scoreId'),
             stages: a.hasMany('TaskStage', 'taskId'),
-            dispatchStatus: a.string(),
-            startedAt: a.datetime(),
-            completedAt: a.datetime(),
-            estimatedCompletionAt: a.datetime(),
-            celeryTaskId: a.string(),
-            workerNodeId: a.string(),
-            stdout: a.string(),
-            stderr: a.string(),
-            errorMessage: a.string(),
-            errorDetails: a.json(),
+            currentStage: a.belongsTo('TaskStage', 'currentStageId'),
+            command: a.string(),
+            dispatchStatus: a.string()
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx: (field: TaskIndexFields) => any) => [
-            idx("accountId"),
-            idx("scorecardId"),
-            idx("scoreId"),
-            idx("updatedAt"),
-            idx("type"),
-            idx("status"),
-            idx("target"),
-            idx("currentStageId")
+        .secondaryIndexes((idx) => [
+            idx("accountId" as TaskIndexFields),
+            idx("type" as TaskIndexFields),
+            idx("status" as TaskIndexFields),
+            idx("target" as TaskIndexFields),
+            idx("currentStageId" as TaskIndexFields),
+            idx("updatedAt" as TaskIndexFields),
+            idx("scorecardId" as TaskIndexFields),
+            idx("scoreId" as TaskIndexFields)
         ]),
 
     TaskStage: a

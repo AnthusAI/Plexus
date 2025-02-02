@@ -21,6 +21,7 @@ export function ImageNode({
           className="stroke-muted-foreground" 
           size={24}
           strokeWidth={1.5}
+          aria-label="Image node icon"
         />
       </g>
     </g>
