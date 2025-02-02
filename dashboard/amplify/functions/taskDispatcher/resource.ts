@@ -2,6 +2,9 @@ import { CfnOutput, Stack, StackProps, Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export class TaskDispatcherStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -11,7 +14,7 @@ export class TaskDispatcherStack extends Stack {
     const taskDispatcherFunction = new lambda.Function(this, 'TaskDispatcherFunction', {
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'index.handler',
-      code: lambda.Code.fromAsset(path.join(__dirname)),
+      code: lambda.Code.fromAsset(__dirname),
       functionName: 'TaskDispatcherFunction',
       description: 'Dispatches tasks from DynamoDB to Celery',
       timeout: Duration.seconds(30),
