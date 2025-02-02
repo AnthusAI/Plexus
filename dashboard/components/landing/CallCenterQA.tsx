@@ -1,6 +1,6 @@
 import React from 'react'
 import { Button } from '@/components/ui/button'
-import { ArrowRight, Bot, GraduationCap, LineChart } from 'lucide-react'
+import { ArrowRight, Bot, GraduationCap, DollarSign, ArrowUpWideNarrow } from 'lucide-react'
 import { StandardSection } from './StandardSection'
 import { FrameSection } from './FrameSection'
 import ItemListWorkflow from '../workflow/layouts/item-list-workflow'
@@ -20,6 +20,12 @@ export const CallCenterQA = () => {
                   <p className="text-xl text-muted-foreground mb-8">
                     Replace expensive manual call quality assessments with AI-driven automation.
                     Save the cost of full-time QA staff while improving evaluation coverage and consistency.
+                  </p>
+                  <p className="text-xl text-muted-foreground mb-8">
+                    We know how to operate AI agents at scale. We've built a platform that enables you to monitor calls with with no code.
+                  </p>
+                  <p className="text-xl text-muted-foreground mb-8">
+                    Humans still need to steer it, and your team knows best how to do that.  Plexus gives your team the tools they need to make it happen.
                   </p>
                   <div className="flex justify-center md:justify-start">
                     <Button size="lg" className="bg-primary text-white">
@@ -55,8 +61,8 @@ export const CallCenterQA = () => {
           <div className="flex flex-col items-center text-center p-6 
                         rounded-lg transition-all duration-300 
                         hover:bg-accent/5">
-            <Bot className="w-16 h-16 mb-6 text-accent" />
-            <h3 className="text-xl font-semibold mb-2">Eliminate Manual QA</h3>
+            <DollarSign className="w-16 h-16 mb-6 text-accent" />
+            <h3 className="text-xl font-semibold mb-2">Reduce Manual QA</h3>
             <p className="text-muted-foreground">
               Automate evaluations with AI to save the expense of full-time QA staff while increasing coverage.
             </p>
@@ -73,10 +79,10 @@ export const CallCenterQA = () => {
           <div className="flex flex-col items-center text-center p-6 
                         rounded-lg transition-all duration-300 
                         hover:bg-accent/5">
-            <LineChart className="w-16 h-16 mb-6 text-accent" />
-            <h3 className="text-xl font-semibold mb-2">Boost Team Performance</h3>
+            <ArrowUpWideNarrow className="w-16 h-16 mb-6 text-accent" />
+            <h3 className="text-xl font-semibold mb-2">Maximize Call Coverage</h3>
             <p className="text-muted-foreground">
-              Provide real-time AI feedback to help your team excel and reduce turnover rates.
+              Monitor and analyze 100% of customer interactions with AI-powered quality assurance at scale.
             </p>
           </div>
         </div>
