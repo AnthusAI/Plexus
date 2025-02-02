@@ -8,9 +8,10 @@ import { CTASection } from '@/components/landing/CTASection'
 import { Footer } from '@/components/landing/Footer'
 import { Hero } from '@/components/landing/Hero'
 import { TaskCycleDemo } from '@/components/landing/TaskCycleDemo'
-import { StandardSection } from '@/components/landing/StandardSection'
+import { FrameSection } from '@/components/landing/FrameSection'
 import MetricsGauges from '@/components/MetricsGauges'
 import ItemListWorkflow from '@/components/workflow/layouts/item-list-workflow'
+import { StandardSection } from '@/components/landing/StandardSection'
 
 const CLOCKWISE_SEQUENCE = [0, 1, 3, 2] // accuracy -> precision -> specificity -> sensitivity
 
@@ -41,10 +42,10 @@ export default function PlatformPage() {
                   </h1>
                   <div className="flex flex-col md:flex-row xl:flex-col gap-8">
                     <div className="w-full md:w-1/2 xl:w-full flex flex-col items-center md:items-start text-center md:text-left md:justify-center">
-                      <p className="text-xl text-muted-foreground mb-8 text-justify w-full">
+                      <p className="text-xl text-muted-foreground mb-8 w-full">
                         Plexus is a serverless platform where your team can develop, test, and deploy AI agents without writing any code, and without worrying about the underlying infrastructure.
                       </p>
-                      <p className="text-xl text-muted-foreground mb-8 text-justify w-full">
+                      <p className="text-xl text-muted-foreground mb-8 w-full">
                         Your team knows your business.  Our team knows how to operate AI reliably at scale.  Together, we can build and deploy solutions that transform your business.
                       </p>
                     </div>
@@ -85,60 +86,25 @@ export default function PlatformPage() {
       <StandardSection
         headline="Don't Just Guess — Guess and Test"
         headlinePosition="top"
+        layout="twoColumn"
         leftContent={
           <MetricsGauges
             variant="detail"
             selectedIndex={selectedIndex}
             gauges={[
-              {
-                value: 92,
-                label: 'Accuracy',
-                segments: [
-                  { start: 0, end: 60, color: 'var(--gauge-inviable)' },
-                  { start: 60, end: 85, color: 'var(--gauge-converging)' },
-                  { start: 85, end: 100, color: 'var(--gauge-great)' }
-                ],
-                backgroundColor: 'var(--gauge-background)',
-              },
-              {
-                value: 91,
-                label: 'Precision',
-                segments: [
-                  { start: 0, end: 60, color: 'var(--gauge-inviable)' },
-                  { start: 60, end: 85, color: 'var(--gauge-converging)' },
-                  { start: 85, end: 100, color: 'var(--gauge-great)' }
-                ],
-                backgroundColor: 'var(--gauge-background)',
-              },
-              {
-                value: 95,
-                label: 'Specificity',
-                segments: [
-                  { start: 0, end: 60, color: 'var(--gauge-inviable)' },
-                  { start: 60, end: 85, color: 'var(--gauge-converging)' },
-                  { start: 85, end: 100, color: 'var(--gauge-great)' }
-                ],
-                backgroundColor: 'var(--gauge-background)',
-              },
-              {
-                value: 89,
-                label: 'Sensitivity',
-                segments: [
-                  { start: 0, end: 60, color: 'var(--gauge-inviable)' },
-                  { start: 60, end: 85, color: 'var(--gauge-converging)' },
-                  { start: 85, end: 100, color: 'var(--gauge-great)' }
-                ],
-                backgroundColor: 'var(--gauge-background)',
-              },
+              { value: 92, label: 'Accuracy', segments: [ { start: 0, end: 60, color: 'var(--gauge-inviable)' }, { start: 60, end: 85, color: 'var(--gauge-converging)' }, { start: 85, end: 100, color: 'var(--gauge-great)' } ], backgroundColor: 'var(--gauge-background)' },
+              { value: 91, label: 'Precision', segments: [ { start: 0, end: 60, color: 'var(--gauge-inviable)' }, { start: 60, end: 85, color: 'var(--gauge-converging)' }, { start: 85, end: 100, color: 'var(--gauge-great)' } ], backgroundColor: 'var(--gauge-background)' },
+              { value: 95, label: 'Specificity', segments: [ { start: 0, end: 60, color: 'var(--gauge-inviable)' }, { start: 60, end: 85, color: 'var(--gauge-converging)' }, { start: 85, end: 100, color: 'var(--gauge-great)' } ], backgroundColor: 'var(--gauge-background)' },
+              { value: 89, label: 'Sensitivity', segments: [ { start: 0, end: 60, color: 'var(--gauge-inviable)' }, { start: 60, end: 85, color: 'var(--gauge-converging)' }, { start: 85, end: 100, color: 'var(--gauge-great)' } ], backgroundColor: 'var(--gauge-background)' },
             ]}
           />
         }
         rightContent={
           <div>
-            <p className="text-xl text-muted-foreground text-justify">
+            <p className="text-xl text-muted-foreground">
               You can't just write prompts and put them into production and hope they work, you need a way to evaluate them quantitatively to see if they meet your needs. You can't optimize a metric you're not measuring.
             </p>
-            <p className="text-xl text-muted-foreground text-justify mt-4">
+            <p className="text-xl text-muted-foreground mt-4">
               Each use case demands its own success metrics: Is this a regulatory compliance question where we need high sensitivity? Do we need to use balanced accuracy because the data is unbalanced? Plexus gives you the gauges you need.
             </p>
           </div>

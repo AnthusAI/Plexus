@@ -112,7 +112,8 @@ export const TaskCycleDemo = () => {
 
   return (
     <FrameSection
-      headline="Remote Task Dispatch System"
+      headline="Transform any computer into a worker node"
+      headlinePosition="top"
       layout="twoColumn"
       leftContent={
         <div className="space-y-6 max-w-2xl">
