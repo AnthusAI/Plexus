@@ -67,10 +67,10 @@ const TIMING = {
   COMPLETION_BUFFER: 300,
   EXIT: 800,
   HEARTBEAT: 1200,
-  ACCELERATION_DURATION: 30000,  // 30 seconds to reach max speed
-  CYCLE_DURATION: 60000,         // 60 seconds total before reset
+  ACCELERATION_DURATION: 10000,  // 10 seconds to reach max speed
+  CYCLE_DURATION: 12000,         // 12 seconds total before reset
   MIN_SCALE: 1,
-  MAX_SCALE: 4  // Maximum speed multiplier
+  MAX_SCALE: 4  // Maximum speed multiplier (halved from 8x to 4x)
 } as const
 
 // Add jitter to timing values with occasional outliers
@@ -88,15 +88,27 @@ const addJitter = (value: number, factor: number = 0.1) => {
   return Math.round(value * (1 + jitterAmount))
 }
 
-// Calculate timing scale factor (1x to 4x over 30 seconds)
+// Easing function for smoother acceleration
+const easeInQuad = (t: number) => t * t
+
+// Calculate timing scale factor with eased acceleration
 const getTimingScale = (cycleStartTime: number) => {
   const elapsed = Date.now() - cycleStartTime
+  
+  // If we're past the cycle duration, maintain maximum speed
+  if (elapsed >= TIMING.CYCLE_DURATION) {
+    return TIMING.MAX_SCALE
+  }
+  
   const cycleElapsed = elapsed % TIMING.CYCLE_DURATION
   const accelerationElapsed = Math.min(cycleElapsed, TIMING.ACCELERATION_DURATION)
   
+  // Use quadratic easing for smoother acceleration
+  const progress = accelerationElapsed / TIMING.ACCELERATION_DURATION
+  const easedProgress = easeInQuad(progress)
+  
   return TIMING.MIN_SCALE + 
-    (TIMING.MAX_SCALE - TIMING.MIN_SCALE) * 
-    (accelerationElapsed / TIMING.ACCELERATION_DURATION)
+    (TIMING.MAX_SCALE - TIMING.MIN_SCALE) * easedProgress
 }
 
 // Scale a timing value by the current scale factor
@@ -481,8 +493,8 @@ const ItemListWorkflow = React.forwardRef<SVGGElement, ItemListWorkflowProps>(({
     const now = Date.now()
     const cycleElapsed = now - cycleStartTime
 
-    // Check if we need to start resetting
-    if (cycleElapsed >= TIMING.CYCLE_DURATION && !isResetting) {
+    // Only enter reset mode if the cycle is complete AND all rows have exited
+    if (cycleElapsed >= TIMING.CYCLE_DURATION && visibleRows === 0 && !isResetting) {
       setIsResetting(true)
       return
     }
@@ -547,7 +559,19 @@ const ItemListWorkflow = React.forwardRef<SVGGElement, ItemListWorkflowProps>(({
 
     const sequencedNewSteps = createScaledSequences(now, newSteps)
 
-    if (isResetting) {
+    // If we're past the cycle duration but still have visible rows,
+    // continue the normal flow but don't add new rows
+    if (cycleElapsed >= TIMING.CYCLE_DURATION) {
+      setSteps(currentSteps => {
+        const withoutFirstRow = currentSteps.slice(5)
+        const updatedPositions = withoutFirstRow.map((step, index) => ({
+          ...step,
+          position: `r${Math.floor(index / 5) + 1}-${(index % 5) + 1}`
+        }))
+        return updatedPositions
+      })
+      setVisibleRows(prev => Math.max(0, prev - 1))
+    } else if (isResetting) {
       // During reset, only remove rows, don't add new ones
       setSteps(currentSteps => {
         const withoutFirstRow = currentSteps.slice(5)
