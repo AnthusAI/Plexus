@@ -7,11 +7,13 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export class TaskDispatcherStack extends Stack {
+  public readonly function: lambda.Function;
+
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
     // Define the Lambda function
-    const taskDispatcherFunction = new lambda.Function(this, 'TaskDispatcherFunction', {
+    this.function = new lambda.Function(this, 'TaskDispatcherFunction', {
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'index.handler',
       code: lambda.Code.fromAsset(__dirname),
@@ -26,7 +28,7 @@ export class TaskDispatcherStack extends Stack {
 
     // Output the Lambda function ARN
     new CfnOutput(this, 'TaskDispatcherFunctionArn', {
-      value: taskDispatcherFunction.functionArn,
+      value: this.function.functionArn,
       exportName: 'TaskDispatcherFunctionArn'
     });
   }

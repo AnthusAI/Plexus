@@ -23,13 +23,6 @@ const taskDispatcherStack = new TaskDispatcherStack(
 // Get the Task table
 const taskTable = backend.data.resources.tables.Task;
 
-// Get the Lambda function from the stack outputs
-const taskDispatcherLambda = lambda.Function.fromFunctionName(
-    taskDispatcherStack,
-    'TaskDispatcherFunction',
-    'TaskDispatcherFunction'
-);
-
 // Create a DynamoDB stream event source
 const eventSource = new DynamoEventSource(taskTable, {
     startingPosition: lambda.StartingPosition.LATEST,
@@ -39,10 +32,10 @@ const eventSource = new DynamoEventSource(taskTable, {
 });
 
 // Add the event source to the Lambda function
-taskDispatcherLambda.addEventSource(eventSource);
+taskDispatcherStack.function.addEventSource(eventSource);
 
 // Add DynamoDB stream permissions
-taskDispatcherLambda.addToRolePolicy(
+taskDispatcherStack.function.addToRolePolicy(
     new iam.PolicyStatement({
         actions: [
             'dynamodb:GetRecords',
@@ -55,7 +48,7 @@ taskDispatcherLambda.addToRolePolicy(
 );
 
 // Add SQS permissions
-taskDispatcherLambda.addToRolePolicy(
+taskDispatcherStack.function.addToRolePolicy(
     new iam.PolicyStatement({
         actions: ['sqs:SendMessage'],
         resources: [process.env.CELERY_QUEUE_URL || '*']
