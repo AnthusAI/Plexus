@@ -1,55 +1,115 @@
 "use client"
 
-import { CircleNode, SquareNode, TriangleNode, HexagonNode } from "../nodes"
-import { Check } from "lucide-react"
-import React from "react"
-import WorkflowBase, { WorkflowTiming } from "../base/workflow-base"
+import React from 'react'
+import { WorkflowNode } from '../nodes'
+import WorkflowBase, { POSITIONS, WorkflowTiming } from '../base/workflow-base'
+import type { ComponentType } from 'react'
+import type { BaseNodeProps } from '../types'
 
-const getNodeComponent = (position: string) => {
-  switch (position) {
-    case "main":
-      return CircleNode
-    case "row1-a":
-      return HexagonNode
-    case "row1-b":
-      return TriangleNode
-    case "row2-a":
-      return SquareNode
-    case "row2-b":
-      return HexagonNode
-    default:
-      return CircleNode
-  }
+type NodeProps = BaseNodeProps & {
+  status: "not-started" | "processing" | "complete"
+  isMain?: boolean
 }
 
-// Custom timing configuration that emphasizes processing states
-const MULTI_MODEL_TIMING: WorkflowTiming = {
+// Extended timing for multi-model to show longer processing
+const TIMING: WorkflowTiming = {
   main: {
     processingDelay: 0,
-    completionDelay: 15000, // 15 seconds of processing
+    completionDelay: 15000,  // Complete after all workers
   },
-  "row1-a": {
+  'row1-a': {
     processingDelay: 1000,
-    completionDelay: 11000, // 10 seconds of processing
+    completionDelay: 11000,
   },
-  "row1-b": {
+  'row1-b': {
     processingDelay: 2000,
-    completionDelay: 13000, // 11 seconds of processing
+    completionDelay: 12000,
   },
-  "row2-a": {
-    processingDelay: 1500,
-    completionDelay: 11500, // 10 seconds of processing
+  'row1-c': {
+    processingDelay: 3000,
+    completionDelay: 13000,
   },
-  "row2-b": {
-    processingDelay: 2500,
-    completionDelay: 13500, // 11 seconds of processing
-  }
+  'row2-a': {
+    processingDelay: 2000,
+    completionDelay: 12000,
+  },
+  'row2-b': {
+    processingDelay: 3000,
+    completionDelay: 13000,
+  },
+  'row2-c': {
+    processingDelay: 4000,
+    completionDelay: 14000,
+  },
+  'row3-a': {
+    processingDelay: 3000,
+    completionDelay: 13000,
+  },
+  'row3-b': {
+    processingDelay: 4000,
+    completionDelay: 14000,
+  },
+  'row3-c': {
+    processingDelay: 5000,
+    completionDelay: 15000,
+  },
 }
 
-const MultiModelWorkflow = React.forwardRef<SVGGElement>((props, ref) => {
-  return <WorkflowBase ref={ref} getNodeComponent={getNodeComponent} timing={MULTI_MODEL_TIMING} />
-})
+export default function MultiModelWorkflow() {
+  const getNodeComponent = (id: string): ComponentType<NodeProps> => {
+    switch (id) {
+      case 'main':
+        return (props: NodeProps) => (
+          <WorkflowNode {...props} shape="circle" />
+        )
+      case 'row1-a':
+        return (props: NodeProps) => (
+          <WorkflowNode {...props} shape="hexagon" />
+        )
+      case 'row1-b':
+        return (props: NodeProps) => (
+          <WorkflowNode {...props} shape="triangle" />
+        )
+      case 'row1-c':
+        return (props: NodeProps) => (
+          <WorkflowNode {...props} shape="square" />
+        )
+      case 'row2-a':
+        return (props: NodeProps) => (
+          <WorkflowNode {...props} shape="square" />
+        )
+      case 'row2-b':
+        return (props: NodeProps) => (
+          <WorkflowNode {...props} shape="circle" />
+        )
+      case 'row2-c':
+        return (props: NodeProps) => (
+          <WorkflowNode {...props} shape="hexagon" />
+        )
+      case 'row3-a':
+        return (props: NodeProps) => (
+          <WorkflowNode {...props} shape="triangle" />
+        )
+      case 'row3-b':
+        return (props: NodeProps) => (
+          <WorkflowNode {...props} shape="hexagon" />
+        )
+      case 'row3-c':
+        return (props: NodeProps) => (
+          <WorkflowNode {...props} shape="square" />
+        )
+      default:
+        return (props: NodeProps) => (
+          <WorkflowNode {...props} shape="circle" />
+        )
+    }
+  }
 
-MultiModelWorkflow.displayName = 'MultiModelWorkflow'
-
-export default React.memo(MultiModelWorkflow) 
+  return (
+    <WorkflowBase
+      positions={POSITIONS}
+      getNodeComponent={getNodeComponent}
+      timing={TIMING}
+    />
+  )
+} 
