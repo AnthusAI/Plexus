@@ -82,7 +82,8 @@ export const PlatformFeatures = () => {
       </StandardSection>
 
       <FrameSection
-        headline="Advanced Capabilities"
+        headline="Multi-Model Toolkit"
+        headlinePosition="top"
         fullWidth
       >
         <div className="max-w-4xl mx-auto">
