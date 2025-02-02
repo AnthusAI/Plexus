@@ -2,6 +2,11 @@ import { CfnOutput, Stack, StackProps, Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get the directory path in ES module context
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Custom CDK stack for the Python Task Dispatcher function
 export class TaskDispatcherStack extends Stack {
@@ -10,7 +15,7 @@ export class TaskDispatcherStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
     
-    // Assuming the function code is in the same directory as this file
+    // Get the directory containing the function code
     const functionDir = path.join(__dirname, '.');
 
     this.taskDispatcherFunction = new lambda.Function(this, 'TaskDispatcherFunction', {
