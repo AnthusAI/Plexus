@@ -1,7 +1,7 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { data } from './data/resource';
 import { auth } from './auth/resource';
-import { taskDispatcher } from './functions/taskDispatcher/resource';
+import { TaskDispatcherStack } from './functions/taskDispatcher/resource';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { Duration } from 'aws-cdk-lib';
@@ -10,9 +10,14 @@ import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 // Create the backend
 const backend = defineBackend({
     auth,
-    data,
-    taskDispatcher
+    data
 });
+
+// Create the TaskDispatcher stack
+const taskDispatcherStack = new TaskDispatcherStack(
+    backend.createStack('TaskDispatcherStack'),
+    'taskDispatcher'
+);
 
 // Get the Task table
 const taskTable = backend.data.resources.tables.Task;
@@ -26,10 +31,10 @@ const eventSource = new DynamoEventSource(taskTable, {
 });
 
 // Add the event source to the Lambda function
-backend.taskDispatcher.resources.lambda.addEventSource(eventSource);
+taskDispatcherStack.taskDispatcherFunction.addEventSource(eventSource);
 
 // Add DynamoDB stream permissions
-backend.taskDispatcher.resources.lambda.addToRolePolicy(
+taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
     new iam.PolicyStatement({
         actions: [
             'dynamodb:GetRecords',
@@ -42,7 +47,7 @@ backend.taskDispatcher.resources.lambda.addToRolePolicy(
 );
 
 // Add SQS permissions
-backend.taskDispatcher.resources.lambda.addToRolePolicy(
+taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
     new iam.PolicyStatement({
         actions: ['sqs:SendMessage'],
         resources: [process.env.CELERY_QUEUE_URL || '*']
