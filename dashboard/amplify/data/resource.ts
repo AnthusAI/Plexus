@@ -323,7 +323,8 @@ const schema = a.schema({
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             score: a.belongsTo('Score', 'scoreId'),
             stages: a.hasMany('TaskStage', 'taskId'),
-            currentStage: a.belongsTo('TaskStage', 'currentStageId')
+            currentStage: a.belongsTo('TaskStage', 'currentStageId'),
+            dispatchStatus: a.string()
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -334,7 +335,12 @@ const schema = a.schema({
             idx("scorecardId"),
             idx("scoreId"),
             idx("updatedAt")
-        ]),
+        ])
+        .cdk({
+            table: {
+                stream: aws_dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+            }
+        }),
 
     TaskStage: a
         .model({
@@ -433,6 +439,11 @@ export const data = defineData({
         defaultAuthorizationMode: 'userPool',
         apiKeyAuthorizationMode: {
             expiresInDays: 0  // Never expires
+        }
+    },
+    tables: {
+        Task: {
+            stream: aws_dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
         }
     }
 });
