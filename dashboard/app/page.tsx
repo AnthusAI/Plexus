@@ -39,11 +39,11 @@ export default function LandingPage() {
 
       <StandardSection
         headline="Intelligence at Scale"
-        headlinePosition="inline"
+        headlinePosition="top"
         rightColumnAlign="middle"
         leftContent={<ItemListWorkflow />}
         rightContent={
-          <p className="text-xl text-muted-foreground text-justify">
+          <p className="text-xl text-muted-foreground">
             Run a scorecard on each item of your data, with multiple scores per scorecard. Are your agents saying the right things? Are your inbound leads qualified? Classify, predict, extract, and act on your data.
           </p>
         }
@@ -51,16 +51,17 @@ export default function LandingPage() {
 
       <FrameSection
         headline="Use Any Model"
+        headlinePosition="top"
         layout="twoColumn"
         leftContent={
           <>
-            <p className="text-xl text-muted-foreground text-justify w-full">
+            <p className="text-xl text-muted-foreground w-full">
               AI changes every week! Don't lock yourself into one solution. 
               Plexus is a workbench for applying any newfangled AI model to 
               solve your problems. Or simpler and cheaper ML models. Or 
               logical rules -- anything your solution requires.
             </p>
-            <p className="text-xl text-muted-foreground text-justify w-full mt-4">
+            <p className="text-xl text-muted-foreground w-full mt-4">
               OpenAI, Anthropic, Google, Deepseek, Azure, AWS Bedrock, Hugging Face, PyTorch, TensorFlow — 
               Plexus supports them all.
             </p>
@@ -126,10 +127,10 @@ export default function LandingPage() {
         }
         rightContent={
           <div>
-            <p className="text-xl text-muted-foreground text-justify">
+            <p className="text-xl text-muted-foreground">
               You can't just write prompts and put them into production and hope they work, you need a way to evaluate them quantitatively to see if they meet your needs.  You can't optimize a metric you're not measuring.
             </p>
-            <p className="text-xl text-muted-foreground text-justify mt-4">
+            <p className="text-xl text-muted-foreground mt-4">
               Each use case demands its own success metrics: Is this a regulatory compliance question where we need high sensitivity? Do we need to use balanced accuracy because the data is unbalanced? Plexus gives you the gauges you need.
             </p>
           </div>
@@ -138,16 +139,17 @@ export default function LandingPage() {
 
       <FrameSection
         headline="Any Result Type"
+        headlinePosition="top"
         layout="twoColumn"
         leftContent={
           <>
-            <p className="text-xl text-muted-foreground text-justify w-full">
+            <p className="text-xl text-muted-foreground w-full">
               Your answers should match your questions. Sometimes a simple yes/no will do, 
               other times you need a 5-star rating, a percentage score, or just a thumbs up. 
               Plexus gives you the flexibility to express your results in the format that makes sense 
               for your use case.
             </p>
-            <p className="text-xl text-muted-foreground text-justify w-full mt-4">
+            <p className="text-xl text-muted-foreground w-full mt-4">
               Binary classifiers, multi-class classifiers, scalar values, entity extraction, quote extraction, 
               and more.  The framework is flexible enough to support anything your solution requires.
             </p>
@@ -164,10 +166,11 @@ export default function LandingPage() {
 
       <FrameSection
         headline="Organizational Intelligence"
+        headlinePosition="top"
         layout="single"
       >
         <p className="text-2xl text-muted-foreground mb-12">
-          Transform how your organization handles information
+          Transform How Your Organization Handles Information
         </p>
         <div className="grid md:grid-cols-3 gap-12 text-left">
           <div className="flex flex-col items-center text-center p-6 

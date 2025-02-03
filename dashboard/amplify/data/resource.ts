@@ -25,7 +25,7 @@ type ItemIndexFields = "name" | "description" | "accountId";
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
-    "scoringJobId";
+    "scoringJobId" | "evaluationId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
@@ -171,7 +171,7 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("accountId").sortKeys(["updatedAt", "status"]),
+            idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId"),
             idx("scoreId"),
             idx("updatedAt")
@@ -261,7 +261,8 @@ const schema = a.schema({
             idx("accountId"),
             idx("itemId"),
             idx("scorecardId"),
-            idx("scoreId")
+            idx("scoreId"),
+            idx("evaluationId")
         ]),
 
     ScoreResult: a
@@ -289,7 +290,8 @@ const schema = a.schema({
             idx("accountId"),
             idx("itemId"),
             idx("scoringJobId"),
-            idx("scorecardId")
+            idx("scorecardId"),
+            idx("evaluationId")
         ]),
 
     BatchJobScoringJob: a

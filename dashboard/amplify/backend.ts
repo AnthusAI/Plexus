@@ -1,38 +1,22 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { data } from './data/resource';
 import { auth } from './auth/resource';
-import { defineFunction } from '@aws-amplify/backend-function';
+import { TaskDispatcherStack } from './functions/taskDispatcher/resource';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
-import { Duration, Stack } from 'aws-cdk-lib';
+import { Duration } from 'aws-cdk-lib';
 import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 
-// First define the function
-const taskDispatcher = defineFunction({
-    name: 'taskDispatcher',
-    entry: './functions/taskDispatcher.ts',
-    environment: {
-        CELERY_QUEUE_URL: process.env.CELERY_QUEUE_URL || ''
-    },
-    timeoutSeconds: 30
-});
-
-// Create the backend with the function
+// Create the backend
 const backend = defineBackend({
     auth,
-    data,
-    taskDispatcher
+    data
 });
 
-// Get the actual Lambda resource and add the policy to it
-const taskDispatcherLambda = backend.taskDispatcher.resources.lambda;
-
-// Add SQS permissions
-taskDispatcherLambda.addToRolePolicy(
-    new iam.PolicyStatement({
-        actions: ['sqs:SendMessage'],
-        resources: [process.env.CELERY_QUEUE_URL || '*']
-    })
+// Create the TaskDispatcher stack
+const taskDispatcherStack = new TaskDispatcherStack(
+    backend.createStack('TaskDispatcherStack'),
+    'taskDispatcher'
 );
 
 // Get the Task table
@@ -47,10 +31,10 @@ const eventSource = new DynamoEventSource(taskTable, {
 });
 
 // Add the event source to the Lambda function
-taskDispatcherLambda.addEventSource(eventSource);
+taskDispatcherStack.taskDispatcherFunction.addEventSource(eventSource);
 
 // Add DynamoDB stream permissions
-taskDispatcherLambda.addToRolePolicy(
+taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
     new iam.PolicyStatement({
         actions: [
             'dynamodb:GetRecords',
@@ -59,6 +43,14 @@ taskDispatcherLambda.addToRolePolicy(
             'dynamodb:ListStreams'
         ],
         resources: [taskTable.tableArn + '/stream/*']
+    })
+);
+
+// Add SQS permissions
+taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
+    new iam.PolicyStatement({
+        actions: ['sqs:SendMessage'],
+        resources: [process.env.CELERY_QUEUE_URL || '*']
     })
 );
 

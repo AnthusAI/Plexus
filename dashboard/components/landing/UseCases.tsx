@@ -6,6 +6,7 @@ import {
   Target
 } from 'lucide-react'
 import { FeatureCard } from './FeatureCard'
+import { StandardSection } from '@/components/landing/StandardSection'
 
 const applications = [
   {
@@ -33,33 +34,28 @@ const applications = [
 
 export const UseCases = () => {
   return (
-    <section className="py-20 bg-background">
-      <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
-        <div className="py-4">
-          <div className="bg-background rounded-xl py-12 md:py-16 px-4 md:px-8">
-            <div className="max-w-4xl mx-auto text-center mb-12">
-              <h2 className="text-4xl md:text-5xl font-bold mb-8 text-foreground">
-                Real-World Applications
-              </h2>
-              <p className="text-2xl text-muted-foreground mb-12">
-                From automated business workflows to mission-critical operations, 
-                our platform orchestrates intelligent decisions and actions at scale.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-              {applications.map((app, index) => (
-                <FeatureCard
-                  key={index}
-                  title={app.title}
-                  description={app.description}
-                  icon={app.icon}
-                  href={app.href}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
+    <StandardSection
+      headline="Real-World Applications"
+      headlinePosition="top"
+      fullWidth
+    >
+      <div className="max-w-4xl mx-auto text-center mb-12">
+        <p className="text-2xl text-muted-foreground mb-12">
+          From automated business workflows to mission-critical operations, 
+          our platform orchestrates intelligent decisions and actions at scale.
+        </p>
       </div>
-    </section>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        {applications.map((app, index) => (
+          <FeatureCard
+            key={index}
+            title={app.title}
+            description={app.description}
+            icon={app.icon}
+            href={app.href}
+          />
+        ))}
+      </div>
+    </StandardSection>
   )
 } 
