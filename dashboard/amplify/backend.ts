@@ -20,11 +20,12 @@ const taskDispatcherStack = new TaskDispatcherStack(
     'taskDispatcher'
 );
 
-// Get the Task table and enable streams via CloudFormation override
+// Get the Task table and enable streams
 const taskTable = backend.data.resources.tables.Task;
-(taskTable as any).node.addPropertyOverride('StreamSpecification', {
-    StreamViewType: 'NEW_AND_OLD_IMAGES'
-});
+const cfnTable = taskTable.node.defaultChild as aws_dynamodb.CfnTable;
+cfnTable.streamSpecification = {
+    streamViewType: aws_dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+};
 
 // Create a DynamoDB stream event source
 const eventSource = new DynamoEventSource(taskTable, {
