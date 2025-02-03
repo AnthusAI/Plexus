@@ -9,6 +9,7 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import { StartingPosition } from 'aws-cdk-lib/aws-lambda';
 import { Policy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
+import { ITable } from 'aws-cdk-lib/aws-dynamodb';
 
 // Get the directory path in ES module context
 const __filename = fileURLToPath(import.meta.url);
@@ -16,7 +17,7 @@ const __dirname = path.dirname(__filename);
 
 // Interface for TaskDispatcher stack props
 interface TaskDispatcherStackProps extends StackProps {
-  taskTable: dynamodb.Table;
+  taskTable: ITable;
 }
 
 // Custom CDK stack for the Python Task Dispatcher function
@@ -65,14 +66,6 @@ export class TaskDispatcherStack extends Stack {
         CELERY_RESULT_BACKEND: process.env.CELERY_RESULT_BACKEND || ''
       }
     });
-
-    // Enable streams on the Task table using L1 construct
-    const cfnTable = props.taskTable.node.defaultChild as dynamodb.CfnTable;
-    if (cfnTable) {
-      cfnTable.streamSpecification = {
-        streamViewType: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
-      };
-    }
 
     // Create stream policy
     const policy = new Policy(this, 'TaskDispatcherStreamPolicy', {
