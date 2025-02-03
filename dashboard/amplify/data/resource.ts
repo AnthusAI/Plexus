@@ -435,8 +435,3 @@ export const data = defineData({
         }
     }
 });
-
-// Enable DynamoDB streams on the Task table after it's created
-data.resources.tables.Task.addStreamSpecification({
-    streamViewType: aws_dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
-});

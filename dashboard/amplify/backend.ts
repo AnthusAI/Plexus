@@ -20,8 +20,11 @@ const taskDispatcherStack = new TaskDispatcherStack(
     'taskDispatcher'
 );
 
-// Get the Task table
+// Get the Task table and enable streams via CloudFormation override
 const taskTable = backend.data.resources.tables.Task;
+(taskTable as any).node.addPropertyOverride('StreamSpecification', {
+    StreamViewType: 'NEW_AND_OLD_IMAGES'
+});
 
 // Create a DynamoDB stream event source
 const eventSource = new DynamoEventSource(taskTable, {
@@ -29,8 +32,7 @@ const eventSource = new DynamoEventSource(taskTable, {
     batchSize: 1,
     retryAttempts: 3,
     maxBatchingWindow: Duration.seconds(1),
-    enabled: true,
-    streamViewType: aws_dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+    enabled: true
 });
 
 // Add the event source to the Lambda function
