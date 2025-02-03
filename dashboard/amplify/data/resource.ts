@@ -335,12 +335,7 @@ const schema = a.schema({
             idx("scorecardId"),
             idx("scoreId"),
             idx("updatedAt")
-        ])
-        .cdk({
-            table: {
-                stream: aws_dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
-            }
-        }),
+        ]),
 
     TaskStage: a
         .model({
@@ -439,11 +434,6 @@ export const data = defineData({
         defaultAuthorizationMode: 'userPool',
         apiKeyAuthorizationMode: {
             expiresInDays: 0  // Never expires
-        }
-    },
-    tables: {
-        Task: {
-            stream: aws_dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
         }
     }
 });

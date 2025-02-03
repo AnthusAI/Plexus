@@ -4,9 +4,10 @@ import { auth } from './auth/resource';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
-import { Duration } from 'aws-cdk-lib';
+import { Duration, CustomResource } from 'aws-cdk-lib';
 import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as aws_dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as cr from 'aws-cdk-lib/custom-resources';
 
 // Create the backend
 const backend = defineBackend({
@@ -22,6 +23,45 @@ const taskDispatcherStack = new TaskDispatcherStack(
 
 // Get the Task table
 const taskTable = backend.data.resources.tables.Task;
+
+// Create a custom resource to enable DynamoDB streams
+const enableStreamProvider = new cr.Provider(taskDispatcherStack, 'EnableStreamProvider', {
+    onEventHandler: new lambda.Function(taskDispatcherStack, 'EnableStreamFunction', {
+        runtime: lambda.Runtime.NODEJS_18_X,
+        handler: 'index.handler',
+        code: lambda.Code.fromInline(`
+            const AWS = require('aws-sdk');
+            const dynamodb = new AWS.DynamoDB();
+            
+            exports.handler = async (event) => {
+                if (event.RequestType === 'Delete') return;
+                
+                await dynamodb.updateTable({
+                    TableName: event.ResourceProperties.tableName,
+                    StreamSpecification: {
+                        StreamEnabled: true,
+                        StreamViewType: 'NEW_AND_OLD_IMAGES'
+                    }
+                }).promise();
+            };
+        `),
+        timeout: Duration.seconds(30)
+    })
+});
+
+enableStreamProvider.onEventHandler.addToRolePolicy(
+    new iam.PolicyStatement({
+        actions: ['dynamodb:UpdateTable'],
+        resources: [taskTable.tableArn]
+    })
+);
+
+new CustomResource(taskDispatcherStack, 'EnableTaskTableStream', {
+    serviceToken: enableStreamProvider.serviceToken,
+    properties: {
+        tableName: taskTable.tableName
+    }
+});
 
 // Create a DynamoDB stream event source
 const eventSource = new DynamoEventSource(taskTable, {
