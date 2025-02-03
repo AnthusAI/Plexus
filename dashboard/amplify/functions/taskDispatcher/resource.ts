@@ -28,12 +28,23 @@ export class TaskDispatcherStack extends Stack {
           image: lambda.Runtime.PYTHON_3_11.bundlingImage,
           local: {
             tryBundle(outputDir: string) {
-              // Install Python dependencies using pip with binary wheels and no deps
+              // Create a temporary directory for dependencies
+              execSync('mkdir -p /tmp/package');
+              
+              // Install all dependencies with their sub-dependencies
               execSync(
-                `python3 -m pip install -r ${path.join(functionDir, 'requirements.txt')} -t ${outputDir} --platform manylinux2014_x86_64 --only-binary=:all: --no-deps`
+                `python3 -m pip install -r ${path.join(functionDir, 'requirements.txt')} -t /tmp/package --platform manylinux2014_x86_64 --implementation cp --python 3.11 --only-binary=:all: --upgrade`
               );
+
+              // Copy dependencies to the output directory
+              execSync(`cp -r /tmp/package/* ${outputDir}`);
+              
               // Copy function code to output directory
               execSync(`cp -r ${functionDir}/* ${outputDir}`);
+              
+              // Clean up
+              execSync('rm -rf /tmp/package');
+              
               return true;
             }
           }
