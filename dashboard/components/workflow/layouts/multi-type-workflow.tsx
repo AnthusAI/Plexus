@@ -26,48 +26,50 @@ const MULTI_TYPE_POSITIONS = {
   'row3-c': { x: 3.42, y: 3.5 },
 }
 
-// Timing adjusted for quick processing and long completion phase
-// Main node stays processing until all worker nodes complete
+// Adjusted timing: row3-c completes at 15000ms,
+// and the main node completes later (at 21000ms), so its "heartbeat"
+// happens noticeably after 3C's completion.
 const TIMING: WorkflowTiming = {
   main: {
-    processingDelay: 0,      // Start immediately
-    completionDelay: 15000,  // Complete after all workers
+    processingDelay: 0,
+    completionDelay: 16000,    // Complete 1 second after row3-c
+    completionDuration: 3000,
   },
   'row1-a': {
-    processingDelay: 1000,
-    completionDelay: 11000,
+    processingDelay: 900,      // Varied start
+    completionDelay: 10900,    // Varied completion
   },
   'row1-b': {
-    processingDelay: 2000,
-    completionDelay: 12000,
+    processingDelay: 2300,     // Later start
+    completionDelay: 12200,    // Varied completion
   },
   'row1-c': {
-    processingDelay: 3000,
-    completionDelay: 13000,
+    processingDelay: 2700,     // Earlier than before
+    completionDelay: 13300,    // Slightly later
   },
   'row2-a': {
-    processingDelay: 2000,
-    completionDelay: 12000,
+    processingDelay: 1700,     // Earlier start
+    completionDelay: 11800,    // Earlier completion
   },
   'row2-b': {
-    processingDelay: 3000,
-    completionDelay: 13000,
+    processingDelay: 3300,     // Later start
+    completionDelay: 13200,    // Varied completion
   },
   'row2-c': {
-    processingDelay: 4000,
-    completionDelay: 14000,
+    processingDelay: 3800,     // Slightly earlier
+    completionDelay: 14300,    // Slightly later
   },
   'row3-a': {
-    processingDelay: 3000,
-    completionDelay: 13000,
+    processingDelay: 2800,     // Varied timing
+    completionDelay: 12900,    // Varied completion
   },
   'row3-b': {
-    processingDelay: 4000,
-    completionDelay: 14000,
+    processingDelay: 4200,     // Later
+    completionDelay: 14200,    // Later
   },
   'row3-c': {
-    processingDelay: 5000,
-    completionDelay: 15000,
+    processingDelay: 4700,     // Slightly earlier
+    completionDelay: 15000,    // Keep this timing for main node sync
   },
 }
 
@@ -100,7 +102,7 @@ export default function MultiTypeWorkflow() {
         )
       case 'row2-c':
         return (props: NodeProps) => (
-          <WorkflowNode {...props} shape="square" text="Skip" color="muted-foreground" />
+          <WorkflowNode {...props} shape="square" text="A7" color="muted-foreground" />
         )
       case 'row3-a':
         return (props: NodeProps) => (
@@ -108,7 +110,7 @@ export default function MultiTypeWorkflow() {
         )
       case 'row3-b':
         return (props: NodeProps) => (
-          <WorkflowNode {...props} shape="circle" text="98%" color="true" />
+          <WorkflowNode {...props} shape="circle" text="98" color="true" />
         )
       case 'row3-c':
         return (props: NodeProps) => (
