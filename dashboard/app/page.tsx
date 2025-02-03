@@ -57,9 +57,17 @@ export default function LandingPage() {
         rightColumnAlign="middle"
         leftContent={<ItemListWorkflowClient />}
         rightContent={
-          <p className="text-xl text-muted-foreground">
-            Run a scorecard on each item of your data, with multiple scores per scorecard. Are your agents saying the right things? Are your inbound leads qualified? Classify, predict, extract, and act on your data.
-          </p>
+          <div>
+            <p className="text-xl text-muted-foreground">
+              Run a scorecard on each item of your data, with multiple scores per scorecard.
+            </p>
+            <p className="text-xl text-muted-foreground mt-4">
+              Are your agents saying the right things? Are your inbound leads qualified?
+            </p>
+            <p className="text-xl text-muted-foreground mt-4">
+              Classify, predict, extract, and act on your data.
+            </p>
+          </div>
         }
       />
 
