@@ -314,18 +314,15 @@ const schema = a.schema({
             accountId: a.string().required(),
             type: a.string().required(),
             status: a.string().required(),
-            target: a.string(),
+            target: a.string().required(),
             currentStageId: a.string(),
-            updatedAt: a.datetime(),
+            updatedAt: a.datetime().required(),
             scorecardId: a.string(),
             scoreId: a.string(),
             account: a.belongsTo('Account', 'accountId'),
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             score: a.belongsTo('Score', 'scoreId'),
             stages: a.hasMany('TaskStage', 'taskId'),
-            currentStage: a.belongsTo('TaskStage', 'currentStageId'),
-            command: a.string(),
-            dispatchStatus: a.string()
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -333,13 +330,9 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx) => [
             idx("accountId"),
-            idx("type"),
-            idx("status"),
-            idx("target"),
-            idx("currentStageId"),
-            idx("updatedAt"),
             idx("scorecardId"),
-            idx("scoreId")
+            idx("scoreId"),
+            idx("updatedAt")
         ]),
 
     TaskStage: a
@@ -440,5 +433,10 @@ export const data = defineData({
         apiKeyAuthorizationMode: {
             expiresInDays: 0  // Never expires
         }
-    },
+    }
+});
+
+// Enable DynamoDB streams on the Task table after it's created
+data.resources.tables.Task.addStreamSpecification({
+    streamViewType: aws_dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
 });
