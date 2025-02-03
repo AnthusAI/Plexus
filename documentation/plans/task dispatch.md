@@ -148,10 +148,25 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - ✓ Create Lambda function for Task-to-Celery dispatch
    - ✓ Set up DynamoDB stream trigger
    - ✓ Basic dispatch logic implemented
+   - Implementation challenges:
+     1. Initial Node.js Lambda approach:
+        - Successfully deployed and triggered by DynamoDB streams
+        - Failed to integrate with Celery due to TypeScript limitations
+        - Direct SQS message posting worked but wasn't ideal
+     2. Python Lambda attempt:
+        - Better Celery integration potential through native library
+        - Deployment challenges with Amplify's limited Python support
+        - Successfully deployed but stream trigger issues persist
+     3. Current status:
+        - Python function deployed but not triggering on Task creation
+        - Investigating stream trigger configuration
+        - May need to fallback to Node.js with direct SQS if Python issues persist
    - Remaining tasks:
-     - Replace direct SQS message construction with Celery library
-     - Add Celery environment variables to Lambda
-     - Test end-to-end dispatch flow
+     - Debug Python Lambda trigger issues
+     - Verify DynamoDB stream configuration
+     - Test Celery task dispatch from Python
+     - Add proper error handling and logging
+     - Consider fallback to Node.js with direct SQS if needed
 
 2. **DynamoDB Indexes** (In Progress)
    - Current state:
@@ -169,9 +184,13 @@ This document outlines the implementation of Plexus's two-level dispatch system:
      3. Remove standalone `updatedAt` index (redundant)
 
 3. **System Testing**
-   - ✓ Initial test successful - Lambda triggered by Task creation
+   - ✓ Initial test successful with Node.js Lambda
    - ✓ DynamoDB stream configuration working
+   - Current challenges:
+     - Python Lambda trigger not firing
+     - Stream configuration may need adjustment
    - Pending tests:
+     - Python Lambda trigger verification
      - Celery task dispatch with environment variables
      - Progress reporting
      - State transitions
