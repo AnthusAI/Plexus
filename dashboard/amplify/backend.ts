@@ -8,6 +8,7 @@ import { Duration, CustomResource } from 'aws-cdk-lib';
 import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as aws_dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as cr from 'aws-cdk-lib/custom-resources';
+import path from 'path';
 
 // Create the backend
 const backend = defineBackend({
@@ -29,22 +30,17 @@ const enableStreamProvider = new cr.Provider(taskDispatcherStack, 'EnableStreamP
     onEventHandler: new lambda.Function(taskDispatcherStack, 'EnableStreamFunction', {
         runtime: lambda.Runtime.NODEJS_18_X,
         handler: 'index.handler',
-        code: lambda.Code.fromInline(`
-            const AWS = require('aws-sdk');
-            const dynamodb = new AWS.DynamoDB();
-            
-            exports.handler = async (event) => {
-                if (event.RequestType === 'Delete') return;
-                
-                await dynamodb.updateTable({
-                    TableName: event.ResourceProperties.tableName,
-                    StreamSpecification: {
-                        StreamEnabled: true,
-                        StreamViewType: 'NEW_AND_OLD_IMAGES'
-                    }
-                }).promise();
-            };
-        `),
+        code: lambda.Code.fromAsset(path.join(__dirname, 'custom-resources/enable-stream'), {
+            bundling: {
+                image: lambda.Runtime.NODEJS_18_X.bundlingImage,
+                command: [
+                    'bash', '-c', [
+                        'npm install @aws-sdk/client-dynamodb',
+                        'cp -r /asset-input/* /asset-output/'
+                    ].join(' && ')
+                ]
+            }
+        }),
         timeout: Duration.seconds(30)
     })
 });
