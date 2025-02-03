@@ -15,43 +15,43 @@ type NodeProps = BaseNodeProps & {
 const TIMING: WorkflowTiming = {
   main: {
     processingDelay: 0,
-    completionDelay: 15000,  // Complete after all workers
+    completionDelay: 17000,  // Complete 2 seconds after workers
   },
   'row1-a': {
-    processingDelay: 1000,
-    completionDelay: 11000,
+    processingDelay: 800,     // Slightly earlier than before
+    completionDelay: 10700,   // Varied completion
   },
   'row1-b': {
-    processingDelay: 2000,
-    completionDelay: 12000,
+    processingDelay: 2200,    // Slightly later
+    completionDelay: 11900,   // Adjusted to avoid sync with 2A
   },
   'row1-c': {
-    processingDelay: 3000,
-    completionDelay: 13000,
+    processingDelay: 2800,    // Earlier than before
+    completionDelay: 13100,   // Slightly different timing
   },
   'row2-a': {
-    processingDelay: 2000,
-    completionDelay: 12000,
+    processingDelay: 1800,    // Earlier start
+    completionDelay: 12300,   // Adjusted to avoid sync with 1B
   },
   'row2-b': {
-    processingDelay: 3000,
-    completionDelay: 13000,
+    processingDelay: 3200,    // Later start
+    completionDelay: 13500,   // More varied
   },
   'row2-c': {
-    processingDelay: 4000,
-    completionDelay: 14000,
+    processingDelay: 3700,    // Slightly earlier
+    completionDelay: 14100,   // Different timing
   },
   'row3-a': {
-    processingDelay: 3000,
-    completionDelay: 13000,
+    processingDelay: 2700,    // Earlier
+    completionDelay: 12600,   // More varied
   },
   'row3-b': {
-    processingDelay: 4000,
-    completionDelay: 14000,
+    processingDelay: 4300,    // Later
+    completionDelay: 14400,   // Adjusted timing
   },
   'row3-c': {
-    processingDelay: 5000,
-    completionDelay: 15000,
+    processingDelay: 4800,    // Slightly earlier
+    completionDelay: 15000,   // Keep this timing for main node sync
   },
 }
 
