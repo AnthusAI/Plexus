@@ -8,7 +8,12 @@ import { Duration, CustomResource } from 'aws-cdk-lib';
 import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as aws_dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as cr from 'aws-cdk-lib/custom-resources';
-import path from 'path';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get the directory path in ES module context
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Create the backend
 const backend = defineBackend({

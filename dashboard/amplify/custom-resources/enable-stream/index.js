@@ -1,7 +1,8 @@
-const { DynamoDBClient, UpdateTableCommand } = require('@aws-sdk/client-dynamodb');
+import { DynamoDBClient, UpdateTableCommand } from '@aws-sdk/client-dynamodb';
+
 const client = new DynamoDBClient();
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
     if (event.RequestType === 'Delete') return;
     
     const command = new UpdateTableCommand({
