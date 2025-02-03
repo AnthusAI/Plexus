@@ -1485,7 +1485,7 @@ Total cost:       ${expenses['total_cost']:.6f}
 
                         score_result.metadata['human_label'] = human_label
                         score_result.metadata['human_explanation'] = human_explanation
-                        score_result.metadata['correct'] = score_result_value == human_label
+                        score_result.metadata['correct'] = score_result_value.strip() == human_label.strip()
                         score_result.metadata['text'] = text
 
                         # Add to filtered results only if we get here (i.e., all conditions are met)
