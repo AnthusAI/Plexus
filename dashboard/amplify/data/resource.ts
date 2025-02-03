@@ -323,6 +323,7 @@ const schema = a.schema({
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             score: a.belongsTo('Score', 'scoreId'),
             stages: a.hasMany('TaskStage', 'taskId'),
+            currentStage: a.belongsTo('TaskStage', 'currentStageId')
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
