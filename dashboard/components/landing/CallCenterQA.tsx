@@ -19,14 +19,14 @@ export const CallCenterQA = () => {
                   </h1>
                   <div className="flex flex-col md:flex-row xl:flex-col gap-8">
                     <div className="w-full md:w-1/2 xl:w-full flex flex-col items-center md:items-start text-center md:text-left md:justify-center">
-                      <p className="text-xl text-muted-foreground mb-8 text-justify w-full">
+                      <p className="text-xl text-muted-foreground mb-8 w-full">
                         Replace expensive manual call quality assessments with AI-driven automation.
                         Save the cost of full-time QA staff while improving evaluation coverage and consistency.
                       </p>
-                      <p className="text-xl text-muted-foreground mb-8 text-justify w-full">
+                      <p className="text-xl text-muted-foreground mb-8 w-full">
                         We know how to operate AI agents at scale. We've built a platform that enables you to monitor calls with with no code.
                       </p>
-                      <p className="text-xl text-muted-foreground mb-8 text-justify w-full">
+                      <p className="text-xl text-muted-foreground mb-8 w-full">
                         Humans still need to steer it, and your team knows best how to do that.  Plexus gives your team the tools they need to make it happen.
                       </p>
                       <div className="flex justify-center xl:justify-start">
