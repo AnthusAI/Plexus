@@ -223,7 +223,7 @@ class EvaluationNode(APOSNode):
             score_config['user_message'] = user_message
             logger.info("Updated prompts in score configuration")
         
-        # Get score class
+        # Get score class and create instance
         score_class_name = score_config['class']
         score_module_path = f'plexus.scores.{score_class_name}'
         logger.info(f"Loading score class {score_class_name} from {score_module_path}")
@@ -237,6 +237,12 @@ class EvaluationNode(APOSNode):
         logger.info("Creating score instance with updated prompts")
         score_instance = score_class(**score_config)
         
+        # Get label field information
+        label_score_name = score_config.get('label_score_name', score_name)
+        label_field = score_config.get('label_field', None)
+        
+        logger.info(f"Using label_score_name: {label_score_name}, label_field: {label_field}")
+        
         # Load and process data
         logger.info("Loading and processing data")
         score_instance.load_data(data=score_config['data'])
@@ -245,6 +251,9 @@ class EvaluationNode(APOSNode):
         # Get samples and ensure form_ids are preserved
         logger.info("Converting dataframe to samples")
         df = score_instance.dataframe
+        
+        # Log the dataframe columns for debugging
+        logger.info(f"DataFrame columns: {df.columns.tolist()}")
         
         # Ensure form_id is in the dataframe
         if 'form_id' not in df.columns:
@@ -266,44 +275,75 @@ class EvaluationNode(APOSNode):
             # If still no form_id, use index as last resort
             if 'form_id' not in df.columns:
                 logger.warning("No form_id found in data, using index as form_id")
-                df['form_id'] = df.index.astype(str)  # Convert index to string for consistency
+                df['form_id'] = df.index.astype(str)
         
-        # Convert to records while preserving form_id and ensuring proper structure
+        # Convert to records while preserving ALL columns
         df_dict = df.to_dict('records')
         samples = []
         for record in df_dict:
-            # Ensure form_id is included in both top level and columns
-            form_id = record.get('form_id', '')
+            # First, create the base sample structure
+            sample = {
+                'text': record.get('text', ''),
+                'content_id': record.get('content_id', ''),
+                'form_id': record.get('form_id', ''),
+                'Session ID': record.get('Session ID', ''),
+                'columns': {}
+            }
+            
+            # Process metadata
             metadata = record.get('metadata', {})
             if isinstance(metadata, str):
                 try:
                     metadata = json.loads(metadata)
                 except:
                     metadata = {}
+            sample['columns']['metadata'] = metadata
             
-            # Create properly structured sample with evaluation fields at top level
-            sample = {
-                'text': record.get('text', ''),
-                'content_id': record.get('content_id', ''),
-                'form_id': form_id,
-                'Session ID': record.get('Session ID', ''),
-                'columns': {
-                    'form_id': form_id,
-                    'metadata': metadata
-                }
-            }
+            # Add form_id to columns
+            sample['columns']['form_id'] = sample['form_id']
             
-            # Add any additional columns that might be needed for evaluation
+            # Handle the label field specifically
+            label_value = None
+            combined_field = None  # Initialize outside the if block
+            
+            # Try different possible formats for the label field
+            if label_field:
+                combined_field = f"{label_score_name} {label_field}"  # e.g., "Non-Qualified Reason comment"
+                if combined_field in record:
+                    label_value = record[combined_field]
+                    logger.info(f"Found label in combined field: {combined_field}")
+                elif label_field in record:
+                    label_value = record[label_field]
+                    logger.info(f"Found label in direct field: {label_field}")
+            
+            # If we found a label value, add it in all necessary formats
+            if label_value is not None:
+                # Add as the score name for direct access
+                sample[label_score_name] = label_value
+                # Add as standard label format
+                sample[f"{label_score_name}_label"] = label_value
+                # Add to columns
+                sample['columns'][f"{label_score_name}_label"] = label_value
+                sample['columns'][label_score_name] = label_value
+                logger.info(f"Added label value: {label_value} for {label_score_name}")
+            
+            # Copy ALL remaining fields to both top level and columns
             for key, value in record.items():
                 if key not in ['text', 'content_id', 'form_id', 'metadata', 'Session ID']:
-                    # Keep label fields at top level for evaluation
-                    if key.endswith('_label') or key in score_config.get('scores', [{'name': score_name}])[0]['name']:
+                    # Keep certain fields at top level
+                    if (key.endswith('_label') or 
+                        key == label_score_name or 
+                        (combined_field and key == combined_field)):  # Check if combined_field exists
                         sample[key] = value
-                    # Everything else goes in columns
+                    # Add everything to columns
                     sample['columns'][key] = value
             
             samples.append(sample)
             
+            # Debug log for each sample
+            logger.info(f"Created sample with keys: {list(sample.keys())}")
+            logger.info(f"Sample columns: {list(sample['columns'].keys())}")
+        
         logger.info(f"Got {len(samples)} total samples with columns: {list(samples[0].keys()) if samples else []}")
         
         # Store all samples and create fixed evaluation set if needed
