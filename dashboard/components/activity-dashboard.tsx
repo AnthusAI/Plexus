@@ -76,7 +76,6 @@ function transformTaskToActivity(task: ProcessedTask) {
     completedAt: currentStage?.completedAt ?? undefined,
     status: task.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
     stageConfigs: stages,
-    command: task.command ?? '',
     statusMessage: currentStage?.statusMessage ?? undefined
   }
 }
@@ -156,7 +155,6 @@ export default function ActivityDashboard() {
           estimatedCompletionAt={task.estimatedCompletionAt}
           status={task.status}
           stageConfigs={task.stageConfigs}
-          command={task.command}
           statusMessage={task.statusMessage}
           completedAt={task.completedAt}
           isFullWidth={isFullWidth}
@@ -204,7 +202,6 @@ export default function ActivityDashboard() {
                   estimatedCompletionAt={task.estimatedCompletionAt}
                   status={task.status}
                   stageConfigs={task.stageConfigs}
-                  command={task.command}
                   statusMessage={task.statusMessage}
                   completedAt={task.completedAt}
                 />

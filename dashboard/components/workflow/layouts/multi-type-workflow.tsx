@@ -33,7 +33,6 @@ const TIMING: WorkflowTiming = {
   main: {
     processingDelay: 0,
     completionDelay: 16000,    // Complete 1 second after row3-c
-    completionDuration: 3000,
   },
   'row1-a': {
     processingDelay: 900,      // Varied start
