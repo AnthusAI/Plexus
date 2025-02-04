@@ -25,7 +25,7 @@ from sklearn.metrics import (
 )
 
 from .DataCommands import data
-from .EvaluationCommands import evaluate
+from .EvaluationCommands import evaluate, evaluations
 from .TrainingCommands import train
 from .ReportingCommands import report
 from .PredictionCommands import predict
@@ -78,160 +78,27 @@ class OrderCommands(click.Group):
     def list_commands(self, ctx: click.Context) -> list[str]:
         return list(self.commands)
 
-@click.group(cls=OrderCommands)
-def main():
+def cli():
     """
-    Plexus is an orchestration system for AI/ML content classification.
-
-    For machine-learning scores that require data preparation, the `data` command includes subcommands for data analysis and preparation.
-
-    For classifiers that require training, the `train` command includes subcommands for training and evaluating models, using MLFlow for logging experiment results.
-
-    For evaluating LLM-based classifiers for prompt engineering, the `evaluate` command includes subcommands for evaluating prompts.
-
-    For scoring content at inference time, the `score` command includes subcommands for scoring content.  The scoring reports will not include accuracy metrics.
-
-    For reporting on training and evaluation results, the `report` command includes subcommands for generating reports.
-
-    For more information, please visit https://plexus.anth.us
+    Plexus CLI for managing scorecards, scores, and evaluations.
     """
     pass
 
 # Add original commands
-main.add_command(data)
-main.add_command(evaluate)
-main.add_command(train)
-main.add_command(report)
-main.add_command(predict)
-main.add_command(tuning)
-main.add_command(analyze)
-main.add_command(batch)
-main.add_command(command)
+cli.add_command(data)
+cli.add_command(evaluate)
+cli.add_command(train)
+cli.add_command(report)
+cli.add_command(predict)
+cli.add_command(tuning)
+cli.add_command(analyze)
+cli.add_command(batch)
+cli.add_command(command)
 
 # Dashboard CLI Commands
-@main.group()
-def evaluations():
-    """Manage evaluations"""
-    pass
+cli.add_command(evaluations)
 
-@evaluations.command()
-@click.option('--account-key', default='call-criteria', help='Account key identifier')
-@click.option('--type', required=True, help='Type of evaluation (e.g., accuracy, consistency)')
-@click.option('--parameters', type=str, help='JSON string of evaluation parameters')
-@click.option('--metrics', type=str, help='JSON string of evaluation metrics')
-@click.option('--inferences', type=int, help='Number of inferences made')
-@click.option('--results', type=int, help='Number of results processed')
-@click.option('--cost', type=float, help='Cost of the evaluation')
-@click.option('--progress', type=float, help='Progress percentage (0-100)')
-@click.option('--accuracy', type=float, help='Accuracy percentage (0-100)')
-@click.option('--accuracy-type', help='Type of accuracy measurement')
-@click.option('--sensitivity', type=float, help='Sensitivity/recall percentage (0-100)')
-@click.option('--specificity', type=float, help='Specificity percentage (0-100)')
-@click.option('--precision', type=float, help='Precision percentage (0-100)')
-@click.option('--status', default='PENDING', 
-              type=click.Choice(['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED']),
-              help='Status of the evaluation')
-@click.option('--total-items', type=int, help='Total number of items to process')
-@click.option('--processed-items', type=int, help='Number of items processed')
-@click.option('--error-message', help='Error message if evaluation failed')
-@click.option('--error-details', type=str, help='JSON string of detailed error information')
-@click.option('--scorecard-id', help='Scorecard ID (if known)')
-@click.option('--scorecard-key', help='Scorecard key to look up')
-@click.option('--scorecard-name', help='Scorecard name to look up')
-@click.option('--score-id', help='Score ID (if known)')
-@click.option('--score-key', help='Score key to look up')
-@click.option('--score-name', help='Score name to look up')
-@click.option('--confusion-matrix', type=str, help='JSON string of confusion matrix data')
-def create(
-    account_key: str,
-    type: str,
-    parameters: Optional[str] = None,
-    metrics: Optional[str] = None,
-    inferences: Optional[int] = None,
-    results: Optional[int] = None,
-    cost: Optional[float] = None,
-    progress: Optional[float] = None,
-    accuracy: Optional[float] = None,
-    accuracy_type: Optional[str] = None,
-    sensitivity: Optional[float] = None,
-    specificity: Optional[float] = None,
-    precision: Optional[float] = None,
-    status: str = 'PENDING',
-    total_items: Optional[int] = None,
-    processed_items: Optional[int] = None,
-    error_message: Optional[str] = None,
-    error_details: Optional[str] = None,
-    scorecard_id: Optional[str] = None,
-    scorecard_key: Optional[str] = None,
-    scorecard_name: Optional[str] = None,
-    score_id: Optional[str] = None,
-    score_key: Optional[str] = None,
-    score_name: Optional[str] = None,
-    confusion_matrix: Optional[str] = None,
-):
-    """Create a new dashboard evaluation with specified attributes."""
-    # ... [rest of the create function implementation] ...
-
-@evaluations.command()
-@click.argument('id', required=True)
-@click.option('--type', help='Type of evaluation (e.g., accuracy, consistency)')
-@click.option('--status',
-              type=click.Choice(['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED']),
-              help='Status of the evaluation')
-@click.option('--parameters', type=str, help='JSON string of evaluation parameters')
-@click.option('--metrics', type=str, help='JSON string of evaluation metrics')
-@click.option('--inferences', type=int, help='Number of inferences made')
-@click.option('--results', type=int, help='Number of results processed')
-@click.option('--cost', type=float, help='Cost of the evaluation')
-@click.option('--progress', type=float, help='Progress percentage (0-100)')
-@click.option('--accuracy', type=float, help='Accuracy percentage (0-100)')
-@click.option('--accuracy-type', help='Type of accuracy measurement')
-@click.option('--sensitivity', type=float, help='Sensitivity/recall percentage (0-100)')
-@click.option('--specificity', type=float, help='Specificity percentage (0-100)')
-@click.option('--precision', type=float, help='Precision percentage (0-100)')
-@click.option('--total-items', type=int, help='Total number of items to process')
-@click.option('--processed-items', type=int, help='Number of items processed')
-@click.option('--error-message', help='Error message if evaluation failed')
-@click.option('--error-details', type=str, help='JSON string of detailed error information')
-@click.option('--scorecard-id', help='Scorecard ID (if known)')
-@click.option('--scorecard-key', help='Scorecard key to look up')
-@click.option('--scorecard-name', help='Scorecard name to look up')
-@click.option('--score-id', help='Score ID (if known)')
-@click.option('--score-key', help='Score key to look up')
-@click.option('--score-name', help='Score name to look up')
-@click.option('--confusion-matrix', type=str, help='JSON string of confusion matrix data')
-def update(
-    id: str,
-    type: Optional[str] = None,
-    status: Optional[str] = None,
-    parameters: dict = None,
-    metrics: dict = None,
-    inferences: list = None,
-    results: list = None,
-    cost: float = None,
-    progress: float = None,
-    accuracy: float = None,
-    accuracy_type: str = None,
-    sensitivity: float = None,
-    specificity: float = None,
-    precision: float = None,
-    total_items: int = None,
-    processed_items: int = None,
-    error_message: str = None,
-    error_details: dict = None,
-    confusion_matrix: dict = None
-):
-    """Update an existing dashboard evaluation."""
-    # ... [rest of the update function implementation] ...
-
-@evaluations.command()
-@click.argument('id', required=True)
-@click.option('--limit', type=int, default=1000, help='Maximum number of results to return')
-def list_results(id: str, limit: int):
-    """List score results for a dashboard evaluation"""
-    # ... [rest of the list_results function implementation] ...
-
-@main.group()
+@cli.group()
 def scores():
     """Manage score results"""
     pass
@@ -248,7 +115,7 @@ def create_score(value, item_id, account_id, scoring_job_id, scorecard_id, confi
     """Create a new dashboard score result"""
     # ... [rest of the create_score function implementation] ...
 
-@main.group()
+@cli.group()
 def scorecards():
     """Manage scorecards"""
     pass
