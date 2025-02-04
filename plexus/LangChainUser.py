@@ -6,9 +6,11 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 from langchain_aws import ChatBedrock
-from langchain_community.chat_models import ChatOpenAI, AzureChatOpenAI
-from langchain_community.chat_models import ChatOpenAI
+from langchain_community.chat_models import AzureChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain_community.callbacks import OpenAICallbackHandler
+from langchain_community.cache import SQLiteCache
+from langchain_core.globals import set_llm_cache
 
 from plexus.CustomLogging import logging
 from plexus.scores.Score import Score
@@ -87,6 +89,7 @@ class LangChainUser:
         self.parameters = self.Parameters(**parameters)
         self.token_counter = self._create_token_counter()
         self.openai_callback = None
+        
         self.model = self._initialize_model()
 
     def _initialize_model(self, custom_params: Optional[dict] = None) -> BaseLanguageModel:
@@ -117,13 +120,20 @@ class LangChainUser:
                     max_tokens=max_tokens
                 )
             else:  # ChatOpenAI
-                base_model = ChatOpenAI(
-                    model=params.model_name,
-                    api_key=os.getenv("OPENAI_API_KEY"),
-                    max_tokens=max_tokens,
-                    model_kwargs={"top_p": params.top_p},
-                    temperature=params.temperature
-                )
+                # Special handling for o3-mini models
+                if params.model_name and "o3-mini" in params.model_name:
+                    base_model = ChatOpenAI(
+                        model=params.model_name,
+                        api_key=os.getenv("OPENAI_API_KEY")
+                    )
+                else:
+                    base_model = ChatOpenAI(
+                        model=params.model_name,
+                        api_key=os.getenv("OPENAI_API_KEY"),
+                        max_tokens=max_tokens,
+                        model_kwargs={"top_p": params.top_p},
+                        temperature=params.temperature
+                    )
         elif params.model_provider == "BedrockChat":
             base_model = ChatBedrock(
                 model_id=params.model_name or "anthropic.claude-3-haiku-20240307-v1:0",
