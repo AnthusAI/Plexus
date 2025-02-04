@@ -32,7 +32,23 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/solutions/optimizer-agents',
     '/solutions/call-center-qa',
     '/solutions/enterprise',
-    '/solutions/resources'
+    '/solutions/resources',
+    '/documentation',
+    '/documentation/worker-nodes',
+    '/documentation/cli',
+    '/documentation/sdk',
+    '/documentation/basics',
+    '/documentation/methods',
+    '/documentation/basics/sources',
+    '/documentation/basics/scorecards',
+    '/documentation/basics/evaluations',
+    '/documentation/basics/tasks',
+    '/documentation/methods/add-edit-source',
+    '/documentation/methods/profile-source',
+    '/documentation/methods/add-edit-scorecard',
+    '/documentation/methods/add-edit-score',
+    '/documentation/methods/evaluate-score',
+    '/documentation/methods/monitor-tasks'
   ];
   const isPublicPath = publicPaths.includes(pathname);
   

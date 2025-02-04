@@ -31,12 +31,20 @@ export const Footer = () => {
                 <ul className="space-y-2">
                   <li>
                     <Link 
+                      href="/documentation"
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      Documentation
+                    </Link>
+                  </li>
+                  <li>
+                    <Link 
                       href="https://anthusai.github.io/Plexus/"
                       className="text-muted-foreground hover:text-foreground"
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      Documentation
+                      Python SDK
                     </Link>
                   </li>
                   <li>
