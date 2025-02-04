@@ -314,9 +314,9 @@ const schema = a.schema({
             accountId: a.string().required(),
             type: a.string().required(),
             status: a.string().required(),
-            target: a.string(),
+            target: a.string().required(),
             currentStageId: a.string(),
-            updatedAt: a.datetime(),
+            updatedAt: a.datetime().required(),
             scorecardId: a.string(),
             scoreId: a.string(),
             account: a.belongsTo('Account', 'accountId'),
@@ -324,7 +324,6 @@ const schema = a.schema({
             score: a.belongsTo('Score', 'scoreId'),
             stages: a.hasMany('TaskStage', 'taskId'),
             currentStage: a.belongsTo('TaskStage', 'currentStageId'),
-            command: a.string(),
             dispatchStatus: a.string()
         })
         .authorization((allow: AuthorizationCallback) => [
@@ -333,13 +332,9 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx) => [
             idx("accountId"),
-            idx("type"),
-            idx("status"),
-            idx("target"),
-            idx("currentStageId"),
-            idx("updatedAt"),
             idx("scorecardId"),
-            idx("scoreId")
+            idx("scoreId"),
+            idx("updatedAt")
         ]),
 
     TaskStage: a
@@ -440,5 +435,5 @@ export const data = defineData({
         apiKeyAuthorizationMode: {
             expiresInDays: 0  // Never expires
         }
-    },
+    }
 });

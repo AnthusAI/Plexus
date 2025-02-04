@@ -177,5 +177,83 @@ class TestScorecard:
         assert '1' in result  # Score1 should be present
         assert '3' not in result  # Score3 should be skipped
 
+    @pytest.mark.asyncio
+    async def test_score_entire_text_handles_single_result(self):
+        """Test that score_entire_text correctly handles a single Result object"""
+        # Create a simple config without dependencies for this test
+        simple_config = {
+            'name': 'TestScorecard',
+            'scores': [
+                {'name': 'SingleResultScore', 'id': 1}
+            ]
+        }
+        self.scorecard.properties = simple_config
+        Scorecard.scores = simple_config['scores']
+        
+        # Update the get_properties mock for simple scores
+        def get_properties_side_effect(score_name):
+            for score in simple_config['scores']:
+                if score['name'] == score_name:
+                    return score
+            return None
+        self.mock_registry.get_properties.side_effect = get_properties_side_effect
+
+        # Mock get_score_result to return a single Result object
+        async def mock_get_score_result(*args, **kwargs):
+            score_name = kwargs.get('score')
+            return Mock(name=score_name, value='Pass')
+        
+        self.scorecard.get_score_result = mock_get_score_result
+
+        # Call the method we're testing
+        result = await self.scorecard.score_entire_text(
+            text="Sample text",
+            metadata={},
+            modality="test"
+        )
+
+        # Assert that the result contains the score
+        assert len(result) == 1
+        assert result['1'].value == 'Pass'
+
+    @pytest.mark.asyncio
+    async def test_score_entire_text_handles_result_list(self):
+        """Test that score_entire_text correctly handles a list of Result objects"""
+        # Create a simple config without dependencies for this test
+        simple_config = {
+            'name': 'TestScorecard',
+            'scores': [
+                {'name': 'ListResultScore', 'id': 1}
+            ]
+        }
+        self.scorecard.properties = simple_config
+        Scorecard.scores = simple_config['scores']
+        
+        # Update the get_properties mock for simple scores
+        def get_properties_side_effect(score_name):
+            for score in simple_config['scores']:
+                if score['name'] == score_name:
+                    return score
+            return None
+        self.mock_registry.get_properties.side_effect = get_properties_side_effect
+
+        # Mock get_score_result to return a list of Result objects
+        async def mock_get_score_result(*args, **kwargs):
+            score_name = kwargs.get('score')
+            return [Mock(name=score_name, value='Pass')]
+        
+        self.scorecard.get_score_result = mock_get_score_result
+
+        # Call the method we're testing
+        result = await self.scorecard.score_entire_text(
+            text="Sample text",
+            metadata={},
+            modality="test"
+        )
+
+        # Assert that the result contains the score
+        assert len(result) == 1
+        assert result['1'].value == 'Pass'
+
 if __name__ == '__main__':
     pytest.main()

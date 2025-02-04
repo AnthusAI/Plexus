@@ -10,6 +10,7 @@ from plexus.cli.console import console
 from rich.progress import Progress
 from .DataCache import DataCache
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from plexus.utils.dict_utils import truncate_dict_strings_inner
 
 # boto3.set_stream_logger('', logging.WARNING)
 
@@ -112,7 +113,7 @@ class AWSDataLakeCache(DataCache):
             number_of_columns = len(all_query_results[0]['Data']) if all_query_results else 0
             logging.info(f"Query results summary: {number_of_rows} rows and {number_of_columns} columns")
             if all_query_results:
-                logging.info("First few rows of query results: {}".format(all_query_results[:3]))
+                logging.info("First few rows of query results: {}".format(truncate_dict_strings_inner(all_query_results[:3])))
             return all_query_results
         elif query_execution_state in ['FAILED', 'CANCELLED']:
             error_message = query_execution_response['QueryExecution']['Status']['StateChangeReason']
