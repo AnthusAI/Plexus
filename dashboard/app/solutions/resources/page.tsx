@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowRight, BookOpen, GraduationCap, Video, MessageSquare } from 'lucide-react'
 import { StandardSection } from '@/components/landing/StandardSection'
 import { FeatureCard } from '@/components/landing/FeatureCard'
+import Link from 'next/link'
 
 export default function ResourcesPage() {
   return (
@@ -32,9 +33,11 @@ export default function ResourcesPage() {
               Join our community of developers and AI practitioners to share knowledge and best practices.
             </p>
             <div className="flex justify-center">
-              <Button size="lg" className="bg-primary text-white">
-                Browse Documentation
-                <ArrowRight className="ml-2 h-5 w-5" />
+              <Button size="lg" className="bg-primary text-white" asChild>
+                <Link href="/documentation">
+                  Browse Documentation
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
               </Button>
             </div>
           </div>
@@ -90,14 +93,16 @@ export default function ResourcesPage() {
             <p className="text-lg text-muted-foreground">
               Learn the basics of building AI agents with Plexus in our comprehensive getting started guide.
             </p>
-            <Button variant="outline">Read Guide</Button>
+            <Button className="bg-primary text-white" asChild>
+              <Link href="/documentation/basics">Read Guide</Link>
+            </Button>
           </div>
           <div className="space-y-4">
             <h3 className="text-2xl font-semibold">Best Practices</h3>
             <p className="text-lg text-muted-foreground">
               Discover best practices for developing reliable and scalable AI workflows.
             </p>
-            <Button variant="outline">Learn More</Button>
+            <Button className="bg-primary text-white">Learn More</Button>
           </div>
         </div>
       </StandardSection>
