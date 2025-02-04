@@ -18,6 +18,10 @@ const __dirname = path.dirname(__filename);
 // Interface for TaskDispatcher stack props
 interface TaskDispatcherStackProps extends StackProps {
   taskTable: ITable;
+  celeryAwsAccessKeyId?: string;
+  celeryAwsSecretAccessKey?: string;
+  celeryAwsRegion?: string;
+  celeryResultBackendTemplate?: string;
 }
 
 // Custom CDK stack for the Python Task Dispatcher function
@@ -29,6 +33,12 @@ export class TaskDispatcherStack extends Stack {
     
     // Get the directory containing the function code
     const functionDir = path.join(__dirname, '.');
+
+    // Get Celery configuration from props or environment
+    const celeryAwsAccessKeyId = props.celeryAwsAccessKeyId || process.env.CELERY_AWS_ACCESS_KEY_ID || 'WILL_BE_SET_AFTER_DEPLOYMENT';
+    const celeryAwsSecretAccessKey = props.celeryAwsSecretAccessKey || process.env.CELERY_AWS_SECRET_ACCESS_KEY || 'WILL_BE_SET_AFTER_DEPLOYMENT';
+    const celeryAwsRegion = props.celeryAwsRegion || process.env.CELERY_AWS_REGION_NAME || Stack.of(this).region;
+    const celeryResultBackendTemplate = props.celeryResultBackendTemplate || process.env.CELERY_RESULT_BACKEND_TEMPLATE || 'WILL_BE_SET_AFTER_DEPLOYMENT';
 
     this.taskDispatcherFunction = new lambda.Function(this, 'TaskDispatcherFunction', {
       runtime: lambda.Runtime.PYTHON_3_11,
@@ -62,10 +72,26 @@ export class TaskDispatcherStack extends Stack {
       }),
       timeout: Duration.seconds(30),
       environment: {
-        CELERY_BROKER_URL: process.env.CELERY_BROKER_URL || '',
-        CELERY_RESULT_BACKEND: process.env.CELERY_RESULT_BACKEND || ''
+        CELERY_AWS_ACCESS_KEY_ID: celeryAwsAccessKeyId,
+        CELERY_AWS_SECRET_ACCESS_KEY: celeryAwsSecretAccessKey,
+        CELERY_AWS_REGION_NAME: celeryAwsRegion,
+        CELERY_RESULT_BACKEND_TEMPLATE: celeryResultBackendTemplate
       }
     });
+
+    // Add SQS permissions
+    this.taskDispatcherFunction.addToRolePolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: [
+          'sqs:SendMessage',
+          'sqs:ReceiveMessage',
+          'sqs:DeleteMessage',
+          'sqs:GetQueueAttributes'
+        ],
+        resources: ['*'] // You might want to restrict this to specific queues
+      })
+    );
 
     // Create stream policy
     const policy = new Policy(this, 'TaskDispatcherStreamPolicy', {

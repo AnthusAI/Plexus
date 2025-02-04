@@ -26,7 +26,12 @@ const taskDispatcherStack = new TaskDispatcherStack(
     backend.createStack('TaskDispatcherStack'),
     'taskDispatcher',
     {
-        taskTable
+        taskTable,
+        // These will be set in the Lambda function's environment variables after deployment
+        celeryAwsAccessKeyId: process.env.CELERY_AWS_ACCESS_KEY_ID || 'WILL_BE_SET_AFTER_DEPLOYMENT',
+        celeryAwsSecretAccessKey: process.env.CELERY_AWS_SECRET_ACCESS_KEY || 'WILL_BE_SET_AFTER_DEPLOYMENT',
+        celeryAwsRegion: process.env.CELERY_AWS_REGION_NAME || 'us-east-1', // Default to us-east-1 if not specified
+        celeryResultBackendTemplate: process.env.CELERY_RESULT_BACKEND_TEMPLATE || 'WILL_BE_SET_AFTER_DEPLOYMENT'
     }
 );
 

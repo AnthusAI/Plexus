@@ -10,7 +10,7 @@ import pandas as pd
 import importlib.util
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Union
 import asyncio
 import boto3
 from botocore.exceptions import ClientError
@@ -204,15 +204,24 @@ class Scorecard:
 
     async def get_score_result(self, *, scorecard, score, text, metadata, modality, results):
         """
-        Get a result for a score by looking up a Score instance for that question name and calling its
-        compute_score_result method with the provided transcript.
+        Get a result for a score by looking up a Score instance for that score name and calling its
+        predict method with the provided input.
 
-        :param score: The score identifier.
-        :param text: The transcript.
-        :param metadata: The metadata.
-        :param modality: The modality.
-        :return: Either a single Result object or a list of Result objects.
-        :raises BatchProcessingPause: When scoring needs to be suspended for batch processing
+        Args:
+            scorecard (str): The scorecard identifier.
+            score (str): The score identifier.
+            text (str): The text content to analyze.
+            metadata (dict): Additional metadata for the score.
+            modality (str, optional): The modality of the content (e.g., 'Development', 'Production').
+            results (list): Previous score results that may be needed for dependent scores.
+
+        Returns:
+            Union[List[Score.Result], Score.Result]: Either a single Result object or a list of Result objects.
+            The Result object contains the score value and any associated metadata.
+
+        Raises:
+            BatchProcessingPause: When scoring needs to be suspended for batch processing.
+            ValueError: When required environment variables are missing.
         """
         logging.info(f"Getting score result for: {score}")
         
@@ -266,6 +275,16 @@ class Scorecard:
                 # Get the total cost for this score
                 score_total_cost = score_instance.get_accumulated_costs()
                 total_tokens = score_total_cost.get('prompt_tokens', 0) + score_total_cost.get('completion_tokens', 0)
+
+                # Update scorecard's cost accumulators
+                self.prompt_tokens += score_total_cost.get('prompt_tokens', 0)
+                self.completion_tokens += score_total_cost.get('completion_tokens', 0)
+                self.cached_tokens += score_total_cost.get('cached_tokens', 0)
+                self.llm_calls += score_total_cost.get('llm_calls', 0)
+                self.input_cost += score_total_cost.get('input_cost', 0)
+                self.output_cost += score_total_cost.get('output_cost', 0)
+                self.total_cost += score_total_cost.get('total_cost', 0)
+                self.scorecard_total_cost += score_total_cost.get('total_cost', Decimal('0.0'))
 
                 # Log the cost for this individual score
                 dimensions = {

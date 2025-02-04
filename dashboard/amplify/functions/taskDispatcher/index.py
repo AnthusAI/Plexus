@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+from kombu.utils.url import safequote
 
 from boto3.dynamodb.types import TypeDeserializer
 from celery import Celery
@@ -14,16 +15,46 @@ logging.basicConfig(
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Read Celery configuration from environment variables
-CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL')
-CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND')
+# Get and quote AWS credentials
+aws_access_key = safequote(os.environ.get("CELERY_AWS_ACCESS_KEY_ID", ""))
+aws_secret_key = safequote(os.environ.get("CELERY_AWS_SECRET_ACCESS_KEY", ""))
+aws_region = os.environ.get("CELERY_AWS_REGION_NAME", "")
 
-# Log configuration status
-logger.info(f"CELERY_BROKER_URL configured: {bool(CELERY_BROKER_URL)}")
-logger.info(f"CELERY_RESULT_BACKEND configured: {bool(CELERY_RESULT_BACKEND)}")
+logger.info(f"AWS Region configured: {bool(aws_region)}")
+logger.info(f"AWS credentials configured: {bool(aws_access_key and aws_secret_key)}")
+
+# Construct broker URL from AWS credentials
+broker_url = f"sqs://{aws_access_key}:{aws_secret_key}@"
+
+# Get backend URL template and construct full URL
+backend_url_template = os.environ.get("CELERY_RESULT_BACKEND_TEMPLATE")
+logger.info(f"Backend template configured: {bool(backend_url_template)}")
+
+if not all([aws_access_key, aws_secret_key, aws_region, backend_url_template]):
+    raise ValueError("Missing required AWS credentials or backend template in environment")
+
+backend_url = backend_url_template.format(
+    aws_access_key=aws_access_key,
+    aws_secret_key=aws_secret_key,
+    aws_region_name=aws_region
+)
 
 # Initialize Celery app
-celery_app = Celery('plexus', broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
+celery_app = Celery(
+    "plexus",
+    broker=broker_url,
+    backend=backend_url,
+    broker_transport_options={
+        "region": aws_region,
+        "is_secure": True,
+    }
+)
+
+# Configure Celery app
+celery_app.conf.update(
+    broker_connection_retry_on_startup=True,
+    task_default_queue='celery'
+)
 
 # Initialize DynamoDB deserializer
 deserializer = TypeDeserializer()
