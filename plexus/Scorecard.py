@@ -248,38 +248,63 @@ class Scorecard:
                 metadata = metadata or {}
                 metadata.update({
                     'account_key': account_key,
-                    'scorecard_key': scorecard,
+                    'scorecard_name': self.name,
                     'score_name': score
                 })
 
-            logging.info(f"Predicting score for: {score}")
             try:
-                # Let BatchProcessingPause propagate up
-                score_result = await score_instance.predict(
-                    context=None,
-                    model_input=plexus.scores.Score.Input(
-                        text=text,
-                        metadata=metadata,
-                        results=results
-                    )
+                score_result = await score_instance.compute_score_result(
+                    text=text,
+                    metadata=metadata,
+                    modality=modality,
+                    results=results
                 )
-                logging.info(f"Prediction complete for: {score}")
-                return score_result
+
+                # Get the total cost for this score
+                score_total_cost = score_instance.get_accumulated_costs()
+                total_tokens = score_total_cost.get('prompt_tokens', 0) + score_total_cost.get('completion_tokens', 0)
+
+                # Log the cost for this individual score
+                dimensions = {
+                    'ScoreCardID': str(self.properties['id']),
+                    'ScoreCardName': str(self.properties['name']),
+                    'Score': str(score_configuration.get('name')),
+                    'ScoreID': str(score_configuration.get('id')),
+                    'Modality': modality or 'Development',
+                    'Environment': os.getenv('environment') or 'Unknown'
+                }
+                
+                self.cloudwatch_logger.log_metric('Cost', score_total_cost.get('total_cost', 0), dimensions)
+                self.cloudwatch_logger.log_metric('PromptTokens', score_total_cost.get('prompt_tokens', 0), dimensions)
+                self.cloudwatch_logger.log_metric('CompletionTokens', score_total_cost.get('completion_tokens', 0), dimensions)
+                self.cloudwatch_logger.log_metric('TotalTokens', total_tokens, dimensions)
+                self.cloudwatch_logger.log_metric('CachedTokens', score_total_cost.get('cached_tokens', 0), dimensions)
+                self.cloudwatch_logger.log_metric('ExternalAIRequests', score_total_cost.get('llm_calls', 0), dimensions)
+                self.cloudwatch_logger.log_metric('ItemTokens', item_tokens, dimensions)
+
+                scorecard_dimensions = {
+                    'ScoreCardName': str(self.properties['name']),
+                    'Environment': os.getenv('environment') or 'Unknown'
+                }
+
+                self.cloudwatch_logger.log_metric('CostByScorecard', score_total_cost.get('total_cost', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('PromptTokensByScorecard', score_total_cost.get('prompt_tokens', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('CompletionTokensByScorecard', score_total_cost.get('completion_tokens', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('TotalTokensByScorecard', total_tokens, scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('CachedTokensByScorecard', score_total_cost.get('cached_tokens', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('ExternalAIRequestsByScorecard', score_total_cost.get('llm_calls', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('ItemTokensByScorecard', item_tokens, scorecard_dimensions)
+
+                # Ensure we always return a list of results
+                if isinstance(score_result, list):
+                    return score_result
+                else:
+                    return [score_result]
+
             except BatchProcessingPause:
                 # Re-raise BatchProcessingPause to be handled by API
                 logging.info(f"BatchProcessingPause caught in get_score_result for {score}")
                 raise
-            except Exception as e:
-                # Convert other errors to error results
-                logging.exception(f"Error processing {score}: {e}")
-                return [plexus.scores.Score.Result(
-                    value="Error", 
-                    error=str(e),
-                    parameters=Score.Parameters(
-                        name=score,
-                        scorecard=self.name
-                    )
-                )]
 
         else:
             error_string = f"No score found for question: \"{score}\""
