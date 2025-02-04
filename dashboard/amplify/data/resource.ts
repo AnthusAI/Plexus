@@ -333,6 +333,7 @@ const schema = a.schema({
             scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
             stages: a.hasMany('TaskStage', 'taskId'),
+            currentStage: a.belongsTo('TaskStage', 'currentStageId'),
             celeryTaskId: a.string(),
             workerNodeId: a.string(),
             updatedAt: a.datetime()
