@@ -1,24 +1,27 @@
 'use client'
 
 import React from 'react'
-import { Hero } from '@/components/landing/Hero'
-import { Features } from '@/components/landing/Features'
+import { StandardSection } from '@/components/landing/StandardSection'
 import { LabelingStrategies } from '@/components/landing/LabelingStrategies'
 import { UseCases } from '@/components/landing/UseCases'
 import { CTASection } from '@/components/landing/CTASection'
 import { Footer } from '@/components/landing/Footer'
 import { Layout } from '@/components/landing/Layout'
-import { Download, Brain, Workflow as WorkflowIcon } from 'lucide-react'
+import { Download, Brain, Workflow as WorkflowIcon, ArrowRight, Cpu, FlaskRoundIcon as Flask, Cloud, Network } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import ItemListWorkflow from '@/components/workflow/layouts/item-list-workflow'
 import MetricsGauges from '@/components/MetricsGauges'
-import { StandardSection } from '@/components/landing/StandardSection'
-import { FrameSection } from '@/components/landing/FrameSection'
+import { Button } from '@/components/ui/button'
 
 const CLOCKWISE_SEQUENCE = [0, 1, 3, 2] // accuracy -> precision -> specificity -> sensitivity
 
 const MultiModelWorkflowClient = dynamic(
   () => import('@/components/workflow/layouts/multi-model-workflow'),
+  { ssr: false }
+)
+
+const WorkflowClient = dynamic(
+  () => import('@/components/workflow/base/workflow-base'),
   { ssr: false }
 )
 
@@ -49,7 +52,36 @@ export default function LandingPage() {
 
   return (
     <Layout>
-      <Hero />
+      <StandardSection
+        headline={
+          <span>
+            Run <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text">AI Agents</span> Over <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text">Your Data</span> With <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text">No Code</span>
+          </span>
+        }
+        headlinePosition="inline"
+        variant="hero"
+        leftContent={
+          <>
+            <p className="text-xl text-muted-foreground mb-8 w-full">
+              Plexus is a battle-tested platform for building AI workflows that analyze streams of content and take action.
+            </p>
+            <p className="text-xl text-muted-foreground mb-8 w-full">
+              Your team can use your data to set up step-by-step processes that automate information management. Without dealing with code development and deployment.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Button size="lg" className="w-full sm:w-auto bg-primary text-white hover:bg-primary/90 text-lg font-semibold">
+                Learn More
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </div>
+          </>
+        }
+        rightContent={
+          <div className="w-full max-w-[400px]">
+            <WorkflowClient />
+          </div>
+        }
+      />
 
       <StandardSection
         headline="Intelligence at Scale"
@@ -71,23 +103,22 @@ export default function LandingPage() {
         }
       />
 
-      <FrameSection
+      <StandardSection
         headline="Use Any Model"
         headlinePosition="top"
         layout="twoColumn"
+        variant="framed"
+        rightColumnAlign="middle"
         leftContent={
-          <>
-            <p className="text-xl text-muted-foreground w-full">
-              AI changes every week! Don't lock yourself into one solution. 
-              Plexus is a workbench for applying any newfangled AI model to 
-              solve your problems. Or simpler and cheaper ML models. Or 
-              logical rules -- anything your solution requires.
-            </p>
-            <p className="text-xl text-muted-foreground w-full mt-4">
-              OpenAI, Anthropic, Google, Deepseek, Azure, AWS Bedrock, Hugging Face, PyTorch, TensorFlow — 
-              Plexus supports them all.
-            </p>
-          </>
+          <p className="text-xl text-muted-foreground">
+            AI changes every week! Don't lock yourself into one solution. 
+            Plexus is a workbench for applying any newfangled AI model to 
+            solve your problems. Or simpler and cheaper ML models. Or 
+            logical rules -- anything your solution requires.
+            {"\n\n"}
+            OpenAI, Anthropic, Google, Deepseek, Azure, AWS Bedrock, Hugging Face, PyTorch, TensorFlow — 
+            Plexus supports them all.
+          </p>
         }
         rightContent={
           <div className="w-full max-w-[400px]">
@@ -150,7 +181,7 @@ export default function LandingPage() {
         rightContent={
           <div>
             <p className="text-xl text-muted-foreground">
-              You can't just write prompts and put them into production and hope they work, you need a way to evaluate them quantitatively to see if they meet your needs.  You can't optimize a metric you're not measuring.
+              You can't just write prompts and put them into production and hope they work, you need a way to evaluate them quantitatively to see if they meet your needs. You can't optimize a metric you're not measuring.
             </p>
             <p className="text-xl text-muted-foreground mt-4">
               Each use case demands its own success metrics: Is this a regulatory compliance question where we need high sensitivity? Do we need to use balanced accuracy because the data is unbalanced? Plexus gives you the gauges you need.
@@ -159,23 +190,22 @@ export default function LandingPage() {
         }
       />
 
-      <FrameSection
+      <StandardSection
         headline="Any Result Type"
         headlinePosition="top"
         layout="twoColumn"
+        variant="framed"
+        rightColumnAlign="middle"
         leftContent={
-          <>
-            <p className="text-xl text-muted-foreground w-full">
-              Your answers should match your questions. Sometimes a simple yes/no will do, 
-              other times you need a 5-star rating, a percentage score, or just a thumbs up. 
-              Plexus gives you the flexibility to express your results in the format that makes sense 
-              for your use case.
-            </p>
-            <p className="text-xl text-muted-foreground w-full mt-4">
-              Binary classifiers, multi-class classifiers, scalar values, entity extraction, quote extraction, 
-              and more.  The framework is flexible enough to support anything your solution requires.
-            </p>
-          </>
+          <p className="text-xl text-muted-foreground">
+            Your answers should match your questions. Sometimes a simple yes/no will do, 
+            other times you need a 5-star rating, a percentage score, or just a thumbs up. 
+            Plexus gives you the flexibility to express your results in the format that makes sense 
+            for your use case.
+            {"\n\n"}
+            Binary classifiers, multi-class classifiers, scalar values, entity extraction, quote extraction, 
+            and more. The framework is flexible enough to support anything your solution requires.
+          </p>
         }
         rightContent={
           <div className="w-full max-w-[400px]">
@@ -184,54 +214,57 @@ export default function LandingPage() {
         }
       />
 
-      <Features />
-
-      <FrameSection
-        headline="Organizational Intelligence"
+      <StandardSection
+        headline="Powerful Features for Agent Orchestration"
         headlinePosition="top"
-        layout="single"
+        fullWidth
       >
-        <p className="text-2xl text-muted-foreground mb-12">
-          Transform How Your Organization Handles Information
-        </p>
-        <div className="grid md:grid-cols-3 gap-12 text-left">
-          <div className="flex flex-col items-center text-center p-6 
-                        rounded-lg transition-all duration-300 
-                        hover:bg-accent/5">
-            <Download className="w-16 h-16 mb-6 text-accent" />
-            <h3 className="text-2xl font-bold mb-4 text-foreground">
-              Ingest
+        <div className="max-w-3xl mx-auto text-center mb-12">
+          <p className="text-2xl text-muted-foreground mb-12">
+            Built by practitioners on the front lines of AI deployment. Our features 
+            evolve as rapidly as AI itself, delivering battle-tested tools that 
+            transform cutting-edge capabilities into real business value.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="bg-card p-6 rounded-lg shadow-md transition-all duration-300 hover:shadow-xl">
+            <Cpu className="float-right ml-4 w-12 h-12 text-accent" />
+            <h3 className="text-xl font-semibold mb-2 text-foreground">
+              Multi-model
             </h3>
-            <p className="text-lg text-muted-foreground">
-              Connect to your data sources and process millions of items 
-              automatically
+            <p className="text-muted-foreground">
+              Use any AI/ML model, from GPT-4 or Claude, to your own fine-tuned local Llama, to custom BERT-based classifiers.
             </p>
           </div>
-          <div className="flex flex-col items-center text-center p-6 
-                        rounded-lg transition-all duration-300 
-                        hover:bg-accent/5">
-            <Brain className="w-16 h-16 mb-6 text-accent" />
-            <h3 className="text-2xl font-bold mb-4 text-foreground">
-              Analyze
+          <div className="bg-card p-6 rounded-lg shadow-md transition-all duration-300 hover:shadow-xl">
+            <Flask className="float-right ml-4 w-12 h-12 text-accent" />
+            <h3 className="text-xl font-semibold mb-2 text-foreground">
+              Lab workflow
             </h3>
-            <p className="text-lg text-muted-foreground">
-              Build intelligent workflows that learn from your data and 
-              make predictions
+            <p className="text-muted-foreground">
+              Create and align your own custom classifiers using sophisticated tools for analyzing datasets and evaluating results.
             </p>
           </div>
-          <div className="flex flex-col items-center text-center p-6 
-                        rounded-lg transition-all duration-300 
-                        hover:bg-accent/5">
-            <WorkflowIcon className="w-16 h-16 mb-6 text-accent" />
-            <h3 className="text-2xl font-bold mb-4 text-foreground">
-              Act
+          <div className="bg-card p-6 rounded-lg shadow-md transition-all duration-300 hover:shadow-xl">
+            <Cloud className="float-right ml-4 w-12 h-12 text-accent" />
+            <h3 className="text-xl font-semibold mb-2 text-foreground">
+              Serverless
             </h3>
-            <p className="text-lg text-muted-foreground">
-              Orchestrate automated responses across your enterprise systems
+            <p className="text-muted-foreground">
+              Plexus is a lightning-fast, fully DevOps / IaC / NoSQL project that doesn't depend on servers or databases.
+            </p>
+          </div>
+          <div className="bg-card p-6 rounded-lg shadow-md transition-all duration-300 hover:shadow-xl">
+            <Network className="float-right ml-4 w-12 h-12 text-accent" />
+            <h3 className="text-xl font-semibold mb-2 text-foreground">
+              Task dispatch
+            </h3>
+            <p className="text-muted-foreground">
+              Connect any node as a worker for running agents, evaluations, or reports, from AWS to Azure to local computers.
             </p>
           </div>
         </div>
-      </FrameSection>
+      </StandardSection>
 
       <UseCases />
       <CTASection />

@@ -15,11 +15,11 @@ import {
 } from '../ui/dropdown-menu'
 
 const landingPages = [
-  { href: '/platform', label: 'Platform' },
-  { href: '/optimizer-agents', label: 'Optimizer Agents' },
-  { href: '/call-center-qa', label: 'Call Center QA' },
-  { href: '/enterprise', label: 'Enterprise' },
-  { href: '/resources', label: 'Resources' }
+  { href: '/solutions/platform', label: 'Platform' },
+  { href: '/solutions/call-center-qa', label: 'Call Center QA' },
+  { href: '/solutions/optimizer-agents', label: 'Optimizer Agents' },
+  { href: '/solutions/enterprise', label: 'Enterprise' },
+  { href: '/solutions/resources', label: 'Resources' }
 ]
 
 export function Layout({ children }: { children: React.ReactNode }) {
