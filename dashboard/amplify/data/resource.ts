@@ -328,6 +328,7 @@ const schema = a.schema({
             stderr: a.string(),
             currentStageId: a.string(),
             scorecardId: a.string(),
+            account: a.belongsTo('Account', 'accountId'),
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
