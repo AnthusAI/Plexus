@@ -1,13 +1,18 @@
+'use client'
+
 import React from 'react'
+import { Layout } from '@/components/landing/Layout'
+import { CTASection } from '@/components/landing/CTASection'
+import { Footer } from '@/components/landing/Footer'
+import { StandardSection } from '@/components/landing/StandardSection'
+import { FrameSection } from '@/components/landing/FrameSection'
 import { Button } from '@/components/ui/button'
 import { ArrowRight, Bot, GraduationCap, DollarSign, ArrowUpWideNarrow } from 'lucide-react'
-import { StandardSection } from './StandardSection'
-import { FrameSection } from './FrameSection'
-import ItemListWorkflow from '../workflow/layouts/item-list-workflow'
+import ItemListWorkflow from '@/components/workflow/layouts/item-list-workflow'
 
-export const CallCenterQA = () => {
+export default function CallCenterQAPage() {
   return (
-    <>
+    <Layout>
       <section className="bg-muted">
         <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
           <div className="py-4">
@@ -15,7 +20,7 @@ export const CallCenterQA = () => {
               <div className="flex flex-col xl:flex-row gap-8">
                 <div className="flex-1 min-w-0 xl:w-[calc(50%-2rem)]">
                   <h1 className="text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tighter mb-6 md:mb-12 leading-tight text-center md:text-center xl:text-left">
-                    <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text whitespace-nowrap">Monitor calls</span> with <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text whitespace-nowrap">AI agents</span> with <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text whitespace-nowrap">no code</span>
+                    <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text whitespace-nowrap">Monitor Calls</span> With <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text whitespace-nowrap">AI Agents</span> With <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text whitespace-nowrap">No Code</span>
                   </h1>
                   <div className="flex flex-col md:flex-row xl:flex-col gap-8">
                     <div className="w-full md:w-1/2 xl:w-full flex flex-col items-center md:items-start text-center md:text-left md:justify-center">
@@ -27,7 +32,7 @@ export const CallCenterQA = () => {
                         We know how to operate AI agents at scale. We've built a platform that enables you to monitor calls with with no code.
                       </p>
                       <p className="text-xl text-muted-foreground mb-8 w-full">
-                        Humans still need to steer it, and your team knows best how to do that.  Plexus gives your team the tools they need to make it happen.
+                        Humans still need to steer it, and your team knows best how to do that. Plexus gives your team the tools they need to make it happen.
                       </p>
                       <div className="flex justify-center xl:justify-start">
                         <Button size="lg" className="bg-primary text-white">
@@ -78,27 +83,21 @@ export const CallCenterQA = () => {
         fullWidth
       >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-          <div className="flex flex-col items-center text-center p-6 
-                        rounded-lg transition-all duration-300 
-                        hover:bg-accent/5">
+          <div className="flex flex-col items-center text-center p-6 rounded-lg transition-all duration-300 hover:bg-accent/5">
             <DollarSign className="w-16 h-16 mb-6 text-accent" />
             <h3 className="text-xl font-semibold mb-2">Reduce Manual QA</h3>
             <p className="text-muted-foreground">
               Automate evaluations with AI to save the expense of full-time QA staff while increasing coverage.
             </p>
           </div>
-          <div className="flex flex-col items-center text-center p-6 
-                        rounded-lg transition-all duration-300 
-                        hover:bg-accent/5">
+          <div className="flex flex-col items-center text-center p-6 rounded-lg transition-all duration-300 hover:bg-accent/5">
             <GraduationCap className="w-16 h-16 mb-6 text-accent" />
             <h3 className="text-xl font-semibold mb-2">Accelerate Agent Growth</h3>
             <p className="text-muted-foreground">
               Help new hires reach full productivity faster with AI-powered training insights and feedback.
             </p>
           </div>
-          <div className="flex flex-col items-center text-center p-6 
-                        rounded-lg transition-all duration-300 
-                        hover:bg-accent/5">
+          <div className="flex flex-col items-center text-center p-6 rounded-lg transition-all duration-300 hover:bg-accent/5">
             <ArrowUpWideNarrow className="w-16 h-16 mb-6 text-accent" />
             <h3 className="text-xl font-semibold mb-2">Maximize Call Coverage</h3>
             <p className="text-muted-foreground">
@@ -179,6 +178,9 @@ export const CallCenterQA = () => {
           </p>
         </div>
       </StandardSection>
-    </>
+
+      <CTASection />
+      <Footer />
+    </Layout>
   )
 } 

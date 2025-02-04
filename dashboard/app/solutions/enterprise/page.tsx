@@ -7,40 +7,40 @@ import { Footer } from '@/components/landing/Footer'
 import { Button } from '@/components/ui/button'
 import { ArrowRight, Shield, Users, Building2, Lock } from 'lucide-react'
 import { StandardSection } from '@/components/landing/StandardSection'
-import { FrameSection } from '@/components/landing/FrameSection'
 import ItemListWorkflow from '@/components/workflow/layouts/item-list-workflow'
 import { FeatureCard } from '@/components/landing/FeatureCard'
 
 export default function EnterprisePage() {
   return (
     <Layout>
-      <section className="bg-muted">
-        <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
-          <div className="py-4">
-            <div className="bg-background rounded-xl py-12 md:py-16 px-4 md:px-8">
-              <div className="max-w-3xl mx-auto">
-                <h1 className="text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tighter mb-6 md:mb-12 leading-tight text-center">
-                  <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text whitespace-nowrap">Enterprise-grade</span> AI <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text whitespace-nowrap">infrastructure</span>
-                </h1>
-                <div className="space-y-8">
-                  <p className="text-xl text-muted-foreground text-center">
-                    Deploy AI with confidence using our enterprise-ready platform. Built for security, scalability, and compliance from the ground up.
-                  </p>
-                  <p className="text-xl text-muted-foreground text-center">
-                    Get dedicated support, custom integrations, and advanced security features to meet your organization's unique needs.
-                  </p>
-                  <div className="flex justify-center">
-                    <Button size="lg" className="bg-primary text-white">
-                      Contact Sales
-                      <ArrowRight className="ml-2 h-5 w-5" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
+      <StandardSection
+        headline={
+          <span>
+            <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text">Enterprise-Grade</span> AI Infrastructure
+          </span>
+        }
+        headlinePosition="inline"
+        variant="hero"
+        layout="single"
+        fullWidth
+      >
+        <div className="max-w-3xl mx-auto">
+          <div className="space-y-8">
+            <p className="text-xl text-muted-foreground text-center">
+              Deploy AI with confidence using our enterprise-ready platform. Built for security, scalability, and compliance from the ground up.
+            </p>
+            <p className="text-xl text-muted-foreground text-center">
+              Get dedicated support, custom integrations, and advanced security features to meet your organization's unique needs.
+            </p>
+            <div className="flex justify-center">
+              <Button size="lg" className="bg-primary text-white">
+                Contact Sales
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
             </div>
           </div>
         </div>
-      </section>
+      </StandardSection>
 
       <StandardSection
         headline="Enterprise Features"
@@ -79,10 +79,11 @@ export default function EnterprisePage() {
         </div>
       </StandardSection>
 
-      <FrameSection
+      <StandardSection
         headline="Built on AWS Well-Architected Framework"
         headlinePosition="top"
         layout="single"
+        variant="framed"
       >
         <div className="space-y-12 max-w-6xl mx-auto">
           <p className="text-xl text-muted-foreground text-center max-w-4xl mx-auto">
@@ -124,7 +125,7 @@ export default function EnterprisePage() {
             </div>
           </div>
         </div>
-      </FrameSection>
+      </StandardSection>
 
       <StandardSection
         headline="Enterprise Support"
