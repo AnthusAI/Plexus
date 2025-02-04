@@ -23,6 +23,7 @@ import plexus.scores
 from plexus.scores.Score import Score
 from plexus.plexus_logging.Cloudwatch import CloudWatchLogger
 from plexus.scores.LangGraphScore import BatchProcessingPause, LangGraphScore
+from plexus.utils.dict_utils import truncate_dict_strings_inner, truncate_dict_strings
 
 class Scorecard:
     """
@@ -210,7 +211,7 @@ class Scorecard:
         :param text: The transcript.
         :param metadata: The metadata.
         :param modality: The modality.
-        :return: A list of score results.
+        :return: Either a single Result object or a list of Result objects.
         :raises BatchProcessingPause: When scoring needs to be suspended for batch processing
         """
         logging.info(f"Getting score result for: {score}")
@@ -247,40 +248,26 @@ class Scorecard:
                 metadata = metadata or {}
                 metadata.update({
                     'account_key': account_key,
-                    'scorecard_key': scorecard,
+                    'scorecard_name': self.name,
                     'score_name': score
                 })
 
-            logging.info(f"Predicting score for: {score}")
-            # Let BatchProcessingPause propagate up
-            score_result = await score_instance.predict(
-                context=None,
-                model_input=plexus.scores.Score.Input(
-                    text=text,
-                    metadata=metadata,
-                    results=results
+            try:
+                # Let BatchProcessingPause propagate up
+                score_result = await score_instance.predict(
+                    context=None,
+                    model_input=plexus.scores.Score.Input(
+                        text=text,
+                        metadata=metadata,
+                        results=results
+                    )
                 )
-            )
-            logging.info(f"Prediction complete for: {score}")
-            logging.info(f"Score result type: {type(score_result)}")
-            logging.info(f"Score result contents: {score_result}")
-            logging.debug(f"Score result for {score}: {score_result}")
 
-            if hasattr(score_instance, 'get_accumulated_costs'):
+                # Get the total cost for this score
                 score_total_cost = score_instance.get_accumulated_costs()
-                logging.info(f"Total cost for {score}: {score_total_cost}")
+                total_tokens = score_total_cost.get('prompt_tokens', 0) + score_total_cost.get('completion_tokens', 0)
 
-                self.prompt_tokens       += score_total_cost.get('prompt_tokens', 0)
-                self.completion_tokens   += score_total_cost.get('completion_tokens', 0)
-                self.cached_tokens       += score_total_cost.get('cached_tokens', 0)
-                self.llm_calls           += score_total_cost.get('llm_calls', 0)
-                self.input_cost          += score_total_cost.get('input_cost', 0)
-                self.output_cost         += score_total_cost.get('output_cost', 0)
-                self.total_cost          += score_total_cost.get('total_cost', 0)
-                self.scorecard_total_cost += score_total_cost.get('total_cost', Decimal('0.0'))
-
-                total_tokens = self.prompt_tokens + self.completion_tokens
-
+                # Log the cost for this individual score
                 dimensions = {
                     'ScoreCardID': str(self.properties['id']),
                     'ScoreCardName': str(self.properties['name']),
@@ -311,11 +298,16 @@ class Scorecard:
                 self.cloudwatch_logger.log_metric('ExternalAIRequestsByScorecard', score_total_cost.get('llm_calls', 0), scorecard_dimensions)
                 self.cloudwatch_logger.log_metric('ItemTokensByScorecard', item_tokens, scorecard_dimensions)
 
-            # Ensure we always return a list of results
-            if isinstance(score_result, list):
-                return score_result
-            else:
-                return [score_result]
+                # Ensure we always return a list of results
+                if isinstance(score_result, list):
+                    return score_result
+                else:
+                    return [score_result]
+
+            except BatchProcessingPause:
+                # Re-raise BatchProcessingPause to be handled by API
+                logging.info(f"BatchProcessingPause caught in get_score_result for {score}")
+                raise
 
         else:
             error_string = f"No score found for question: \"{score}\""
@@ -391,11 +383,17 @@ class Scorecard:
                     logging.info(f"Score {score_name} returned None (possibly paused for batch processing)")
                     return
                 
-                results_by_score_id[score_id] = score_result[0]
+                # Handle both single Result objects and lists of results
+                if isinstance(score_result, list):
+                    result = score_result[0]
+                else:
+                    result = score_result
+                    
+                results_by_score_id[score_id] = result
                 results.append({
                     'id': score_id,
                     'name': score_name,
-                    'result': score_result[0]
+                    'result': result
                 })
                 logging.info(f"Processed score: {score_name} (ID: {score_id})")
 
@@ -413,9 +411,21 @@ class Scorecard:
 
             except BatchProcessingPause as e:
                 logging.info(f"Score {score_name} paused for batch processing (thread_id: {e.thread_id})")
-                # Mark this score as paused and store its state
-                results_by_score_id[score_id] = "PAUSED"
-                raise  # Re-raise to be handled by higher-level code
+                # Store the paused state in results
+                results_by_score_id[score_id] = plexus.scores.Score.Result(
+                    value="PAUSED",
+                    error=str(e),
+                    parameters=Score.Parameters(
+                        name=score_name,
+                        scorecard=self.name
+                    ),
+                    metadata={
+                        'thread_id': e.thread_id,
+                        'batch_job_id': e.batch_job_id
+                    }
+                )
+                # Re-raise to be handled by higher-level code
+                raise
 
         remaining_scores = set(dependency_graph.keys())
         while remaining_scores:
@@ -429,9 +439,7 @@ class Scorecard:
                 remaining_scores.discard(score_id_to_process)
                 
             except BatchProcessingPause as e:
-                # Remove the paused score from remaining scores
-                remaining_scores.discard(score_id_to_process)
-                # Re-raise to be handled by caller
+                # Don't remove from remaining scores, just re-raise to be handled by caller
                 raise
 
         logging.info(f"All scores processed. Total scores: {len(results_by_score_id)}")

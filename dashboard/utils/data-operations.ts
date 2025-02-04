@@ -14,8 +14,6 @@ export type AmplifyTask = {
   createdAt: string;
   scorecardId?: string | null;
   scoreId?: string | null;
-  command?: string | null;
-  dispatchStatus?: string | null;
   stages: () => Promise<{
     data: Array<{
       name: string;
@@ -40,8 +38,6 @@ export type ProcessedTask = {
   updatedAt?: string | null;
   scorecardId?: string | null;
   scoreId?: string | null;
-  command?: string | null;
-  dispatchStatus?: string | null;
   createdAt: string;
   stages: Schema['TaskStage']['type'][];
 };
@@ -154,8 +150,6 @@ async function processTask(task: Schema['Task']['type']): Promise<ProcessedTask>
     updatedAt: task.updatedAt,
     scorecardId: task.scorecardId,
     scoreId: task.scoreId,
-    command: task.command,
-    dispatchStatus: task.dispatchStatus,
     createdAt: task.createdAt,
     stages
   };

@@ -361,3 +361,105 @@ def test_update_evaluation_error_handling(mock_client):
     
     with pytest.raises(Exception, match="API Error"):
         mock_client.updateEvaluation('eval-1', status='COMPLETED')
+
+def test_batch_scoring_job_handles_metadata_and_parameters(mock_client):
+    """Test that batch scoring job correctly handles metadata and parameters"""
+    with patch('plexus.dashboard.api.models.scoring_job.ScoringJob') as mock_scoring_job, \
+         patch('plexus.dashboard.api.models.batch_job.BatchJob') as mock_batch_job:
+        
+        # No existing scoring job
+        mock_scoring_job.find_by_item_id.return_value = None
+        
+        # Mock the API responses
+        mock_client.execute.side_effect = [
+            {'listBatchJobs': {'items': []}},  # No open batches
+            {'createBatchJob': {'id': 'batch-1'}},  # Create new batch
+            {'getBatchJob': {  # Get batch status
+                'id': 'batch-1',
+                'status': 'OPEN',
+                'totalRequests': 0,
+                'scoringJobCountCache': 0
+            }},
+            {'updateBatchJob': {  # Update batch count
+                'id': 'batch-1',
+                'scoringJobCountCache': 1,
+                'status': 'OPEN'
+            }},
+            {'createBatchJobScoringJob': {'id': 'link-1'}}  # Link job to batch
+        ]
+        
+        # Mock the new scoring job creation
+        mock_scoring_job.create.return_value = Mock(id='job-1')
+        mock_batch_job.create.return_value = Mock(id='batch-1')
+        
+        test_metadata = {'key1': 'value1', 'key2': 'value2'}
+        test_parameters = {'param1': 'value1', 'param2': 'value2'}
+        
+        scoring_job, batch_job = mock_client.batch_scoring_job(
+            itemId='item-1',
+            scorecardId='card-1',
+            accountId='acc-1',
+            model_provider='openai',
+            model_name='gpt-4',
+            metadata=test_metadata,
+            parameters=test_parameters
+        )
+        
+        # Verify metadata and parameters were passed correctly to scoring job creation
+        mock_scoring_job.create.assert_called_once()
+        create_call_kwargs = mock_scoring_job.create.call_args[1]
+        assert create_call_kwargs['metadata'] == test_metadata
+        assert create_call_kwargs['parameters'] == test_parameters
+
+def test_batch_scoring_job_handles_none_values(mock_client):
+    """Test that batch scoring job correctly handles None values for optional parameters"""
+    with patch('plexus.dashboard.api.models.scoring_job.ScoringJob') as mock_scoring_job, \
+         patch('plexus.dashboard.api.models.batch_job.BatchJob') as mock_batch_job:
+        
+        # No existing scoring job
+        mock_scoring_job.find_by_item_id.return_value = None
+        
+        # Mock the API responses
+        mock_client.execute.side_effect = [
+            {'listBatchJobs': {'items': []}},  # No open batches
+            {'createBatchJob': {'id': 'batch-1'}},  # Create new batch
+            {'getBatchJob': {  # Get batch status
+                'id': 'batch-1',
+                'status': 'OPEN',
+                'totalRequests': 0,
+                'scoringJobCountCache': 0
+            }},
+            {'updateBatchJob': {  # Update batch count
+                'id': 'batch-1',
+                'scoringJobCountCache': 1,
+                'status': 'OPEN'
+            }},
+            {'createBatchJobScoringJob': {'id': 'link-1'}}  # Link job to batch
+        ]
+        
+        # Mock the new scoring job creation
+        mock_scoring_job.create.return_value = Mock(id='job-1')
+        mock_batch_job.create.return_value = Mock(id='batch-1')
+        
+        # Call with explicit None values
+        scoring_job, batch_job = mock_client.batch_scoring_job(
+            itemId='item-1',
+            scorecardId='card-1',
+            accountId='acc-1',
+            model_provider='openai',
+            model_name='gpt-4',
+            metadata=None,
+            parameters=None
+        )
+        
+        # Verify the call succeeded and None values were handled
+        assert scoring_job is not None
+        assert batch_job is not None
+        
+        # Verify create was called with None values
+        mock_scoring_job.create.assert_called_once()
+        create_call_kwargs = mock_scoring_job.create.call_args[1]
+        assert 'metadata' in create_call_kwargs
+        assert create_call_kwargs['metadata'] is None
+        assert 'parameters' in create_call_kwargs
+        assert create_call_kwargs['parameters'] is None

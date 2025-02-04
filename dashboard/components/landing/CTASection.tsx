@@ -28,8 +28,8 @@ export const CTASection = () => {
   }
 
   return (
-    <section className="relative -mt-16 pt-8 pb-8 px-4 md:px-8 bg-card">
-      <div className="absolute top-0 left-0 w-full h-96 pointer-events-none bg-gradient-to-b from-background to-card"></div>
+    <section className="relative pt-24 pb-8 px-4 md:px-8 bg-card">
+      <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-background to-card"></div>
       <div className="relative z-10 w-[calc(100vw-2rem)] max-w-7xl mx-auto">
         <div className="py-4">
           <div className="py-8 md:py-8 px-4 md:px-8">

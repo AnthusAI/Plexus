@@ -65,6 +65,7 @@ from threading import Thread, Event
 import time
 from datetime import datetime, timezone
 import logging
+from plexus.utils import truncate_dict_strings_inner
 logging.basicConfig(level=logging.DEBUG)
 
 # Configure GQL loggers to show output
@@ -476,11 +477,35 @@ class _BaseAPIClient:
         from .models.scoring_job import ScoringJob
         from .models.batch_job import BatchJob
 
-        logging.info(f"Starting batch_scoring_job with itemId={itemId}, scorecardId={scorecardId}, accountId={accountId}")
-        if parameters:
-            logging.info(f"Received parameters: {parameters}")
+        logging.info("=== BATCH SCORING JOB START ===")
+        logging.info(f"itemId: {itemId}")
+        logging.info(f"scorecardId: {scorecardId}")
+        logging.info(f"accountId: {accountId}")
+        logging.info(f"model_provider: {model_provider}")
+        logging.info(f"model_name: {model_name}")
+        logging.info(f"scoreId: {scoreId}")
+        logging.info(f"status: {kwargs.get('status')}")
+        
+        logging.info("=== METADATA DUMP START ===")
         if metadata:
-            logging.info(f"Received metadata: {metadata}")
+            for key, value in metadata.items():
+                logging.info(f"metadata[{key}]: {str(value)[:200]}...")
+        else:
+            logging.info("No metadata provided")
+        logging.info("=== METADATA DUMP END ===")
+        
+        logging.info("=== PARAMETERS DUMP START ===")
+        if parameters:
+            for key, value in parameters.items():
+                logging.info(f"parameters[{key}]: {value}")
+        else:
+            logging.info("No parameters provided")
+        logging.info("=== PARAMETERS DUMP END ===")
+
+        logging.info("Starting batch_scoring_job with itemId={}, scorecardId={}, accountId={}".format(
+            itemId, scorecardId, accountId
+        ))
+        logging.info(f"Received parameters: {parameters}")
 
         # First check if a scoring job already exists for this item
         existing_job = ScoringJob.find_by_item_id(itemId, self)
@@ -545,7 +570,7 @@ class _BaseAPIClient:
                 'type': 'MultiStepScore',
                 'modelProvider': model_provider,
                 'modelName': model_name,
-                'parameters': parameters or {},
+                'parameters': parameters,
                 'scorecardId': scorecardId,
                 'scoreId': scoreId,
                 'scoringJobCountCache': 0,  # Initialize cache to 0
@@ -572,8 +597,8 @@ class _BaseAPIClient:
             itemId=itemId,
             scoreId=scoreId,
             batchId=batch_job.id,
-            parameters=parameters or {},
-            metadata=metadata,  # Pass metadata directly
+            parameters=parameters,
+            metadata=metadata,
             status='PENDING'
         )
         logging.info(f"Created scoring job: {scoring_job.id}")
@@ -603,21 +628,6 @@ class _BaseAPIClient:
         logging.info(f"Total scoring jobs in batch: {total_jobs}")
         logging.info(f"Max batch size: {max_batch_size}")
 
-        # Get current batch status
-        batch_query = """
-        query GetBatchStatus($batchId: ID!) {
-            getBatchJob(id: $batchId) {
-                id
-                status
-                totalRequests
-                scoringJobCountCache
-            }
-        }
-        """
-        batch_status_result = self.execute(batch_query, {'batchId': batch_job.id})
-        current_status = batch_status_result.get('getBatchJob', {}).get('status')
-        logging.info(f"Current batch status: {current_status}")
-
         # Update batch job count and cache
         update_count_mutation = """
         mutation UpdateBatchJobCount($input: UpdateBatchJobInput!) {
@@ -646,7 +656,7 @@ class _BaseAPIClient:
         logging.info(f"Updated batch job count: {update_result}")
         
         # If we've reached or exceeded max_batch_size and batch is still open, close it
-        if total_jobs >= max_batch_size and current_status == 'OPEN':
+        if total_jobs >= max_batch_size and batch_job.status == 'OPEN':
             logging.info(
                 f"Batch job {batch_job.id} has reached max size "
                 f"({total_jobs}/{max_batch_size}). Closing batch."

@@ -112,7 +112,7 @@ export const TaskCycleDemo = () => {
 
   return (
     <FrameSection
-      headline="Transform any computer into a worker node"
+      headline="Distributed AI Computing"
       headlinePosition="top"
       layout="twoColumn"
       leftContent={
@@ -122,7 +122,7 @@ export const TaskCycleDemo = () => {
           </p>
           <div className="space-y-4 text-muted-foreground leading-relaxed">
             <p>
-              Deploy tasks to AWS EC2, Azure VMs, or your local hardware with a unified control interface. Harness idle computing power for ML training, data processing, and custom workloads.
+              Deploy tasks to AWS EC2, Azure VMs, or your local gaming rig with a unified control interface. Harness idle computing power for ML training, data processing, and custom workloads.
             </p>
             <p>
               Monitor task progress, aggregate results, and manage your distributed infrastructure in real-time through a central dashboard.

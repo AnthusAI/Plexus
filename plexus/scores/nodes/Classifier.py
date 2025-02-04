@@ -11,6 +11,7 @@ from plexus.scores.LangGraphScore import BatchProcessingPause
 import traceback
 import os
 from plexus.dashboard.api.client import PlexusDashboardClient
+import uuid
 
 class Classifier(BaseNode):
     """
@@ -411,7 +412,7 @@ class Classifier(BaseNode):
                     for key, value in state_dict.items():
                         if isinstance(value, (str, int, float, bool, type(None))):
                             serializable_state[key] = value
-                            logging.info(f"Copied primitive field {key}: {value}")
+                            logging.debug(f"Copied primitive field {key}: {value}")
 
                     # Handle messages list specially - handle both dict and Message objects
                     if 'messages' in state_dict:
@@ -423,7 +424,7 @@ class Classifier(BaseNode):
                             }
                             for msg in state_dict['messages']
                         ]
-                        logging.info(f"Serialized messages: {serializable_state['messages']}")
+                        logging.info("Serialized messages prepared")
 
                     # Handle chat_history list specially
                     if 'chat_history' in state_dict:
@@ -436,73 +437,84 @@ class Classifier(BaseNode):
                                 }
                                 for msg in state_dict['chat_history']
                             ]
-                            logging.info(f"Serialized chat_history: {serializable_state['chat_history']}")
+                            logging.info("Chat history serialized")
 
                     # Handle metadata specially to ensure it's included
                     if 'metadata' in state_dict:
                         serializable_state['metadata'] = state_dict['metadata']
-                        logging.info(f"Copied metadata: {serializable_state['metadata']}")
+                        logging.info("Metadata copied")
 
                     # Handle any remaining fields by converting to string representation
                     for key, value in state_dict.items():
                         if key not in serializable_state:
                             try:
                                 serializable_state[key] = str(value)
-                                logging.info(f"Converted field {key} to string: {serializable_state[key]}")
+                                logging.info(f"Converted field {key}")
                             except Exception as e:
                                 logging.warning(f"Could not serialize field {key}: {str(e)}")
 
-                    logging.info(f"Final serializable state: {serializable_state}")
+                    logging.info("State serialization complete")
                     
-                    # Create batch job with serializable state
-                    logging.info(f"Creating batch job with state: {serializable_state}")
-                    logging.info(f"State type: {type(serializable_state)}")
+                    try:
+                        # Create batch job with serializable state
+                        logging.info("Creating batch job...")
 
-                    client = PlexusDashboardClient.for_scorecard(
-                        account_key=state.metadata.get('account_key'),
-                        scorecard_key=state.metadata.get('scorecard_key'),
-                        score_name=state.metadata.get('score_name')
-                    )
+                        client = PlexusDashboardClient.for_scorecard(
+                            account_key=state.metadata.get('account_key'),
+                            scorecard_key=state.metadata.get('scorecard_key'),
+                            score_name=state.metadata.get('score_name')
+                        )
 
-                    # Extract required IDs from metadata
-                    thread_id = state.metadata.get('content_id', 'unknown')
-                    score_id = client._resolve_score_id()
-                    scorecard_id = client._resolve_scorecard_id()
-                    account_id = client._resolve_account_id()
+                        # Extract required IDs from metadata
+                        thread_id = state.metadata.get('content_id', 'unknown')
+                        score_id = client._resolve_score_id()
+                        scorecard_id = client._resolve_scorecard_id()
+                        account_id = client._resolve_account_id()
 
-                    # Create batch job with metadata
-                    logging.info(f"Creating batch job with metadata: {{'state': serializable_state}}")
-                    logging.info(f"Score ID: {score_id}")
-                    logging.info(f"Scorecard ID: {scorecard_id}")
-                    logging.info(f"Account ID: {account_id}")
+                        # Create batch job with metadata
+                        logging.info(f"Creating batch job for thread_id: {thread_id}")
+                        logging.info(f"Score ID: {score_id}")
+                        logging.info(f"Scorecard ID: {scorecard_id}")
+                        logging.info(f"Account ID: {account_id}")
 
-                    scoring_job, batch_job = client.batch_scoring_job(
-                        itemId=thread_id,
-                        scorecardId=scorecard_id,
-                        accountId=account_id,
-                        model_provider='ChatOpenAI',
-                        model_name='gpt-4',
-                        scoreId=score_id,
-                        status='PENDING',
-                        metadata={'state': serializable_state},
-                        parameters={
-                            'thread_id': thread_id,
-                            'breakpoint': True
-                        }
-                    )
+                        scoring_job, batch_job = client.batch_scoring_job(
+                            itemId=thread_id,
+                            scorecardId=scorecard_id,
+                            accountId=account_id,
+                            model_provider='ChatOpenAI',
+                            model_name='gpt-4',
+                            scoreId=score_id,
+                            status='PENDING',
+                            metadata={'state': serializable_state},
+                            parameters={
+                                'thread_id': thread_id,
+                                'breakpoint': True
+                            }
+                        )
 
-                    if not batch_job or not scoring_job:
-                        raise ValueError("Failed to find or create batch job")
+                        if not batch_job or not scoring_job:
+                            raise ValueError("Failed to find or create batch job")
 
-                    logging.info(f"Created batch job with ID: {batch_job.id}")
-                    logging.info(f"Created scoring job with ID: {scoring_job.id}")
+                        logging.info(f"Created batch job with ID: {batch_job.id}")
+                        logging.info(f"Created scoring job with ID: {scoring_job.id}")
 
-                    raise BatchProcessingPause(
-                        thread_id=thread_id,
-                        state=serializable_state,
-                        batch_job_id=batch_job.id,
-                        message=f"Execution paused for batch processing. Scoring job ID: {scoring_job.id}"
-                    )
+                        raise BatchProcessingPause(
+                            thread_id=thread_id,
+                            state=serializable_state,
+                            batch_job_id=batch_job.id,
+                            message=f"Execution paused for batch processing. Scoring job ID: {scoring_job.id}"
+                        )
+                    except BatchProcessingPause:
+                        raise  # Re-raise BatchProcessingPause as it's expected
+                    except Exception as e:
+                        logging.error(f"Error creating batch job: {str(e)}")
+                        logging.error(f"Stack trace: {traceback.format_exc()}")
+                        raise BatchProcessingPause(
+                            thread_id=state.metadata.get('content_id', 'unknown'),
+                            state=serializable_state,
+                            batch_job_id=str(uuid.uuid4()),  # Generate a temporary ID
+                            message=f"Batch processing initiated despite error: {str(e)}"
+                        )
                 else:
                     # Non-batch mode - direct LLM call
                     # Convert dict messages back to LangChain objects if needed

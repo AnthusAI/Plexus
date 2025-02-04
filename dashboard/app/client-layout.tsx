@@ -23,8 +23,33 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   
-  // Allow unauthenticated access to /, /dashboard, /call-center-qa, /optimizer-agents, and /platform
-  const publicPaths = ['/', '/dashboard', '/call-center-qa', '/optimizer-agents', '/platform', '/enterprise', '/resources'];
+  // Allow unauthenticated access to marketing pages and solutions
+  const publicPaths = [
+    '/',
+    '/dashboard',
+    '/solutions',
+    '/solutions/platform',
+    '/solutions/optimizer-agents',
+    '/solutions/call-center-qa',
+    '/solutions/enterprise',
+    '/solutions/resources',
+    '/documentation',
+    '/documentation/worker-nodes',
+    '/documentation/cli',
+    '/documentation/sdk',
+    '/documentation/basics',
+    '/documentation/methods',
+    '/documentation/basics/sources',
+    '/documentation/basics/scorecards',
+    '/documentation/basics/evaluations',
+    '/documentation/basics/tasks',
+    '/documentation/methods/add-edit-source',
+    '/documentation/methods/profile-source',
+    '/documentation/methods/add-edit-scorecard',
+    '/documentation/methods/add-edit-score',
+    '/documentation/methods/evaluate-score',
+    '/documentation/methods/monitor-tasks'
+  ];
   const isPublicPath = publicPaths.includes(pathname);
   
   useEffect(() => {
