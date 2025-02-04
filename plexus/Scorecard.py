@@ -253,11 +253,14 @@ class Scorecard:
                 })
 
             try:
-                score_result = await score_instance.compute_score_result(
-                    text=text,
-                    metadata=metadata,
-                    modality=modality,
-                    results=results
+                # Let BatchProcessingPause propagate up
+                score_result = await score_instance.predict(
+                    context=None,
+                    model_input=plexus.scores.Score.Input(
+                        text=text,
+                        metadata=metadata,
+                        results=results
+                    )
                 )
 
                 # Get the total cost for this score
