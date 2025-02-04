@@ -315,23 +315,35 @@ const schema = a.schema({
             type: a.string().required(),
             status: a.string().required(),
             target: a.string().required(),
+            command: a.string().required(),
+            dispatchStatus: a.string(),
+            metadata: a.json(),
+            createdAt: a.datetime(),
+            startedAt: a.datetime(),
+            completedAt: a.datetime(),
+            estimatedCompletionAt: a.datetime(),
+            errorMessage: a.string(),
+            errorDetails: a.json(),
+            stdout: a.string(),
+            stderr: a.string(),
             currentStageId: a.string(),
-            updatedAt: a.datetime().required(),
             scorecardId: a.string(),
-            scoreId: a.string(),
             account: a.belongsTo('Account', 'accountId'),
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
             stages: a.hasMany('TaskStage', 'taskId'),
             currentStage: a.belongsTo('TaskStage', 'currentStageId'),
-            dispatchStatus: a.string()
+            celeryTaskId: a.string(),
+            workerNodeId: a.string(),
+            updatedAt: a.datetime()
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("accountId"),
+            idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId"),
             idx("scoreId"),
             idx("updatedAt")

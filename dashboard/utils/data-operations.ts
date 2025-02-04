@@ -150,7 +150,7 @@ async function processTask(task: Schema['Task']['type']): Promise<ProcessedTask>
     updatedAt: task.updatedAt,
     scorecardId: task.scorecardId,
     scoreId: task.scoreId,
-    createdAt: task.createdAt,
+    createdAt: task.createdAt ?? new Date().toISOString(),
     stages
   };
 }
