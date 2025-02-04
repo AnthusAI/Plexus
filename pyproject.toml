@@ -50,7 +50,7 @@ dependencies = [
     "langchain-community>=0.2.6",
     "langgraph>=0.2.53",
     "langchain-aws>=0.1.9",
-    "langchain-openai>=0.1.14",
+    "langchain-openai>=0.3.3",
     "langchain-google-vertexai>=1.0.6",
     "langgraph-checkpoint-postgres==2.0.9",
     "openpyxl==3.1.5",
