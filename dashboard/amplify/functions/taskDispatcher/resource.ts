@@ -35,14 +35,10 @@ export class TaskDispatcherStack extends Stack {
     const functionDir = path.join(__dirname, '.');
 
     // Get Celery configuration from props or environment
-    const celeryAwsAccessKeyId = props.celeryAwsAccessKeyId || process.env.CELERY_AWS_ACCESS_KEY_ID;
-    const celeryAwsSecretAccessKey = props.celeryAwsSecretAccessKey || process.env.CELERY_AWS_SECRET_ACCESS_KEY;
+    const celeryAwsAccessKeyId = props.celeryAwsAccessKeyId || process.env.CELERY_AWS_ACCESS_KEY_ID || 'WILL_BE_SET_AFTER_DEPLOYMENT';
+    const celeryAwsSecretAccessKey = props.celeryAwsSecretAccessKey || process.env.CELERY_AWS_SECRET_ACCESS_KEY || 'WILL_BE_SET_AFTER_DEPLOYMENT';
     const celeryAwsRegion = props.celeryAwsRegion || process.env.CELERY_AWS_REGION_NAME || Stack.of(this).region;
-    const celeryResultBackendTemplate = props.celeryResultBackendTemplate || process.env.CELERY_RESULT_BACKEND_TEMPLATE;
-
-    if (!celeryAwsAccessKeyId || !celeryAwsSecretAccessKey || !celeryResultBackendTemplate) {
-      throw new Error('Missing required Celery configuration. Please provide AWS credentials and backend template.');
-    }
+    const celeryResultBackendTemplate = props.celeryResultBackendTemplate || process.env.CELERY_RESULT_BACKEND_TEMPLATE || 'WILL_BE_SET_AFTER_DEPLOYMENT';
 
     this.taskDispatcherFunction = new lambda.Function(this, 'TaskDispatcherFunction', {
       runtime: lambda.Runtime.PYTHON_3_11,

@@ -21,31 +21,17 @@ if (cfnTable) {
     };
 }
 
-// Get Celery configuration from environment
-const celeryAwsAccessKeyId = process.env.CELERY_AWS_ACCESS_KEY_ID;
-const celeryAwsSecretAccessKey = process.env.CELERY_AWS_SECRET_ACCESS_KEY;
-const celeryAwsRegion = process.env.CELERY_AWS_REGION_NAME;
-const celeryResultBackendTemplate = process.env.CELERY_RESULT_BACKEND_TEMPLATE;
-
-if (!celeryAwsAccessKeyId || !celeryAwsSecretAccessKey || !celeryResultBackendTemplate) {
-    throw new Error(
-        'Missing required Celery configuration. Please set the following environment variables:\n' +
-        '  CELERY_AWS_ACCESS_KEY_ID\n' +
-        '  CELERY_AWS_SECRET_ACCESS_KEY\n' +
-        '  CELERY_RESULT_BACKEND_TEMPLATE'
-    );
-}
-
-// Create the TaskDispatcher stack with the table reference and Celery config
+// Create the TaskDispatcher stack with the table reference
 const taskDispatcherStack = new TaskDispatcherStack(
     backend.createStack('TaskDispatcherStack'),
     'taskDispatcher',
     {
         taskTable,
-        celeryAwsAccessKeyId,
-        celeryAwsSecretAccessKey,
-        celeryAwsRegion,
-        celeryResultBackendTemplate
+        // These will be set in the Lambda function's environment variables after deployment
+        celeryAwsAccessKeyId: process.env.CELERY_AWS_ACCESS_KEY_ID || 'WILL_BE_SET_AFTER_DEPLOYMENT',
+        celeryAwsSecretAccessKey: process.env.CELERY_AWS_SECRET_ACCESS_KEY || 'WILL_BE_SET_AFTER_DEPLOYMENT',
+        celeryAwsRegion: process.env.CELERY_AWS_REGION_NAME || 'us-east-1', // Default to us-east-1 if not specified
+        celeryResultBackendTemplate: process.env.CELERY_RESULT_BACKEND_TEMPLATE || 'WILL_BE_SET_AFTER_DEPLOYMENT'
     }
 );
 
