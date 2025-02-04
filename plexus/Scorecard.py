@@ -211,7 +211,7 @@ class Scorecard:
         :param text: The transcript.
         :param metadata: The metadata.
         :param modality: The modality.
-        :return: A list of score results.
+        :return: Either a single Result object or a list of Result objects.
         :raises BatchProcessingPause: When scoring needs to be suspended for batch processing
         """
         logging.info(f"Getting score result for: {score}")
@@ -355,11 +355,17 @@ class Scorecard:
                     logging.info(f"Score {score_name} returned None (possibly paused for batch processing)")
                     return
                 
-                results_by_score_id[score_id] = score_result[0]
+                # Handle both single Result objects and lists of results
+                if isinstance(score_result, list):
+                    result = score_result[0]
+                else:
+                    result = score_result
+                    
+                results_by_score_id[score_id] = result
                 results.append({
                     'id': score_id,
                     'name': score_name,
-                    'result': score_result[0]
+                    'result': result
                 })
                 logging.info(f"Processed score: {score_name} (ID: {score_id})")
 
