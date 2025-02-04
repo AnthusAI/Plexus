@@ -6,12 +6,32 @@ def truncate_dict_strings_inner(
     truncation_indicator: str = "..."
 ) -> Dict[str, Any]:
     def truncate_value(value: Any) -> Any:
+        # Handle string values
         if isinstance(value, str) and len(value) > max_length:
             return value[:max_length - len(truncation_indicator)] + truncation_indicator
+        
+        # Handle dictionaries
         elif isinstance(value, dict):
             return truncate_dict_strings_inner(value, max_length, truncation_indicator)
+        
+        # Handle lists
         elif isinstance(value, list):
             return [truncate_value(item) for item in value]
+        
+        # Handle objects with __dict__ attribute (like Parameters)
+        elif hasattr(value, '__dict__'):
+            obj_dict = value.__dict__
+            truncated_dict = truncate_dict_strings_inner(obj_dict, max_length, truncation_indicator)
+            # Return as dict rather than trying to reconstruct the object
+            return truncated_dict
+        
+        # Handle objects that need string conversion
+        elif not isinstance(value, (int, float, bool, type(None))):
+            str_value = str(value)
+            if len(str_value) > max_length:
+                return str_value[:max_length - len(truncation_indicator)] + truncation_indicator
+            return str_value
+            
         return value
 
     if isinstance(data, dict):

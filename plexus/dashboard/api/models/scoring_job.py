@@ -6,6 +6,7 @@ from .batch_job import BatchJob
 from ..client import _BaseAPIClient
 import json
 import logging
+from plexus.utils import truncate_dict_strings_inner
 
 @dataclass
 class ScoringJob(BaseModel):
@@ -185,10 +186,10 @@ class ScoringJob(BaseModel):
         if data.get('metadata'):
             try:
                 data['metadata'] = json.loads(data['metadata'])
-                logging.info(f"Parsed metadata from JSON: {data['metadata']}")
+                logging.info(f"Parsed metadata from JSON: {truncate_dict_strings_inner(data['metadata'])}")
             except Exception as e:
                 logging.error(f"Failed to parse metadata JSON: {e}")
-                logging.error(f"Raw metadata: {data['metadata']}")
+                logging.error(f"Raw metadata: {truncate_dict_strings_inner(data['metadata'])}")
                 data['metadata'] = None
 
         return cls(
