@@ -2,7 +2,6 @@
 
 import React from 'react'
 import { StandardSection } from '@/components/landing/StandardSection'
-import { LabelingStrategies } from '@/components/landing/LabelingStrategies'
 import { UseCases } from '@/components/landing/UseCases'
 import { CTASection } from '@/components/landing/CTASection'
 import { Footer } from '@/components/landing/Footer'
