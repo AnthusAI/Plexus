@@ -23,8 +23,17 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   
-  // Allow unauthenticated access to /, /dashboard, /call-center-qa, /optimizer-agents, and /platform
-  const publicPaths = ['/', '/dashboard', '/call-center-qa', '/optimizer-agents', '/platform', '/enterprise', '/resources'];
+  // Allow unauthenticated access to marketing pages and solutions
+  const publicPaths = [
+    '/',
+    '/dashboard',
+    '/solutions',
+    '/solutions/platform',
+    '/solutions/optimizer-agents',
+    '/solutions/call-center-qa',
+    '/solutions/enterprise',
+    '/solutions/resources'
+  ];
   const isPublicPath = publicPaths.includes(pathname);
   
   useEffect(() => {

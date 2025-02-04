@@ -7,39 +7,39 @@ import { Footer } from '@/components/landing/Footer'
 import { Button } from '@/components/ui/button'
 import { ArrowRight, BookOpen, GraduationCap, Video, MessageSquare } from 'lucide-react'
 import { StandardSection } from '@/components/landing/StandardSection'
-import { FrameSection } from '@/components/landing/FrameSection'
 import { FeatureCard } from '@/components/landing/FeatureCard'
 
 export default function ResourcesPage() {
   return (
     <Layout>
-      <section className="bg-muted">
-        <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
-          <div className="py-4">
-            <div className="bg-background rounded-xl py-12 md:py-16 px-4 md:px-8">
-              <div className="max-w-3xl mx-auto">
-                <h1 className="text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tighter mb-6 md:mb-12 leading-tight text-center">
-                  <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text whitespace-nowrap">Learn</span> how to build with <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text whitespace-nowrap">AI agents</span>
-                </h1>
-                <div className="space-y-8">
-                  <p className="text-xl text-muted-foreground text-center">
-                    Explore our comprehensive resources to master AI agent development. From getting started guides to advanced tutorials.
-                  </p>
-                  <p className="text-xl text-muted-foreground text-center">
-                    Join our community of developers and AI practitioners to share knowledge and best practices.
-                  </p>
-                  <div className="flex justify-center">
-                    <Button size="lg" className="bg-primary text-white">
-                      Browse Documentation
-                      <ArrowRight className="ml-2 h-5 w-5" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
+      <StandardSection
+        headline={
+          <span>
+            <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text">Learn to Build</span> With <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text">AI Agents</span>
+          </span>
+        }
+        headlinePosition="inline"
+        variant="hero"
+        layout="single"
+        fullWidth
+      >
+        <div className="max-w-3xl mx-auto">
+          <div className="space-y-8">
+            <p className="text-xl text-muted-foreground text-center">
+              Explore our comprehensive resources to master AI agent development. From getting started guides to advanced tutorials.
+            </p>
+            <p className="text-xl text-muted-foreground text-center">
+              Join our community of developers and AI practitioners to share knowledge and best practices.
+            </p>
+            <div className="flex justify-center">
+              <Button size="lg" className="bg-primary text-white">
+                Browse Documentation
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
             </div>
           </div>
         </div>
-      </section>
+      </StandardSection>
 
       <StandardSection
         headline="Learning Resources"
@@ -78,10 +78,11 @@ export default function ResourcesPage() {
         </div>
       </StandardSection>
 
-      <FrameSection
+      <StandardSection
         headline="Latest Resources"
         headlinePosition="top"
         layout="single"
+        variant="framed"
       >
         <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
           <div className="space-y-4">
@@ -99,7 +100,7 @@ export default function ResourcesPage() {
             <Button variant="outline">Learn More</Button>
           </div>
         </div>
-      </FrameSection>
+      </StandardSection>
 
       <CTASection />
       <Footer />
