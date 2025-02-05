@@ -53,6 +53,16 @@ class BaseModel:
         }}
         """
         result = client.execute(query, {'id': id})
+        if not result:
+            raise ValueError(f"API returned no result when getting {cls.__name__} with ID {id}")
+        
+        key = f'get{cls.__name__}'
+        if key not in result:
+            raise ValueError(f"API response missing {key} when getting {cls.__name__} with ID {id}")
+            
+        if result[key] is None:
+            raise ValueError(f"Could not find {cls.__name__} with ID {id}")
+            
         return cls.from_dict(result[f'get{cls.__name__}'], client)
     
     @classmethod
