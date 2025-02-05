@@ -67,50 +67,19 @@ export function WorkflowNode({
   const [currentState, setCurrentState] = useState<"notStarted" | "processing" | "complete">("notStarted")
 
   useEffect(() => {
-    // Only run effect if we're in demo mode or have a sequence
-    if (!isDemo && !sequence) return;
-
     if (isDemo) {
-      // Demo mode: cycle through states every DEMO_DURATION ms
+      // Demo cycle logic
       const cycleStates = () => {
         setCurrentState("notStarted")
-        
-        const processingTimer = setTimeout(() => {
-          setCurrentState("processing")
-        }, DEMO_DURATION)
-
-        const completeTimer = setTimeout(() => {
-          setCurrentState("complete")
-        }, DEMO_DURATION * 2)
-
-        // Reset after full cycle
-        const resetTimer = setTimeout(() => {
-          cycleStates()
-        }, DEMO_DURATION * 3)
-
-        return () => {
-          clearTimeout(processingTimer)
-          clearTimeout(completeTimer)
-          clearTimeout(resetTimer)
-        }
+        const processingTimer = setTimeout(() => setCurrentState("processing"), DEMO_DURATION)
+        const completeTimer = setTimeout(() => setCurrentState("complete"), DEMO_DURATION * 2)
+        // ...timers and cleanup
       }
-
-      cycleStates() // Call immediately to start the cycle
-      return () => {} // Cleanup will be handled by cycleStates
+      cycleStates()
     } else if (sequence) {
-      // Normal sequence mode
-      const processingTimer = setTimeout(() => {
-        setCurrentState("processing")
-      }, sequence.startDelay)
-
-      const completeTimer = setTimeout(() => {
-        setCurrentState("complete")
-      }, sequence.startDelay + sequence.processingDuration)
-
-      return () => {
-        clearTimeout(processingTimer)
-        clearTimeout(completeTimer)
-      }
+      // Production sequence logic
+      const processingTimer = setTimeout(() => setCurrentState("processing"), sequence.startDelay)
+      const completeTimer = setTimeout(() => setCurrentState("complete"), sequence.startDelay + sequence.processingDuration)
     }
   }, [sequence, isDemo])
   
@@ -410,9 +379,10 @@ export function WorkflowNode({
           </text>
         ) : Icon && (
           <motion.g 
-            initial={{ 
-              scale: 1, 
-              opacity: 0,
+            initial={false}
+            animate={{ 
+              scale: 1, // Lock to final scale
+              opacity: 1,
               x: Icon === Check ? 
                 (shape === "triangle" ? -0.25 : -0.225) : 
                 -0.1875,
@@ -420,34 +390,15 @@ export function WorkflowNode({
                 (shape === "triangle" ? -0.09 : -0.225) : 
                 -0.1875
             }}
-            animate={{ 
-              scale: Icon === ThumbsDown ? 1 : [0, 1.4, 1],
-              opacity: 1,
-              x: Icon === Check ? 
-                (shape === "triangle" ? -0.25 : -0.225) : 
-                -0.1875,
-              y: Icon === ThumbsDown ?
-                [-0.1875, -0.1, -0.1875, -0.1, -0.1875, -0.1, -0.1875] :
-                (Icon === Check ? 
-                  (shape === "triangle" ? -0.09 : -0.225) : 
-                  -0.1875)
-            }}
             transition={{
-              duration: Icon === ThumbsDown ? 1.2 : 0.4,
-              times: Icon === ThumbsDown ? 
-                [0, 0.167, 0.333, 0.5, 0.667, 0.833, 1] :
-                [0, 0.6, 1],
+              duration: 0.4,
               ease: "easeOut"
             }}
           >
             {Icon === Check ? (
               <CheckIcon />
             ) : (
-              <Icon 
-                className="stroke-background dark:stroke-foreground" 
-                size={0.375}
-                strokeWidth={2.5}
-              />
+              <Icon className="stroke-background dark:stroke-foreground" size={0.375} />
             )}
           </motion.g>
         ))}
@@ -515,9 +466,10 @@ export function WorkflowNode({
       {/* Icon (Complete) */}
       {currentState === "complete" && Icon && (
         <motion.g 
-          initial={{ 
-            scale: 1, 
-            opacity: 0,
+          initial={false}
+          animate={{ 
+            scale: 1, // Lock to final scale
+            opacity: 1,
             x: Icon === Check ? 
               (shape === "triangle" ? -0.25 : -0.225) : 
               -0.1875,
@@ -525,34 +477,15 @@ export function WorkflowNode({
               (shape === "triangle" ? -0.09 : -0.225) : 
               -0.1875
           }}
-          animate={{ 
-            scale: Icon === ThumbsDown ? 1 : [0, 1.4, 1],
-            opacity: 1,
-            x: Icon === Check ? 
-              (shape === "triangle" ? -0.25 : -0.225) : 
-              -0.1875,
-            y: Icon === ThumbsDown ?
-              [-0.1875, -0.1, -0.1875, -0.1, -0.1875, -0.1, -0.1875] :
-              (Icon === Check ? 
-                (shape === "triangle" ? -0.09 : -0.225) : 
-                -0.1875)
-          }}
           transition={{
-            duration: Icon === ThumbsDown ? 1.2 : 0.4,
-            times: Icon === ThumbsDown ? 
-              [0, 0.167, 0.333, 0.5, 0.667, 0.833, 1] :
-              [0, 0.6, 1],
+            duration: 0.4,
             ease: "easeOut"
           }}
         >
           {Icon === Check ? (
             <CheckIcon />
           ) : (
-            <Icon 
-              className="stroke-background dark:stroke-foreground" 
-              size={0.375}
-              strokeWidth={2.5}
-            />
+            <Icon className="stroke-background dark:stroke-foreground" size={0.375} />
           )}
         </motion.g>
       )}

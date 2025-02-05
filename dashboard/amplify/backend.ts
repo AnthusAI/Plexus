@@ -1,69 +1,46 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { data } from './data/resource';
 import { auth } from './auth/resource';
-import { defineFunction } from '@aws-amplify/backend-function';
-import * as iam from 'aws-cdk-lib/aws-iam';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
-import { Duration, Stack } from 'aws-cdk-lib';
-import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
+import { TaskDispatcherStack } from './functions/taskDispatcher/resource';
+import { Stack } from 'aws-cdk-lib';
+import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 
-// First define the function
-const taskDispatcher = defineFunction({
-    name: 'taskDispatcher',
-    entry: './functions/taskDispatcher.ts',
-    environment: {
-        CELERY_QUEUE_URL: process.env.CELERY_QUEUE_URL || ''
-    },
-    timeoutSeconds: 30
-});
-
-// Create the backend with the function
+// Create the backend
 const backend = defineBackend({
     auth,
-    data,
-    taskDispatcher
+    data
 });
 
-// Get the actual Lambda resource and add the policy to it
-const taskDispatcherLambda = backend.taskDispatcher.resources.lambda;
+// Get reference to the Task table and enable streams
+const taskTable = backend.data.resources.tables.Task;
+const cfnTable = taskTable.node.defaultChild as dynamodb.CfnTable;
+if (cfnTable) {
+    cfnTable.streamSpecification = {
+        streamViewType: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+    };
+}
+
+// Create the TaskDispatcher stack with the table reference
+const taskDispatcherStack = new TaskDispatcherStack(
+    backend.createStack('TaskDispatcherStack'),
+    'taskDispatcher',
+    {
+        taskTable,
+        // These will be set in the Lambda function's environment variables after deployment
+        celeryAwsAccessKeyId: process.env.CELERY_AWS_ACCESS_KEY_ID || 'WILL_BE_SET_AFTER_DEPLOYMENT',
+        celeryAwsSecretAccessKey: process.env.CELERY_AWS_SECRET_ACCESS_KEY || 'WILL_BE_SET_AFTER_DEPLOYMENT',
+        celeryAwsRegion: process.env.CELERY_AWS_REGION_NAME || 'us-east-1', // Default to us-east-1 if not specified
+        celeryResultBackendTemplate: process.env.CELERY_RESULT_BACKEND_TEMPLATE || 'WILL_BE_SET_AFTER_DEPLOYMENT'
+    }
+);
 
 // Add SQS permissions
-taskDispatcherLambda.addToRolePolicy(
-    new iam.PolicyStatement({
+taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
+    new PolicyStatement({
         actions: ['sqs:SendMessage'],
         resources: [process.env.CELERY_QUEUE_URL || '*']
     })
 );
-
-// Get the Task table
-const taskTable = backend.data.resources.tables.Task;
-
-// Create a DynamoDB stream event source
-const eventSource = new DynamoEventSource(taskTable, {
-    startingPosition: lambda.StartingPosition.LATEST,
-    batchSize: 1,
-    retryAttempts: 3,
-    maxBatchingWindow: Duration.seconds(1)
-});
-
-// Add the event source to the Lambda function
-taskDispatcherLambda.addEventSource(eventSource);
-
-// Add DynamoDB stream permissions
-taskDispatcherLambda.addToRolePolicy(
-    new iam.PolicyStatement({
-        actions: [
-            'dynamodb:GetRecords',
-            'dynamodb:GetShardIterator',
-            'dynamodb:DescribeStream',
-            'dynamodb:ListStreams'
-        ],
-        resources: [taskTable.tableArn + '/stream/*']
-    })
-);
-
-// Configure stream trigger in the data model schema
-// Note: The stream configuration should be defined in the data/resource.ts schema
-// using the appropriate stream directives
 
 export { backend };

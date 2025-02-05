@@ -107,7 +107,7 @@ const TaskDemoBase = ({
           ...stage,
           status: stage.name === 'Initializing' ? 'RUNNING' : 'PENDING',
           startedAt: stage.name === 'Initializing' ? now.toISOString() : undefined,
-          statusMessage: stage.name === 'Initializing' ? 'Initializing task environment...' : stage.statusMessage
+          statusMessage: stage.name === 'Initializing' ? 'Loading models...' : stage.statusMessage
         })))
 
         // Stage timing
@@ -119,7 +119,7 @@ const TaskDemoBase = ({
         const initMessageTimeout = setTimeout(() => {
           setStages(prev => prev.map(stage => ({
             ...stage,
-            statusMessage: stage.name === 'Initializing' ? 'Setting up worker node...' : stage.statusMessage
+            statusMessage: stage.name === 'Initializing' ? 'Post-load testing...' : stage.statusMessage
           })))
         }, initDuration * 0.5)
 
@@ -157,11 +157,11 @@ const TaskDemoBase = ({
             const progress = progressRef.current.currentItems / TOTAL_ITEMS
             let statusMessage = ''
             if (progress < 0.25) {
-              statusMessage = 'Processing initial batch of items...'
-            } else if (progress < 0.5) {
-              statusMessage = 'Processing items steadily...'
-            } else if (progress < 0.75) {
-              statusMessage = 'Processing at optimal rate...'
+              statusMessage = 'Starting processing...'
+            } else if (progress < 0.6) {
+              statusMessage = 'Processing items...'
+            } else if (progress < 0.90) {
+              statusMessage = 'Cruising...'
             } else {
               statusMessage = 'Completing final items...'
             }
@@ -278,7 +278,7 @@ const TaskDemoBase = ({
     data: {
       id: taskId,
       title: 'Demo Task',
-      command: 'plexus command demo'
+      command: 'plexus evaluate accuracy --scorecard abc-inc-scorecard --score "DNC Requested?"'
     } as BaseTaskData
   }
 

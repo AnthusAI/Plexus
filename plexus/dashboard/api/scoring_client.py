@@ -34,12 +34,14 @@ Implementation Notes:
     - Handles ID resolution errors gracefully
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 from dataclasses import dataclass
 from .client import PlexusAPIClient
 from .models.account import Account
 from .models.scorecard import Scorecard
 from .models.score import Score
+from plexus.utils.dict_utils import truncate_dict_strings_inner
+import logging
 
 @dataclass
 class ScoringContext:
@@ -147,24 +149,22 @@ class ScoringClient:
             client.log_score(0.95, "item-123", 
                            scorecard_key="different-scorecard")
         """
-        # Resolve IDs (using cache when possible)
-        account_id = self._resolve_account_id()
-        scorecard_id = self._resolve_scorecard_id(scorecard_key)
-        
         # Build score data
         score_data = {
             'value': value,
             'itemId': item_id,
-            'accountId': account_id
+            'accountId': self._resolve_account_id()
         }
         
-        if scorecard_id:
-            score_data['scorecardId'] = scorecard_id
+        if scorecard_key:
+            score_data['scorecardId'] = self._resolve_scorecard_id(scorecard_key)
         if confidence is not None:
             score_data['confidence'] = confidence
         if metadata:
             score_data['metadata'] = metadata
             
+        logging.debug(f"Logging score with data: {truncate_dict_strings_inner(score_data)}")
+        
         # Log through API client
         self.api_client.log_score(
             value=value,
