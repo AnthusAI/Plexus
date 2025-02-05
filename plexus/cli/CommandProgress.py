@@ -2,6 +2,7 @@ import time
 from typing import Optional
 from dataclasses import dataclass
 from contextlib import contextmanager
+from celery import current_task
 
 @dataclass
 class ProgressState:
@@ -48,7 +49,7 @@ class CommandProgress:
             callback(cls._current_progress)
     
     @classmethod
-    def update(cls, current: int, total: int, status: str):
+    def update(cls, current: int, total: int, status: str = None):
         """Update the progress state and notify the callback if set.
         Safe to call even when no callback is set."""
         if cls._current_progress is None:
@@ -65,6 +66,21 @@ class CommandProgress:
         
         if cls._update_callback:
             cls._update_callback(cls._current_progress)
+        
+        # Get current Celery task if we're in a Celery worker
+        celery_task = current_task
+        if not celery_task:
+            return
+        
+        # Update Celery task state
+        celery_task.update_state(
+            state='PROGRESS',
+            meta={
+                'current': current,
+                'total': total,
+                'status': status
+            }
+        )
     
     @classmethod
     @contextmanager
