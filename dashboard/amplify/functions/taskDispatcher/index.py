@@ -101,8 +101,23 @@ def handler(event, context):
             task = deserialize_dynamo_item(new_image)
             logger.info(f"Deserialized task: {json.dumps(task)}")
             
-            if task.get('dispatchStatus') != 'PENDING':
-                logger.info(f"Skipping task with dispatchStatus: {task.get('dispatchStatus')}")
+            # For MODIFY events, check if dispatchStatus changed to PENDING
+            if event_name == 'MODIFY':
+                old_image = record.get('dynamodb', {}).get('OldImage')
+                if old_image:
+                    old_task = deserialize_dynamo_item(old_image)
+                    old_status = old_task.get('dispatchStatus')
+                    new_status = task.get('dispatchStatus')
+                    
+                    # Skip if not transitioning to PENDING
+                    if old_status == new_status or new_status != 'PENDING':
+                        logger.info(f"Skipping MODIFY event - dispatchStatus not transitioning to PENDING (old: {old_status}, new: {new_status})")
+                        skipped_count += 1
+                        continue
+            
+            # For INSERT events, only process if dispatchStatus is PENDING
+            elif event_name == 'INSERT' and task.get('dispatchStatus') != 'PENDING':
+                logger.info(f"Skipping INSERT event with dispatchStatus: {task.get('dispatchStatus')}")
                 skipped_count += 1
                 continue
 
