@@ -276,6 +276,16 @@ class Scorecard:
                 score_total_cost = score_instance.get_accumulated_costs()
                 total_tokens = score_total_cost.get('prompt_tokens', 0) + score_total_cost.get('completion_tokens', 0)
 
+                # Update scorecard's cost accumulators
+                self.prompt_tokens += score_total_cost.get('prompt_tokens', 0)
+                self.completion_tokens += score_total_cost.get('completion_tokens', 0)
+                self.cached_tokens += score_total_cost.get('cached_tokens', 0)
+                self.llm_calls += score_total_cost.get('llm_calls', 0)
+                self.input_cost += score_total_cost.get('input_cost', 0)
+                self.output_cost += score_total_cost.get('output_cost', 0)
+                self.total_cost += score_total_cost.get('total_cost', 0)
+                self.scorecard_total_cost += score_total_cost.get('total_cost', Decimal('0.0'))
+
                 # Log the cost for this individual score
                 dimensions = {
                     'ScoreCardID': str(self.properties['id']),
