@@ -6,12 +6,14 @@ from contextlib import redirect_stdout, redirect_stderr
 from celery import Task
 from plexus.CustomLogging import logging
 from .CommandProgress import CommandProgress, ProgressState
+from datetime import datetime, timezone, timedelta
+from typing import Optional
 
 def register_tasks(app):
     """Register Celery tasks with the application."""
     
     @app.task(bind=True, name="plexus.execute_command")
-    def execute_command(self: Task, command_string: str, target: str = "default/command") -> dict:
+    def execute_command(self: Task, command_string: str, target: str = "default/command", task_id: Optional[str] = None) -> dict:
         """Execute a Plexus command and return its result."""
         try:
             # Check if this worker accepts this target
@@ -32,6 +34,14 @@ def register_tasks(app):
             stdout_capture = io.StringIO()
             stderr_capture = io.StringIO()
             
+            # Initialize task if we have a task ID
+            task = None
+            if task_id:
+                from plexus.dashboard.api.models.task import Task
+                task = Task.get(task_id)
+                if task:
+                    task.start_processing()
+            
             def progress_callback(state: ProgressState):
                 """Update Celery task state with progress information."""
                 self.update_state(
@@ -44,6 +54,22 @@ def register_tasks(app):
                         'estimated_remaining': state.estimated_remaining
                     }
                 )
+                
+                # Update Task progress if we have a task
+                if task:
+                    task.update_progress(
+                        state.current,
+                        state.total,
+                        {
+                            "Running": {
+                                "order": 1,
+                                "totalItems": state.total,
+                                "processedItems": state.current,
+                                "statusMessage": state.status
+                            }
+                        },
+                        estimated_completion_at=datetime.now(timezone.utc) + timedelta(seconds=state.estimated_remaining)
+                    )
             
             # Set up progress reporting
             CommandProgress.set_update_callback(progress_callback)
@@ -66,6 +92,13 @@ def register_tasks(app):
                         status = 'error'
                         logging.error(f"Command execution failed: {str(e)}")
                 
+                # Update task status if we have a task
+                if task:
+                    if status == 'success':
+                        task.complete_processing()
+                    else:
+                        task.fail_processing(str(e) if 'e' in locals() else 'Command failed')
+                
                 return {
                     'status': status,
                     'command': command_string,
@@ -82,6 +115,9 @@ def register_tasks(app):
                 
         except Exception as e:
             logging.error(f"Command failed: {str(e)}")
+            # Update task status if we have a task
+            if 'task' in locals() and task:
+                task.fail_processing(str(e))
             return {
                 'status': 'error',
                 'command': command_string,
