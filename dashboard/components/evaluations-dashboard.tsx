@@ -41,6 +41,7 @@ import { formatDuration } from '@/utils/format-duration'
 import { EvaluationDashboardSkeleton } from "@/components/loading-skeleton"
 import { ModelListResult, AmplifyListResult, AmplifyGetResult } from '@/types/shared'
 import { listFromModel, observeQueryFromModel, getFromModel, observeScoreResults } from "@/utils/amplify-helpers"
+import type { EvaluationTaskData } from '@/components/EvaluationTask'
 import { useAuthenticator } from '@aws-amplify/ui-react';
 import { useRouter } from 'next/navigation';
 import { Observable } from 'rxjs';
@@ -607,13 +608,12 @@ async function loadRelatedData(
   }))
 }
 
-// Add type for metrics
 interface EvaluationMetric {
-  name: string
-  value: number
-  unit?: string
-  maximum?: number
-  priority: boolean
+  name?: string;
+  value?: number;
+  unit?: string;
+  maximum?: number;
+  priority?: boolean;
 }
 
 interface ParsedScoreResult {
@@ -745,211 +745,577 @@ const handleDeleteEvaluation = async (client: any, evaluationId: string) => {
   }
 };
 
-// Add type for confusion matrix
-interface ConfusionMatrix {
-  matrix: number[][]
-  labels: string[]
-}
-
-// Add type for class distribution
-interface ClassDistribution {
-  label: string
-  count: number
-}
-
-interface TaskProps {
-  variant: 'grid' | 'detail'
-  task: {
-    id: string
-    type: string
-    scorecard: string
-    score: string
-    time: string
-    summary?: string
-    description?: string
-    data: {
-      id: string
-      title: string
-      accuracy: number | null
-      metrics: {
-        name: string
-        value: number
-        unit: string
-        maximum: number
-        priority: boolean
-      }[]
-      metricsExplanation: string | null
-      processedItems: number
-      totalItems: number
-      progress: number
-      inferences: number
-      cost: number | null
-      status: string
-      elapsedSeconds: number | null
-      estimatedRemainingSeconds: number | null
-      startedAt: string | null
-      errorMessage?: string
-      errorDetails: any | null
-      confusionMatrix: ConfusionMatrix | null
-      scoreGoal: string | null
-      datasetClassDistribution?: ClassDistribution[]
-      isDatasetClassDistributionBalanced: boolean | null
-      predictedClassDistribution?: ClassDistribution[]
-      isPredictedClassDistributionBalanced: boolean | null
-      scoreResults: {
-        id: string
-        value: string
-        confidence: number | null
-        explanation: string | null
-        metadata: {
-          human_label: string | null
-          correct: boolean
-          human_explanation?: string | null
-          text?: string | null
-        }
-        itemId: string
-        createdAt: string
-        updatedAt: string
-      }[]
-    }
-  }
-  isFullWidth?: boolean
-  onToggleFullWidth?: () => void
-  selectedScoreResultId?: string | null
-  onSelectScoreResult?: (id: string | null) => void
-}
-
 export default function EvaluationsDashboard(): JSX.Element {
-  const { user } = useAuthenticator();
+  const { authStatus, user } = useAuthenticator(context => [context.authStatus]);
   const router = useRouter();
   
   // State hooks
-  const [evaluations, setEvaluations] = useState<NonNullable<Schema['Evaluation']['type']>[]>([]);
-  const [evaluationTaskProps, setEvaluationTaskProps] = useState<EvaluationTaskProps | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedEvaluation, setSelectedEvaluation] = useState<Schema['Evaluation']['type'] | null>(null);
-  const [scorecardNames, setScorecardNames] = useState<Record<string, string>>({});
-  const [scoreNames, setScoreNames] = useState<Record<string, string>>({});
-  const [scoreResults, setScoreResults] = useState<Schema['ScoreResult']['type'][]>([]);
-  const [isFullWidth, setIsFullWidth] = useState(false);
-  const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null);
+  const [Evaluations, setEvaluations] = useState<NonNullable<Schema['Evaluation']['type']>[]>([])
+  const [EvaluationTaskProps, setEvaluationTaskProps] = useState<EvaluationTaskProps['task'] | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [selectedEvaluation, setSelectedEvaluation] = useState<Schema['Evaluation']['type'] | null>(null)
+  const [accountId, setAccountId] = useState<string | null>(null)
+  const [error, setError] = useState<Error | null>(null)
+  const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
+  const [selectedScore, setSelectedScore] = useState<string | null>(null)
+  const [isFullWidth, setIsFullWidth] = useState(false)
+  const [scorecardName, setScorecardName] = useState('Unknown Scorecard')
+  const [scorecardNames, setScorecardNames] = useState<Record<string, string>>({})
+  const [hasMounted, setHasMounted] = useState(false)
+  const [scoreResults, setScoreResults] = useState<Schema['ScoreResult']['type'][]>([])
+  const [leftPanelWidth, setLeftPanelWidth] = useState<number>(50)
+  const [scoreNames, setScoreNames] = useState<Record<string, string>>({})
+  const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null)
 
+  // Ref hooks
+  const selectedEvaluationRef = useRef<Schema['Evaluation']['type'] | null>(null)
+  const dragStateRef = useRef<DragState>({
+    isDragging: false,
+    startX: 0,
+    startWidth: 50
+  })
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Custom hooks
+  const isNarrowViewport = useViewportWidth()
+
+  // Memoized values
+  const filteredEvaluations = useMemo(() => {
+    return Evaluations.filter(Evaluation => {
+      if (!selectedScorecard) return true
+      return Evaluation.scorecardId === selectedScorecard
+    })
+  }, [Evaluations, selectedScorecard])
+
+  // Memoized components
+  const EvaluationList = useMemo(() => (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="w-[40%]">Evaluation</TableHead>
+          <TableHead className="w-[10%] @[630px]:table-cell hidden">Type</TableHead>
+          <TableHead className="w-[20%] @[630px]:table-cell hidden text-right">Progress</TableHead>
+          <TableHead className="w-[20%] @[630px]:table-cell hidden text-right">Accuracy</TableHead>
+          <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {filteredEvaluations.map((Evaluation) => (
+          <EvaluationRow 
+            key={Evaluation.id} 
+            evaluation={Evaluation}
+            selectedEvaluationId={selectedEvaluation?.id ?? null}
+            scorecardNames={scorecardNames}
+            scoreNames={scoreNames}
+            onSelect={(evaluation) => {
+              setScoreResults([])
+              setSelectedScoreResultId(null)
+              setSelectedEvaluation(evaluation)
+            }}
+            onDelete={async (evaluationId) => {
+              const success = await handleDeleteEvaluation(client, evaluationId);
+              if (success) {
+                setEvaluations(prev => prev.filter(e => e.id !== evaluationId));
+                if (selectedEvaluation?.id === evaluationId) {
+                  setSelectedEvaluation(null);
+                }
+              }
+              return success;
+            }}
+          />
+        ))}
+      </TableBody>
+    </Table>
+  ), [filteredEvaluations, selectedEvaluation?.id, scorecardNames, scoreNames])
+
+  const EvaluationTaskComponent = useMemo(() => {
+    if (!selectedEvaluation || !EvaluationTaskProps) return null
+    
+    return (
+      <EvaluationTask
+        variant="detail"
+        task={EvaluationTaskProps}
+        isFullWidth={isFullWidth}
+        selectedScoreResultId={selectedScoreResultId}
+        onSelectScoreResult={setSelectedScoreResultId}
+        onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+        onClose={() => {
+          setSelectedEvaluation(null)
+          setSelectedScoreResultId(null)
+          setIsFullWidth(false)
+        }}
+      />
+    )
+  }, [selectedEvaluation?.id, EvaluationTaskProps, isFullWidth, selectedScoreResultId])
+
+  // Event handlers
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    if (!containerRef.current) return
+    
+    dragStateRef.current = {
+      isDragging: true,
+      startX: e.clientX,
+      startWidth: leftPanelWidth
+    }
+  }, [leftPanelWidth])
+
+  const handleDragMove = useCallback((e: MouseEvent) => {
+    if (!dragStateRef.current.isDragging || !containerRef.current) return
+
+    const containerWidth = containerRef.current.offsetWidth
+    const delta = e.clientX - dragStateRef.current.startX
+    const newWidth = Math.max(20, Math.min(80, 
+      dragStateRef.current.startWidth + (delta / containerWidth * 100)
+    ))
+    
+    setLeftPanelWidth(newWidth)
+  }, [])
+
+  const handleDragEnd = useCallback(() => {
+    dragStateRef.current.isDragging = false
+  }, [])
+
+  // Effects
+  useEffect(() => {
+    if (authStatus === 'unauthenticated') {
+      router.push('/');
+      return;
+    }
+  }, [authStatus, router]);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  useEffect(() => {
+    selectedEvaluationRef.current = selectedEvaluation;
+
+    if (selectedEvaluation) {
+      const subscription = observeScoreResults(client, selectedEvaluation.id).subscribe({
+        next: (data) => {
+          const parsedResults = data.items.map(parseScoreResult)
+          setScoreResults(parsedResults)
+        },
+        error: (error) => {
+          console.error('Error observing score results:', error)
+        }
+      })
+
+      return () => {
+        subscription.unsubscribe()
+      }
+    }
+  }, [selectedEvaluation])
+
+  // Add effect to update EvaluationTaskProps when selectedEvaluation changes
   useEffect(() => {
     if (!selectedEvaluation) {
       setEvaluationTaskProps(null);
       return;
     }
 
-    const scorecardName = selectedEvaluation.scorecardId && scorecardNames[selectedEvaluation.scorecardId] 
-      ? scorecardNames[selectedEvaluation.scorecardId] 
-      : selectedEvaluation.scorecardId || 'Unknown Scorecard';
+    console.log('Selected evaluation data:', {
+      id: selectedEvaluation.id,
+      rawConfusionMatrix: selectedEvaluation.confusionMatrix,
+      confusionMatrixType: typeof selectedEvaluation.confusionMatrix,
+      isObject: selectedEvaluation.confusionMatrix && typeof selectedEvaluation.confusionMatrix === 'object',
+      hasMatrixProp: selectedEvaluation.confusionMatrix && 
+        typeof selectedEvaluation.confusionMatrix === 'object' && 
+        'matrix' in selectedEvaluation.confusionMatrix,
+      hasLabelsProp: selectedEvaluation.confusionMatrix && 
+        typeof selectedEvaluation.confusionMatrix === 'object' && 
+        'labels' in selectedEvaluation.confusionMatrix
+    });
 
-    const scoreName = selectedEvaluation.scoreId && scoreNames[selectedEvaluation.scoreId]
-      ? scoreNames[selectedEvaluation.scoreId]
-      : selectedEvaluation.scoreId || 'Unknown Score';
+    const rawMetrics = (() => {
+      try {
+        if (typeof selectedEvaluation.metrics === 'string') {
+          return JSON.parse(selectedEvaluation.metrics);
+        }
+        if (Array.isArray(selectedEvaluation.metrics)) {
+          return selectedEvaluation.metrics;
+        }
+        return [];
+      } catch (e) {
+        console.error('Error parsing metrics:', e);
+        return [];
+      }
+    })();
 
-    const parsedMetrics = Array.isArray(selectedEvaluation.metrics) 
-      ? selectedEvaluation.metrics.map((metric: any) => ({
-          name: String(metric?.name || ''),
-          value: Number(metric?.value || 0),
-          unit: String(metric?.unit || '%'),
-          maximum: Number(metric?.maximum || 100),
-          priority: Boolean(metric?.priority)
-        }))
-      : [];
-
-    const parsedScoreResults = (scoreResults || []).map((result: any) => ({
-      id: String(result?.id || ''),
-      value: String(result?.value || ''),
-      confidence: result?.confidence !== undefined ? Number(result.confidence) : null,
-      explanation: result?.explanation || null,
-      metadata: {
-        human_label: result?.metadata?.human_label || null,
-        correct: Boolean(result?.metadata?.correct),
-        human_explanation: result?.metadata?.human_explanation || null,
-        text: result?.metadata?.text || null
-      },
-      itemId: String(result?.itemId || ''),
-      createdAt: result?.createdAt || new Date().toISOString(),
-      updatedAt: result?.updatedAt || new Date().toISOString()
+    const metrics = rawMetrics.map((metric: EvaluationMetric) => ({
+      name: String(metric?.name || ''),
+      value: Number(metric?.value || 0),
+      unit: String(metric?.unit || '%'),
+      maximum: Number(metric?.maximum || 100),
+      priority: Boolean(metric?.priority)
     }));
 
-    const parsedConfusionMatrix = selectedEvaluation.confusionMatrix 
-      ? (typeof selectedEvaluation.confusionMatrix === 'string' 
-          ? JSON.parse(selectedEvaluation.confusionMatrix) 
-          : selectedEvaluation.confusionMatrix) as ConfusionMatrix
-      : null;
+    const confusionMatrix = (() => {
+      try {
+        const rawMatrix = typeof selectedEvaluation.confusionMatrix === 'string' 
+          ? JSON.parse(selectedEvaluation.confusionMatrix)
+          : selectedEvaluation.confusionMatrix;
 
-    const parsedDatasetClassDistribution = selectedEvaluation.datasetClassDistribution 
-      ? (typeof selectedEvaluation.datasetClassDistribution === 'string'
-          ? JSON.parse(selectedEvaluation.datasetClassDistribution)
-          : selectedEvaluation.datasetClassDistribution) as ClassDistribution[]
-      : undefined;
-
-    const parsedPredictedClassDistribution = selectedEvaluation.predictedClassDistribution
-      ? (typeof selectedEvaluation.predictedClassDistribution === 'string'
-          ? JSON.parse(selectedEvaluation.predictedClassDistribution)
-          : selectedEvaluation.predictedClassDistribution) as ClassDistribution[]
-      : undefined;
-
-    const taskProps: EvaluationTaskProps = {
-      variant: 'detail',
-      task: {
-        id: selectedEvaluation.id,
-        type: selectedEvaluation.type,
-        scorecard: scorecardName,
-        score: scoreName,
-        time: selectedEvaluation.createdAt,
-        summary: undefined,
-        description: undefined,
-        data: {
-          id: selectedEvaluation.id,
-          title: selectedEvaluation.type,
-          accuracy: selectedEvaluation.accuracy !== null ? Number(selectedEvaluation.accuracy) : null,
-          metrics: parsedMetrics,
-          metricsExplanation: selectedEvaluation.metricsExplanation || null,
-          processedItems: Number(selectedEvaluation.processedItems || 0),
-          totalItems: Number(selectedEvaluation.totalItems || 0),
-          progress: selectedEvaluation.processedItems && selectedEvaluation.totalItems ?
-            (Number(selectedEvaluation.processedItems) / Number(selectedEvaluation.totalItems)) * 100 : 0,
-          inferences: Number(selectedEvaluation.inferences || 0),
-          cost: selectedEvaluation.cost !== null ? Number(selectedEvaluation.cost) : null,
-          status: String(selectedEvaluation.status || ''),
-          elapsedSeconds: selectedEvaluation.elapsedSeconds !== null ? Number(selectedEvaluation.elapsedSeconds) : null,
-          estimatedRemainingSeconds: selectedEvaluation.estimatedRemainingSeconds !== null ? 
-            Number(selectedEvaluation.estimatedRemainingSeconds) : null,
-          startedAt: selectedEvaluation.startedAt || null,
-          errorMessage: selectedEvaluation.errorMessage || undefined,
-          errorDetails: selectedEvaluation.errorDetails || null,
-          confusionMatrix: parsedConfusionMatrix,
-          scoreGoal: selectedEvaluation.scoreGoal || null,
-          datasetClassDistribution: parsedDatasetClassDistribution,
-          isDatasetClassDistributionBalanced: selectedEvaluation.isDatasetClassDistributionBalanced || null,
-          predictedClassDistribution: parsedPredictedClassDistribution,
-          isPredictedClassDistributionBalanced: selectedEvaluation.isPredictedClassDistributionBalanced || null,
-          scoreResults: parsedScoreResults
+        if (rawMatrix && typeof rawMatrix === 'object' &&
+            Array.isArray(rawMatrix.matrix) && Array.isArray(rawMatrix.labels)) {
+          return {
+            matrix: rawMatrix.matrix,
+            labels: rawMatrix.labels
+          };
         }
-      },
-      isFullWidth,
-      onToggleFullWidth: () => setIsFullWidth(!isFullWidth),
-      selectedScoreResultId,
-      onSelectScoreResult: setSelectedScoreResultId
+        return null;
+      } catch (e) {
+        console.error('Error parsing confusion matrix:', e);
+        return null;
+      }
+    })();
+
+    const datasetClassDistribution = (() => {
+      try {
+        const rawDist = typeof selectedEvaluation.datasetClassDistribution === 'string' 
+          ? JSON.parse(selectedEvaluation.datasetClassDistribution)
+          : selectedEvaluation.datasetClassDistribution;
+
+        if (Array.isArray(rawDist)) {
+          return rawDist.map(item => ({
+            label: String(item?.label || ''),
+            count: Number(item?.count || 0)
+          }));
+        }
+        return undefined;
+      } catch (e) {
+        console.error('Error parsing dataset distribution:', e);
+        return undefined;
+      }
+    })();
+
+    const predictedClassDistribution = (() => {
+      try {
+        const rawDist = typeof selectedEvaluation.predictedClassDistribution === 'string' 
+          ? JSON.parse(selectedEvaluation.predictedClassDistribution)
+          : selectedEvaluation.predictedClassDistribution;
+
+        if (Array.isArray(rawDist)) {
+          return rawDist.map(item => ({
+            label: String(item?.label || ''),
+            count: Number(item?.count || 0)
+          }));
+        }
+        return undefined;
+      } catch (e) {
+        console.error('Error parsing predicted distribution:', e);
+        return undefined;
+      }
+    })();
+
+    const taskProps = {
+      id: selectedEvaluation.id,
+      type: selectedEvaluation.type,
+      scorecard: scorecardNames[selectedEvaluation.id] || 'Unknown Scorecard',
+      score: scoreNames[selectedEvaluation.id] || 'Unknown Score',
+      time: selectedEvaluation.createdAt,
+      data: {
+        id: selectedEvaluation.id,
+        title: scorecardNames[selectedEvaluation.id] || 'Unknown Scorecard',
+        accuracy: selectedEvaluation.accuracy ?? null,
+        metrics,
+        metricsExplanation: selectedEvaluation.metricsExplanation ?? null,
+        processedItems: selectedEvaluation.processedItems ?? 0,
+        totalItems: selectedEvaluation.totalItems ?? 0,
+        progress: calculateProgress(selectedEvaluation.processedItems, selectedEvaluation.totalItems),
+        inferences: selectedEvaluation.inferences ?? 0,
+        cost: selectedEvaluation.cost ?? null,
+        status: selectedEvaluation.status || '',
+        elapsedSeconds: selectedEvaluation.elapsedSeconds ?? null,
+        estimatedRemainingSeconds: selectedEvaluation.estimatedRemainingSeconds ?? null,
+        startedAt: selectedEvaluation.startedAt ?? null,
+        errorMessage: selectedEvaluation.errorMessage ?? undefined,
+        errorDetails: selectedEvaluation.errorDetails ?? null,
+        confusionMatrix,
+        scoreGoal: selectedEvaluation.scoreGoal ?? null,
+        datasetClassDistribution,
+        isDatasetClassDistributionBalanced: selectedEvaluation.isDatasetClassDistributionBalanced ?? null,
+        predictedClassDistribution,
+        isPredictedClassDistributionBalanced: selectedEvaluation.isPredictedClassDistributionBalanced ?? null,
+        scoreResults: scoreResults
+      }
     };
 
     setEvaluationTaskProps(taskProps);
-  }, [selectedEvaluation, scorecardNames, scoreNames, scoreResults, isFullWidth, selectedScoreResultId]);
+  }, [selectedEvaluation, scorecardNames, scoreNames, scoreResults]);
+
+  // Add initial data loading effect
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const { data: accounts } = await listAccounts();
+        if (!accounts?.length) {
+          setIsLoading(false);
+          return;
+        }
+
+        const foundAccountId = accounts[0].id;
+        setAccountId(foundAccountId);
+
+        const { data: evaluations } = await listEvaluations(foundAccountId);
+        if (!evaluations) {
+          setIsLoading(false);
+          return;
+        }
+
+        console.log('Raw evaluations from listEvaluations:', evaluations.map(e => ({
+          id: e.id,
+          updatedAt: e.updatedAt,
+          type: e.type
+        })));
+
+        const transformedEvaluations = await loadRelatedData(
+          evaluations,
+          setScorecardNames,
+          setScoreNames
+        );
+
+        setEvaluations(transformedEvaluations);
+        setIsLoading(false);
+
+        // Set up subscriptions for real-time updates
+        const handleEvaluationUpdate = async (data: Schema['Evaluation']['type']) => {
+          console.log('Evaluation update received:', {
+            id: data.id,
+            type: data.type,
+            status: data.status,
+            processedItems: data.processedItems,
+            totalItems: data.totalItems,
+            accuracy: data.accuracy,
+            updatedAt: data.updatedAt
+          });
+
+          if (!foundAccountId) return;
+          
+          // For onCreate, we can just add the new evaluation to the list
+          const isCreate = !Evaluations.some(e => e.id === data.id);
+          if (isCreate) {
+            console.log('Handling onCreate for evaluation:', {
+              id: data.id,
+              updatedAt: data.updatedAt,
+              existingIds: Evaluations.map(e => e.id)
+            });
+
+            // Transform the evaluation before setState to avoid async issues
+            const transformedEvaluation = await loadRelatedData(
+              [data],
+              (newNames) => {
+                setScorecardNames(prev => ({ ...prev, ...newNames }));
+              },
+              (newNames) => {
+                setScoreNames(prev => ({ ...prev, ...newNames }));
+              }
+            );
+
+            setEvaluations(prev => {
+              // If evaluation exists, update it
+              if (prev.some(e => e.id === data.id)) {
+                console.log('Updating existing evaluation:', data.id);
+                return prev.map(e => e.id === data.id ? {
+                  ...e,
+                  ...transformedEvaluation[0],
+                  // Preserve the async functions
+                  account: e.account,
+                  scorecard: e.scorecard,
+                  score: e.score
+                } : e);
+              }
+
+              // Otherwise add as new
+              console.log('Adding new evaluation:', data.id);
+              return [transformedEvaluation[0], ...prev];
+            });
+          } else {
+            // For updates, we'll update the specific evaluation in place
+            // but preserve the existing names
+            setEvaluations(prev => {
+              return prev.map(e => e.id === data.id ? {
+                ...e,
+                ...data,
+                // Preserve the async functions
+                account: e.account,
+                scorecard: e.scorecard,
+                score: e.score
+              } : e);
+            });
+          }
+
+          // Update selectedEvaluation if it matches
+          if (selectedEvaluation && data.id === selectedEvaluation.id) {
+            setSelectedEvaluation(prev => ({
+              ...prev!,
+              ...data,
+              // Preserve the async functions
+              account: prev!.account,
+              scorecard: prev!.scorecard,
+              score: prev!.score
+            }));
+          }
+        };
+
+        const handleError = (error: unknown) => {
+          console.error('Subscription error:', error);
+          setError(error instanceof Error ? error : new Error(String(error)));
+        };
+
+        type EvaluationObservable = Observable<Schema['Evaluation']['type']>;
+        
+        // Subscribe to create events
+        const createSub = (client.models.Evaluation as any).onCreate().subscribe({
+          next: handleEvaluationUpdate,
+          error: handleError
+        });
+
+        // Subscribe to update events
+        const updateSub = (client.models.Evaluation as any).onUpdate().subscribe({
+          next: handleEvaluationUpdate,
+          error: handleError
+        });
+
+        // Subscribe to delete events
+        const deleteSub = (client.models.Evaluation as any).onDelete().subscribe({
+          next: (data: Schema['Evaluation']['type']) => {
+            if (!data) return;
+            console.log('Evaluation delete received:', {
+              id: data.id,
+              type: data.type,
+              updatedAt: data.updatedAt
+            });
+
+            // Remove from evaluations list
+            setEvaluations(prev => {
+              const filteredList = prev.filter(e => e.id !== data.id);
+              console.log('Removing deleted evaluation:', {
+                deletedId: data.id,
+                previousCount: prev.length,
+                newCount: filteredList.length
+              });
+              return filteredList;
+            });
+
+            // Clear selection if the deleted evaluation was selected
+            if (selectedEvaluation?.id === data.id) {
+              console.log('Clearing selected evaluation as it was deleted');
+              setSelectedEvaluation(null);
+              setScoreResults([]);
+              setEvaluationTaskProps(null);
+            }
+          },
+          error: handleError
+        });
+
+        return () => {
+          createSub.unsubscribe();
+          updateSub.unsubscribe();
+          deleteSub.unsubscribe();
+        };
+
+      } catch (error) {
+        console.error('Error loading initial data:', error);
+        setError(error instanceof Error ? error : new Error('Failed to load initial data'));
+        setIsLoading(false);
+      }
+    };
+
+    loadInitialData();
+
+    // No cleanup needed here as it's handled in the async function
+    return undefined;
+  }, [selectedEvaluation]); // Add selectedEvaluation to dependencies since we use it in handleEvaluationUpdate
+
+  // Early return for unauthenticated state
+  if (authStatus !== 'authenticated') {
+    return <EvaluationDashboardSkeleton />;
+  }
+
+  // Early return for loading state
+  if (!hasMounted) {
+    return <EvaluationDashboardSkeleton />;
+  }
+
+  // Early return for error state
+  if (error) {
+    return (
+      <div className="p-4 text-red-500">
+        Error loading Evaluations: {error.message}
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col h-full">
-      {isLoading ? (
-        <EvaluationDashboardSkeleton />
-      ) : (
-        <div className="flex flex-col h-full">
-          {evaluationTaskProps && (
-            <EvaluationTask {...evaluationTaskProps} />
+    <ClientOnly>
+      <div className="h-full flex flex-col" ref={containerRef}>
+        <div className={`flex ${isNarrowViewport ? 'flex-col' : ''} flex-1 h-full w-full`}>
+          <div className={`
+            flex flex-col
+            ${isFullWidth ? 'hidden' : ''} 
+            ${(!selectedEvaluation || !isNarrowViewport) ? 'flex h-full' : 'hidden'}
+            ${(!selectedEvaluation || isNarrowViewport) ? 'w-full' : ''}
+          `}
+          style={!isNarrowViewport && selectedEvaluation ? {
+            width: `${leftPanelWidth}%`
+          } : undefined}>
+            <div className="mb-4 flex-shrink-0">
+              <ScorecardContext 
+                selectedScorecard={selectedScorecard}
+                setSelectedScorecard={setSelectedScorecard}
+                selectedScore={selectedScore}
+                setSelectedScore={setSelectedScore}
+                availableFields={[]}
+              />
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto @container">
+              {EvaluationList}
+            </div>
+          </div>
+
+          {selectedEvaluation && !isNarrowViewport && !isFullWidth && (
+            <div
+              className="w-2 relative cursor-col-resize flex-shrink-0 group"
+              onMouseDown={handleDragStart}
+            >
+              <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                group-hover:bg-accent" />
+            </div>
+          )}
+
+          {selectedEvaluation && EvaluationTaskProps && (
+            <div 
+              className={`
+                flex flex-col flex-1 
+                ${isNarrowViewport || isFullWidth ? 'w-full' : ''}
+                h-full
+              `}
+              style={!isNarrowViewport && !isFullWidth ? {
+                width: `${100 - leftPanelWidth}%`
+              } : undefined}
+            >
+              {EvaluationTaskComponent}
+            </div>
           )}
         </div>
-      )}
-    </div>
+      </div>
+    </ClientOnly>
   );
+}
+
+// Create a ClientOnly wrapper component
+function ClientOnly({ children }: { children: React.ReactNode }) {
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  if (!hasMounted) {
+    return null; // Or a loading skeleton that matches server render
+  }
+
+  return <>{children}</>;
 }
