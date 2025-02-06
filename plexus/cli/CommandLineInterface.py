@@ -78,6 +78,7 @@ class OrderCommands(click.Group):
     def list_commands(self, ctx: click.Context) -> list[str]:
         return list(self.commands)
 
+@click.group(cls=OrderCommands)
 def cli():
     """
     Plexus CLI for managing scorecards, scores, and evaluations.
@@ -177,3 +178,7 @@ def load_plexus_extensions():
 
 # Call this function during CLI initialization
 load_plexus_extensions()
+
+def main():
+    """Entry point for the Plexus CLI."""
+    cli(standalone_mode=False)

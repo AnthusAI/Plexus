@@ -7,14 +7,33 @@ import os
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.task import Task
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 @dataclass
 class StageConfig:
+    """Configuration for a task stage.
+    
+    Args:
+        order: The order of this stage in the task sequence
+        total_items: Optional number of items to process in this stage.
+            Only set this if you want the stage to show a progress bar in the UI.
+            Typically only set for main processing stages, not for setup or finalizing stages.
+        status_message: Optional status message to display for this stage
+    """
     order: int
     total_items: Optional[int] = None
     status_message: Optional[str] = None
 
 @dataclass
 class Stage:
+    """Internal representation of a task stage.
+    
+    This class tracks the state of a single stage in a task's execution.
+    Progress bars in the UI are only shown for stages that have total_items set.
+    Typically, only the main processing stages should have total_items set,
+    while setup and finalizing stages should not show progress bars.
+    """
     name: str
     order: int
     total_items: Optional[int] = None
@@ -22,16 +41,56 @@ class Stage:
     status_message: Optional[str] = None
     start_time: Optional[float] = None
     end_time: Optional[float] = None
+    status: str = 'PENDING'
 
     def start(self):
+        """Start this stage."""
         self.start_time = time.time()
+        self.status = 'RUNNING'
+        logging.info(f"Starting stage {self.name} with total_items={self.total_items}")
 
     def complete(self):
+        """Complete this stage."""
         self.end_time = time.time()
+        self.status = 'COMPLETED'
+        # Only set processed_items to total_items if they're set
+        # This preserves the behavior where some stages don't show progress
         if self.total_items is not None:
             self.processed_items = self.total_items
+            logging.info(f"Completed stage {self.name} with processed_items={self.processed_items}")
+        else:
+            logging.info(f"Completed stage {self.name} without progress bar")
 
 class TaskProgressTracker:
+    """Tracks progress of a multi-stage task with optional API integration.
+    
+    This class manages the progress of a task through multiple stages, with proper
+    UI integration for progress bars and status updates. Key concepts:
+    
+    1. Stage Progress Bars:
+       - Only stages with total_items set will show progress bars in the UI
+       - Typically, only main processing stages should show progress
+       - Setup and finalizing stages usually should not have total_items set
+    
+    2. Stage Types:
+       - Setup stages: Quick preparation steps, usually no progress bar needed
+       - Processing stages: Main work stages that show progress bars
+       - Finalizing stages: Cleanup/completion steps, usually no progress bar needed
+    
+    Example usage:
+        # Configure stages - only Processing shows progress
+        stages = {
+            "Setup": StageConfig(order=1, status_message="Setting up..."),
+            "Processing": StageConfig(order=2, total_items=100),
+            "Finalizing": StageConfig(order=3, status_message="Finishing...")
+        }
+        
+        # Create tracker
+        tracker = TaskProgressTracker(total_items=100, stage_configs=stages)
+        
+        # Update progress (only affects stages with total_items set)
+        tracker.update(current_items=50)
+    """
     def __init__(
         self,
         total_items: int,
@@ -96,10 +155,13 @@ class TaskProgressTracker:
         # Initialize stages if provided
         if stage_configs:
             for name, config in stage_configs.items():
+                # Don't set total_items for finalizing stage
+                stage_total_items = None if name.lower() == 'finalizing' else config.total_items
+                logging.info(f"Initializing stage {name} with total_items={stage_total_items}")
                 self._stages[name] = Stage(
                     name=name,
                     order=config.order,
-                    total_items=config.total_items,
+                    total_items=stage_total_items,
                     status_message=config.status_message
                 )
             # Set current stage to the first one by order
@@ -129,7 +191,11 @@ class TaskProgressTracker:
         
         # Update current stage if we have stages
         if self.current_stage:
-            self.current_stage.processed_items = current_items
+            if self.current_stage.name.lower() != 'finalizing':
+                self.current_stage.processed_items = current_items
+                logging.info(f"Updated stage {self.current_stage.name} progress: {current_items}/{self.current_stage.total_items}")
+            else:
+                logging.info(f"Skipping progress update for finalizing stage")
 
         # Update status message
         if status:
@@ -150,6 +216,7 @@ class TaskProgressTracker:
         current = self.current_stage
         if current:
             current.complete()
+            logging.info(f"Completed stage {current.name}")
 
         # Find next stage
         next_stages = [
@@ -162,9 +229,18 @@ class TaskProgressTracker:
         next_stage = min(next_stages, key=lambda s: s.order)
         self._current_stage_name = next_stage.name
         next_stage.start()
+        logging.info(f"Advanced to stage {next_stage.name}")
 
         # Update API task if we have one
         if self.api_task:
+            # Update current stage in API
+            stages = self.api_task.get_stages()
+            next_api_stage = next(
+                (s for s in stages if s.name == next_stage.name),
+                None
+            )
+            if next_api_stage:
+                self.api_task.advance_stage(next_api_stage)
             self._update_api_task_progress()
 
     def complete(self):
@@ -197,24 +273,73 @@ class TaskProgressTracker:
     def _update_api_task_progress(self):
         """Update API task record with current progress."""
         if not self.api_task:
+            logging.info("No API task available, skipping progress update")
             return
 
         # Convert stages to API format
         stage_configs = {}
+        logging.info("\nPreparing API task update:")
+        logging.info(f"Current stage: {self._current_stage_name}")
+        logging.info(f"Overall progress: {self.current_items}/{self.total_items}")
+        
         for name, stage in self._stages.items():
-            stage_configs[name] = {
+            # Convert timestamps to ISO format strings
+            start_time = (
+                datetime.fromtimestamp(stage.start_time, timezone.utc).isoformat()
+                if stage.start_time else None
+            )
+            end_time = (
+                datetime.fromtimestamp(stage.end_time, timezone.utc).isoformat()
+                if stage.end_time else None
+            )
+            
+            # Always include required UI fields
+            config = {
                 "order": stage.order,
-                "totalItems": stage.total_items or 0,
-                "processedItems": stage.processed_items or 0,
-                "statusMessage": stage.status_message or self.status
+                "statusMessage": stage.status_message or self.status,
+                "status": stage.status,
+                "name": name,  # Required for UI
+                "startedAt": start_time,
+                "completedAt": end_time,
+                "estimatedCompletionAt": None  # Optional, can be added if needed
             }
+            
+            # Explicitly set progress tracking fields
+            if name.lower() not in ['setup', 'finalizing']:
+                # Only add progress tracking for non-setup/finalizing stages
+                if stage.total_items is not None:
+                    config["totalItems"] = stage.total_items
+                if stage.processed_items is not None:
+                    config["processedItems"] = stage.processed_items
+            else:
+                # Explicitly set null for setup/finalizing stages
+                config["totalItems"] = None
+                config["processedItems"] = None
+                
+            stage_configs[name] = config
+            
+            logging.info(f"\nStage '{name}' API data:")
+            logging.info(f"  - Order: {stage.order}")
+            logging.info(f"  - Status: {stage.status}")
+            if name.lower() not in ['setup', 'finalizing']:
+                logging.info(f"  - Total Items: {stage.total_items}")
+                logging.info(f"  - Processed Items: {stage.processed_items}")
+            else:
+                logging.info(f"  - Total Items: None (not tracked for {name})")
+                logging.info(f"  - Processed Items: None (not tracked for {name})")
+            logging.info(f"  - Status Message: {stage.status_message or self.status}")
+            logging.info(f"  - Start Time: {start_time}")
+            logging.info(f"  - End Time: {end_time}")
 
-        # Update API task progress
+        estimated_completion = self.estimated_completion_time
+        logging.info(f"\nEstimated completion time: {estimated_completion}")
+
+        # Update API task with progress
         self.api_task.update_progress(
-            self.current_items,
-            self.total_items,
-            stage_configs,
-            estimated_completion_at=self.estimated_completion_time
+            current_items=self.current_items,
+            total_items=self.total_items,
+            stage_configs=stage_configs,
+            estimated_completion_at=estimated_completion
         )
 
     def _generate_status_message(self) -> str:
