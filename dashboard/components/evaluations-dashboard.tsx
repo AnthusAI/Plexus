@@ -955,32 +955,47 @@ export default function EvaluationsDashboard(): JSX.Element {
   }, [selectedEvaluation?.id, EvaluationTaskProps, isFullWidth, selectedScoreResultId])
 
   // Event handlers
-  const handleDragStart = useCallback((e: React.MouseEvent) => {
+  const handleDragStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault()
-    if (!containerRef.current) return
-    
     dragStateRef.current = {
       isDragging: true,
       startX: e.clientX,
       startWidth: leftPanelWidth
     }
+    document.addEventListener('mousemove', handleDragMove)
+    document.addEventListener('mouseup', handleDragEnd)
   }, [leftPanelWidth])
 
   const handleDragMove = useCallback((e: MouseEvent) => {
     if (!dragStateRef.current.isDragging || !containerRef.current) return
 
-    const containerWidth = containerRef.current.offsetWidth
-    const delta = e.clientX - dragStateRef.current.startX
-    const newWidth = Math.max(20, Math.min(80, 
-      dragStateRef.current.startWidth + (delta / containerWidth * 100)
-    ))
-    
-    setLeftPanelWidth(newWidth)
+    const containerWidth = containerRef.current.getBoundingClientRect().width
+    const deltaX = e.clientX - dragStateRef.current.startX
+    const newWidthPercent = (dragStateRef.current.startWidth * 
+      containerWidth / 100 + deltaX) / containerWidth * 100
+
+    const constrainedWidth = Math.min(Math.max(newWidthPercent, 20), 80)
+    setLeftPanelWidth(constrainedWidth)
   }, [])
 
   const handleDragEnd = useCallback(() => {
     dragStateRef.current.isDragging = false
+    document.removeEventListener('mousemove', handleDragMove)
+    document.removeEventListener('mouseup', handleDragEnd)
   }, [])
+
+  // Add escape key handler
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    if (selectedEvaluation && event.key === 'Escape') {
+      setSelectedEvaluation(null)
+      setIsFullWidth(false)
+    }
+  }, [selectedEvaluation])
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
 
   // Effects
   useEffect(() => {
@@ -1364,7 +1379,7 @@ export default function EvaluationsDashboard(): JSX.Element {
             ${(!selectedEvaluation || !isNarrowViewport) ? 'flex h-full' : 'hidden'}
             ${(!selectedEvaluation || isNarrowViewport) ? 'w-full' : ''}
           `}
-          style={!isNarrowViewport && selectedEvaluation ? {
+          style={!isNarrowViewport && selectedEvaluation && !isFullWidth ? {
             width: `${leftPanelWidth}%`
           } : undefined}>
             <div className="mb-4 flex-shrink-0">
