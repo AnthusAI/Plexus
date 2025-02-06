@@ -132,7 +132,7 @@ export default function ScoresPage() {
           </p>
           
           <div className="flex gap-4 mt-6">
-            <Link href="/documentation/basics/scorecards">
+            <Link href="/documentation/concepts/scorecards">
               <DocButton>Learn about Scorecards</DocButton>
             </Link>
             <Link href="/documentation/advanced/sdk">
