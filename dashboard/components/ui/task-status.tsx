@@ -271,15 +271,17 @@ export function TaskStatus({
         </div>
       )}
       {(command || statusMessage) && (
-        <div className="rounded-lg bg-card-light px-2 py-1">
+        <div className="rounded-lg bg-card-light px-2 py-1 space-y-1">
           {command && (
             <div className={`font-mono text-sm text-muted-foreground ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
               $ {command}
             </div>
           )}
-          <div className={`font-mono text-sm ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
-            {statusMessage || '\u00A0'}
-          </div>
+          {statusMessage && (
+            <div className={`text-sm ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
+              {statusMessage}
+            </div>
+          )}
         </div>
       )}
       {showEmptyState ? (

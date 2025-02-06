@@ -100,6 +100,7 @@ class TaskProgressTracker:
         task_id: Optional[str] = None,
         target: Optional[str] = None,
         command: Optional[str] = None,
+        description: Optional[str] = None,
         dispatch_status: Optional[str] = None,
         prevent_new_task: bool = True
     ):
@@ -112,6 +113,7 @@ class TaskProgressTracker:
             task_id: Optional API task ID to retrieve existing task record
             target: Target string for new task records
             command: Command string for new task records
+            description: Description string for task status display
             dispatch_status: Dispatch status for new task records
             prevent_new_task: If True, don't create new task records for salary commands
         """
@@ -143,6 +145,8 @@ class TaskProgressTracker:
                 if task_id:
                     try:
                         self.api_task = Task.get_by_id(task_id, client)
+                        if description:  # Update description if provided
+                            self.api_task.update(description=description)
                     except Exception as e:
                         logging.error(f"Could not get Task {task_id}: {str(e)}")
                 elif command and target:  # Only create new task if we have command and target
@@ -153,6 +157,7 @@ class TaskProgressTracker:
                             type=command,
                             target=target,
                             command=command,
+                            description=description,
                             dispatchStatus=dispatch_status or "PENDING"
                         )
                     except Exception as e:
