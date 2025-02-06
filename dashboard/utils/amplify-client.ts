@@ -1,7 +1,16 @@
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 
-const client = generateClient<Schema>()
+let _client: ReturnType<typeof generateClient<Schema>> | null = null;
+
+export function getClient() {
+  if (!_client) {
+    _client = generateClient<Schema>();
+  }
+  return _client;
+}
+
+export const client = getClient();
 
 export type AmplifyResponse<T> = { data: T; nextToken: string | null }
 export type SubscriptionResponse<T> = { items: T[] }

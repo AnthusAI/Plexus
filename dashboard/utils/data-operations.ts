@@ -58,6 +58,15 @@ type AmplifyClient = ReturnType<typeof generateClient<Schema>> & {
     TaskStage: {
       onUpdate: (options: {}) => { subscribe: (handlers: { next: () => void; error: (error: any) => void }) => { unsubscribe: () => void } };
     };
+    Evaluation: {
+      list: (options: any) => Promise<AmplifyListResult<Schema['Evaluation']['type']>>;
+      listEvaluationByAccountIdAndUpdatedAt: (options: {
+        accountId: string;
+        sortDirection?: 'ASC' | 'DESC';
+        limit?: number;
+        nextToken?: string;
+      }) => Promise<AmplifyListResult<Schema['Evaluation']['type']>>;
+    };
   };
 }
 
@@ -82,13 +91,15 @@ export async function listFromModel<T extends { id: string }>(
   options?: {
     limit?: number,
     filter?: Record<string, any>,
-    nextToken?: string
+    nextToken?: string,
+    sortDirection?: 'ASC' | 'DESC'
   }
 ): Promise<AmplifyListResult<T>> {
   console.log('listFromModel called with:', { modelName, options });
   const currentClient = getClient();
   console.log('client at time of call:', currentClient);
   console.log('client.models at time of call:', currentClient.models);
+  
   try {
     // Collect all results across pages
     let allData: T[] = []
@@ -98,7 +109,8 @@ export async function listFromModel<T extends { id: string }>(
       const response = await (currentClient.models[modelName] as any).list({
         limit: options?.limit,
         filter: options?.filter,
-        nextToken: currentNextToken
+        nextToken: currentNextToken,
+        sortDirection: options?.sortDirection
       });
 
       if (response.data?.length) {
@@ -113,11 +125,17 @@ export async function listFromModel<T extends { id: string }>(
       allData = allData.slice(0, options.limit)
     }
 
-    // Sort by createdAt if available
-    if (allData.length > 0 && 'createdAt' in allData[0]) {
-      allData.sort((a: any, b: any) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      )
+    // Sort by updatedAt if available, otherwise by createdAt
+    if (allData.length > 0) {
+      if ('updatedAt' in allData[0]) {
+        allData.sort((a: any, b: any) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        )
+      } else if ('createdAt' in allData[0]) {
+        allData.sort((a: any, b: any) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )
+      }
     }
 
     return {

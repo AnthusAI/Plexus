@@ -7,10 +7,12 @@ globs:
 Plexus is a documentation and evaluation platform for AI/ML systems, with an Amplify Gen2 Next.js/React dashboard app, and with Python backend code for the AI/ML stuff.  We use Celery with AWS SQS and Dynamo DB for remote task dispatch from the dashboard to worker nodes running Python that send results back through the GraphQL API.
 
 ## Tech Stack
+
 ### Python AI/ML
 - Python
 - LangChain/LangGraph
 - Miniconda environment `py39`
+
 ### Dashboard app
 - Next.js 14.1
 - AWS Amplify Gen2
@@ -19,11 +21,17 @@ Plexus is a documentation and evaluation platform for AI/ML systems, with an Amp
 
 ## Key Directories
 - `plexus`: Python modules for AI/ML, CLI, etc
+
+### Dashboard app
 - `/dashboard/app`: Next.js routes & pages
 - `/dashboard/components`: React components
 - `/dashboard/amplify`: AWS config & resources
+- `/dashboard/app/page.tsx`: Landing page
+- `/dashboard/app/documentation`: Documentation pages
 
 ## Core Files
+
+### Dashboard app
 - `dashboard/app/client-layout.tsx`: Controls auth & public routes via `publicPaths` array
 - `dashboard/amplify/data/resource.ts`: Core data model definitions
 - `dashboard/utils/amplify-client.ts`: API client implementation

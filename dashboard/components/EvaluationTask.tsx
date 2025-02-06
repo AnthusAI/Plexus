@@ -49,7 +49,18 @@ export interface EvaluationTaskData {
   isDatasetClassDistributionBalanced?: boolean | null
   predictedClassDistribution?: { label: string, count: number }[]
   isPredictedClassDistributionBalanced?: boolean | null
-  scoreResults?: Schema['ScoreResult']['type'][]
+  scoreResults?: Array<{
+    id: string
+    value: string | number
+    confidence?: number | null
+    explanation?: string | null
+    metadata?: any
+    createdAt?: string
+    itemId?: string
+    EvaluationId?: string
+    scorecardId?: string
+    [key: string]: any  // Allow additional properties
+  }>
   selectedScoreResult?: Schema['ScoreResult']['type'] | null
 }
 
@@ -157,6 +168,24 @@ interface ParsedScoreResult {
 }
 
 function parseScoreResult(result: any): ParsedScoreResult {
+  if (!result) {
+    console.warn('Received null or undefined score result')
+    return {
+      id: '',
+      value: '',
+      confidence: null,
+      explanation: null,
+      metadata: {
+        human_label: null,
+        correct: false,
+        human_explanation: null,
+        text: null
+      },
+      itemId: null
+    }
+  }
+
+  // Handle metadata parsing with better error handling
   const parsedMetadata = (() => {
     try {
       let metadata = result.metadata
@@ -173,18 +202,32 @@ function parseScoreResult(result: any): ParsedScoreResult {
     }
   })()
 
+  // Extract results from nested structure if present
+  const firstResultKey = parsedMetadata?.results ? 
+    Object.keys(parsedMetadata.results)[0] : null
+  const scoreResult = firstResultKey && parsedMetadata.results ? 
+    parsedMetadata.results[firstResultKey] : null
+
+  // Log the parsing process for debugging
+  console.debug('Score result parsing:', {
+    originalResult: result,
+    parsedMetadata,
+    firstResultKey,
+    scoreResult
+  })
+
   return {
     id: result.id || '',
-    value: String(result.value || ''),
-    confidence: result.confidence || null,
-    explanation: result.explanation || null,
+    value: String(result.value || scoreResult?.value || ''),
+    confidence: result.confidence ?? scoreResult?.confidence ?? null,
+    explanation: result.explanation ?? scoreResult?.explanation ?? null,
     metadata: {
-      human_label: parsedMetadata.human_label || null,
-      correct: Boolean(parsedMetadata.correct),
-      human_explanation: parsedMetadata.human_explanation || null,
-      text: parsedMetadata.text || null
+      human_label: scoreResult?.metadata?.human_label ?? parsedMetadata.human_label ?? null,
+      correct: Boolean(scoreResult?.metadata?.correct ?? parsedMetadata.correct),
+      human_explanation: scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? null,
+      text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? null
     },
-    itemId: result.itemId || null
+    itemId: result.itemId || parsedMetadata.item_id?.toString() || null
   }
 }
 

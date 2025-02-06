@@ -222,9 +222,7 @@ export const Finalizing: Story = {
         {
           ...sampleStages[2],
           status: 'RUNNING',
-          processedItems: 80,
-          totalItems: 100,
-          statusMessage: 'Generating PDF report...'
+          statusMessage: 'Generating final report...'
         }
       ],
       currentStageName: 'Finalizing',

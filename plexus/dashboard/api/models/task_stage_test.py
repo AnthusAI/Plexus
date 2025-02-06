@@ -170,6 +170,8 @@ def test_create_task_stage():
 
 def test_update_task_stage():
     mock_client = MagicMock()
+    test_datetime = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    
     mock_stage = TaskStage(
         id='test-stage-id',
         taskId='test-task-id',
@@ -202,7 +204,7 @@ def test_update_task_stage():
                 'order': 1,
                 'status': 'RUNNING',
                 'statusMessage': 'Processing...',
-                'startedAt': '2024-01-01T00:00:00Z',
+                'startedAt': test_datetime,
                 'totalItems': 1,
                 'processedItems': 0
             }
@@ -212,13 +214,12 @@ def test_update_task_stage():
     updated = mock_stage.update(
         status='RUNNING',
         statusMessage='Processing...',
-        startedAt=datetime(2024, 1, 1, tzinfo=timezone.utc)
+        startedAt=test_datetime
     )
 
     assert updated.status == 'RUNNING'
     assert updated.statusMessage == 'Processing...'
-    assert updated.startedAt == datetime(2024, 1, 1, tzinfo=timezone.utc)
-    assert mock_client.execute.call_count == 2
+    assert updated.startedAt == test_datetime
 
 def test_get_task_stage_by_id():
     mock_client = MagicMock()

@@ -177,9 +177,7 @@ export const Finishing: Story = {
         name: 'Finishing',
         order: 3,
         status: 'RUNNING',
-        processedItems: 80,
-        totalItems: 100,
-        statusMessage: 'Generating PDF report...'
+        statusMessage: 'Generating final report...'
       }
     ],
     currentStageName: 'Finishing',

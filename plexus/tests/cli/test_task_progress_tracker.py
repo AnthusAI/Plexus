@@ -4,28 +4,40 @@ from datetime import datetime, timezone
 from plexus.cli.task_progress_tracker import TaskProgressTracker, Stage, StageConfig
 
 def test_basic_progress_tracking():
-    tracker = TaskProgressTracker(total_items=100)
+    default_stages = {
+        "Default": StageConfig(order=1, total_items=100, status_message="Processing")
+    }
+    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages)
     assert tracker.total_items == 100
     assert tracker.current_items == 0
     assert tracker.progress == 0
     assert tracker.status == "Not started"
 
 def test_update_progress():
-    tracker = TaskProgressTracker(total_items=100)
+    default_stages = {
+        "Default": StageConfig(order=1, total_items=100, status_message="Processing")
+    }
+    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages)
     tracker.update(current_items=50, status="Processing")
     assert tracker.current_items == 50
     assert tracker.progress == 50
     assert tracker.status == "Processing"
 
 def test_elapsed_time():
-    tracker = TaskProgressTracker(total_items=100)
+    default_stages = {
+        "Default": StageConfig(order=1, total_items=100, status_message="Processing")
+    }
+    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages)
     time.sleep(1)  # Sleep to ensure elapsed time
     elapsed = tracker.elapsed_time
     assert elapsed >= 1.0
     assert isinstance(elapsed, float)
 
 def test_estimated_time_remaining():
-    tracker = TaskProgressTracker(total_items=100)
+    default_stages = {
+        "Default": StageConfig(order=1, total_items=100, status_message="Processing")
+    }
+    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages)
     time.sleep(1)  # Process for 1 second
     tracker.update(current_items=50)  # Update halfway through
     # If 50 items took 1 second, remaining 50 should take ~1 second
@@ -74,7 +86,10 @@ def test_stage_management():
     assert tracker.is_complete
 
 def test_context_manager():
-    with TaskProgressTracker(total_items=100) as tracker:
+    default_stages = {
+        "Default": StageConfig(order=1, total_items=100, status_message="Processing")
+    }
+    with TaskProgressTracker(total_items=100, stage_configs=default_stages) as tracker:
         assert tracker.total_items == 100
         tracker.update(current_items=50)
         assert tracker.current_items == 50
@@ -83,7 +98,10 @@ def test_context_manager():
     assert tracker.is_complete
 
 def test_error_handling():
-    tracker = TaskProgressTracker(total_items=100)
+    default_stages = {
+        "Default": StageConfig(order=1, total_items=100, status_message="Processing")
+    }
+    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages)
     
     # Test invalid updates
     with pytest.raises(ValueError):
@@ -102,7 +120,14 @@ def test_error_handling():
         tracker.complete()  # Can't complete before going through all stages
 
 def test_status_message_generation():
-    tracker = TaskProgressTracker(total_items=100)
+    default_stages = {
+        "Default": StageConfig(
+            order=1, 
+            total_items=100, 
+            status_message=None  # Explicitly set to None to allow dynamic messages
+        )
+    }
+    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages)
     
     # Test different progress levels
     tracker.update(current_items=5)
@@ -118,7 +143,10 @@ def test_status_message_generation():
     assert tracker.status == "Complete"
 
 def test_estimated_completion_time():
-    tracker = TaskProgressTracker(total_items=100)
+    default_stages = {
+        "Default": StageConfig(order=1, total_items=100, status_message="Processing")
+    }
+    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages)
     time.sleep(1)  # Process for 1 second
     tracker.update(current_items=50)  # Update halfway through
     
@@ -132,7 +160,10 @@ def test_estimated_completion_time():
     assert 0.8 <= diff <= 1.2  # Allow small margin of error
 
 def test_items_per_second():
-    tracker = TaskProgressTracker(total_items=100)
+    default_stages = {
+        "Default": StageConfig(order=1, total_items=100, status_message="Processing")
+    }
+    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages)
     time.sleep(1)  # Process for 1 second
     tracker.update(current_items=50)  # 50 items in 1 second
     

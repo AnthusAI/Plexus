@@ -128,6 +128,10 @@ class TaskStage(BaseModel):
         )
 
     def update(self, **kwargs) -> 'TaskStage':
+        """Update the task stage."""
+        if 'createdAt' in kwargs:
+            raise ValueError("createdAt cannot be modified")
+
         # Convert datetime fields to ISO format strings
         for field, value in kwargs.items():
             if isinstance(value, datetime):
@@ -136,11 +140,22 @@ class TaskStage(BaseModel):
         mutation = """
         mutation UpdateTaskStage($input: UpdateTaskStageInput!) {
             updateTaskStage(input: $input) {
-                %s
+                id
+                taskId
+                name
+                order
+                status
+                statusMessage
+                startedAt
+                completedAt
+                estimatedCompletionAt
+                processedItems
+                totalItems
             }
         }
-        """ % self.fields()
+        """
 
+        # Get current data to preserve required fields
         query = """
         query GetTaskStage($id: ID!) {
             getTaskStage(id: $id) {
@@ -154,18 +169,32 @@ class TaskStage(BaseModel):
         result = self._client.execute(query, {'id': self.id})
         current_data = result.get('getTaskStage', {})
 
-        # If we don't have current data, use the instance's data
+        # Prepare input data with all required fields
         input_data = {
             'id': self.id,
-            'taskId': current_data.get('taskId', self.taskId),
-            'name': current_data.get('name', self.name),
-            'order': current_data.get('order', self.order),
-            'status': current_data.get('status', self.status),
-            **kwargs
+            'taskId': current_data['taskId'],
+            'name': current_data['name'],
+            'order': current_data['order'],
+            'status': current_data['status']
         }
 
+        # Only add optional fields if they have non-None values
+        for key, value in kwargs.items():
+            if value is not None or key in ['processedItems', 'totalItems']:
+                input_data[key] = value
+
+        # Execute update mutation
         result = self._client.execute(mutation, {'input': input_data})
-        return self.from_dict(result['updateTaskStage'], self._client)
+        if not result or 'updateTaskStage' not in result:
+            raise Exception(f"Failed to update TaskStage {self.id}")
+
+        # Update instance with new data
+        updated = result['updateTaskStage']
+        for key, value in updated.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+        return self
 
     @classmethod
     def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'TaskStage':
