@@ -9,7 +9,8 @@ import asyncio
 
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
-from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_core.output_parsers import JsonOutputParser
+from pydantic import BaseModel, Field
 
 from plexus.apos.nodes.base import APOSNode
 from plexus.apos.graph_state import APOSState
@@ -20,9 +21,26 @@ logger = logging.getLogger('plexus.apos.nodes.mismatch')
 
 class MismatchAnalysisOutput(BaseModel):
     """Schema for mismatch analysis response."""
-    error_category: str
-    root_cause: str
-    detailed_analysis: str
+    error_category: str = Field(
+        description="The category of the error",
+        min_length=1
+    )
+    root_cause: str = Field(
+        description="The root cause of the mismatch",
+        min_length=1
+    )
+    detailed_analysis: str = Field(
+        description="Detailed analysis of the mismatch",
+        min_length=1
+    )
+    prompts_contribution: str = Field(
+        description="Analysis of how the prompts may have contributed to the error",
+        min_length=1
+    )
+
+    class Config:
+        validate_assignment = True
+        extra = "forbid"  # Prevent extra fields
 
 
 class MismatchAnalyzerNode(APOSNode):
@@ -48,15 +66,25 @@ class MismatchAnalyzerNode(APOSNode):
             max_tokens=model_config.max_tokens,
             top_p=model_config.top_p,
             max_retries=model_config.max_retries
-        ).with_structured_output(MismatchAnalysisOutput)
+        )
+        
+        # Set up output parser
+        self.parser = JsonOutputParser(pydantic_object=MismatchAnalysisOutput)
+        
+        # log the format instructions
+        logger.info(f"Format instructions: {self.parser.get_format_instructions()}")
         
         logger.info(f"Initialized mismatch analyzer using {model_config.model_type}")
         self.prompt = self._create_prompt()
         
     def _create_prompt(self):
         """Create the analysis prompt template."""
-        system_template = SystemMessagePromptTemplate.from_template(
-            self.config.analyzer_model.prompts['system_template']
+        system_template = self.config.analyzer_model.prompts['system_template']
+        system_template += "\n\n{format_instructions}"
+        
+        system_message = SystemMessagePromptTemplate.from_template(
+            system_template,
+            partial_variables={"format_instructions": self.parser.get_format_instructions()}
         )
         
         human_template = HumanMessagePromptTemplate.from_template(
@@ -64,7 +92,7 @@ class MismatchAnalyzerNode(APOSNode):
         )
         
         return ChatPromptTemplate.from_messages([
-            system_template,
+            system_message,
             human_template
         ])
     
@@ -85,10 +113,6 @@ class MismatchAnalyzerNode(APOSNode):
             # Debug logging
             state_dict = self.state.dict(exclude_unset=True, exclude_none=True)
             
-            # Convert any non-serializable objects to their string representation for logging
-            state_dict_serializable = {k: str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v 
-                                     for k, v in state_dict.items()}
-            
             # Create token counter callback
             token_counter = TokenCounterCallback()
             
@@ -96,10 +120,24 @@ class MismatchAnalyzerNode(APOSNode):
             messages = self.prompt.format_messages(**state_dict)
             
             # Get analysis from LLM with token counting
-            analysis_result = await self.llm.ainvoke(
+            response = await self.llm.ainvoke(
                 messages,
                 config={"callbacks": [token_counter]}
             )
+            
+            # Debug log the raw response
+            logger.debug(f"Mismatch Raw LLM response: {response.content}")
+            
+            # Clean the response content by removing markdown code block if present
+            content = response.content
+            if content.startswith("```") and content.endswith("```"):
+                # Remove the first line (```json) and the last line (```)
+                content = "\n".join(content.split("\n")[1:-1])
+            
+            # Parse the cleaned response
+            parsed_dict = self.parser.parse(content)
+            logger.debug(f"Parsed dict: {parsed_dict}")
+            analysis_result = MismatchAnalysisOutput(**parsed_dict)
             
             # Track cost
             self.track_llm_cost(
@@ -113,6 +151,7 @@ class MismatchAnalyzerNode(APOSNode):
             mismatch.detailed_analysis = analysis_result.detailed_analysis
             mismatch.error_category = analysis_result.error_category
             mismatch.root_cause = analysis_result.root_cause
+            mismatch.prompts_contribution = analysis_result.prompts_contribution
             
             logger.info(f"Completed analysis for mismatch {mismatch.form_id}")
             return mismatch
@@ -201,7 +240,8 @@ class MismatchAnalyzerNode(APOSNode):
                             transcript_text=mismatch.get('transcript', ''),
                             model_answer=mismatch.get('predicted', ''),
                             ground_truth=mismatch.get('ground_truth', ''),
-                            original_explanation=mismatch.get('explanation', '')
+                            original_explanation=mismatch.get('explanation', ''),
+                            prompts_contribution=mismatch.get('prompts_contribution', '')
                         )
                     else:
                         # If it's already a MismatchAnalysis, use it as is
@@ -223,7 +263,8 @@ class MismatchAnalyzerNode(APOSNode):
                         'original_explanation': m.original_explanation,
                         'detailed_analysis': m.detailed_analysis,
                         'error_category': m.error_category,
-                        'root_cause': m.root_cause
+                        'root_cause': m.root_cause,
+                        'prompts_contribution': m.prompts_contribution
                     }
                     mismatch_dicts.append(mismatch_dict)
                 
