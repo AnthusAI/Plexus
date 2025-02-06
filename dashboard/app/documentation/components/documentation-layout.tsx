@@ -105,16 +105,13 @@ const docSections: DocSidebarItem[] = [
     ],
   },
   {
-    name: "Worker Nodes",
-    href: "/documentation/worker-nodes",
-  },
-  {
-    name: "plexus CLI Tool",
-    href: "/documentation/cli",
-  },
-  {
-    name: "Python SDK Reference",
-    href: "/documentation/sdk",
+    name: "Advanced",
+    href: "/documentation/advanced",
+    items: [
+      { name: "plexus CLI Tool", href: "/documentation/advanced/cli" },
+      { name: "Worker Nodes", href: "/documentation/advanced/worker-nodes" },
+      { name: "Python SDK Reference", href: "/documentation/advanced/sdk" },
+    ],
   },
 ]
 

@@ -20,6 +20,16 @@ export default function BasicsPage() {
           <h2 className="text-2xl font-semibold mb-4">Core Concepts</h2>
           <div className="grid gap-6 sm:grid-cols-2">
             <div>
+              <h3 className="text-xl font-medium mb-2">Items</h3>
+              <p className="text-muted-foreground mb-4">
+                Individual pieces of content that you want to analyze or evaluate using Plexus. Items are the core units that get scored.
+              </p>
+              <Link href="/documentation/basics/items">
+                <DocButton>Learn about Items</DocButton>
+              </Link>
+            </div>
+
+            <div>
               <h3 className="text-xl font-medium mb-2">Sources</h3>
               <p className="text-muted-foreground mb-4">
                 Input data for evaluation, including text and audio content. Sources are the foundation

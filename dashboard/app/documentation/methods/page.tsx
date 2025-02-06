@@ -12,7 +12,7 @@ export default function MethodsPage() {
     <div className="max-w-4xl mx-auto py-8 px-6">
       <h1 className="text-4xl font-bold mb-4">Methods</h1>
       <p className="text-lg text-muted-foreground mb-8">
-        Step-by-step guides for common operations and workflows in Plexus.
+        Welcome to our step-by-step guides section. Here you'll find detailed, practical instructions for all common operations in Plexus. Whether you're setting up your first source, creating scorecards, or running evaluations, these guides will walk you through each process step by step.
       </p>
 
       <div className="space-y-8">
