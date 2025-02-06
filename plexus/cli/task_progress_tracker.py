@@ -49,7 +49,7 @@ class Stage:
         """Start this stage."""
         self.start_time = time.time()
         self.status = 'RUNNING'
-        logging.info(f"Starting stage {self.name} with total_items={self.total_items}")
+        logging.debug(f"Starting stage {self.name} with total_items={self.total_items}")
 
     def complete(self):
         """Complete this stage."""
@@ -59,9 +59,9 @@ class Stage:
         # This preserves the behavior where some stages don't show progress
         if self.total_items is not None:
             self.processed_items = self.total_items
-            logging.info(f"Completed stage {self.name} with processed_items={self.processed_items}")
+            logging.debug(f"Completed stage {self.name} with processed_items={self.processed_items}")
         else:
-            logging.info(f"Completed stage {self.name} without progress bar")
+            logging.debug(f"Completed stage {self.name} without progress bar")
 
 class TaskProgressTracker:
     """Tracks progress of a multi-stage task with optional API integration.
@@ -163,7 +163,7 @@ class TaskProgressTracker:
             for name, config in stage_configs.items():
                 # Don't set total_items for finalizing stage
                 stage_total_items = None if name.lower() == 'finalizing' else config.total_items
-                logging.info(f"Initializing stage {name} with total_items={stage_total_items}")
+                logging.debug(f"Initializing stage {name} with total_items={stage_total_items}")
                 self._stages[name] = Stage(
                     name=name,
                     order=config.order,
@@ -190,7 +190,7 @@ class TaskProgressTracker:
                             order=stage.order
                         )
                         self._stage_ids[name] = new_stage.id
-                        logging.info(f"Created stage {name} with ID: {new_stage.id}")
+                        logging.debug(f"Created stage {name} with ID: {new_stage.id}")
 
                 self._update_api_task_progress()
 
@@ -214,9 +214,9 @@ class TaskProgressTracker:
         if self.current_stage:
             if self.current_stage.name.lower() != 'finalizing':
                 self.current_stage.processed_items = current_items
-                logging.info(f"Updated stage {self.current_stage.name} progress: {current_items}/{self.current_stage.total_items}")
+                logging.debug(f"Updated stage {self.current_stage.name} progress: {current_items}/{self.current_stage.total_items}")
             else:
-                logging.info(f"Skipping progress update for finalizing stage")
+                logging.debug(f"Skipping progress update for finalizing stage")
 
         # Update status message
         if status:
@@ -237,7 +237,7 @@ class TaskProgressTracker:
         current = self.current_stage
         if current:
             current.complete()
-            logging.info(f"Completed stage {current.name}")
+            logging.debug(f"Completed stage {current.name}")
 
         # Find next stage
         next_stages = [
@@ -250,7 +250,7 @@ class TaskProgressTracker:
         next_stage = min(next_stages, key=lambda s: s.order)
         self._current_stage_name = next_stage.name
         next_stage.start()
-        logging.info(f"Advanced to stage {next_stage.name}")
+        logging.debug(f"Advanced to stage {next_stage.name}")
 
         # Update API task if we have one
         if self.api_task:
@@ -294,7 +294,7 @@ class TaskProgressTracker:
     def _update_api_task_progress(self):
         """Update API task record with current progress asynchronously."""
         if not self.api_task:
-            logging.info("No API task available, skipping progress update")
+            logging.debug("No API task available, skipping progress update")
             return
 
         # Ensure only one API update is in progress at a time
@@ -304,9 +304,9 @@ class TaskProgressTracker:
 
         try:
             stage_configs = {}
-            logging.info("\nPreparing API task update:")
-            logging.info(f"Current stage: {self._current_stage_name}")
-            logging.info(f"Overall progress: {self.current_items}/{self.total_items}")
+            logging.debug("\nPreparing API task update:")
+            logging.debug(f"Current stage: {self._current_stage_name}")
+            logging.debug(f"Overall progress: {self.current_items}/{self.total_items}")
 
             for name, stage in self._stages.items():
                 start_time = (
@@ -337,21 +337,21 @@ class TaskProgressTracker:
 
                 stage_configs[name] = config
 
-                logging.info(f"\nStage '{name}' API data:")
-                logging.info(f"  - Order: {stage.order}")
-                logging.info(f"  - Status: {stage.status}")
+                logging.debug(f"\nStage '{name}' API data:")
+                logging.debug(f"  - Order: {stage.order}")
+                logging.debug(f"  - Status: {stage.status}")
                 if name.lower() not in ['setup', 'finalizing']:
-                    logging.info(f"  - Total Items: {stage.total_items}")
-                    logging.info(f"  - Processed Items: {stage.processed_items}")
+                    logging.debug(f"  - Total Items: {stage.total_items}")
+                    logging.debug(f"  - Processed Items: {stage.processed_items}")
                 else:
-                    logging.info(f"  - Total Items: None (not tracked for {name})")
-                    logging.info(f"  - Processed Items: None (not tracked for {name})")
-                logging.info(f"  - Status Message: {stage.status_message or self.status}")
-                logging.info(f"  - Start Time: {start_time}")
-                logging.info(f"  - End Time: {end_time}")
+                    logging.debug(f"  - Total Items: None (not tracked for {name})")
+                    logging.debug(f"  - Processed Items: None (not tracked for {name})")
+                logging.debug(f"  - Status Message: {stage.status_message or self.status}")
+                logging.debug(f"  - Start Time: {start_time}")
+                logging.debug(f"  - End Time: {end_time}")
 
             estimated_completion = self.estimated_completion_time
-            logging.info(f"\nEstimated completion time: {estimated_completion}")
+            logging.debug(f"\nEstimated completion time: {estimated_completion}")
 
             # Compute a JSON string of stage_configs to detect duplicate updates
             config_str = json.dumps(stage_configs, sort_keys=True)
