@@ -370,8 +370,7 @@ def status(task_id: str, loglevel: str) -> None:
                 task_progress = progress.add_task(
                     "Processing...",
                     total=total,
-                    completed=current,
-                    status=status
+                    status=stage_configs["Setup"].status_message
                 )
                 progress.refresh()
 
@@ -459,8 +458,35 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
     if not api_url or not api_key:
         logging.warning("PLEXUS_API_URL or PLEXUS_API_KEY not set, cannot track task")
         return
+
+    # Initialize API client
+    client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+
+    # Get the account ID by key
+    ACCOUNT_KEY = 'call-criteria'
+    # Use GraphQL query to get account by key
+    response = client.execute(
+        """
+        query ListAccountByKey($key: String!) {
+            listAccountByKey(key: $key) {
+                items {
+                    id
+                }
+            }
+        }
+        """,
+        {'key': ACCOUNT_KEY}
+    )
+
+    print("API Response:", response)  # Debug the raw response
+
+    if not response.get('listAccountByKey', {}).get('items'):
+        raise ValueError(f"No account found with key: {ACCOUNT_KEY}")
+        
+    account_id = response['listAccountByKey']['items'][0]['id']
+    logging.info(f"Found account ID: {account_id} for key: {ACCOUNT_KEY}")
     
-    # Initialize progress tracker with API task management
+    # Initialize progress tracker with API task management and account ID
     tracker = TaskProgressTracker(
         total_items=total_items,
         stage_configs=stage_configs,
@@ -474,7 +500,8 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
             "type": "Demo Task",
             "scorecard": "Outbound Sales",
             "score": "DNC Requested?"
-        }
+        },
+        account_id=account_id  # Add the account ID here
     )
     
     with Progress(
@@ -492,7 +519,7 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
         task_progress = progress.add_task(
             "Processing...",
             total=total_items,
-            status=tracker.status
+            status=stage_configs["Setup"].status_message
         )
         _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size, max_batch_size, sleep_per_batch)
 

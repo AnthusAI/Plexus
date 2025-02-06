@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 import time
 import logging
 import os
@@ -106,10 +106,10 @@ class TaskProgressTracker:
         description: Optional[str] = None,
         dispatch_status: Optional[str] = None,
         prevent_new_task: bool = True,
-        metadata: Optional[Dict] = None
+        metadata: Optional[Dict] = None,
+        account_id: Optional[str] = None
     ):
-        """
-        Initialize progress tracker with optional API task record management.
+        """Initialize progress tracker with optional API task record management.
         
         Args:
             total_items: Total number of items to process
@@ -119,8 +119,9 @@ class TaskProgressTracker:
             command: Command string for new task records
             description: Description string for task status display
             dispatch_status: Dispatch status for new task records
-            prevent_new_task: If True, don't create new task records for salary commands
+            prevent_new_task: If True, don't create new task records
             metadata: Optional metadata to store with the task
+            account_id: Optional account ID to associate with the task
         """
         self.total_items = total_items
         self.current_items = 0
@@ -157,20 +158,21 @@ class TaskProgressTracker:
                     except Exception as e:
                         logging.error(f"Could not get Task {task_id}: {str(e)}")
                 elif command and target:  # Only create new task if we have command and target
-                    try:
-                        self.api_task = Task.create(
-                            client=client,
-                            accountId="demo_account",
-                            type=metadata.get("type", command) if metadata else command,
-                            target=target,
-                            command=command,
-                            description=description,
-                            metadata=json.dumps(metadata) if metadata else None,
-                            dispatchStatus=dispatch_status or "PENDING",
-                            startedAt=datetime.now(timezone.utc).isoformat()
-                        )
-                    except Exception as e:
-                        logging.error(f"Failed to create task record: {str(e)}")
+                    create_args = {
+                        "client": client,
+                        "type": metadata.get("type", command) if metadata else command,
+                        "target": target,
+                        "command": command,
+                        "description": description,
+                        "metadata": json.dumps(metadata) if metadata else None,
+                        "dispatchStatus": dispatch_status or "PENDING",
+                        "startedAt": datetime.now(timezone.utc).isoformat()
+                    }
+                    # Add account_id if provided
+                    if account_id:
+                        create_args["accountId"] = account_id
+                    
+                    self.api_task = Task.create(**create_args)
         
         # Initialize stages if provided
         if stage_configs:

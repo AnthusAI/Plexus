@@ -10,6 +10,8 @@ import { listRecentTasks, observeRecentTasks } from '@/utils/data-operations'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import { Activity } from 'lucide-react'
+import { useAuthenticator } from '@aws-amplify/ui-react'
+import { useRouter } from 'next/navigation'
 
 // Import the types from data-operations
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
@@ -99,6 +101,10 @@ function transformTaskToActivity(task: ProcessedTask) {
 }
 
 export default function ActivityDashboard() {
+  const { authStatus, user } = useAuthenticator(context => [context.authStatus]);
+  const router = useRouter();
+  
+  // State hooks
   const [displayedTasks, setDisplayedTasks] = useState<ReturnType<typeof transformTaskToActivity>[]>([])
   const [isInitialLoading, setIsInitialLoading] = useState(true)
   const [recentTasks, setRecentTasks] = useState<ProcessedTask[]>([])
@@ -110,16 +116,22 @@ export default function ActivityDashboard() {
     threshold: 0,
   })
 
+  // Add authentication check
+  useEffect(() => {
+    if (authStatus === 'unauthenticated') {
+      router.push('/');
+      return;
+    }
+  }, [authStatus, router]);
+
   useEffect(() => {
     const transformed = recentTasks.map(transformTaskToActivity)
-    console.log('Transformed tasks:', transformed)
     setDisplayedTasks(transformed)
   }, [recentTasks])
 
   useEffect(() => {
     const subscription = observeRecentTasks(12).subscribe({
       next: ({ items, isSynced }) => {
-        console.log('Received task update:', { items, isSynced })
         setRecentTasks(items)
         if (isSynced) {
           setIsInitialLoading(false)
@@ -183,6 +195,11 @@ export default function ActivityDashboard() {
         />
       </div>
     )
+  }
+
+  // Early return for unauthenticated state
+  if (authStatus !== 'authenticated') {
+    return null;
   }
 
   return (

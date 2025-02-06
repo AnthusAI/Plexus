@@ -2,6 +2,7 @@ from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from .base import BaseModel
+from .account import Account
 from ..client import _BaseAPIClient
 import logging
 import uuid
@@ -16,8 +17,10 @@ class Task(BaseModel):
     status: str
     target: str
     command: str
+    description: Optional[str] = None
     metadata: Optional[Dict] = None
     createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
     startedAt: Optional[datetime] = None
     completedAt: Optional[datetime] = None
     estimatedCompletionAt: Optional[datetime] = None
@@ -39,8 +42,10 @@ class Task(BaseModel):
         status: str,
         target: str,
         command: str,
+        description: Optional[str] = None,
         metadata: Optional[Dict] = None,
         createdAt: Optional[datetime] = None,
+        updatedAt: Optional[datetime] = None,
         startedAt: Optional[datetime] = None,
         completedAt: Optional[datetime] = None,
         estimatedCompletionAt: Optional[datetime] = None,
@@ -59,8 +64,10 @@ class Task(BaseModel):
         self.status = status
         self.target = target
         self.command = command
+        self.description = description
         self.metadata = metadata
         self.createdAt = createdAt
+        self.updatedAt = updatedAt
         self.startedAt = startedAt
         self.completedAt = completedAt
         self.estimatedCompletionAt = estimatedCompletionAt
@@ -81,8 +88,10 @@ class Task(BaseModel):
             status
             target
             command
+            description
             metadata
             createdAt
+            updatedAt
             startedAt
             completedAt
             estimatedCompletionAt
@@ -110,52 +119,87 @@ class Task(BaseModel):
         """
 
     @classmethod
-    def create(
-        cls,
-        client: _BaseAPIClient,
-        accountId: str,
-        type: str,
-        target: str,
-        command: str,
-        metadata: Optional[Dict] = None,
-        **kwargs
-    ) -> 'Task':
-        input_data = {
-            'accountId': accountId,
-            'type': type,
-            'target': target,
-            'command': command,
-            'status': kwargs.pop('status', 'PENDING'),
-            'createdAt': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-        }
+    def _get_account_id(cls, client) -> str:
+        """Get the account ID for the call-criteria account."""
+        account = Account.list_by_key(client, "call-criteria")
+        if not account:
+            raise ValueError("No account found with key: call-criteria")
+        return account.id
 
-        if metadata:
-            input_data['metadata'] = metadata
+    @classmethod
+    def create(cls, client, type: str, target: str, command: str, **kwargs) -> 'Task':
+        """Create a new task record.
+        
+        Args:
+            client: The API client instance
+            type: Task type
+            target: Task target
+            command: Command string
+            **kwargs: Additional task fields
+        
+        Returns:
+            Task: The created task instance
+        """
+        # Get the account ID if not provided
+        if 'accountId' not in kwargs:
+            kwargs['accountId'] = cls._get_account_id(client)
 
-        optional_fields = [
-            'startedAt', 'completedAt', 'estimatedCompletionAt',
-            'errorMessage', 'errorDetails', 'stdout', 'stderr',
-            'currentStageId', 'workerNodeId', 'dispatchStatus'
-        ]
-        for field in optional_fields:
-            if field in kwargs:
-                input_data[field] = kwargs[field]
-
-        mutation = """
-        mutation CreateTask($input: CreateTaskInput!) {
-            createTask(input: $input) {
-                %s
+        # Create task with account ID
+        response = client.execute(
+            """
+            mutation CreateTask(
+                $type: String!
+                $target: String!
+                $command: String!
+                $accountId: String!
+                $status: String!
+                $description: String
+                $dispatchStatus: String
+                $metadata: AWSJSON
+            ) {
+                createTask(input: {
+                    type: $type
+                    target: $target
+                    command: $command
+                    accountId: $accountId
+                    status: $status
+                    description: $description
+                    dispatchStatus: $dispatchStatus
+                    metadata: $metadata
+                }) {
+                    id
+                    type
+                    target
+                    command
+                    accountId
+                    status
+                    description
+                    dispatchStatus
+                    metadata
+                    createdAt
+                    updatedAt
+                }
             }
-        }
-        """ % cls.fields()
+            """,
+            {
+                "type": type,
+                "target": target,
+                "command": command,
+                "status": "PENDING",  # Default status for new tasks
+                **kwargs
+            }
+        )
 
-        result = client.execute(mutation, {'input': input_data})
-        return cls.from_dict(result['createTask'], client)
+        if 'errors' in response:
+            raise ValueError(f"Failed to create task: {response['errors']}")
+
+        task_data = response['createTask']
+        return cls(client=client, **task_data)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Task':
         # Convert datetime fields
-        for date_field in ['createdAt', 'startedAt', 'completedAt', 'estimatedCompletionAt']:
+        for date_field in ['createdAt', 'updatedAt', 'startedAt', 'completedAt', 'estimatedCompletionAt']:
             if data.get(date_field):
                 data[date_field] = datetime.fromisoformat(
                     data[date_field].replace('Z', '+00:00')
