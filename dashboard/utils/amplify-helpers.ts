@@ -21,11 +21,13 @@ export async function listFromModel<T extends { id: string }>(
   nextToken?: string,
   limit?: number
 ): Promise<AmplifyListResult<T>> {
-  const isEvaluation = typeof model.listEvaluationByAccountIdAndUpdatedAt === 'function';
+  const isEvaluation = model?.constructor?.name === 'EvaluationModel';
   
   console.log('listFromModel called:', {
     modelName: model?.constructor?.name,
-    hasListByAccountId: typeof model.listEvaluationByAccountIdAndUpdatedAt === 'function',
+    modelType: typeof model,
+    hasGraphQL: !!model?.graphql,
+    graphqlFunctions: Object.keys(model?.graphql || {}),
     filter,
     nextToken,
     limit
@@ -42,40 +44,148 @@ export async function listFromModel<T extends { id: string }>(
         return { data: [], nextToken: null };
       }
 
-      console.log('Using listEvaluationByAccountIdAndUpdatedAt with:', {
+      // Add validation for accountId
+      if (typeof accountId !== 'string' || accountId.trim() === '') {
+        console.error('Invalid accountId:', {
+          accountId,
+          type: typeof accountId,
+          filter
+        });
+        return { data: [], nextToken: null };
+      }
+
+      console.log('Attempting to query evaluations for account:', {
         accountId,
-        limit,
-        nextToken
+        accountIdType: typeof accountId,
+        accountIdLength: accountId.length,
+        filter
       });
 
-      response = await model.listEvaluationByAccountIdAndUpdatedAt({
-        accountId,
-        limit: 100,
-        nextToken,
-        sortDirection: 'DESC'
-      });
+      // Try to use the GSI through GraphQL
+      try {
+        const variables = {
+          accountId: accountId.trim(),
+          sortDirection: 'DESC' as const,
+          limit: limit || 100,
+          nextToken
+        };
 
-      console.log('listEvaluationByAccountIdAndUpdatedAt response:', {
-        dataLength: response?.data?.length,
-        hasNextToken: !!response?.nextToken,
-        firstItem: response?.data?.[0]?.id,
-        lastItem: response?.data?.[response?.data?.length - 1]?.id
-      });
+        console.log('Executing GraphQL query with variables:', variables);
+
+        const graphqlResponse = await model.graphql.query({
+          query: `
+            query ListEvaluationByAccountIdAndUpdatedAt(
+              $accountId: String!
+              $sortDirection: ModelSortDirection!
+              $limit: Int
+              $nextToken: String
+            ) {
+              listEvaluationByAccountIdAndUpdatedAt(
+                accountId: $accountId
+                sortDirection: $sortDirection
+                limit: $limit
+                nextToken: $nextToken
+              ) {
+                items {
+                  id
+                  type
+                  parameters
+                  metrics
+                  metricsExplanation
+                  inferences
+                  accuracy
+                  cost
+                  createdAt
+                  updatedAt
+                  status
+                  startedAt
+                  elapsedSeconds
+                  estimatedRemainingSeconds
+                  totalItems
+                  processedItems
+                  errorMessage
+                  errorDetails
+                  accountId
+                  scorecardId
+                  scoreId
+                  confusionMatrix
+                  scoreGoal
+                  datasetClassDistribution
+                  isDatasetClassDistributionBalanced
+                  predictedClassDistribution
+                  isPredictedClassDistributionBalanced
+                }
+                nextToken
+              }
+            }
+          `,
+          variables,
+          authMode: 'apiKey'
+        });
+
+        console.log('Raw GraphQL response:', {
+          data: graphqlResponse?.data,
+          errors: graphqlResponse?.errors
+        });
+
+        if (graphqlResponse?.errors) {
+          throw new Error(JSON.stringify(graphqlResponse.errors));
+        }
+
+        // Transform the response to match the expected format
+        response = {
+          data: graphqlResponse?.data?.listEvaluationByAccountIdAndUpdatedAt?.items || [],
+          nextToken: graphqlResponse?.data?.listEvaluationByAccountIdAndUpdatedAt?.nextToken
+        };
+
+        console.log('GraphQL query results:', {
+          dataLength: response?.data?.length,
+          hasNextToken: !!response?.nextToken,
+          firstItem: response?.data?.[0]?.updatedAt,
+          lastItem: response?.data?.[response?.data?.length - 1]?.updatedAt,
+          allDates: response?.data?.map((item: { updatedAt: string }) => item.updatedAt).sort((a: string, b: string) => 
+            new Date(b).getTime() - new Date(a).getTime()
+          )
+        });
+      } catch (gsiError) {
+        console.error('GraphQL query failed:', gsiError);
+        
+        // Fall back to filtered list with sorting
+        console.log('Falling back to regular list query');
+        response = await model.list({
+          filter: { accountId: { eq: accountId } },
+          limit: 100,
+          nextToken,
+          sort: {
+            field: 'updatedAt',
+            direction: 'DESC'
+          }
+        });
+
+        console.log('Fallback query results:', {
+          dataLength: response?.data?.length,
+          hasNextToken: !!response?.nextToken,
+          firstItem: response?.data?.[0]?.updatedAt,
+          lastItem: response?.data?.[response?.data?.length - 1]?.updatedAt,
+          allDates: response?.data?.map((item: { updatedAt: string }) => item.updatedAt).sort((a: string, b: string) => 
+            new Date(b).getTime() - new Date(a).getTime()
+          )
+        });
+      }
     } else {
       const options: any = {}
       if (filter) options.filter = filter
       if (nextToken) options.nextToken = nextToken
       if (limit) options.limit = limit
       
-      // Add sorting by updatedAt DESC for evaluations
-      if (model?.constructor?.name === 'EvaluationModel') {
-        options.sort = {
-          field: 'updatedAt',
-          direction: 'DESC'
-        }
-      }
-      
       response = await model.list(options)
+    }
+
+    // Sort the results in memory if we have them
+    if (response?.data && isEvaluation) {
+      response.data.sort((a: any, b: any) => 
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      );
     }
 
     return {
