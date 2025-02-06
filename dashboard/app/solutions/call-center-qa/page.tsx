@@ -34,12 +34,6 @@ export default function CallCenterQAPage() {
                       <p className="text-xl text-muted-foreground mb-8 w-full">
                         Humans still need to steer it, and your team knows best how to do that. Plexus gives your team the tools they need to make it happen.
                       </p>
-                      <div className="flex justify-center xl:justify-start">
-                        <Button size="lg" className="bg-primary text-white">
-                          Book a Demo
-                          <ArrowRight className="ml-2 h-5 w-5" />
-                        </Button>
-                      </div>
                     </div>
                     <div className="w-full md:w-1/2 xl:hidden flex justify-center md:justify-end items-center">
                       <div className="w-full max-w-[400px]">
