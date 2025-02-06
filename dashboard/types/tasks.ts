@@ -1,5 +1,7 @@
 import { BaseTaskData, BaseActivity, ActivityType } from './base'
 import { RingData, TaskStatus } from './shared'
+import type { Schema } from "@/amplify/data/resource"
+import type { LazyLoader } from "@/types/lazy-loader"
 
 // Task Data Types
 export type AlertTaskData = BaseTaskData & {
@@ -50,6 +52,39 @@ export type EvaluationTaskData = BaseTaskData & {
     matrix: number[][]
     labels: string[]
   }
+  scoreGoal?: string | null
+  datasetClassDistribution?: { label: string, count: number }[]
+  isDatasetClassDistributionBalanced?: boolean | null
+  predictedClassDistribution?: { label: string, count: number }[]
+  isPredictedClassDistributionBalanced?: boolean | null
+  metricsExplanation?: string | null
+  metrics?: {
+    name: string
+    value: number
+    unit?: string
+    maximum?: number
+    priority: boolean
+  }[]
+  scoreResults?: {
+    value: string
+    itemId: string
+    metadata: any
+    confidence: number | null
+    explanation: string | null
+    createdAt: string
+    updatedAt: string
+    id: string
+  }[]
+  selectedScoreResult?: {
+    value: string
+    itemId: string
+    metadata: any
+    confidence: number | null
+    explanation: string | null
+    createdAt: string
+    updatedAt: string
+    id: string
+  } | null
 }
 
 export type FeedbackTaskData = BaseTaskData & {
