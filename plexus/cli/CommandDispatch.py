@@ -437,9 +437,19 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
     
     # Create stage configs for TaskProgressTracker
     stage_configs = {
-        "Setup": StageConfig(order=1, status_message="Setting up..."),
-        "Running": StageConfig(order=2, total_items=total_items),
-        "Finishing": StageConfig(order=3, status_message="Finalizing...")
+        "Setup": StageConfig(
+            order=1, 
+            status_message="Initializing demo task..."
+        ),
+        "Running": StageConfig(
+            order=2, 
+            total_items=total_items,
+            status_message="Processing demo items..."
+        ),
+        "Finalizing": StageConfig(
+            order=3, 
+            status_message="Finalizing demo task..."
+        )
     }
     
     # Verify API environment
@@ -456,7 +466,8 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
         stage_configs=stage_configs,
         task_id=task_id,
         target=target,
-        command="command demo",
+        command="plexus command demo",  # Remove $ prefix since component adds it
+        description="Running demo task with progress tracking",
         dispatch_status="DISPATCHED",
         prevent_new_task=False
     )
@@ -485,6 +496,10 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
     import random
     
     try:
+        # Setup stage
+        tracker.update(current_items=0)
+        time.sleep(random.uniform(1.0, 2.0))  # Simulate setup work
+        
         # Main processing stage
         tracker.advance_stage()  # Advance to "Running" stage
         
@@ -534,7 +549,7 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
         
         # Final stage - make sure we update the API one last time
         tracker.update(current_items=current_item)
-        tracker.advance_stage()  # Advance to "Finishing" stage
+        tracker.advance_stage()  # Advance to "Finalizing" stage
         
         # Simulate some finalization work
         time.sleep(random.uniform(1.0, 2.0))

@@ -3,37 +3,14 @@ import { Schema } from '@/amplify/data/resource';
 import { Observable } from 'rxjs';
 
 // Define the shape of the task data we expect from Amplify
-export type AmplifyTask = {
-  id: string;
-  accountId: string;
-  type: string;
-  status: string;
-  target?: string | null;
-  currentStageId?: string | null;
-  updatedAt?: string | null;
-  createdAt: string;
-  scorecardId?: string | null;
-  scoreId?: string | null;
-  stages: () => Promise<{
-    data: Array<{
-      name: string;
-      order: number;
-      status: string;
-      processedItems?: number | null;
-      totalItems?: number | null;
-      startedAt?: string | null;
-      completedAt?: string | null;
-      estimatedCompletionAt?: string | null;
-      statusMessage?: string | null;
-    }>;
-  }>;
-}
+export type AmplifyTask = Schema['Task']['type'];
 
 export type ProcessedTask = {
   id: string;
+  command: string;
   type: string;
   status: string;
-  target?: string | null;
+  target: string;
   currentStageId?: string | null;
   updatedAt?: string | null;
   scorecardId?: string | null;
@@ -148,6 +125,22 @@ export async function listFromModel<T extends { id: string }>(
   }
 }
 
+export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
+  return {
+    id: task.id,
+    command: task.command,
+    type: task.type,
+    status: task.status,
+    target: task.target,
+    currentStageId: task.currentStageId,
+    updatedAt: task.updatedAt,
+    scorecardId: task.scorecardId,
+    scoreId: task.scoreId,
+    createdAt: task.createdAt,
+    stages: task.stages || []
+  };
+}
+
 async function processTask(task: Schema['Task']['type']): Promise<ProcessedTask> {
   let stages: Schema['TaskStage']['type'][] = [];
   try {
@@ -161,6 +154,7 @@ async function processTask(task: Schema['Task']['type']): Promise<ProcessedTask>
   
   return {
     id: task.id,
+    command: task.command,
     type: task.type,
     status: task.status,
     target: task.target,

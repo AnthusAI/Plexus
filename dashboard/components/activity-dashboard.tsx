@@ -67,6 +67,7 @@ function transformTaskToActivity(task: ProcessedTask) {
 
   return {
     id: task.id,
+    command: task.command,
     stages,
     currentStageName: currentStage?.name,
     processedItems: currentStage?.processedItems ?? 0,
@@ -147,6 +148,7 @@ export default function ActivityDashboard() {
       <div className="bg-card rounded-lg p-4 h-full overflow-auto">
         <TaskStatus
           variant="detail"
+          command={task.command}
           stages={task.stages}
           currentStageName={task.currentStageName}
           processedItems={task.processedItems}
@@ -194,6 +196,7 @@ export default function ActivityDashboard() {
                 }}
               >
                 <TaskStatus
+                  command={task.command}
                   stages={task.stages}
                   currentStageName={task.currentStageName}
                   processedItems={task.processedItems}
