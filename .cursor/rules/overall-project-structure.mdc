@@ -41,3 +41,10 @@ Plexus is a documentation and evaluation platform for AI/ML systems, with an Amp
 2. Routes checked against `publicPaths` in `client-layout.tsx`
 3. Protected routes redirect to landing
 4. Data operations flow through `amplify-client.ts`
+
+## How to do basic things:
+- Check types for the dashboard app: `npx tsc --noEmit --pretty --diagnostics`
+- Run all Python tests: `pytest` or `invoke ci`
+- Run all Typescript/dashboard tests: `npm run test`
+- Change Amplify environments: `npx ampx generate outputs --app-id d39vkkujb9n1f6 --branch main` or `npx ampx generate outputs --app-id d39vkkujb9n1f6 --branch develop`
+- 
