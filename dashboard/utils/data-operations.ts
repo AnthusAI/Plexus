@@ -11,12 +11,24 @@ export type ProcessedTask = {
   type: string;
   status: string;
   target: string;
+  metadata?: any;
   currentStageId?: string | null;
   updatedAt?: string | null;
   scorecardId?: string | null;
   scoreId?: string | null;
   createdAt: string;
-  stages: Schema['TaskStage']['type'][];
+  stages: Array<{
+    id: string;
+    name: string;
+    order: number;
+    status: string;
+    processedItems?: number | null;
+    totalItems?: number | null;
+    startedAt?: string | null;
+    completedAt?: string | null;
+    estimatedCompletionAt?: string | null;
+    statusMessage?: string | null;
+  }>;
 };
 
 type AmplifyClient = ReturnType<typeof generateClient<Schema>> & {
@@ -128,17 +140,18 @@ export async function listFromModel<T extends { id: string }>(
 export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
   return {
     id: task.id,
-    command: task.command,
+    command: task.command || '',
     type: task.type,
     status: task.status,
     target: task.target,
+    metadata: task.metadata,
     currentStageId: task.currentStageId,
     updatedAt: task.updatedAt,
     scorecardId: task.scorecardId,
     scoreId: task.scoreId,
-    createdAt: task.createdAt,
-    stages: task.stages || []
-  };
+    createdAt: task.createdAt || new Date().toISOString(),
+    stages: []  // Stages are loaded separately by processTask
+  }
 }
 
 async function processTask(task: Schema['Task']['type']): Promise<ProcessedTask> {
@@ -154,16 +167,28 @@ async function processTask(task: Schema['Task']['type']): Promise<ProcessedTask>
   
   return {
     id: task.id,
-    command: task.command,
+    command: task.command || '',
     type: task.type,
     status: task.status,
     target: task.target,
+    metadata: task.metadata,
     currentStageId: task.currentStageId,
     updatedAt: task.updatedAt,
     scorecardId: task.scorecardId,
     scoreId: task.scoreId,
-    createdAt: task.createdAt ?? new Date().toISOString(),
-    stages
+    createdAt: task.createdAt || new Date().toISOString(),
+    stages: stages.map(stage => ({
+      id: stage.id,
+      name: stage.name,
+      order: stage.order,
+      status: stage.status,
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      startedAt: stage.startedAt,
+      completedAt: stage.completedAt,
+      estimatedCompletionAt: stage.estimatedCompletionAt,
+      statusMessage: stage.statusMessage
+    }))
   };
 }
 

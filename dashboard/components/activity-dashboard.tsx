@@ -8,6 +8,8 @@ import { TaskStatus, TaskStageConfig } from '@/components/ui/task-status'
 import { Schema } from '@/amplify/data/resource'
 import { listRecentTasks, observeRecentTasks } from '@/utils/data-operations'
 import { useMediaQuery } from '@/hooks/use-media-query'
+import { Task, TaskHeader, TaskContent } from '@/components/Task'
+import { Activity } from 'lucide-react'
 
 // Import the types from data-operations
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
@@ -16,6 +18,9 @@ function transformTaskToActivity(task: ProcessedTask) {
   if (!task || !task.id) {
     throw new Error('Invalid task: task or task.id is null')
   }
+
+  // Parse metadata for task info
+  const metadata = task.metadata ? JSON.parse(task.metadata) : {}
 
   // Transform stages if present
   const stages = (task.stages || [])
@@ -65,8 +70,15 @@ function transformTaskToActivity(task: ProcessedTask) {
       return current
     }, null) : null
 
+  // Ensure we have a valid timestamp for the time field
+  const timeStr = task.createdAt || new Date().toISOString()
+
   return {
     id: task.id,
+    type: metadata.type || task.type,
+    scorecard: metadata.scorecard,
+    score: metadata.score,
+    time: timeStr,
     command: task.command,
     stages,
     currentStageName: currentStage?.name,
@@ -77,7 +89,12 @@ function transformTaskToActivity(task: ProcessedTask) {
     completedAt: currentStage?.completedAt ?? undefined,
     status: task.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
     stageConfigs: stages,
-    statusMessage: currentStage?.statusMessage ?? undefined
+    statusMessage: currentStage?.statusMessage ?? undefined,
+    data: {
+      id: task.id,
+      title: metadata.type || task.type,
+      command: task.command
+    }
   }
 }
 
@@ -146,25 +163,23 @@ export default function ActivityDashboard() {
 
     return (
       <div className="bg-card rounded-lg p-4 h-full overflow-auto">
-        <TaskStatus
+        <Task
           variant="detail"
-          command={task.command}
-          stages={task.stages}
-          currentStageName={task.currentStageName}
-          processedItems={task.processedItems}
-          totalItems={task.totalItems}
-          startedAt={task.startedAt}
-          estimatedCompletionAt={task.estimatedCompletionAt}
-          status={task.status}
-          stageConfigs={task.stageConfigs}
-          statusMessage={task.statusMessage}
-          completedAt={task.completedAt}
+          task={task}
           isFullWidth={isFullWidth}
           onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
           onClose={() => {
             setSelectedTask(null)
             setIsFullWidth(false)
           }}
+          renderHeader={(props) => (
+            <TaskHeader {...props}>
+              <div className="flex justify-end w-full">
+                <Activity className="h-6 w-6" />
+              </div>
+            </TaskHeader>
+          )}
+          renderContent={(props) => <TaskContent {...props} />}
         />
       </div>
     )
@@ -195,18 +210,17 @@ export default function ActivityDashboard() {
                   }
                 }}
               >
-                <TaskStatus
-                  command={task.command}
-                  stages={task.stages}
-                  currentStageName={task.currentStageName}
-                  processedItems={task.processedItems}
-                  totalItems={task.totalItems}
-                  startedAt={task.startedAt}
-                  estimatedCompletionAt={task.estimatedCompletionAt}
-                  status={task.status}
-                  stageConfigs={task.stageConfigs}
-                  statusMessage={task.statusMessage}
-                  completedAt={task.completedAt}
+                <Task
+                  variant="grid"
+                  task={task}
+                  renderHeader={(props) => (
+                    <TaskHeader {...props}>
+                      <div className="flex justify-end w-full">
+                        <Activity className="h-6 w-6" />
+                      </div>
+                    </TaskHeader>
+                  )}
+                  renderContent={(props) => <TaskContent {...props} />}
                 />
               </div>
             ))}

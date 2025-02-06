@@ -4,13 +4,16 @@ from typing import Dict, Optional
 import time
 import logging
 import os
+import json
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.task import Task
 import threading
-import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Minimum time between API updates in seconds
+MIN_API_UPDATE_INTERVAL = 0.5  # 500ms
 
 @dataclass
 class StageConfig:
@@ -102,7 +105,8 @@ class TaskProgressTracker:
         command: Optional[str] = None,
         description: Optional[str] = None,
         dispatch_status: Optional[str] = None,
-        prevent_new_task: bool = True
+        prevent_new_task: bool = True,
+        metadata: Optional[Dict] = None
     ):
         """
         Initialize progress tracker with optional API task record management.
@@ -116,6 +120,7 @@ class TaskProgressTracker:
             description: Description string for task status display
             dispatch_status: Dispatch status for new task records
             prevent_new_task: If True, don't create new task records for salary commands
+            metadata: Optional metadata to store with the task
         """
         self.total_items = total_items
         self.current_items = 0
@@ -147,6 +152,8 @@ class TaskProgressTracker:
                         self.api_task = Task.get_by_id(task_id, client)
                         if description:  # Update description if provided
                             self.api_task.update(description=description)
+                        if metadata:  # Update metadata if provided
+                            self.api_task.update(metadata=json.dumps(metadata))
                     except Exception as e:
                         logging.error(f"Could not get Task {task_id}: {str(e)}")
                 elif command and target:  # Only create new task if we have command and target
@@ -154,11 +161,13 @@ class TaskProgressTracker:
                         self.api_task = Task.create(
                             client=client,
                             accountId="demo_account",
-                            type=command,
+                            type=metadata.get("type", command) if metadata else command,
                             target=target,
                             command=command,
                             description=description,
-                            dispatchStatus=dispatch_status or "PENDING"
+                            metadata=json.dumps(metadata) if metadata else None,
+                            dispatchStatus=dispatch_status or "PENDING",
+                            startedAt=datetime.now(timezone.utc).isoformat()
                         )
                     except Exception as e:
                         logging.error(f"Failed to create task record: {str(e)}")
@@ -302,16 +311,35 @@ class TaskProgressTracker:
             logging.debug("No API task available, skipping progress update")
             return
 
+        # Check if this is a critical update (completion or all items processed)
+        is_critical_update = (
+            self.is_complete or 
+            (self.current_items == self.total_items) or
+            (self.current_stage and self.current_stage.status == 'COMPLETED')
+        )
+
+        # Check if enough time has passed since the last update
+        current_time = time.time()
+        time_since_last_update = current_time - self._last_api_update_time
+        if time_since_last_update < MIN_API_UPDATE_INTERVAL and not is_critical_update:
+            logging.debug(f"Skipping non-critical API update - only {time_since_last_update:.3f}s since last update")
+            return
+
         # Ensure only one API update is in progress at a time
         if not self._api_update_lock.acquire(blocking=False):
-            logging.debug("API update already in progress, skipping this update.")
-            return
+            if is_critical_update:
+                logging.info("Critical update waiting for lock...")
+                self._api_update_lock.acquire(blocking=True)  # Wait for lock if critical
+            else:
+                logging.debug("API update already in progress, skipping this update.")
+                return
 
         try:
             stage_configs = {}
             logging.debug("\nPreparing API task update:")
             logging.debug(f"Current stage: {self._current_stage_name}")
             logging.debug(f"Overall progress: {self.current_items}/{self.total_items}")
+            logging.debug(f"Is critical update: {is_critical_update}")
 
             for name, stage in self._stages.items():
                 start_time = (
@@ -360,20 +388,30 @@ class TaskProgressTracker:
 
             # Compute a JSON string of stage_configs to detect duplicate updates
             config_str = json.dumps(stage_configs, sort_keys=True)
-            if self._last_stage_configs_str == config_str:
-                logging.debug("Stage configs unchanged, skipping duplicate API update.")
+            if self._last_stage_configs_str == config_str and not is_critical_update:
+                logging.debug("Stage configs unchanged, skipping non-critical duplicate API update.")
                 return
             else:
                 self._last_stage_configs_str = config_str
+                if is_critical_update:
+                    logging.info("Processing critical update with new stage configs")
 
-            # Offload the API update to a background thread (fire and forget)
-            threading.Thread(target=self._async_update_api_task, args=(stage_configs, estimated_completion), daemon=True).start()
+            # Update the last update time before starting the update
+            self._last_api_update_time = current_time
+
+            # For critical updates, do the update synchronously to ensure it completes
+            if is_critical_update:
+                logging.info("Performing critical update synchronously")
+                self._async_update_api_task(stage_configs, estimated_completion)
+            else:
+                # Offload non-critical updates to a background thread
+                threading.Thread(target=self._async_update_api_task, args=(stage_configs, estimated_completion), daemon=True).start()
         finally:
             if self._api_update_lock.locked():
                 self._api_update_lock.release()
 
     def _async_update_api_task(self, stage_configs, estimated_completion):
-        """Helper method to perform the API task progress update in a background thread."""
+        """Helper method to perform the API task progress update."""
         try:
             # Only update existing stages, never create new ones
             stages = self.api_task.get_stages()
@@ -388,6 +426,7 @@ class TaskProgressTracker:
                     estimatedCompletionAt=estimated_completion
                 )
 
+            logging.debug("API task update completed successfully")
         except Exception as e:
             logging.error("Failed to update API task progress", exc_info=True)
 

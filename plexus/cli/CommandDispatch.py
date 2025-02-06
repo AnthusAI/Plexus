@@ -469,7 +469,12 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
         command="plexus command demo",  # Remove $ prefix since component adds it
         description="Running demo task with progress tracking",
         dispatch_status="DISPATCHED",
-        prevent_new_task=False
+        prevent_new_task=False,
+        metadata={
+            "type": "Demo Task",
+            "scorecard": "Outbound Sales",
+            "score": "DNC Requested?"
+        }
     )
     
     with Progress(
