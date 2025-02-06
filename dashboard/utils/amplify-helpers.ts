@@ -23,6 +23,14 @@ export async function listFromModel<T extends { id: string }>(
 ): Promise<AmplifyListResult<T>> {
   const isEvaluation = typeof model.listEvaluationByAccountIdAndUpdatedAt === 'function';
   
+  console.log('listFromModel called:', {
+    modelName: model?.constructor?.name,
+    hasListByAccountId: typeof model.listEvaluationByAccountIdAndUpdatedAt === 'function',
+    filter,
+    nextToken,
+    limit
+  });
+  
   try {
     let response;
     
@@ -34,6 +42,12 @@ export async function listFromModel<T extends { id: string }>(
         return { data: [], nextToken: null };
       }
 
+      console.log('Using listEvaluationByAccountIdAndUpdatedAt with:', {
+        accountId,
+        limit,
+        nextToken
+      });
+
       response = await model.listEvaluationByAccountIdAndUpdatedAt({
         accountId,
         limit: 100,
@@ -41,11 +55,25 @@ export async function listFromModel<T extends { id: string }>(
         sortDirection: 'DESC'
       });
 
+      console.log('listEvaluationByAccountIdAndUpdatedAt response:', {
+        dataLength: response?.data?.length,
+        hasNextToken: !!response?.nextToken,
+        firstItem: response?.data?.[0]?.id,
+        lastItem: response?.data?.[response?.data?.length - 1]?.id
+      });
     } else {
       const options: any = {}
       if (filter) options.filter = filter
       if (nextToken) options.nextToken = nextToken
       if (limit) options.limit = limit
+      
+      // Add sorting by updatedAt DESC for evaluations
+      if (model?.constructor?.name === 'EvaluationModel') {
+        options.sort = {
+          field: 'updatedAt',
+          direction: 'DESC'
+        }
+      }
       
       response = await model.list(options)
     }
