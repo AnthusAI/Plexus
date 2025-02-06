@@ -40,6 +40,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/documentation/basics',
     '/documentation/methods',
     '/documentation/basics/sources',
+    '/documentation/basics/scores',
     '/documentation/basics/scorecards',
     '/documentation/basics/evaluations',
     '/documentation/basics/tasks',
