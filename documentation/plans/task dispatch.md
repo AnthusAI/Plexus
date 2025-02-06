@@ -144,29 +144,30 @@ This document outlines the implementation of Plexus's two-level dispatch system:
 
 ### Phase 4: Backend Integration
 
-1. **Lambda Integration** (In Progress)
+1. **Lambda Integration** ✓
    - ✓ Create Lambda function for Task-to-Celery dispatch
    - ✓ Set up DynamoDB stream trigger
    - ✓ Basic dispatch logic implemented
-   - Implementation challenges:
+   - Implementation challenges resolved:
      1. Initial Node.js Lambda approach:
         - Successfully deployed and triggered by DynamoDB streams
         - Failed to integrate with Celery due to TypeScript limitations
         - Direct SQS message posting worked but wasn't ideal
-     2. Python Lambda attempt:
-        - Better Celery integration potential through native library
-        - Deployment challenges with Amplify's limited Python support
-        - Successfully deployed but stream trigger issues persist
+     2. Python Lambda solution:
+        - Successfully implemented with native Celery library
+        - Properly configured with environment variables
+        - Successfully deployed and triggered by DynamoDB streams
      3. Current status:
-        - Python function deployed but not triggering on Task creation
-        - Investigating stream trigger configuration
-        - May need to fallback to Node.js with direct SQS if Python issues persist
+        - ✓ Python function successfully deployed
+        - ✓ Stream trigger working correctly
+        - ✓ Celery task dispatch confirmed
+        - ✓ Progress updates flowing through Task model
+        - ✓ Full end-to-end integration tested and working
    - Remaining tasks:
-     - Debug Python Lambda trigger issues
-     - Verify DynamoDB stream configuration
-     - Test Celery task dispatch from Python
-     - Add proper error handling and logging
-     - Consider fallback to Node.js with direct SQS if needed
+     - Add more comprehensive error handling
+     - Implement retry strategies for edge cases
+     - Add detailed logging for debugging
+     - Set up monitoring and alerting
 
 2. **DynamoDB Indexes** (In Progress)
    - Current state:
@@ -362,34 +363,34 @@ The evaluation command processes scorecard evaluations with:
 
 ## Next Steps
 
-1. **Lambda Function Updates**
-   - Refactor to use Celery library instead of direct SQS messages
-   - Add proper environment configuration:
-     - `CELERY_AWS_ACCESS_KEY_ID`
-     - `CELERY_AWS_SECRET_ACCESS_KEY`
-     - `CELERY_AWS_REGION_NAME`
-     - `CELERY_RESULT_BACKEND_TEMPLATE`
-   - Add error handling and retries
-   - Add logging and monitoring
+1. **System Hardening**
+   - Add comprehensive error handling to Lambda function
+   - Implement retry strategies for network issues
+   - Add detailed logging for debugging
+   - Set up monitoring and alerting
+   - Add dead letter queues for failed tasks
+   - Implement task timeout handling
 
-2. **DynamoDB Index Updates**
-   - Deploy changes one at a time:
-     1. Add sort key to `scorecardId` index
-     2. Add sort key to `scoreId` index
-     3. Remove redundant `updatedAt` index
-   - Verify query performance after each change
-   - Update application code to use new index patterns
+2. **Performance Optimization**
+   - Profile Lambda function performance
+   - Optimize DynamoDB read/write patterns
+   - Tune Celery worker configurations
+   - Implement task batching where appropriate
+   - Add performance metrics collection
+   - Set up performance monitoring
 
 3. **Testing & Validation**
-   - Test Task creation through UI
-   - Verify Lambda triggers
-   - Confirm Celery task dispatch
-   - Check task progress updates
-   - Validate error handling
-   - Test concurrent operations
+   - Add integration tests for full task lifecycle
+   - Test error recovery scenarios
+   - Validate concurrent task handling
+   - Test system under load
+   - Verify monitoring accuracy
+   - Document testing procedures
 
 4. **Documentation**
    - Update deployment procedures
    - Document environment configuration
    - Add troubleshooting guides
-   - Document index usage patterns 
+   - Document index usage patterns
+   - Create operational runbooks
+   - Add monitoring documentation 

@@ -45,11 +45,7 @@ def create_celery_app() -> Celery:
         raise ValueError("Missing required AWS credentials in environment")
 
     # Construct broker URL from AWS credentials
-    broker_url = "sqs://{aws_access_key}:{aws_secret_key}@".format(
-        aws_access_key=aws_access_key,
-        aws_secret_key=aws_secret_key,
-        aws_region_name=aws_region,
-    )
+    broker_url = f"sqs://{aws_access_key}:{aws_secret_key}@sqs.{aws_region}.amazonaws.com"
 
     # Construct backend URL from template and AWS credentials
     backend_url_template = os.getenv("CELERY_RESULT_BACKEND_TEMPLATE")
@@ -66,10 +62,6 @@ def create_celery_app() -> Celery:
         "plexus-actions",
         broker=broker_url,
         backend=backend_url,
-        broker_transport_options={
-            "region": aws_region,
-            "is_secure": True,
-        },
     )
     
     logging.debug("Celery Configuration:")
@@ -81,6 +73,41 @@ def create_celery_app() -> Celery:
     app.conf.update(
         broker_connection_retry_on_startup=True,
         task_default_queue='celery',
+        task_acks_late=False,  # Change to early ack to prevent redelivery
+        task_reject_on_worker_lost=True,
+        worker_prefetch_multiplier=0,  # Disable prefetch completely
+        worker_max_tasks_per_child=100, # Restart worker after 100 tasks
+        broker_transport_options={      
+            "region": aws_region,
+            "visibility_timeout": 1800,  # 30 minutes (matches max task duration)
+            "visibility_timeout_high_priority": 60,  # For priority tasks
+            "polling_interval": 1,      
+            "wait_time_seconds": 20,
+            "queue_name_prefix": "",    
+            "is_secure": True,
+            "predefined_queues": {
+                "celery": {
+                    "url": f"https://sqs.{aws_region}.amazonaws.com/celery",
+                    "access_key_id": aws_access_key,
+                    "secret_access_key": aws_secret_key,
+                    "visibility_timeout": 1800
+                }
+            },
+            "sqs-queue-name": "celery",
+            "sqs-base64-encoded": False,
+            "stall_wait_seconds": 5
+        },
+        # Additional settings to prevent task duplication
+        task_queue_max_priority=10,     # Enable priority queue
+        task_default_priority=5,        # Default task priority
+        task_create_missing_queues=False, # Don't create queues automatically
+        task_default_delivery_mode=1,   # Non-persistent messages
+        broker_transport_options_high_priority={
+            "queue_name_prefix": "high_",
+            "visibility_timeout": 60
+        },
+        worker_soft_shutdown_timeout=30,  # 30s grace period for task completion
+        worker_cancel_long_running_tasks_on_connection_loss=True
     )
     
     return app
@@ -103,29 +130,33 @@ def command():
 @click.option('--loglevel', default='INFO', help='Logging level')
 @click.option(
     '--target-patterns',
-    default="*",
-    help='Comma-separated list of target patterns (e.g. "domain/*,*/subdomain")'
+    help='Comma-separated list of target patterns (e.g. "domain/*,*/subdomain"). If not provided, accepts all targets.'
 )
 def worker(
     concurrency: int,
     queue: str,
     loglevel: str,
-    target_patterns: str
+    target_patterns: Optional[str] = None
 ) -> None:
     """Start a Celery worker for processing remote commands."""
     from .TaskTargeting import TaskTargetMatcher
     
     logging.info("Starting worker initialization...")
     
-    # Parse and validate target patterns
-    patterns = [p.strip() for p in target_patterns.split(",")]
-    try:
-        matcher = TaskTargetMatcher(patterns)
-    except ValueError as e:
-        raise click.BadParameter(f"Invalid target pattern: {e}")
-    
-    # Store matcher in app config for task routing
-    celery_app.conf.task_target_matcher = matcher
+    # Only set up target matching if patterns are provided
+    if target_patterns:
+        # Parse and validate target patterns
+        patterns = [p.strip() for p in target_patterns.split(",")]
+        try:
+            matcher = TaskTargetMatcher(patterns)
+        except ValueError as e:
+            raise click.BadParameter(f"Invalid target pattern: {e}")
+        
+        # Store matcher in app config for task routing
+        celery_app.conf.task_target_matcher = matcher
+        logging.info(f"Target patterns: {patterns}")
+    else:
+        logging.info("No target patterns specified - accepting all targets")
     
     argv = [
         "worker",
@@ -134,13 +165,12 @@ def worker(
         f"--loglevel={loglevel}",
     ]
     logging.info(f"Starting worker with arguments: {argv}")
-    logging.info(f"Target patterns: {patterns}")
     celery_app.worker_main(argv)
 
 @command.command()
 @click.argument('command_string')
 @click.option('--async', 'is_async', is_flag=True, help='Run command asynchronously')
-@click.option('--timeout', default=3600, help='Command timeout in seconds')
+@click.option('--timeout', default=1800, help='Command timeout in seconds')
 @click.option('--loglevel', default='INFO', help='Logging level')
 @click.option(
     '--target',
@@ -394,50 +424,14 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
     from plexus.dashboard.api.client import PlexusDashboardClient
     
     total_items = 2000
-    target_duration = 20  # seconds
-    sleep_per_item = target_duration / total_items
+    target_duration = 20  # Keep the 20 second target
+    min_batch_size = 30
+    max_batch_size = 70
+    avg_batch_size = 50  # For calculating sleep time
+    estimated_batches = total_items / avg_batch_size
+    sleep_per_batch = target_duration / estimated_batches
     
     logging.info("Starting demo task processing...")
-    
-    client = PlexusDashboardClient()
-    task = None
-    
-    if task_id:
-        task = Task.get_by_id(task_id, client)
-    else:
-        # Create a new Task record with metadata as JSON string
-        metadata_str = json.dumps({
-            "total_items": total_items,
-            "target_duration": target_duration
-        })
-        task = Task.create(
-            client=client,
-            accountId="default",  # Using default account for demo
-            type="DEMO",
-            target=target,
-            command="plexus command demo",
-            metadata=metadata_str
-        )
-        task_id = task.id
-        logging.info(f"Created new Task with ID: {task_id}")
-    
-    # Initial state - no dispatch status
-    time.sleep(random.uniform(2.0, 3.0))
-    
-    # Update to dispatched state
-    task.update(dispatchStatus='DISPATCHED')
-    time.sleep(random.uniform(2.0, 3.0))
-    
-    # Simulate Celery task creation
-    task.update(celeryTaskId=f'demo-task-{int(time.time())}')
-    time.sleep(random.uniform(2.0, 3.0))
-    
-    # Simulate worker claiming the task
-    task.update(workerNodeId=f'demo-worker-{random.randint(1000, 9999)}')
-    time.sleep(random.uniform(2.0, 3.0))
-    
-    # Now start actual processing
-    task.start_processing()
     
     # Create stage configs for TaskProgressTracker
     stage_configs = {
@@ -450,8 +444,16 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
     for name, config in stage_configs.items():
         logging.info(f"  {name}: order={config.order}, total_items={config.total_items}, message={config.status_message}")
     
-    # Initialize progress tracker
-    tracker = TaskProgressTracker(total_items=total_items, stage_configs=stage_configs)
+    # Initialize progress tracker with API task management
+    tracker = TaskProgressTracker(
+        total_items=total_items,
+        stage_configs=stage_configs,
+        task_id=task_id,
+        target=target,  # Always pass target
+        command="command demo",  # Always pass command
+        dispatch_status="DISPATCHED",  # Always pass dispatch status
+        prevent_new_task=True  # Always prevent new task creation in demo command
+    )
     
     with Progress(
         TextColumn("[bright_magenta]{task.fields[status]}"),
@@ -472,197 +474,53 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
         )
         
         try:
-            # Initialization stage
-            init_time = random.uniform(4.0, 6.0)  # Random time between 4-6 seconds
-            time.sleep(init_time)
-            
-            # Update Setup stage status before advancing
-            if task:
-                task.update_progress(
-                    0,  # current items
-                    total_items,
-                    {
-                        "Setup": {
-                            "order": stage_configs["Setup"].order,
-                            "totalItems": stage_configs["Setup"].total_items,
-                            "processedItems": 0,
-                            "statusMessage": "Setup complete",
-                            "status": "COMPLETED"
-                        }
-                    }
-                )
-            
-            tracker.advance_stage()  # Complete Setup stage
-            
-            if task:
-                task.update_progress(
-                    tracker.current_items,
-                    tracker.total_items,
-                    {
-                        name: {
-                            "order": config.order,
-                            "totalItems": config.total_items,
-                            "processedItems": stage.processed_items if stage else 0,
-                            "statusMessage": stage.status_message if stage else ""
-                        }
-                        for name, (config, stage) in zip(
-                            stage_configs.keys(),
-                            [(c, tracker._stages.get(n)) for n, c in stage_configs.items()]
-                        )
-                    }
-                )
-            
-            progress.update(
-                task_progress,
-                completed=tracker.current_items,
-                status=tracker.status
-            )
+            # Initial state - simulate setup
+            time.sleep(random.uniform(2.0, 3.0))
             
             # Main processing stage
-            for i in range(total_items):
-                current_item = i + 1
+            tracker.advance_stage()
+            
+            # Process items with random batch sizes
+            current_item = 0
+            while current_item < total_items:
+                # Randomize batch size but ensure we don't exceed total_items
+                batch_size = min(
+                    random.randint(min_batch_size, max_batch_size),
+                    total_items - current_item
+                )
+                current_item += batch_size
+                
                 tracker.update(current_items=current_item)
                 
-                # Update progress every 50 items or on the last item
-                if i % 50 == 0 or i == total_items - 1:
-                    # Update rich progress
-                    progress.update(
-                        task_progress,
-                        completed=current_item,
-                        status=f"{tracker.status} ({tracker.items_per_second:.1f} items/sec)"
-                    )
-                    
-                    # Update Celery progress
-                    CommandProgress.update(
-                        current=current_item,
-                        total=total_items,
-                        status=tracker.status
-                    )
-                    
-                    # Update Task progress if we have a task ID
-                    if task:
-                        current_status = f"{tracker.status} ({tracker.items_per_second:.1f} items/sec)"
-                        task.update_progress(
-                            tracker.current_items,
-                            tracker.total_items,
-                            {
-                                name: {
-                                    "order": config.order,
-                                    "totalItems": config.total_items,
-                                    "processedItems": stage.processed_items if stage else 0,
-                                    "statusMessage": current_status if name == "Running" else (stage.status_message if stage else ""),
-                                    "itemsPerSecond": tracker.items_per_second
-                                }
-                                for name, (config, stage) in zip(
-                                    stage_configs.keys(),
-                                    [(c, tracker._stages.get(n)) for n, c in stage_configs.items()]
-                                )
-                            },
-                            estimated_completion_at=tracker.estimated_completion_time
-                        )
-                
-                time.sleep(sleep_per_item)
-            
-            # Update Running stage status before advancing
-            if task:
-                task.update_progress(
-                    total_items,  # All items processed
-                    total_items,
-                    {
-                        "Running": {
-                            "order": stage_configs["Running"].order,
-                            "totalItems": stage_configs["Running"].total_items,
-                            "processedItems": total_items,
-                            "statusMessage": "Processing complete",
-                            "status": "COMPLETED"
-                        }
-                    }
+                # Update progress for this batch
+                progress.update(
+                    task_progress,
+                    completed=current_item,
+                    status=f"{tracker.status} ({tracker.items_per_second:.1f} items/sec)"
                 )
+                
+                CommandProgress.update(
+                    current=current_item,
+                    total=total_items,
+                    status=tracker.status
+                )
+                
+                # Randomize sleep time slightly around the target
+                batch_sleep = sleep_per_batch * (0.8 + random.random() * 0.4)  # ±20% variation
+                time.sleep(batch_sleep)
             
             # Finishing stage
-            tracker.advance_stage()  # Move to Finishing stage
-            finish_time = random.uniform(2.0, 4.0)  # Random time between 2-4 seconds
+            tracker.advance_stage()
             progress.update(
                 task_progress,
                 completed=total_items,
                 status="Finalizing..."
             )
             
-            time.sleep(finish_time)
-            
-            # Update Finishing stage status before completing
-            if task:
-                task.update_progress(
-                    total_items,
-                    total_items,
-                    {
-                        "Finishing": {
-                            "order": stage_configs["Finishing"].order,
-                            "totalItems": stage_configs["Finishing"].total_items,
-                            "processedItems": 0,
-                            "statusMessage": "Finalizing...",
-                            "status": "COMPLETED"
-                        }
-                    }
-                )
-            
-            time.sleep(finish_time)
-            
-            # Update final status after finishing
-            if task:
-                task.update_progress(
-                    total_items,
-                    total_items,
-                    {
-                        "Finishing": {
-                            "order": stage_configs["Finishing"].order,
-                            "totalItems": stage_configs["Finishing"].total_items,
-                            "processedItems": 0,
-                            "statusMessage": "Processing complete",
-                            "status": "COMPLETED"
-                        }
-                    }
-                )
+            time.sleep(0.5)  # Reduced from random.uniform(2.0, 4.0) to 0.5
             
             # Complete all stages
             tracker.complete()
-            
-            if task:
-                # Debug log current state
-                logging.info("Final tracker state:")
-                for name, stage in tracker._stages.items():
-                    logging.info(f"  {name}: processed={stage.processed_items}/{stage.total_items}, status={stage.status_message}")
-                
-                # Debug log what we're sending to the API
-                stage_updates = {
-                    name: {
-                        "order": config.order,
-                        "totalItems": config.total_items,
-                        "processedItems": stage.processed_items if stage else 0,
-                        "statusMessage": stage.status_message if stage else ""
-                    }
-                    for name, (config, stage) in zip(
-                        stage_configs.keys(),
-                        [(c, tracker._stages.get(n)) for n, c in stage_configs.items()]
-                    )
-                }
-                logging.info("Sending stage updates to API:")
-                for name, update in stage_updates.items():
-                    logging.info(f"  {name}: {update}")
-                
-                task.update_progress(
-                    tracker.current_items,
-                    tracker.total_items,
-                    stage_updates
-                )
-                
-                # Now mark as completed
-                task.complete_processing()
-                
-                # Get current stages to verify their state
-                final_stages = task.get_stages()
-                for stage in final_stages:
-                    logging.info(f"Final stage {stage.name}: status={stage.status}, message={stage.statusMessage}")
             
             success_message = (
                 f"Demo task completed successfully in {tracker.elapsed_time:.1f} seconds "
@@ -676,3 +534,10 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
                 f"({tracker.items_per_second:.1f} items/sec)"
             )
             logging.info(error_message)
+            if tracker.api_task:
+                tracker.api_task.fail_processing("Task cancelled by user")
+        except Exception as e:
+            logging.error(f"Demo task failed: {str(e)}", exc_info=True)
+            if tracker.api_task:
+                tracker.api_task.fail_processing(str(e))
+            raise
