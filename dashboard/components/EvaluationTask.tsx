@@ -49,8 +49,36 @@ export interface EvaluationTaskData {
   isDatasetClassDistributionBalanced?: boolean | null
   predictedClassDistribution?: { label: string, count: number }[]
   isPredictedClassDistributionBalanced?: boolean | null
-  scoreResults?: Schema['ScoreResult']['type'][]
-  selectedScoreResult?: Schema['ScoreResult']['type'] | null
+  scoreResults?: {
+    id: string
+    value: string
+    confidence: number | null
+    explanation: string | null
+    metadata: {
+      human_label: string | null
+      correct: boolean
+      human_explanation?: string | null
+      text?: string | null
+    }
+    itemId: string | null
+    createdAt: string
+    updatedAt: string
+  }[]
+  selectedScoreResult?: {
+    id: string
+    value: string
+    confidence: number | null
+    explanation: string | null
+    metadata: {
+      human_label: string | null
+      correct: boolean
+      human_explanation?: string | null
+      text?: string | null
+    }
+    itemId: string | null
+    createdAt: string
+    updatedAt: string
+  } | null
 }
 
 export interface EvaluationTaskProps {
@@ -240,7 +268,7 @@ const DetailContent = React.memo(({
   const showResultsList = !selectedScoreResult || showAsColumns
   const showResultDetail = selectedScoreResult
 
-  const handleScoreResultSelect = (result: Schema['ScoreResult']['type']) => {
+  const handleScoreResultSelect = (result: NonNullable<EvaluationTaskData['scoreResults']>[number]) => {
     onSelectScoreResult?.(result.id)
   }
 
@@ -249,7 +277,19 @@ const DetailContent = React.memo(({
   }
 
   const parsedScoreResults = useMemo(() => {
-    return data.scoreResults?.map(parseScoreResult) ?? []
+    return data.scoreResults?.map(result => ({
+      id: result.id,
+      value: String(result.value || ''),
+      confidence: result.confidence || null,
+      explanation: result.explanation || null,
+      metadata: {
+        human_label: result.metadata?.human_label || null,
+        correct: Boolean(result.metadata?.correct),
+        human_explanation: result.metadata?.human_explanation || null,
+        text: result.metadata?.text || null
+      },
+      itemId: result.itemId || null
+    })) ?? []
   }, [data.scoreResults])
 
   return (
@@ -359,7 +399,7 @@ const DetailContent = React.memo(({
           <div className="w-full h-full relative">
             <div className="absolute inset-0 pr-0">
               <EvaluationTaskScoreResultDetail
-                result={parseScoreResult(selectedScoreResult)}
+                result={parsedScoreResults.find(r => r.id === selectedScoreResult.id) ?? parsedScoreResults[0]}
                 onClose={handleScoreResultClose}
               />
             </div>
