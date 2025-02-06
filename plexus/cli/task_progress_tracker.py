@@ -6,6 +6,8 @@ import logging
 import os
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.task import Task
+import threading
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -120,6 +122,10 @@ class TaskProgressTracker:
         self.status = "Not started"
         self.is_complete = False
         self.api_task = None
+        self._api_update_lock = threading.Lock()
+        self._last_stage_configs_str = None
+        self._last_api_update_time = 0
+        self._stage_ids = {}  # Map of stage name to API stage ID
 
         # Stage management
         self.stage_configs = stage_configs
@@ -169,8 +175,23 @@ class TaskProgressTracker:
             self._current_stage_name = first_stage.name
             first_stage.start()
 
-            # Update API task with initial stages if we have one
+            # Create API stages once during initialization
             if self.api_task:
+                # Get existing stages first
+                existing_stages = {s.name: s.id for s in self.api_task.get_stages()}
+                
+                # Create any missing stages and store their IDs
+                for name, stage in self._stages.items():
+                    if name in existing_stages:
+                        self._stage_ids[name] = existing_stages[name]
+                    else:
+                        new_stage = self.api_task.create_stage(
+                            name=name,
+                            order=stage.order
+                        )
+                        self._stage_ids[name] = new_stage.id
+                        logging.info(f"Created stage {name} with ID: {new_stage.id}")
+
                 self._update_api_task_progress()
 
     def __enter__(self):
@@ -271,76 +292,99 @@ class TaskProgressTracker:
             self.api_task.complete_processing()
 
     def _update_api_task_progress(self):
-        """Update API task record with current progress."""
+        """Update API task record with current progress asynchronously."""
         if not self.api_task:
             logging.info("No API task available, skipping progress update")
             return
 
-        # Convert stages to API format
-        stage_configs = {}
-        logging.info("\nPreparing API task update:")
-        logging.info(f"Current stage: {self._current_stage_name}")
-        logging.info(f"Overall progress: {self.current_items}/{self.total_items}")
-        
-        for name, stage in self._stages.items():
-            # Convert timestamps to ISO format strings
-            start_time = (
-                datetime.fromtimestamp(stage.start_time, timezone.utc).isoformat()
-                if stage.start_time else None
-            )
-            end_time = (
-                datetime.fromtimestamp(stage.end_time, timezone.utc).isoformat()
-                if stage.end_time else None
-            )
-            
-            # Always include required UI fields
-            config = {
-                "order": stage.order,
-                "statusMessage": stage.status_message or self.status,
-                "status": stage.status,
-                "name": name,  # Required for UI
-                "startedAt": start_time,
-                "completedAt": end_time,
-                "estimatedCompletionAt": None  # Optional, can be added if needed
-            }
-            
-            # Explicitly set progress tracking fields
-            if name.lower() not in ['setup', 'finalizing']:
-                # Only add progress tracking for non-setup/finalizing stages
-                if stage.total_items is not None:
-                    config["totalItems"] = stage.total_items
-                if stage.processed_items is not None:
-                    config["processedItems"] = stage.processed_items
-            else:
-                # Explicitly set null for setup/finalizing stages
-                config["totalItems"] = None
-                config["processedItems"] = None
-                
-            stage_configs[name] = config
-            
-            logging.info(f"\nStage '{name}' API data:")
-            logging.info(f"  - Order: {stage.order}")
-            logging.info(f"  - Status: {stage.status}")
-            if name.lower() not in ['setup', 'finalizing']:
-                logging.info(f"  - Total Items: {stage.total_items}")
-                logging.info(f"  - Processed Items: {stage.processed_items}")
-            else:
-                logging.info(f"  - Total Items: None (not tracked for {name})")
-                logging.info(f"  - Processed Items: None (not tracked for {name})")
-            logging.info(f"  - Status Message: {stage.status_message or self.status}")
-            logging.info(f"  - Start Time: {start_time}")
-            logging.info(f"  - End Time: {end_time}")
+        # Ensure only one API update is in progress at a time
+        if not self._api_update_lock.acquire(blocking=False):
+            logging.debug("API update already in progress, skipping this update.")
+            return
 
-        estimated_completion = self.estimated_completion_time
-        logging.info(f"\nEstimated completion time: {estimated_completion}")
+        try:
+            stage_configs = {}
+            logging.info("\nPreparing API task update:")
+            logging.info(f"Current stage: {self._current_stage_name}")
+            logging.info(f"Overall progress: {self.current_items}/{self.total_items}")
 
-        # Update API task with progress
-        self.api_task.update_progress(
-            current_items=self.current_items,
-            total_items=self.total_items,
-            stage_configs=stage_configs,
-            estimated_completion_at=estimated_completion
-        )
+            for name, stage in self._stages.items():
+                start_time = (
+                    datetime.fromtimestamp(stage.start_time, timezone.utc).isoformat()
+                    if stage.start_time else None
+                )
+                end_time = (
+                    datetime.fromtimestamp(stage.end_time, timezone.utc).isoformat()
+                    if stage.end_time else None
+                )
+                config = {
+                    "order": stage.order,
+                    "statusMessage": stage.status_message or self.status,
+                    "status": stage.status,
+                    "name": name,
+                    "startedAt": start_time,
+                    "completedAt": end_time,
+                    "estimatedCompletionAt": None
+                }
+                if name.lower() not in ['setup', 'finalizing']:
+                    if stage.total_items is not None:
+                        config["totalItems"] = stage.total_items
+                    if stage.processed_items is not None:
+                        config["processedItems"] = stage.processed_items
+                else:
+                    config["totalItems"] = None
+                    config["processedItems"] = None
+
+                stage_configs[name] = config
+
+                logging.info(f"\nStage '{name}' API data:")
+                logging.info(f"  - Order: {stage.order}")
+                logging.info(f"  - Status: {stage.status}")
+                if name.lower() not in ['setup', 'finalizing']:
+                    logging.info(f"  - Total Items: {stage.total_items}")
+                    logging.info(f"  - Processed Items: {stage.processed_items}")
+                else:
+                    logging.info(f"  - Total Items: None (not tracked for {name})")
+                    logging.info(f"  - Processed Items: None (not tracked for {name})")
+                logging.info(f"  - Status Message: {stage.status_message or self.status}")
+                logging.info(f"  - Start Time: {start_time}")
+                logging.info(f"  - End Time: {end_time}")
+
+            estimated_completion = self.estimated_completion_time
+            logging.info(f"\nEstimated completion time: {estimated_completion}")
+
+            # Compute a JSON string of stage_configs to detect duplicate updates
+            config_str = json.dumps(stage_configs, sort_keys=True)
+            if self._last_stage_configs_str == config_str:
+                logging.debug("Stage configs unchanged, skipping duplicate API update.")
+                return
+            else:
+                self._last_stage_configs_str = config_str
+
+            # Offload the API update to a background thread (fire and forget)
+            threading.Thread(target=self._async_update_api_task, args=(stage_configs, estimated_completion), daemon=True).start()
+        finally:
+            if self._api_update_lock.locked():
+                self._api_update_lock.release()
+
+    def _async_update_api_task(self, stage_configs, estimated_completion):
+        """Helper method to perform the API task progress update in a background thread."""
+        try:
+            # Only update existing stages, never create new ones
+            stages = self.api_task.get_stages()
+            for stage in stages:
+                if stage.name in stage_configs:
+                    config = stage_configs[stage.name]
+                    stage.update(**config)
+
+            # Only update the estimated completion time on the task
+            if estimated_completion:
+                self.api_task.update(
+                    estimatedCompletionAt=estimated_completion
+                )
+
+        except Exception as e:
+            logging.error("Failed to update API task progress", exc_info=True)
 
     def _generate_status_message(self) -> str:
         if self.is_complete:
