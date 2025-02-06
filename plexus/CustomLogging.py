@@ -37,10 +37,10 @@ def _get_aws_credentials():
     is_configured = all([access_key, secret_key, region])
     
     if os.getenv('DEBUG'):
-        print(f"AWS Credentials Check:")
-        print(f"- Access Key present: {bool(access_key)}")
-        print(f"- Secret Key present: {bool(secret_key)}")
-        print(f"- Region present: {bool(region)}")
+        logging.debug("AWS Credentials Check:")
+        logging.debug(f"- Access Key present: {bool(access_key)}")
+        logging.debug(f"- Secret Key present: {bool(secret_key)}")
+        logging.debug(f"- Region present: {bool(region)}")
     
     return access_key, secret_key, region, is_configured
 
@@ -50,7 +50,7 @@ def setup_logging(log_group=DEFAULT_LOG_GROUP):
     # Remove existing CloudWatch handler if present
     if cloudwatch_handler:
         logging.getLogger().removeHandler(cloudwatch_handler)
-        print(f"Removed existing CloudWatch handler for log group: {current_log_group}")
+        logging.debug(f"Removed existing CloudWatch handler for log group: {current_log_group}")
     
     handlers = [
         RichHandler(console=console, markup=True, rich_tracebacks=True, 
@@ -65,10 +65,10 @@ def setup_logging(log_group=DEFAULT_LOG_GROUP):
         try:
             stream_name = f"plexus-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
             if os.getenv('DEBUG'):
-                print(f"Attempting to create CloudWatch handler:")
-                print(f"- Log Group: {log_group}")
-                print(f"- Stream Name: {stream_name}")
-                print(f"- AWS Region: {region}")
+                logging.debug(f"Attempting to create CloudWatch handler:")
+                logging.debug(f"- Log Group: {log_group}")
+                logging.debug(f"- Stream Name: {stream_name}")
+                logging.debug(f"- AWS Region: {region}")
             
             cloudwatch_handler = watchtower.CloudWatchLogHandler(
                 log_group=log_group,
@@ -77,21 +77,21 @@ def setup_logging(log_group=DEFAULT_LOG_GROUP):
             handlers.append(cloudwatch_handler)
             current_log_group = log_group
             if os.getenv('DEBUG'):
-                print("Successfully created CloudWatch handler")
+                logging.debug("Successfully created CloudWatch handler")
         except Exception as e:
-            print(f"Error creating CloudWatch handler: {str(e)}")
+            logging.error(f"Error creating CloudWatch handler: {str(e)}")
             cloudwatch_handler = None
             current_log_group = None
     else:
         if os.getenv('DEBUG'):
-            print("Skipping CloudWatch handler - missing AWS credentials")
+            logging.debug("Skipping CloudWatch handler - missing AWS credentials")
         cloudwatch_handler = None
         current_log_group = None
 
     # Configure logging
     logging.basicConfig(
         force=True,
-        level=logging.DEBUG if os.getenv('DEBUG') else logging.INFO,
+        level=logging.DEBUG if os.getenv('DEBUG') else logging.WARNING,  # Change default to WARNING
         format="%(message)s",
         datefmt="[%X]",
         handlers=handlers
@@ -122,7 +122,7 @@ def set_log_group(new_log_group):
     
     setup_logging(new_log_group)
     current_log_group = new_log_group
-    logging.info(f"Switched logging to group: {new_log_group}")
+    logging.debug(f"Switched logging to group: {new_log_group}")  # Change to debug level
 
 def add_log_stream(stream_name):
     """
@@ -150,7 +150,7 @@ def add_log_stream(stream_name):
     logger.addHandler(new_handler)
     
     # Log the addition of the new stream
-    logging.info(f"Added new log stream: {stream_name}")
+    logging.debug(f"Added new log stream: {stream_name}")  # Change to debug level
     
     return new_handler  # Return the handler in case it's needed
 

@@ -26,13 +26,14 @@ def deserialize_dynamo_item(item):
 def lambda_handler(event, context):
     """
     AWS Lambda handler that processes DynamoDB stream events.
-    For each new or modified task record with dispatchStatus 'PENDING', dispatch the task using Celery.
+    For each new task record with dispatchStatus 'PENDING', dispatch the task using Celery.
     """
     logging.info(f"Received event: {json.dumps(event)}")
 
     for record in event.get('Records', []):
         event_name = record.get('eventName')
-        if event_name not in ['INSERT', 'MODIFY']:
+        # Only process INSERT events to dispatch Celery task when Task is first created
+        if event_name != 'INSERT':
             continue
        
         new_image = record.get('dynamodb', {}).get('NewImage')

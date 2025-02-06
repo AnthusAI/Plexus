@@ -48,7 +48,8 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/documentation/methods/add-edit-scorecard',
     '/documentation/methods/add-edit-score',
     '/documentation/methods/evaluate-score',
-    '/documentation/methods/monitor-tasks'
+    '/documentation/methods/monitor-tasks',
+    '/items'
   ];
   const isPublicPath = publicPaths.includes(pathname);
   
@@ -110,7 +111,6 @@ export default function ClientLayout({
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
-          forcedTheme={typeof window !== 'undefined' ? undefined : 'light'}
         >
           <AuthWrapper>{children}</AuthWrapper>
         </ThemeProvider>

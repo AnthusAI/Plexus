@@ -5,7 +5,6 @@ import ClientLayout from "./client-layout";
 import { HydrationOverlay } from "@builder.io/react-hydration-overlay";
 import "@aws-amplify/ui-react/styles.css";
 import { AccountProvider } from "./contexts/AccountContext"
-import { ThemeProvider } from "./contexts/ThemeContext"
 import { SidebarProvider } from "./contexts/SidebarContext"
 
 const inter = Inter({ subsets: ["latin"] });
@@ -59,47 +58,15 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Jersey+20&display=swap"
           rel="stylesheet"
         />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                function getTheme() {
-                  try {
-                    const theme = localStorage.getItem('theme');
-                    if (theme === 'dark' || theme === 'light') return theme;
-                    if (theme === 'system' || !theme) {
-                      return window.matchMedia('(prefers-color-scheme: dark)').matches
-                        ? 'dark'
-                        : 'light';
-                    }
-                    return 'light'; // fallback
-                  } catch (e) {
-                    return 'light'; // fallback if localStorage is not available
-                  }
-                }
-                const theme = getTheme();
-                document.documentElement.classList.add(theme);
-                document.documentElement.style.colorScheme = theme;
-              })();
-            `,
-          }}
-        />
       </head>
       <body className={inter.className}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <AccountProvider>
-            <SidebarProvider>
-              <HydrationOverlay>
-                <ClientLayout>{children}</ClientLayout>
-              </HydrationOverlay>
-            </SidebarProvider>
-          </AccountProvider>
-        </ThemeProvider>
+        <AccountProvider>
+          <SidebarProvider>
+            <HydrationOverlay>
+              <ClientLayout>{children}</ClientLayout>
+            </HydrationOverlay>
+          </SidebarProvider>
+        </AccountProvider>
       </body>
     </html>
   );

@@ -2,6 +2,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, Optional
 import time
+import logging
+import os
+from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.models.task import Task
 
 @dataclass
 class StageConfig:
@@ -31,19 +35,63 @@ class TaskProgressTracker:
     def __init__(
         self,
         total_items: int,
-        stage_configs: Optional[Dict[str, StageConfig]] = None
+        stage_configs: Dict[str, StageConfig],
+        task_id: Optional[str] = None,
+        target: Optional[str] = None,
+        command: Optional[str] = None,
+        dispatch_status: Optional[str] = None,
+        prevent_new_task: bool = True
     ):
+        """
+        Initialize progress tracker with optional API task record management.
+        
+        Args:
+            total_items: Total number of items to process
+            stage_configs: Optional dict mapping stage names to their configs
+            task_id: Optional API task ID to retrieve existing task record
+            target: Target string for new task records
+            command: Command string for new task records
+            dispatch_status: Dispatch status for new task records
+            prevent_new_task: If True, don't create new task records for salary commands
+        """
         self.total_items = total_items
         self.current_items = 0
         self.start_time = time.time()
         self.end_time: Optional[float] = None
         self.status = "Not started"
         self.is_complete = False
+        self.api_task = None
 
         # Stage management
-        self._stage_configs = stage_configs or {}
+        self.stage_configs = stage_configs
         self._stages: Dict[str, Stage] = {}
         self._current_stage_name: Optional[str] = None
+
+        # Only try to get/create task if we're allowed
+        if not prevent_new_task:
+            api_url = os.environ.get('PLEXUS_API_URL')
+            api_key = os.environ.get('PLEXUS_API_KEY')
+            
+            if api_url and api_key:
+                client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+                
+                if task_id:
+                    try:
+                        self.api_task = Task.get_by_id(task_id, client)
+                    except Exception as e:
+                        logging.error(f"Could not get Task {task_id}: {str(e)}")
+                elif command and target:  # Only create new task if we have command and target
+                    try:
+                        self.api_task = Task.create(
+                            client=client,
+                            accountId="demo_account",
+                            type=command,
+                            target=target,
+                            command=command,
+                            dispatchStatus=dispatch_status or "PENDING"
+                        )
+                    except Exception as e:
+                        logging.error(f"Failed to create task record: {str(e)}")
         
         # Initialize stages if provided
         if stage_configs:
@@ -59,6 +107,10 @@ class TaskProgressTracker:
             self._current_stage_name = first_stage.name
             first_stage.start()
 
+            # Update API task with initial stages if we have one
+            if self.api_task:
+                self._update_api_task_progress()
+
     def __enter__(self):
         return self
 
@@ -67,6 +119,7 @@ class TaskProgressTracker:
             self.complete()
 
     def update(self, current_items: int, status: Optional[str] = None):
+        """Update progress and optionally the API task record."""
         if current_items < 0:
             raise ValueError("Current items cannot be negative")
         if current_items > self.total_items:
@@ -84,7 +137,12 @@ class TaskProgressTracker:
         else:
             self.status = self._generate_status_message()
 
+        # Update API task if we have one
+        if self.api_task:
+            self._update_api_task_progress()
+
     def advance_stage(self):
+        """Advance to next stage and update API task if we have one."""
         if not self._stages:
             return
 
@@ -105,7 +163,12 @@ class TaskProgressTracker:
         self._current_stage_name = next_stage.name
         next_stage.start()
 
+        # Update API task if we have one
+        if self.api_task:
+            self._update_api_task_progress()
+
     def complete(self):
+        """Complete tracking and update API task if we have one."""
         if self._stages:
             # Complete current stage if it exists
             if self.current_stage:
@@ -125,6 +188,34 @@ class TaskProgressTracker:
         self.end_time = time.time()
         self.is_complete = True
         self.status = "Complete"
+
+        # Update API task if we have one
+        if self.api_task:
+            self._update_api_task_progress()
+            self.api_task.complete_processing()
+
+    def _update_api_task_progress(self):
+        """Update API task record with current progress."""
+        if not self.api_task:
+            return
+
+        # Convert stages to API format
+        stage_configs = {}
+        for name, stage in self._stages.items():
+            stage_configs[name] = {
+                "order": stage.order,
+                "totalItems": stage.total_items or 0,
+                "processedItems": stage.processed_items or 0,
+                "statusMessage": stage.status_message or self.status
+            }
+
+        # Update API task progress
+        self.api_task.update_progress(
+            self.current_items,
+            self.total_items,
+            stage_configs,
+            estimated_completion_at=self.estimated_completion_time
+        )
 
     def _generate_status_message(self) -> str:
         if self.is_complete:

@@ -1,8 +1,10 @@
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from .base import BaseModel
 from ..client import _BaseAPIClient
+import logging
+import uuid
 
 if TYPE_CHECKING:
     from .task_stage import TaskStage
@@ -24,6 +26,10 @@ class Task(BaseModel):
     stdout: Optional[str] = None
     stderr: Optional[str] = None
     currentStageId: Optional[str] = None
+    workerNodeId: Optional[str] = None
+    dispatchStatus: Optional[str] = None
+    lock_token: Optional[str] = None
+    lock_expires: Optional[datetime] = None
 
     def __init__(
         self,
@@ -43,6 +49,8 @@ class Task(BaseModel):
         stdout: Optional[str] = None,
         stderr: Optional[str] = None,
         currentStageId: Optional[str] = None,
+        workerNodeId: Optional[str] = None,
+        dispatchStatus: Optional[str] = None,
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
@@ -61,6 +69,8 @@ class Task(BaseModel):
         self.stdout = stdout
         self.stderr = stderr
         self.currentStageId = currentStageId
+        self.workerNodeId = workerNodeId
+        self.dispatchStatus = dispatchStatus
 
     @classmethod
     def fields(cls) -> str:
@@ -81,6 +91,8 @@ class Task(BaseModel):
             stdout
             stderr
             currentStageId
+            workerNodeId
+            dispatchStatus
             stages {
                 items {
                     id
@@ -123,7 +135,7 @@ class Task(BaseModel):
         optional_fields = [
             'startedAt', 'completedAt', 'estimatedCompletionAt',
             'errorMessage', 'errorDetails', 'stdout', 'stderr',
-            'currentStageId'
+            'currentStageId', 'workerNodeId', 'dispatchStatus'
         ]
         for field in optional_fields:
             if field in kwargs:
@@ -237,11 +249,11 @@ class Task(BaseModel):
         return [TaskStage.from_dict(stage, self._client) for stage in stages]
 
     def start_processing(self) -> None:
-        """Mark the task as started and update its status."""
-        update_fields = {"status": "RUNNING"}
-        if not self.startedAt:
-            update_fields["startedAt"] = datetime.now(timezone.utc)
-        self.update(**update_fields)
+        """Mark the task as started."""
+        self.update(
+            status='RUNNING',
+            startedAt=datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+        )
 
     def complete_processing(self) -> None:
         """Mark the task as completed."""
@@ -265,120 +277,49 @@ class Task(BaseModel):
 
     def update_progress(
         self,
-        processed_items: int,
+        current_items: int,
         total_items: int,
-        stage_configs: Optional[Dict[str, Dict[str, Any]]] = None,
+        stage_configs: Dict[str, Dict],
         estimated_completion_at: Optional[datetime] = None
     ) -> List['TaskStage']:
-        """
-        Update progress for task stages.
-        
-        Args:
-            processed_items: Number of items processed so far
-            total_items: Total number of items to process
-            stage_configs: Optional dict mapping stage names to their configs:
-                {
-                    "stage_name": {
-                        "order": int,
-                        "totalItems": int,
-                        "processedItems": int
-                    }
-                }
-                If not provided, stages won't be created/updated
-            estimated_completion_at: Optional estimated completion time in UTC
-        
-        Returns:
-            List of current stages in order
-        """
-        from .task_stage import TaskStage
-
-        if not stage_configs:
-            return []
-
+        """Update task progress and stage information."""
         now = datetime.now(timezone.utc)
-
-        # Determine new status based on progress
-        new_status = self.status
-        if processed_items == 0:
-            if self.status not in ["COMPLETED", "FAILED"]:
-                new_status = "PENDING"
-        elif processed_items == total_items:
-            if self.status != "COMPLETED":
-                new_status = "COMPLETED"
-        else:
-            if self.status != "RUNNING":
-                new_status = "RUNNING"
-
-        # Combine all task updates into a single call
-        update_fields = {
-            "updatedAt": now,
-            "status": new_status
-        }
         
-        if estimated_completion_at:
-            update_fields["estimatedCompletionAt"] = estimated_completion_at
+        # Update task progress
+        self.update(
+            estimatedCompletionAt=estimated_completion_at
+        )
         
-        if new_status == "COMPLETED":
-            update_fields["completedAt"] = now
-        
-        self.update(**update_fields)
-
-        # Get or create stages
+        # Get existing stages
         stages = self.get_stages()
-        existing_stage_names = {stage.name for stage in stages}
+        existing_stage_names = {s.name for s in stages}
         
-        # Create any missing stages
+        # Only create new stages for configs that don't have matching existing stages
         for name, config in stage_configs.items():
             if name not in existing_stage_names:
-                stages.append(TaskStage.create(
-                    client=self._client,
-                    taskId=self.id,
+                stage = self.create_stage(
                     name=name,
-                    order=config["order"],
-                    status="PENDING",
-                    processedItems=0,
-                    totalItems=config["totalItems"],
-                    statusMessage=config.get("statusMessage")
-                ))
-
-        # Sort stages by order
-        stages.sort(key=lambda s: s.order)
-
-        # Update stage progress
+                    order=config.get("order", 0)
+                )
+                stages.append(stage)
+        
+        # Update all stages
         for stage in stages:
-            config = stage_configs.get(stage.name)
-            if not config:
-                continue
-
-            processed = config.get("processedItems", 0)
-            total = config.get("totalItems", 0)
-
-            # Combine all stage updates into a single call
-            update_fields = {
-                "processedItems": processed,
-                "totalItems": total,
-                "statusMessage": config.get("statusMessage")
-            }
-
-            # Determine if stage status needs to change
-            if processed == 0:
-                if stage.status not in ["COMPLETED", "FAILED"]:
-                    update_fields["status"] = "PENDING"
-            elif processed == total:
-                if stage.status != "COMPLETED":
-                    update_fields.update({
-                        "status": "COMPLETED",
-                        "completedAt": now
-                    })
-            else:
-                if stage.status != "RUNNING":
-                    update_fields.update({
-                        "status": "RUNNING",
-                        "startedAt": now
-                    })
-
-            stage.update(**update_fields)
-
+            if stage.name in stage_configs:
+                config = stage_configs[stage.name]
+                processed = config.get("processedItems", 0)
+                total = config.get("totalItems", 0)
+                
+                # Update stage
+                stage.update(
+                    processedItems=processed,
+                    totalItems=total,
+                    statusMessage=config.get("statusMessage"),
+                    status="RUNNING" if processed < total else "COMPLETED",
+                    startedAt=now if processed > 0 else None,
+                    completedAt=now if processed == total else None
+                )
+        
         return stages
 
     def fail_current_stage(
@@ -394,4 +335,52 @@ class Task(BaseModel):
                     status="FAILED",
                     statusMessage=error_message,
                     completedAt=datetime.now(timezone.utc)
-                ) 
+                )
+
+    def acquire_lock(self, timeout=1800):
+        if self.lock_token and self.lock_expires > datetime.now(timezone.utc):
+            raise Exception("Task already locked")
+        self.lock_token = str(uuid.uuid4())
+        self.lock_expires = datetime.now(timezone.utc) + timedelta(seconds=timeout)
+        self.update(lock_token=self.lock_token, lock_expires=self.lock_expires)
+
+    def release_lock(self):
+        self.update(lock_token=None, lock_expires=None)
+
+    def create_stage(self, name: str, order: int) -> 'TaskStage':
+        """Create a new TaskStage for this Task."""
+        from .task_stage import TaskStage
+        
+        mutation = """
+        mutation CreateTaskStage($input: CreateTaskStageInput!) {
+            createTaskStage(input: $input) {
+                id
+                taskId
+                name
+                order
+                status
+                statusMessage
+                startedAt
+                completedAt
+                estimatedCompletionAt
+                processedItems
+                totalItems
+            }
+        }
+        """
+        
+        variables = {
+            'input': {
+                'taskId': self.id,
+                'name': name,
+                'order': order,
+                'status': 'PENDING'
+            }
+        }
+        
+        result = self._client.execute(mutation, variables)
+        stage_data = result.get('createTaskStage')
+        if not stage_data:
+            raise Exception("Failed to create TaskStage")
+        
+        return TaskStage.from_dict(stage_data, self._client) 
