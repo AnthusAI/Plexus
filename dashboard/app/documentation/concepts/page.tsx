@@ -4,15 +4,15 @@ import { Metadata } from "next"
 
 export const metadata: Metadata = {
   title: "Basics - Plexus Documentation",
-  description: "Learn about the core concepts and components that make up the Plexus platform."
+  description: "Learn about the core concepts in Plexus"
 }
 
 export default function BasicsPage() {
   return (
     <div className="max-w-4xl mx-auto py-8 px-6">
-      <h1 className="text-4xl font-bold mb-4">Basics</h1>
+      <h1 className="text-4xl font-bold mb-4">Core Concepts</h1>
       <p className="text-lg text-muted-foreground mb-8">
-        Learn about the core concepts and components that make up the Plexus platform.
+        Learn about the fundamental building blocks that make up Plexus.
       </p>
 
       <div className="space-y-8">
@@ -41,13 +41,24 @@ export default function BasicsPage() {
             </div>
 
             <div>
+              <h3 className="text-xl font-medium mb-2">Scores</h3>
+              <p className="text-muted-foreground mb-4">
+                Individual evaluation criteria that define what to measure. Scores are the building blocks
+                of scorecards and can range from simple questions to complex metrics.
+              </p>
+              <Link href="/documentation/basics/scores">
+                <DocButton>Learn about Scores</DocButton>
+              </Link>
+            </div>
+
+            <div>
               <h3 className="text-xl font-medium mb-2">Scorecards</h3>
               <p className="text-muted-foreground mb-4">
-                Collections of evaluation criteria that define how content should be analyzed
-                and scored.
+                Collections of scores that form a complete evaluation framework. Scorecards organize
+                related evaluation criteria into meaningful groups.
               </p>
               <Link href="/documentation/basics/scorecards">
-                <DocButton>Explore Scorecards</DocButton>
+                <DocButton>Learn about Scorecards</DocButton>
               </Link>
             </div>
 
