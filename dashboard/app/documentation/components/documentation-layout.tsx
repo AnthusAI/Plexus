@@ -85,6 +85,7 @@ const docSections: DocSidebarItem[] = [
     name: "Basics",
     href: "/documentation/basics",
     items: [
+      { name: "Items", href: "/documentation/basics/items" },
       { name: "Sources", href: "/documentation/basics/sources" },
       { name: "Scorecards", href: "/documentation/basics/scorecards" },
       { name: "Evaluations", href: "/documentation/basics/evaluations" },
