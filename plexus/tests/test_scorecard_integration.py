@@ -5,6 +5,7 @@ from plexus.Scorecard import Scorecard
 from plexus.scores.LangGraphScore import LangGraphScore
 from plexus.scores.Score import Score
 from plexus.Registries import scorecard_registry
+from decimal import Decimal
 
 class TestLangGraphScore(LangGraphScore):
     """A concrete implementation of LangGraphScore for testing."""
@@ -32,7 +33,7 @@ class TestLangGraphScore(LangGraphScore):
             'completion_tokens': 50,
             'cached_tokens': 0,
             'llm_calls': 1,
-            'total_cost': 0.15
+            'total_cost': Decimal('0.15')
         }
 
 @pytest.fixture
@@ -109,13 +110,13 @@ async def test_scorecard_cost_tracking(test_scorecard):
 
             # Verify that all expected metrics were logged
             expected_metrics = [
-                ('Cost', 0.15),
+                ('Cost', Decimal('0.15')),
                 ('PromptTokens', 100),
                 ('CompletionTokens', 50),
                 ('TotalTokens', 150),
                 ('CachedTokens', 0),
                 ('ExternalAIRequests', 1),
-                ('CostByScorecard', 0.15),
+                ('CostByScorecard', Decimal('0.15')),
                 ('PromptTokensByScorecard', 100),
                 ('CompletionTokensByScorecard', 50),
                 ('TotalTokensByScorecard', 150),
