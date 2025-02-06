@@ -1,3 +1,5 @@
+'use client';
+
 export default function SdkPage() {
   return (
     <div className="max-w-4xl mx-auto py-8 px-6">
@@ -53,16 +55,21 @@ evaluation = plexus.evaluations.create(
         </section>
 
         <section>
-          <h2 className="text-2xl font-semibold mb-4">Coming Soon</h2>
-          <p className="text-muted-foreground">
-            Detailed SDK documentation is currently being developed. Check back soon for:
+          <h2 className="text-2xl font-semibold mb-4">Complete Documentation</h2>
+          <p className="text-muted-foreground mb-4">
+            For complete API reference, authentication guides, advanced usage examples, and best practices, 
+            visit our comprehensive Python SDK documentation:
           </p>
-          <ul className="list-disc pl-6 space-y-2 text-muted-foreground mt-4">
-            <li>Complete API reference</li>
-            <li>Authentication guides</li>
-            <li>Advanced usage examples</li>
-            <li>Best practices</li>
-          </ul>
+          <div className="mt-4">
+            <a 
+              href="https://anthusai.github.io/Plexus/" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md transition-colors"
+            >
+              View Full SDK Documentation →
+            </a>
+          </div>
         </section>
       </div>
     </div>

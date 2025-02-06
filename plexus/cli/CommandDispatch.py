@@ -370,8 +370,7 @@ def status(task_id: str, loglevel: str) -> None:
                 task_progress = progress.add_task(
                     "Processing...",
                     total=total,
-                    completed=current,
-                    status=status
+                    status=stage_configs["Setup"].status_message
                 )
                 progress.refresh()
 
@@ -427,12 +426,6 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
     # Set logging level to INFO for clearer progress output
     logging.getLogger().setLevel(logging.INFO)
     
-    # Flag to easily restore Rich progress bar
-    USE_RICH_PROGRESS = False
-    
-    # Configurable logging frequency (in seconds)
-    LOG_FREQUENCY = 2
-    
     total_items = 2000
     target_duration = 20  # Keep the 20 second target
     min_batch_size = 30
@@ -441,13 +434,21 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
     estimated_batches = total_items / avg_batch_size
     sleep_per_batch = target_duration / estimated_batches
     
-    logging.info("\n=== Starting Demo Task ===")
-    
     # Create stage configs for TaskProgressTracker
     stage_configs = {
-        "Setup": StageConfig(order=1, status_message="Setting up..."),
-        "Running": StageConfig(order=2, total_items=total_items),
-        "Finishing": StageConfig(order=3, status_message="Finalizing...")
+        "Setup": StageConfig(
+            order=1, 
+            status_message="Initializing demo task..."
+        ),
+        "Running": StageConfig(
+            order=2, 
+            total_items=total_items,
+            status_message="Processing demo items..."
+        ),
+        "Finalizing": StageConfig(
+            order=3, 
+            status_message="Finalizing demo task..."
+        )
     }
     
     # Verify API environment
@@ -457,59 +458,86 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
     if not api_url or not api_key:
         logging.warning("PLEXUS_API_URL or PLEXUS_API_KEY not set, cannot track task")
         return
+
+    # Initialize API client
+    client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+
+    # Get the account ID by key
+    ACCOUNT_KEY = 'call-criteria'
+    # Use GraphQL query to get account by key
+    response = client.execute(
+        """
+        query ListAccountByKey($key: String!) {
+            listAccountByKey(key: $key) {
+                items {
+                    id
+                }
+            }
+        }
+        """,
+        {'key': ACCOUNT_KEY}
+    )
+
+    print("API Response:", response)  # Debug the raw response
+
+    if not response.get('listAccountByKey', {}).get('items'):
+        raise ValueError(f"No account found with key: {ACCOUNT_KEY}")
+        
+    account_id = response['listAccountByKey']['items'][0]['id']
+    logging.info(f"Found account ID: {account_id} for key: {ACCOUNT_KEY}")
     
-    # Initialize progress tracker with API task management
+    # Initialize progress tracker with API task management and account ID
     tracker = TaskProgressTracker(
         total_items=total_items,
         stage_configs=stage_configs,
         task_id=task_id,
-        target=target,  # Always pass target
-        command="command demo",  # Always pass command
-        dispatch_status="DISPATCHED",  # Always pass dispatch status
-        prevent_new_task=False  # Always allow task creation for demo command
+        target=target,
+        command="plexus command demo",  # Remove $ prefix since component adds it
+        description="Running demo task with progress tracking",
+        dispatch_status="DISPATCHED",
+        prevent_new_task=False,
+        metadata={
+            "type": "Demo Task",
+            "scorecard": "Outbound Sales",
+            "score": "DNC Requested?"
+        },
+        account_id=account_id  # Add the account ID here
     )
     
-    if USE_RICH_PROGRESS:
-        with Progress(
-            TextColumn("[bright_magenta]{task.fields[status]}"),
-            TextColumn(""),  # Empty column for spacing
-            TextColumn("\n"),
-            SpinnerColumn(style="bright_magenta"),
-            ItemCountColumn(),
-            BarColumn(complete_style="bright_magenta", finished_style="bright_magenta"),
-            TaskProgressColumn(),
-            TimeElapsedColumn(),
-            TimeRemainingColumn(),
-            expand=True
-        ) as progress:
-            task_progress = progress.add_task(
-                "Processing...",
-                total=total_items,
-                status=tracker.status
-            )
-            _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size, max_batch_size, sleep_per_batch, LOG_FREQUENCY)
-    else:
-        # Use simple logging for progress
-        _run_demo_task(tracker, None, None, total_items, min_batch_size, max_batch_size, sleep_per_batch, LOG_FREQUENCY)
+    with Progress(
+        TextColumn("[bright_magenta]{task.fields[status]}"),
+        TextColumn(""),  # Empty column for spacing
+        TextColumn("\n"),
+        SpinnerColumn(style="bright_magenta"),
+        ItemCountColumn(),
+        BarColumn(complete_style="bright_magenta", finished_style="bright_magenta"),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+        expand=True
+    ) as progress:
+        task_progress = progress.add_task(
+            "Processing...",
+            total=total_items,
+            status=stage_configs["Setup"].status_message
+        )
+        _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size, max_batch_size, sleep_per_batch)
 
-def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size, max_batch_size, sleep_per_batch, log_frequency):
-    """Helper function to run the demo task with either Rich progress or logging."""
+def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size, max_batch_size, sleep_per_batch):
+    """Helper function to run the demo task with Rich progress bar."""
     import random
     
     try:
-        # Initial state - simulate setup
-        logging.info("\n=== Starting Demo Task ===")
-        logging.info("Phase 1: Setup")
-        # time.sleep(random.uniform(2.0, 3.0))
+        # Setup stage
+        tracker.update(current_items=0)
+        time.sleep(random.uniform(1.0, 2.0))  # Simulate setup work
         
         # Main processing stage
         tracker.advance_stage()  # Advance to "Running" stage
-        logging.info("Phase 2: Processing")
         
         # Process items with target rate
         current_item = 0
         start_time = time.time()
-        last_log_time = 0  # To control logging frequency
         last_api_update = 0  # To control API update frequency
         target_duration = 20.0  # Target total processing time in seconds
         api_update_interval = 1  # Update API every 1 second
@@ -540,40 +568,26 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
             
             # Calculate progress metrics for display only
             actual_items_per_sec = current_item / elapsed if elapsed > 0 else 0
-            percent_complete = (current_item / total_items) * 100
             
-            # Update progress
-            if progress and task_progress:
-                progress.update(
-                    task_progress,
-                    completed=current_item,
-                    status=f"{tracker.status} ({actual_items_per_sec:.1f} items/sec)"
-                )
-            else:
-                # Only log based on configured frequency
-                if current_time - last_log_time >= log_frequency:
-                    logging.info(
-                        f"[{elapsed:5.1f}s] Progress: [{current_item:4d}/{total_items:4d}] {percent_complete:5.1f}% "
-                        f"({actual_items_per_sec:.0f} items/sec)"
-                    )
-                    last_log_time = current_time
+            # Update Rich progress bar
+            progress.update(
+                task_progress,
+                completed=current_item,
+                status=f"{tracker.status} ({actual_items_per_sec:.1f} items/sec)"
+            )
             
             # Sleep a tiny amount to allow for API updates and logging
             time.sleep(0.1)
         
         # Final stage - make sure we update the API one last time
         tracker.update(current_items=current_item)
-        tracker.advance_stage()  # Advance to "Finishing" stage
+        tracker.advance_stage()  # Advance to "Finalizing" stage
         
         # Simulate some finalization work
         time.sleep(random.uniform(1.0, 2.0))
         
         # Complete the task
         tracker.complete()  # This will mark the task as complete
-        
-        total_time = time.time() - start_time
-        logging.info(f"\nPhase 3: Finishing - Completed in {total_time:.1f} seconds")
-        logging.info("=== Task completed successfully ===\n")
         
     except KeyboardInterrupt:
         error_message = (

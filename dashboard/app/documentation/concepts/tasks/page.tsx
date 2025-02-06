@@ -1,5 +1,6 @@
 import { Button as DocButton } from "@/components/ui/button"
 import Link from "next/link"
+import { TaskAnimation } from "@/components/landing/TaskAnimation"
 
 export default function TasksPage() {
   return (
@@ -18,6 +19,10 @@ export default function TasksPage() {
             resources—Items, Sources, Scorecards, and Evaluations—and the task management system is how these 
             commands get distributed to worker computers for processing.
           </p>
+
+          <div className="mb-8">
+            <TaskAnimation />
+          </div>
 
           <div className="space-y-4">
             <div>
@@ -98,6 +103,10 @@ export default function TasksPage() {
                   The worker processes the task and sends back regular progress updates
                 </li>
               </ul>
+            </div>
+
+            <div className="my-8">
+              <TaskAnimation />
             </div>
 
             <div>

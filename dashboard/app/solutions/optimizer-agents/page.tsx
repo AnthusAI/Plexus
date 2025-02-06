@@ -27,12 +27,6 @@ export default function OptimizerAgentsPage() {
             <p className="text-xl text-muted-foreground text-center">
               Transform LLM-based classifiers from proof-of-concept to production-ready. Our optimizer agents automate the process of aligning prompts with your business needs, using a disciplined, scientific approach to prompt engineering.
             </p>
-            <div className="flex justify-center">
-              <Button size="lg" className="bg-primary text-white">
-                Learn More
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </div>
           </div>
         </div>
       </StandardSection>

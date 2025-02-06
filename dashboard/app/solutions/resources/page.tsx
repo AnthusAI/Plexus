@@ -5,7 +5,7 @@ import { Layout } from '@/components/landing/Layout'
 import { CTASection } from '@/components/landing/CTASection'
 import { Footer } from '@/components/landing/Footer'
 import { Button } from '@/components/ui/button'
-import { ArrowRight, BookOpen, GraduationCap, Video, MessageSquare } from 'lucide-react'
+import { ArrowRight, Lightbulb, GraduationCap, Blocks, MessageSquare } from 'lucide-react'
 import { StandardSection } from '@/components/landing/StandardSection'
 import { FeatureCard } from '@/components/landing/FeatureCard'
 import Link from 'next/link'
@@ -50,37 +50,38 @@ export default function ResourcesPage() {
         fullWidth
       >
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
-          <div className="flex flex-col items-center text-center p-6 rounded-lg transition-all duration-300 hover:bg-accent/5">
-            <BookOpen className="w-16 h-16 mb-6 text-accent" />
-            <h3 className="text-xl font-semibold mb-2">Documentation</h3>
+          <Link href="/documentation/concepts" className="flex flex-col items-center text-center p-6 rounded-lg transition-all duration-300 hover:bg-accent/5">
+            <Lightbulb className="w-16 h-16 mb-6 text-accent" />
+            <h3 className="text-xl font-semibold mb-2">Core Concepts</h3>
             <p className="text-muted-foreground">
-              Comprehensive guides and API references for building with Plexus.
+              Learn the fundamental concepts and architecture of the Plexus platform.
             </p>
-          </div>
-          <div className="flex flex-col items-center text-center p-6 rounded-lg transition-all duration-300 hover:bg-accent/5">
+          </Link>
+          <Link href="/documentation/methods" className="flex flex-col items-center text-center p-6 rounded-lg transition-all duration-300 hover:bg-accent/5">
+            <Blocks className="w-16 h-16 mb-6 text-accent" />
+            <h3 className="text-xl font-semibold mb-2">Methods</h3>
+            <p className="text-muted-foreground">
+              Step-by-step guides for common operations and workflows in Plexus.
+            </p>
+          </Link>
+          <Link href="/documentation/advanced" className="flex flex-col items-center text-center p-6 rounded-lg transition-all duration-300 hover:bg-accent/5">
             <GraduationCap className="w-16 h-16 mb-6 text-accent" />
-            <h3 className="text-xl font-semibold mb-2">Tutorials</h3>
+            <h3 className="text-xl font-semibold mb-2">Advanced</h3>
             <p className="text-muted-foreground">
-              Step-by-step tutorials for common AI agent development scenarios.
+              Advanced tools and concepts for power users and developers.
             </p>
-          </div>
-          <div className="flex flex-col items-center text-center p-6 rounded-lg transition-all duration-300 hover:bg-accent/5">
-            <Video className="w-16 h-16 mb-6 text-accent" />
-            <h3 className="text-xl font-semibold mb-2">Video Guides</h3>
-            <p className="text-muted-foreground">
-              Watch video tutorials and webinars from our team of experts.
-            </p>
-          </div>
-          <div className="flex flex-col items-center text-center p-6 rounded-lg transition-all duration-300 hover:bg-accent/5">
+          </Link>
+          <Link href="https://discord.gg/plexus" className="flex flex-col items-center text-center p-6 rounded-lg transition-all duration-300 hover:bg-accent/5">
             <MessageSquare className="w-16 h-16 mb-6 text-accent" />
             <h3 className="text-xl font-semibold mb-2">Community</h3>
             <p className="text-muted-foreground">
               Join our Discord community to connect with other developers.
             </p>
-          </div>
+          </Link>
         </div>
       </StandardSection>
 
+      {/* Commented out for now - to be used later
       <StandardSection
         headline="Latest Resources"
         headlinePosition="top"
@@ -106,6 +107,7 @@ export default function ResourcesPage() {
           </div>
         </div>
       </StandardSection>
+      */}
 
       <CTASection />
       <Footer />
