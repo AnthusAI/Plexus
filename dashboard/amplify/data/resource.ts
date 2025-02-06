@@ -173,8 +173,7 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
-            idx("scoreId").sortKeys(["updatedAt"]),
-            idx("updatedAt")
+            idx("scoreId").sortKeys(["updatedAt"])
         ]),
 
     BatchJob: a
