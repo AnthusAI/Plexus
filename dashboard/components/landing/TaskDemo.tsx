@@ -189,7 +189,9 @@ const TaskDemoBase = ({
                     stage.name === 'Processing' ? 'COMPLETED' : stage.status,
             completedAt: stage.name === 'Processing' ? stageTime.toISOString() : undefined,
             startedAt: stage.name === 'Finalizing' ? stageTime.toISOString() : undefined,
-            statusMessage: stage.name === 'Finalizing' ? 'Starting finalization process...' : stage.statusMessage
+            statusMessage: stage.name === 'Finalizing' ? 'Starting finalization process...' : stage.statusMessage,
+            processedItems: stage.name === 'Finalizing' ? undefined : stage.processedItems,
+            totalItems: stage.name === 'Finalizing' ? undefined : stage.totalItems
           })))
           setCurrentStage('Finalizing')
 

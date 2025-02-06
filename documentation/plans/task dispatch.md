@@ -122,7 +122,7 @@ This document outlines the implementation of Plexus's two-level dispatch system:
    - Maintain current progress visualization features ✓
    - Add support for rich status messages ✓
 
-4. **Testing & Validation** ✓
+4. **Testing & Validation** (In Progress)
    - Write unit tests for `TaskProgressTracker` ✓
      - Basic progress tracking ✓
      - Update progress ✓
@@ -135,14 +135,23 @@ This document outlines the implementation of Plexus's two-level dispatch system:
      - Estimated completion time ✓
      - Items per second ✓
    - Add integration tests for demo and report tasks ✓
-   - Verify UI updates work correctly ✓
+   - Verify UI updates work correctly (Debugging)
+     - Investigating stage visibility issues in UI
+     - Fixing progress bar behavior for Setup/Finalizing stages
+     - Ensuring proper status message updates
+     - Validating stage transition animations
    - Test error handling and recovery ✓
 
-5. **Command Integration**
-   - Add Task support to evaluation command
-   - Implement consistent error handling
+5. **Command Integration** (Partially Complete)
+   - Add Task support to evaluation command ✓
+   - Implement consistent error handling ✓
+   - Current debugging focus:
+     - Progress bar visibility for different stage types
+     - Stage transition handling in UI
+     - Status message updates during transitions
+     - Proper cleanup of completed stages
 
-### Phase 4: Backend Integration
+### Phase 4: Backend Integration (In Progress)
 
 1. **Lambda Integration** ✓
    - ✓ Create Lambda function for Task-to-Celery dispatch
@@ -265,6 +274,38 @@ The system provides detailed progress information:
 - Dynamic status messages based on progress ✓
 - Clean display using Rich library ✓
 - Support for both local and remote progress updates ✓
+
+### Task Progress UI Behavior
+The system follows specific rules for displaying progress in the UI:
+
+1. **Progress Bar Visibility**
+   - Only stages with `total_items` set will show progress bars in the UI
+   - Setup and Finalizing stages typically should not show progress
+   - Main Processing stages should show progress bars
+
+2. **Stage Configuration**
+   - Each stage can be configured with:
+     - Name and order
+     - Optional total_items for progress tracking
+     - Status messages for user feedback
+     - Start and completion times
+     - Estimated completion time
+
+3. **Implementation Files**
+   - Core Progress Tracking:
+     - `plexus/cli/task_progress_tracker.py`: Main implementation
+     - Contains `TaskProgressTracker`, `StageConfig`, and `Stage` classes
+     - Detailed configuration options in class docstrings
+   - UI Components:
+     - `dashboard/components/Task.tsx`: Main task display component
+     - `dashboard/components/ui/task-status.tsx`: Progress bar implementation
+
+4. **Best Practices**
+   - Setup stages: Quick preparation, no progress bar needed
+   - Processing stages: Main work stages with progress bars
+   - Finalizing stages: Cleanup/completion steps, no progress bar needed
+   - Always provide meaningful status messages for each stage
+   - Use estimated completion times when available
 
 Progress tracking has been integrated into:
 - The demo command (fully tested) ✓
