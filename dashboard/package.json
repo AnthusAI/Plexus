@@ -33,6 +33,7 @@
     "@nivo/calendar": "^0.87.0",
     "@nivo/core": "^0.87.0",
     "@nivo/waffle": "^0.87.0",
+    "@number-flow/react": "^0.5.5",
     "@radix-ui/colors": "^3.0.0",
     "@radix-ui/react-accordion": "^1.2.1",
     "@radix-ui/react-alert-dialog": "^1.1.2",
