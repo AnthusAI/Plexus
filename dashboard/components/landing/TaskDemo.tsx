@@ -89,7 +89,9 @@ const TaskDemoBase = ({
         const now = new Date()
         const endTime = new Date(now.getTime() + DEMO_DURATION)
         
-        setStartTime(now.toISOString())
+        // Set the start time once and only once at the very beginning
+        const taskStartTime = now.toISOString()
+        setStartTime(taskStartTime)
         setEstimatedEndTime(endTime.toISOString())
         setStatus('RUNNING')
 
@@ -106,7 +108,7 @@ const TaskDemoBase = ({
         setStages(prev => prev.map(stage => ({
           ...stage,
           status: stage.name === 'Initializing' ? 'RUNNING' : 'PENDING',
-          startedAt: stage.name === 'Initializing' ? now.toISOString() : undefined,
+          startedAt: taskStartTime,  // Use the same start time for all stages
           statusMessage: stage.name === 'Initializing' ? 'Loading models...' : stage.statusMessage
         })))
 
@@ -131,7 +133,7 @@ const TaskDemoBase = ({
             status: stage.name === 'Initializing' ? 'COMPLETED' : 
                     stage.name === 'Processing' ? 'RUNNING' : 'PENDING',
             completedAt: stage.name === 'Initializing' ? stageTime.toISOString() : undefined,
-            startedAt: stage.name === 'Processing' ? stageTime.toISOString() : undefined,
+            startedAt: taskStartTime,  // Keep using the original start time
             statusMessage: stage.name === 'Processing' ? 'Starting to process items...' : stage.statusMessage
           })))
           setCurrentStage('Processing')
@@ -188,7 +190,7 @@ const TaskDemoBase = ({
             status: stage.name === 'Finalizing' ? 'RUNNING' : 
                     stage.name === 'Processing' ? 'COMPLETED' : stage.status,
             completedAt: stage.name === 'Processing' ? stageTime.toISOString() : undefined,
-            startedAt: stage.name === 'Finalizing' ? stageTime.toISOString() : undefined,
+            startedAt: taskStartTime,  // Keep using the original start time
             statusMessage: stage.name === 'Finalizing' ? 'Starting finalization process...' : stage.statusMessage,
             processedItems: stage.name === 'Finalizing' ? undefined : stage.processedItems,
             totalItems: stage.name === 'Finalizing' ? undefined : stage.totalItems
@@ -268,13 +270,13 @@ const TaskDemoBase = ({
     type: 'Scorecard Evaluation',
     scorecard: 'ABC, Inc Scorecard',
     score: 'DNC Requested?',
-    time: startTime || new Date().toISOString(),
+    time: startTime!,  // Use the original start time, it will always be set
     stages,
     currentStageName: currentStage,
     processedItems: currentProgress,
     totalItems: TOTAL_ITEMS,
-    startedAt: startTime || new Date().toISOString(),
-    estimatedCompletionAt: estimatedEndTime || new Date(Date.now() + DEMO_DURATION).toISOString(),
+    startedAt: startTime!,  // Use the original start time, it will always be set
+    estimatedCompletionAt: estimatedEndTime!,  // Use the original estimated end time
     completedAt: completedTime || undefined,
     status,
     data: {
