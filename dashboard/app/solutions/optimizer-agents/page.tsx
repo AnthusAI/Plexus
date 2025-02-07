@@ -12,15 +12,21 @@ export default function OptimizerAgentsPage() {
   return (
     <Layout>
       <StandardSection
-        headline={
-          <span>
-            <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text">Move The Needle</span> With <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text">AI Agents</span> With <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text">No Code</span>
-          </span>
-        }
+        headline="Move The Needle With AI Agents With No Code"
         headlinePosition="inline"
         variant="hero"
         layout="single"
         fullWidth
+        useWordReveal={true}
+        gradientWords={{
+          "Move": { from: "secondary", to: "accent" },
+          "The": { from: "secondary", to: "accent" },
+          "Needle": { from: "secondary", to: "accent" },
+          "AI": { from: "primary", to: "accent" },
+          "Agents": { from: "primary", to: "accent" },
+          "No": { from: "secondary", to: "accent" },
+          "Code": { from: "secondary", to: "accent" }
+        }}
       >
         <div className="max-w-3xl mx-auto">
           <div className="space-y-8">
