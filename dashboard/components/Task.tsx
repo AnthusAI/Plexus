@@ -155,9 +155,7 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
           <div className="text-lg font-bold">{task.type}</div>
           <div className="text-xs text-muted-foreground">{task.scorecard}</div>
           <div className="text-xs text-muted-foreground">{task.score}</div>
-          {variant === 'detail' && (
-            <div className="text-xs text-muted-foreground mt-1">{formattedTime}</div>
-          )}
+          <div className="text-xs text-muted-foreground mt-1">{formattedTime}</div>
         </div>
         <div className="flex flex-col items-end">
           {variant === 'grid' ? (
@@ -181,11 +179,6 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
                 />
               )}
               {controlButtons}
-            </div>
-          )}
-          {variant === 'grid' && (
-            <div className="text-xs text-muted-foreground flex items-center mt-1">
-              {formattedTime}
             </div>
           )}
         </div>

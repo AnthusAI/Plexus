@@ -38,13 +38,16 @@ export default function PlatformPage() {
   return (
     <Layout>
       <StandardSection
-        headline={
-          <span>
-            A Platform for Running <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text">AI Agents</span> at <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text">Industrial Scale</span>
-          </span>
-        }
+        headline="A Platform for Running AI Agents at Industrial Scale"
         headlinePosition="inline"
         variant="hero"
+        useWordReveal={true}
+        gradientWords={{
+          "AI": { from: "primary", to: "accent" },
+          "Agents": { from: "primary", to: "accent" },
+          "Industrial": { from: "secondary", to: "accent" },
+          "Scale": { from: "secondary", to: "accent" }
+        }}
         leftContent={
           <>
             <p className="text-xl text-muted-foreground mb-8 w-full">
