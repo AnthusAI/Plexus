@@ -33,6 +33,8 @@ class Task(BaseModel):
     dispatchStatus: Optional[str] = None
     lock_token: Optional[str] = None
     lock_expires: Optional[datetime] = None
+    scorecardId: Optional[str] = None
+    scoreId: Optional[str] = None
 
     def __init__(
         self,
@@ -56,6 +58,8 @@ class Task(BaseModel):
         currentStageId: Optional[str] = None,
         workerNodeId: Optional[str] = None,
         dispatchStatus: Optional[str] = None,
+        scorecardId: Optional[str] = None,
+        scoreId: Optional[str] = None,
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
@@ -78,6 +82,8 @@ class Task(BaseModel):
         self.currentStageId = currentStageId
         self.workerNodeId = workerNodeId
         self.dispatchStatus = dispatchStatus
+        self.scorecardId = scorecardId
+        self.scoreId = scoreId
 
     @classmethod
     def fields(cls) -> str:
@@ -102,6 +108,8 @@ class Task(BaseModel):
             currentStageId
             workerNodeId
             dispatchStatus
+            scorecardId
+            scoreId
             stages {
                 items {
                     id
