@@ -9,13 +9,30 @@ from typing import Dict, Any, Callable
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain_core.callbacks import AsyncCallbackHandler
+from langchain_core.output_parsers import JsonOutputParser
+from pydantic import BaseModel, Field
 
 from plexus.apos.nodes.base import APOSNode
 from plexus.apos.graph_state import APOSState
-from plexus.apos.models import PatternAnalysisOutput, SynthesisResult
+from plexus.apos.models import SynthesisResult
 from plexus.apos.utils import TokenCounterCallback
 
 logger = logging.getLogger('plexus.apos.nodes.pattern')
+
+class PatternAnalysisOutput(BaseModel):
+    """Schema for pattern analysis response."""
+    common_issues: list[str] = Field(
+        description="List of common issues identified across mismatches",
+        min_length=1
+    )
+    summary: str = Field(
+        description="Overall summary of how the current prompt is causing mismatches",
+        min_length=1
+    )
+
+    class Config:
+        validate_assignment = True
+        extra = "forbid"
 
 class PatternAnalyzerNode(APOSNode):
     """Node for analyzing patterns across mismatches."""
@@ -31,11 +48,18 @@ class PatternAnalyzerNode(APOSNode):
             max_tokens=model_config.max_tokens,
             top_p=model_config.top_p,
             max_retries=model_config.max_retries
-        ).with_structured_output(PatternAnalysisOutput)
+        )
+        
+        # Set up output parser
+        self.parser = JsonOutputParser(pydantic_object=PatternAnalysisOutput)
         
         # Set up prompt templates
+        system_template = model_config.prompts['system_template']
+        system_template += "\n\n{format_instructions}"
+        
         self.system_template = SystemMessagePromptTemplate.from_template(
-            model_config.prompts['system_template']
+            system_template,
+            partial_variables={"format_instructions": self.parser.get_format_instructions()}
         )
         self.human_template = HumanMessagePromptTemplate.from_template(
             model_config.prompts['human_template']
@@ -54,6 +78,7 @@ Question: {mismatch.question_name}
 Model's Answer: {mismatch.model_answer}
 Correct Answer: {mismatch.ground_truth}
 Analysis: {mismatch.detailed_analysis}
+Prompts Contribution: {mismatch.prompts_contribution}
 ---"""
     
     def get_node_handler(self) -> Callable[[APOSState], Dict[str, Any]]:
@@ -76,10 +101,19 @@ Analysis: {mismatch.detailed_analysis}
                 
                 # Get analysis from LLM using state dict with token counting
                 messages = self.chat_prompt.format_messages(**state.dict())
-                result = await self.llm.ainvoke(
+                response = await self.llm.ainvoke(
                     messages,
                     config={"callbacks": [token_counter]}
                 )
+                
+                # Clean the response content by removing markdown code block if present
+                content = response.content
+                if content.startswith("```") and content.endswith("```"):
+                    content = "\n".join(content.split("\n")[1:-1])
+                
+                # Parse the response
+                parsed_dict = self.parser.parse(content)
+                result = PatternAnalysisOutput(**parsed_dict)
                 
                 # Track cost
                 self.track_llm_cost(
