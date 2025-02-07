@@ -50,6 +50,7 @@ from plexus.dashboard.api.models.score import Score as DashboardScore
 from plexus.dashboard.api.models.score_result import ScoreResult
 
 from plexus.scores.LangGraphScore import LangGraphScore, BatchProcessingPause
+from plexus.utils.dict_utils import truncate_dict_strings_inner
 
 class Evaluation:
     """
@@ -1532,9 +1533,9 @@ Total cost:       ${expenses['total_cost']:.6f}
             # Log the raw inputs
             logging.info("Creating score result with raw inputs:")
             logging.info(f"score_result value: {score_result.value}")
-            logging.info(f"score_result metadata: {score_result.metadata}")
+            logging.info(f"score_result metadata: {truncate_dict_strings_inner(score_result.metadata)}")
             logging.info(f"content_id: {content_id}")
-            logging.info(f"result dict: {result}")
+            logging.info(f"result dict: {truncate_dict_strings_inner(result)}")
 
             # Create ScoreResult in a non-blocking way
             data = {

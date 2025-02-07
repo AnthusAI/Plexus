@@ -115,45 +115,91 @@ This document outlines the implementation of Plexus's two-level dispatch system:
      - Added real-time status message updates during processing ✓
      - Implemented proper stage transitions with status messages ✓
      - Added final completion status message ✓
+     - Added account ID integration ✓
+     - Fixed task creation and update issues ✓
+     - Improved error handling and logging ✓
+     - Enhanced datetime handling with robust parsing and formatting ✓
+     - Fixed stage start time inheritance to prevent elapsed time resets ✓
+     - Added safeguards against invalid datetime values ✓
+     - Improved timezone handling and UTC consistency ✓
 
-3. **Refactor ReportTask** ✓
-   - Update `ReportTask` to use `TaskProgressTracker` ✓
-   - Ensure compatibility with existing UI components ✓
-   - Maintain current progress visualization features ✓
-   - Add support for rich status messages ✓
+3. **UI Integration** ✓
+   - Activity Dashboard improvements:
+     - Added real-time task updates ✓
+     - Fixed stage handling in task display ✓
+     - Improved progress bar behavior ✓
+     - Added proper error handling ✓
+     - Cleaned up excessive logging ✓
+     - Fixed type issues with GraphQL responses ✓
+   - Task Component enhancements:
+     - Added support for stage transitions ✓
+     - Improved progress visualization ✓
+     - Fixed stage visibility issues ✓
+     - Added proper cleanup on unmount ✓
 
 4. **Testing & Validation** ✓
    - Write unit tests for `TaskProgressTracker` ✓
-     - Basic progress tracking ✓
-     - Update progress ✓
-     - Elapsed time ✓
-     - Estimated time remaining ✓
-     - Stage management ✓
-     - Context manager ✓
-     - Error handling ✓
-     - Status message generation ✓
-     - Estimated completion time ✓
-     - Items per second ✓
    - Add integration tests for demo and report tasks ✓
    - Verify UI updates work correctly ✓
+     - Stage visibility working correctly ✓
+     - Progress bar behavior fixed ✓
+     - Status message updates working ✓
+     - Stage transition animations smooth ✓
    - Test error handling and recovery ✓
 
-5. **Command Integration**
+5. **Next Steps**
    - Add Task support to evaluation command
-   - Implement consistent error handling
+   - Implement consistent error handling across all commands
+   - Add support for task cancellation
+   - Improve task cleanup and resource management
+   - Add monitoring and alerting for task failures
 
-### Phase 4: Backend Integration
+### Phase 4: Backend Integration (In Progress)
 
-1. **Lambda Integration** (In Progress)
+1. **Lambda Integration** ✓
    - ✓ Create Lambda function for Task-to-Celery dispatch
    - ✓ Set up DynamoDB stream trigger
    - ✓ Basic dispatch logic implemented
+   - Implementation challenges resolved:
+     1. Initial Node.js Lambda approach:
+        - Successfully deployed and triggered by DynamoDB streams
+        - Failed to integrate with Celery due to TypeScript limitations
+        - Direct SQS message posting worked but wasn't ideal
+     2. Python Lambda solution:
+        - Successfully implemented with native Celery library
+        - Properly configured with environment variables
+        - Successfully deployed and triggered by DynamoDB streams
+     3. Current status:
+        - ✓ Python function successfully deployed
+        - ✓ Stream trigger working correctly
+        - ✓ Celery task dispatch confirmed
+        - ✓ Progress updates flowing through Task model
+        - ✓ Full end-to-end integration tested and working
    - Remaining tasks:
-     - Replace direct SQS message construction with Celery library
-     - Add Celery environment variables to Lambda
-     - Test end-to-end dispatch flow
+     - Add more comprehensive error handling
+     - Implement retry strategies for edge cases
+     - Add detailed logging for debugging
+     - Set up monitoring and alerting
 
-2. **DynamoDB Indexes** (In Progress)
+2. **Task Management CLI Tools** (In Progress)
+   - Added CLI commands for task management:
+     - `plexus tasks list` - List tasks with filtering options
+       - Filter by account ID, status, and type
+       - Display task details in formatted table
+     - `plexus tasks delete` - Delete tasks and their stages
+       - Delete by ID, account, status, or type
+       - Confirmation prompt with task preview
+       - Force option to skip confirmation
+   - Implementation details:
+     - Moved task commands to dedicated `TaskCommands.py`
+     - Rich library integration for better UI
+     - GraphQL mutations for task/stage deletion
+   - Current challenges:
+     - Testing needed for edge cases
+     - Error handling improvements needed
+     - Need to verify proper cleanup of related resources
+
+3. **DynamoDB Indexes** (In Progress)
    - Current state:
      ```typescript
      .secondaryIndexes((idx) => [
@@ -168,10 +214,14 @@ This document outlines the implementation of Plexus's two-level dispatch system:
      2. Add `updatedAt` sort key to `scoreId` index
      3. Remove standalone `updatedAt` index (redundant)
 
-3. **System Testing**
-   - ✓ Initial test successful - Lambda triggered by Task creation
+4. **System Testing**
+   - ✓ Initial test successful with Node.js Lambda
    - ✓ DynamoDB stream configuration working
+   - Current challenges:
+     - Python Lambda trigger not firing
+     - Stream configuration may need adjustment
    - Pending tests:
+     - Python Lambda trigger verification
      - Celery task dispatch with environment variables
      - Progress reporting
      - State transitions
@@ -245,6 +295,38 @@ The system provides detailed progress information:
 - Dynamic status messages based on progress ✓
 - Clean display using Rich library ✓
 - Support for both local and remote progress updates ✓
+
+### Task Progress UI Behavior
+The system follows specific rules for displaying progress in the UI:
+
+1. **Progress Bar Visibility**
+   - Only stages with `total_items` set will show progress bars in the UI
+   - Setup and Finalizing stages typically should not show progress
+   - Main Processing stages should show progress bars
+
+2. **Stage Configuration**
+   - Each stage can be configured with:
+     - Name and order
+     - Optional total_items for progress tracking
+     - Status messages for user feedback
+     - Start and completion times
+     - Estimated completion time
+
+3. **Implementation Files**
+   - Core Progress Tracking:
+     - `plexus/cli/task_progress_tracker.py`: Main implementation
+     - Contains `TaskProgressTracker`, `StageConfig`, and `Stage` classes
+     - Detailed configuration options in class docstrings
+   - UI Components:
+     - `dashboard/components/Task.tsx`: Main task display component
+     - `dashboard/components/ui/task-status.tsx`: Progress bar implementation
+
+4. **Best Practices**
+   - Setup stages: Quick preparation, no progress bar needed
+   - Processing stages: Main work stages with progress bars
+   - Finalizing stages: Cleanup/completion steps, no progress bar needed
+   - Always provide meaningful status messages for each stage
+   - Use estimated completion times when available
 
 Progress tracking has been integrated into:
 - The demo command (fully tested) ✓
@@ -343,34 +425,34 @@ The evaluation command processes scorecard evaluations with:
 
 ## Next Steps
 
-1. **Lambda Function Updates**
-   - Refactor to use Celery library instead of direct SQS messages
-   - Add proper environment configuration:
-     - `CELERY_AWS_ACCESS_KEY_ID`
-     - `CELERY_AWS_SECRET_ACCESS_KEY`
-     - `CELERY_AWS_REGION_NAME`
-     - `CELERY_RESULT_BACKEND_TEMPLATE`
-   - Add error handling and retries
-   - Add logging and monitoring
+1. **System Hardening**
+   - Add comprehensive error handling to Lambda function
+   - Implement retry strategies for network issues
+   - Add detailed logging for debugging
+   - Set up monitoring and alerting
+   - Add dead letter queues for failed tasks
+   - Implement task timeout handling
 
-2. **DynamoDB Index Updates**
-   - Deploy changes one at a time:
-     1. Add sort key to `scorecardId` index
-     2. Add sort key to `scoreId` index
-     3. Remove redundant `updatedAt` index
-   - Verify query performance after each change
-   - Update application code to use new index patterns
+2. **Performance Optimization**
+   - Profile Lambda function performance
+   - Optimize DynamoDB read/write patterns
+   - Tune Celery worker configurations
+   - Implement task batching where appropriate
+   - Add performance metrics collection
+   - Set up performance monitoring
 
 3. **Testing & Validation**
-   - Test Task creation through UI
-   - Verify Lambda triggers
-   - Confirm Celery task dispatch
-   - Check task progress updates
-   - Validate error handling
-   - Test concurrent operations
+   - Add integration tests for full task lifecycle
+   - Test error recovery scenarios
+   - Validate concurrent task handling
+   - Test system under load
+   - Verify monitoring accuracy
+   - Document testing procedures
 
 4. **Documentation**
    - Update deployment procedures
    - Document environment configuration
    - Add troubleshooting guides
-   - Document index usage patterns 
+   - Document index usage patterns
+   - Create operational runbooks
+   - Add monitoring documentation 

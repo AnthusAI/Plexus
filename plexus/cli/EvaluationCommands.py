@@ -10,12 +10,23 @@ import yaml
 import asyncio
 import pandas as pd
 import traceback
+from typing import Optional
+import numpy as np
+from datetime import datetime, timezone, timedelta
 
 from plexus.CustomLogging import logging, set_log_group
 from plexus.Scorecard import Scorecard
 from plexus.Registries import scorecard_registry
 from plexus.Evaluation import AccuracyEvaluation
 from plexus.cli.console import console
+
+# Import dashboard-specific modules
+from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.models.account import Account
+from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
+from plexus.dashboard.api.models.score import Score as DashboardScore
+from plexus.dashboard.api.models.score_result import ScoreResult
 
 import importlib
 from collections import Counter
@@ -26,6 +37,12 @@ import threading
 set_log_group('plexus/cli/evaluation')
 
 from plexus.scores.Score import Score
+
+def create_client() -> PlexusDashboardClient:
+    """Create a client and log its configuration"""
+    client = PlexusDashboardClient()
+    logger.debug(f"Using API URL: {client.api_url}")
+    return client
 
 @click.group()
 def evaluate():
@@ -378,3 +395,284 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
     
     end_time = time.time()
     logging.info(f"Finished {score_name} at {time.strftime('%H:%M:%S')}. Time taken: {end_time - start_time:.2f} seconds")
+
+@click.group()
+def evaluations():
+    """Manage evaluation records in the dashboard"""
+    pass
+
+@evaluations.command()
+@click.option('--account-key', default='call-criteria', help='Account key identifier')
+@click.option('--type', required=True, help='Type of evaluation (e.g., accuracy, consistency)')
+@click.option('--parameters', type=str, help='JSON string of evaluation parameters')
+@click.option('--metrics', type=str, help='JSON string of evaluation metrics')
+@click.option('--inferences', type=int, help='Number of inferences made')
+@click.option('--results', type=int, help='Number of results processed')
+@click.option('--cost', type=float, help='Cost of the evaluation')
+@click.option('--progress', type=float, help='Progress percentage (0-100)')
+@click.option('--accuracy', type=float, help='Accuracy percentage (0-100)')
+@click.option('--accuracy-type', help='Type of accuracy measurement')
+@click.option('--sensitivity', type=float, help='Sensitivity/recall percentage (0-100)')
+@click.option('--specificity', type=float, help='Specificity percentage (0-100)')
+@click.option('--precision', type=float, help='Precision percentage (0-100)')
+@click.option('--status', default='PENDING', 
+              type=click.Choice(['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED']),
+              help='Status of the evaluation')
+@click.option('--total-items', type=int, help='Total number of items to process')
+@click.option('--processed-items', type=int, help='Number of items processed')
+@click.option('--error-message', help='Error message if evaluation failed')
+@click.option('--error-details', type=str, help='JSON string of detailed error information')
+@click.option('--scorecard-id', help='Scorecard ID (if known)')
+@click.option('--scorecard-key', help='Scorecard key to look up')
+@click.option('--scorecard-name', help='Scorecard name to look up')
+@click.option('--score-id', help='Score ID (if known)')
+@click.option('--score-key', help='Score key to look up')
+@click.option('--score-name', help='Score name to look up')
+@click.option('--confusion-matrix', type=str, help='JSON string of confusion matrix data')
+def create(
+    account_key: str,
+    type: str,
+    parameters: Optional[str] = None,
+    metrics: Optional[str] = None,
+    inferences: Optional[int] = None,
+    results: Optional[int] = None,
+    cost: Optional[float] = None,
+    progress: Optional[float] = None,
+    accuracy: Optional[float] = None,
+    accuracy_type: Optional[str] = None,
+    sensitivity: Optional[float] = None,
+    specificity: Optional[float] = None,
+    precision: Optional[float] = None,
+    status: str = 'PENDING',
+    total_items: Optional[int] = None,
+    processed_items: Optional[int] = None,
+    error_message: Optional[str] = None,
+    error_details: Optional[str] = None,
+    scorecard_id: Optional[str] = None,
+    scorecard_key: Optional[str] = None,
+    scorecard_name: Optional[str] = None,
+    score_id: Optional[str] = None,
+    score_key: Optional[str] = None,
+    score_name: Optional[str] = None,
+    confusion_matrix: Optional[str] = None,
+):
+    """Create a new evaluation record"""
+    client = create_client()
+    
+    try:
+        # First get the account
+        logger.info(f"Looking up account with key: {account_key}")
+        account = Account.get_by_key(account_key, client)
+        logger.info(f"Found account: {account.name} ({account.id})")
+        
+        # Build input dictionary with all provided values
+        input_data = {
+            'type': type,
+            'accountId': account.id,
+            'status': status
+        }
+        
+        # Look up scorecard if any identifier was provided
+        if any([scorecard_id, scorecard_key, scorecard_name]):
+            if scorecard_id:
+                logger.info(f"Using provided scorecard ID: {scorecard_id}")
+                scorecard = DashboardScorecard.get_by_id(scorecard_id, client)
+            elif scorecard_key:
+                logger.info(f"Looking up scorecard by key: {scorecard_key}")
+                scorecard = DashboardScorecard.get_by_key(scorecard_key, client)
+            else:
+                logger.info(f"Looking up scorecard by name: {scorecard_name}")
+                scorecard = DashboardScorecard.get_by_name(scorecard_name, client)
+            logger.info(f"Found scorecard: {scorecard.name} ({scorecard.id})")
+            input_data['scorecardId'] = scorecard.id
+        
+        # Look up score if any identifier was provided
+        if any([score_id, score_key, score_name]):
+            if score_id:
+                logger.info(f"Using provided score ID: {score_id}")
+                score = DashboardScore.get_by_id(score_id, client)
+            elif score_key:
+                logger.info(f"Looking up score by key: {score_key}")
+                score = DashboardScore.get_by_key(score_key, client)
+            else:
+                logger.info(f"Looking up score by name: {score_name}")
+                score = DashboardScore.get_by_name(score_name, client)
+            logger.info(f"Found score: {score.name} ({score.id})")
+            input_data['scoreId'] = score.id
+        
+        # Add optional fields if provided
+        if parameters: input_data['parameters'] = parameters
+        if metrics: input_data['metrics'] = metrics
+        if inferences is not None: input_data['inferences'] = inferences
+        if results is not None: input_data['results'] = results
+        if cost is not None: input_data['cost'] = cost
+        if progress is not None: input_data['progress'] = progress
+        if accuracy is not None: input_data['accuracy'] = accuracy
+        if accuracy_type: input_data['accuracyType'] = accuracy_type
+        if sensitivity is not None: input_data['sensitivity'] = sensitivity
+        if specificity is not None: input_data['specificity'] = specificity
+        if precision is not None: input_data['precision'] = precision
+        if total_items is not None: input_data['totalItems'] = total_items
+        if processed_items is not None: input_data['processedItems'] = processed_items
+        if error_message: input_data['errorMessage'] = error_message
+        if error_details: input_data['errorDetails'] = error_details
+        if confusion_matrix: input_data['confusionMatrix'] = confusion_matrix
+        
+        # Create the evaluation
+        logger.info("Creating evaluation...")
+        evaluation = DashboardEvaluation.create(client=client, **input_data)
+        logger.info(f"Created evaluation: {evaluation.id}")
+        
+        # Output results
+        click.echo(f"Created evaluation: {evaluation.id}")
+        click.echo(f"Type: {evaluation.type}")
+        click.echo(f"Status: {evaluation.status}")
+        click.echo(f"Created at: {evaluation.createdAt}")
+        
+    except Exception as e:
+        logger.error(f"Error creating evaluation: {str(e)}")
+        click.echo(f"Error: {str(e)}", err=True)
+
+@evaluations.command()
+@click.argument('id', required=True)
+@click.option('--type', help='Type of evaluation (e.g., accuracy, consistency)')
+@click.option('--status',
+              type=click.Choice(['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED']),
+              help='Status of the evaluation')
+@click.option('--parameters', type=str, help='JSON string of evaluation parameters')
+@click.option('--metrics', type=str, help='JSON string of evaluation metrics')
+@click.option('--inferences', type=int, help='Number of inferences made')
+@click.option('--results', type=int, help='Number of results processed')
+@click.option('--cost', type=float, help='Cost of the evaluation')
+@click.option('--progress', type=float, help='Progress percentage (0-100)')
+@click.option('--accuracy', type=float, help='Accuracy percentage (0-100)')
+@click.option('--accuracy-type', help='Type of accuracy measurement')
+@click.option('--sensitivity', type=float, help='Sensitivity/recall percentage (0-100)')
+@click.option('--specificity', type=float, help='Specificity percentage (0-100)')
+@click.option('--precision', type=float, help='Precision percentage (0-100)')
+@click.option('--total-items', type=int, help='Total number of items to process')
+@click.option('--processed-items', type=int, help='Number of items processed')
+@click.option('--error-message', help='Error message if evaluation failed')
+@click.option('--error-details', type=str, help='JSON string of detailed error information')
+@click.option('--scorecard-id', help='Scorecard ID (if known)')
+@click.option('--scorecard-key', help='Scorecard key to look up')
+@click.option('--scorecard-name', help='Scorecard name to look up')
+@click.option('--score-id', help='Score ID (if known)')
+@click.option('--score-key', help='Score key to look up')
+@click.option('--score-name', help='Score name to look up')
+@click.option('--confusion-matrix', type=str, help='JSON string of confusion matrix data')
+def update(
+    id: str,
+    type: Optional[str] = None,
+    status: Optional[str] = None,
+    parameters: dict = None,
+    metrics: dict = None,
+    inferences: list = None,
+    results: list = None,
+    cost: float = None,
+    progress: float = None,
+    accuracy: float = None,
+    accuracy_type: str = None,
+    sensitivity: float = None,
+    specificity: float = None,
+    precision: float = None,
+    total_items: int = None,
+    processed_items: int = None,
+    error_message: str = None,
+    error_details: dict = None,
+    confusion_matrix: dict = None
+):
+    """Update an existing evaluation record"""
+    client = create_client()
+    
+    try:
+        # First get the existing evaluation
+        logger.info(f"Looking up evaluation: {id}")
+        evaluation = DashboardEvaluation.get_by_id(id, client)
+        logger.info(f"Found evaluation: {evaluation.id}")
+        
+        # Build update data with only provided fields
+        update_data = {}
+        
+        # Add optional fields if provided
+        if type is not None: update_data['type'] = type
+        if status is not None: update_data['status'] = status
+        if parameters is not None: update_data['parameters'] = parameters
+        if metrics is not None: update_data['metrics'] = metrics
+        if inferences is not None: update_data['inferences'] = inferences
+        if results is not None: update_data['results'] = results
+        if cost is not None: update_data['cost'] = cost
+        if progress is not None: update_data['progress'] = progress
+        if accuracy is not None: update_data['accuracy'] = accuracy
+        if accuracy_type is not None: update_data['accuracyType'] = accuracy_type
+        if sensitivity is not None: update_data['sensitivity'] = sensitivity
+        if specificity is not None: update_data['specificity'] = specificity
+        if precision is not None: update_data['precision'] = precision
+        if total_items is not None: update_data['totalItems'] = total_items
+        if processed_items is not None: update_data['processedItems'] = processed_items
+        if error_message is not None: update_data['errorMessage'] = error_message
+        if error_details is not None: update_data['errorDetails'] = error_details
+        if confusion_matrix is not None: update_data['confusionMatrix'] = confusion_matrix
+        
+        # Update the evaluation
+        logger.info("Updating evaluation...")
+        updated = evaluation.update(**update_data)
+        logger.info(f"Updated evaluation: {updated.id}")
+        
+        # Output results
+        click.echo(f"Updated evaluation: {updated.id}")
+        click.echo(f"Type: {updated.type}")
+        click.echo(f"Status: {updated.status}")
+        click.echo(f"Updated at: {updated.updatedAt}")
+        
+    except Exception as e:
+        logger.error(f"Error updating evaluation: {str(e)}")
+        click.echo(f"Error: {str(e)}", err=True)
+
+@evaluations.command()
+@click.argument('id', required=True)
+@click.option('--limit', type=int, default=1000, help='Maximum number of results to return')
+def list_results(id: str, limit: int):
+    """List score results for an evaluation record"""
+    client = create_client()
+    
+    try:
+        # Get evaluation with score results included
+        response = client.execute("""
+            query GetEvaluation($id: ID!, $limit: Int) {
+                getEvaluation(id: $id) {
+                    scoreResults(limit: $limit) {
+                        items {
+                            id
+                            value
+                            confidence
+                            metadata
+                            correct
+                            createdAt
+                            evaluationId
+                        }
+                    }
+                }
+            }
+        """, {'id': id, 'limit': limit})
+        
+        # Get the items array directly from the nested response
+        items = response.get('getEvaluation', {}).get('scoreResults', {}).get('items', [])
+        result_count = len(items)
+            
+        click.echo(f"Found {result_count} score results for evaluation {id}:")
+        
+        for item in items:
+            created = item.get('createdAt', '').replace('Z', '').replace('T', ' ')
+            click.echo(
+                f"ID: {item.get('id')}, "
+                f"EvaluationId: {item.get('evaluationId')}, "
+                f"Value: {item.get('value')}, "
+                f"Confidence: {item.get('confidence')}, "
+                f"Correct: {item.get('correct')}, "
+                f"Created: {created}"
+            )
+        
+    except Exception as e:
+        logger.error(f"Error listing results: {e}")
+        click.echo(f"Error: {e}", err=True)

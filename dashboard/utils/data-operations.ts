@@ -3,47 +3,32 @@ import { Schema } from '@/amplify/data/resource';
 import { Observable } from 'rxjs';
 
 // Define the shape of the task data we expect from Amplify
-export type AmplifyTask = {
-  id: string;
-  accountId: string;
-  type: string;
-  status: string;
-  target?: string | null;
-  currentStageId?: string | null;
-  updatedAt?: string | null;
-  createdAt: string;
-  scorecardId?: string | null;
-  scoreId?: string | null;
-  command?: string | null;
-  dispatchStatus?: string | null;
-  stages: () => Promise<{
-    data: Array<{
-      name: string;
-      order: number;
-      status: string;
-      processedItems?: number | null;
-      totalItems?: number | null;
-      startedAt?: string | null;
-      completedAt?: string | null;
-      estimatedCompletionAt?: string | null;
-      statusMessage?: string | null;
-    }>;
-  }>;
-}
+export type AmplifyTask = Schema['Task']['type'];
 
 export type ProcessedTask = {
   id: string;
+  command: string;
   type: string;
   status: string;
-  target?: string | null;
+  target: string;
+  metadata?: any;
   currentStageId?: string | null;
   updatedAt?: string | null;
   scorecardId?: string | null;
   scoreId?: string | null;
-  command?: string | null;
-  dispatchStatus?: string | null;
   createdAt: string;
-  stages: Schema['TaskStage']['type'][];
+  stages: Array<{
+    id: string;
+    name: string;
+    order: number;
+    status: string;
+    processedItems?: number | null;
+    totalItems?: number | null;
+    startedAt?: string | null;
+    completedAt?: string | null;
+    estimatedCompletionAt?: string | null;
+    statusMessage?: string | null;
+  }>;
 };
 
 type AmplifyClient = ReturnType<typeof generateClient<Schema>> & {
@@ -62,6 +47,15 @@ type AmplifyClient = ReturnType<typeof generateClient<Schema>> & {
     TaskStage: {
       onUpdate: (options: {}) => { subscribe: (handlers: { next: () => void; error: (error: any) => void }) => { unsubscribe: () => void } };
     };
+    Evaluation: {
+      list: (options: any) => Promise<AmplifyListResult<Schema['Evaluation']['type']>>;
+      listEvaluationByAccountIdAndUpdatedAt: (options: {
+        accountId: string;
+        sortDirection?: 'ASC' | 'DESC';
+        limit?: number;
+        nextToken?: string;
+      }) => Promise<AmplifyListResult<Schema['Evaluation']['type']>>;
+    };
   };
 }
 
@@ -72,11 +66,27 @@ export type AmplifyListResult<T> = {
 
 let client: AmplifyClient;
 
+// Add back the type definitions at the top
+interface GraphQLError {
+  message: string;
+  path?: string[];
+}
+
+interface GraphQLResult<T> {
+  data?: T;
+  errors?: GraphQLError[];
+}
+
+type ListTaskResponse = {
+  listTaskByAccountIdAndUpdatedAt: {
+    items: Schema['Task']['type'][];
+    nextToken: string | null;
+  };
+};
+
 export function getClient(): AmplifyClient {
   if (!client) {
     client = generateClient<Schema>() as AmplifyClient;
-    console.log('Generated new client:', client);
-    console.log('Client models:', client.models);
   }
   return client;
 }
@@ -86,13 +96,12 @@ export async function listFromModel<T extends { id: string }>(
   options?: {
     limit?: number,
     filter?: Record<string, any>,
-    nextToken?: string
+    nextToken?: string,
+    sortDirection?: 'ASC' | 'DESC'
   }
 ): Promise<AmplifyListResult<T>> {
-  console.log('listFromModel called with:', { modelName, options });
   const currentClient = getClient();
-  console.log('client at time of call:', currentClient);
-  console.log('client.models at time of call:', currentClient.models);
+  
   try {
     // Collect all results across pages
     let allData: T[] = []
@@ -102,7 +111,8 @@ export async function listFromModel<T extends { id: string }>(
       const response = await (currentClient.models[modelName] as any).list({
         limit: options?.limit,
         filter: options?.filter,
-        nextToken: currentNextToken
+        nextToken: currentNextToken,
+        sortDirection: options?.sortDirection
       });
 
       if (response.data?.length) {
@@ -117,11 +127,17 @@ export async function listFromModel<T extends { id: string }>(
       allData = allData.slice(0, options.limit)
     }
 
-    // Sort by createdAt if available
-    if (allData.length > 0 && 'createdAt' in allData[0]) {
-      allData.sort((a: any, b: any) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      )
+    // Sort by updatedAt if available, otherwise by createdAt
+    if (allData.length > 0) {
+      if ('updatedAt' in allData[0]) {
+        allData.sort((a: any, b: any) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        )
+      } else if ('createdAt' in allData[0]) {
+        allData.sort((a: any, b: any) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )
+      }
     }
 
     return {
@@ -134,12 +150,42 @@ export async function listFromModel<T extends { id: string }>(
   }
 }
 
-async function processTask(task: Schema['Task']['type']): Promise<ProcessedTask> {
+export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
+  return {
+    id: task.id,
+    command: task.command || '',
+    type: task.type,
+    status: task.status,
+    target: task.target,
+    metadata: task.metadata,
+    currentStageId: task.currentStageId,
+    updatedAt: task.updatedAt,
+    scorecardId: task.scorecardId,
+    scoreId: task.scoreId,
+    createdAt: task.createdAt || new Date().toISOString(),
+    stages: []  // Stages are loaded separately by processTask
+  }
+}
+
+// Add this type at the top with other types
+interface GraphQLTaskStages {
+  items: Schema['TaskStage']['type'][];
+}
+
+async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
   let stages: Schema['TaskStage']['type'][] = [];
   try {
-    if (task.stages) {
-      const stagesResponse = await task.stages();
-      stages = stagesResponse.data || [];
+    // Handle both GraphQL response format and Amplify client format
+    if (typeof task.stages === 'function') {
+      // Amplify client format
+      const stagesData = await task.stages();
+      if (stagesData?.data) {
+        stages = stagesData.data;
+      }
+    } else if (task.stages && 'items' in task.stages) {
+      // GraphQL response format
+      const graphqlStages = task.stages as GraphQLTaskStages;
+      stages = graphqlStages.items;
     }
   } catch (error) {
     console.error('Error loading stages for task:', error);
@@ -147,17 +193,28 @@ async function processTask(task: Schema['Task']['type']): Promise<ProcessedTask>
   
   return {
     id: task.id,
+    command: task.command || '',
     type: task.type,
     status: task.status,
     target: task.target,
+    metadata: task.metadata,
     currentStageId: task.currentStageId,
     updatedAt: task.updatedAt,
     scorecardId: task.scorecardId,
     scoreId: task.scoreId,
-    command: task.command,
-    dispatchStatus: task.dispatchStatus,
-    createdAt: task.createdAt,
-    stages
+    createdAt: task.createdAt || new Date().toISOString(),
+    stages: stages.map(stage => ({
+      id: stage.id,
+      name: stage.name,
+      order: stage.order,
+      status: stage.status,
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      startedAt: stage.startedAt,
+      completedAt: stage.completedAt,
+      estimatedCompletionAt: stage.estimatedCompletionAt,
+      statusMessage: stage.statusMessage
+    }))
   };
 }
 
@@ -168,34 +225,98 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
       throw new Error('Task model not found');
     }
 
-    type TaskListResponse = {
-      data: Schema['Task']['type'][];
-      nextToken?: string | null;
-    };
+    // Get the account ID by key
+    const ACCOUNT_KEY = 'call-criteria';
+    const accountResponse = await listFromModel<Schema['Account']['type']>(
+      'Account',
+      { filter: { key: { eq: ACCOUNT_KEY } } }
+    );
 
-    // Cast the client.models.Task to a more specific type
-    const taskModel = currentClient.models.Task as {
-      list: (options: { limit?: number; include?: string[] }) => Promise<TaskListResponse>;
-    };
+    if (!accountResponse.data?.length) {
+      console.error('No account found with key:', ACCOUNT_KEY);
+      return [];
+    }
 
-    const response = await taskModel.list({
-      limit,
-      include: ['stages']
-    });
+    const accountId = accountResponse.data[0].id;
 
-    if (!response.data) {
+    const response = await currentClient.graphql({
+      query: `
+        query ListTaskByAccountIdAndUpdatedAt(
+          $accountId: String!
+          $sortDirection: ModelSortDirection!
+          $limit: Int
+        ) {
+          listTaskByAccountIdAndUpdatedAt(
+            accountId: $accountId
+            sortDirection: $sortDirection
+            limit: $limit
+          ) {
+            items {
+              id
+              accountId
+              type
+              status
+              target
+              command
+              description
+              dispatchStatus
+              metadata
+              createdAt
+              startedAt
+              completedAt
+              estimatedCompletionAt
+              errorMessage
+              errorDetails
+              stdout
+              stderr
+              currentStageId
+              scorecardId
+              scoreId
+              celeryTaskId
+              workerNodeId
+              updatedAt
+              stages {
+                items {
+                  id
+                  name
+                  order
+                  status
+                  statusMessage
+                  startedAt
+                  completedAt
+                  estimatedCompletionAt
+                  processedItems
+                  totalItems
+                }
+              }
+            }
+            nextToken
+          }
+        }
+      `,
+      variables: {
+        accountId: accountId.trim(),
+        sortDirection: 'DESC',
+        limit: limit || 100
+      },
+      authMode: 'userPool'
+    }) as unknown as GraphQLResult<ListTaskResponse>;
+
+    if (response.errors?.length) {
+      throw new Error(`GraphQL errors: ${response.errors.map(e => e.message).join(', ')}`);
+    }
+
+    const result = response.data;
+    if (!result?.listTaskByAccountIdAndUpdatedAt?.items) {
       return [];
     }
 
     // Process tasks and load their stages
     const processedTasks = await Promise.all(
-      response.data.map(processTask)
+      result.listTaskByAccountIdAndUpdatedAt.items.map(processTask)
     );
 
-    // Sort by createdAt in reverse chronological order
-    return processedTasks.sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    return processedTasks;
   } catch (error) {
     console.error('Error listing recent tasks:', error);
     return [];
@@ -205,63 +326,65 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
 export function observeRecentTasks(limit: number = 12): Observable<{ items: ProcessedTask[], isSynced: boolean }> {
   return new Observable(handlers => {
     const currentClient = getClient();
+    let accountId: string | null = null;
 
-    // Initial fetch
-    listRecentTasks(limit).then(response => {
-      handlers.next({ items: response, isSynced: true });
-    }).catch(handlers.error);
+    // Get the account ID first
+    const ACCOUNT_KEY = 'call-criteria';
+    listFromModel<Schema['Account']['type']>(
+      'Account',
+      { filter: { key: { eq: ACCOUNT_KEY } } }
+    ).then(response => {
+      if (!response.data?.length) {
+        console.error('No account found with key:', ACCOUNT_KEY);
+        handlers.error(new Error('No account found'));
+        return;
+      }
 
-    // Define subscription type
-    type SubscriptionType = {
-      subscribe: (handlers: { 
-        next: () => void; 
-        error: (error: any) => void 
-      }) => { 
-        unsubscribe: () => void 
+      accountId = response.data[0].id;
+
+      // Initial fetch
+      listRecentTasks(limit).then(response => {
+        handlers.next({ items: response, isSynced: true });
+      }).catch(handlers.error);
+
+      // Subscribe to changes
+      const createSub = (currentClient.models.Task as any).onCreate().subscribe({
+        next: async () => {
+          if (!accountId) return;
+          const response = await listRecentTasks(limit);
+          handlers.next({ items: response, isSynced: true });
+        },
+        error: handlers.error
+      });
+
+      const updateSub = (currentClient.models.Task as any).onUpdate().subscribe({
+        next: async () => {
+          if (!accountId) return;
+          const response = await listRecentTasks(limit);
+          handlers.next({ items: response, isSynced: true });
+        },
+        error: handlers.error
+      });
+
+      const stageSub = (currentClient.models.TaskStage as any).onUpdate().subscribe({
+        next: async () => {
+          if (!accountId) return;
+          const response = await listRecentTasks(limit);
+          handlers.next({ items: response, isSynced: true });
+        },
+        error: handlers.error
+      });
+
+      // Cleanup subscriptions
+      return () => {
+        createSub.unsubscribe();
+        updateSub.unsubscribe();
+        stageSub.unsubscribe();
       };
-    };
-
-    // Cast subscription methods to specific types
-    const taskModel = currentClient.models.Task as {
-      onCreate: (options: {}) => SubscriptionType;
-      onUpdate: (options: {}) => SubscriptionType;
-    };
-
-    const taskStageModel = currentClient.models.TaskStage as {
-      onUpdate: (options: {}) => SubscriptionType;
-    };
-
-    // Subscribe to changes
-    const createSub = taskModel.onCreate({}).subscribe({
-      next: async () => {
-        const response = await listRecentTasks(limit);
-        handlers.next({ items: response, isSynced: true });
-      },
-      error: handlers.error
+    }).catch(error => {
+      console.error('Error getting account:', error);
+      handlers.error(error);
     });
-
-    const updateSub = taskModel.onUpdate({}).subscribe({
-      next: async () => {
-        const response = await listRecentTasks(limit);
-        handlers.next({ items: response, isSynced: true });
-      },
-      error: handlers.error
-    });
-
-    const stageSub = taskStageModel.onUpdate({}).subscribe({
-      next: async () => {
-        const response = await listRecentTasks(limit);
-        handlers.next({ items: response, isSynced: true });
-      },
-      error: handlers.error
-    });
-
-    // Cleanup subscriptions
-    return () => {
-      createSub.unsubscribe();
-      updateSub.unsubscribe();
-      stageSub.unsubscribe();
-    };
   });
 }
 

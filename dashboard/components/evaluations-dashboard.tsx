@@ -1,7 +1,6 @@
 "use client"
 import React, { useMemo, useCallback, useRef } from "react"
 import { useState, useEffect } from "react"
-import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -45,6 +44,8 @@ import type { EvaluationTaskData } from '@/components/EvaluationTask'
 import { useAuthenticator } from '@aws-amplify/ui-react';
 import { useRouter } from 'next/navigation';
 import { Observable } from 'rxjs';
+import { client, getClient } from "@/utils/amplify-client"  // Import both client and getClient
+import { GraphQLResult } from '@aws-amplify/api';
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -350,23 +351,131 @@ function useViewportWidth() {
   return isNarrowViewport
 }
 
+// Initialize models once, but lazily
+let evaluationModel: any = null;
+let accountModel: any = null;
+
+function getModels() {
+  if (!evaluationModel || !accountModel) {
+    const currentClient = getClient();
+    console.log('Initializing models with client:', {
+      hasModels: !!currentClient.models,
+      modelNames: Object.keys(currentClient.models || {}),
+      evaluationModel: currentClient.models?.Evaluation,
+      evaluationModelFunctions: Object.keys(currentClient.models?.Evaluation || {}).filter(key => key.startsWith('list'))
+    });
+    evaluationModel = currentClient.models.Evaluation;
+    accountModel = currentClient.models.Account;
+  }
+  return { evaluationModel, accountModel };
+}
+
 // Add these helper functions at the top
 async function listAccounts(): ModelListResult<Schema['Account']['type']> {
+  const { accountModel } = getModels();
+  if (!accountModel) {
+    throw new Error('Account model not found in client');
+  }
   return listFromModel<Schema['Account']['type']>(
-    client.models.Account,
+    accountModel,
     { key: { eq: ACCOUNT_KEY } }
-  )
+  );
 }
 
 async function listEvaluations(accountId: string): ModelListResult<Schema['Evaluation']['type']> {
-  if (!client?.models?.Evaluation) {
-    throw new Error('Evaluation model not found in client')
+  const currentClient = getClient();
+  
+  console.log('Listing evaluations for account:', { accountId });
+  
+  type EvaluationItem = Schema['Evaluation']['type'];
+  
+  interface ListEvaluationResponse {
+    listEvaluationByAccountIdAndUpdatedAt: {
+      items: EvaluationItem[];
+      nextToken: string | null;
+    };
   }
   
-  return listFromModel<Schema['Evaluation']['type']>(
-    client.models.Evaluation,
-    { accountId: { eq: accountId } }
-  )
+  try {
+    // Use the graphql query directly
+    const response = await currentClient.graphql<ListEvaluationResponse>({
+      query: `
+        query ListEvaluationByAccountIdAndUpdatedAt(
+          $accountId: String!
+          $sortDirection: ModelSortDirection
+          $limit: Int
+        ) {
+          listEvaluationByAccountIdAndUpdatedAt(
+            accountId: $accountId
+            sortDirection: $sortDirection
+            limit: $limit
+          ) {
+            items {
+              id
+              type
+              parameters
+              metrics
+              metricsExplanation
+              inferences
+              accuracy
+              cost
+              createdAt
+              updatedAt
+              status
+              startedAt
+              elapsedSeconds
+              estimatedRemainingSeconds
+              totalItems
+              processedItems
+              errorMessage
+              errorDetails
+              accountId
+              scorecardId
+              scoreId
+              confusionMatrix
+              scoreGoal
+              datasetClassDistribution
+              isDatasetClassDistributionBalanced
+              predictedClassDistribution
+              isPredictedClassDistributionBalanced
+            }
+            nextToken
+          }
+        }
+      `,
+      variables: {
+        accountId,
+        sortDirection: 'DESC',
+        limit: 100
+      }
+    }) as GraphQLResult<ListEvaluationResponse>;
+
+    console.log('GraphQL response:', {
+      hasData: !!response.data,
+      hasErrors: !!response.errors,
+      errors: response.errors?.map(e => ({
+        message: e.message,
+        path: e.path
+      }))
+    });
+
+    if (response.errors?.length) {
+      throw new Error(`GraphQL errors: ${response.errors.map(e => e.message).join(', ')}`);
+    }
+
+    const result = response.data;
+    if (!result) {
+      throw new Error('No data returned from GraphQL query');
+    }
+
+    return {
+      data: result.listEvaluationByAccountIdAndUpdatedAt.items.map((item: EvaluationItem) => transformEvaluation(item)),
+      nextToken: result.listEvaluationByAccountIdAndUpdatedAt.nextToken
+    };
+  } catch (error) {
+    console.error('Error in listEvaluations:', error);
+    throw error;
+  }
 }
 
 // Add this interface near the top of the file
@@ -376,9 +485,6 @@ interface EvaluationParameters {
   scoreGoal?: string
   [key: string]: any  // Allow other parameters
 }
-
-// Keep the client definition
-const client = generateClient<Schema>()
 
 // Add this type at the top with other interfaces
 interface SubscriptionResponse {
@@ -849,32 +955,47 @@ export default function EvaluationsDashboard(): JSX.Element {
   }, [selectedEvaluation?.id, EvaluationTaskProps, isFullWidth, selectedScoreResultId])
 
   // Event handlers
-  const handleDragStart = useCallback((e: React.MouseEvent) => {
+  const handleDragStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault()
-    if (!containerRef.current) return
-    
     dragStateRef.current = {
       isDragging: true,
       startX: e.clientX,
       startWidth: leftPanelWidth
     }
+    document.addEventListener('mousemove', handleDragMove)
+    document.addEventListener('mouseup', handleDragEnd)
   }, [leftPanelWidth])
 
   const handleDragMove = useCallback((e: MouseEvent) => {
     if (!dragStateRef.current.isDragging || !containerRef.current) return
 
-    const containerWidth = containerRef.current.offsetWidth
-    const delta = e.clientX - dragStateRef.current.startX
-    const newWidth = Math.max(20, Math.min(80, 
-      dragStateRef.current.startWidth + (delta / containerWidth * 100)
-    ))
-    
-    setLeftPanelWidth(newWidth)
+    const containerWidth = containerRef.current.getBoundingClientRect().width
+    const deltaX = e.clientX - dragStateRef.current.startX
+    const newWidthPercent = (dragStateRef.current.startWidth * 
+      containerWidth / 100 + deltaX) / containerWidth * 100
+
+    const constrainedWidth = Math.min(Math.max(newWidthPercent, 20), 80)
+    setLeftPanelWidth(constrainedWidth)
   }, [])
 
   const handleDragEnd = useCallback(() => {
     dragStateRef.current.isDragging = false
+    document.removeEventListener('mousemove', handleDragMove)
+    document.removeEventListener('mouseup', handleDragEnd)
   }, [])
+
+  // Add escape key handler
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    if (selectedEvaluation && event.key === 'Escape') {
+      setSelectedEvaluation(null)
+      setIsFullWidth(false)
+    }
+  }, [selectedEvaluation])
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
 
   // Effects
   useEffect(() => {
@@ -1258,7 +1379,7 @@ export default function EvaluationsDashboard(): JSX.Element {
             ${(!selectedEvaluation || !isNarrowViewport) ? 'flex h-full' : 'hidden'}
             ${(!selectedEvaluation || isNarrowViewport) ? 'w-full' : ''}
           `}
-          style={!isNarrowViewport && selectedEvaluation ? {
+          style={!isNarrowViewport && selectedEvaluation && !isFullWidth ? {
             width: `${leftPanelWidth}%`
           } : undefined}>
             <div className="mb-4 flex-shrink-0">

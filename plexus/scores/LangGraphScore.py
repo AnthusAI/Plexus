@@ -926,6 +926,9 @@ class LangGraphScore(Score, LangChainUser):
                     'classification': graph_result.get('classification')
                 }
             )
+        except BatchProcessingPause:
+            # Let BatchProcessingPause propagate up
+            raise
         except Exception as e:
             logging.error(f"Error in predict: {e}")
             return Score.Result(
