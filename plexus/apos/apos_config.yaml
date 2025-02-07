@@ -29,12 +29,12 @@ optimizer_model:  # For generating prompt improvements
 
       YOUR RESPONSE MUST INCLUDE THESE TWO FIELDS:
       - system_message: The improved system message
-      - user_message: The improved user message (must contain {{text}} placeholder)
+      - user_message: The improved user message (must contain {{ '{{text}}' }} placeholder)
 
       RESPONSE FORMAT REQUIREMENTS:
       - Both fields are required
       - Both fields must be non-empty strings
-      - The user_message MUST contain the {{text}} placeholder
+      - The user_message MUST contain the {{ '{{text}}' }} placeholder
       - No additional fields are allowed
 
     human_template: |
@@ -42,24 +42,24 @@ optimizer_model:  # For generating prompt improvements
 
       Current Prompts:
       <system_message>
-      {system_message}
+      {{system_message}}
       </system_message>
 
       <user_message>
-      {user_message}
+      {{user_message}}
       </user_message>
 
       Analysis of Issues:
       Common Problems:
-      {pattern_analysis.common_issues}
+      {{pattern_analysis.common_issues}}
 
       Summary:
-      {pattern_analysis.summary}
+      {{pattern_analysis.summary}}
       
       Your task:
       1. Start with the current prompts
       2. Make targeted changes to address each identified issue
-      3. Ensure the {{text}} variable is ONLY in the user_message
+      3. Ensure the {{ '{{text}}' }} variable is ONLY in the user_message
       4. Focus on clarifying specific points of confusion
       5. Keep the existing structure and only modify what needs improvement
       6. Add clarifications or examples only where directly relevant to the issues
@@ -68,7 +68,7 @@ optimizer_model:  # For generating prompt improvements
       
       PROVIDE YOUR RESPONSE WITH THESE TWO FIELDS:
       - system_message: Your improved system message
-      - user_message: Your improved user message (must contain {{text}} placeholder)
+      - user_message: Your improved user message (must contain {{ '{{text}}' }} placeholder)
 
       The user message should encourage a response in this format:
       [Concise reasoning and analysis explaining the evaluator's thought process]
@@ -78,7 +78,7 @@ optimizer_model:  # For generating prompt improvements
       IMPORTANT:
       - Both fields must be provided
       - Both fields must be non-empty
-      - The user_message must contain the {{text}} placeholder
+      - The user_message must contain the {{ '{{text}}' }} placeholder
 
 analyzer_model:  # For analyzing individual mismatches
   model_type: "gpt-4o-mini-2024-07-18"
@@ -110,21 +110,21 @@ analyzer_model:  # For analyzing individual mismatches
 
       Prompts used:
       <system_message>
-      {system_message}
+      {{system_message}}
       </system_message>
 
       <user_message>
-      {user_message}
+      {{user_message}}
       </user_message>
 
       Transcript:
-      {current_mismatch.transcript_text}
+      {{current_mismatch.transcript_text}}
 
-      Model's Prediction: {current_mismatch.model_answer}
-      Ground Truth: {current_mismatch.ground_truth}
+      Model's Prediction: {{current_mismatch.model_answer}}
+      Ground Truth: {{current_mismatch.ground_truth}}
 
       Model's Original Explanation:
-      {current_mismatch.original_explanation}
+      {{current_mismatch.original_explanation}}
 
       Your task is to:
       1. Analyze exactly why the model made the wrong prediction in this specific case
@@ -171,14 +171,23 @@ pattern_analyzer_model:  # For analyzing patterns across mismatches
 
       Current Prompts:
       <system_message>
-      {system_message}
+      {{system_message}}
       </system_message>
 
       <user_message>
-      {user_message}
+      {{user_message}}
       </user_message>
 
       Mismatches and their analyses:
-      {mismatch_summaries}
+      {% for mismatch in mismatches %}
+      Case #{{loop.index}}:
+      Question: {{mismatch.question_name}}
+      Model's Answer: {{mismatch.model_answer}}
+      Correct Answer: {{mismatch.ground_truth}}
+      Model's Original Explanation: {{mismatch.original_explanation}}
+      Detailed Analysis: {{mismatch.detailed_analysis}}
+      Prompts Contribution: {{mismatch.prompts_contribution}}
+      ---
+      {% endfor %}
 
       Focus on being clear and specific about how the prompt is causing these issues. Provide recommendations for how to fix the prompt.
