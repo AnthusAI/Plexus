@@ -189,18 +189,51 @@ class Task(BaseModel):
         task_data = response['createTask']
         return cls.from_dict(task_data, client)
 
+    @staticmethod
+    def _parse_datetime(value: Any) -> Optional[datetime]:
+        """Safely parse a datetime value from various formats."""
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                # Try parsing ISO format with Z
+                if value.endswith('Z'):
+                    value = value[:-1] + '+00:00'
+                return datetime.fromisoformat(value)
+            except (ValueError, TypeError):
+                try:
+                    # Fallback to parsing with dateutil
+                    from dateutil import parser
+                    return parser.parse(value)
+                except:
+                    logging.error(f"Failed to parse datetime value: {value}")
+                    return None
+        return None
+
+    @staticmethod
+    def _format_datetime(dt: Optional[datetime]) -> Optional[str]:
+        """Safely format a datetime value to ISO format with Z."""
+        if not dt:
+            return None
+        try:
+            # Ensure the datetime is UTC
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            elif dt.tzinfo != timezone.utc:
+                dt = dt.astimezone(timezone.utc)
+            return dt.isoformat().replace('+00:00', 'Z')
+        except Exception as e:
+            logging.error(f"Failed to format datetime: {e}")
+            return None
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Task':
         # Convert datetime fields
         for date_field in ['createdAt', 'updatedAt', 'startedAt', 'completedAt', 'estimatedCompletionAt']:
-            if data.get(date_field):
-                try:
-                    data[date_field] = datetime.fromisoformat(
-                        data[date_field].replace('Z', '+00:00')
-                    )
-                except (ValueError, AttributeError) as e:
-                    logging.error(f"Error parsing datetime for {date_field}: {e}")
-                    data[date_field] = None
+            if date_field in data:
+                data[date_field] = cls._parse_datetime(data[date_field])
 
         # Store stages data for later access if needed
         stages_data = data.pop('stages', None)
@@ -219,9 +252,11 @@ class Task(BaseModel):
             raise ValueError("createdAt cannot be modified")
 
         # Convert datetime fields to ISO format strings
-        for field, value in kwargs.items():
+        for field, value in list(kwargs.items()):
             if isinstance(value, datetime):
-                kwargs[field] = value.isoformat().replace('+00:00', 'Z')
+                kwargs[field] = self._format_datetime(value)
+            elif value is None:
+                kwargs[field] = None
 
         mutation = """
         mutation UpdateTask($input: UpdateTaskInput!) {
@@ -303,14 +338,14 @@ class Task(BaseModel):
         """Mark the task as started."""
         self.update(
             status='RUNNING',
-            startedAt=datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+            startedAt=self._format_datetime(datetime.now(timezone.utc))
         )
 
     def complete_processing(self) -> None:
         """Mark the task as completed."""
         self.update(
             status="COMPLETED",
-            completedAt=datetime.now(timezone.utc)
+            completedAt=self._format_datetime(datetime.now(timezone.utc))
         )
 
     def fail_processing(
@@ -323,7 +358,7 @@ class Task(BaseModel):
             status="FAILED",
             errorMessage=error_message,
             errorDetails=error_details,
-            completedAt=datetime.now(timezone.utc)
+            completedAt=self._format_datetime(datetime.now(timezone.utc))
         )
 
     def create_stage(self, name: str, order: int) -> 'TaskStage':
@@ -355,7 +390,7 @@ class Task(BaseModel):
                 'name': name,
                 'order': order,
                 'status': 'PENDING',
-                'startedAt': self.startedAt.isoformat().replace('+00:00', 'Z') if self.startedAt else None
+                'startedAt': self._format_datetime(self.startedAt) if self.startedAt else None
             }
         }
         
