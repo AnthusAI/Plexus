@@ -51,6 +51,7 @@ class MismatchAnalysis:
     detailed_analysis: Optional[str] = None  # Our detailed mismatch analysis
     error_category: Optional[str] = None
     root_cause: Optional[str] = None
+    prompts_contribution: Optional[str] = None  # Analysis of how prompts contributed to the error
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
