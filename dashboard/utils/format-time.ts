@@ -1,58 +1,25 @@
 import { formatDistanceToNow } from 'date-fns'
 
-export function formatTimeAgo(timestamp: string | Date, abbreviated = false): string {
-  console.log('formatTimeAgo input:', { timestamp, abbreviated })
-
-  // If the timestamp is already "less than a minute ago", handle it specially
-  if (typeof timestamp === 'string' && timestamp === 'less than a minute ago') {
-    return abbreviated ? '<1m ago' : timestamp
-  }
-
-  // If the timestamp already contains 'ago', return it with appropriate formatting
-  if (typeof timestamp === 'string' && timestamp.includes('ago')) {
-    console.log('Already contains ago:', timestamp)
-    if (abbreviated) {
-      const result = timestamp
-        .replace('about ', '')
-        .replace(' seconds', 's')
-        .replace(' second', 's')
-        .replace(' minutes', 'm')
-        .replace(' minute', 'm')
-        .replace(' hours', 'h')
-        .replace(' hour', 'h')
-        .replace(' days', 'd')
-        .replace(' day', 'd')
-        .replace(' months', 'mo')
-        .replace(' month', 'mo')
-        .replace(' years', 'y')
-        .replace(' year', 'y')
-      console.log('Abbreviated result:', result)
-      return result
+export function formatTimeAgo(timestamp: string | Date, abbreviated: boolean = true): string {
+  try {
+    // Handle string timestamps
+    const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp
+    
+    // Check for invalid dates
+    if (isNaN(date.getTime())) {
+      return 'Invalid date'
     }
-    return timestamp
-  }
+    
+    const timeSince = formatDistanceToNow(date, { addSuffix: true })
+    
+    if (!abbreviated) {
+      return timeSince
+    }
 
-  // Parse the date and check for sub-minute times first
-  const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp
-  const msSinceDate = Date.now() - date.getTime()
-  console.log('Time since date (ms):', msSinceDate)
-
-  if (msSinceDate < 60000) {
-    const result = abbreviated ? '<1m ago' : 'less than a minute ago'
-    console.log('Sub-minute result:', result)
-    return result
-  }
-
-  // For all other times, use formatDistanceToNow
-  const formatted = formatDistanceToNow(date, { 
-    addSuffix: true,
-    includeSeconds: false
-  })
-  console.log('formatDistanceToNow result:', formatted)
-
-  if (abbreviated) {
-    const result = formatted
+    // Abbreviate the formatted time
+    return timeSince
       .replace('about ', '')
+      .replace('less than ', '<')
       .replace(' minutes', 'm')
       .replace(' minute', 'm')
       .replace(' hours', 'h')
@@ -63,9 +30,9 @@ export function formatTimeAgo(timestamp: string | Date, abbreviated = false): st
       .replace(' month', 'mo')
       .replace(' years', 'y')
       .replace(' year', 'y')
-    console.log('Final abbreviated result:', result)
-    return result
+      .replace(' ago', '')
+  } catch (error) {
+    console.error('Error formatting date:', error)
+    return 'Invalid date'
   }
-
-  return formatted
 } 

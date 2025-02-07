@@ -11,6 +11,7 @@ import dynamic from 'next/dynamic'
 import ItemListWorkflow from '@/components/workflow/layouts/item-list-workflow'
 import MetricsGauges from '@/components/MetricsGauges'
 import { Button } from '@/components/ui/button'
+import Link from 'next/link'
 
 const CLOCKWISE_SEQUENCE = [0, 1, 3, 2] // accuracy -> precision -> specificity -> sensitivity
 
@@ -52,13 +53,18 @@ export default function LandingPage() {
   return (
     <Layout>
       <StandardSection
-        headline={
-          <span>
-            Run <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text">AI Agents</span> Over <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text">Your Data</span> With <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text">No Code</span>
-          </span>
-        }
+        headline="Run AI Agents Over Your Data With No Code"
         headlinePosition="inline"
         variant="hero"
+        useWordReveal={true}
+        gradientWords={{
+          "AI": { from: "primary", to: "accent" },
+          "Agents": { from: "primary", to: "accent" },
+          "Your": { from: "secondary", to: "accent" },
+          "Data": { from: "secondary", to: "accent" },
+          "No": { from: "secondary", to: "accent" },
+          "Code": { from: "secondary", to: "accent" }
+        }}
         leftContent={
           <>
             <p className="text-xl text-muted-foreground mb-8 w-full">
@@ -68,9 +74,11 @@ export default function LandingPage() {
               Your team can use your data to set up step-by-step processes that automate information management. Without dealing with code development and deployment.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button size="lg" className="w-full sm:w-auto bg-primary text-white hover:bg-primary/90 text-lg font-semibold">
-                Learn More
-                <ArrowRight className="ml-2 h-5 w-5" />
+              <Button size="lg" className="w-full sm:w-auto bg-primary text-white hover:bg-primary/90 text-lg font-semibold" asChild>
+                <Link href="/solutions/platform">
+                  Learn More
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
               </Button>
             </div>
           </>

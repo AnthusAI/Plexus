@@ -168,9 +168,12 @@ export function TaskStatus({
 
   // Update timing values every second while not completed
   useEffect(() => {
-    if (!startedAt) return
-
     const updateTiming = () => {
+      if (!startedAt) {
+        setElapsedTime('0s')
+        return
+      }
+
       const now = new Date()
       const started = new Date(startedAt)
       
@@ -270,14 +273,14 @@ export function TaskStatus({
           </div>
         </div>
       )}
-      {(command || statusMessage) && (
-        <div className="rounded-lg bg-card-light px-2 py-1">
+      {(command || statusMessage || isFinished) && (
+        <div className="rounded-lg bg-card-light px-2 py-1 space-y-1">
           {command && (
             <div className={`font-mono text-sm text-muted-foreground ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
               $ {command}
             </div>
           )}
-          <div className={`font-mono text-sm ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
+          <div className={`text-sm ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
             {statusMessage || '\u00A0'}
           </div>
         </div>

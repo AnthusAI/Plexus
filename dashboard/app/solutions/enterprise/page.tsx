@@ -5,24 +5,46 @@ import { Layout } from '@/components/landing/Layout'
 import { CTASection } from '@/components/landing/CTASection'
 import { Footer } from '@/components/landing/Footer'
 import { Button } from '@/components/ui/button'
-import { ArrowRight, Shield, Users, Building2, Lock } from 'lucide-react'
+import { 
+  ArrowRight, Shield, Users, Building2, Lock,
+  HeadphonesIcon, Clock, Wrench, GraduationCap, BarChart3
+} from 'lucide-react'
 import { StandardSection } from '@/components/landing/StandardSection'
 import ItemListWorkflow from '@/components/workflow/layouts/item-list-workflow'
 import { FeatureCard } from '@/components/landing/FeatureCard'
+
+const enterpriseSupport = [
+  {
+    title: "Dedicated Support",
+    description: "Your personal AI success team with a dedicated account manager and 24/7 priority support access.",
+    icon: HeadphonesIcon
+  },
+  {
+    title: "Technical Services",
+    description: "Expert technical assistance including custom integration support and architecture consultation.",
+    icon: Wrench
+  },
+  {
+    title: "Business Success",
+    description: "Long-term success planning with quarterly business reviews and strategic planning sessions.",
+    icon: BarChart3
+  }
+]
 
 export default function EnterprisePage() {
   return (
     <Layout>
       <StandardSection
-        headline={
-          <span>
-            <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text">Enterprise-Grade</span> AI Infrastructure
-          </span>
-        }
+        headline="Enterprise-Grade AI Infrastructure"
         headlinePosition="inline"
         variant="hero"
         layout="single"
         fullWidth
+        useWordReveal={true}
+        gradientWords={{
+          "Enterprise-Grade": { from: "primary", to: "accent" },
+          "AI": { from: "primary", to: "accent" }
+        }}
       >
         <div className="max-w-3xl mx-auto">
           <div className="space-y-8">
@@ -32,12 +54,6 @@ export default function EnterprisePage() {
             <p className="text-xl text-muted-foreground text-center">
               Get dedicated support, custom integrations, and advanced security features to meet your organization's unique needs.
             </p>
-            <div className="flex justify-center">
-              <Button size="lg" className="bg-primary text-white">
-                Contact Sales
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </div>
           </div>
         </div>
       </StandardSection>
@@ -130,21 +146,28 @@ export default function EnterprisePage() {
       <StandardSection
         headline="Enterprise Support"
         headlinePosition="top"
-        leftContent={
-          <div className="space-y-6 max-w-3xl mx-auto">
+        variant="framed"
+        fullWidth
+      >
+        <div className="space-y-12 max-w-6xl mx-auto">
+          <div className="text-center max-w-3xl mx-auto">
             <p className="text-xl text-muted-foreground">
               Get dedicated support from our team of AI experts. We'll help you design, implement, and optimize your AI workflows.
             </p>
-            <ul className="space-y-4 text-lg text-muted-foreground">
-              <li>• Dedicated account manager</li>
-              <li>• 24/7 priority support</li>
-              <li>• Custom integration assistance</li>
-              <li>• Training and onboarding</li>
-              <li>• Quarterly business reviews</li>
-            </ul>
           </div>
-        }
-      />
+          
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {enterpriseSupport.map((feature, index) => (
+              <FeatureCard
+                key={index}
+                title={feature.title}
+                description={feature.description}
+                icon={feature.icon}
+              />
+            ))}
+          </div>
+        </div>
+      </StandardSection>
 
       <CTASection />
       <Footer />

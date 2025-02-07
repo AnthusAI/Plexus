@@ -13,69 +13,48 @@ import ItemListWorkflow from '@/components/workflow/layouts/item-list-workflow'
 export default function CallCenterQAPage() {
   return (
     <Layout>
-      <section className="bg-muted">
-        <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
-          <div className="py-4">
-            <div className="bg-background rounded-xl py-12 md:py-16 px-4 md:px-8">
-              <div className="flex flex-col xl:flex-row gap-8">
-                <div className="flex-1 min-w-0 xl:w-[calc(50%-2rem)]">
-                  <h1 className="text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tighter mb-6 md:mb-12 leading-tight text-center md:text-center xl:text-left">
-                    <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text whitespace-nowrap">Monitor Calls</span> With <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text whitespace-nowrap">AI Agents</span> With <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text whitespace-nowrap">No Code</span>
-                  </h1>
-                  <div className="flex flex-col md:flex-row xl:flex-col gap-8">
-                    <div className="w-full md:w-1/2 xl:w-full flex flex-col items-center md:items-start text-center md:text-left md:justify-center">
-                      <p className="text-xl text-muted-foreground mb-8 w-full">
-                        Replace expensive manual call quality assessments with AI-driven automation.
-                        Save the cost of full-time QA staff while improving evaluation coverage and consistency.
-                      </p>
-                      <p className="text-xl text-muted-foreground mb-8 w-full">
-                        We know how to operate AI agents at scale. We've built a platform that enables you to monitor calls with with no code.
-                      </p>
-                      <p className="text-xl text-muted-foreground mb-8 w-full">
-                        Humans still need to steer it, and your team knows best how to do that. Plexus gives your team the tools they need to make it happen.
-                      </p>
-                      <div className="flex justify-center xl:justify-start">
-                        <Button size="lg" className="bg-primary text-white">
-                          Book a Demo
-                          <ArrowRight className="ml-2 h-5 w-5" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="w-full md:w-1/2 xl:hidden flex justify-center md:justify-end items-center">
-                      <div className="w-full max-w-[400px]">
-                        <ItemListWorkflow 
-                          allowedMediaTypes={["audio"]} 
-                          allowedShapes={["circle"]}
-                          resultTypes={[
-                            { type: "check" },
-                            { type: "check" },
-                            { type: "check" },
-                            { type: "check" }
-                          ]}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="hidden xl:flex flex-1 min-w-0 xl:w-[calc(50%-2rem)] justify-center md:justify-end items-center">
-                  <div className="w-full max-w-[400px]">
-                    <ItemListWorkflow 
-                      allowedMediaTypes={["audio"]} 
-                      allowedShapes={["circle"]}
-                      resultTypes={[
-                        { type: "check" },
-                        { type: "check" },
-                        { type: "check" },
-                        { type: "check" }
-                      ]}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
+      <StandardSection
+        headline="Monitor Calls With AI Agents With No Code"
+        headlinePosition="inline"
+        variant="hero"
+        useWordReveal={true}
+        gradientWords={{
+          "Monitor": { from: "secondary", to: "accent" },
+          "Calls": { from: "secondary", to: "accent" },
+          "AI": { from: "primary", to: "accent" },
+          "Agents": { from: "primary", to: "accent" },
+          "No": { from: "primary", to: "accent" },
+          "Code": { from: "primary", to: "accent" }
+        }}
+        leftContent={
+          <>
+            <p className="text-xl text-muted-foreground mb-8 w-full">
+              Replace expensive manual call quality assessments with AI-driven automation.
+              Save the cost of full-time QA staff while improving evaluation coverage and consistency.
+            </p>
+            <p className="text-xl text-muted-foreground mb-8 w-full">
+              We know how to operate AI agents at scale. We've built a platform that enables you to monitor calls with with no code.
+            </p>
+            <p className="text-xl text-muted-foreground mb-8 w-full">
+              Humans still need to steer it, and your team knows best how to do that. Plexus gives your team the tools they need to make it happen.
+            </p>
+          </>
+        }
+        rightContent={
+          <div className="w-full max-w-[400px]">
+            <ItemListWorkflow 
+              allowedMediaTypes={["audio"]} 
+              allowedShapes={["circle"]}
+              resultTypes={[
+                { type: "check" },
+                { type: "check" },
+                { type: "check" },
+                { type: "check" }
+              ]}
+            />
           </div>
-        </div>
-      </section>
+        }
+      />
 
       <StandardSection
         headline="Transform Your QA Process"

@@ -340,8 +340,7 @@ def status(task_id: str, loglevel: str) -> None:
                 task_progress = progress.add_task(
                     "Processing...",
                     total=total,
-                    completed=current,
-                    status=status
+                    status=stage_configs["Setup"].status_message
                 )
                 progress.refresh()
 
@@ -392,66 +391,84 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
     import json
     from plexus.dashboard.api.models.task import Task
     from plexus.dashboard.api.client import PlexusDashboardClient
+    import os
+    
+    # Set logging level to INFO for clearer progress output
+    logging.getLogger().setLevel(logging.INFO)
     
     total_items = 2000
     target_duration = 20  # seconds
     sleep_per_item = target_duration / total_items
     
-    logging.info("Starting demo task processing...")
-    
-    client = PlexusDashboardClient()
-    task = None
-    
-    if task_id:
-        task = Task.get_by_id(task_id, client)
-    else:
-        # Create a new Task record with metadata as JSON string
-        metadata_str = json.dumps({
-            "total_items": total_items,
-            "target_duration": target_duration
-        })
-        task = Task.create(
-            client=client,
-            accountId="default",  # Using default account for demo
-            type="DEMO",
-            target=target,
-            command="plexus command demo",
-            metadata=metadata_str
-        )
-        task_id = task.id
-        logging.info(f"Created new Task with ID: {task_id}")
-    
-    # Initial state - no dispatch status
-    time.sleep(random.uniform(2.0, 3.0))
-    
-    # Update to dispatched state
-    task.update(dispatchStatus='DISPATCHED')
-    time.sleep(random.uniform(2.0, 3.0))
-    
-    # Simulate Celery task creation
-    task.update(celeryTaskId=f'demo-task-{int(time.time())}')
-    time.sleep(random.uniform(2.0, 3.0))
-    
-    # Simulate worker claiming the task
-    task.update(workerNodeId=f'demo-worker-{random.randint(1000, 9999)}')
-    time.sleep(random.uniform(2.0, 3.0))
-    
-    # Now start actual processing
-    task.start_processing()
-    
     # Create stage configs for TaskProgressTracker
     stage_configs = {
-        "Setup": StageConfig(order=1, status_message="Setting up..."),
-        "Running": StageConfig(order=2, total_items=total_items),
-        "Finishing": StageConfig(order=3, status_message="Finalizing...")
+        "Setup": StageConfig(
+            order=1, 
+            status_message="Initializing demo task..."
+        ),
+        "Running": StageConfig(
+            order=2, 
+            total_items=total_items,
+            status_message="Processing demo items..."
+        ),
+        "Finalizing": StageConfig(
+            order=3, 
+            status_message="Task completed."
+        )
     }
     
     logging.info("Stage configs:")
     for name, config in stage_configs.items():
         logging.info(f"  {name}: order={config.order}, total_items={config.total_items}, message={config.status_message}")
     
-    # Initialize progress tracker
-    tracker = TaskProgressTracker(total_items=total_items, stage_configs=stage_configs)
+    if not api_url or not api_key:
+        logging.warning("PLEXUS_API_URL or PLEXUS_API_KEY not set, cannot track task")
+        return
+
+    # Initialize API client
+    client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+
+    # Get the account ID by key
+    ACCOUNT_KEY = 'call-criteria'
+    # Use GraphQL query to get account by key
+    response = client.execute(
+        """
+        query ListAccountByKey($key: String!) {
+            listAccountByKey(key: $key) {
+                items {
+                    id
+                }
+            }
+        }
+        """,
+        {'key': ACCOUNT_KEY}
+    )
+
+    print("API Response:", response)  # Debug the raw response
+
+    if not response.get('listAccountByKey', {}).get('items'):
+        raise ValueError(f"No account found with key: {ACCOUNT_KEY}")
+        
+    account_id = response['listAccountByKey']['items'][0]['id']
+    logging.info(f"Found account ID: {account_id} for key: {ACCOUNT_KEY}")
+    
+    # Initialize progress tracker with API task management and account ID
+    tracker = TaskProgressTracker(
+        total_items=total_items,
+        stage_configs=stage_configs,
+        task_id=task_id,
+        target=target,
+        command="plexus command demo",  # Remove $ prefix since component adds it
+        description="Running demo task with progress tracking",
+        dispatch_status="DISPATCHED",
+        prevent_new_task=False,
+        metadata={
+            "type": "Demo Task",
+            "scorecard": "Outbound Sales",
+            "score": "DNC Requested?"
+        },
+        account_id=account_id  # Add the account ID here
+    )
     
     with Progress(
         TextColumn("[bright_magenta]{task.fields[status]}"),
@@ -467,212 +484,85 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
     ) as progress:
         task_progress = progress.add_task(
             "Processing...",
-            total=total_items,  # Only count main processing items
-            status=tracker.status
+            total=total_items,
+            status=stage_configs["Setup"].status_message
         )
+        _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size, max_batch_size, sleep_per_batch)
+
+def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size, max_batch_size, sleep_per_batch):
+    """Helper function to run the demo task with Rich progress bar."""
+    import random
+    
+    try:
+        # Setup stage
+        tracker.update(current_items=0)
+        time.sleep(random.uniform(1.0, 2.0))  # Simulate setup work
         
-        try:
-            # Initialization stage
-            init_time = random.uniform(4.0, 6.0)  # Random time between 4-6 seconds
-            time.sleep(init_time)
-            
-            # Update Setup stage status before advancing
-            if task:
-                task.update_progress(
-                    0,  # current items
-                    total_items,
-                    {
-                        "Setup": {
-                            "order": stage_configs["Setup"].order,
-                            "totalItems": stage_configs["Setup"].total_items,
-                            "processedItems": 0,
-                            "statusMessage": "Setup complete",
-                            "status": "COMPLETED"
-                        }
-                    }
-                )
-            
-            tracker.advance_stage()  # Complete Setup stage
-            
-            if task:
-                task.update_progress(
-                    tracker.current_items,
-                    tracker.total_items,
-                    {
-                        name: {
-                            "order": config.order,
-                            "totalItems": config.total_items,
-                            "processedItems": stage.processed_items if stage else 0,
-                            "statusMessage": stage.status_message if stage else ""
-                        }
-                        for name, (config, stage) in zip(
-                            stage_configs.keys(),
-                            [(c, tracker._stages.get(n)) for n, c in stage_configs.items()]
-                        )
-                    }
-                )
-            
-            progress.update(
-                task_progress,
-                completed=tracker.current_items,
-                status=tracker.status
+        # Main processing stage
+        tracker.advance_stage()  # Advance to "Running" stage
+        
+        # Process items with target rate
+        current_item = 0
+        start_time = time.time()
+        last_api_update = 0  # To control API update frequency
+        target_duration = 20.0  # Target total processing time in seconds
+        api_update_interval = 1  # Update API every 1 second
+        
+        # Initialize the last update time
+        last_update_time = time.time()
+
+        while current_item < total_items:
+            # Calculate how many items we should have processed by now to stay on target
+            elapsed = time.time() - start_time
+            target_items = min(
+                total_items,
+                int((elapsed / target_duration) * total_items)
             )
             
-            # Main processing stage
-            for i in range(total_items):
-                current_item = i + 1
+            time.sleep(finish_time)
+            
+            # Update tracker with current progress
+            tracker.update(current_items=current_item)
+            
+            # Only update API task periodically
+            current_time = time.time()
+            if current_time - last_api_update >= api_update_interval:
                 tracker.update(current_items=current_item)
-                
-                # Update progress every 50 items or on the last item
-                if i % 50 == 0 or i == total_items - 1:
-                    # Update rich progress
-                    progress.update(
-                        task_progress,
-                        completed=current_item,
-                        status=f"{tracker.status} ({tracker.items_per_second:.1f} items/sec)"
-                    )
-                    
-                    # Update Celery progress
-                    CommandProgress.update(
-                        current=current_item,
-                        total=total_items,
-                        status=tracker.status
-                    )
-                    
-                    # Update Task progress if we have a task ID
-                    if task:
-                        current_status = f"{tracker.status} ({tracker.items_per_second:.1f} items/sec)"
-                        task.update_progress(
-                            tracker.current_items,
-                            tracker.total_items,
-                            {
-                                name: {
-                                    "order": config.order,
-                                    "totalItems": config.total_items,
-                                    "processedItems": stage.processed_items if stage else 0,
-                                    "statusMessage": current_status if name == "Running" else (stage.status_message if stage else ""),
-                                    "itemsPerSecond": tracker.items_per_second
-                                }
-                                for name, (config, stage) in zip(
-                                    stage_configs.keys(),
-                                    [(c, tracker._stages.get(n)) for n, c in stage_configs.items()]
-                                )
-                            },
-                            estimated_completion_at=tracker.estimated_completion_time
-                        )
-                
-                time.sleep(sleep_per_item)
+                last_api_update = current_time
             
-            # Update Running stage status before advancing
-            if task:
-                task.update_progress(
-                    total_items,  # All items processed
-                    total_items,
-                    {
-                        "Running": {
-                            "order": stage_configs["Running"].order,
-                            "totalItems": stage_configs["Running"].total_items,
-                            "processedItems": total_items,
-                            "statusMessage": "Processing complete",
-                            "status": "COMPLETED"
-                        }
-                    }
-                )
+            # Calculate progress metrics for display only
+            actual_items_per_sec = current_item / elapsed if elapsed > 0 else 0
             
-            # Finishing stage
-            tracker.advance_stage()  # Move to Finishing stage
-            finish_time = random.uniform(2.0, 4.0)  # Random time between 2-4 seconds
+            # Update Rich progress bar
             progress.update(
                 task_progress,
-                completed=total_items,
-                status="Finalizing..."
+                completed=current_item,
+                status=f"{tracker.status} ({actual_items_per_sec:.1f} items/sec)"
             )
             
-            time.sleep(finish_time)
-            
-            # Update Finishing stage status before completing
-            if task:
-                task.update_progress(
-                    total_items,
-                    total_items,
-                    {
-                        "Finishing": {
-                            "order": stage_configs["Finishing"].order,
-                            "totalItems": stage_configs["Finishing"].total_items,
-                            "processedItems": 0,
-                            "statusMessage": "Finalizing...",
-                            "status": "COMPLETED"
-                        }
-                    }
-                )
-            
-            time.sleep(finish_time)
-            
-            # Update final status after finishing
-            if task:
-                task.update_progress(
-                    total_items,
-                    total_items,
-                    {
-                        "Finishing": {
-                            "order": stage_configs["Finishing"].order,
-                            "totalItems": stage_configs["Finishing"].total_items,
-                            "processedItems": 0,
-                            "statusMessage": "Processing complete",
-                            "status": "COMPLETED"
-                        }
-                    }
-                )
-            
-            # Complete all stages
-            tracker.complete()
-            
-            if task:
-                # Debug log current state
-                logging.info("Final tracker state:")
-                for name, stage in tracker._stages.items():
-                    logging.info(f"  {name}: processed={stage.processed_items}/{stage.total_items}, status={stage.status_message}")
-                
-                # Debug log what we're sending to the API
-                stage_updates = {
-                    name: {
-                        "order": config.order,
-                        "totalItems": config.total_items,
-                        "processedItems": stage.processed_items if stage else 0,
-                        "statusMessage": stage.status_message if stage else ""
-                    }
-                    for name, (config, stage) in zip(
-                        stage_configs.keys(),
-                        [(c, tracker._stages.get(n)) for n, c in stage_configs.items()]
-                    )
-                }
-                logging.info("Sending stage updates to API:")
-                for name, update in stage_updates.items():
-                    logging.info(f"  {name}: {update}")
-                
-                task.update_progress(
-                    tracker.current_items,
-                    tracker.total_items,
-                    stage_updates
-                )
-                
-                # Now mark as completed
-                task.complete_processing()
-                
-                # Get current stages to verify their state
-                final_stages = task.get_stages()
-                for stage in final_stages:
-                    logging.info(f"Final stage {stage.name}: status={stage.status}, message={stage.statusMessage}")
-            
-            success_message = (
-                f"Demo task completed successfully in {tracker.elapsed_time:.1f} seconds "
-                f"({tracker.items_per_second:.1f} items/sec)"
-            )
-            logging.info(success_message)
-            
-        except KeyboardInterrupt:
-            error_message = (
-                f"Demo task cancelled by user after {tracker.elapsed_time:.1f} seconds "
-                f"({tracker.items_per_second:.1f} items/sec)"
-            )
-            logging.info(error_message)
+            # Sleep a tiny amount to allow for API updates and logging
+            time.sleep(0.1)
+        
+        # Final stage - make sure we update the API one last time
+        tracker.update(current_items=current_item)
+        tracker.advance_stage()  # Advance to "Finalizing" stage
+        
+        # Simulate some finalization work
+        time.sleep(random.uniform(1.0, 2.0))
+        
+        # Complete the task
+        tracker.complete()  # This will mark the task as complete
+        
+    except KeyboardInterrupt:
+        error_message = (
+            f"Demo task cancelled by user after {tracker.elapsed_time:.1f} seconds "
+            f"({tracker.items_per_second:.1f} items/sec)"
+        )
+        logging.info(error_message)
+        if tracker.api_task:
+            tracker.api_task.fail_processing("Task cancelled by user")
+    except Exception as e:
+        logging.error(f"Demo task failed: {str(e)}", exc_info=True)
+        if tracker.api_task:
+            tracker.api_task.fail_processing(str(e))
+        raise

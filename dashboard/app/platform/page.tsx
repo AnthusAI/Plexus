@@ -53,12 +53,6 @@ export default function PlatformPage() {
             <p className="text-xl text-muted-foreground mb-8 w-full">
               Your team knows your business. Our team knows how to operate AI reliably at scale. Together, we can build and deploy solutions that transform your business.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Button size="lg" className="w-full sm:w-auto bg-primary text-white hover:bg-primary/90 text-lg font-semibold">
-                Learn More
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </div>
           </>
         }
         rightContent={
