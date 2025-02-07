@@ -105,10 +105,6 @@ export default function TasksPage() {
               </ul>
             </div>
 
-            <div className="my-8">
-              <TaskAnimation />
-            </div>
-
             <div>
               <h3 className="text-xl font-medium mb-2">Worker Computers</h3>
               <p className="text-muted-foreground mb-4">
