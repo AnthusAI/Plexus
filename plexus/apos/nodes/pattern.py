@@ -11,6 +11,7 @@ from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTempla
 from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
+from jinja2 import Template
 
 from plexus.apos.nodes.base import APOSNode
 from plexus.apos.graph_state import APOSState
@@ -61,25 +62,11 @@ class PatternAnalyzerNode(APOSNode):
             system_template,
             partial_variables={"format_instructions": self.parser.get_format_instructions()}
         )
-        self.human_template = HumanMessagePromptTemplate.from_template(
-            model_config.prompts['human_template']
-        )
-        self.chat_prompt = ChatPromptTemplate.from_messages([
-            self.system_template,
-            self.human_template
-        ])
+        
+        # Use Jinja2 template for human template
+        self.human_template_str = model_config.prompts['human_template']
         
         logger.info(f"Initialized pattern analyzer node using {model_config.model_type}")
-    
-    def _format_mismatch_summary(self, mismatch) -> str:
-        """Format a single mismatch for inclusion in the prompt."""
-        return f"""
-Question: {mismatch.question_name}
-Model's Answer: {mismatch.model_answer}
-Correct Answer: {mismatch.ground_truth}
-Analysis: {mismatch.detailed_analysis}
-Prompts Contribution: {mismatch.prompts_contribution}
----"""
     
     def get_node_handler(self) -> Callable[[APOSState], Dict[str, Any]]:
         """Get the pattern analysis handler."""
@@ -91,16 +78,20 @@ Prompts Contribution: {mismatch.prompts_contribution}
                 
                 logger.info("Starting pattern analysis across mismatches")
                 
-                # Format mismatches and store in state
-                state.mismatch_summaries = "\n".join(
-                    self._format_mismatch_summary(m) for m in state.mismatches
-                )
+                # Render the Jinja2 template with state data
+                template = Template(self.human_template_str)
+                human_message = template.render(**state.dict())
+                
+                # Create messages using rendered template
+                messages = [
+                    self.system_template.format(**state.dict()),
+                    HumanMessagePromptTemplate.from_template(human_message).format(**state.dict())
+                ]
                 
                 # Create token counter callback
                 token_counter = TokenCounterCallback()
                 
-                # Get analysis from LLM using state dict with token counting
-                messages = self.chat_prompt.format_messages(**state.dict())
+                # Get analysis from LLM
                 response = await self.llm.ainvoke(
                     messages,
                     config={"callbacks": [token_counter]}

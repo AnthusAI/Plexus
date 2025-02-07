@@ -11,6 +11,7 @@ from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
+from jinja2 import Template
 
 from plexus.apos.nodes.base import APOSNode
 from plexus.apos.graph_state import APOSState
@@ -59,7 +60,7 @@ class MismatchAnalyzerNode(APOSNode):
         from langchain_core.globals import set_llm_cache
         set_llm_cache(SQLiteCache(database_path=f"{model_config.cache_dir}/analyzer_cache.db"))
         
-        # Initialize LLM with only valid OpenAI parameters
+        # Initialize LLM
         self.llm = ChatOpenAI(
             model=model_config.model_type,
             temperature=model_config.temperature,
@@ -71,30 +72,15 @@ class MismatchAnalyzerNode(APOSNode):
         # Set up output parser
         self.parser = JsonOutputParser(pydantic_object=MismatchAnalysisOutput)
         
-        # log the format instructions
-        logger.info(f"Format instructions: {self.parser.get_format_instructions()}")
+        # Store raw templates for Jinja2
+        self.system_template_str = (
+            model_config.prompts['system_template'] + 
+            "\n\nIMPORTANT: Your response MUST be in JSON format following this schema:\n" +
+            "{{format_instructions}}"  # Use Jinja2 variable instead of direct substitution
+        )
+        self.human_template_str = model_config.prompts['human_template']
         
         logger.info(f"Initialized mismatch analyzer using {model_config.model_type}")
-        self.prompt = self._create_prompt()
-        
-    def _create_prompt(self):
-        """Create the analysis prompt template."""
-        system_template = self.config.analyzer_model.prompts['system_template']
-        system_template += "\n\n{format_instructions}"
-        
-        system_message = SystemMessagePromptTemplate.from_template(
-            system_template,
-            partial_variables={"format_instructions": self.parser.get_format_instructions()}
-        )
-        
-        human_template = HumanMessagePromptTemplate.from_template(
-            self.config.analyzer_model.prompts['human_template']
-        )
-        
-        return ChatPromptTemplate.from_messages([
-            system_message,
-            human_template
-        ])
     
     async def analyze_mismatch(self, mismatch: MismatchAnalysis) -> MismatchAnalysis:
         """
@@ -113,13 +99,23 @@ class MismatchAnalyzerNode(APOSNode):
             # Debug logging
             state_dict = self.state.dict(exclude_unset=True, exclude_none=True)
             
+            # Add format instructions directly to state_dict
+            state_dict["format_instructions"] = self.parser.get_format_instructions()
+            
             # Create token counter callback
             token_counter = TokenCounterCallback()
             
-            # Prepare the prompt with all variables
-            messages = self.prompt.format_messages(**state_dict)
+            # Render templates using Jinja2
+            system_template = Template(self.system_template_str)
+            human_template = Template(self.human_template_str)
             
-            # Get analysis from LLM with token counting
+            # Render the messages directly
+            messages = [
+                {"role": "system", "content": system_template.render(**state_dict)},
+                {"role": "user", "content": human_template.render(**state_dict)}
+            ]
+            
+            # Get analysis from LLM
             response = await self.llm.ainvoke(
                 messages,
                 config={"callbacks": [token_counter]}
@@ -128,15 +124,18 @@ class MismatchAnalyzerNode(APOSNode):
             # Debug log the raw response
             logger.debug(f"Mismatch Raw LLM response: {response.content}")
             
-            # Clean the response content by removing markdown code block if present
+            # Clean and parse the response content
             content = response.content
             if content.startswith("```") and content.endswith("```"):
-                # Remove the first line (```json) and the last line (```)
-                content = "\n".join(content.split("\n")[1:-1])
+                lines = content.split("\n")
+                if len(lines) >= 3:
+                    content = "\n".join(lines[1:-1])
             
-            # Parse the cleaned response
+            # Parse the response
             parsed_dict = self.parser.parse(content)
-            logger.debug(f"Parsed dict: {parsed_dict}")
+            if not isinstance(parsed_dict, dict):
+                raise ValueError(f"Expected dictionary from parser, got {type(parsed_dict)}")
+            
             analysis_result = MismatchAnalysisOutput(**parsed_dict)
             
             # Track cost
