@@ -144,29 +144,20 @@ class Task(BaseModel):
         if 'accountId' not in kwargs:
             kwargs['accountId'] = cls._get_account_id(client)
 
+        # Prepare input data
+        input_data = {
+            "type": type,
+            "target": target,
+            "command": command,
+            "status": "PENDING",  # Default status for new tasks
+            **kwargs
+        }
+
         # Create task with account ID
         response = client.execute(
             """
-            mutation CreateTask(
-                $type: String!
-                $target: String!
-                $command: String!
-                $accountId: String!
-                $status: String!
-                $description: String
-                $dispatchStatus: String
-                $metadata: AWSJSON
-            ) {
-                createTask(input: {
-                    type: $type
-                    target: $target
-                    command: $command
-                    accountId: $accountId
-                    status: $status
-                    description: $description
-                    dispatchStatus: $dispatchStatus
-                    metadata: $metadata
-                }) {
+            mutation CreateTask($input: CreateTaskInput!) {
+                createTask(input: $input) {
                     id
                     type
                     target
@@ -178,40 +169,48 @@ class Task(BaseModel):
                     metadata
                     createdAt
                     updatedAt
+                    startedAt
+                    completedAt
+                    estimatedCompletionAt
+                    errorMessage
+                    errorDetails
+                    stdout
+                    stderr
+                    currentStageId
                 }
             }
             """,
-            {
-                "type": type,
-                "target": target,
-                "command": command,
-                "status": "PENDING",  # Default status for new tasks
-                **kwargs
-            }
+            {"input": input_data}
         )
 
         if 'errors' in response:
             raise ValueError(f"Failed to create task: {response['errors']}")
 
         task_data = response['createTask']
-        return cls(client=client, **task_data)
+        return cls.from_dict(task_data, client)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Task':
         # Convert datetime fields
         for date_field in ['createdAt', 'updatedAt', 'startedAt', 'completedAt', 'estimatedCompletionAt']:
             if data.get(date_field):
-                data[date_field] = datetime.fromisoformat(
-                    data[date_field].replace('Z', '+00:00')
-                )
+                try:
+                    data[date_field] = datetime.fromisoformat(
+                        data[date_field].replace('Z', '+00:00')
+                    )
+                except (ValueError, AttributeError) as e:
+                    logging.error(f"Error parsing datetime for {date_field}: {e}")
+                    data[date_field] = None
 
-        # Don't filter out stages, but remove it from the constructor args
-        task_data = {k: v for k, v in data.items() if k != 'stages'}
-        task = cls(client=client, **task_data)
-        
         # Store stages data for later access if needed
-        if 'stages' in data and data['stages'] and 'items' in data['stages']:
-            task._stages = data['stages']['items']
+        stages_data = data.pop('stages', None)
+        
+        # Create instance with remaining fields
+        task = cls(client=client, **data)
+        
+        # Store stages data if present
+        if stages_data and 'items' in stages_data:
+            task._stages = stages_data['items']
         
         return task
 
@@ -349,12 +348,14 @@ class Task(BaseModel):
         }
         """
         
+        # Always include the task's start time when creating a stage
         variables = {
             'input': {
                 'taskId': self.id,
                 'name': name,
                 'order': order,
-                'status': 'PENDING'
+                'status': 'PENDING',
+                'startedAt': self.startedAt.isoformat().replace('+00:00', 'Z') if self.startedAt else None
             }
         }
         
@@ -373,6 +374,11 @@ class Task(BaseModel):
 
     def advance_stage(self, stage: 'TaskStage') -> None:
         """Update the task's current stage."""
+        # First, ensure the stage has the task's original start time
+        if self.startedAt:
+            stage.update(startedAt=self.startedAt.isoformat().replace('+00:00', 'Z'))
+        
+        # Then update the current stage ID
         self.update(currentStageId=stage.id)
 
     def update_progress(
@@ -385,10 +391,9 @@ class Task(BaseModel):
         """Update task progress and stage information."""
         now = datetime.now(timezone.utc)
         
-        # Update task progress
-        self.update(
-            estimatedCompletionAt=estimated_completion_at
-        )
+        # Only update estimated completion time
+        # Never modify startedAt - it should be set once when the task is created/started
+        self.update(estimatedCompletionAt=estimated_completion_at)
         
         # Get existing stages
         stages = self.get_stages()
@@ -420,11 +425,10 @@ class Task(BaseModel):
             if "totalItems" in config:
                 update_data["totalItems"] = config["totalItems"]
                 
-            # Handle startedAt based on stage status
-            if config.get("startedAt") is not None:
-                update_data["startedAt"] = config["startedAt"]
-            elif config.get("status") == "RUNNING" and not stage.startedAt:
-                update_data["startedAt"] = now.isoformat()
+            # ALWAYS use the task's original start time for all stages
+            # This ensures consistent timing across the entire task
+            if self.startedAt:
+                update_data["startedAt"] = self.startedAt.isoformat().replace('+00:00', 'Z')
             
             # Remove None values to avoid overwriting existing data
             update_data = {k: v for k, v in update_data.items() if v is not None}

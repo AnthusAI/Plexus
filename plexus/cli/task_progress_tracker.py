@@ -472,8 +472,7 @@ class TaskProgressTracker:
 
     @property
     def elapsed_time(self) -> float:
-        if self.is_complete:
-            return self.end_time - self.start_time
+        """Return elapsed time since task started, regardless of current stage."""
         return time.time() - self.start_time
 
     @property
