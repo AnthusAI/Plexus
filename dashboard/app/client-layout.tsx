@@ -23,8 +23,36 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   
-  // Allow unauthenticated access to /, /dashboard, /call-center-qa, /optimizer-agents, and /platform
-  const publicPaths = ['/', '/dashboard', '/call-center-qa', '/optimizer-agents', '/platform', '/enterprise', '/resources'];
+  // Allow unauthenticated access to marketing pages and solutions
+  const publicPaths = [
+    '/',
+    '/dashboard',
+    '/solutions',
+    '/solutions/platform',
+    '/solutions/optimizer-agents',
+    '/solutions/call-center-qa',
+    '/solutions/enterprise',
+    '/solutions/resources',
+    '/documentation',
+    '/documentation/advanced/worker-nodes',
+    '/documentation/advanced/cli',
+    '/documentation/advanced/sdk',
+    '/documentation/concepts',
+    '/documentation/methods',
+    '/documentation/concepts/sources',
+    '/documentation/concepts/scores',
+    '/documentation/concepts/scorecards',
+    '/documentation/concepts/evaluations',
+    '/documentation/concepts/tasks',
+    '/documentation/concepts/items',
+    '/documentation/methods/add-edit-source',
+    '/documentation/methods/profile-source',
+    '/documentation/methods/add-edit-scorecard',
+    '/documentation/methods/add-edit-score',
+    '/documentation/methods/evaluate-score',
+    '/documentation/methods/monitor-tasks',
+    '/items'
+  ];
   const isPublicPath = publicPaths.includes(pathname);
   
   useEffect(() => {
@@ -85,7 +113,6 @@ export default function ClientLayout({
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
-          forcedTheme={typeof window !== 'undefined' ? undefined : 'light'}
         >
           <AuthWrapper>{children}</AuthWrapper>
         </ThemeProvider>

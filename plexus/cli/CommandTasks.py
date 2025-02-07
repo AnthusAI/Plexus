@@ -6,24 +6,95 @@ from contextlib import redirect_stdout, redirect_stderr
 from celery import Task
 from plexus.CustomLogging import logging
 from .CommandProgress import CommandProgress, ProgressState
+from datetime import datetime, timezone, timedelta
+from typing import Optional
+import socket
+import os
+import time
 
 def register_tasks(app):
     """Register Celery tasks with the application."""
     
-    @app.task(bind=True, name="plexus.execute_command")
-    def execute_command(self: Task, command_string: str, target: str = "default/command") -> dict:
+    @app.task(
+        bind=True,
+        name="plexus.execute_command",
+        acks_late=False
+    )
+    def execute_command(self: Task, command_string: str, target: str = "default/command", task_id: Optional[str] = None) -> dict:
         """Execute a Plexus command and return its result."""
         try:
-            # Check if this worker accepts this target
-            matcher = getattr(app.conf, "task_target_matcher", None)
-            if matcher and not matcher.matches(target):
-                # Reject the task so another worker can pick it up
-                self.request.callbacks = None
-                self.request.errbacks = None
-                raise self.reject(requeue=True)
+            logging.info(f"Received command: '{command_string}' with target: '{target}' and task_id: '{task_id}'")
+            
+            # Initialize task tracking
+            task = None
+            api_url = os.environ.get('PLEXUS_API_URL')
+            api_key = os.environ.get('PLEXUS_API_KEY')
 
+            if not api_url or not api_key:
+                logging.warning("PLEXUS_API_URL or PLEXUS_API_KEY not set, cannot track task")
+            else:
+                # Import API client classes at the top level
+                from plexus.dashboard.api.models.task import Task
+                from plexus.dashboard.api.client import PlexusDashboardClient
+                
+                client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+                
+                # Always try to get or create task at the Celery task level
+                if task_id:
+                    # If we have a task_id, try to get existing task
+                    logging.info(f"Initializing PlexusDashboardClient to get task {task_id}")
+                    
+                    # Retry getting task a few times to handle timing issues
+                    max_retries = 3
+                    retry_delay = 1  # seconds
+                    
+                    for attempt in range(max_retries):
+                        try:
+                            task = Task.get_by_id(task_id, client)
+                            logging.info(f"Successfully retrieved task {task_id}, starting processing")
+                            task.start_processing()
+                            break
+                        except Exception as e:
+                            if attempt < max_retries - 1:
+                                logging.warning(f"Attempt {attempt + 1} to get Task {task_id} failed: {str(e)}, retrying...")
+                                time.sleep(retry_delay)
+                            else:
+                                logging.error(f"All attempts to get Task {task_id} failed: {str(e)}")
+                else:
+                    # Create new task if no task_id provided
+                    try:
+                        task = Task.create(
+                            client=client,
+                            accountId="demo_account",  # You may want to make this configurable
+                            type=command_string,
+                            target=target,
+                            command=command_string,
+                            dispatchStatus="DISPATCHED"
+                        )
+                        task_id = task.id  # Set task_id for passing to command
+                        logging.info(f"Created API Task record with ID: {task.id}")
+                    except Exception as e:
+                        logging.error(f"Failed to create task record: {str(e)}")
+            
+            # Only check target matching if a matcher is configured
+            matcher = getattr(app.conf, "task_target_matcher", None)
+            if matcher is not None:
+                logging.info(f"Checking if worker accepts target '{target}'")
+                if not matcher.matches(target):
+                    logging.info(f"Worker does not accept target '{target}', rejecting task")
+                    # Reject the task so another worker can pick it up
+                    self.request.callbacks = None
+                    self.request.errbacks = None
+                    raise self.reject(requeue=True)
+                logging.info(f"Worker accepts target '{target}'")
+
+            logging.info(f"Executing command: '{command_string}'")
             # Parse the command string safely
             args = shlex.split(command_string)
+            
+            # Add task_id to args if we have one
+            if task_id and '--task-id' not in args:
+                args.extend(['--task-id', task_id])
             
             # Save the original argv
             original_argv = sys.argv
@@ -34,6 +105,20 @@ def register_tasks(app):
             
             def progress_callback(state: ProgressState):
                 """Update Celery task state with progress information."""
+                # Convert time string to seconds if needed
+                estimated_remaining = 0
+                if state.estimated_remaining:
+                    if isinstance(state.estimated_remaining, str):
+                        # Parse time string like "3m 31s"
+                        parts = state.estimated_remaining.split()
+                        for part in parts:
+                            if part.endswith('m'):
+                                estimated_remaining += int(part[:-1]) * 60
+                            elif part.endswith('s'):
+                                estimated_remaining += int(part[:-1])
+                    else:
+                        estimated_remaining = float(state.estimated_remaining)
+
                 self.update_state(
                     state='PROGRESS',
                     meta={
@@ -41,9 +126,25 @@ def register_tasks(app):
                         'total': state.total,
                         'status': state.status,
                         'elapsed_time': state.elapsed_time,
-                        'estimated_remaining': state.estimated_remaining
+                        'estimated_remaining': estimated_remaining
                     }
                 )
+                
+                # Update Task progress if we have a task
+                if task:
+                    task.update_progress(
+                        state.current,
+                        state.total,
+                        {
+                            "Running": {
+                                "order": 1,
+                                "totalItems": state.total,
+                                "processedItems": state.current,
+                                "statusMessage": state.status
+                            }
+                        },
+                        estimated_completion_at=datetime.now(timezone.utc) + timedelta(seconds=estimated_remaining)
+                    )
             
             # Set up progress reporting
             CommandProgress.set_update_callback(progress_callback)
@@ -64,7 +165,14 @@ def register_tasks(app):
                         status = 'success' if e.code == 0 else 'error'
                     except Exception as e:
                         status = 'error'
-                        logging.error(f"Command execution failed: {str(e)}")
+                        logging.error(f"Command execution failed: {str(e)}", exc_info=True)
+                
+                # Update task status if we have a task
+                if task:
+                    if status == 'success':
+                        task.complete_processing()
+                    else:
+                        task.fail_processing(str(e) if 'e' in locals() else 'Command failed')
                 
                 return {
                     'status': status,
@@ -82,6 +190,9 @@ def register_tasks(app):
                 
         except Exception as e:
             logging.error(f"Command failed: {str(e)}")
+            # Update task status if we have a task
+            if 'task' in locals() and task:
+                task.fail_processing(str(e))
             return {
                 'status': 'error',
                 'command': command_string,

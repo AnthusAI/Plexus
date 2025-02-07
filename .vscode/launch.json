@@ -116,6 +116,23 @@
             }
         },
         {
+            "name": "FastAPI Dev",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "fastapi",
+            "args": [
+                "dev",
+                "api.py",
+                "--host", "0.0.0.0",
+                "--port", "9000"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/../Call-Criteria-Python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
             "name": "Python Debugger: Python File",
             "type": "debugpy",
             "request": "launch",
