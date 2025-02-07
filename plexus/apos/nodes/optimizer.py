@@ -11,6 +11,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field, field_validator, ValidationError
+from jinja2 import Template
 
 from plexus.apos.nodes.base import APOSNode
 from plexus.apos.graph_state import APOSState
@@ -75,21 +76,13 @@ class OptimizerNode(APOSNode):
         # Set up output parser
         self.parser = JsonOutputParser(pydantic_object=OptimizerOutput)
         
-        # Set up prompt templates with format instructions
-        system_template = model_config.prompts['system_template']
-        system_template += "\n\n{format_instructions}"
-        
-        self.system_template = SystemMessagePromptTemplate.from_template(
-            system_template,
-            partial_variables={"format_instructions": self.parser.get_format_instructions()}
+        # Store raw templates for Jinja2
+        self.system_template_str = (
+            model_config.prompts['system_template'] + 
+            "\n\nIMPORTANT: Your response MUST be in JSON format following this schema:\n" +
+            "{{format_instructions}}"  # Use Jinja2 variable instead of direct substitution
         )
-        self.human_template = HumanMessagePromptTemplate.from_template(
-            model_config.prompts['human_template']
-        )
-        self.chat_prompt = ChatPromptTemplate.from_messages([
-            self.system_template,
-            self.human_template
-        ])
+        self.human_template_str = model_config.prompts['human_template']
         
         logger.info(f"Initialized optimizer node using {model_config.model_type}")
     
@@ -184,7 +177,8 @@ class OptimizerNode(APOSNode):
                     
                 # Run optimization using LLM with retries
                 prompt_vars = {
-                    **state.dict()
+                    **state.dict(),
+                    "format_instructions": self.parser.get_format_instructions()
                 }
 
                 max_retries = 3
@@ -194,17 +188,21 @@ class OptimizerNode(APOSNode):
 
                 while retry_count < max_retries:
                     try:
-                        # If this is a retry, add error context to the prompt
+                        # If this is a retry, add error context
                         if retry_count > 0 and last_error:
-                            prompt_vars["error_context"] = (
-                                f"Previous attempt failed with error: {str(last_error)}. "
-                                "CRITICAL REQUIREMENT: The user_message MUST contain the exact string '{{text}}' (including the curly braces) "
-                                "as a placeholder where the input text will be inserted. "
-                                "Example format: 'Analyze the following text: {{text}}'"
-                            )
+                            prompt_vars["error_context"] = f"Previous attempt failed with error: {str(last_error)}..."
                         
-                        # Get optimization suggestions from LLM with token counting
-                        messages = self.chat_prompt.format_messages(**prompt_vars)
+                        # Render templates using Jinja2
+                        system_template = Template(self.system_template_str)
+                        human_template = Template(self.human_template_str)
+                        
+                        # Render the messages directly
+                        messages = [
+                            {"role": "system", "content": system_template.render(**prompt_vars)},
+                            {"role": "user", "content": human_template.render(**prompt_vars)}
+                        ]
+                        
+                        # Get optimization suggestions from LLM
                         response = await self.llm.ainvoke(
                             messages,
                             config={"callbacks": [token_counter]}
