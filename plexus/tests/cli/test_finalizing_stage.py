@@ -2,6 +2,7 @@ import time
 import logging
 import os
 from plexus.cli.task_progress_tracker import TaskProgressTracker, StageConfig
+from unittest.mock import patch
 
 # Configure logging
 logging.basicConfig(
@@ -10,7 +11,40 @@ logging.basicConfig(
     force=True  # Override any existing logging configuration
 )
 
-def test_finalizing_stage_progress():
+# Add dummy API classes to simulate API task behavior without real cloud calls
+
+class DummyAPIStage:
+    def __init__(self, name, order):
+        self.name = name
+        self.order = order
+        self.id = f"dummy_stage_{name}"
+    def update(self, **kwargs):
+        pass
+
+class DummyAPITask:
+    def __init__(self, id):
+        self.id = id
+        self._stages = {}
+    def get_stages(self):
+        return list(self._stages.values())
+    def create_stage(self, name, order):
+        stage = DummyAPIStage(name, order)
+        self._stages[name] = stage
+        return stage
+    def advance_stage(self, next_api_stage):
+        pass
+    def update(self, **kwargs):
+        pass
+    def complete_processing(self):
+        pass
+
+# Modify the test function to patch Task.create
+@patch("plexus.dashboard.api.models.task.Task.create", autospec=True)
+
+def test_finalizing_stage_progress(mock_create):
+    dummy_task = DummyAPITask("dummy_task_id")
+    mock_create.return_value = dummy_task
+
     """Test that stages are properly created, updated and visible in the UI.
     
     This test demonstrates the proper way to configure task stages for UI visibility:
