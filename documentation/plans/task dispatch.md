@@ -118,6 +118,10 @@ This document outlines the implementation of Plexus's two-level dispatch system:
      - Added account ID integration ✓
      - Fixed task creation and update issues ✓
      - Improved error handling and logging ✓
+     - Enhanced datetime handling with robust parsing and formatting ✓
+     - Fixed stage start time inheritance to prevent elapsed time resets ✓
+     - Added safeguards against invalid datetime values ✓
+     - Improved timezone handling and UTC consistency ✓
 
 3. **UI Integration** ✓
    - Activity Dashboard improvements:
@@ -177,7 +181,25 @@ This document outlines the implementation of Plexus's two-level dispatch system:
      - Add detailed logging for debugging
      - Set up monitoring and alerting
 
-2. **DynamoDB Indexes** (In Progress)
+2. **Task Management CLI Tools** (In Progress)
+   - Added CLI commands for task management:
+     - `plexus tasks list` - List tasks with filtering options
+       - Filter by account ID, status, and type
+       - Display task details in formatted table
+     - `plexus tasks delete` - Delete tasks and their stages
+       - Delete by ID, account, status, or type
+       - Confirmation prompt with task preview
+       - Force option to skip confirmation
+   - Implementation details:
+     - Moved task commands to dedicated `TaskCommands.py`
+     - Rich library integration for better UI
+     - GraphQL mutations for task/stage deletion
+   - Current challenges:
+     - Testing needed for edge cases
+     - Error handling improvements needed
+     - Need to verify proper cleanup of related resources
+
+3. **DynamoDB Indexes** (In Progress)
    - Current state:
      ```typescript
      .secondaryIndexes((idx) => [
@@ -192,7 +214,7 @@ This document outlines the implementation of Plexus's two-level dispatch system:
      2. Add `updatedAt` sort key to `scoreId` index
      3. Remove standalone `updatedAt` index (redundant)
 
-3. **System Testing**
+4. **System Testing**
    - ✓ Initial test successful with Node.js Lambda
    - ✓ DynamoDB stream configuration working
    - Current challenges:
