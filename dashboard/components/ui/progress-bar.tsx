@@ -1,6 +1,7 @@
-import React from "react"
+import React, { useRef } from "react"
 import { cn } from "@/lib/utils"
 import { ProgressBarTiming } from "./progress-bar-timing"
+import NumberFlow from '@number-flow/react'
 
 export interface ProgressBarProps {
   progress: number
@@ -25,9 +26,28 @@ export function ProgressBar({
   isFocused = false,
   showTiming = true
 }: ProgressBarProps) {
+  const highestProgressRef = useRef(0)
+  const highestProcessedItemsRef = useRef(0)
+
+  // Update highest values and ensure we never go backwards
   const displayProgress = Math.round(progress)
-  const clampedProgress = Math.min(Math.max(displayProgress, 0), 100)
+  const safeProgress = Math.max(displayProgress, highestProgressRef.current)
+  highestProgressRef.current = safeProgress
+  
+  const safeProcessedItems = processedItems !== undefined ? 
+    Math.max(processedItems, highestProcessedItemsRef.current) : undefined
+  if (safeProcessedItems !== undefined) {
+    highestProcessedItemsRef.current = safeProcessedItems
+  }
+
+  const clampedProgress = Math.min(Math.max(safeProgress, 0), 100)
   const isInProgress = clampedProgress < 100
+
+  // Common animation config for consistency
+  const animationConfig = {
+    duration: 800,
+    easing: 'cubic-bezier(0.4, 0, 0.2, 1)' // Material Design easing
+  }
 
   return (
     <div className={cn("flex flex-col gap-1", className)}>
@@ -43,11 +63,14 @@ export function ProgressBar({
         <div
           role="progressbar"
           className={cn(
-            "absolute top-0 left-0 h-full rounded-md transition-all",
+            "absolute top-0 left-0 h-full rounded-md",
             `bg-${color}`,
             clampedProgress > 0 ? `bg-${color}` : ''
           )}
-          style={{ width: `${clampedProgress}%` }}
+          style={{ 
+            width: `${clampedProgress}%`,
+            transition: `width ${animationConfig.duration}ms ${animationConfig.easing}`
+          }}
         />
         <div className="absolute top-0 left-0 right-0 h-full flex justify-between items-center px-2">
           {processedItems !== undefined && totalItems !== undefined && (
@@ -58,12 +81,18 @@ export function ProgressBar({
                   ? "text-focus" 
                   : "text-primary-foreground"
               )}>
-                {processedItems}
+                <NumberFlow 
+                  value={safeProcessedItems ?? 0}
+                  transformTiming={{
+                    duration: animationConfig.duration,
+                    easing: animationConfig.easing
+                  }}
+                />
               </span>
               <span className="text-sm font-medium text-primary-foreground"> / </span>
               <span className={cn(
                 "text-sm font-medium",
-                isFocused && processedItems !== totalItems 
+                isFocused && safeProcessedItems !== totalItems 
                   ? "text-focus" 
                   : "text-primary-foreground" 
               )}>
@@ -75,7 +104,14 @@ export function ProgressBar({
             "text-sm font-medium",
             isFocused && isInProgress ? "text-focus" : "text-primary-foreground"
           )}>
-            {displayProgress}%
+            <NumberFlow 
+              value={clampedProgress}
+              suffix="%"
+              transformTiming={{
+                duration: animationConfig.duration,
+                easing: animationConfig.easing
+              }}
+            />
           </span>
         </div>
       </div>
