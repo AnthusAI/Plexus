@@ -45,8 +45,14 @@ export function ProgressBar({
 
   // Common animation config for consistency
   const animationConfig = {
-    duration: 800,
-    easing: 'cubic-bezier(0.4, 0, 0.2, 1)' // Material Design easing
+    duration: 400, // Slightly longer duration for smoother number transitions
+    easing: 'ease-out' // Use ease-out for number transitions
+  }
+
+  // Configure number formatting
+  const numberFormat = {
+    notation: 'standard' as const,
+    maximumFractionDigits: 0
   }
 
   return (
@@ -83,10 +89,9 @@ export function ProgressBar({
               )}>
                 <NumberFlow 
                   value={safeProcessedItems ?? 0}
-                  transformTiming={{
-                    duration: animationConfig.duration,
-                    easing: animationConfig.easing
-                  }}
+                  format={numberFormat}
+                  transformTiming={animationConfig}
+                  willChange
                 />
               </span>
               <span className="text-sm font-medium text-primary-foreground"> / </span>
@@ -106,11 +111,10 @@ export function ProgressBar({
           )}>
             <NumberFlow 
               value={clampedProgress}
+              format={numberFormat}
               suffix="%"
-              transformTiming={{
-                duration: animationConfig.duration,
-                easing: animationConfig.easing
-              }}
+              transformTiming={animationConfig}
+              willChange
             />
           </span>
         </div>
