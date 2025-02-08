@@ -11,6 +11,7 @@ from typing import Optional
 import socket
 import os
 import time
+import random
 
 def register_tasks(app):
     """Register Celery tasks with the application."""
@@ -212,6 +213,11 @@ def register_tasks(app):
         target_duration = 20  # seconds
         sleep_per_item = target_duration / total_items
         
+        # Parse command args to check for --fail flag
+        args = shlex.split(target)
+        should_fail = '--fail' in args
+        fail_at = random.randint(600, 1400) if should_fail else None  # Fail between 30-70% progress
+        
         logging.info("Starting demo task processing...")
         
         try:
@@ -219,6 +225,10 @@ def register_tasks(app):
             
             for i in range(total_items):
                 current_item = i + 1
+                
+                # Simulate random failure if --fail flag is set
+                if should_fail and current_item >= fail_at:
+                    raise Exception(f"Simulated failure at {current_item}/{total_items} items")
                 
                 # Update progress every 50 items or on the last item
                 if i % 50 == 0 or i == total_items - 1:
