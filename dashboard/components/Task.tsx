@@ -2,7 +2,7 @@ import React from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Square, RectangleVertical, X } from 'lucide-react'
-import { formatTimeAgo } from '@/utils/format-time'
+import { formatDistanceToNow } from 'date-fns'
 import { CardButton } from '@/components/CardButton'
 import { TaskStatus, TaskStageConfig } from './ui/task-status'
 import { BaseTaskData } from '@/types/base'
@@ -146,7 +146,7 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
   onClose,
   isLoading
 }: TaskChildProps<TData>) => {
-  const formattedTime = formatTimeAgo(task.time, variant === 'grid')
+  const formattedTime = formatDistanceToNow(new Date(task.time), { addSuffix: true })
 
   return (
     <CardHeader className="space-y-1.5 px-2 py-2 flex flex-col items-start">
