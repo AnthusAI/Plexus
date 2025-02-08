@@ -436,17 +436,30 @@ export async function createTask(
 
     const accountId = accountResponse.data[0].id;
 
-    // Create the task using the Amplify Gen2 client
-    const response = await currentClient.models.Task.create({
+    type BasicTaskInput = {
+      accountId: string;
+      command: string;
+      type: string;
+      target: string;
+      metadata: string;
+      dispatchStatus: 'PENDING';
+      status: 'PENDING';
+      createdAt: string;
+    };
+
+    const taskInput = {
       accountId,
       command,
       type,
       target,
       metadata: JSON.stringify(metadata),
-      dispatchStatus: "PENDING",
-      status: "PENDING",
+      dispatchStatus: 'PENDING' as const,
+      status: 'PENDING' as const,
       createdAt: new Date().toISOString()
-    });
+    } as BasicTaskInput;
+
+    // @ts-expect-error Complex union type in generated Amplify types
+    const response = await currentClient.models.Task.create(taskInput);
 
     if (response.data) {
       return processTask(response.data);
