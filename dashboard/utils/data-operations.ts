@@ -162,6 +162,23 @@ export async function listFromModel<T extends { id: string }>(
 }
 
 export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
+  // Handle stages - if it's a LazyLoader, we'll return an empty array
+  // The stages will be loaded later by the processTask function
+  const stages: ProcessedTaskStage[] = Array.isArray(task.stages) 
+    ? task.stages.map((stage: any) => ({
+        id: stage.id,
+        name: stage.name,
+        order: stage.order,
+        status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+        processedItems: stage.processedItems ?? undefined,
+        totalItems: stage.totalItems ?? undefined,
+        startedAt: stage.startedAt ?? undefined,
+        completedAt: stage.completedAt ?? undefined,
+        estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+        statusMessage: stage.statusMessage ?? undefined
+      }))
+    : []
+
   return {
     id: task.id,
     command: task.command,
@@ -169,28 +186,17 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
     status: task.status,
     target: task.target,
     description: task.description ?? undefined,
-    metadata: task.metadata ?? undefined,
+    metadata: typeof task.metadata === 'string' ? task.metadata : JSON.stringify(task.metadata ?? null),
     createdAt: task.createdAt ?? undefined,
     startedAt: task.startedAt ?? undefined,
     completedAt: task.completedAt ?? undefined,
     estimatedCompletionAt: task.estimatedCompletionAt ?? undefined,
     errorMessage: task.errorMessage ?? undefined,
-    errorDetails: task.errorDetails ?? undefined,
+    errorDetails: typeof task.errorDetails === 'string' ? task.errorDetails : JSON.stringify(task.errorDetails ?? null),
     stdout: task.stdout ?? undefined,
     stderr: task.stderr ?? undefined,
     currentStageId: task.currentStageId ?? undefined,
-    stages: task.stages?.map(stage => ({
-      id: stage.id,
-      name: stage.name,
-      order: stage.order,
-      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-      processedItems: stage.processedItems ?? undefined,
-      totalItems: stage.totalItems ?? undefined,
-      startedAt: stage.startedAt ?? undefined,
-      completedAt: stage.completedAt ?? undefined,
-      estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
-      statusMessage: stage.statusMessage ?? undefined
-    })) ?? [],
+    stages,
     dispatchStatus: task.dispatchStatus ?? undefined,
     celeryTaskId: task.celeryTaskId ?? undefined,
     workerNodeId: task.workerNodeId ?? undefined,
@@ -199,63 +205,130 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
 }
 
 // Add this type at the top with other types
-interface GraphQLTaskStages {
-  items: Schema['TaskStage']['type'][];
+type ErrorHandler = (error: Error) => void;
+
+export function observeRecentTasks(limit: number = 12): Observable<{ items: ProcessedTask[], isSynced: boolean }> {
+  return new Observable(subscriber => {
+    let isSynced = false
+    const client = getClient()
+
+    // Subscribe to task updates
+    const taskSubscriptions = [
+      client.models.Task.onCreate({}).subscribe({
+        next: () => {
+          refreshTasks()
+        },
+        error: (error: Error) => {
+          console.error('Error in task onCreate subscription:', error)
+        }
+      }),
+      client.models.Task.onUpdate({}).subscribe({
+        next: () => {
+          refreshTasks()
+        },
+        error: (error: Error) => {
+          console.error('Error in task onUpdate subscription:', error)
+        }
+      })
+    ]
+
+    // Subscribe to stage updates
+    const stageSubscription = (client.models.TaskStage as any).onUpdate({}).subscribe({
+      next: () => {
+        refreshTasks()
+      },
+      error: (error: Error) => {
+        console.error('Error in stage onUpdate subscription:', error)
+      }
+    })
+
+    // Initial load
+    refreshTasks()
+
+    async function refreshTasks() {
+      try {
+        const tasks = await listRecentTasks(limit)
+        subscriber.next({ items: tasks, isSynced: true })
+        isSynced = true
+      } catch (error) {
+        console.error('Error refreshing tasks:', error)
+        if (!isSynced) {
+          subscriber.next({ items: [], isSynced: false })
+        }
+      }
+    }
+
+    // Cleanup function
+    return () => {
+      taskSubscriptions.forEach(sub => sub.unsubscribe())
+      stageSubscription.unsubscribe()
+    }
+  })
 }
 
 async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
-  let stages: Schema['TaskStage']['type'][] = [];
+  let stages: ProcessedTaskStage[] = []
+
   try {
-    // Handle both GraphQL response format and Amplify client format
     if (typeof task.stages === 'function') {
-      // Amplify client format
-      const stagesData = await task.stages();
+      // Handle LazyLoader
+      const stagesData = await task.stages()
       if (stagesData?.data) {
-        stages = stagesData.data;
+        stages = stagesData.data.map((stage: any) => ({
+          id: stage.id,
+          name: stage.name,
+          order: stage.order,
+          status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+          processedItems: stage.processedItems ?? undefined,
+          totalItems: stage.totalItems ?? undefined,
+          startedAt: stage.startedAt ?? undefined,
+          completedAt: stage.completedAt ?? undefined,
+          estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+          statusMessage: stage.statusMessage ?? undefined
+        }))
       }
-    } else if (task.stages && 'items' in task.stages) {
-      // GraphQL response format
-      const graphqlStages = task.stages as GraphQLTaskStages;
-      stages = graphqlStages.items;
+    } else if (task.stages && Array.isArray(task.stages)) {
+      const taskStages = task.stages as any[]
+      stages = taskStages.map(stage => ({
+        id: stage.id,
+        name: stage.name,
+        order: stage.order,
+        status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+        processedItems: stage.processedItems ?? undefined,
+        totalItems: stage.totalItems ?? undefined,
+        startedAt: stage.startedAt ?? undefined,
+        completedAt: stage.completedAt ?? undefined,
+        estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+        statusMessage: stage.statusMessage ?? undefined
+      }))
     }
-  } catch (error) {
-    console.error('Error loading stages for task:', error);
+  } catch (error: unknown) {
+    console.error('Error loading stages for task:', error)
   }
-  
+
   return {
     id: task.id,
-    command: task.command || '',
+    command: task.command,
     type: task.type,
     status: task.status,
     target: task.target,
-    description: task.description,
-    metadata: task.metadata,
-    createdAt: task.createdAt,
-    startedAt: task.startedAt,
-    completedAt: task.completedAt,
-    estimatedCompletionAt: task.estimatedCompletionAt,
-    errorMessage: task.errorMessage,
-    errorDetails: task.errorDetails,
-    stdout: task.stdout,
-    stderr: task.stderr,
-    currentStageId: task.currentStageId,
-    stages: stages.map(stage => ({
-      id: stage.id,
-      name: stage.name,
-      order: stage.order,
-      status: stage.status,
-      processedItems: stage.processedItems,
-      totalItems: stage.totalItems,
-      startedAt: stage.startedAt,
-      completedAt: stage.completedAt,
-      estimatedCompletionAt: stage.estimatedCompletionAt,
-      statusMessage: stage.statusMessage
-    })),
-    dispatchStatus: task.dispatchStatus,
-    celeryTaskId: task.celeryTaskId,
-    workerNodeId: task.workerNodeId,
-    updatedAt: task.updatedAt
-  };
+    description: task.description ?? undefined,
+    metadata: typeof task.metadata === 'string' ? task.metadata : JSON.stringify(task.metadata ?? null),
+    createdAt: task.createdAt ?? undefined,
+    startedAt: task.startedAt ?? undefined,
+    completedAt: task.completedAt ?? undefined,
+    estimatedCompletionAt: task.estimatedCompletionAt ?? undefined,
+    errorMessage: task.errorMessage ?? undefined,
+    errorDetails: typeof task.errorDetails === 'string' ? task.errorDetails : JSON.stringify(task.errorDetails ?? null),
+    stdout: task.stdout ?? undefined,
+    stderr: task.stderr ?? undefined,
+    currentStageId: task.currentStageId ?? undefined,
+    stages,
+    dispatchStatus: task.dispatchStatus ?? undefined,
+    celeryTaskId: task.celeryTaskId ?? undefined,
+    workerNodeId: task.workerNodeId ?? undefined,
+    updatedAt: task.updatedAt ?? undefined
+  }
 }
 
 export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask[]> {
@@ -361,123 +434,6 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
     console.error('Error listing recent tasks:', error);
     return [];
   }
-}
-
-export function observeRecentTasks(limit: number = 12): Observable<{ items: ProcessedTask[], isSynced: boolean }> {
-  console.log('Setting up task subscription...');
-  return new Observable(handlers => {
-    const currentClient = getClient();
-    let accountId: string | null = null;
-
-    // Get the account ID first
-    const ACCOUNT_KEY = 'call-criteria';
-    console.log('Fetching account ID for subscription...');
-    listFromModel<Schema['Account']['type']>(
-      'Account',
-      { filter: { key: { eq: ACCOUNT_KEY } } }
-    ).then(response => {
-      if (!response.data?.length) {
-        console.error('No account found with key:', ACCOUNT_KEY);
-        handlers.error(new Error('No account found'));
-        return;
-      }
-
-      accountId = response.data[0].id;
-      console.log('Account ID found:', accountId);
-
-      // Initial fetch
-      console.log('Performing initial task fetch...');
-      listRecentTasks(limit).then(response => {
-        console.log('Initial tasks loaded:', {
-          count: response.length,
-          tasks: response.map(t => ({
-            id: t.id,
-            celeryTaskId: t.celeryTaskId,
-            workerNodeId: t.workerNodeId,
-            dispatchStatus: t.dispatchStatus
-          }))
-        });
-        handlers.next({ items: response, isSynced: true });
-      }).catch(handlers.error);
-
-      console.log('Setting up subscriptions...');
-      // Subscribe to changes with more frequent updates for claiming
-      const createSub = (currentClient.models.Task as any).onCreate().subscribe({
-        next: async () => {
-          console.log('Task created event received');
-          if (!accountId) return;
-          const response = await listRecentTasks(limit);
-          handlers.next({ items: response, isSynced: true });
-        },
-        error: (error) => {
-          console.error('Error in task create subscription:', error);
-          handlers.error(error);
-        }
-      });
-
-      const updateSub = (currentClient.models.Task as any).onUpdate().subscribe({
-        next: async (event: any) => {
-          // Log the full event to see its structure
-          console.log('Full Update Event:', event);
-
-          // In Amplify Gen2, fields are methods that need to be called
-          const updatedTask = event?.element;
-          if (updatedTask) {
-            console.log('Task Update Event:', {
-              id: updatedTask.id(),
-              celeryTaskId: updatedTask.celeryTaskId(),
-              workerNodeId: updatedTask.workerNodeId(),
-              dispatchStatus: updatedTask.dispatchStatus(),
-              status: updatedTask.status()
-            });
-          }
-
-          // Always trigger an update for task updates to ensure we catch claiming
-          if (!accountId) return;
-          try {
-            const response = await listRecentTasks(limit);
-            console.log('Task List Response:', {
-              count: response.length,
-              tasks: response.map(t => ({
-                id: t.id,
-                celeryTaskId: t.celeryTaskId,
-                workerNodeId: t.workerNodeId,
-                dispatchStatus: t.dispatchStatus,
-                status: t.status
-              }))
-            });
-            handlers.next({ items: response, isSynced: true });
-          } catch (error) {
-            console.error('Error fetching tasks after update:', error);
-          }
-        },
-        error: (error: Error) => {
-          console.error('Error in task update subscription:', error);
-          handlers.error(error);
-        }
-      });
-
-      const stageSub = (currentClient.models.TaskStage as any).onUpdate().subscribe({
-        next: async () => {
-          if (!accountId) return;
-          const response = await listRecentTasks(limit);
-          handlers.next({ items: response, isSynced: true });
-        },
-        error: handlers.error
-      });
-
-      // Cleanup subscriptions
-      console.log('Subscriptions set up successfully');
-      return () => {
-        createSub.unsubscribe();
-        updateSub.unsubscribe();
-        stageSub.unsubscribe();
-      };
-    }).catch(error => {
-      console.error('Error getting account:', error);
-      handlers.error(error);
-    });
-  });
 }
 
 export async function getFromModel<T extends { id: string }>(
