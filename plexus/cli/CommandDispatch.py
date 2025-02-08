@@ -20,6 +20,7 @@ from plexus.dashboard.api.client import PlexusDashboardClient
 import json
 import datetime
 from plexus.cli.task_progress_tracker import TaskProgressTracker, StageConfig
+from datetime import timezone
 
 class ItemCountColumn(ProgressColumn):
     """Renders item count and total."""
@@ -542,39 +543,46 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
         for msg in setup_messages:
             tracker.current_stage.status_message = msg
             tracker.update(current_items=0)
-            time.sleep(0.3)  # Shorter delays between messages
+            time.sleep(0.15)  # Reduced from 0.3s to 0.15s per message
         
         # Main processing stage
         tracker.advance_stage()  # Advance to "Running" stage
         
-        # Process items with target rate
+        # Process items with target rate - doubled duration with ±5s jitter
         current_item = 0
-        start_time = time.time()
+        stage_start_time = time.time()  # Track stage-specific start time
         last_api_update = 0  # To control API update frequency
         api_update_interval = 1  # Update API every 1 second
-        batch_size = 50  # Process in fixed size batches
+        target_duration = 40.0 + random.uniform(-5.0, 5.0)  # 40 seconds ±5s jitter
         
         while current_item < total_items:
-            # Process a batch of items
-            items_to_process = min(batch_size, total_items - current_item)
-            current_item += items_to_process
+            # Calculate how many items we should have processed by now to stay on target
+            elapsed = time.time() - stage_start_time  # Use stage-specific elapsed time
+            target_items = min(
+                total_items,
+                int((elapsed / target_duration) * total_items)
+            )
+            
+            # Process enough items to catch up to where we should be
+            items_to_process = max(1, target_items - current_item)
+            current_item = min(current_item + items_to_process, total_items)
+            
+            # Calculate metrics for display using stage timing
+            elapsed = time.time() - stage_start_time
+            actual_items_per_sec = current_item / elapsed if elapsed > 0 else 0
             
             # Update tracker with current progress
             tracker.update(current_items=current_item)
             
+            # Update Rich progress bar
+            progress.update(
+                task_progress,
+                completed=current_item,
+                status=f"{tracker.status} ({actual_items_per_sec:.1f} items/sec)"
+            )
+            
             # If we've reached total items, advance to finalizing and exit immediately
             if current_item >= total_items:
-                # Calculate final metrics for display
-                elapsed = time.time() - start_time
-                actual_items_per_sec = current_item / elapsed if elapsed > 0 else 0
-                
-                # Update Rich progress bar one last time
-                progress.update(
-                    task_progress,
-                    completed=current_item,
-                    status=f"{tracker.status} ({actual_items_per_sec:.1f} items/sec)"
-                )
-                
                 tracker.advance_stage()  # Advance to "Finalizing" stage
                 break
             
@@ -584,19 +592,8 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
                 tracker.update(current_items=current_item)
                 last_api_update = current_time
             
-            # Calculate progress metrics for display
-            elapsed = time.time() - start_time
-            actual_items_per_sec = current_item / elapsed if elapsed > 0 else 0
-            
-            # Update Rich progress bar
-            progress.update(
-                task_progress,
-                completed=current_item,
-                status=f"{tracker.status} ({actual_items_per_sec:.1f} items/sec)"
-            )
-            
-            # Sleep a tiny amount to simulate processing time
-            time.sleep(0.1)
+            # Sleep a tiny amount to allow for API updates and logging
+            time.sleep(0.05)  # Reduced sleep time for smoother updates
         
         # Finalizing stage with just two messages
         finalizing_messages = [
@@ -607,7 +604,7 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
         for msg in finalizing_messages:
             tracker.current_stage.status_message = msg
             tracker.update(current_items=total_items)
-            time.sleep(0.3)  # Slightly longer per message since we have fewer
+            time.sleep(0.15)  # Reduced from 0.3s to 0.15s per message
         
         # Set completion message and complete task in one atomic operation
         tracker.current_stage.status_message = "Task completed."
