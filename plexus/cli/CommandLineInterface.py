@@ -34,6 +34,7 @@ from .AnalyzeCommands import analyze
 from .console import console
 from .BatchCommands import batch
 from .CommandDispatch import command
+from .TaskCommands import tasks
 
 # Import dashboard-specific modules
 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -42,6 +43,8 @@ from plexus.dashboard.api.models.evaluation import Evaluation
 from plexus.dashboard.api.models.scorecard import Scorecard
 from plexus.dashboard.api.models.score import Score
 from plexus.dashboard.api.models.score_result import ScoreResult
+from plexus.dashboard.api.models.task import Task
+from plexus.dashboard.api.models.task_stage import TaskStage
 from plexus.dashboard.commands.simulate import (
     generate_class_distribution,
     simulate_prediction,
@@ -98,6 +101,7 @@ cli.add_command(command)
 
 # Dashboard CLI Commands
 cli.add_command(evaluations)
+cli.add_command(tasks)
 
 @cli.group()
 def scores():
@@ -178,6 +182,170 @@ def load_plexus_extensions():
 
 # Call this function during CLI initialization
 load_plexus_extensions()
+
+@click.group()
+def tasks():
+    """Manage task records in the dashboard"""
+    pass
+
+@tasks.command()
+@click.option('--account-id', help='Filter by account ID')
+@click.option('--status', help='Filter by status (PENDING, RUNNING, COMPLETED, FAILED)')
+@click.option('--type', help='Filter by task type')
+def list(account_id: Optional[str], status: Optional[str], type: Optional[str]):
+    """List tasks with optional filtering"""
+    client = create_client()
+    
+    # Build filter conditions
+    filter_conditions = []
+    if account_id:
+        filter_conditions.append(f'accountId: {{ eq: "{account_id}" }}')
+    if status:
+        filter_conditions.append(f'status: {{ eq: "{status}" }}')
+    if type:
+        filter_conditions.append(f'type: {{ eq: "{type}" }}')
+    
+    filter_str = ", ".join(filter_conditions)
+    if filter_str:
+        filter_str = f"filter: {{ {filter_str} }}"
+    
+    query = f"""
+    query ListTasks({filter_str}) {{
+        listTasks({filter_str}) {{
+            items {{
+                {Task.fields()}
+            }}
+        }}
+    }}
+    """
+    
+    result = client.execute(query)
+    tasks = result.get('listTasks', {}).get('items', [])
+    
+    # Create a rich table for display
+    table = rich.table.Table(show_header=True, header_style="bold magenta")
+    table.add_column("ID")
+    table.add_column("Type")
+    table.add_column("Status")
+    table.add_column("Target")
+    table.add_column("Command")
+    table.add_column("Created")
+    table.add_column("Updated")
+    
+    for task_data in tasks:
+        task = Task.from_dict(task_data, client)
+        table.add_row(
+            task.id,
+            task.type,
+            task.status,
+            task.target,
+            task.command,
+            task.createdAt.strftime("%Y-%m-%d %H:%M:%S") if task.createdAt else "",
+            task.updatedAt.strftime("%Y-%m-%d %H:%M:%S") if task.updatedAt else ""
+        )
+    
+    console.print(table)
+
+@tasks.command()
+@click.option('--task-id', help='Delete a specific task by ID')
+@click.option('--account-id', help='Delete all tasks for an account')
+@click.option('--status', help='Delete tasks with specific status')
+@click.option('--type', help='Delete tasks of specific type')
+@click.option('--force', is_flag=True, help='Skip confirmation prompt')
+def delete(task_id: Optional[str], account_id: Optional[str], status: Optional[str], type: Optional[str], force: bool):
+    """Delete tasks and their stages"""
+    client = create_client()
+    
+    # Build filter conditions for listing tasks to delete
+    filter_conditions = []
+    if task_id:
+        filter_conditions.append(f'id: {{ eq: "{task_id}" }}')
+    if account_id:
+        filter_conditions.append(f'accountId: {{ eq: "{account_id}" }}')
+    if status:
+        filter_conditions.append(f'status: {{ eq: "{status}" }}')
+    if type:
+        filter_conditions.append(f'type: {{ eq: "{type}" }}')
+    
+    filter_str = ", ".join(filter_conditions)
+    if filter_str:
+        filter_str = f"filter: {{ {filter_str} }}"
+    
+    # First list tasks that will be deleted
+    query = f"""
+    query ListTasks({filter_str}) {{
+        listTasks({filter_str}) {{
+            items {{
+                {Task.fields()}
+            }}
+        }}
+    }}
+    """
+    
+    result = client.execute(query)
+    tasks = result.get('listTasks', {}).get('items', [])
+    
+    if not tasks:
+        console.print("[yellow]No tasks found matching the criteria[/yellow]")
+        return
+    
+    # Show tasks that will be deleted
+    table = rich.table.Table(show_header=True, header_style="bold red")
+    table.add_column("ID")
+    table.add_column("Type")
+    table.add_column("Status")
+    table.add_column("Target")
+    table.add_column("Command")
+    
+    for task_data in tasks:
+        task = Task.from_dict(task_data, client)
+        table.add_row(
+            task.id,
+            task.type,
+            task.status,
+            task.target,
+            task.command
+        )
+    
+    console.print("\n[bold red]The following tasks will be deleted:[/bold red]")
+    console.print(table)
+    
+    # Get confirmation unless --force is used
+    if not force:
+        confirm = click.confirm("\nAre you sure you want to delete these tasks?", default=False)
+        if not confirm:
+            console.print("[yellow]Operation cancelled[/yellow]")
+            return
+    
+    # Delete tasks and their stages
+    deleted_count = 0
+    for task_data in tasks:
+        task = Task.from_dict(task_data, client)
+        
+        # First delete all stages
+        stages = task.get_stages()
+        for stage in stages:
+            mutation = """
+            mutation DeleteTaskStage($input: DeleteTaskStageInput!) {
+                deleteTaskStage(input: { id: $input }) {
+                    id
+                }
+            }
+            """
+            client.execute(mutation, {'input': stage.id})
+        
+        # Then delete the task
+        mutation = """
+        mutation DeleteTask($input: DeleteTaskInput!) {
+            deleteTask(input: { id: $input }) {
+                id
+            }
+        }
+        """
+        client.execute(mutation, {'input': task.id})
+        deleted_count += 1
+    
+    console.print(f"\n[green]Successfully deleted {deleted_count} tasks and their stages[/green]")
 
 def main():
     """Entry point for the Plexus CLI."""

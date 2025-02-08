@@ -14,15 +14,19 @@ export default function ResourcesPage() {
   return (
     <Layout>
       <StandardSection
-        headline={
-          <span>
-            <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text">Learn to Build</span> With <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text">AI Agents</span>
-          </span>
-        }
+        headline="Learn to Build With AI Agents"
         headlinePosition="inline"
         variant="hero"
         layout="single"
         fullWidth
+        useWordReveal={true}
+        gradientWords={{
+          "Learn": { from: "secondary", to: "accent" },
+          "to": { from: "secondary", to: "accent" },
+          "Build": { from: "secondary", to: "accent" },
+          "AI": { from: "primary", to: "accent" },
+          "Agents": { from: "primary", to: "accent" }
+        }}
       >
         <div className="max-w-3xl mx-auto">
           <div className="space-y-8">

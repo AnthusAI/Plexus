@@ -396,14 +396,14 @@ class TaskProgressTracker:
             else:
                 self._last_stage_configs_str = config_str
                 if is_critical_update:
-                    logging.info("Processing critical update with new stage configs")
+                    logging.debug("Processing critical update with new stage configs")
 
             # Update the last update time before starting the update
             self._last_api_update_time = current_time
 
             # For critical updates, do the update synchronously to ensure it completes
             if is_critical_update:
-                logging.info("Performing critical update synchronously")
+                logging.debug("Performing critical update synchronously")
                 self._async_update_api_task(stage_configs, estimated_completion)
             else:
                 # Offload non-critical updates to a background thread
@@ -472,8 +472,7 @@ class TaskProgressTracker:
 
     @property
     def elapsed_time(self) -> float:
-        if self.is_complete:
-            return self.end_time - self.start_time
+        """Return elapsed time since task started, regardless of current stage."""
         return time.time() - self.start_time
 
     @property
