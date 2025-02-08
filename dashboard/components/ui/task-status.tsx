@@ -237,26 +237,40 @@ export function TaskStatus({
   ] : []
 
   const getPreExecutionStatus = () => {
-    if (!dispatchStatus) return { 
-      message: 'Starting...', 
+    if (workerNodeId && workerNodeId.trim() !== '') {
+      console.debug('Task claimed by worker:', workerNodeId);
+      return { 
+        message: 'Task claimed...', 
+        icon: Hand,
+        animation: 'animate-wave'
+      }
+    }
+    if (!celeryTaskId) {
+      console.debug('Task announced, no celery ID yet');
+      return { 
+        message: 'Task announced...', 
+        icon: ConciergeBell,
+        animation: 'animate-jiggle'
+      }
+    }
+    console.debug('Task has celery ID:', celeryTaskId);
+    return { 
+      message: 'Announced...', 
       icon: Radio,
       animation: 'animate-pulse'
     }
-    if (!celeryTaskId) return { 
-      message: 'Task announced...', 
-      icon: ConciergeBell,
-      animation: 'animate-jiggle'
-    }
-    if (!workerNodeId) return { 
-      message: 'Task claimed.', 
-      icon: Hand,
-      animation: 'animate-wave'
-    }
-    return null
   }
 
-  const preExecutionStatus = showPreExecutionStages ? getPreExecutionStatus() : null
-  const showEmptyState = !stages.length && !preExecutionStatus
+  // Only show pre-execution status when:
+  // 1. Task is in PENDING state
+  // 2. Has no stages (not started processing yet)
+  // 3. Either has a worker node ID or showPreExecutionStages is true
+  const shouldShowPreExecution = status === 'PENDING' && 
+    (!stages || stages.length === 0) && 
+    ((workerNodeId && workerNodeId.trim() !== '') || showPreExecutionStages)
+
+  const preExecutionStatus = shouldShowPreExecution ? getPreExecutionStatus() : null
+  const showEmptyState = !stages.length && !preExecutionStatus && status === 'PENDING'
 
   const displayMessage = isError && errorMessage ? errorMessage : statusMessage
 
@@ -283,7 +297,7 @@ export function TaskStatus({
         </div>
       )}
       {(command || displayMessage || isFinished) && (
-        <div className="rounded-lg bg-background px-2 py-1 space-y-1 -mx-2">
+        <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
           {command && (
             <div className={`font-mono text-sm text-muted-foreground ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
               $ {command}
@@ -302,7 +316,7 @@ export function TaskStatus({
       {showEmptyState ? (
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
           <Radio className="w-4 h-4 animate-pulse" />
-          <span>Starting...</span>
+          <span>Announced...</span>
         </div>
       ) : preExecutionStatus ? (
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
