@@ -297,7 +297,7 @@ export function TaskStatus({
         </div>
       )}
       {(command || statusMessage || isFinished) && (
-        <div className="rounded-lg bg-card-light px-2 py-1 space-y-1">
+        <div className="rounded-lg bg-background px-2 py-1 space-y-1 -mx-2">
           {command && (
             <div className={`font-mono text-sm text-muted-foreground ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
               $ {command}

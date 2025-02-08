@@ -141,7 +141,17 @@ export default function ActivityDashboard() {
 
   useEffect(() => {
     const transformed = recentTasks.map(transformTaskToActivity)
-    const filtered = transformed.filter(task => {
+    // Sort tasks: use createdAt for in-progress tasks, updatedAt for completed ones
+    const sorted = [...transformed].sort((a, b) => {
+      // For completed/failed tasks, sort by updatedAt
+      if ((a.status === 'COMPLETED' || a.status === 'FAILED') && 
+          (b.status === 'COMPLETED' || b.status === 'FAILED')) {
+        return new Date(b.time).getTime() - new Date(a.time).getTime()
+      }
+      // For in-progress tasks or mixing in-progress with completed, sort by createdAt
+      return new Date(b.time).getTime() - new Date(a.time).getTime()
+    })
+    const filtered = sorted.filter(task => {
       if (!selectedScorecard && !selectedScore) return true;
       if (selectedScorecard && task.scorecard !== selectedScorecard) return false;
       if (selectedScore && task.score !== selectedScore) return false;
@@ -153,7 +163,18 @@ export default function ActivityDashboard() {
   useEffect(() => {
     const subscription = observeRecentTasks(12).subscribe({
       next: ({ items, isSynced }) => {
-        setRecentTasks(items)
+        // Sort items before setting state
+        const sortedItems = [...items].sort((a, b) => {
+          const aTime = a.status === 'COMPLETED' || a.status === 'FAILED' 
+            ? (a.updatedAt || a.createdAt)
+            : a.createdAt
+          const bTime = b.status === 'COMPLETED' || b.status === 'FAILED'
+            ? (b.updatedAt || b.createdAt)
+            : b.createdAt
+
+          return new Date(bTime).getTime() - new Date(aTime).getTime()
+        })
+        setRecentTasks(sortedItems)
         if (isSynced) {
           setIsInitialLoading(false)
         }
