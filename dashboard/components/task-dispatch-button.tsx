@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PlayCircle, ClipboardCheck, Zap, ChevronDown } from "lucide-react"
@@ -40,6 +40,7 @@ const actions: Action[] = [
 export function TaskDispatchButton() {
   const [selectedAction, setSelectedAction] = useState<Action | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [command, setCommand] = useState("")
   const [target, setTarget] = useState("")
 
@@ -48,6 +49,15 @@ export function TaskDispatchButton() {
     setCommand(action.command)
     setTarget(action.target || "")
     setIsModalOpen(true)
+    setIsDropdownOpen(false)
+  }
+
+  const handleCloseDialog = () => {
+    setIsModalOpen(false)
+    setCommand("")
+    setTarget("")
+    setSelectedAction(null)
+    setIsDropdownOpen(false)
   }
 
   const handleDispatch = async () => {
@@ -62,14 +72,12 @@ export function TaskDispatchButton() {
       console.error("Error dispatching task:", error)
       toast.error("Error dispatching task")
     }
-    setIsModalOpen(false)
-    setCommand("")
-    setTarget("")
+    handleCloseDialog()
   }
 
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
         <DropdownMenuTrigger asChild>
           <Button variant="outline">
             Actions <ChevronDown className="ml-2 h-4 w-4" />
@@ -85,7 +93,7 @@ export function TaskDispatchButton() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+      <Dialog open={isModalOpen} onOpenChange={handleCloseDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{selectedAction?.name} Action</DialogTitle>
@@ -115,7 +123,7 @@ export function TaskDispatchButton() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsModalOpen(false)}>
+            <Button variant="outline" onClick={handleCloseDialog}>
               Cancel
             </Button>
             <Button onClick={handleDispatch}>Dispatch</Button>
