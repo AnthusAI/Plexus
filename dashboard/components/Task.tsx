@@ -156,11 +156,16 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
           <div className="text-lg font-bold">{task.type}</div>
           <div className="text-xs text-muted-foreground h-4">{task.scorecard || '\u00A0'}</div>
           <div className="text-xs text-muted-foreground h-4">{task.score || '\u00A0'}</div>
-          <div className="text-xs text-muted-foreground mt-1">{formattedTime}</div>
+          {variant !== 'grid' && (
+            <div className="text-xs text-muted-foreground mt-1">{formattedTime}</div>
+          )}
         </div>
         <div className="flex flex-col items-end">
           {variant === 'grid' ? (
-            children
+            <>
+              {children}
+              <div className="text-xs text-muted-foreground mt-1">{formattedTime}</div>
+            </>
           ) : (
             <div className="flex gap-2">
               {onToggleFullWidth && (
