@@ -264,7 +264,7 @@ export default function ActivityDashboard() {
 
   return (
     <div className="flex flex-col h-full p-1.5">
-      <div className="mb-3 flex justify-between items-center">
+      <div className="mb-3 flex justify-between items-start">
         <ScorecardContext 
           selectedScorecard={selectedScorecard}
           setSelectedScorecard={setSelectedScorecard}
