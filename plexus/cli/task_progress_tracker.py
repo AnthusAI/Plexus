@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Optional, Any
 import time
 import logging
@@ -196,18 +196,90 @@ class TaskProgressTracker:
             if self.api_task:
                 # Get existing stages first
                 existing_stages = {s.name: s.id for s in self.api_task.get_stages()}
+                logging.info(f"Found existing stages: {list(existing_stages.keys())}")
                 
                 # Create any missing stages and store their IDs
+                logging.info(f"Attempting to create stages for: {list(self._stages.keys())}")
                 for name, stage in self._stages.items():
-                    if name in existing_stages:
-                        self._stage_ids[name] = existing_stages[name]
-                    else:
-                        new_stage = self.api_task.create_stage(
-                            name=name,
-                            order=stage.order
-                        )
-                        self._stage_ids[name] = new_stage.id
-                        logging.debug(f"Created stage {name} with ID: {new_stage.id}")
+                    logging.info(f"Processing stage '{name}' with order {stage.order}, total_items={stage.total_items}, status_message={stage.status_message}")
+                    try:
+                        if name in existing_stages:
+                            logging.info(f"Stage '{name}' already exists with ID: {existing_stages[name]}")
+                            self._stage_ids[name] = existing_stages[name]
+                        else:
+                            logging.info(f"Creating new stage '{name}' with order {stage.order}")
+                            try:
+                                # First create the stage with just name and order
+                                new_stage = self.api_task.create_stage(
+                                    name=name,
+                                    order=stage.order
+                                )
+                                if not new_stage:
+                                    raise Exception(f"Failed to create stage '{name}' - create_stage returned None")
+                                    
+                                self._stage_ids[name] = new_stage.id
+                                logging.info(f"Successfully created stage '{name}' with ID: {new_stage.id}")
+                                
+                                # Immediately update with status and other fields
+                                update_fields = {
+                                    'status': stage.status,  # Set the required status field
+                                }
+                                if stage.status_message:
+                                    update_fields['statusMessage'] = stage.status_message
+                                if stage.total_items is not None:
+                                    update_fields['totalItems'] = stage.total_items
+                                
+                                # Set initial estimated completion time for stages that show progress
+                                if stage.total_items is not None:
+                                    estimated_completion = (
+                                        datetime.now(timezone.utc) + 
+                                        timedelta(seconds=20)  # Initial estimate of 20 seconds
+                                    )
+                                    update_fields['estimatedCompletionAt'] = estimated_completion.isoformat()
+                                
+                                logging.info(f"Updating stage '{name}' with fields: {update_fields}")
+                                new_stage.update(**update_fields)
+                                
+                                logging.info(f"Completed creation and update of stage '{name}'")
+                                
+                            except Exception as e:
+                                logging.error(f"Error creating stage '{name}': {str(e)}", exc_info=True)
+                                raise  # Re-raise the exception to prevent silent failures
+
+                    except Exception as e:
+                        logging.error(f"Error creating stage '{name}': {str(e)}", exc_info=True)
+
+                # Verify all stages were created
+                max_retries = 3
+                retry_delay = 1.0  # seconds
+                
+                for retry in range(max_retries):
+                    final_stages = {s.name: s.id for s in self.api_task.get_stages()}
+                    logging.info(f"Final stages after creation (attempt {retry + 1}): {list(final_stages.keys())}")
+                    
+                    if set(self._stages.keys()) == set(final_stages.keys()):
+                        logging.info("All stages verified successfully")
+                        break
+                        
+                    missing = set(self._stages.keys()) - set(final_stages.keys())
+                    extra = set(final_stages.keys()) - set(self._stages.keys())
+                    
+                    if missing:
+                        logging.warning(f"Missing stages (attempt {retry + 1}): {missing}")
+                    if extra:
+                        logging.warning(f"Extra stages (attempt {retry + 1}): {extra}")
+                    
+                    if retry < max_retries - 1:
+                        logging.info(f"Waiting {retry_delay}s before retrying verification...")
+                        time.sleep(retry_delay)
+                else:
+                    # Only raise error if we've exhausted all retries
+                    if set(self._stages.keys()) != set(final_stages.keys()):
+                        logging.error(f"Missing stages after {max_retries} retries! Expected: {list(self._stages.keys())}, Got: {list(final_stages.keys())}")
+                        if missing:
+                            logging.error(f"Missing stages: {missing}")
+                        if extra:
+                            logging.error(f"Extra stages: {extra}")
 
                 self._update_api_task_progress()
 
@@ -360,13 +432,17 @@ class TaskProgressTracker:
                     "name": name,
                     "startedAt": start_time,
                     "completedAt": end_time,
-                    "estimatedCompletionAt": None
                 }
                 if name.lower() not in ['setup', 'finalizing']:
                     if stage.total_items is not None:
                         config["totalItems"] = stage.total_items
                     if stage.processed_items is not None:
                         config["processedItems"] = stage.processed_items
+                    # Only set estimated completion time for the current stage
+                    if name == self.current_stage.name:
+                        estimated_completion = self.estimated_completion_time
+                        if estimated_completion:
+                            config["estimatedCompletionAt"] = estimated_completion.isoformat()
                 else:
                     config["totalItems"] = None
                     config["processedItems"] = None
@@ -405,10 +481,10 @@ class TaskProgressTracker:
             # For critical updates, do the update synchronously to ensure it completes
             if is_critical_update:
                 logging.debug("Performing critical update synchronously")
-                self._async_update_api_task(stage_configs, estimated_completion)
+                self._async_update_api_task(stage_configs, estimated_completion.isoformat() if estimated_completion else None)
             else:
                 # Offload non-critical updates to a background thread
-                threading.Thread(target=self._async_update_api_task, args=(stage_configs, estimated_completion), daemon=True).start()
+                threading.Thread(target=self._async_update_api_task, args=(stage_configs, estimated_completion.isoformat() if estimated_completion else None), daemon=True).start()
         finally:
             if self._api_update_lock.locked():
                 self._api_update_lock.release()
@@ -421,9 +497,12 @@ class TaskProgressTracker:
             for stage in stages:
                 if stage.name in stage_configs:
                     config = stage_configs[stage.name]
+                    # Add estimated completion time to the stage if it's the current stage
+                    if stage.name == self.current_stage.name and estimated_completion:
+                        config['estimatedCompletionAt'] = estimated_completion
                     stage.update(**config)
 
-            # Only update the estimated completion time on the task
+            # Update the estimated completion time on the task
             if estimated_completion:
                 self.api_task.update(
                     estimatedCompletionAt=estimated_completion
