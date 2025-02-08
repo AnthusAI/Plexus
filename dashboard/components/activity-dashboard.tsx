@@ -12,6 +12,7 @@ import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import { Activity } from 'lucide-react'
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
+import ScorecardContext from "@/components/ScorecardContext"
 
 // Import the types from data-operations
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
@@ -111,6 +112,8 @@ export default function ActivityDashboard() {
   const [selectedTask, setSelectedTask] = useState<string | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(50)
+  const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
+  const [selectedScore, setSelectedScore] = useState<string | null>(null)
   const isNarrowViewport = useMediaQuery("(max-width: 768px)")
   const { ref, inView } = useInView({
     threshold: 0,
@@ -126,8 +129,14 @@ export default function ActivityDashboard() {
 
   useEffect(() => {
     const transformed = recentTasks.map(transformTaskToActivity)
-    setDisplayedTasks(transformed)
-  }, [recentTasks])
+    const filtered = transformed.filter(task => {
+      if (!selectedScorecard && !selectedScore) return true;
+      if (selectedScorecard && task.scorecard !== selectedScorecard) return false;
+      if (selectedScore && task.score !== selectedScore) return false;
+      return true;
+    })
+    setDisplayedTasks(filtered)
+  }, [recentTasks, selectedScorecard, selectedScore])
 
   useEffect(() => {
     const subscription = observeRecentTasks(12).subscribe({
@@ -204,6 +213,14 @@ export default function ActivityDashboard() {
 
   return (
     <div className="flex flex-col h-full">
+      <div className="mb-4">
+        <ScorecardContext 
+          selectedScorecard={selectedScorecard}
+          setSelectedScorecard={setSelectedScorecard}
+          selectedScore={selectedScore}
+          setSelectedScore={setSelectedScore}
+        />
+      </div>
       <div className="flex h-full">
         <div 
           className={`
@@ -215,7 +232,7 @@ export default function ActivityDashboard() {
             width: `${leftPanelWidth}%`
           } : undefined}
         >
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {displayedTasks.map((task) => (
               <div 
                 key={task.id} 
