@@ -399,4 +399,53 @@ export async function getFromModel<T extends { id: string }>(
     console.error(`Error getting ${modelName}:`, error);
     return { data: null };
   }
+}
+
+export async function createTask(
+  command: string,
+  type: string = 'command',
+  target: string = '',
+  metadata: any = {}
+): Promise<ProcessedTask | null> {
+  try {
+    const currentClient = getClient();
+    if (!currentClient.models.Task) {
+      throw new Error('Task model not found');
+    }
+
+    // Get the account ID by key
+    const ACCOUNT_KEY = 'call-criteria';
+    const accountResponse = await listFromModel<Schema['Account']['type']>(
+      'Account',
+      { filter: { key: { eq: ACCOUNT_KEY } } }
+    );
+
+    if (!accountResponse.data?.length) {
+      console.error('No account found with key:', ACCOUNT_KEY);
+      return null;
+    }
+
+    const accountId = accountResponse.data[0].id;
+
+    // Create the task using the Amplify Gen2 client
+    const response = await currentClient.models.Task.create({
+      accountId,
+      command,
+      type,
+      target,
+      metadata: JSON.stringify(metadata),
+      dispatchStatus: "PENDING",
+      status: "PENDING",
+      createdAt: new Date().toISOString()
+    });
+
+    if (response.data) {
+      return processTask(response.data);
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error creating task:', error);
+    return null;
+  }
 } 
