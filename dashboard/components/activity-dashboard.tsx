@@ -88,13 +88,6 @@ function transformTaskToActivity(task: ProcessedTask) {
   // Ensure we have a valid timestamp for the time field
   const timeStr = task.createdAt || new Date().toISOString()
 
-  console.log('Task Status Debug:', {
-    taskStatus: task.status,
-    taskErrorMessage: task.errorMessage,
-    currentStageMessage: currentStage?.statusMessage,
-    isTaskFailed: task.status === 'FAILED'
-  })
-
   // Get the appropriate status message - keep both messages and let TaskStatus handle display logic
   const statusMessage = currentStage?.statusMessage ?? undefined
 
@@ -104,7 +97,7 @@ function transformTaskToActivity(task: ProcessedTask) {
     scorecard: (metadata.scorecard?.toString() || '') as string,
     score: (metadata.score?.toString() || '') as string,
     time: timeStr,
-    description: task.command,  // Use command as description
+    description: task.command,
     data: {
       id: task.id,
       title: metadata.type || task.type,
@@ -119,14 +112,11 @@ function transformTaskToActivity(task: ProcessedTask) {
     completedAt: task.completedAt ?? undefined,
     status: task.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
     statusMessage: statusMessage,
-    errorMessage: task.status === 'FAILED' && task.errorMessage ? task.errorMessage : undefined
+    errorMessage: task.status === 'FAILED' && task.errorMessage ? task.errorMessage : undefined,
+    dispatchStatus: task.dispatchStatus,
+    celeryTaskId: task.celeryTaskId,
+    workerNodeId: task.workerNodeId
   }
-
-  console.log('Transform Result:', {
-    status: result.status,
-    statusMessage: result.statusMessage,
-    errorMessage: result.errorMessage
-  })
 
   return result
 }
