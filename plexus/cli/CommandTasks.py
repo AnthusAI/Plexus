@@ -173,7 +173,28 @@ def register_tasks(app):
                     if status == 'success':
                         task.complete_processing()
                     else:
-                        task.fail_processing(str(e) if 'e' in locals() else 'Command failed')
+                        # Clear progress callback immediately to prevent further updates
+                        CommandProgress.set_update_callback(None)
+                        
+                        # Get error message from stderr if available, otherwise use exception message
+                        error_msg = stderr_capture.getvalue().strip() or (str(e) if 'e' in locals() else None)
+                        if error_msg:
+                            task.fail_processing(error_msg)
+                        else:
+                            # If we somehow have no error message, find the failed stage's message
+                            stages = task.get_stages()
+                            if stages:
+                                # Look for a failed stage first
+                                failed_stage = next((stage for stage in stages if stage.status == 'FAILED'), None)
+                                if failed_stage and failed_stage.statusMessage:
+                                    error_msg = failed_stage.statusMessage
+                                else:
+                                    # If no failed stage found, use current stage's message
+                                    current_stage = next((stage for stage in stages if stage.status == 'RUNNING'), None)
+                                    error_msg = (current_stage.statusMessage if current_stage else None) or "Command failed"
+                                task.fail_processing(error_msg)
+                            else:
+                                task.fail_processing("Command failed")
                 
                 return {
                     'status': status,
@@ -186,8 +207,9 @@ def register_tasks(app):
             finally:
                 # Restore the original argv
                 sys.argv = original_argv
-                # Clear progress callback
-                CommandProgress.set_update_callback(None)
+                # Only clear callback if not already cleared due to failure
+                if status == 'success':
+                    CommandProgress.set_update_callback(None)
                 
         except Exception as e:
             logging.error(f"Command failed: {str(e)}")

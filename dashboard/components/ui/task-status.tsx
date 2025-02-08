@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { SegmentedProgressBar, SegmentConfig } from './segmented-progress-bar'
 import { ProgressBar } from './progress-bar'
 import { ProgressBarTiming } from './progress-bar-timing'
-import { Radio, Hand, ConciergeBell, Square, RectangleVertical, X } from 'lucide-react'
+import { Radio, Hand, ConciergeBell, Square, RectangleVertical, X, AlertTriangle } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { StyleTag } from './style-tag'
 import { CardButton } from '@/components/CardButton'
@@ -64,6 +64,7 @@ export interface TaskStatusProps {
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
   command?: string
   statusMessage?: string
+  errorMessage?: string
   stageConfigs?: TaskStageConfig[]
   isLoading?: boolean
   errorLabel?: string
@@ -110,6 +111,7 @@ export function TaskStatus({
   showPreExecutionStages = false,
   command,
   statusMessage,
+  errorMessage,
   completedAt,
   truncateMessages = true,
   variant,
@@ -119,6 +121,7 @@ export function TaskStatus({
 }: TaskStatusProps) {
   const isInProgress = status === 'RUNNING'
   const isFinished = status === 'COMPLETED' || status === 'FAILED'
+  const isError = status === 'FAILED'
 
   // State for computed timing values
   const [elapsedTime, setElapsedTime] = useState<string>('')
@@ -133,23 +136,8 @@ export function TaskStatus({
         return
       }
 
-      console.log('Timing Debug:', {
-        startedAt,
-        completedAt,
-        rawStartTime: new Date(startedAt),
-        rawEndTime: completedAt ? new Date(completedAt) : new Date(),
-      })
-
       const taskStartTime = new Date(startedAt)
       const endTime = completedAt ? new Date(completedAt) : new Date()
-
-      // Log the actual timestamps we're using
-      console.log('Timestamps:', {
-        startTimeMs: taskStartTime.getTime(),
-        endTimeMs: endTime.getTime(),
-        difference: endTime.getTime() - taskStartTime.getTime(),
-        calculatedSeconds: Math.floor((endTime.getTime() - taskStartTime.getTime()) / 1000)
-      })
 
       // Calculate elapsed time from task start to end time
       const elapsedSeconds = Math.floor(
@@ -157,10 +145,6 @@ export function TaskStatus({
       )
 
       const formattedTime = formatDuration(elapsedSeconds)
-      console.log('Final time:', {
-        elapsedSeconds,
-        formattedTime
-      })
 
       setElapsedTime(formattedTime)
 
@@ -274,6 +258,8 @@ export function TaskStatus({
   const preExecutionStatus = showPreExecutionStages ? getPreExecutionStatus() : null
   const showEmptyState = !stages.length && !preExecutionStatus
 
+  const displayMessage = isError && errorMessage ? errorMessage : statusMessage
+
   return (
     <div className="[&>*+*]:mt-2">
       <StyleTag />
@@ -296,15 +282,20 @@ export function TaskStatus({
           </div>
         </div>
       )}
-      {(command || statusMessage || isFinished) && (
+      {(command || displayMessage || isFinished) && (
         <div className="rounded-lg bg-background px-2 py-1 space-y-1 -mx-2">
           {command && (
             <div className={`font-mono text-sm text-muted-foreground ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
               $ {command}
             </div>
           )}
-          <div className={`text-sm ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
-            {statusMessage || '\u00A0'}
+          <div className={cn(
+            "text-sm flex items-center gap-2",
+            truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
+            isError ? 'text-destructive font-medium' : ''
+          )}>
+            {isError && <AlertTriangle className="w-4 h-4 animate-pulse" />}
+            {displayMessage || '\u00A0'}
           </div>
         </div>
       )}

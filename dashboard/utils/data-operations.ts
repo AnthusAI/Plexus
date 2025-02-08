@@ -20,6 +20,8 @@ export type ProcessedTask = {
   startedAt?: string | null;
   completedAt?: string | null;
   estimatedCompletionAt?: string | null;
+  errorMessage?: string | null;
+  errorDetails?: any;
   stages: Array<{
     id: string;
     name: string;
@@ -169,6 +171,8 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
     startedAt: task.startedAt,
     completedAt: task.completedAt,
     estimatedCompletionAt: task.estimatedCompletionAt,
+    errorMessage: task.errorMessage,
+    errorDetails: task.errorDetails,
     stages: []  // Stages are loaded separately by processTask
   }
 }
@@ -212,6 +216,8 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
     startedAt: task.startedAt,
     completedAt: task.completedAt,
     estimatedCompletionAt: task.estimatedCompletionAt,
+    errorMessage: task.errorMessage,
+    errorDetails: task.errorDetails,
     stages: stages.map(stage => ({
       id: stage.id,
       name: stage.name,
