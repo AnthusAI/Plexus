@@ -154,12 +154,12 @@ def register_tasks(app):
                 sys.argv = ['plexus'] + args
                 
                 # Import the main CLI function
-                from plexus.cli.CommandLineInterface import main
+                from plexus.cli.CommandLineInterface import cli
                 
                 # Execute the command with output capture
                 with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
                     try:
-                        main(standalone_mode=False)
+                        cli(standalone_mode=False)
                         status = 'success'
                     except SystemExit as e:
                         status = 'success' if e.code == 0 else 'error'
