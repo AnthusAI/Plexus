@@ -41,14 +41,14 @@ export function SegmentedProgressBar({
               role="listitem"
               key={segment.key}
               className={cn(
-                "flex-1 flex items-center justify-center transition-colors duration-200",
+                "flex-1 flex items-center justify-center transition-colors duration-200 min-w-0",
                 isBeforeCurrent ? segment.color ?? "bg-secondary" :
                 isCurrent ? error ? "bg-false" : segment.color ?? "bg-secondary" :
                 "bg-neutral"
               )}
             >
               <span className={cn(
-                "text-sm font-medium truncate px-1 text-primary-foreground"
+                "text-sm font-medium truncate px-1 text-primary-foreground min-w-0 max-w-full"
               )}>
                 {isCurrent && error ? errorLabel : segment.label}
               </span>

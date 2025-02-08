@@ -94,7 +94,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
     <Card 
       className={`
         bg-card shadow-none border-none rounded-lg transition-colors duration-200 
-        flex flex-col h-full min-w-[300px]
+        flex flex-col h-full
         ${variant === 'grid' ? 'cursor-pointer' : ''}
         ${isLoading ? 'opacity-70' : ''}
       `}
