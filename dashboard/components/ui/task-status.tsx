@@ -238,13 +238,17 @@ export function TaskStatus({
     ...stageConfigs.map(stage => ({
       key: stage.name,
       label: stage.label,
-      color: stage.color
+      color: stage.status === 'PENDING' ? 'bg-neutral' : 
+             stage.status === 'FAILED' ? 'bg-false' : 
+             stage.color,
+      status: stage.status
     })),
     // Only add completion segment if we have other stages
     ...(stageConfigs.length > 0 ? [{
       key: 'completion',
       label: status === 'FAILED' ? 'Failed' : 'Complete',
-      color: status === 'FAILED' ? 'bg-false' : 'bg-true'
+      color: status === 'FAILED' ? 'bg-false' : 'bg-true',
+      status: status
     }] : [])
   ] : []
 

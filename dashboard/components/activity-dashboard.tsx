@@ -29,20 +29,31 @@ function transformTaskToActivity(task: ProcessedTask) {
   // Transform stages if present
   const stages = (task.stages || [])
     .sort((a: ProcessedTask['stages'][0], b: ProcessedTask['stages'][0]) => a.order - b.order)
-    .map((stage: ProcessedTask['stages'][0]): TaskStageConfig => ({
-      key: stage.name,
-      label: stage.name,
-      color: stage.name.toLowerCase() === 'processing' ? 'bg-secondary' : 'bg-primary',
-      name: stage.name,
-      order: stage.order,
-      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-      processedItems: stage.processedItems ?? undefined,
-      totalItems: stage.totalItems ?? undefined,
-      startedAt: stage.startedAt ?? undefined,
-      completedAt: stage.completedAt ?? undefined,
-      estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
-      statusMessage: stage.statusMessage ?? undefined
-    }))
+    .map((stage: ProcessedTask['stages'][0]): TaskStageConfig => {
+      // When a task fails, preserve the original status of incomplete stages
+      // Only stages that actually completed should show as completed
+      const status = stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+
+      // Only include startedAt if the stage actually started (status is RUNNING, COMPLETED, or FAILED)
+      const startedAt = (status === 'RUNNING' || status === 'COMPLETED' || status === 'FAILED') 
+        ? stage.startedAt ?? undefined 
+        : undefined
+
+      return {
+        key: stage.name,
+        label: stage.name,
+        color: stage.name.toLowerCase() === 'processing' ? 'bg-secondary' : 'bg-primary',
+        name: stage.name,
+        order: stage.order,
+        status,
+        processedItems: stage.processedItems ?? undefined,
+        totalItems: stage.totalItems ?? undefined,
+        startedAt,
+        completedAt: stage.completedAt ?? undefined,
+        estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+        statusMessage: stage.statusMessage ?? undefined
+      }
+    })
 
   // Get current stage info - highest order non-completed stage, or last stage if all completed
   const currentStage = stages.length > 0 ? 
