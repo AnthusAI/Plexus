@@ -11,7 +11,6 @@ interface NumberFlowProps {
   suffix?: string;
   spinTiming?: EffectTiming;
   willChange?: boolean;
-  continuous?: boolean;
 }
 
 export default function NumberFlowWrapper({
@@ -22,7 +21,6 @@ export default function NumberFlowWrapper({
   suffix,
   spinTiming,
   willChange = false,
-  continuous = false,
 }: NumberFlowProps) {
   return (
     <NumberFlow
@@ -33,7 +31,6 @@ export default function NumberFlowWrapper({
       suffix={suffix}
       spinTiming={spinTiming}
       willChange={willChange}
-      continuous={continuous}
     />
   );
 }
