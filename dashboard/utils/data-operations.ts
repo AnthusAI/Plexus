@@ -164,37 +164,37 @@ export async function listFromModel<T extends { id: string }>(
 export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
   return {
     id: task.id,
-    command: task.command || '',
+    command: task.command,
     type: task.type,
     status: task.status,
     target: task.target,
-    description: task.description,
-    metadata: task.metadata,
-    createdAt: task.createdAt,
-    startedAt: task.startedAt,
-    completedAt: task.completedAt,
-    estimatedCompletionAt: task.estimatedCompletionAt,
-    errorMessage: task.errorMessage,
-    errorDetails: task.errorDetails,
-    stdout: task.stdout,
-    stderr: task.stderr,
-    currentStageId: task.currentStageId,
-    stages: task.stages.map(stage => ({
+    description: task.description ?? undefined,
+    metadata: task.metadata ?? undefined,
+    createdAt: task.createdAt ?? undefined,
+    startedAt: task.startedAt ?? undefined,
+    completedAt: task.completedAt ?? undefined,
+    estimatedCompletionAt: task.estimatedCompletionAt ?? undefined,
+    errorMessage: task.errorMessage ?? undefined,
+    errorDetails: task.errorDetails ?? undefined,
+    stdout: task.stdout ?? undefined,
+    stderr: task.stderr ?? undefined,
+    currentStageId: task.currentStageId ?? undefined,
+    stages: task.stages?.map(stage => ({
       id: stage.id,
       name: stage.name,
       order: stage.order,
-      status: stage.status,
-      processedItems: stage.processedItems,
-      totalItems: stage.totalItems,
-      startedAt: stage.startedAt,
-      completedAt: stage.completedAt,
-      estimatedCompletionAt: stage.estimatedCompletionAt,
-      statusMessage: stage.statusMessage
-    })),
-    dispatchStatus: task.dispatchStatus,
-    celeryTaskId: task.celeryTaskId,
-    workerNodeId: task.workerNodeId,
-    updatedAt: task.updatedAt
+      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+      processedItems: stage.processedItems ?? undefined,
+      totalItems: stage.totalItems ?? undefined,
+      startedAt: stage.startedAt ?? undefined,
+      completedAt: stage.completedAt ?? undefined,
+      estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+      statusMessage: stage.statusMessage ?? undefined
+    })) ?? [],
+    dispatchStatus: task.dispatchStatus ?? undefined,
+    celeryTaskId: task.celeryTaskId ?? undefined,
+    workerNodeId: task.workerNodeId ?? undefined,
+    updatedAt: task.updatedAt ?? undefined
   }
 }
 
