@@ -282,7 +282,9 @@ def dispatch(
                 if result.get('stderr'):
                     print(result['stderr'], end='', file=sys.stderr)
             else:
-                logging.error(f"Command failed: {result.get('error', 'Unknown error')}")
+                error_msg = result.get('error')
+                if error_msg:
+                    logging.error(f"Command failed: {error_msg}")
                 # Print error output if available
                 if result.get('stderr'):
                     print(result['stderr'], end='', file=sys.stderr)
@@ -566,7 +568,16 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
         while current_item < total_items:
             # Check for simulated failure
             if fail and current_item >= fail_at:
-                raise Exception(f"Simulated failure at {current_item}/{total_items} items")
+                error_msg = f"Simulated failure at {current_item}/{total_items} items"
+                # First mark the task as failed to prevent further updates
+                tracker.fail(error_msg)
+                # Then update the progress display
+                progress.update(
+                    task_progress,
+                    completed=current_item,
+                    status="Failed"
+                )
+                raise Exception(error_msg)
                 
             # Calculate how many items we should have processed by now to stay on target
             elapsed = time.time() - stage_start_time  # Use stage-specific elapsed time
@@ -605,7 +616,7 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
                 last_api_update = current_time
             
             # Sleep a tiny amount to allow for API updates and logging
-            time.sleep(0.05)  # Reduced sleep time for smoother updates
+            time.sleep(0.05)
         
         # Finalizing stage with just two messages
         finalizing_messages = [
@@ -629,16 +640,17 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
         )
         logging.info(error_message)
         try:
-            if tracker.api_task:
-                tracker.api_task.fail_processing("Task cancelled by user")
+            tracker.fail("Task cancelled by user")  # Use new fail() method
+            progress.update(task_progress, status="Cancelled")
         except Exception as e:
             logging.error(f"Failed to update task status on cancellation: {str(e)}")
     except Exception as e:
         error_message = str(e)
         logging.error(f"Demo task failed: {error_message}", exc_info=True)
         try:
-            if tracker.api_task:
-                tracker.api_task.fail_processing(error_message)
+            if not tracker.is_failed:  # Only fail if not already failed
+                tracker.fail(error_message)  # Use new fail() method
+            progress.update(task_progress, status="Failed")
         except Exception as update_error:
             logging.error(f"Failed to update task status on error: {str(update_error)}")
         raise  # Re-raise the original exception after updating the task status

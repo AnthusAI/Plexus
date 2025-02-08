@@ -88,7 +88,17 @@ function transformTaskToActivity(task: ProcessedTask) {
   // Ensure we have a valid timestamp for the time field
   const timeStr = task.createdAt || new Date().toISOString()
 
-  return {
+  console.log('Task Status Debug:', {
+    taskStatus: task.status,
+    taskErrorMessage: task.errorMessage,
+    currentStageMessage: currentStage?.statusMessage,
+    isTaskFailed: task.status === 'FAILED'
+  })
+
+  // Get the appropriate status message - keep both messages and let TaskStatus handle display logic
+  const statusMessage = currentStage?.statusMessage ?? undefined
+
+  const result = {
     id: task.id,
     type: String(metadata.type || task.type),
     scorecard: metadata.scorecard?.toString() ?? '',
@@ -104,13 +114,22 @@ function transformTaskToActivity(task: ProcessedTask) {
     completedAt: task.completedAt ?? undefined,
     status: task.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
     stageConfigs: stages,
-    statusMessage: currentStage?.statusMessage ?? undefined,
+    statusMessage: statusMessage,  // Keep the status message
+    errorMessage: task.status === 'FAILED' ? task.errorMessage : undefined,  // Set error message for failed tasks
     data: {
       id: task.id,
       title: metadata.type || task.type,
       command: task.command
     }
   }
+
+  console.log('Transform Result:', {
+    status: result.status,
+    statusMessage: result.statusMessage,
+    errorMessage: result.errorMessage
+  })
+
+  return result
 }
 
 export default function ActivityDashboard() {

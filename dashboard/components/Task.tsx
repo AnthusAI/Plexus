@@ -28,6 +28,7 @@ export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
     celeryTaskId?: string
     workerNodeId?: string
     completedAt?: string
+    errorMessage?: string
   }
   onClick?: () => void
   controlButtons?: React.ReactNode
@@ -201,7 +202,12 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
   // Get status message from current stage or last completed stage if task is done
   const statusMessage = (() => {
     if (!task.stages?.length) return undefined
-    if (task.status === 'COMPLETED' || task.status === 'FAILED') {
+    if (task.status === 'FAILED') {
+      // For failed tasks, find the failed stage's status message
+      const failedStage = task.stages.find(stage => stage.status === 'FAILED')
+      return failedStage?.statusMessage
+    }
+    if (task.status === 'COMPLETED') {
       // Find the last stage with a status message
       return [...task.stages]
         .reverse()
@@ -237,6 +243,7 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
             status={task.status || 'PENDING'}
             command={task.data?.command}
             statusMessage={statusMessage}
+            errorMessage={task.errorMessage}
             dispatchStatus={task.dispatchStatus}
             celeryTaskId={task.celeryTaskId}
             workerNodeId={task.workerNodeId}
