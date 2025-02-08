@@ -52,6 +52,7 @@ class Stage:
         """Start this stage."""
         self.start_time = time.time()
         self.status = 'RUNNING'
+        self.processed_items = 0  # Reset processed items when starting stage
         logging.debug(f"Starting stage {self.name} with total_items={self.total_items}")
 
     def complete(self):
@@ -477,20 +478,42 @@ class TaskProgressTracker:
 
     @property
     def items_per_second(self) -> Optional[float]:
-        if self.current_items == 0:
+        if (not self.current_stage or 
+            not self.current_stage.start_time or 
+            not self.current_stage.processed_items):
             return None
-        return self.current_items / self.elapsed_time
+            
+        # Use stage-specific item count and timing
+        stage_elapsed = time.time() - self.current_stage.start_time
+        if stage_elapsed <= 0:
+            return None
+            
+        # Calculate rate based on stage-specific processed items
+        return self.current_stage.processed_items / stage_elapsed
 
     @property
     def estimated_time_remaining(self) -> Optional[float]:
-        if not self.items_per_second:
+        if not self.items_per_second or not self.items_per_second > 0:
             return None
-        remaining_items = self.total_items - self.current_items
+            
+        # Calculate remaining items in current stage
+        if not self.current_stage or not self.current_stage.total_items:
+            return None
+            
+        # Only show ETA after 10% progress to ensure we have enough data
+        stage_progress = (self.current_stage.processed_items or 0) / self.current_stage.total_items * 100
+        if stage_progress < 10:
+            return None
+            
+        remaining_items = self.current_stage.total_items - (self.current_stage.processed_items or 0)
         return remaining_items / self.items_per_second
 
     @property
     def estimated_completion_time(self) -> Optional[datetime]:
         remaining = self.estimated_time_remaining
-        if remaining is None:
+        if remaining is None or not self.current_stage or not self.current_stage.start_time:
             return None
-        return datetime.fromtimestamp(time.time() + remaining, tz=timezone.utc) 
+        # Calculate completion time based on stage start time plus elapsed and remaining time
+        stage_elapsed = time.time() - self.current_stage.start_time
+        completion_time = self.current_stage.start_time + stage_elapsed + remaining
+        return datetime.fromtimestamp(completion_time, tz=timezone.utc) 

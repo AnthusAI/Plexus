@@ -94,7 +94,7 @@ export function TaskDispatchButton() {
       </DropdownMenu>
 
       <Dialog open={isModalOpen} onOpenChange={handleCloseDialog}>
-        <DialogContent>
+        <DialogContent autoFocus={false}>
           <DialogHeader>
             <DialogTitle>{selectedAction?.name} Action</DialogTitle>
           </DialogHeader>
@@ -108,6 +108,7 @@ export function TaskDispatchButton() {
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
                 className="col-span-3 font-mono"
+                tabIndex={-1}
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
@@ -119,6 +120,7 @@ export function TaskDispatchButton() {
                 value={target}
                 onChange={(e) => setTarget(e.target.value)}
                 className="col-span-3 font-mono"
+                tabIndex={-1}
               />
             </div>
           </div>
