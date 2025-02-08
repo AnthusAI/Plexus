@@ -447,7 +447,7 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
         ),
         "Finalizing": StageConfig(
             order=3, 
-            status_message="Finalizing demo task..."
+            status_message="Task completed."
         )
     }
     

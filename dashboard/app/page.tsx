@@ -53,13 +53,18 @@ export default function LandingPage() {
   return (
     <Layout>
       <StandardSection
-        headline={
-          <span>
-            Run <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text">AI Agents</span> Over <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text">Your Data</span> With <span className="text-transparent bg-gradient-to-r from-secondary to-accent bg-clip-text">No Code</span>
-          </span>
-        }
+        headline="Run AI Agents Over Your Data With No Code"
         headlinePosition="inline"
         variant="hero"
+        useWordReveal={true}
+        gradientWords={{
+          "AI": { from: "primary", to: "accent" },
+          "Agents": { from: "primary", to: "accent" },
+          "Your": { from: "secondary", to: "accent" },
+          "Data": { from: "secondary", to: "accent" },
+          "No": { from: "secondary", to: "accent" },
+          "Code": { from: "secondary", to: "accent" }
+        }}
         leftContent={
           <>
             <p className="text-xl text-muted-foreground mb-8 w-full">

@@ -216,8 +216,7 @@ class TaskStage(BaseModel):
         """Mark the stage as started and update its status."""
         update_fields = {
             "status": "RUNNING",
-            "statusMessage": "Processing...",
-            "startedAt": datetime.now(timezone.utc)
+            "statusMessage": "Processing..."
         }
         self.update(**update_fields)
 
