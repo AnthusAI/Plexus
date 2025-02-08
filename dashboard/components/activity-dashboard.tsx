@@ -113,7 +113,7 @@ function transformTaskToActivity(task: ProcessedTask) {
     status: task.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
     statusMessage: statusMessage,
     errorMessage: task.status === 'FAILED' && task.errorMessage ? task.errorMessage : undefined,
-    dispatchStatus: task.dispatchStatus,
+    dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
     celeryTaskId: task.celeryTaskId,
     workerNodeId: task.workerNodeId
   }
@@ -180,7 +180,11 @@ export default function ActivityDashboard() {
             ? (b.updatedAt || b.createdAt)
             : b.createdAt
 
-          return new Date(bTime).getTime() - new Date(aTime).getTime()
+          // Default to current time if timestamps are undefined
+          const aDate = aTime ? new Date(aTime) : new Date()
+          const bDate = bTime ? new Date(bTime) : new Date()
+          
+          return bDate.getTime() - aDate.getTime()
         })
         setRecentTasks(sortedItems)
         if (isSynced) {
