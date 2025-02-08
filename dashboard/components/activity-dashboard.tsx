@@ -101,10 +101,15 @@ function transformTaskToActivity(task: ProcessedTask) {
   const result = {
     id: task.id,
     type: String(metadata.type || task.type),
-    scorecard: metadata.scorecard?.toString() ?? '',
-    score: metadata.score?.toString() ?? '',
+    scorecard: (metadata.scorecard?.toString() || '') as string,
+    score: (metadata.score?.toString() || '') as string,
     time: timeStr,
-    command: task.command,
+    description: task.command,  // Use command as description
+    data: {
+      id: task.id,
+      title: metadata.type || task.type,
+      command: task.command
+    },
     stages,
     currentStageName: currentStage?.name,
     processedItems: currentStage?.processedItems ?? 0,
@@ -113,14 +118,8 @@ function transformTaskToActivity(task: ProcessedTask) {
     estimatedCompletionAt: task.estimatedCompletionAt ?? undefined,
     completedAt: task.completedAt ?? undefined,
     status: task.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-    stageConfigs: stages,
-    statusMessage: statusMessage,  // Keep the status message
-    errorMessage: task.status === 'FAILED' ? task.errorMessage : undefined,  // Set error message for failed tasks
-    data: {
-      id: task.id,
-      title: metadata.type || task.type,
-      command: task.command
-    }
+    statusMessage: statusMessage,
+    errorMessage: task.status === 'FAILED' && task.errorMessage ? task.errorMessage : undefined
   }
 
   console.log('Transform Result:', {
