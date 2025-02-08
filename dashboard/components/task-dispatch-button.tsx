@@ -79,7 +79,7 @@ export function TaskDispatchButton() {
     <>
       <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline">
+          <Button variant="ghost" className="bg-card hover:bg-accent">
             Actions <ChevronDown className="ml-2 h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -94,7 +94,7 @@ export function TaskDispatchButton() {
       </DropdownMenu>
 
       <Dialog open={isModalOpen} onOpenChange={handleCloseDialog}>
-        <DialogContent autoFocus={false}>
+        <DialogContent autoFocus={false} className="bg-card border-0">
           <DialogHeader>
             <DialogTitle>{selectedAction?.name} Action</DialogTitle>
           </DialogHeader>
@@ -107,7 +107,7 @@ export function TaskDispatchButton() {
                 id="command"
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
-                className="col-span-3 font-mono"
+                className="col-span-3 font-mono bg-background"
                 tabIndex={-1}
               />
             </div>
@@ -119,7 +119,7 @@ export function TaskDispatchButton() {
                 id="target"
                 value={target}
                 onChange={(e) => setTarget(e.target.value)}
-                className="col-span-3 font-mono"
+                className="col-span-3 font-mono bg-background"
                 tabIndex={-1}
               />
             </div>
