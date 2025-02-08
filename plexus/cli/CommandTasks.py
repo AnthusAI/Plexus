@@ -24,6 +24,48 @@ def register_tasks(app):
     def execute_command(self: Task, command_string: str, target: str = "default/command", task_id: Optional[str] = None) -> dict:
         """Execute a Plexus command and return its result."""
         try:
+            # IMMEDIATELY claim the task if we have a task_id
+            if task_id:
+                logging.info(f"Celery assigned task {task_id} to worker - attempting immediate claim")
+                api_url = os.environ.get('PLEXUS_API_URL')
+                api_key = os.environ.get('PLEXUS_API_KEY')
+                
+                if api_url and api_key:
+                    from plexus.dashboard.api.models.task import Task
+                    from plexus.dashboard.api.client import PlexusDashboardClient
+                    
+                    client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+                    worker_id = f"{socket.gethostname()}-{os.getpid()}"
+                    
+                    try:
+                        task = Task.get_by_id(task_id, client)
+                        # First update - claim the task
+                        task.update(
+                            celeryTaskId=self.request.id,
+                            workerNodeId=worker_id,
+                            status='PENDING',  # Keep as pending while claimed
+                            type=task.type,
+                            target=task.target,
+                            command=task.command,
+                            accountId=task.accountId,
+                            dispatchStatus='DISPATCHED',  # Set to DISPATCHED when claimed
+                            updatedAt=datetime.now(timezone.utc).isoformat()
+                        )
+                        logging.info(f"Successfully claimed task {task_id} with worker ID {worker_id}")
+                        
+                        # Brief pause to ensure UI can show claimed state
+                        time.sleep(0.5)
+                        
+                        # Second update - start processing
+                        task.update(
+                            status='RUNNING',
+                            startedAt=datetime.now(timezone.utc).isoformat(),
+                            updatedAt=datetime.now(timezone.utc).isoformat()
+                        )
+                        logging.info(f"Started processing task {task_id}")
+                    except Exception as e:
+                        logging.error(f"Failed to claim task {task_id}: {str(e)}")
+            
             logging.info(f"Received command: '{command_string}' with target: '{target}' and task_id: '{task_id}'")
             
             # Initialize task tracking
@@ -40,27 +82,10 @@ def register_tasks(app):
                 
                 client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
                 
-                # Always try to get or create task at the Celery task level
+                # Now proceed with task processing
                 if task_id:
-                    # If we have a task_id, try to get existing task
-                    logging.info(f"Initializing PlexusDashboardClient to get task {task_id}")
-                    
-                    # Retry getting task a few times to handle timing issues
-                    max_retries = 3
-                    retry_delay = 1  # seconds
-                    
-                    for attempt in range(max_retries):
-                        try:
-                            task = Task.get_by_id(task_id, client)
-                            logging.info(f"Successfully retrieved task {task_id}, starting processing")
-                            task.start_processing()
-                            break
-                        except Exception as e:
-                            if attempt < max_retries - 1:
-                                logging.warning(f"Attempt {attempt + 1} to get Task {task_id} failed: {str(e)}, retrying...")
-                                time.sleep(retry_delay)
-                            else:
-                                logging.error(f"All attempts to get Task {task_id} failed: {str(e)}")
+                    # Get the task for further updates
+                    task = Task.get_by_id(task_id, client)
                 else:
                     # Create new task if no task_id provided
                     try:

@@ -11,29 +11,35 @@ export type ProcessedTask = {
   type: string;
   status: string;
   target: string;
-  metadata?: any;
-  currentStageId?: string | null;
-  updatedAt?: string | null;
-  scorecardId?: string | null;
-  scoreId?: string | null;
-  createdAt: string;
-  startedAt?: string | null;
-  completedAt?: string | null;
-  estimatedCompletionAt?: string | null;
-  errorMessage?: string | null;
-  errorDetails?: any;
-  stages: Array<{
-    id: string;
-    name: string;
-    order: number;
-    status: string;
-    processedItems?: number | null;
-    totalItems?: number | null;
-    startedAt?: string | null;
-    completedAt?: string | null;
-    estimatedCompletionAt?: string | null;
-    statusMessage?: string | null;
-  }>;
+  description?: string;
+  metadata?: string;
+  createdAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  estimatedCompletionAt?: string;
+  errorMessage?: string;
+  errorDetails?: string;
+  stdout?: string;
+  stderr?: string;
+  currentStageId?: string;
+  stages: ProcessedTaskStage[];
+  dispatchStatus?: 'DISPATCHED' | string;  // Allow both literal and string
+  celeryTaskId?: string;
+  workerNodeId?: string;
+  updatedAt?: string;  // Add updatedAt field
+};
+
+export type ProcessedTaskStage = {
+  id: string;
+  name: string;
+  order: number;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  processedItems?: number;
+  totalItems?: number;
+  startedAt?: string;
+  completedAt?: string;
+  estimatedCompletionAt?: string;
+  statusMessage?: string;
 };
 
 type AmplifyClient = ReturnType<typeof generateClient<Schema>> & {
@@ -162,18 +168,33 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
     type: task.type,
     status: task.status,
     target: task.target,
+    description: task.description,
     metadata: task.metadata,
-    currentStageId: task.currentStageId,
-    updatedAt: task.updatedAt,
-    scorecardId: task.scorecardId,
-    scoreId: task.scoreId,
-    createdAt: task.createdAt || new Date().toISOString(),
+    createdAt: task.createdAt,
     startedAt: task.startedAt,
     completedAt: task.completedAt,
     estimatedCompletionAt: task.estimatedCompletionAt,
     errorMessage: task.errorMessage,
     errorDetails: task.errorDetails,
-    stages: []  // Stages are loaded separately by processTask
+    stdout: task.stdout,
+    stderr: task.stderr,
+    currentStageId: task.currentStageId,
+    stages: task.stages.map(stage => ({
+      id: stage.id,
+      name: stage.name,
+      order: stage.order,
+      status: stage.status,
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      startedAt: stage.startedAt,
+      completedAt: stage.completedAt,
+      estimatedCompletionAt: stage.estimatedCompletionAt,
+      statusMessage: stage.statusMessage
+    })),
+    dispatchStatus: task.dispatchStatus,
+    celeryTaskId: task.celeryTaskId,
+    workerNodeId: task.workerNodeId,
+    updatedAt: task.updatedAt
   }
 }
 
@@ -207,17 +228,17 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
     type: task.type,
     status: task.status,
     target: task.target,
+    description: task.description,
     metadata: task.metadata,
-    currentStageId: task.currentStageId,
-    updatedAt: task.updatedAt,
-    scorecardId: task.scorecardId,
-    scoreId: task.scoreId,
-    createdAt: task.createdAt || new Date().toISOString(),
+    createdAt: task.createdAt,
     startedAt: task.startedAt,
     completedAt: task.completedAt,
     estimatedCompletionAt: task.estimatedCompletionAt,
     errorMessage: task.errorMessage,
     errorDetails: task.errorDetails,
+    stdout: task.stdout,
+    stderr: task.stderr,
+    currentStageId: task.currentStageId,
     stages: stages.map(stage => ({
       id: stage.id,
       name: stage.name,
@@ -229,7 +250,11 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
       completedAt: stage.completedAt,
       estimatedCompletionAt: stage.estimatedCompletionAt,
       statusMessage: stage.statusMessage
-    }))
+    })),
+    dispatchStatus: task.dispatchStatus,
+    celeryTaskId: task.celeryTaskId,
+    workerNodeId: task.workerNodeId,
+    updatedAt: task.updatedAt
   };
 }
 
@@ -339,12 +364,14 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
 }
 
 export function observeRecentTasks(limit: number = 12): Observable<{ items: ProcessedTask[], isSynced: boolean }> {
+  console.log('Setting up task subscription...');
   return new Observable(handlers => {
     const currentClient = getClient();
     let accountId: string | null = null;
 
     // Get the account ID first
     const ACCOUNT_KEY = 'call-criteria';
+    console.log('Fetching account ID for subscription...');
     listFromModel<Schema['Account']['type']>(
       'Account',
       { filter: { key: { eq: ACCOUNT_KEY } } }
@@ -356,29 +383,78 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
       }
 
       accountId = response.data[0].id;
+      console.log('Account ID found:', accountId);
 
       // Initial fetch
+      console.log('Performing initial task fetch...');
       listRecentTasks(limit).then(response => {
+        console.log('Initial tasks loaded:', {
+          count: response.length,
+          tasks: response.map(t => ({
+            id: t.id,
+            celeryTaskId: t.celeryTaskId,
+            workerNodeId: t.workerNodeId,
+            dispatchStatus: t.dispatchStatus
+          }))
+        });
         handlers.next({ items: response, isSynced: true });
       }).catch(handlers.error);
 
-      // Subscribe to changes
+      console.log('Setting up subscriptions...');
+      // Subscribe to changes with more frequent updates for claiming
       const createSub = (currentClient.models.Task as any).onCreate().subscribe({
         next: async () => {
+          console.log('Task created event received');
           if (!accountId) return;
           const response = await listRecentTasks(limit);
           handlers.next({ items: response, isSynced: true });
         },
-        error: handlers.error
+        error: (error) => {
+          console.error('Error in task create subscription:', error);
+          handlers.error(error);
+        }
       });
 
       const updateSub = (currentClient.models.Task as any).onUpdate().subscribe({
-        next: async () => {
+        next: async (event: any) => {
+          // Log the full event to see its structure
+          console.log('Full Update Event:', event);
+
+          // In Amplify Gen2, fields are methods that need to be called
+          const updatedTask = event?.element;
+          if (updatedTask) {
+            console.log('Task Update Event:', {
+              id: updatedTask.id(),
+              celeryTaskId: updatedTask.celeryTaskId(),
+              workerNodeId: updatedTask.workerNodeId(),
+              dispatchStatus: updatedTask.dispatchStatus(),
+              status: updatedTask.status()
+            });
+          }
+
+          // Always trigger an update for task updates to ensure we catch claiming
           if (!accountId) return;
-          const response = await listRecentTasks(limit);
-          handlers.next({ items: response, isSynced: true });
+          try {
+            const response = await listRecentTasks(limit);
+            console.log('Task List Response:', {
+              count: response.length,
+              tasks: response.map(t => ({
+                id: t.id,
+                celeryTaskId: t.celeryTaskId,
+                workerNodeId: t.workerNodeId,
+                dispatchStatus: t.dispatchStatus,
+                status: t.status
+              }))
+            });
+            handlers.next({ items: response, isSynced: true });
+          } catch (error) {
+            console.error('Error fetching tasks after update:', error);
+          }
         },
-        error: handlers.error
+        error: (error: Error) => {
+          console.error('Error in task update subscription:', error);
+          handlers.error(error);
+        }
       });
 
       const stageSub = (currentClient.models.TaskStage as any).onUpdate().subscribe({
@@ -391,6 +467,7 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
       });
 
       // Cleanup subscriptions
+      console.log('Subscriptions set up successfully');
       return () => {
         createSub.unsubscribe();
         updateSub.unsubscribe();
