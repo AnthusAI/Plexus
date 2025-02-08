@@ -151,10 +151,10 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
   return (
     <CardHeader className="space-y-1.5 px-2 py-2 flex flex-col items-start">
       <div className="flex justify-between items-start w-full">
-        <div className="flex flex-col">
+        <div className="flex flex-col min-h-[5.5rem]">
           <div className="text-lg font-bold">{task.type}</div>
-          <div className="text-xs text-muted-foreground">{task.scorecard}</div>
-          <div className="text-xs text-muted-foreground">{task.score}</div>
+          <div className="text-xs text-muted-foreground h-4">{task.scorecard || '\u00A0'}</div>
+          <div className="text-xs text-muted-foreground h-4">{task.score || '\u00A0'}</div>
           <div className="text-xs text-muted-foreground mt-1">{formattedTime}</div>
         </div>
         <div className="flex flex-col items-end">
@@ -218,7 +218,17 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
           <TaskStatus
             showStages={true}
             stages={task.stages}
-            stageConfigs={task.stages}
+            stageConfigs={task.stages.map(stage => ({
+              key: stage.name,
+              label: stage.label || stage.name,
+              color: stage.color || 'bg-primary',
+              name: stage.name,
+              order: stage.order,
+              status: stage.status,
+              processedItems: stage.processedItems,
+              totalItems: stage.totalItems,
+              statusMessage: stage.statusMessage
+            }))}
             currentStageName={task.currentStageName}
             processedItems={task.processedItems}
             totalItems={task.totalItems}

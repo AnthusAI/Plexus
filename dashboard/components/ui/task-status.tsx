@@ -120,7 +120,78 @@ export function TaskStatus({
   const isInProgress = status === 'RUNNING'
   const isFinished = status === 'COMPLETED' || status === 'FAILED'
 
-  // Find the most recent stage with valid progress information
+  // State for computed timing values
+  const [elapsedTime, setElapsedTime] = useState<string>('')
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string>('')
+
+  // Update timing values every second while not completed
+  useEffect(() => {
+    const updateTiming = () => {
+      // If no task start time, show 0s
+      if (!startedAt) {
+        setElapsedTime('0s')
+        return
+      }
+
+      console.log('Timing Debug:', {
+        startedAt,
+        completedAt,
+        rawStartTime: new Date(startedAt),
+        rawEndTime: completedAt ? new Date(completedAt) : new Date(),
+      })
+
+      const taskStartTime = new Date(startedAt)
+      const endTime = completedAt ? new Date(completedAt) : new Date()
+
+      // Log the actual timestamps we're using
+      console.log('Timestamps:', {
+        startTimeMs: taskStartTime.getTime(),
+        endTimeMs: endTime.getTime(),
+        difference: endTime.getTime() - taskStartTime.getTime(),
+        calculatedSeconds: Math.floor((endTime.getTime() - taskStartTime.getTime()) / 1000)
+      })
+
+      // Calculate elapsed time from task start to end time
+      const elapsedSeconds = Math.floor(
+        (endTime.getTime() - taskStartTime.getTime()) / 1000
+      )
+
+      const formattedTime = formatDuration(elapsedSeconds)
+      console.log('Final time:', {
+        elapsedSeconds,
+        formattedTime
+      })
+
+      setElapsedTime(formattedTime)
+
+      // Only show ETA if in progress and we have an estimate
+      if (isInProgress && estimatedCompletionAt) {
+        const estimated = new Date(estimatedCompletionAt)
+        const remainingSeconds = Math.floor(
+          (estimated.getTime() - endTime.getTime()) / 1000
+        )
+        if (remainingSeconds > 0) {
+          setEstimatedTimeRemaining(formatDuration(remainingSeconds))
+        } else {
+          setEstimatedTimeRemaining('')
+        }
+      } else {
+        setEstimatedTimeRemaining('')
+      }
+    }
+
+    // Initial update
+    updateTiming()
+
+    // Update every second until completed
+    const interval = !completedAt ? setInterval(updateTiming, 1000) : null
+
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [startedAt, estimatedCompletionAt, completedAt, isInProgress])
+
+  // Get progress information from stages if available, otherwise use props
   const getProgressFromStages = () => {
     if (!stages || stages.length === 0) {
       return { processedItems, totalItems }
@@ -161,58 +232,6 @@ export function TaskStatus({
   
   const progress = effectiveProcessedItems && effectiveTotalItems ? 
     (effectiveProcessedItems / effectiveTotalItems) * 100 : 0
-
-  // State for computed timing values
-  const [elapsedTime, setElapsedTime] = useState<string>('')
-  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string>('')
-
-  // Update timing values every second while not completed
-  useEffect(() => {
-    const updateTiming = () => {
-      if (!startedAt) {
-        setElapsedTime('0s')
-        return
-      }
-
-      const now = new Date()
-      const started = new Date(startedAt)
-      
-      // For finished tasks, use completedAt time instead of current time
-      const endTime = completedAt ? 
-        new Date(completedAt) : now
-
-      const elapsedSeconds = Math.floor(
-        (endTime.getTime() - started.getTime()) / 1000
-      )
-
-      setElapsedTime(formatDuration(elapsedSeconds))
-
-      // Only show ETA if in progress and we have an estimate
-      if (isInProgress && estimatedCompletionAt) {
-        const estimated = new Date(estimatedCompletionAt)
-        const remainingSeconds = Math.floor(
-          (estimated.getTime() - now.getTime()) / 1000
-        )
-        if (remainingSeconds > 0) {
-          setEstimatedTimeRemaining(formatDuration(remainingSeconds))
-        } else {
-          setEstimatedTimeRemaining('')
-        }
-      } else {
-        setEstimatedTimeRemaining('')
-      }
-    }
-
-    // Initial update
-    updateTiming()
-
-    // Update every second until completed
-    const interval = !completedAt ? setInterval(updateTiming, 1000) : null
-
-    return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [startedAt, estimatedCompletionAt, completedAt, isInProgress])
 
   // Convert TaskStageConfig to SegmentConfig for the progress bar
   const segmentConfigs: SegmentConfig[] = stageConfigs ? [
