@@ -438,16 +438,16 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
     stage_configs = {
         "Setup": StageConfig(
             order=1, 
-            status_message="Initializing demo task..."
+            status_message="Loading AI models..."
         ),
         "Running": StageConfig(
             order=2, 
             total_items=total_items,
-            status_message="Processing demo items..."
+            status_message="Processing items..."
         ),
         "Finalizing": StageConfig(
             order=3, 
-            status_message="Task completed."
+            status_message="Computing metrics..."
         )
     }
     
@@ -528,9 +528,21 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
     import random
     
     try:
-        # Setup stage
+        # Setup stage with multiple status updates
         tracker.update(current_items=0)
-        time.sleep(random.uniform(1.0, 2.0))  # Simulate setup work
+        
+        # Quick setup phase with multiple status messages
+        setup_messages = [
+            "Loading base AI model...",
+            "Initializing model parameters...",
+            "Loading custom configurations...",
+            "Preparing processing pipeline..."
+        ]
+        
+        for msg in setup_messages:
+            tracker.current_stage.status_message = msg
+            tracker.update(current_items=0)
+            time.sleep(0.3)  # Shorter delays between messages
         
         # Main processing stage
         tracker.advance_stage()  # Advance to "Running" stage
@@ -539,34 +551,41 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
         current_item = 0
         start_time = time.time()
         last_api_update = 0  # To control API update frequency
-        target_duration = 20.0  # Target total processing time in seconds
         api_update_interval = 1  # Update API every 1 second
+        batch_size = 50  # Process in fixed size batches
         
-        # Initialize the last update time
-        last_update_time = time.time()
-
         while current_item < total_items:
-            # Calculate how many items we should have processed by now to stay on target
-            elapsed = time.time() - start_time
-            target_items = min(
-                total_items,
-                int((elapsed / target_duration) * total_items)
-            )
-            
-            # Process enough items to catch up to where we should be
-            items_to_process = max(1, target_items - current_item)
-            current_item = min(current_item + items_to_process, total_items)
+            # Process a batch of items
+            items_to_process = min(batch_size, total_items - current_item)
+            current_item += items_to_process
             
             # Update tracker with current progress
             tracker.update(current_items=current_item)
             
-            # Only update API task periodically
+            # If we've reached total items, advance to finalizing and exit immediately
+            if current_item >= total_items:
+                # Calculate final metrics for display
+                elapsed = time.time() - start_time
+                actual_items_per_sec = current_item / elapsed if elapsed > 0 else 0
+                
+                # Update Rich progress bar one last time
+                progress.update(
+                    task_progress,
+                    completed=current_item,
+                    status=f"{tracker.status} ({actual_items_per_sec:.1f} items/sec)"
+                )
+                
+                tracker.advance_stage()  # Advance to "Finalizing" stage
+                break
+            
+            # Only update API task periodically if we're still processing
             current_time = time.time()
             if current_time - last_api_update >= api_update_interval:
                 tracker.update(current_items=current_item)
                 last_api_update = current_time
             
-            # Calculate progress metrics for display only
+            # Calculate progress metrics for display
+            elapsed = time.time() - start_time
             actual_items_per_sec = current_item / elapsed if elapsed > 0 else 0
             
             # Update Rich progress bar
@@ -576,18 +595,23 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
                 status=f"{tracker.status} ({actual_items_per_sec:.1f} items/sec)"
             )
             
-            # Sleep a tiny amount to allow for API updates and logging
+            # Sleep a tiny amount to simulate processing time
             time.sleep(0.1)
         
-        # Final stage - make sure we update the API one last time
-        tracker.update(current_items=current_item)
-        tracker.advance_stage()  # Advance to "Finalizing" stage
+        # Finalizing stage with just two messages
+        finalizing_messages = [
+            "Computing metrics...",
+            "Generating report..."
+        ]
         
-        # Simulate some finalization work
-        time.sleep(random.uniform(1.0, 2.0))
+        for msg in finalizing_messages:
+            tracker.current_stage.status_message = msg
+            tracker.update(current_items=total_items)
+            time.sleep(0.3)  # Slightly longer per message since we have fewer
         
-        # Complete the task
-        tracker.complete()  # This will mark the task as complete
+        # Set completion message and complete task in one atomic operation
+        tracker.current_stage.status_message = "Task completed."
+        tracker.complete()  # This will mark the task as complete and send the final update
         
     except KeyboardInterrupt:
         error_message = (
