@@ -113,7 +113,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
       <div className="flex-none">
         {renderHeader(childProps)}
       </div>
-      <CardContent className="flex-1 min-h-0 p-2">
+      <CardContent className="flex-1 min-h-0 p-0">
         {error ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             <div className="text-destructive mb-2">{error}</div>
@@ -149,9 +149,9 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
   const formattedTime = formatDistanceToNow(new Date(task.time), { addSuffix: true })
 
   return (
-    <CardHeader className="space-y-1.5 px-2 py-2 flex flex-col items-start">
+    <CardHeader className="space-y-1.5 p-0 flex flex-col items-start">
       <div className="flex justify-between items-start w-full">
-        <div className="flex flex-col min-h-[5.5rem]">
+        <div className="flex flex-col pb-1">
           <div className="text-lg font-bold">{task.type}</div>
           <div className="text-xs text-muted-foreground h-4">{task.scorecard || '\u00A0'}</div>
           <div className="text-xs text-muted-foreground h-4">{task.score || '\u00A0'}</div>

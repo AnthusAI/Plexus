@@ -275,7 +275,7 @@ export function TaskStatus({
   const showEmptyState = !stages.length && !preExecutionStatus
 
   return (
-    <div className="space-y-2">
+    <div className="[&>*+*]:mt-2">
       <StyleTag />
       {variant === 'detail' && (
         <div className="flex justify-between items-center mb-4">
