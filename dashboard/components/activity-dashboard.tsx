@@ -13,6 +13,7 @@ import { Activity } from 'lucide-react'
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import ScorecardContext from "@/components/ScorecardContext"
+import { TaskDispatchButton } from "@/components/task-dispatch-button"
 
 // Import the types from data-operations
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
@@ -213,13 +214,14 @@ export default function ActivityDashboard() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="mb-4">
+      <div className="mb-4 flex justify-between items-center">
         <ScorecardContext 
           selectedScorecard={selectedScorecard}
           setSelectedScorecard={setSelectedScorecard}
           selectedScore={selectedScore}
           setSelectedScore={setSelectedScore}
         />
+        <TaskDispatchButton />
       </div>
       <div className="flex h-full">
         <div 
