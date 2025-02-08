@@ -414,7 +414,12 @@ def get_progress_status(current: int, total: int) -> str:
     '--task-id',
     help='Task ID to update progress through the API'
 )
-def demo(target: str, task_id: Optional[str] = None) -> None:
+@click.option(
+    '--fail',
+    is_flag=True,
+    help='Simulate a random failure during the Running stage'
+)
+def demo(target: str, task_id: Optional[str] = None, fail: bool = False) -> None:
     """Run a demo task that processes 2000 items over 20 seconds."""
     from .CommandProgress import CommandProgress
     import time
@@ -522,9 +527,9 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
             total=total_items,
             status=stage_configs["Setup"].status_message
         )
-        _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size, max_batch_size, sleep_per_batch)
+        _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size, max_batch_size, sleep_per_batch, fail)
 
-def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size, max_batch_size, sleep_per_batch):
+def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size, max_batch_size, sleep_per_batch, fail):
     """Helper function to run the demo task with Rich progress bar."""
     import random
     
@@ -555,7 +560,14 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
         api_update_interval = 1  # Update API every 1 second
         target_duration = 40.0 + random.uniform(-5.0, 5.0)  # 40 seconds ±5s jitter
         
+        # If fail flag is set, calculate failure point between 30-70% progress
+        fail_at = int(total_items * random.uniform(0.3, 0.7)) if fail else None
+        
         while current_item < total_items:
+            # Check for simulated failure
+            if fail and current_item >= fail_at:
+                raise Exception(f"Simulated failure at {current_item}/{total_items} items")
+                
             # Calculate how many items we should have processed by now to stay on target
             elapsed = time.time() - stage_start_time  # Use stage-specific elapsed time
             target_items = min(
@@ -616,10 +628,17 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
             f"({tracker.items_per_second:.1f} items/sec)"
         )
         logging.info(error_message)
-        if tracker.api_task:
-            tracker.api_task.fail_processing("Task cancelled by user")
+        try:
+            if tracker.api_task:
+                tracker.api_task.fail_processing("Task cancelled by user")
+        except Exception as e:
+            logging.error(f"Failed to update task status on cancellation: {str(e)}")
     except Exception as e:
-        logging.error(f"Demo task failed: {str(e)}", exc_info=True)
-        if tracker.api_task:
-            tracker.api_task.fail_processing(str(e))
-        raise
+        error_message = str(e)
+        logging.error(f"Demo task failed: {error_message}", exc_info=True)
+        try:
+            if tracker.api_task:
+                tracker.api_task.fail_processing(error_message)
+        except Exception as update_error:
+            logging.error(f"Failed to update task status on error: {str(update_error)}")
+        raise  # Re-raise the original exception after updating the task status

@@ -109,6 +109,9 @@ export function TaskDispatchButton() {
                 onChange={(e) => setCommand(e.target.value)}
                 className="col-span-3 font-mono bg-background"
                 tabIndex={-1}
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
@@ -121,6 +124,9 @@ export function TaskDispatchButton() {
                 onChange={(e) => setTarget(e.target.value)}
                 className="col-span-3 font-mono bg-background"
                 tabIndex={-1}
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
               />
             </div>
           </div>
