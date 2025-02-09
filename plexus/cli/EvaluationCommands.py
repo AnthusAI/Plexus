@@ -37,6 +37,9 @@ import threading
 set_log_group('plexus/cli/evaluation')
 
 from plexus.scores.Score import Score
+from plexus.dashboard.api.models.task import Task
+from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.cli.CommandProgress import CommandProgress
 
 def create_client() -> PlexusDashboardClient:
     """Create a client and log its configuration"""
@@ -70,6 +73,7 @@ def load_configuration_from_yaml_file(configuration_file_path):
 @click.option('--experiment-label', default='', type=str, help='Label for the experiment')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 @click.option('--visualize', is_flag=True, default=False, help='Generate PNG visualization of LangGraph scores')
+@click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
 def accuracy(
     scorecard_name: str,
     use_langsmith_trace: bool,
@@ -80,14 +84,40 @@ def accuracy(
     score_name: str,
     experiment_label: str,
     fresh: bool,
-    visualize: bool
+    visualize: bool,
+    task_id: Optional[str]
     ):
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
     """
     async def _run_accuracy():
+        nonlocal task_id  # Make task_id accessible to modify in the async function
         experiment = None
+        task = None
         try:
+            # Create or get Task record for progress tracking
+            if task_id:
+                # Get existing task if task_id provided (Celery path)
+                client = PlexusDashboardClient()
+                task = Task.get_by_id(task_id, client)
+                logging.info(f"Using existing task: {task_id}")
+            else:
+                # Create new task if running standalone
+                api_url = os.environ.get('PLEXUS_API_URL')
+                api_key = os.environ.get('PLEXUS_API_KEY')
+                if api_url and api_key:
+                    client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+                    task = Task.create(
+                        client=client,
+                        accountId="call-criteria",  # TODO: Make configurable
+                        type="ACCURACY_EVALUATION",
+                        target=f"evaluation/accuracy/{scorecard_name}",
+                        command=f"evaluate accuracy --scorecard-name {scorecard_name}",
+                        status="PENDING"
+                    )
+                    logging.info(f"Created new task: {task.id}")
+                    task_id = task.id
+
             if use_langsmith_trace:
                 os.environ['LANGCHAIN_TRACING_V2'] = 'true'
             else:
@@ -113,12 +143,9 @@ def accuracy(
             # Check if any score in the scorecard uses the data-driven approach
             uses_data_driven = any('data' in score_config for score_config in scorecard_instance.scores)
 
-            # We used to support multiple, comma-separated score names.  But lots of our
-            # score names have commas in them.  So, we don't support that anymore.
             if score_name is not None and score_name != '':
                 score_names = [score_name]
             else:
-                # Fix: Get score names from the list of score dictionaries
                 score_names = [score['name'] for score in scorecard_instance.scores]
 
             if not score_names:
@@ -146,9 +173,20 @@ def accuracy(
 
                 if uses_data_driven:
                     if score_config:
-                        single_score_labeled_samples = get_data_driven_samples(
-                            scorecard_instance, scorecard_name, single_score_name, 
-                            score_config, fresh, content_ids_to_sample_set)
+                        # Setup stage - dataset preparation
+                        with CommandProgress.track(
+                            total=number_of_samples,
+                            status=f"Loading dataset for {single_score_name}..."
+                        ) as progress:
+                            single_score_labeled_samples = get_data_driven_samples(
+                                scorecard_instance, scorecard_name, single_score_name, 
+                                score_config, fresh, content_ids_to_sample_set,
+                                progress_callback=lambda current: progress.update(
+                                    current=current,
+                                    total=number_of_samples,
+                                    status=f"Loaded {current} of {number_of_samples} samples"
+                                )
+                            )
                     else:
                         logging.warning(f"Score '{single_score_name}' not found in scorecard. Skipping.")
                         continue
@@ -166,7 +204,8 @@ def accuracy(
                     'subset_of_score_names': [single_score_name],
                     'experiment_label': experiment_label,
                     'score_id': score_id,
-                    'visualize': visualize
+                    'visualize': visualize,
+                    'task_id': task_id  # Pass task_id to experiment
                 }
                 
                 if uses_data_driven:
@@ -177,16 +216,29 @@ def accuracy(
                     single_score_experiment_args['labeled_samples_filename'] = labeled_samples_filename
                 
                 async with AccuracyEvaluation(**single_score_experiment_args) as experiment:
-                    # Here we can set the score_id on the experiment instance if needed
-                    await experiment.run()
+                    # Processing stage - run evaluation
+                    with CommandProgress.track(
+                        total=number_of_samples,
+                        status=f"Evaluating {single_score_name}..."
+                    ) as progress:
+                        await experiment.run(progress_callback=lambda current: progress.update(
+                            current=current,
+                            total=number_of_samples,
+                            status=f"Processed {current} of {number_of_samples} evaluations"
+                        ))
 
                 logging.info("All score experiments completed.")
 
+        except Exception as e:
+            logging.error(f"Evaluation failed: {str(e)}")
+            if task:
+                task.fail_processing(str(e))
+            raise
         finally:
             if experiment:
                 await experiment.cleanup()
 
-    # Create and run the event loop only once at the top level
+    # Create and run the event loop
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
@@ -211,7 +263,15 @@ def accuracy(
         except Exception as e:
             logging.error(f"Error during cleanup: {e}")
 
-def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, score_config, fresh, content_ids_to_sample_set):
+def get_data_driven_samples(
+    scorecard_instance, 
+    scorecard_name, 
+    score_name, 
+    score_config, 
+    fresh, 
+    content_ids_to_sample_set,
+    progress_callback=None
+):
     score_class_name = score_config['class']
     score_module_path = f'plexus.scores.{score_class_name}'
     score_module = importlib.import_module(score_module_path)
@@ -273,6 +333,10 @@ def get_data_driven_samples(scorecard_instance, scorecard_name, score_name, scor
         }
         processed_samples.append(processed_sample)
 
+    # Add progress updates if callback provided
+    if progress_callback:
+        progress_callback(len(processed_samples))
+    
     return processed_samples
 
 def get_csv_samples(csv_filename):
