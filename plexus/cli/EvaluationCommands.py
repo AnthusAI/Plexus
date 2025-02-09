@@ -40,6 +40,7 @@ from plexus.scores.Score import Score
 from plexus.dashboard.api.models.task import Task
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.cli.CommandProgress import CommandProgress
+from plexus.cli.task_progress_tracker import TaskProgressTracker, StageConfig
 
 def create_client() -> PlexusDashboardClient:
     """Create a client and log its configuration"""
@@ -99,135 +100,244 @@ def accuracy(
             if task_id:
                 # Get existing task if task_id provided (Celery path)
                 client = PlexusDashboardClient()
-                task = Task.get_by_id(task_id, client)
-                logging.info(f"Using existing task: {task_id}")
+                try:
+                    task = Task.get_by_id(task_id, client)
+                    logging.info(f"Using existing task: {task_id}")
+                except Exception as e:
+                    logging.error(f"Failed to get existing task {task_id}: {str(e)}")
+                    raise
             else:
                 # Create new task if running standalone
                 api_url = os.environ.get('PLEXUS_API_URL')
                 api_key = os.environ.get('PLEXUS_API_KEY')
                 if api_url and api_key:
                     client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
-                    task = Task.create(
-                        client=client,
-                        accountId="call-criteria",  # TODO: Make configurable
-                        type="ACCURACY_EVALUATION",
-                        target=f"evaluation/accuracy/{scorecard_name}",
-                        command=f"evaluate accuracy --scorecard-name {scorecard_name}",
-                        status="PENDING"
-                    )
-                    logging.info(f"Created new task: {task.id}")
-                    task_id = task.id
+                    try:
+                        # First verify we can connect to the API
+                        logging.info("Testing API connection...")
+                        test_query = """
+                        query TestConnection {
+                            __typename
+                        }
+                        """
+                        client.execute(test_query)
+                        logging.info("API connection successful")
 
-            if use_langsmith_trace:
-                os.environ['LANGCHAIN_TRACING_V2'] = 'true'
-            else:
-                os.environ.pop('LANGCHAIN_TRACING_V2', None)
+                        # Get the account ID for call-criteria
+                        logging.info("Looking up call-criteria account...")
+                        account = Account.list_by_key(key="call-criteria", client=client)
+                        if not account:
+                            raise Exception("Could not find account with key: call-criteria")
+                        logging.info(f"Found account: {account.name} ({account.id})")
 
-            if not scorecard_name:
-                logging.error("Scorecard not specified")
-                sys.exit(1)
-
-            scorecard_folder = os.path.join('scorecards', scorecard_name)
-            override_folder: str = os.path.join(scorecard_folder, 'experiments/calibrations')
-
-            logging.info('Running accuracy experiment...')
-            Scorecard.load_and_register_scorecards('scorecards/')
-            scorecard_type = scorecard_registry.get(scorecard_name)
-            if scorecard_type is None:
-                logging.error(f"Scorecard with name '{scorecard_name}' not found.")
-                return
-
-            scorecard_instance = scorecard_type(scorecard=scorecard_name)
-            logging.info(f"Using scorecard {scorecard_name} with class {scorecard_instance.__class__.__name__}")
-
-            # Check if any score in the scorecard uses the data-driven approach
-            uses_data_driven = any('data' in score_config for score_config in scorecard_instance.scores)
-
-            if score_name is not None and score_name != '':
-                score_names = [score_name]
-            else:
-                score_names = [score['name'] for score in scorecard_instance.scores]
-
-            if not score_names:
-                logging.error("No score names specified")
-                return
-
-            content_ids_to_sample_set = set(re.split(r',\s+', content_ids_to_sample.strip())) if content_ids_to_sample.strip() else None
-
-            for single_score_name in score_names:
-                logging.info(f"Running experiment for score: {single_score_name}")
-                
-                single_score_labeled_samples = []
-                labeled_samples_filename = None
-                
-                # Look up Score ID from the API
-                score_config = next((score for score in scorecard_instance.scores 
-                                   if score['name'] == single_score_name), None)
-                
-                if score_config and 'id' in score_config:
-                    score_id = score_config['id']
-                    logging.info(f"Found Score ID {score_id} for {single_score_name}")
-                else:
-                    logging.warning(f"Could not find Score ID for {single_score_name}")
-                    score_id = None
-
-                if uses_data_driven:
-                    if score_config:
-                        # Setup stage - dataset preparation
-                        with CommandProgress.track(
-                            total=number_of_samples,
-                            status=f"Loading dataset for {single_score_name}..."
-                        ) as progress:
-                            single_score_labeled_samples = get_data_driven_samples(
-                                scorecard_instance, scorecard_name, single_score_name, 
-                                score_config, fresh, content_ids_to_sample_set,
-                                progress_callback=lambda current: progress.update(
-                                    current=current,
-                                    total=number_of_samples,
-                                    status=f"Loaded {current} of {number_of_samples} samples"
-                                )
+                        # Initialize TaskProgressTracker with proper stage configs
+                        stage_configs = {
+                            "Setup": StageConfig(
+                                order=1,
+                                status_message="Setting up evaluation..."
+                            ),
+                            "Processing": StageConfig(
+                                order=2,
+                                total_items=number_of_samples,
+                                status_message="Waiting to start processing..."
+                            ),
+                            "Finalizing": StageConfig(
+                                order=3,
+                                status_message="Waiting to start finalization..."
                             )
+                        }
+
+                        # Create tracker with proper task configuration
+                        tracker = TaskProgressTracker(
+                            total_items=number_of_samples,
+                            stage_configs=stage_configs,
+                            target=f"evaluation/accuracy/{scorecard_name}",
+                            command=f"evaluate accuracy --scorecard-name {scorecard_name}",
+                            description=f"Accuracy evaluation for {scorecard_name}",
+                            dispatch_status="DISPATCHED",
+                            prevent_new_task=False,
+                            metadata={
+                                "type": "Accuracy Evaluation",
+                                "scorecard": scorecard_name,
+                                "task_type": "Accuracy Evaluation"  # Move type to metadata
+                            },
+                            account_id=account.id
+                        )
+
+                        # Get the task from the tracker
+                        task = tracker.task
+                        task_id = task.id
+                        logging.info(f"Successfully created and verified task: {task.id}")
+
+                    except Exception as e:
+                        logging.error(f"Failed to create task: {str(e)}")
+                        logging.error("Error details:", exc_info=True)
+                        raise
+                else:
+                    logging.warning("PLEXUS_API_URL or PLEXUS_API_KEY not set, skipping task creation")
+
+            if task:
+                try:
+                    # Start with Setup stage
+                    tracker.update(current_items=0)
+                    
+                    # Update Setup stage message
+                    tracker.current_stage.status_message = "Setting up evaluation..."
+                    tracker.update(current_items=0)
+
+                    if use_langsmith_trace:
+                        os.environ['LANGCHAIN_TRACING_V2'] = 'true'
                     else:
-                        logging.warning(f"Score '{single_score_name}' not found in scorecard. Skipping.")
-                        continue
-                else:
-                    # Use the default labeled samples file if not data-driven
-                    labeled_samples_filename = os.path.join(scorecard_folder, 'experiments', 'labeled-samples.csv')
+                        os.environ.pop('LANGCHAIN_TRACING_V2', None)
 
-                single_score_experiment_args = {
-                    'scorecard_name': scorecard_name,
-                    'scorecard': scorecard_instance,
-                    'override_folder': override_folder,
-                    'number_of_texts_to_sample': number_of_samples,
-                    'sampling_method': sampling_method,
-                    'random_seed': random_seed,
-                    'subset_of_score_names': [single_score_name],
-                    'experiment_label': experiment_label,
-                    'score_id': score_id,
-                    'visualize': visualize,
-                    'task_id': task_id  # Pass task_id to experiment
-                }
-                
-                if uses_data_driven:
-                    if not single_score_labeled_samples:
-                        raise ValueError("The dataset is empty. Cannot proceed with the experiment.")
-                    single_score_experiment_args['labeled_samples'] = single_score_labeled_samples
-                else:
-                    single_score_experiment_args['labeled_samples_filename'] = labeled_samples_filename
-                
-                async with AccuracyEvaluation(**single_score_experiment_args) as experiment:
-                    # Processing stage - run evaluation
-                    with CommandProgress.track(
-                        total=number_of_samples,
-                        status=f"Evaluating {single_score_name}..."
-                    ) as progress:
-                        await experiment.run(progress_callback=lambda current: progress.update(
-                            current=current,
-                            total=number_of_samples,
-                            status=f"Processed {current} of {number_of_samples} evaluations"
-                        ))
+                    if not scorecard_name:
+                        logging.error("Scorecard not specified")
+                        if task:
+                            task.fail_processing("Scorecard not specified")
+                        sys.exit(1)
 
-                logging.info("All score experiments completed.")
+                    scorecard_folder = os.path.join('scorecards', scorecard_name)
+                    override_folder: str = os.path.join(scorecard_folder, 'experiments/calibrations')
+
+                    logging.info('Running accuracy experiment...')
+                    Scorecard.load_and_register_scorecards('scorecards/')
+                    scorecard_type = scorecard_registry.get(scorecard_name)
+                    if scorecard_type is None:
+                        error_msg = f"Scorecard with name '{scorecard_name}' not found."
+                        logging.error(error_msg)
+                        if task:
+                            task.fail_processing(error_msg)
+                        return
+
+                    scorecard_instance = scorecard_type(scorecard=scorecard_name)
+                    logging.info(f"Using scorecard {scorecard_name} with class {scorecard_instance.__class__.__name__}")
+
+                    # Check if any score in the scorecard uses the data-driven approach
+                    uses_data_driven = any('data' in score_config for score_config in scorecard_instance.scores)
+
+                    if score_name is not None and score_name != '':
+                        score_names = [score_name]
+                    else:
+                        score_names = [score['name'] for score in scorecard_instance.scores]
+
+                    if not score_names:
+                        error_msg = "No score names specified"
+                        logging.error(error_msg)
+                        if task:
+                            task.fail_processing(error_msg)
+                        return
+
+                    content_ids_to_sample_set = set(re.split(r',\s+', content_ids_to_sample.strip())) if content_ids_to_sample.strip() else None
+
+                    for single_score_name in score_names:
+                        logging.info(f"Running experiment for score: {single_score_name}")
+                        
+                        single_score_labeled_samples = []
+                        labeled_samples_filename = None
+                        
+                        # Look up Score ID from the API
+                        score_config = next((score for score in scorecard_instance.scores 
+                                           if score['name'] == single_score_name), None)
+                        
+                        if score_config and 'id' in score_config:
+                            score_id = score_config['id']
+                            logging.info(f"Found Score ID {score_id} for {single_score_name}")
+                        else:
+                            logging.warning(f"Could not find Score ID for {single_score_name}")
+                            score_id = None
+
+                        if uses_data_driven:
+                            if score_config:
+                                # Setup stage - dataset preparation
+                                with CommandProgress.track(
+                                    total=number_of_samples,
+                                    status=f"Loading dataset for {single_score_name}..."
+                                ) as progress:
+                                    tracker.current_stage.status_message = f"Loading dataset for {single_score_name}..."
+                                    tracker.update(current_items=0)
+
+                                    single_score_labeled_samples = get_data_driven_samples(
+                                        scorecard_instance, scorecard_name, single_score_name, 
+                                        score_config, fresh, content_ids_to_sample_set,
+                                        progress_callback=lambda current: (
+                                            progress.update(
+                                                current=current,
+                                                total=number_of_samples,
+                                                status=f"Loaded {current} of {number_of_samples} samples"
+                                            ),
+                                            tracker.update(current_items=current)
+                                        ),
+                                        number_of_samples=number_of_samples
+                                    )
+                            else:
+                                logging.warning(f"Score '{single_score_name}' not found in scorecard. Skipping.")
+                                continue
+                        else:
+                            # Use the default labeled samples file if not data-driven
+                            labeled_samples_filename = os.path.join(scorecard_folder, 'experiments', 'labeled-samples.csv')
+
+                        single_score_experiment_args = {
+                            'scorecard_name': scorecard_name,
+                            'scorecard': scorecard_instance,
+                            'override_folder': override_folder,
+                            'number_of_texts_to_sample': number_of_samples,
+                            'sampling_method': sampling_method,
+                            'random_seed': random_seed,
+                            'subset_of_score_names': [single_score_name],
+                            'experiment_label': experiment_label,
+                            'score_id': score_id,
+                            'visualize': visualize,
+                            'task_id': task_id  # Pass task_id to experiment
+                        }
+                        
+                        if uses_data_driven:
+                            if not single_score_labeled_samples:
+                                error_msg = "The dataset is empty. Cannot proceed with the experiment."
+                                logging.error(error_msg)
+                                if task:
+                                    task.fail_processing(error_msg)
+                                raise ValueError(error_msg)
+                            single_score_experiment_args['labeled_samples'] = single_score_labeled_samples
+                        else:
+                            single_score_experiment_args['labeled_samples_filename'] = labeled_samples_filename
+                        
+                        # Advance to Processing stage
+                        tracker.advance_stage()
+                        tracker.current_stage.status_message = f"Processing evaluations for {single_score_name}..."
+                        tracker.update(current_items=0)
+
+                        async with AccuracyEvaluation(**single_score_experiment_args) as experiment:
+                            # Processing stage - run evaluation
+                            with CommandProgress.track(
+                                total=number_of_samples,
+                                status=f"Evaluating {single_score_name}..."
+                            ) as progress:
+                                await experiment.run(progress_callback=lambda current: (
+                                    progress.update(
+                                        current=current,
+                                        total=number_of_samples,
+                                        status=f"Processed {current} of {number_of_samples} evaluations"
+                                    ),
+                                    tracker.update(current_items=current)
+                                ))
+
+                        # Advance to Finalizing stage
+                        tracker.advance_stage()
+                        tracker.current_stage.status_message = "Generating reports and saving results..."
+                        tracker.update(current_items=number_of_samples)
+
+                        logging.info("All score experiments completed.")
+
+                    # Complete the task
+                    tracker.current_stage.status_message = "Evaluation completed successfully"
+                    tracker.complete()
+
+                except Exception as e:
+                    logging.error(f"Failed to create task stages: {str(e)}")
+                    logging.error("Error details:", exc_info=True)
+                    if tracker:
+                        tracker.fail(str(e))
+                    raise
 
         except Exception as e:
             logging.error(f"Evaluation failed: {str(e)}")
@@ -270,7 +380,8 @@ def get_data_driven_samples(
     score_config, 
     fresh, 
     content_ids_to_sample_set,
-    progress_callback=None
+    progress_callback=None,
+    number_of_samples=None
 ):
     score_class_name = score_config['class']
     score_module_path = f'plexus.scores.{score_class_name}'
@@ -332,10 +443,12 @@ def get_data_driven_samples(
             }
         }
         processed_samples.append(processed_sample)
-
+    
     # Add progress updates if callback provided
     if progress_callback:
-        progress_callback(len(processed_samples))
+        # Report progress as min(current_samples, total_requested_samples)
+        current_progress = min(len(processed_samples), number_of_samples) if number_of_samples else len(processed_samples)
+        progress_callback(current_progress)
     
     return processed_samples
 

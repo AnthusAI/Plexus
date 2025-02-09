@@ -21,6 +21,7 @@ import json
 import datetime
 from plexus.cli.task_progress_tracker import TaskProgressTracker, StageConfig
 from datetime import timezone
+from urllib.parse import quote
 
 class ItemCountColumn(ProgressColumn):
     """Renders item count and total."""
@@ -654,3 +655,9 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
         except Exception as update_error:
             logging.error(f"Failed to update task status on error: {str(update_error)}")
         raise  # Re-raise the original exception after updating the task status
+
+def safequote(value: str) -> str:
+    """Safely quote a string value, handling None."""
+    if value is None:
+        return ""
+    return quote(str(value))

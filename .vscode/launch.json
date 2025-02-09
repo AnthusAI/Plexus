@@ -4,6 +4,7 @@
         "pythonPath": "/Users/ryan/miniconda3/envs/py39/bin/python"
     },
     "configurations": [
+
         {
             "name": "Plexus Evaluate Accuracy",
             "type": "python",
@@ -17,9 +18,12 @@
                 "--score-name",
                 "Good Call",
                 "--number-of-samples",
-                "40",
+                "10",
                 "--sampling-method",
-                "random"
+                "random",
+                "--fresh",
+                // "--visualize",
+                // "--use-langsmith-trace",
             ],
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/../Call-Criteria-Python",
@@ -34,12 +38,25 @@
             "module": "plexus",
             "args": [
                 "predict",
-                "--scorecard-name",
-                "randallreillyv1",
-                "--score-name",
-                "IVR Present",
+                "--scorecard-name", "termlifev1",
+                "--score-name", "Carrier Access",
                 "--number",
                 "1"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/../Call-Criteria-Python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Plexus Score (DBI)",
+            "type": "python",
+            "request": "launch",
+            "module": "score",
+            "args": [
+                "--scorecard-name", "termlifev1",
+                "--report-id", "260399240"
             ],
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/../Call-Criteria-Python",

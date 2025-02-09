@@ -5,10 +5,10 @@ import json
 import copy
 import base64
 import pandas as pd
-import logging
 import requests
 import random
 import time
+import traceback
 from datetime import datetime, timezone
 import string
 import pprint
@@ -22,6 +22,7 @@ import mlflow
 from concurrent.futures import ThreadPoolExecutor
 from asyncio import Queue
 import importlib
+import logging
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -51,6 +52,12 @@ from plexus.dashboard.api.models.score_result import ScoreResult
 
 from plexus.scores.LangGraphScore import LangGraphScore, BatchProcessingPause
 from plexus.utils.dict_utils import truncate_dict_strings_inner
+from plexus.CustomLogging import setup_logging, set_log_group
+
+# Set up logging for evaluations
+set_log_group('plexus/evaluation')
+setup_logging()
+logger = logging.getLogger(__name__)
 
 class Evaluation:
     """
@@ -123,6 +130,9 @@ class Evaluation:
         visualize: bool = False,
         task_id: str = None,
     ):
+        # Initialize logger for this instance
+        self.logger = logging.getLogger('plexus/evaluation')
+        self.logger.info("Initializing evaluation...")
         self.scorecard_name = scorecard_name
         self.scorecard = scorecard
         self.labeled_samples_filename = labeled_samples_filename
@@ -154,29 +164,31 @@ class Evaluation:
 
         # Initialize dashboard client and experiment ID
         try:
-            logging.info("Initializing Plexus Dashboard client...")
+            self.logger.info("Initializing Plexus Dashboard client...")
             self.dashboard_client = PlexusDashboardClient.for_account(account_key)
             
             # Look up account using default key
-            logging.info(f"Looking up account with key: {account_key}")
-            account = Account.get_by_key(account_key, self.dashboard_client)
-            logging.info(f"Found account: {account.name} ({account.id})")
+            self.logger.info(f"Looking up account with key: {account_key}")
+            account = Account.list_by_key(key=account_key, client=self.dashboard_client)
+            if not account:
+                raise ValueError(f"No account found with key: {account_key}")
+            self.logger.info(f"Found account: {account.name} ({account.id})")
             
             # Store the account ID
             self.account_id = account.id
             
             # Look up scorecard using available identifiers
-            logging.info(f"Looking up scorecard with name: {self.scorecard.name}")
+            self.logger.info(f"Looking up scorecard with name: {self.scorecard.name}")
             if hasattr(self.scorecard, 'key'):
-                logging.info(f"Using scorecard key: {self.scorecard.key}")
+                self.logger.info(f"Using scorecard key: {self.scorecard.key}")
                 scorecard = DashboardScorecard.get_by_key(self.scorecard.key, self.dashboard_client)
             elif hasattr(self.scorecard, 'id'):
-                logging.info(f"Using scorecard ID: {self.scorecard.id}")
+                self.logger.info(f"Using scorecard ID: {self.scorecard.id}")
                 scorecard = DashboardScorecard.get_by_id(self.scorecard.id, self.dashboard_client)
             else:
-                logging.info(f"Looking up scorecard by name: {self.scorecard.name}")
+                self.logger.info(f"Looking up scorecard by name: {self.scorecard.name}")
                 scorecard = DashboardScorecard.get_by_name(self.scorecard.name, self.dashboard_client)
-            logging.info(f"Found scorecard: {scorecard.name} ({scorecard.id})")
+            self.logger.info(f"Found scorecard: {scorecard.name} ({scorecard.id})")
             
             # Store the scorecard ID
             self.scorecard_id = scorecard.id
@@ -204,7 +216,7 @@ class Evaluation:
             # Look up score ID if we have a subset of score names
             if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
                 score_name = self.subset_of_score_names[0]
-                logging.info(f"Looking up score with name: {score_name}")
+                self.logger.info(f"Looking up score with name: {score_name}")
                 try:
                     query = """
                     query GetScoreFromScorecard($scorecardId: ID!, $name: String!) {
@@ -227,19 +239,19 @@ class Evaluation:
                         "name": score_name
                     }
                     result = self.dashboard_client.execute(query, variables)
-                    logging.info(f"Raw API response: {result}")
+                    self.logger.info(f"Raw API response: {result}")
                     
                     # Find the first score with matching name
                     matching_score = None
                     scorecard_data = result.get('getScorecard', {})
-                    logging.info(f"Scorecard data: {scorecard_data}")
+                    self.logger.info(f"Scorecard data: {scorecard_data}")
                     sections = scorecard_data.get('sections', {}).get('items', [])
-                    logging.info(f"Sections: {sections}")
+                    self.logger.info(f"Sections: {sections}")
                     
                     for section in sections:
-                        logging.info(f"Processing section: {section}")
+                        self.logger.info(f"Processing section: {section}")
                         scores = section.get('scores', {}).get('items', [])
-                        logging.info(f"Found scores: {scores}")
+                        self.logger.info(f"Found scores: {scores}")
                         if scores:  # If we have any scores
                             matching_score = scores[0]  # Take the first one since GraphQL already filtered
                             logging.info(f"Found matching score: {matching_score}")
@@ -414,10 +426,10 @@ class Evaluation:
     async def log_to_dashboard(self, metrics, status="RUNNING"):
         """Log metrics to Plexus Dashboard with retry logic"""
         if not self.experiment_id:
-            logging.warning("Experiment ID not available - skipping metrics update")
+            self.logger.warning("Experiment ID not available - skipping metrics update")
             return
         
-        logging.info(f"Starting dashboard update for experiment {self.experiment_id}")
+        self.logger.info(f"Starting dashboard update for experiment {self.experiment_id}")
         
         try:
             elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
@@ -437,8 +449,6 @@ class Evaluation:
                 "labels": confusion_matrix_data["labels"]
             }
             
-            current_time = datetime.now(timezone.utc)
-            
             # Calculate total items based on status
             if status == "COMPLETED":
                 # For final update, use actual total from distribution data
@@ -453,64 +463,32 @@ class Evaluation:
             
             update_params = {
                 "id": self.experiment_id,
-                "type": "accuracy",
+                "status": status,
                 "metrics": json.dumps(metrics_list),
                 "processedItems": self.processed_items,
                 "totalItems": total_predictions,
                 "elapsedSeconds": elapsed_seconds,
                 "estimatedRemainingSeconds": int(elapsed_seconds * (total_predictions - self.processed_items) / self.processed_items) if self.processed_items > 0 else total_predictions,
                 "accuracy": metrics["accuracy"] * 100,
-                "updatedAt": current_time.isoformat().replace('+00:00', 'Z'),
-                "status": status,
+                "confusionMatrix": json.dumps(matrix_data),
                 "predictedClassDistribution": json.dumps(metrics["predicted_distribution"]),
-                "datasetClassDistribution": json.dumps(metrics["actual_distribution"]),
-                "confusionMatrix": json.dumps(matrix_data)
+                "datasetClassDistribution": json.dumps(metrics["actual_distribution"])
             }
-            
-            mutation = """
-            mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                updateEvaluation(input: $input) {
-                    id
-                    type
-                    accountId
-                    status
-                    createdAt
-                    updatedAt
-                    parameters
-                    metrics
-                    inferences
-                    accuracy
-                    cost
-                    startedAt
-                    elapsedSeconds
-                    estimatedRemainingSeconds
-                    totalItems
-                    processedItems
-                    errorMessage
-                    errorDetails
-                    scorecardId
-                    scoreId
-                    confusionMatrix
-                    scoreGoal
-                    datasetClassDistribution
-                    isDatasetClassDistributionBalanced
-                    predictedClassDistribution
-                    isPredictedClassDistributionBalanced
-                }
-            }
-            """
             
             variables = {
                 "input": update_params
             }
             
-            logging.info("Executing dashboard update...")
-            # Execute the API call directly - no shield needed since we handle cancellation in the caller
-            await asyncio.to_thread(self.dashboard_client.execute, mutation, variables)
-            logging.info("Successfully completed dashboard update")
+            self.logger.info("Executing dashboard update...")
+            # Use synchronous execution during cleanup, async otherwise
+            if status in ["COMPLETED", "FAILED"]:
+                self.dashboard_client.execute(self._get_update_mutation(), variables)
+            else:
+                await asyncio.to_thread(self.dashboard_client.execute, self._get_update_mutation(), variables)
+            self.logger.info("Successfully completed dashboard update")
             
         except Exception as e:
-            logging.error(f"Error updating dashboard experiment: {e}")
+            self.logger.error(f"Error updating dashboard experiment: {e}")
             raise
 
     def calculate_metrics(self, results):
@@ -1100,8 +1078,8 @@ class Evaluation:
     async def continuous_metrics_computation(self, score_name: str):
         """Background task that continuously computes and posts metrics for a specific score"""
         last_processed_count = 0
-        while not self.should_stop:
-            try:
+        try:
+            while not self.should_stop:
                 # Check if we have any new results for this score
                 current_count = len(self.results_by_score.get(score_name, []))
                 if current_count > 0 and current_count != last_processed_count:
@@ -1114,29 +1092,143 @@ class Evaluation:
                     # If this is the final update (score is complete), mark it as completed
                     status = "COMPLETED" if score_name in self.completed_scores else "RUNNING"
                     
-                    # Create a task for the API call and shield it from cancellation
-                    api_task = asyncio.shield(self.log_to_dashboard(metrics, status=status))
-                    try:
-                        await api_task
-                        last_processed_count = current_count
-                    except asyncio.CancelledError:
-                        # If we're cancelled, still wait for the API call to finish
-                        logging.info("Metrics task cancelled, ensuring API call completes")
+                    # For final updates, use synchronous execution
+                    if status == "COMPLETED":
                         try:
+                            self.dashboard_client.execute(
+                                self._get_update_mutation(),
+                                self._get_update_variables(metrics, status)
+                            )
+                            last_processed_count = current_count
+                        except Exception as e:
+                            self.logger.error(f"Error in final metrics update: {e}")
+                    else:
+                        # For progress updates, use async with shield
+                        try:
+                            api_task = asyncio.shield(self.log_to_dashboard(metrics, status=status))
                             await api_task
+                            last_processed_count = current_count
                         except asyncio.CancelledError:
-                            pass  # Ignore any additional cancellations
-                        logging.info("API call completed after cancellation")
-                        return  # Exit the task
+                            # If cancelled during progress update, just log and continue
+                            self.logger.info("Progress update cancelled")
+                        except Exception as e:
+                            self.logger.error(f"Error in progress update: {e}")
                 
                 # Wait a bit before checking again
                 await asyncio.sleep(.1)
-            except asyncio.CancelledError:
-                logging.info(f"Metrics computation for {score_name} cancelled")
-                return  # Exit gracefully
-            except Exception as e:
-                logging.error(f"Error in continuous metrics computation for {score_name}: {e}")
-                await asyncio.sleep(5)  # Wait longer on error
+
+        except asyncio.CancelledError:
+            # Handle final cleanup if needed
+            if score_name in self.completed_scores:
+                try:
+                    # Ensure final metrics are posted synchronously
+                    combined_results = []
+                    for score, results in self.results_by_score.items():
+                        combined_results.extend(results)
+                    metrics = self.calculate_metrics(combined_results)
+                    self.dashboard_client.execute(
+                        self._get_update_mutation(),
+                        self._get_update_variables(metrics, "COMPLETED")
+                    )
+                except Exception as e:
+                    self.logger.error(f"Error during final metrics update: {e}")
+            self.logger.info(f"Metrics computation for {score_name} cancelled")
+        except Exception as e:
+            self.logger.error(f"Error in metrics computation for {score_name}: {e}")
+
+    def _get_update_mutation(self):
+        """Get the GraphQL mutation for updating metrics"""
+        return """
+        mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+            updateEvaluation(input: $input) {
+                id
+                type
+                accountId
+                status
+                createdAt
+                updatedAt
+                parameters
+                metrics
+                inferences
+                accuracy
+                cost
+                startedAt
+                elapsedSeconds
+                estimatedRemainingSeconds
+                totalItems
+                processedItems
+                errorMessage
+                errorDetails
+                scorecardId
+                scoreId
+                confusionMatrix
+                scoreGoal
+                datasetClassDistribution
+                isDatasetClassDistributionBalanced
+                predictedClassDistribution
+                isPredictedClassDistributionBalanced
+            }
+        }
+        """
+
+    def _get_update_variables(self, metrics, status):
+        """Get the variables for the update mutation"""
+        elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
+        
+        # Format metrics for API
+        metrics_list = [
+            {"name": "Accuracy", "value": metrics["accuracy"] * 100},
+            {"name": "Precision", "value": metrics["precision"] * 100},
+            {"name": "Sensitivity", "value": metrics["sensitivity"] * 100},
+            {"name": "Specificity", "value": metrics["specificity"] * 100}
+        ]
+        
+        # Get first score's confusion matrix
+        confusion_matrix_data = metrics["confusion_matrices"][0]
+        matrix_data = {
+            "matrix": confusion_matrix_data["matrix"],
+            "labels": confusion_matrix_data["labels"]
+        }
+        
+        # Calculate total items based on status
+        if status == "COMPLETED":
+            # For final update, use actual total from distribution data
+            total_predictions = 0
+            if metrics["predicted_distribution"]:
+                first_score = metrics["predicted_distribution"][0]["score"]
+                total_predictions = sum(item["count"] for item in metrics["predicted_distribution"] 
+                                     if item["score"] == first_score)
+        else:
+            # During evaluation, use the initial sample size
+            total_predictions = self.number_of_texts_to_sample
+        
+        # Build update input that matches the schema
+        update_input = {
+            "id": self.experiment_id,
+            "status": status,
+            "metrics": json.dumps(metrics_list),
+            "processedItems": self.processed_items,
+            "totalItems": total_predictions,
+            "elapsedSeconds": elapsed_seconds,
+            "accuracy": metrics["accuracy"] * 100
+        }
+
+        # Only add optional fields if they have values
+        if self.processed_items > 0:
+            update_input["estimatedRemainingSeconds"] = int(elapsed_seconds * (total_predictions - self.processed_items) / self.processed_items)
+        
+        if confusion_matrix_data["matrix"]:
+            update_input["confusionMatrix"] = json.dumps(matrix_data)
+        
+        if metrics["predicted_distribution"]:
+            update_input["predictedClassDistribution"] = json.dumps(metrics["predicted_distribution"])
+        
+        if metrics["actual_distribution"]:
+            update_input["datasetClassDistribution"] = json.dumps(metrics["actual_distribution"])
+
+        return {
+            "input": update_input
+        }
 
     async def score_all_texts(self, selected_sample_rows):
         """Score all texts concurrently"""
@@ -1596,8 +1688,20 @@ Total cost:       ${expenses['total_cost']:.6f}
             # Execute the API call in a non-blocking way
             response = await asyncio.to_thread(self.dashboard_client.execute, mutation, variables)
             
-            # Log the response
-            logging.info("Received response from GraphQL:")
+            # Check for GraphQL errors in the response
+            if 'errors' in response:
+                error_messages = [error.get('message', 'Unknown error') for error in response.get('errors', [])]
+                error_str = '; '.join(error_messages)
+                logging.error(f"GraphQL errors creating score result: {error_str}")
+                logging.error(f"Full error response: {response['errors']}")
+                raise Exception(f"Failed to create score result: {error_str}")
+            
+            if not response.get('createScoreResult'):
+                logging.error(f"No data returned from createScoreResult mutation. Full response: {response}")
+                raise Exception("Failed to create score result - no data returned")
+            
+            # Log the successful response
+            logging.info("Successfully created score result:")
             logging.info(f"Response: {response}")
             
         except Exception as e:
@@ -1611,7 +1715,7 @@ Total cost:       ${expenses['total_cost']:.6f}
             # Stop the metrics computation task
             self.should_stop = True
             if hasattr(self, 'metrics_tasks') and self.metrics_tasks:
-                logging.info("Cleaning up metrics tasks...")
+                self.logger.info("Cleaning up metrics tasks...")
                 for task in self.metrics_tasks.values():
                     if not task.done():
                         task.cancel()
@@ -1620,7 +1724,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                         except asyncio.CancelledError:
                             pass  # Expected during cleanup
                         except Exception as e:
-                            logging.error(f"Error cleaning up metrics task: {e}")
+                            self.logger.error(f"Error cleaning up metrics task: {e}")
             
             # Clean up scorecard
             if hasattr(self, 'scorecard'):
@@ -1642,8 +1746,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                     pass
 
         except Exception as e:
-            logging.error(f"Error during {self.__class__.__name__} cleanup: {e}")
-            logging.debug("Cleanup error details:", exc_info=True)
+            self.logger.error(f"Error during {self.__class__.__name__} cleanup: {e}")
+            self.logger.debug("Cleanup error details:", exc_info=True)
 
     async def __aenter__(self):
         return self
@@ -1780,12 +1884,12 @@ class AccuracyEvaluation(Evaluation):
             'totalItems': self.number_of_texts_to_sample,
             'processedItems': 0,
             'startedAt': datetime.now(timezone.utc).isoformat(),
-            'parameters': {
+            'parameters': json.dumps({
                 'scorecard_name': self.scorecard_name,
                 'number_of_samples': self.number_of_texts_to_sample,
                 'sampling_method': self.sampling_method,
                 'experiment_label': self.experiment_label
-            }
+            })
         }
         
         if self.score_id:
@@ -1835,17 +1939,57 @@ class AccuracyEvaluation(Evaluation):
 
     async def _run_evaluation(self):
         """Internal method to run the evaluation."""
-        # ... existing evaluation logic ...
-        # When processing each item:
-        if self.progress_callback:
-            self.progress_callback(processed_items)
+        processed_items = 0
+        current_accuracy = 0.0
         
-        # Update evaluation progress
-        self.evaluation.update(
-            processedItems=processed_items,
-            accuracy=current_accuracy,
-            taskId=self.task_id  # Preserve taskId in progress updates
-        )
+        # Get the labeled samples
+        if self.labeled_samples:
+            df = pd.DataFrame(self.labeled_samples)
+        else:
+            df = pd.read_csv(self.labeled_samples_filename)
         
-        # ... rest of the method ...
+        # Update number_of_texts_to_sample if dataframe is smaller
+        self.number_of_texts_to_sample = min(len(df), self.requested_sample_size)
+        logging.info(f"Adjusted sample size from {self.requested_sample_size} to {self.number_of_texts_to_sample} based on available data")
+
+        # Sample the rows based on sampling method
+        if self.sampling_method == 'random':
+            selected_sample_rows = df.sample(
+                n=self.number_of_texts_to_sample,
+                random_state=self.random_seed
+            )
+        else:
+            selected_sample_rows = df.head(self.number_of_texts_to_sample)
+
+        try:
+            # Process all results concurrently for each score
+            score_tasks = []
+            for score_name in self.score_names():
+                task = asyncio.create_task(
+                    self.score_all_texts_for_score(selected_sample_rows, score_name)
+                )
+                score_tasks.append(task)
+
+            # Wait for all score evaluations to complete
+            all_results = await asyncio.gather(*score_tasks)
+            
+            # Flatten results from all scores and filter out exceptions
+            self.all_results = [
+                result for score_results in all_results 
+                for result in score_results 
+                if not isinstance(result, Exception)
+            ]
+
+            # Calculate metrics from results
+            metrics = self.calculate_metrics(self.all_results)
+            
+            # Update progress one final time
+            if self.progress_callback:
+                self.progress_callback(self.number_of_texts_to_sample)
+            
+            return metrics
+            
+        except Exception as e:
+            logging.error(f"Error in evaluation: {str(e)}")
+            raise
 
