@@ -240,7 +240,7 @@ export function TaskStatus({
     if (workerNodeId && workerNodeId.trim() !== '') {
       console.debug('Task claimed by worker:', workerNodeId);
       return { 
-        message: 'Task claimed...', 
+        message: 'Claimed...', 
         icon: Hand,
         animation: 'animate-wave'
       }
@@ -248,7 +248,7 @@ export function TaskStatus({
     if (!celeryTaskId) {
       console.debug('Task announced, no celery ID yet');
       return { 
-        message: 'Task announced...', 
+        message: 'Announced...', 
         icon: ConciergeBell,
         animation: 'animate-jiggle'
       }
