@@ -123,7 +123,9 @@ export async function listFromModel<T extends { id: string }>(
         limit: options?.limit,
         filter: options?.filter,
         nextToken: currentNextToken,
-        sortDirection: options?.sortDirection
+        sortDirection: options?.sortDirection,
+        // Include stages when listing tasks
+        include: modelName === 'Task' ? ['stages'] : undefined
       });
 
       if (response.data?.length) {
@@ -267,12 +269,15 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
 }
 
 async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
+  console.debug(`Starting to process task ${task.id}`);
   let stages: ProcessedTaskStage[] = []
 
   try {
     if (typeof task.stages === 'function') {
+      console.debug(`Task ${task.id} has stages as function`);
       // Handle LazyLoader
       const stagesData = await task.stages()
+      console.debug(`Loaded stages data for task ${task.id}:`, stagesData);
       if (stagesData?.data) {
         stages = stagesData.data.map((stage: any) => ({
           id: stage.id,
@@ -287,7 +292,23 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
           statusMessage: stage.statusMessage ?? undefined
         }))
       }
+    } else if (task.stages?.items && Array.isArray(task.stages.items)) {
+      // Handle nested stages.items structure from GraphQL
+      console.debug(`Task ${task.id} has stages.items array:`, task.stages.items);
+      stages = task.stages.items.map(stage => ({
+        id: stage.id,
+        name: stage.name,
+        order: stage.order,
+        status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+        processedItems: stage.processedItems ?? undefined,
+        totalItems: stage.totalItems ?? undefined,
+        startedAt: stage.startedAt ?? undefined,
+        completedAt: stage.completedAt ?? undefined,
+        estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+        statusMessage: stage.statusMessage ?? undefined
+      }))
     } else if (task.stages && Array.isArray(task.stages)) {
+      console.debug(`Task ${task.id} has stages as array:`, task.stages);
       const taskStages = task.stages as any[]
       stages = taskStages.map(stage => ({
         id: stage.id,
@@ -301,10 +322,14 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
         estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
         statusMessage: stage.statusMessage ?? undefined
       }))
+    } else {
+      console.debug(`Task ${task.id} has no stages or unknown format:`, task.stages);
     }
   } catch (error: unknown) {
     console.error('Error loading stages for task:', error)
   }
+
+  console.debug(`Finished processing task ${task.id}, stages:`, stages);
 
   return {
     id: task.id,
@@ -351,6 +376,7 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
     }
 
     const accountId = accountResponse.data[0].id;
+    console.debug('Fetching tasks for account:', accountId);
 
     const response = await currentClient.graphql({
       query: `
@@ -419,6 +445,8 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
       throw new Error(`GraphQL errors: ${response.errors.map(e => e.message).join(', ')}`);
     }
 
+    console.debug('Raw GraphQL response:', JSON.stringify(response.data, null, 2));
+
     const result = response.data;
     if (!result?.listTaskByAccountIdAndUpdatedAt?.items) {
       return [];
@@ -426,7 +454,12 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
 
     // Process tasks and load their stages
     const processedTasks = await Promise.all(
-      result.listTaskByAccountIdAndUpdatedAt.items.map(processTask)
+      result.listTaskByAccountIdAndUpdatedAt.items.map(async (task) => {
+        console.debug(`Processing task ${task.id}, stages:`, task.stages);
+        const processed = await processTask(task);
+        console.debug(`Processed task ${task.id}, final stages:`, processed.stages);
+        return processed;
+      })
     );
 
     return processedTasks;
