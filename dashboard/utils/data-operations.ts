@@ -268,18 +268,47 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
   })
 }
 
+type TaskStageData = Schema['TaskStage']['type'];
+
 async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
   console.debug(`Starting to process task ${task.id}`);
-  let stages: ProcessedTaskStage[] = []
+  let stages: ProcessedTaskStage[] = [];
 
   try {
+    if (!task.stages) {
+      console.debug(`Task ${task.id} has no stages`);
+      return {
+        id: task.id,
+        command: task.command,
+        type: task.type,
+        status: task.status,
+        target: task.target,
+        description: task.description ?? undefined,
+        metadata: typeof task.metadata === 'string' ? task.metadata : JSON.stringify(task.metadata ?? null),
+        createdAt: task.createdAt ?? undefined,
+        startedAt: task.startedAt ?? undefined,
+        completedAt: task.completedAt ?? undefined,
+        estimatedCompletionAt: task.estimatedCompletionAt ?? undefined,
+        errorMessage: task.errorMessage ?? undefined,
+        errorDetails: typeof task.errorDetails === 'string' ? task.errorDetails : JSON.stringify(task.errorDetails ?? null),
+        stdout: task.stdout ?? undefined,
+        stderr: task.stderr ?? undefined,
+        currentStageId: task.currentStageId ?? undefined,
+        stages: [],
+        dispatchStatus: task.dispatchStatus ?? undefined,
+        celeryTaskId: task.celeryTaskId ?? undefined,
+        workerNodeId: task.workerNodeId ?? undefined,
+        updatedAt: task.updatedAt ?? undefined
+      };
+    }
+
     if (typeof task.stages === 'function') {
       console.debug(`Task ${task.id} has stages as function`);
       // Handle LazyLoader
-      const stagesData = await task.stages()
+      const stagesData = await task.stages();
       console.debug(`Loaded stages data for task ${task.id}:`, stagesData);
       if (stagesData?.data) {
-        stages = stagesData.data.map((stage: any) => ({
+        stages = stagesData.data.map((stage: TaskStageData) => ({
           id: stage.id,
           name: stage.name,
           order: stage.order,
@@ -290,40 +319,43 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
           completedAt: stage.completedAt ?? undefined,
           estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
           statusMessage: stage.statusMessage ?? undefined
-        }))
+        }));
       }
-    } else if (task.stages?.items && Array.isArray(task.stages.items)) {
-      // Handle nested stages.items structure from GraphQL
-      console.debug(`Task ${task.id} has stages.items array:`, task.stages.items);
-      stages = task.stages.items.map(stage => ({
-        id: stage.id,
-        name: stage.name,
-        order: stage.order,
-        status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-        processedItems: stage.processedItems ?? undefined,
-        totalItems: stage.totalItems ?? undefined,
-        startedAt: stage.startedAt ?? undefined,
-        completedAt: stage.completedAt ?? undefined,
-        estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
-        statusMessage: stage.statusMessage ?? undefined
-      }))
-    } else if (task.stages && Array.isArray(task.stages)) {
-      console.debug(`Task ${task.id} has stages as array:`, task.stages);
-      const taskStages = task.stages as any[]
-      stages = taskStages.map(stage => ({
-        id: stage.id,
-        name: stage.name,
-        order: stage.order,
-        status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-        processedItems: stage.processedItems ?? undefined,
-        totalItems: stage.totalItems ?? undefined,
-        startedAt: stage.startedAt ?? undefined,
-        completedAt: stage.completedAt ?? undefined,
-        estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
-        statusMessage: stage.statusMessage ?? undefined
-      }))
+    } else if (typeof task.stages === 'object' && task.stages !== null) {
+      const stagesObj = task.stages as { items?: TaskStageData[] };
+      if (stagesObj.items && Array.isArray(stagesObj.items)) {
+        // Handle nested stages.items structure from GraphQL
+        console.debug(`Task ${task.id} has stages.items array:`, stagesObj.items);
+        stages = stagesObj.items.map((stage: TaskStageData) => ({
+          id: stage.id,
+          name: stage.name,
+          order: stage.order,
+          status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+          processedItems: stage.processedItems ?? undefined,
+          totalItems: stage.totalItems ?? undefined,
+          startedAt: stage.startedAt ?? undefined,
+          completedAt: stage.completedAt ?? undefined,
+          estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+          statusMessage: stage.statusMessage ?? undefined
+        }));
+      } else if (Array.isArray(task.stages)) {
+        console.debug(`Task ${task.id} has stages as array:`, task.stages);
+        const stagesArray = task.stages as TaskStageData[];
+        stages = stagesArray.map((stage: TaskStageData) => ({
+          id: stage.id,
+          name: stage.name,
+          order: stage.order,
+          status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+          processedItems: stage.processedItems ?? undefined,
+          totalItems: stage.totalItems ?? undefined,
+          startedAt: stage.startedAt ?? undefined,
+          completedAt: stage.completedAt ?? undefined,
+          estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+          statusMessage: stage.statusMessage ?? undefined
+        }));
+      }
     } else {
-      console.debug(`Task ${task.id} has no stages or unknown format:`, task.stages);
+      console.debug(`Task ${task.id} has unknown stages format:`, task.stages);
     }
   } catch (error: unknown) {
     console.error('Error loading stages for task:', error)
