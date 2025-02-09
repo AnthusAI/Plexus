@@ -165,6 +165,8 @@ const schema = a.schema({
             isDatasetClassDistributionBalanced: a.boolean(),
             predictedClassDistribution: a.json(),
             isPredictedClassDistributionBalanced: a.boolean(),
+            taskId: a.string(),
+            task: a.belongsTo('Task', 'taskId')
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -336,7 +338,8 @@ const schema = a.schema({
             currentStage: a.belongsTo('TaskStage', 'currentStageId'),
             celeryTaskId: a.string(),
             workerNodeId: a.string(),
-            updatedAt: a.datetime()
+            updatedAt: a.datetime(),
+            evaluation: a.hasOne('Evaluation', 'taskId')
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
