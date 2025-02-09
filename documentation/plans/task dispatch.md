@@ -372,3 +372,71 @@ The evaluation command processes scorecard evaluations with:
 - Proper async execution handling
 - Detailed status reporting
 - Error handling and cleanup 
+
+### Phase 6: Evaluation System Integration
+
+1. **Schema Updates**
+   - Add taskId field to Evaluation model ✓
+   - Add belongsTo relationship from Evaluation to Task ✓
+   - Keep existing progress fields on Evaluation for backward compatibility
+   - Gradually migrate to using Task/TaskStage progress tracking
+
+2. **Data Flow**
+   - When Evaluation starts:
+     - Create Task record with appropriate stages
+     - Store Task ID in Evaluation record
+     - Use TaskProgressTracker for standardized progress updates
+   - Progress updates flow through Task/TaskStage system
+   - Evaluation record links to Task for progress tracking
+
+3. **GraphQL Integration**
+   - Single query pattern for Evaluations dashboard:
+     ```graphql
+     query ListEvaluations {
+       listEvaluations {
+         items {
+           id
+           taskId
+           task {
+             id
+             stages {
+               id
+               name
+               status
+               processedItems
+               totalItems
+               statusMessage
+               startedAt
+               completedAt
+               estimatedCompletionAt
+             }
+           }
+         }
+       }
+     }
+     ```
+   - No additional GSIs needed:
+     - Use existing GSIs for Evaluation queries
+     - Task relationship handled via taskId field
+     - TaskStages fetched through nested Task relationship
+
+4. **UI Updates**
+   - Modify EvaluationsDashboard to use Task progress data
+   - Leverage existing TaskStatus components
+   - Support both old and new progress tracking during transition
+   - Update progress bars to use standardized Task stage information
+
+5. **Migration Strategy**
+   - Add new fields but maintain backward compatibility
+   - New evaluations use Task system automatically
+   - Existing evaluations continue using old progress tracking
+   - Gradually phase out old progress tracking fields
+
+This approach provides several benefits:
+- Standardized progress tracking across systems
+- Simplified querying through nested relationships
+- Reuse of existing UI components
+- Clean separation of concerns
+- Smooth migration path from old to new system
+
+The integration leverages Amplify's GraphQL transformer to handle the nested queries efficiently, while maintaining a clean schema design that doesn't overload the Task model with additional foreign keys. 
