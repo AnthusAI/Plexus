@@ -120,7 +120,8 @@ class Evaluation:
         max_mismatches_to_report=5,
         account_key: str = 'call-criteria',
         score_id: str = None,
-        visualize: bool = False
+        visualize: bool = False,
+        task_id: str = None,
     ):
         self.scorecard_name = scorecard_name
         self.scorecard = scorecard
@@ -133,6 +134,7 @@ class Evaluation:
         self.score_id = score_id
         self.account_key = account_key  # Store the account key
         self.visualize = visualize
+        self.task_id = task_id
         
         # Parse lists, if available.
         self.session_ids_to_sample = session_ids_to_sample
@@ -1707,7 +1709,7 @@ class ConsistencyEvaluation(Evaluation):
         mlflow.log_param("number_of_times_to_sample_each_text", self.number_of_times_to_sample_each_text)
 
 class AccuracyEvaluation(Evaluation):
-    def __init__(self, *, override_folder=None, labeled_samples=None, labeled_samples_filename=None, score_id=None, visualize=False, **kwargs):
+    def __init__(self, *, override_folder: str, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, visualize: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.scorecard_name = kwargs.get('scorecard_name')
         self.override_folder = override_folder
@@ -1764,4 +1766,86 @@ class AccuracyEvaluation(Evaluation):
         else:
             logging.info(f"No override folder found at {self.override_folder}")
         return override_data
+
+    async def run(self, progress_callback=None):
+        """Run the evaluation with optional progress tracking."""
+        self.progress_callback = progress_callback
+
+        # Create evaluation record with taskId if we have one
+        evaluation_data = {
+            'type': 'accuracy',
+            'accountId': 'call-criteria',  # TODO: Make configurable
+            'status': 'RUNNING',
+            'accuracy': 0.0,  # Initial accuracy
+            'totalItems': self.number_of_texts_to_sample,
+            'processedItems': 0,
+            'startedAt': datetime.now(timezone.utc).isoformat(),
+            'parameters': {
+                'scorecard_name': self.scorecard_name,
+                'number_of_samples': self.number_of_texts_to_sample,
+                'sampling_method': self.sampling_method,
+                'experiment_label': self.experiment_label
+            }
+        }
+        
+        if self.score_id:
+            evaluation_data['scoreId'] = self.score_id
+            
+        if self.task_id:  # Include taskId if we have one
+            evaluation_data['taskId'] = self.task_id
+
+        # Create the evaluation record
+        client = PlexusDashboardClient()
+        self.evaluation = DashboardEvaluation.create(client=client, **evaluation_data)
+        
+        try:
+            # Run the evaluation
+            results = await self._run_evaluation()
+            
+            # Update evaluation with final results
+            update_data = {
+                'status': 'COMPLETED',
+                'accuracy': results.get('accuracy', 0.0),
+                'processedItems': self.number_of_texts_to_sample,
+                'metrics': results.get('metrics'),
+                'confusionMatrix': results.get('confusion_matrix'),
+                'completedAt': datetime.now(timezone.utc).isoformat()
+            }
+            
+            if self.task_id:  # Ensure taskId is preserved in updates
+                update_data['taskId'] = self.task_id
+                
+            self.evaluation.update(**update_data)
+            
+            return results
+            
+        except Exception as e:
+            # Update evaluation with error status
+            error_data = {
+                'status': 'FAILED',
+                'errorMessage': str(e),
+                'errorDetails': traceback.format_exc()
+            }
+            
+            if self.task_id:  # Ensure taskId is preserved in error updates
+                error_data['taskId'] = self.task_id
+                
+            self.evaluation.update(**error_data)
+            raise
+
+    async def _run_evaluation(self):
+        """Internal method to run the evaluation."""
+        # ... existing evaluation logic ...
+        # When processing each item:
+        if self.progress_callback:
+            self.progress_callback(processed_items)
+        
+        # Update evaluation progress
+        self.evaluation.update(
+            processedItems=processed_items,
+            accuracy=current_accuracy,
+            taskId=self.task_id  # Preserve taskId in progress updates
+        )
+        
+        # ... rest of the method ...
 
