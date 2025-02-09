@@ -55,12 +55,11 @@ from plexus.dashboard.commands.simulate import (
     CLASS_SETS
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.WARNING,
-    format='%(message)s',
-    datefmt='%H:%M:%S'
-)
+# Import centralized logging configuration
+from plexus.CustomLogging import setup_logging
+
+# Use centralized logging configuration
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # Constants from dashboard CLI

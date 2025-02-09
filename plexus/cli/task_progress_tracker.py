@@ -632,6 +632,11 @@ class TaskProgressTracker:
             return "Complete"
 
     @property
+    def task(self) -> Optional['Task']:
+        """Return the API task instance if one exists."""
+        return self.api_task
+
+    @property
     def progress(self) -> int:
         if self.total_items == 0:
             return 100 if self.is_complete else 0

@@ -152,12 +152,17 @@ class Task(BaseModel):
         if 'accountId' not in kwargs:
             kwargs['accountId'] = cls._get_account_id(client)
 
+        # Get current timestamp for createdAt and updatedAt
+        now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+
         # Prepare input data
         input_data = {
             "type": type,
             "target": target,
             "command": command,
             "status": "PENDING",  # Default status for new tasks
+            "createdAt": now,
+            "updatedAt": now,  # Set initial updatedAt
             **kwargs
         }
 
