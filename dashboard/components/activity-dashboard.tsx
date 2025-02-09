@@ -61,6 +61,11 @@ function transformTaskToActivity(task: ProcessedTask) {
       // If we haven't found a stage yet, use this one
       if (!current) return stage
       
+      // For completed tasks, use the last stage
+      if (task.status === 'COMPLETED') {
+        return stage.order > (current.order || 0) ? stage : current
+      }
+      
       // If this stage is RUNNING, it should be the current stage
       if (stage.status === 'RUNNING') return stage
       
@@ -77,12 +82,7 @@ function transformTaskToActivity(task: ProcessedTask) {
       if (current.status === 'PENDING') return current
       
       // If all stages are completed, use the last one
-      if (stage.status === 'COMPLETED' && stage === stages[stages.length - 1] && 
-          stages.every((s: TaskStageConfig) => s.order < stage.order ? s.status === 'COMPLETED' : true)) {
-        return stage
-      }
-      
-      return current
+      return stage.order > (current.order || 0) ? stage : current
     }, null) : null
 
   // Ensure we have a valid timestamp for the time field
@@ -104,6 +104,7 @@ function transformTaskToActivity(task: ProcessedTask) {
       command: task.command
     },
     stages,
+    stageConfigs: stages,
     currentStageName: currentStage?.name,
     processedItems: currentStage?.processedItems ?? 0,
     totalItems: currentStage?.totalItems ?? 0,

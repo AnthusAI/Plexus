@@ -181,7 +181,21 @@ export function TaskStatus({
       return { processedItems, totalItems }
     }
 
-    // Start from the current stage and work backwards
+    // For completed tasks, find the stage with the most progress
+    if (status === 'COMPLETED') {
+      const stageWithProgress = stages
+        .filter(s => s.totalItems !== undefined && s.totalItems > 0)
+        .sort((a, b) => (b.totalItems || 0) - (a.totalItems || 0))[0]
+      
+      if (stageWithProgress) {
+        return {
+          processedItems: stageWithProgress.processedItems,
+          totalItems: stageWithProgress.totalItems
+        }
+      }
+    }
+
+    // For running tasks, start from current stage and work backwards
     const currentStageIndex = stages.findIndex(s => s.name === currentStageName)
     if (currentStageIndex === -1) {
       return { processedItems, totalItems }
