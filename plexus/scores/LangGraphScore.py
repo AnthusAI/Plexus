@@ -888,7 +888,12 @@ class LangGraphScore(Score, LangChainUser):
                 "checkpoint_id": checkpoint_id
             }
         }
+        # Convert results list to a dictionary by name for easier lookup
         initial_results = {}
+        if model_input.results:
+            for result_dict in model_input.results:
+                if isinstance(result_dict, dict) and 'name' in result_dict and 'result' in result_dict:
+                    initial_results[result_dict['name']] = result_dict['result']
 
         initial_state = self.combined_state_class(
             text=self.preprocess_text(model_input.text),
