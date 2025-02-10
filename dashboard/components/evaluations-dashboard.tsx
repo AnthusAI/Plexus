@@ -32,20 +32,19 @@ import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
 import { Progress } from "@/components/ui/progress"
 import ScorecardContext from "@/components/ScorecardContext"
-import EvaluationTask, { type EvaluationTaskProps } from "@/components/EvaluationTask"
-import { EvaluationListProgressBar } from "@/components/EvaluationListProgressBar"
+import EvaluationTask, { type EvaluationTaskProps, type EvaluationTaskData as ImportedEvaluationTaskData } from "@/components/EvaluationTask"
 import { EvaluationListAccuracyBar } from "@/components/EvaluationListAccuracyBar"
 import { CardButton } from '@/components/CardButton'
 import { formatDuration } from '@/utils/format-duration'
 import { EvaluationDashboardSkeleton } from "@/components/loading-skeleton"
 import { ModelListResult, AmplifyListResult, AmplifyGetResult } from '@/types/shared'
 import { listFromModel, observeQueryFromModel, getFromModel, observeScoreResults } from "@/utils/amplify-helpers"
-import type { EvaluationTaskData } from '@/components/EvaluationTask'
 import { useAuthenticator } from '@aws-amplify/ui-react';
 import { useRouter } from 'next/navigation';
 import { Observable } from 'rxjs';
 import { client, getClient } from "@/utils/amplify-client"  // Import both client and getClient
 import { GraphQLResult } from '@aws-amplify/api';
+import { TaskStatus } from '@/components/ui/task-status';
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -66,10 +65,26 @@ const calculateProgress = (processedItems?: number | null, totalItems?: number |
   return Math.round((processedItems / totalItems) * 100);
 };
 
-// Update the transformEvaluation function
+// Add proper type for task data
+interface TaskData {
+  accountId: string;
+  type: string;
+  status: string;
+  target: string;
+  command: string;
+  stages?: {
+    items?: Array<{
+      name: string;
+      status: string;
+      processedItems: number;
+    }>;
+  };
+}
+
+// Update the transformation logic to maintain all fields
 const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['type'] => {
   if (!rawEvaluation) {
-    throw new Error('Cannot transform null Evaluation')
+    throw new Error('Cannot transform null Evaluation');
   }
 
   // Create a strongly typed base object with ALL fields
@@ -79,16 +94,16 @@ const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['type'] =
     parameters: rawEvaluation.parameters || {},
     metrics: (() => {
       try {
-        if (!rawEvaluation.metrics) return []
-        if (Array.isArray(rawEvaluation.metrics)) return rawEvaluation.metrics
+        if (!rawEvaluation.metrics) return [];
+        if (Array.isArray(rawEvaluation.metrics)) return rawEvaluation.metrics;
         if (typeof rawEvaluation.metrics === 'string') {
-          const parsed = JSON.parse(rawEvaluation.metrics)
-          return Array.isArray(parsed) ? parsed : []
+          const parsed = JSON.parse(rawEvaluation.metrics);
+          return Array.isArray(parsed) ? parsed : [];
         }
-        return []
+        return [];
       } catch (e) {
-        console.warn('Error parsing metrics:', e)
-        return []
+        console.warn('Error parsing metrics:', e);
+        return [];
       }
     })(),
     inferences: rawEvaluation.inferences || 0,
@@ -114,10 +129,26 @@ const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['type'] =
     isPredictedClassDistributionBalanced: rawEvaluation.isPredictedClassDistributionBalanced || null,
     metricsExplanation: rawEvaluation.metricsExplanation || null,
     accuracy: typeof rawEvaluation.accuracy === 'number' ? rawEvaluation.accuracy : null,
+    task: rawEvaluation.task ? {
+      ...rawEvaluation.task,
+      stages: rawEvaluation.task.stages ? {
+        items: (rawEvaluation.task.stages.items || []).map((stage: any) => ({
+          name: stage.name,
+          status: stage.status,
+          processedItems: stage.processedItems || 0,
+          totalItems: stage.totalItems || 0,
+          statusMessage: stage.statusMessage,
+          estimatedCompletionAt: stage.estimatedCompletionAt,
+          label: stage.label || stage.name,
+          order: stage.order || 0,
+          color: stage.color || 'bg-primary'
+        }))
+      } : { items: [] }
+    } : null,
     items: async (options?: any) => ({ data: [], nextToken: null }),
     scoreResults: async (options?: any) => ({ data: [], nextToken: null }),
     scoringJobs: async (options?: any) => ({ data: [], nextToken: null }),
-    resultTests: async (options?: any) => ({ data: [], nextToken: null })
+    resultTests: async (options?: any) => ({ data: [], nextToken: null }),
   };
 
   return {
@@ -127,14 +158,14 @@ const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['type'] =
         id: rawEvaluation.account?.id || '',
         name: rawEvaluation.account?.name || '',
         key: rawEvaluation.account?.key || '',
-        scorecards: async (options?: any) => ({ data: [], nextToken: null }),
-        evaluations: async (options?: any) => ({ data: [], nextToken: null }),
-        batchJobs: async (options?: any) => ({ data: [], nextToken: null }),
-        items: async (options?: any) => ({ data: [], nextToken: null }),
-        scoringJobs: async (options?: any) => ({ data: [], nextToken: null }),
-        scoreResults: async (options?: any) => ({ data: [], nextToken: null }),
-        actions: async (options?: any) => ({ data: [], nextToken: null }),
-        tasks: async (options?: any) => ({ data: [], nextToken: null }),
+        scorecards: async () => ({ data: [], nextToken: null }),
+        evaluations: async () => ({ data: [], nextToken: null }),
+        batchJobs: async () => ({ data: [], nextToken: null }),
+        items: async () => ({ data: [], nextToken: null }),
+        scoringJobs: async () => ({ data: [], nextToken: null }),
+        scoreResults: async () => ({ data: [], nextToken: null }),
+        actions: async () => ({ data: [], nextToken: null }),
+        tasks: async () => ({ data: [], nextToken: null }),
         createdAt: rawEvaluation.account?.createdAt || new Date().toISOString(),
         updatedAt: rawEvaluation.account?.updatedAt || new Date().toISOString(),
         description: rawEvaluation.account?.description || ''
@@ -142,43 +173,27 @@ const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['type'] =
     }),
     scorecard: async () => {
       if (rawEvaluation.scorecard?.data) {
-        return { data: rawEvaluation.scorecard.data }
+        return { data: rawEvaluation.scorecard.data };
       }
-      if (rawEvaluation.scorecardId) {
-        const { data: scorecard } = await getFromModel<Schema['Scorecard']['type']>(
-          client.models.Scorecard,
-          rawEvaluation.scorecardId
-        )
-        return { data: scorecard }
-      }
-      return { data: null }
+      return { data: null };
     },
     score: async () => {
-      console.log('Transform - raw score data:', {
-        rawScore: rawEvaluation.score,
-        scoreId: rawEvaluation.scoreId,
-        fullEvaluation: rawEvaluation
-      });
-      
-      // If we have the score data already, use it
       if (rawEvaluation.score?.data) {
-        return { data: rawEvaluation.score.data }
+        return { data: rawEvaluation.score.data };
       }
-      
-      // If we have a scoreId, fetch the score
-      if (rawEvaluation.scoreId) {
-        const { data: score } = await getFromModel<Schema['Score']['type']>(
-          client.models.Score,
-          rawEvaluation.scoreId
-        )
-        console.log('Fetched score:', score);
-        return { data: score }
-      }
-      
-      return { data: null }
+      return { data: null };
     }
   };
 };
+
+// Update the item transformation
+const transformItem = (item: any) => ({
+  // ... existing fields ...
+  type: item.type,
+  hasTask: !!item.task,
+  taskStatus: item.task?.status,
+  stagesCount: item.task?.stages?.items?.length || 0
+});
 
 // Add missing interfaces
 interface ConfusionMatrix {
@@ -195,6 +210,43 @@ interface EvaluationRowProps {
   onDelete: (evaluationId: string) => Promise<boolean>
 }
 
+// Add this near the top with other helper functions
+function mapStatus(status: string | undefined | null): 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' {
+  if (!status) return 'PENDING';
+  
+  const normalizedStatus = status.toUpperCase();
+  switch (normalizedStatus) {
+    case 'PENDING':
+    case 'RUNNING':
+    case 'COMPLETED':
+    case 'FAILED':
+      return normalizedStatus;
+    case 'DONE':
+      return 'COMPLETED';
+    case 'ERROR':
+      return 'FAILED';
+    default:
+      return 'PENDING';
+  }
+}
+
+// Add a helper function for safe date formatting
+const formatCreatedAt = (dateString: string | null | undefined) => {
+  if (!dateString) return '';
+  
+  try {
+    const date = new Date(dateString);
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return '';
+    }
+    return formatDistanceToNow(date, { addSuffix: true });
+  } catch (e) {
+    console.warn('Invalid date format:', dateString);
+    return '';
+  }
+};
+
 const EvaluationRow = React.memo(({ 
   evaluation, 
   selectedEvaluationId, 
@@ -203,6 +255,26 @@ const EvaluationRow = React.memo(({
   onSelect,
   onDelete
 }: EvaluationRowProps) => {
+  const taskData = typeof evaluation.task === 'function' ? (evaluation.task() as any) : evaluation.task;
+  
+  const stageConfigs = (taskData?.stages?.items || []).map((stage: TaskStage) => ({
+    ...stage,
+    key: stage.name,
+    label: stage.name,
+    status: mapStatus(stage.status),
+    color: mapStatus(stage.status) === 'PENDING' ? 'bg-neutral' : 
+           mapStatus(stage.status) === 'FAILED' ? 'bg-false' : 
+           'bg-secondary'
+  }));
+
+  // Convert null to undefined for string fields with explicit null checks
+  const estimatedCompletionAt = taskData?.stages?.items?.find((s: TaskStage) => s.estimatedCompletionAt)?.estimatedCompletionAt === null ? 
+    undefined : 
+    taskData?.stages?.items?.find((s: TaskStage) => s.estimatedCompletionAt)?.estimatedCompletionAt;
+  const startedAt = taskData?.startedAt === null ? undefined : taskData?.startedAt || 
+                   evaluation.startedAt === null ? undefined : evaluation.startedAt;
+  const errorMessage = evaluation.errorMessage === null ? undefined : evaluation.errorMessage;
+
   return (
     <TableRow 
       onClick={() => onSelect(evaluation)} 
@@ -221,22 +293,23 @@ const EvaluationRow = React.memo(({
                 {scoreNames[evaluation.id] || 'Unknown Score'}
               </div>
               <div className="text-sm text-muted-foreground">
-                {formatDistanceToNow(new Date(evaluation.createdAt), { addSuffix: true })}
+                {formatCreatedAt(evaluation.createdAt)}
               </div>
               <div className="text-sm text-muted-foreground">
                 {evaluation.type || ''}
               </div>
             </div>
             <div className="w-[55%] space-y-2">
-              <EvaluationListProgressBar 
-                progress={calculateProgress(evaluation.processedItems, evaluation.totalItems)}
-                totalSamples={evaluation.totalItems ?? 0}
-                isFocused={evaluation.id === selectedEvaluationId}
-              />
-              <EvaluationListAccuracyBar 
-                progress={calculateProgress(evaluation.processedItems, evaluation.totalItems)}
-                accuracy={evaluation.accuracy ?? 0}
-                isFocused={evaluation.id === selectedEvaluationId}
+              <TaskStatus
+                variant="list"
+                showStages={true}
+                status={mapStatus(taskData?.status || evaluation.status)}
+                stageConfigs={stageConfigs}
+                processedItems={taskData ? undefined : Number(evaluation.processedItems || 0)}
+                totalItems={taskData ? undefined : Number(evaluation.totalItems || 0)}
+                startedAt={startedAt}
+                estimatedCompletionAt={estimatedCompletionAt}
+                errorMessage={errorMessage}
               />
             </div>
           </div>
@@ -278,7 +351,7 @@ const EvaluationRow = React.memo(({
             {scoreNames[evaluation.id] || 'Unknown Score'}
           </div>
           <div className="text-sm text-muted-foreground">
-            {formatDistanceToNow(new Date(evaluation.createdAt), { addSuffix: true })}
+            {formatCreatedAt(evaluation.createdAt)}
           </div>
         </div>
       </TableCell>
@@ -286,10 +359,16 @@ const EvaluationRow = React.memo(({
         {evaluation.type || ''}
       </TableCell>
       <TableCell className="hidden @[630px]:table-cell w-[15%] text-right">
-        <EvaluationListProgressBar 
-          progress={calculateProgress(evaluation.processedItems, evaluation.totalItems)}
-          totalSamples={evaluation.totalItems ?? 0}
-          isFocused={evaluation.id === selectedEvaluationId}
+        <TaskStatus
+          variant="list"
+          showStages={true}
+          status={mapStatus(taskData?.status || evaluation.status)}
+          stageConfigs={stageConfigs}
+          processedItems={taskData ? undefined : Number(evaluation.processedItems || 0)}
+          totalItems={taskData ? undefined : Number(evaluation.totalItems || 0)}
+          startedAt={startedAt}
+          estimatedCompletionAt={estimatedCompletionAt}
+          errorMessage={errorMessage}
         />
       </TableCell>
       <TableCell className="hidden @[630px]:table-cell w-[15%]">
@@ -438,6 +517,32 @@ async function listEvaluations(accountId: string): ModelListResult<Schema['Evalu
               isDatasetClassDistributionBalanced
               predictedClassDistribution
               isPredictedClassDistributionBalanced
+              
+              task {
+                id
+                type
+                command
+                status
+                startedAt
+                completedAt
+                dispatchStatus
+                celeryTaskId
+                workerNodeId
+                stages {
+                  items {
+                    id
+                    name
+                    status
+                    processedItems
+                    totalItems
+                    startedAt
+                    completedAt
+                    estimatedCompletionAt
+                    statusMessage
+                    order
+                  }
+                }
+              }
             }
             nextToken
           }
@@ -450,12 +555,32 @@ async function listEvaluations(accountId: string): ModelListResult<Schema['Evalu
       }
     }) as GraphQLResult<ListEvaluationResponse>;
 
-    console.log('GraphQL response:', {
+    console.log('GraphQL response for evaluation list:', {
       hasData: !!response.data,
       hasErrors: !!response.errors,
       errors: response.errors?.map(e => ({
         message: e.message,
         path: e.path
+      })),
+      firstEvaluation: response.data?.listEvaluationByAccountIdAndUpdatedAt?.items[0] ? {
+        id: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].id,
+        hasTask: !!response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task,
+        taskData: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task || null,
+        taskFields: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task ? 
+          Object.keys(response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task) : [],
+        taskStages: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task?.stages?.items?.map(s => ({
+          name: s.name,
+          status: s.status,
+          processedItems: s.processedItems,
+          totalItems: s.totalItems
+        }))
+      } : null,
+      allEvaluations: response.data?.listEvaluationByAccountIdAndUpdatedAt?.items.map(item => ({
+        id: item.id,
+        type: item.type,
+        hasTask: !!item.task,
+        taskStatus: item.task?.status,
+        stagesCount: item.task?.stages?.items?.length
       }))
     });
 
@@ -658,8 +783,17 @@ async function loadRelatedData(
     scorecards.map(result => [result.data?.id, result.data])
   )
   const scoreMap = new Map(
-    scores.map((result, index) => [scoreIds[index], result.data])
+    scores.map(result => [result.data?.id, result.data])
   )
+
+  console.log('Score mapping:', {
+    scoreIds,
+    scoreMapEntries: Array.from(scoreMap.entries()).map(([id, score]) => ({
+      id,
+      name: score?.name,
+      found: !!score
+    }))
+  });
 
   // Create name mappings
   const newScorecardNames: Record<string, string> = {}
@@ -667,10 +801,12 @@ async function loadRelatedData(
 
   evaluations.forEach(evaluation => {
     const scorecard = scorecardMap.get(evaluation.scorecardId || '')
-    const score = scoreMap.get(evaluation.scoreId || '')
+    const score = evaluation.scoreId ? scoreMap.get(evaluation.scoreId) : null
+    
     if (scorecard) {
       newScorecardNames[evaluation.id] = scorecard.name
     }
+    
     if (score) {
       newScoreNames[evaluation.id] = score.name
     } else if (evaluation.scoreId) {
@@ -679,7 +815,11 @@ async function loadRelatedData(
         scoreId: evaluation.scoreId,
         type: evaluation.type,
         createdAt: evaluation.createdAt,
-        scoreMapKeys: Array.from(scoreMap.keys())
+        scoreMapKeys: Array.from(scoreMap.keys()),
+        scoreMapValues: Array.from(scoreMap.values()).map((s: Schema['Score']['type'] | null) => ({
+          id: s?.id,
+          name: s?.name
+        }))
       })
     }
   })
@@ -709,7 +849,7 @@ async function loadRelatedData(
       data: scorecardMap.get(evaluation.scorecardId || '') || null
     }),
     score: async () => ({
-      data: scoreMap.get(evaluation.scoreId || '') || null
+      data: evaluation.scoreId ? scoreMap.get(evaluation.scoreId) || null : null
     })
   }))
 }
@@ -851,6 +991,79 @@ const handleDeleteEvaluation = async (client: any, evaluationId: string) => {
   }
 };
 
+// Add interface for Task near the top of the file with other interfaces
+interface Task {
+  id: string
+  type: string
+  command?: string
+  status: string
+  startedAt?: string
+  completedAt?: string
+  dispatchStatus?: string
+  celeryTaskId?: string
+  workerNodeId?: string
+  stages?: {
+    items: TaskStage[]
+    nextToken?: string | null
+  }
+}
+
+// Update the TaskStage interface
+interface TaskStage {
+  id: string
+  name: string
+  status: string
+  processedItems?: number
+  totalItems?: number
+  startedAt?: string
+  completedAt?: string
+  estimatedCompletionAt?: string
+  statusMessage?: string
+  order: number
+}
+
+// Update the EvaluationTaskData interface to use the Task type
+interface EvaluationTaskData {
+  id: string
+  title: string
+  accuracy: number | null
+  metrics: EvaluationMetric[]
+  metricsExplanation?: string | null
+  processedItems: number
+  totalItems: number
+  progress: number
+  inferences: number
+  cost: number | null
+  status: string
+  elapsedSeconds: number | null
+  estimatedRemainingSeconds: number | null
+  startedAt?: string | null
+  errorMessage?: string
+  errorDetails?: any | null
+  confusionMatrix?: {
+    matrix: number[][] | null
+    labels: string[] | null
+  } | null
+  scoreGoal?: string | null
+  datasetClassDistribution?: { label: string, count: number }[]
+  isDatasetClassDistributionBalanced?: boolean | null
+  predictedClassDistribution?: { label: string, count: number }[]
+  isPredictedClassDistributionBalanced?: boolean | null
+  scoreResults?: Array<{
+    id: string
+    value: string | number
+    confidence?: number | null
+    explanation?: string | null
+    metadata?: any
+    createdAt?: string
+    itemId?: string
+    EvaluationId?: string
+    scorecardId?: string
+    [key: string]: any
+  }>
+  task?: Task | null
+}
+
 export default function EvaluationsDashboard(): JSX.Element {
   const { authStatus, user } = useAuthenticator(context => [context.authStatus]);
   const router = useRouter();
@@ -935,7 +1148,31 @@ export default function EvaluationsDashboard(): JSX.Element {
   ), [filteredEvaluations, selectedEvaluation?.id, scorecardNames, scoreNames])
 
   const EvaluationTaskComponent = useMemo(() => {
-    if (!selectedEvaluation || !EvaluationTaskProps) return null
+    if (!selectedEvaluation || !EvaluationTaskProps) {
+      console.log('Cannot render EvaluationTask:', {
+        hasSelectedEvaluation: !!selectedEvaluation,
+        hasTaskProps: !!EvaluationTaskProps,
+        selectedEvaluationId: selectedEvaluation?.id
+      });
+      return null;
+    }
+    
+    console.log('Rendering EvaluationTask with props:', {
+      taskId: EvaluationTaskProps.id,
+      taskType: EvaluationTaskProps.type,
+      hasTaskData: !!EvaluationTaskProps.data,
+      taskInData: EvaluationTaskProps.data?.task ? {
+        id: EvaluationTaskProps.data.task.id,
+        status: EvaluationTaskProps.data.task.status,
+        stagesCount: EvaluationTaskProps.data.task.stages?.items?.length,
+        stages: EvaluationTaskProps.data.task.stages?.items?.map(s => ({
+          name: s.name,
+          status: s.status,
+          processedItems: s.processedItems,
+          totalItems: s.totalItems
+        }))
+      } : null
+    });
     
     return (
       <EvaluationTask
@@ -1029,144 +1266,35 @@ export default function EvaluationsDashboard(): JSX.Element {
     }
   }, [selectedEvaluation])
 
-  // Add effect to update EvaluationTaskProps when selectedEvaluation changes
-  useEffect(() => {
-    if (!selectedEvaluation) {
-      setEvaluationTaskProps(null);
+  // Move the handler outside useEffect and declare with useCallback
+  const handleEvaluationUpdate = useCallback((data: any) => {
+    // Add null checks and logging
+    if (!data) {
+      console.warn('Received null subscription data');
       return;
     }
 
-    console.log('Selected evaluation data:', {
-      id: selectedEvaluation.id,
-      rawConfusionMatrix: selectedEvaluation.confusionMatrix,
-      confusionMatrixType: typeof selectedEvaluation.confusionMatrix,
-      isObject: selectedEvaluation.confusionMatrix && typeof selectedEvaluation.confusionMatrix === 'object',
-      hasMatrixProp: selectedEvaluation.confusionMatrix && 
-        typeof selectedEvaluation.confusionMatrix === 'object' && 
-        'matrix' in selectedEvaluation.confusionMatrix,
-      hasLabelsProp: selectedEvaluation.confusionMatrix && 
-        typeof selectedEvaluation.confusionMatrix === 'object' && 
-        'labels' in selectedEvaluation.confusionMatrix
+    // Log the raw data to help debug
+    console.debug('Subscription update received:', data);
+
+    // Safely access the evaluation data
+    const evaluation = data.data?.onUpdateEvaluation;
+    if (!evaluation || !evaluation.id) {
+      console.warn('Received invalid evaluation data:', evaluation);
+      return;
+    }
+
+    // Now we can safely use the evaluation data
+    setEvaluations(prev => {
+      const index = prev.findIndex(e => e.id === evaluation.id);
+      if (index === -1) return prev;
+      
+      const updated = [...prev];
+      updated[index] = transformEvaluation(evaluation);
+      return updated;
     });
+  }, []); // Empty dependency array since we only use setState functions
 
-    const rawMetrics = (() => {
-      try {
-        if (typeof selectedEvaluation.metrics === 'string') {
-          return JSON.parse(selectedEvaluation.metrics);
-        }
-        if (Array.isArray(selectedEvaluation.metrics)) {
-          return selectedEvaluation.metrics;
-        }
-        return [];
-      } catch (e) {
-        console.error('Error parsing metrics:', e);
-        return [];
-      }
-    })();
-
-    const metrics = rawMetrics.map((metric: EvaluationMetric) => ({
-      name: String(metric?.name || ''),
-      value: Number(metric?.value || 0),
-      unit: String(metric?.unit || '%'),
-      maximum: Number(metric?.maximum || 100),
-      priority: Boolean(metric?.priority)
-    }));
-
-    const confusionMatrix = (() => {
-      try {
-        const rawMatrix = typeof selectedEvaluation.confusionMatrix === 'string' 
-          ? JSON.parse(selectedEvaluation.confusionMatrix)
-          : selectedEvaluation.confusionMatrix;
-
-        if (rawMatrix && typeof rawMatrix === 'object' &&
-            Array.isArray(rawMatrix.matrix) && Array.isArray(rawMatrix.labels)) {
-          return {
-            matrix: rawMatrix.matrix,
-            labels: rawMatrix.labels
-          };
-        }
-        return null;
-      } catch (e) {
-        console.error('Error parsing confusion matrix:', e);
-        return null;
-      }
-    })();
-
-    const datasetClassDistribution = (() => {
-      try {
-        const rawDist = typeof selectedEvaluation.datasetClassDistribution === 'string' 
-          ? JSON.parse(selectedEvaluation.datasetClassDistribution)
-          : selectedEvaluation.datasetClassDistribution;
-
-        if (Array.isArray(rawDist)) {
-          return rawDist.map(item => ({
-            label: String(item?.label || ''),
-            count: Number(item?.count || 0)
-          }));
-        }
-        return undefined;
-      } catch (e) {
-        console.error('Error parsing dataset distribution:', e);
-        return undefined;
-      }
-    })();
-
-    const predictedClassDistribution = (() => {
-      try {
-        const rawDist = typeof selectedEvaluation.predictedClassDistribution === 'string' 
-          ? JSON.parse(selectedEvaluation.predictedClassDistribution)
-          : selectedEvaluation.predictedClassDistribution;
-
-        if (Array.isArray(rawDist)) {
-          return rawDist.map(item => ({
-            label: String(item?.label || ''),
-            count: Number(item?.count || 0)
-          }));
-        }
-        return undefined;
-      } catch (e) {
-        console.error('Error parsing predicted distribution:', e);
-        return undefined;
-      }
-    })();
-
-    const taskProps = {
-      id: selectedEvaluation.id,
-      type: selectedEvaluation.type,
-      scorecard: scorecardNames[selectedEvaluation.id] || 'Unknown Scorecard',
-      score: scoreNames[selectedEvaluation.id] || 'Unknown Score',
-      time: selectedEvaluation.createdAt,
-      data: {
-        id: selectedEvaluation.id,
-        title: scorecardNames[selectedEvaluation.id] || 'Unknown Scorecard',
-        accuracy: selectedEvaluation.accuracy ?? null,
-        metrics,
-        metricsExplanation: selectedEvaluation.metricsExplanation ?? null,
-        processedItems: selectedEvaluation.processedItems ?? 0,
-        totalItems: selectedEvaluation.totalItems ?? 0,
-        progress: calculateProgress(selectedEvaluation.processedItems, selectedEvaluation.totalItems),
-        inferences: selectedEvaluation.inferences ?? 0,
-        cost: selectedEvaluation.cost ?? null,
-        status: selectedEvaluation.status || '',
-        elapsedSeconds: selectedEvaluation.elapsedSeconds ?? null,
-        estimatedRemainingSeconds: selectedEvaluation.estimatedRemainingSeconds ?? null,
-        startedAt: selectedEvaluation.startedAt ?? null,
-        errorMessage: selectedEvaluation.errorMessage ?? undefined,
-        errorDetails: selectedEvaluation.errorDetails ?? null,
-        confusionMatrix,
-        scoreGoal: selectedEvaluation.scoreGoal ?? null,
-        datasetClassDistribution,
-        isDatasetClassDistributionBalanced: selectedEvaluation.isDatasetClassDistributionBalanced ?? null,
-        predictedClassDistribution,
-        isPredictedClassDistributionBalanced: selectedEvaluation.isPredictedClassDistributionBalanced ?? null,
-        scoreResults: scoreResults
-      }
-    };
-
-    setEvaluationTaskProps(taskProps);
-  }, [selectedEvaluation, scorecardNames, scoreNames, scoreResults]);
-
-  // Add initial data loading effect
   useEffect(() => {
     const loadInitialData = async () => {
       try {
@@ -1200,93 +1328,11 @@ export default function EvaluationsDashboard(): JSX.Element {
         setEvaluations(transformedEvaluations);
         setIsLoading(false);
 
-        // Set up subscriptions for real-time updates
-        const handleEvaluationUpdate = async (data: Schema['Evaluation']['type']) => {
-          console.log('Evaluation update received:', {
-            id: data.id,
-            type: data.type,
-            status: data.status,
-            processedItems: data.processedItems,
-            totalItems: data.totalItems,
-            accuracy: data.accuracy,
-            updatedAt: data.updatedAt
-          });
-
-          if (!foundAccountId) return;
-          
-          // For onCreate, we can just add the new evaluation to the list
-          const isCreate = !Evaluations.some(e => e.id === data.id);
-          if (isCreate) {
-            console.log('Handling onCreate for evaluation:', {
-              id: data.id,
-              updatedAt: data.updatedAt,
-              existingIds: Evaluations.map(e => e.id)
-            });
-
-            // Transform the evaluation before setState to avoid async issues
-            const transformedEvaluation = await loadRelatedData(
-              [data],
-              (newNames) => {
-                setScorecardNames(prev => ({ ...prev, ...newNames }));
-              },
-              (newNames) => {
-                setScoreNames(prev => ({ ...prev, ...newNames }));
-              }
-            );
-
-            setEvaluations(prev => {
-              // If evaluation exists, update it
-              if (prev.some(e => e.id === data.id)) {
-                console.log('Updating existing evaluation:', data.id);
-                return prev.map(e => e.id === data.id ? {
-                  ...e,
-                  ...transformedEvaluation[0],
-                  // Preserve the async functions
-                  account: e.account,
-                  scorecard: e.scorecard,
-                  score: e.score
-                } : e);
-              }
-
-              // Otherwise add as new
-              console.log('Adding new evaluation:', data.id);
-              return [transformedEvaluation[0], ...prev];
-            });
-          } else {
-            // For updates, we'll update the specific evaluation in place
-            // but preserve the existing names
-            setEvaluations(prev => {
-              return prev.map(e => e.id === data.id ? {
-                ...e,
-                ...data,
-                // Preserve the async functions
-                account: e.account,
-                scorecard: e.scorecard,
-                score: e.score
-              } : e);
-            });
-          }
-
-          // Update selectedEvaluation if it matches
-          if (selectedEvaluation && data.id === selectedEvaluation.id) {
-            setSelectedEvaluation(prev => ({
-              ...prev!,
-              ...data,
-              // Preserve the async functions
-              account: prev!.account,
-              scorecard: prev!.scorecard,
-              score: prev!.score
-            }));
-          }
-        };
-
         const handleError = (error: unknown) => {
           console.error('Subscription error:', error);
           setError(error instanceof Error ? error : new Error(String(error)));
         };
 
-        type EvaluationObservable = Observable<Schema['Evaluation']['type']>;
-        
         // Subscribe to create events
         const createSub = (client.models.Evaluation as any).onCreate().subscribe({
           next: handleEvaluationUpdate,
@@ -1299,56 +1345,107 @@ export default function EvaluationsDashboard(): JSX.Element {
           error: handleError
         });
 
-        // Subscribe to delete events
-        const deleteSub = (client.models.Evaluation as any).onDelete().subscribe({
-          next: (data: Schema['Evaluation']['type']) => {
-            if (!data) return;
-            console.log('Evaluation delete received:', {
-              id: data.id,
-              type: data.type,
-              updatedAt: data.updatedAt
-            });
-
-            // Remove from evaluations list
-            setEvaluations(prev => {
-              const filteredList = prev.filter(e => e.id !== data.id);
-              console.log('Removing deleted evaluation:', {
-                deletedId: data.id,
-                previousCount: prev.length,
-                newCount: filteredList.length
-              });
-              return filteredList;
-            });
-
-            // Clear selection if the deleted evaluation was selected
-            if (selectedEvaluation?.id === data.id) {
-              console.log('Clearing selected evaluation as it was deleted');
-              setSelectedEvaluation(null);
-              setScoreResults([]);
-              setEvaluationTaskProps(null);
-            }
-          },
-          error: handleError
-        });
-
+        // Clean up subscriptions
         return () => {
           createSub.unsubscribe();
           updateSub.unsubscribe();
-          deleteSub.unsubscribe();
         };
-
       } catch (error) {
-        console.error('Error loading initial data:', error);
-        setError(error instanceof Error ? error : new Error('Failed to load initial data'));
+        console.error('Error loading evaluations:', error);
+        setError(error instanceof Error ? error : new Error(String(error)));
         setIsLoading(false);
       }
     };
 
     loadInitialData();
+  }, [handleEvaluationUpdate]); // Add handleEvaluationUpdate to dependencies
 
-    // No cleanup needed here as it's handled in the async function
-    return undefined;
-  }, [selectedEvaluation]); // Add selectedEvaluation to dependencies since we use it in handleEvaluationUpdate
+  // Add effect to update EvaluationTaskProps when selectedEvaluation changes
+  useEffect(() => {
+    if (!selectedEvaluation) {
+      console.log('No selected evaluation, clearing task props');
+      setEvaluationTaskProps(null);
+      return;
+    }
+
+    console.log('Raw selected evaluation:', {
+      id: selectedEvaluation.id,
+      type: selectedEvaluation.type,
+      status: selectedEvaluation.status,
+      task: selectedEvaluation.task
+    });
+
+    const taskData = typeof selectedEvaluation.task === 'function' ? 
+      (selectedEvaluation.task() as any) : 
+      selectedEvaluation.task;
+
+    // Ensure task data is properly structured
+    const normalizedTaskData = taskData ? {
+      ...taskData,
+      stages: {
+        items: Array.isArray(taskData.stages?.items) ? taskData.stages.items : []
+      }
+    } : null;
+
+    const rawMetrics = (() => {
+      try {
+        if (typeof selectedEvaluation.metrics === 'string') {
+          return JSON.parse(selectedEvaluation.metrics);
+        }
+        if (Array.isArray(selectedEvaluation.metrics)) {
+          return selectedEvaluation.metrics;
+        }
+        return [];
+      } catch (e) {
+        console.error('Error parsing metrics:', e);
+        return [];
+      }
+    })();
+
+    const metrics = rawMetrics.map((metric: EvaluationMetric) => ({
+      name: String(metric?.name || ''),
+      value: Number(metric?.value || 0),
+      unit: String(metric?.unit || '%'),
+      maximum: Number(metric?.maximum || 100),
+      priority: Boolean(metric?.priority)
+    }));
+
+    const taskProps = {
+      id: selectedEvaluation.id,
+      type: selectedEvaluation.type,
+      scorecard: scorecardNames[selectedEvaluation.id] || 'Unknown Scorecard',
+      score: scoreNames[selectedEvaluation.id] || 'Unknown Score',
+      time: selectedEvaluation.createdAt,
+      data: {
+        id: selectedEvaluation.id,
+        title: scorecardNames[selectedEvaluation.id] || 'Unknown Scorecard',
+        accuracy: selectedEvaluation.accuracy ?? null,
+        metrics,
+        metricsExplanation: selectedEvaluation.metricsExplanation ?? null,
+        processedItems: selectedEvaluation.processedItems ?? 0,
+        totalItems: selectedEvaluation.totalItems ?? 0,
+        progress: calculateProgress(selectedEvaluation.processedItems, selectedEvaluation.totalItems),
+        inferences: selectedEvaluation.inferences ?? 0,
+        cost: selectedEvaluation.cost ?? null,
+        status: selectedEvaluation.status || '',
+        elapsedSeconds: selectedEvaluation.elapsedSeconds ?? null,
+        estimatedRemainingSeconds: selectedEvaluation.estimatedRemainingSeconds ?? null,
+        startedAt: selectedEvaluation.startedAt ?? null,
+        errorMessage: selectedEvaluation.errorMessage ?? undefined,
+        errorDetails: selectedEvaluation.errorDetails ?? null,
+        confusionMatrix: selectedEvaluation.confusionMatrix,
+        scoreGoal: selectedEvaluation.scoreGoal ?? null,
+        datasetClassDistribution: selectedEvaluation.datasetClassDistribution,
+        isDatasetClassDistributionBalanced: selectedEvaluation.isDatasetClassDistributionBalanced ?? null,
+        predictedClassDistribution: selectedEvaluation.predictedClassDistribution,
+        isPredictedClassDistributionBalanced: selectedEvaluation.isPredictedClassDistributionBalanced ?? null,
+        scoreResults: scoreResults,
+        task: normalizedTaskData
+      }
+    };
+
+    setEvaluationTaskProps(taskProps);
+  }, [selectedEvaluation, scorecardNames, scoreNames, scoreResults]);
 
   // Early return for unauthenticated state
   if (authStatus !== 'authenticated') {

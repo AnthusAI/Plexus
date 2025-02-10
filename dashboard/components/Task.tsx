@@ -52,6 +52,23 @@ export interface TaskComponentProps<TData extends BaseTaskData = BaseTaskData> e
   showProgress?: boolean
 }
 
+// Add the safe date formatting helper
+const formatTaskTime = (dateString: string | null | undefined) => {
+  if (!dateString) return '';
+  
+  try {
+    const date = new Date(dateString);
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return '';
+    }
+    return formatDistanceToNow(date, { addSuffix: true });
+  } catch (e) {
+    console.warn('Invalid task time format:', dateString);
+    return '';
+  }
+};
+
 const Task = <TData extends BaseTaskData = BaseTaskData>({ 
   variant, 
   task, 
@@ -137,6 +154,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
   )
 }
 
+// Update the TaskHeader component
 const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({ 
   task, 
   variant, 
@@ -147,7 +165,7 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
   onClose,
   isLoading
 }: TaskChildProps<TData>) => {
-  const formattedTime = formatDistanceToNow(new Date(task.time), { addSuffix: true })
+  const formattedTime = formatTaskTime(task.time);
 
   return (
     <CardHeader className="space-y-1.5 p-0 flex flex-col items-start">

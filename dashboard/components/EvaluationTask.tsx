@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useMemo } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { FlaskConical, Square, X, Split, ChevronLeft } from 'lucide-react'
 import MetricsGauges from '@/components/MetricsGauges'
-import { ProgressBar } from "@/components/ui/progress-bar"
+import { TaskStatus } from '@/components/ui/task-status'
 import { ConfusionMatrix } from '@/components/confusion-matrix'
 import { CardButton } from '@/components/CardButton'
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
@@ -62,6 +62,32 @@ export interface EvaluationTaskData {
     [key: string]: any  // Allow additional properties
   }>
   selectedScoreResult?: Schema['ScoreResult']['type'] | null
+  task?: {
+    id: string
+    type: string
+    command?: string
+    status: string
+    startedAt?: string
+    completedAt?: string
+    dispatchStatus?: string
+    celeryTaskId?: string
+    workerNodeId?: string
+    stages?: {
+      items: Array<{
+        id: string
+        name: string
+        status: string
+        processedItems?: number
+        totalItems?: number
+        startedAt?: string
+        completedAt?: string
+        estimatedCompletionAt?: string
+        statusMessage?: string
+        order: number
+      }>
+      nextToken?: string | null
+    }
+  } | null
 }
 
 export interface EvaluationTaskProps {
@@ -137,21 +163,82 @@ function computeIsBalanced(distribution: { label: string, count: number }[] | nu
   )
 }
 
-const GridContent = React.memo(({ data }: { data: EvaluationTaskData }) => (
-  <div className="mt-4">
-    <ProgressBar 
-      progress={data.progress}
-      elapsedTime={data.elapsedSeconds !== null ? 
-        formatDuration(data.elapsedSeconds) : undefined}
-      processedItems={data.processedItems}
-      totalItems={data.totalItems}
-      estimatedTimeRemaining={data.estimatedRemainingSeconds !== null ? 
-        formatDuration(data.estimatedRemainingSeconds) : undefined}
-      color="secondary"
-      isFocused={false}
-    />
-  </div>
-))
+function mapStatus(status: string): 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' {
+  const normalizedStatus = status.toUpperCase();
+  switch (normalizedStatus) {
+    case 'PENDING':
+    case 'RUNNING':
+    case 'COMPLETED':
+    case 'FAILED':
+      return normalizedStatus;
+    case 'DONE':
+      return 'COMPLETED';
+    case 'ERROR':
+      return 'FAILED';
+    default:
+      return 'PENDING';
+  }
+}
+
+const GridContent = React.memo(({ data }: { data: EvaluationTaskData }) => {
+  console.log('GridContent - Task data:', {
+    hasTask: !!data.task,
+    taskStatus: data.task?.status,
+    stagesCount: data.task?.stages?.items?.length,
+    stages: data.task?.stages?.items?.map(stage => ({
+      name: stage.name,
+      status: stage.status,
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems
+    }))
+  });
+
+  // Calculate estimatedCompletionAt if we have the necessary data
+  const estimatedCompletionAt = data.startedAt && data.estimatedRemainingSeconds 
+    ? new Date(new Date(data.startedAt).getTime() + (data.estimatedRemainingSeconds * 1000)).toISOString()
+    : undefined;
+
+  const taskData = data.task;
+  const stageConfigs = (taskData?.stages?.items || [])
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map(stage => ({
+      key: stage.name,
+      label: stage.label || stage.name,
+      color: stage.status === 'COMPLETED' ? 'bg-primary' : 
+             stage.status === 'FAILED' ? 'bg-false' : 
+             'bg-neutral',
+      name: stage.name,
+      order: stage.order || 0,
+      status: stage.status,
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      statusMessage: stage.statusMessage,
+      completed: stage.status === 'COMPLETED',
+      startedAt: stage.startedAt,
+      completedAt: stage.completedAt,
+      estimatedCompletionAt: stage.estimatedCompletionAt
+    }));
+
+  console.log('GridContent - Mapped stage configs:', {
+    stageConfigsCount: stageConfigs.length,
+    stageConfigs
+  });
+
+  return (
+    <div className="mt-4">
+      <TaskStatus
+        variant="grid"
+        status={mapStatus(taskData?.status || data.status)}
+        processedItems={data.processedItems}
+        totalItems={data.totalItems}
+        startedAt={data.startedAt || undefined}
+        estimatedCompletionAt={estimatedCompletionAt}
+        errorMessage={data.errorMessage}
+        stageConfigs={stageConfigs}
+      />
+    </div>
+  );
+})
 
 interface ParsedScoreResult {
   id: string
@@ -246,6 +333,18 @@ const DetailContent = React.memo(({
   selectedScoreResultId?: string | null
   onSelectScoreResult?: (id: string | null) => void
 }) => {
+  console.log('DetailContent - Task data:', {
+    hasTask: !!data.task,
+    taskStatus: data.task?.status,
+    stagesCount: data.task?.stages?.items?.length,
+    stages: data.task?.stages?.items?.map(stage => ({
+      name: stage.name,
+      status: stage.status,
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems
+    }))
+  });
+
   const [containerWidth, setContainerWidth] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const [selectedPredictedActual, setSelectedPredictedActual] = useState<{
@@ -295,6 +394,31 @@ const DetailContent = React.memo(({
     return data.scoreResults?.map(parseScoreResult) ?? []
   }, [data.scoreResults])
 
+  const stageConfigs = (data.task?.stages?.items || [])
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map(stage => ({
+      key: stage.name,
+      label: stage.label || stage.name,
+      color: stage.status === 'COMPLETED' ? 'bg-primary' : 
+             stage.status === 'FAILED' ? 'bg-false' : 
+             'bg-neutral',
+      name: stage.name,
+      order: stage.order || 0,
+      status: stage.status,
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      statusMessage: stage.statusMessage,
+      completed: stage.status === 'COMPLETED',
+      startedAt: stage.startedAt,
+      completedAt: stage.completedAt,
+      estimatedCompletionAt: stage.estimatedCompletionAt
+    }));
+
+  console.log('DetailContent - Mapped stage configs:', {
+    stageConfigsCount: stageConfigs.length,
+    stageConfigs
+  });
+
   return (
     <div 
       ref={containerRef}
@@ -314,16 +438,19 @@ const DetailContent = React.memo(({
         {showMainPanel && (
           <div className="w-full h-full overflow-y-auto pr-2">
             <div className="mb-4">
-              <ProgressBar 
-                progress={data.progress}
-                elapsedTime={data.elapsedSeconds !== null ? 
-                  formatDuration(data.elapsedSeconds) : undefined}
+              <TaskStatus
+                variant="detail"
+                status={mapStatus(data.task?.status || data.status)}
                 processedItems={data.processedItems}
                 totalItems={data.totalItems}
-                estimatedTimeRemaining={data.estimatedRemainingSeconds !== null ? 
-                  formatDuration(data.estimatedRemainingSeconds) : undefined}
-                color="secondary"
-                isFocused={true}
+                startedAt={data.startedAt || undefined}
+                estimatedCompletionAt={
+                  data.startedAt && data.estimatedRemainingSeconds 
+                    ? new Date(new Date(data.startedAt).getTime() + (data.estimatedRemainingSeconds * 1000)).toISOString()
+                    : undefined
+                }
+                errorMessage={data.errorMessage}
+                stageConfigs={stageConfigs}
               />
             </div>
 
@@ -424,6 +551,20 @@ export default function EvaluationTask({
   selectedScoreResultId,
   onSelectScoreResult
 }: EvaluationTaskProps) {
+  console.log('EvaluationTask - Received task data:', {
+    taskId: task.id,
+    hasTaskData: !!task.data,
+    hasTaskInData: !!task.data?.task,
+    taskStatus: task.data?.task?.status,
+    stagesCount: task.data?.task?.stages?.items?.length,
+    stages: task.data?.task?.stages?.items?.map(stage => ({
+      name: stage.name,
+      status: stage.status,
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems
+    }))
+  });
+
   const data = task.data ?? {} as EvaluationTaskData
   const computedType = computeEvaluationType(data)
 

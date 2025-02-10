@@ -51,6 +51,7 @@ export interface TaskStageConfig {
   completedAt?: string
   estimatedCompletionAt?: string
   statusMessage?: string
+  completed?: boolean
 }
 
 export interface TaskStatusProps {
@@ -74,7 +75,7 @@ export interface TaskStatusProps {
   showPreExecutionStages?: boolean
   completedAt?: string
   truncateMessages?: boolean
-  variant?: 'grid' | 'detail' | 'nested'
+  variant?: 'grid' | 'detail' | 'nested' | 'list'
   isFullWidth?: boolean
   onToggleFullWidth?: () => void
   onClose?: () => void
@@ -175,80 +176,85 @@ export function TaskStatus({
     }
   }, [startedAt, estimatedCompletionAt, completedAt, isInProgress])
 
-  // Get progress information from stages if available, otherwise use props
-  const getProgressFromStages = () => {
-    if (!stages || stages.length === 0) {
-      return { processedItems, totalItems }
-    }
-
-    // For completed tasks, find the stage with the most progress
+  // Update the progress calculation logic
+  const { processedItems: effectiveProcessedItems, totalItems: effectiveTotalItems } = (function getProgressFromStages() {
+    // If task is completed, use the last stage's progress
     if (status === 'COMPLETED') {
-      const stageWithProgress = stages
-        .filter(s => s.totalItems !== undefined && s.totalItems > 0)
-        .sort((a, b) => (b.totalItems || 0) - (a.totalItems || 0))[0]
-      
-      if (stageWithProgress) {
+      const lastStage = stages
+        .sort((a, b) => (b.order || 0) - (a.order || 0))
+        .find(s => s.processedItems !== undefined && s.totalItems !== undefined);
+      if (lastStage) {
         return {
-          processedItems: stageWithProgress.processedItems,
-          totalItems: stageWithProgress.totalItems
-        }
+          processedItems: lastStage.processedItems,
+          totalItems: lastStage.totalItems
+        };
       }
     }
 
-    // For running tasks, start from current stage and work backwards
-    const currentStageIndex = stages.findIndex(s => s.name === currentStageName)
-    if (currentStageIndex === -1) {
-      return { processedItems, totalItems }
-    }
-
-    // Check current stage first
-    const currentStage = stages[currentStageIndex]
-    if (currentStage.totalItems !== undefined && currentStage.totalItems !== null) {
-      return {
-        processedItems: currentStage.processedItems,
-        totalItems: currentStage.totalItems
-      }
-    }
-
-    // Look backwards through previous stages for progress info
-    for (let i = currentStageIndex - 1; i >= 0; i--) {
-      const stage = stages[i]
-      if (stage.totalItems !== undefined && stage.totalItems !== null) {
+    // For in-progress tasks, use current stage or fall back to overall progress
+    if (stages?.length > 0) {
+      const currentStage = stages.find(s => s.name === currentStageName);
+      if (currentStage?.processedItems !== undefined && currentStage?.totalItems !== undefined) {
         return {
-          processedItems: stage.processedItems,
-          totalItems: stage.totalItems
-        }
+          processedItems: currentStage.processedItems,
+          totalItems: currentStage.totalItems
+        };
       }
     }
 
-    // Fallback to props if no stage has progress info
-    return { processedItems, totalItems }
+    // Fall back to overall progress
+    return {
+      processedItems: processedItems || 0,
+      totalItems: totalItems || 0
+    };
+  })();
+
+  // Calculate progress percentage
+  const progress = effectiveTotalItems > 0 ? 
+    Math.round((effectiveProcessedItems / effectiveTotalItems) * 100) : 
+    0;
+
+  // Update the progress bar color based on status
+  const progressBarColor = status === 'COMPLETED' ? 'primary' :
+                          status === 'FAILED' ? 'false' :
+                          'secondary';
+
+  // If the variant is 'list', render only a simple progress bar
+  if (variant === 'list') {
+    return (
+      <ProgressBar
+        progress={status === 'COMPLETED' ? 100 : progress}
+        processedItems={effectiveProcessedItems}
+        totalItems={effectiveTotalItems}
+        color={progressBarColor}
+        showTiming={false}
+      />
+    );
   }
 
-  const { processedItems: effectiveProcessedItems, totalItems: effectiveTotalItems } = 
-    getProgressFromStages()
-  
-  const progress = effectiveProcessedItems && effectiveTotalItems ? 
-    (effectiveProcessedItems / effectiveTotalItems) * 100 : 0
-
   // Convert TaskStageConfig to SegmentConfig for the progress bar
-  const segmentConfigs: SegmentConfig[] = stageConfigs ? [
-    ...stageConfigs.map(stage => ({
+  const segments = stageConfigs
+    .sort((a, b) => a.order - b.order)  // Ensure stages are ordered
+    .map(stage => ({
       key: stage.name,
-      label: stage.label,
-      color: stage.status === 'PENDING' ? 'bg-neutral' : 
-             stage.status === 'FAILED' ? 'bg-false' : 
-             stage.color,
-      status: stage.status
-    })),
-    // Only add completion segment if we have other stages
-    ...(stageConfigs.length > 0 ? [{
+      label: stage.label || stage.name,
+      color: stage.status === 'COMPLETED' ? 'bg-primary' :
+             stage.status === 'FAILED' ? 'bg-false' :
+             'bg-neutral',
+      status: stage.status,
+      completed: stage.status === 'COMPLETED'
+    }));
+
+  // Add completion segment if task is complete
+  if (status === 'COMPLETED') {
+    segments.push({
       key: 'completion',
-      label: status === 'FAILED' ? 'Failed' : 'Complete',
-      color: status === 'FAILED' ? 'bg-false' : 'bg-true',
-      status: status
-    }] : [])
-  ] : []
+      label: 'Complete',
+      color: 'bg-true',
+      status: 'COMPLETED',
+      completed: true
+    });
+  }
 
   const getPreExecutionStatus = () => {
     if (workerNodeId && workerNodeId.trim() !== '') {
@@ -346,17 +352,17 @@ export function TaskStatus({
       )}
       {showStages && (
         <SegmentedProgressBar
-          segments={segmentConfigs}
+          segments={segments}
           currentSegment={status === 'FAILED' || status === 'COMPLETED' ? 'completion' : currentStageName || ''}
           error={status === 'FAILED'}
           errorLabel={errorLabel}
         />
       )}
       <ProgressBar
-        progress={progress}
+        progress={status === 'COMPLETED' ? 100 : progress}
         processedItems={effectiveProcessedItems}
         totalItems={effectiveTotalItems}
-        color={status === 'FAILED' ? 'false' : 'secondary'}
+        color={progressBarColor}
         showTiming={false}
       />
     </div>
