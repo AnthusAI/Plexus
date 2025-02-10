@@ -114,6 +114,38 @@ export async function listFromModel<T extends { id: string }>(
                   isDatasetClassDistributionBalanced
                   predictedClassDistribution
                   isPredictedClassDistributionBalanced
+                  taskId
+                  task {
+                    id
+                    type
+                    status
+                    target
+                    command
+                    description
+                    dispatchStatus
+                    metadata
+                    createdAt
+                    startedAt
+                    completedAt
+                    estimatedCompletionAt
+                    errorMessage
+                    errorDetails
+                    currentStageId
+                    stages {
+                      items {
+                        id
+                        name
+                        order
+                        status
+                        statusMessage
+                        startedAt
+                        completedAt
+                        estimatedCompletionAt
+                        processedItems
+                        totalItems
+                      }
+                    }
+                  }
                 }
                 nextToken
               }

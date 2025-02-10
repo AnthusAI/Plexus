@@ -169,6 +169,51 @@ def accuracy(
                         task_id = task.id
                         logging.info(f"Successfully created and verified task: {task.id}")
 
+                        # Create the Evaluation record IMMEDIATELY after Task setup
+                        started_at = datetime.now(timezone.utc)
+                        experiment_params = {
+                            "type": "accuracy",
+                            "accountId": account.id,
+                            "status": "SETUP",
+                            "accuracy": 0.0,
+                            "createdAt": started_at.isoformat().replace('+00:00', 'Z'),
+                            "updatedAt": started_at.isoformat().replace('+00:00', 'Z'),
+                            "totalItems": number_of_samples,
+                            "processedItems": 0,
+                            "parameters": json.dumps({
+                                "sampling_method": sampling_method,
+                                "sample_size": number_of_samples
+                            }),
+                            "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
+                            "estimatedRemainingSeconds": number_of_samples,
+                            "taskId": task.id
+                        }
+                        
+                        try:
+                            evaluation = DashboardEvaluation.create(
+                                client=client,
+                                **experiment_params
+                            )
+                            logging.info(f"Created dashboard Evaluation record with ID: {evaluation.id}")
+
+                            # Explicitly update to ensure task ID is set
+                            mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                                updateEvaluation(input: $input) {
+                                    id
+                                    taskId
+                                }
+                            }"""
+                            client.execute(mutation, {
+                                'input': {
+                                    'id': evaluation.id,
+                                    'taskId': task.id
+                                }
+                            })
+                            logging.info(f"Updated Evaluation record with taskId: {task.id}")
+                        except Exception as e:
+                            logging.error(f"Failed to create or update Evaluation record: {str(e)}", exc_info=True)
+                            raise
+
                     except Exception as e:
                         logging.error(f"Failed to create task: {str(e)}")
                         logging.error("Error details:", exc_info=True)
@@ -211,6 +256,26 @@ def accuracy(
 
                     scorecard_instance = scorecard_type(scorecard=scorecard_name)
                     logging.info(f"Using scorecard {scorecard_name} with class {scorecard_instance.__class__.__name__}")
+
+                    # Now that we have the scorecard instance, update the evaluation record with scorecard ID
+                    if hasattr(scorecard_instance, 'id'):
+                        try:
+                            mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                                updateEvaluation(input: $input) {
+                                    id
+                                    scorecardId
+                                }
+                            }"""
+                            client.execute(mutation, {
+                                'input': {
+                                    'id': evaluation.id,
+                                    'scorecardId': scorecard_instance.id
+                                }
+                            })
+                            logging.info(f"Updated Evaluation record with scorecardId: {scorecard_instance.id}")
+                        except Exception as e:
+                            logging.error(f"Failed to update Evaluation record with scorecardId: {str(e)}")
+                            # Continue execution even if update fails
 
                     # Check if any score in the scorecard uses the data-driven approach
                     uses_data_driven = any('data' in score_config for score_config in scorecard_instance.scores)
@@ -312,14 +377,17 @@ def accuracy(
                                 total=number_of_samples,
                                 status=f"Evaluating {single_score_name}..."
                             ) as progress:
-                                await experiment.run(progress_callback=lambda current: (
-                                    progress.update(
-                                        current=current,
-                                        total=number_of_samples,
-                                        status=f"Processed {current} of {number_of_samples} evaluations"
-                                    ),
-                                    tracker.update(current_items=current)
-                                ))
+                                await experiment.run(
+                                    tracker=tracker,
+                                    progress_callback=lambda current: (
+                                        progress.update(
+                                            current=current,
+                                            total=number_of_samples,
+                                            status=f"Processed {current} of {number_of_samples} evaluations"
+                                        ),
+                                        tracker.update(current_items=current)
+                                    )
+                                )
 
                         # Advance to Finalizing stage
                         tracker.advance_stage()
