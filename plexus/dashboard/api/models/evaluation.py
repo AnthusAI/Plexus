@@ -48,6 +48,7 @@ class Evaluation(BaseModel):
     isDatasetClassDistributionBalanced: Optional[bool] = None
     predictedClassDistribution: Optional[Dict] = None
     isPredictedClassDistributionBalanced: Optional[bool] = None
+    taskId: Optional[str] = None
 
     def __init__(
         self,
@@ -78,6 +79,7 @@ class Evaluation(BaseModel):
         isDatasetClassDistributionBalanced: Optional[bool] = None,
         predictedClassDistribution: Optional[Dict] = None,
         isPredictedClassDistributionBalanced: Optional[bool] = None,
+        taskId: Optional[str] = None,
     ):
         super().__init__(id, client)
         self.type = type
@@ -105,6 +107,7 @@ class Evaluation(BaseModel):
         self.isDatasetClassDistributionBalanced = isDatasetClassDistributionBalanced
         self.predictedClassDistribution = predictedClassDistribution
         self.isPredictedClassDistributionBalanced = isPredictedClassDistributionBalanced
+        self.taskId = taskId
 
     @classmethod
     def fields(cls) -> str:
@@ -136,6 +139,7 @@ class Evaluation(BaseModel):
             isDatasetClassDistributionBalanced
             predictedClassDistribution
             isPredictedClassDistributionBalanced
+            taskId
         """
 
     @classmethod
@@ -148,6 +152,7 @@ class Evaluation(BaseModel):
         status: str = 'PENDING',
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
+        taskId: Optional[str] = None,
         **kwargs
     ) -> 'Evaluation':
         """Create a new Evaluation."""
@@ -166,6 +171,8 @@ class Evaluation(BaseModel):
             input_data['scorecardId'] = scorecardId
         if scoreId:
             input_data['scoreId'] = scoreId
+        if taskId:
+            input_data['taskId'] = taskId
         
         mutation = """
         mutation CreateEvaluation($input: CreateEvaluationInput!) {
@@ -217,6 +224,7 @@ class Evaluation(BaseModel):
             isDatasetClassDistributionBalanced=data.get('isDatasetClassDistributionBalanced'),
             predictedClassDistribution=data.get('predictedClassDistribution'),
             isPredictedClassDistributionBalanced=data.get('isPredictedClassDistributionBalanced'),
+            taskId=data.get('taskId'),
             client=client
         )
 

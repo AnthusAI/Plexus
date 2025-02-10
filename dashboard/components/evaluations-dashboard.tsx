@@ -517,29 +517,35 @@ async function listEvaluations(accountId: string): ModelListResult<Schema['Evalu
               isDatasetClassDistributionBalanced
               predictedClassDistribution
               isPredictedClassDistributionBalanced
-              
+              taskId
               task {
                 id
                 type
-                command
                 status
+                target
+                command
+                description
+                dispatchStatus
+                metadata
+                createdAt
                 startedAt
                 completedAt
-                dispatchStatus
-                celeryTaskId
-                workerNodeId
+                estimatedCompletionAt
+                errorMessage
+                errorDetails
+                currentStageId
                 stages {
                   items {
                     id
                     name
+                    order
                     status
-                    processedItems
-                    totalItems
+                    statusMessage
                     startedAt
                     completedAt
                     estimatedCompletionAt
-                    statusMessage
-                    order
+                    processedItems
+                    totalItems
                   }
                 }
               }

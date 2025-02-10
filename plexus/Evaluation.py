@@ -49,10 +49,13 @@ from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvalua
 from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
 from plexus.dashboard.api.models.score import Score as DashboardScore
 from plexus.dashboard.api.models.score_result import ScoreResult
+from plexus.dashboard.api.models.task import Task
 
 from plexus.scores.LangGraphScore import LangGraphScore, BatchProcessingPause
 from plexus.utils.dict_utils import truncate_dict_strings_inner
 from plexus.CustomLogging import setup_logging, set_log_group
+
+from plexus.cli.task_progress_tracker import StageConfig, TaskProgressTracker
 
 # Set up logging for evaluations
 set_log_group('plexus/evaluation')
@@ -130,9 +133,14 @@ class Evaluation:
         visualize: bool = False,
         task_id: str = None,
     ):
-        # Initialize logger for this instance
+        # Immediately store task_id so that it is available for evaluation record creation
+        self.task_id = task_id
+        
+        # Set up logging for evaluations
         self.logger = logging.getLogger('plexus/evaluation')
-        self.logger.info("Initializing evaluation...")
+        self.logger.info("Starting Evaluation initialization...")
+
+        # Initialize basic parameters
         self.scorecard_name = scorecard_name
         self.scorecard = scorecard
         self.labeled_samples_filename = labeled_samples_filename
@@ -144,7 +152,7 @@ class Evaluation:
         self.score_id = score_id
         self.account_key = account_key  # Store the account key
         self.visualize = visualize
-        self.task_id = task_id
+        self.task_id = task_id  # Ensure task_id is stored
         
         # Parse lists, if available.
         self.session_ids_to_sample = session_ids_to_sample
@@ -162,132 +170,46 @@ class Evaluation:
         self.total_correct = 0
         self.total_questions = 0
 
-        # Initialize dashboard client and experiment ID
+        # Initialize dashboard client
         try:
             self.logger.info("Initializing Plexus Dashboard client...")
             self.dashboard_client = PlexusDashboardClient.for_account(account_key)
             
-            # Look up account using default key
             self.logger.info(f"Looking up account with key: {account_key}")
             account = Account.list_by_key(key=account_key, client=self.dashboard_client)
             if not account:
                 raise ValueError(f"No account found with key: {account_key}")
             self.logger.info(f"Found account: {account.name} ({account.id})")
             
-            # Store the account ID
             self.account_id = account.id
             
-            # Look up scorecard using available identifiers
             self.logger.info(f"Looking up scorecard with name: {self.scorecard.name}")
             if hasattr(self.scorecard, 'key'):
                 self.logger.info(f"Using scorecard key: {self.scorecard.key}")
-                scorecard = DashboardScorecard.get_by_key(self.scorecard.key, self.dashboard_client)
+                scorecard_obj = DashboardScorecard.get_by_key(self.scorecard.key, self.dashboard_client)
             elif hasattr(self.scorecard, 'id'):
                 self.logger.info(f"Using scorecard ID: {self.scorecard.id}")
-                scorecard = DashboardScorecard.get_by_id(self.scorecard.id, self.dashboard_client)
+                scorecard_obj = DashboardScorecard.get_by_id(self.scorecard.id, self.dashboard_client)
             else:
                 self.logger.info(f"Looking up scorecard by name: {self.scorecard.name}")
-                scorecard = DashboardScorecard.get_by_name(self.scorecard.name, self.dashboard_client)
-            self.logger.info(f"Found scorecard: {scorecard.name} ({scorecard.id})")
+                scorecard_obj = DashboardScorecard.get_by_name(self.scorecard.name, self.dashboard_client)
+            self.logger.info(f"Found scorecard: {scorecard_obj.name} ({scorecard_obj.id})")
             
-            # Store the scorecard ID
-            self.scorecard_id = scorecard.id
-
-            # Create initial experiment params
-            started_at = datetime.now(timezone.utc)
-            experiment_params = {
-                "type": "accuracy",
-                "accountId": account.id,
-                "scorecardId": scorecard.id,
-                "status": "RUNNING",
-                "accuracy": 0.0,
-                "createdAt": started_at.isoformat().replace('+00:00', 'Z'),
-                "updatedAt": started_at.isoformat().replace('+00:00', 'Z'),
-                "totalItems": self.number_of_texts_to_sample,
-                "processedItems": 0,
-                "parameters": json.dumps({
-                    "sampling_method": self.sampling_method,
-                    "sample_size": self.number_of_texts_to_sample
-                }),
-                "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
-                "estimatedRemainingSeconds": self.number_of_texts_to_sample
-            }
-
-            # Look up score ID if we have a subset of score names
-            if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
-                score_name = self.subset_of_score_names[0]
-                self.logger.info(f"Looking up score with name: {score_name}")
-                try:
-                    query = """
-                    query GetScoreFromScorecard($scorecardId: ID!, $name: String!) {
-                        getScorecard(id: $scorecardId) {
-                            sections {
-                                items {
-                                    scores(filter: {name: {eq: $name}}) {
-                                        items {
-                                            id
-                                            name
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    """
-                    variables = {
-                        "scorecardId": scorecard.id,
-                        "name": score_name
-                    }
-                    result = self.dashboard_client.execute(query, variables)
-                    self.logger.info(f"Raw API response: {result}")
-                    
-                    # Find the first score with matching name
-                    matching_score = None
-                    scorecard_data = result.get('getScorecard', {})
-                    self.logger.info(f"Scorecard data: {scorecard_data}")
-                    sections = scorecard_data.get('sections', {}).get('items', [])
-                    self.logger.info(f"Sections: {sections}")
-                    
-                    for section in sections:
-                        self.logger.info(f"Processing section: {section}")
-                        scores = section.get('scores', {}).get('items', [])
-                        self.logger.info(f"Found scores: {scores}")
-                        if scores:  # If we have any scores
-                            matching_score = scores[0]  # Take the first one since GraphQL already filtered
-                            logging.info(f"Found matching score: {matching_score}")
-                            break
-                    
-                    if matching_score:
-                        self.score_id = matching_score['id']
-                        logging.info(f"Found score: {matching_score['name']} ({self.score_id})")
-                        experiment_params["scoreId"] = self.score_id
-                        logging.info(f"Updated experiment_params with scoreId: {experiment_params}")
-                    else:
-                        logging.warning(f"Could not find score with name: {score_name} in scorecard: {scorecard.id}")
-                        self.score_id = None
-                except Exception as e:
-                    logging.error(f"Error looking up score: {e}")
-                    logging.error(f"Exception details: {type(e)}")
-                    self.score_id = None
-            else:
-                self.score_id = score_id
-                if self.score_id:
-                    experiment_params["scoreId"] = self.score_id
-
-            logging.info(f"Creating experiment with params: {experiment_params}")
-            
-            response = DashboardEvaluation.create(
-                client=self.dashboard_client,
-                **experiment_params
-            )
-            self.experiment_id = response.id
-            self.started_at = started_at
-            logging.info(f"Created dashboard experiment with ID: {self.experiment_id}")
+            self.scorecard_id = scorecard_obj.id
 
         except Exception as e:
-            logging.error(f"Failed to initialize dashboard client or create experiment: {str(e)}", exc_info=True)
+            self.logger.error(f"Failed to initialize dashboard client: {str(e)}", exc_info=True)
             self.dashboard_client = None
             self.experiment_id = None
+
+        # Continue with additional initialization
+        self.results_by_score = {}
+        self.processed_items_by_score = {}
+        self.all_results = []
+        self.processed_items = 0
+        self.mismatches = []
+        self.total_correct = 0
+        self.total_questions = 0
 
     def __enter__(self):
         self.start_mlflow_run()
@@ -331,6 +253,8 @@ class Evaluation:
         # Add notes about the run
         mlflow.set_tag("scorecard", self.scorecard.name)
         mlflow.set_tag("experiment_type", self.__class__.__name__)
+        if self.task_id:  # Add task_id as a tag if available
+            mlflow.set_tag("task_id", self.task_id)
 
         self.log_parameters()
     
@@ -474,6 +398,9 @@ class Evaluation:
                 "predictedClassDistribution": json.dumps(metrics["predicted_distribution"]),
                 "datasetClassDistribution": json.dumps(metrics["actual_distribution"])
             }
+
+            if self.task_id:  # Ensure taskId is included in all updates
+                update_params["taskId"] = self.task_id
             
             variables = {
                 "input": update_params
@@ -1032,7 +959,7 @@ class Evaluation:
 
         self.generate_metrics_json(report_folder_path, len(selected_sample_rows), expenses)
 
-    async def score_all_texts_for_score(self, selected_sample_rows, score_name: str):
+    async def score_all_texts_for_score(self, selected_sample_rows, score_name: str, tracker):
         """Score all texts for a specific score concurrently"""
         if score_name not in self.results_by_score:
             self.results_by_score[score_name] = []
@@ -1052,6 +979,38 @@ class Evaluation:
                     self.results_by_score[score_name].append(result)
                     self.processed_items_by_score[score_name] += 1
                     self.processed_items = sum(self.processed_items_by_score.values())
+
+                    # Update evaluation status
+                    update_data = {
+                        'status': 'RUNNING',
+                        'processedItems': self.processed_items,
+                        'elapsedSeconds': int((datetime.now(timezone.utc) - self.started_at).total_seconds())
+                    }
+
+                    # Update the evaluation record directly using the dashboard client
+                    if hasattr(self, 'dashboard_client') and hasattr(self, 'experiment_id'):
+                        mutation = """
+                        mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                            updateEvaluation(input: $input) {
+                                id
+                                processedItems
+                                status
+                                elapsedSeconds
+                            }
+                        }
+                        """
+                        variables = {
+                            'input': {
+                                'id': self.experiment_id,
+                                **update_data
+                            }
+                        }
+                        await asyncio.to_thread(self.dashboard_client.execute, mutation, variables)
+
+                    # Update task progress
+                    tracker.current_stage.status_message = f"Processing evaluations ({self.processed_items}/{total_rows})"
+                    tracker.update(current_items=self.processed_items)
+
                     # Start metrics task if needed
                     is_final_result = self.processed_items_by_score[score_name] == total_rows
                     await self.maybe_start_metrics_task(score_name, is_final_result)
@@ -1095,9 +1054,12 @@ class Evaluation:
                     # For final updates, use synchronous execution
                     if status == "COMPLETED":
                         try:
+                            update_variables = self._get_update_variables(metrics, status)
+                            if self.task_id:  # Ensure taskId is preserved in final update
+                                update_variables['input']['taskId'] = self.task_id
                             self.dashboard_client.execute(
                                 self._get_update_mutation(),
-                                self._get_update_variables(metrics, status)
+                                update_variables
                             )
                             last_processed_count = current_count
                         except Exception as e:
@@ -1126,9 +1088,12 @@ class Evaluation:
                     for score, results in self.results_by_score.items():
                         combined_results.extend(results)
                     metrics = self.calculate_metrics(combined_results)
+                    update_variables = self._get_update_variables(metrics, "COMPLETED")
+                    if self.task_id:  # Ensure taskId is preserved in final cleanup
+                        update_variables['input']['taskId'] = self.task_id
                     self.dashboard_client.execute(
                         self._get_update_mutation(),
-                        self._get_update_variables(metrics, "COMPLETED")
+                        update_variables
                     )
                 except Exception as e:
                     self.logger.error(f"Error during final metrics update: {e}")
@@ -1210,7 +1175,8 @@ class Evaluation:
             "processedItems": self.processed_items,
             "totalItems": total_predictions,
             "elapsedSeconds": elapsed_seconds,
-            "accuracy": metrics["accuracy"] * 100
+            "accuracy": metrics["accuracy"] * 100,
+            "taskId": self.task_id  # Always include taskId in all updates
         }
 
         # Only add optional fields if they have values
@@ -1762,47 +1728,6 @@ Total cost:       ${expenses['total_cost']:.6f}
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.__aexit__(exc_type, exc_val, exc_tb))
 
-    @time_execution
-    async def run(self):
-        """Now this is an async function that just runs _async_run directly"""
-        try:
-            return await self._async_run()
-        finally:
-            # Signal metrics tasks to stop gracefully
-            self.should_stop = True
-            
-            if self.metrics_tasks:
-                logging.info("Waiting for metrics tasks to complete...")
-                try:
-                    # Wait for all tasks to complete naturally
-                    done, pending = await asyncio.wait(
-                        self.metrics_tasks.values(),
-                        timeout=30.0,
-                        return_when=asyncio.ALL_COMPLETED
-                    )
-                    
-                    if pending:
-                        logging.warning(f"{len(pending)} metrics tasks still running after 30s wait")
-                        # Instead of canceling, wait a bit longer for final updates
-                        try:
-                            await asyncio.wait(pending, timeout=5.0)
-                        except Exception as e:
-                            logging.error(f"Error waiting for pending tasks: {e}")
-                    
-                    # Check for any exceptions in completed tasks
-                    for task in done:
-                        try:
-                            await task
-                        except asyncio.CancelledError:
-                            pass  # Ignore cancellation errors
-                        except Exception as e:
-                            logging.error(f"Error in metrics task: {e}")
-                            
-                except Exception as e:
-                    logging.error(f"Error during metrics task cleanup: {e}")
-                
-                logging.info("Metrics task cleanup completed")
-
 class ConsistencyEvaluation(Evaluation):
     def __init__(self, *, number_of_times_to_sample_each_text, **kwargs):
         super().__init__(**kwargs)
@@ -1813,183 +1738,120 @@ class ConsistencyEvaluation(Evaluation):
         mlflow.log_param("number_of_times_to_sample_each_text", self.number_of_times_to_sample_each_text)
 
 class AccuracyEvaluation(Evaluation):
-    def __init__(self, *, override_folder: str, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, visualize: bool = False, **kwargs):
+    def __init__(self, *, override_folder: str, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, visualize: bool = False, task_id: str = None, **kwargs):
         super().__init__(**kwargs)
-        self.scorecard_name = kwargs.get('scorecard_name')
         self.override_folder = override_folder
-        self.override_data = self.load_override_data() if self.override_folder else {}
         self.labeled_samples = labeled_samples
         self.labeled_samples_filename = labeled_samples_filename
         self.score_id = score_id
         self.visualize = visualize
+        self.task_id = task_id  # Store task ID
         self.results_queue = Queue()
-        self.metrics_tasks = {}  # Dictionary to track metrics computation tasks per score
+        self.metrics_tasks = {}  # Dictionary to track metrics tasks per score
         self.should_stop = False
         self.completed_scores = set()  # Track which scores have completed all their results
 
-    def load_override_data(self):
-        override_data = {}
-        if os.path.exists(self.override_folder):
-            logging.info(f"Loading overrides from folder: {self.override_folder}")
-            override_files = [f for f in os.listdir(self.override_folder) if f.endswith(".csv")]
-            logging.info(f"Found {len(override_files)} override files")
-            
-            for filename in override_files:
-                filepath = os.path.join(self.override_folder, filename)
-                try:
-                    df = pd.read_csv(filepath, keep_default_na=False)
-                    logging.info(f"Processing {len(df)} rows from {filename}")
-                    
-                    for _, row in df.iterrows():
-                        form_id = None
-                        if 'form_id' in row:
-                            form_id = row['form_id']
-                        elif 'f_id' in row:
-                            form_id = row['f_id']
-                            
-                        question_name = None
-                        if 'question_name' in row:
-                            question_name = row['question_name']
-                        elif 'question' in row:
-                            question_name = row['question']
-                            
-                        correct_value = None
-                        if 'correct_value' in row:
-                            correct_value = row['correct_value'].strip()
-                        elif 'Spot Check Answer' in row:
-                            correct_value = row['Spot Check Answer'].strip()
-                            
-                        if form_id and question_name and correct_value:
-                            if form_id not in override_data:
-                                override_data[form_id] = {}
-                            override_data[form_id][question_name] = correct_value
-                            
-                    logging.info(f"Loaded {len(override_data)} form overrides from {filename}")
-                except Exception as e:
-                    logging.error(f"Failed to read override file {filepath}: {e}")
-        else:
-            logging.info(f"No override folder found at {self.override_folder}")
-        return override_data
-
-    async def run(self, progress_callback=None):
-        """Run the evaluation with optional progress tracking."""
+    async def run(self, tracker, progress_callback=None):
+        """Modified run method to accept tracker argument"""
         self.progress_callback = progress_callback
-
-        # Create evaluation record with taskId if we have one
-        evaluation_data = {
-            'type': 'accuracy',
-            'accountId': 'call-criteria',  # TODO: Make configurable
-            'status': 'RUNNING',
-            'accuracy': 0.0,  # Initial accuracy
-            'totalItems': self.number_of_texts_to_sample,
-            'processedItems': 0,
-            'startedAt': datetime.now(timezone.utc).isoformat(),
-            'parameters': json.dumps({
-                'scorecard_name': self.scorecard_name,
-                'number_of_samples': self.number_of_texts_to_sample,
-                'sampling_method': self.sampling_method,
-                'experiment_label': self.experiment_label
-            })
+        
+        # Create the Evaluation record IMMEDIATELY after Task setup
+        self.started_at = datetime.now(timezone.utc)
+        experiment_params = {
+            "type": "accuracy",
+            "accountId": self.account_id,
+            "scorecardId": self.scorecard_id,
+            "status": "SETUP",
+            "accuracy": 0.0,
+            "createdAt": self.started_at.isoformat().replace('+00:00', 'Z'),
+            "updatedAt": self.started_at.isoformat().replace('+00:00', 'Z'),
+            "totalItems": self.number_of_texts_to_sample,
+            "processedItems": 0,
+            "parameters": json.dumps({
+                "sampling_method": self.sampling_method,
+                "sample_size": self.number_of_texts_to_sample
+            }),
+            "startedAt": self.started_at.isoformat().replace('+00:00', 'Z'),
+            "estimatedRemainingSeconds": self.number_of_texts_to_sample,
+            "taskId": tracker.task.id  # Get task ID directly from tracker
         }
         
-        if self.score_id:
-            evaluation_data['scoreId'] = self.score_id
-            
-        if self.task_id:  # Include taskId if we have one
-            evaluation_data['taskId'] = self.task_id
-
-        # Create the evaluation record
-        client = PlexusDashboardClient()
-        self.evaluation = DashboardEvaluation.create(client=client, **evaluation_data)
-        
         try:
-            # Run the evaluation
-            results = await self._run_evaluation()
-            
-            # Update evaluation with final results
-            update_data = {
-                'status': 'COMPLETED',
-                'accuracy': results.get('accuracy', 0.0),
-                'processedItems': self.number_of_texts_to_sample,
-                'metrics': results.get('metrics'),
-                'confusionMatrix': results.get('confusion_matrix'),
-                'completedAt': datetime.now(timezone.utc).isoformat()
-            }
-            
-            if self.task_id:  # Ensure taskId is preserved in updates
-                update_data['taskId'] = self.task_id
-                
-            self.evaluation.update(**update_data)
-            
-            return results
-            
+            response = DashboardEvaluation.create(
+                client=self.dashboard_client,
+                **experiment_params
+            )
+            self.experiment_id = response.id
+            self.logger.info(f"Created dashboard Evaluation record with ID: {self.experiment_id}")
+
+            # Explicitly update to ensure task ID is set
+            mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                updateEvaluation(input: $input) {
+                    id
+                    taskId
+                }
+            }"""
+            self.dashboard_client.execute(mutation, {
+                'input': {
+                    'id': self.experiment_id,
+                    'taskId': tracker.task.id
+                }
+            })
+            self.logger.info(f"Updated Evaluation record with taskId: {tracker.task.id}")
         except Exception as e:
-            # Update evaluation with error status
-            error_data = {
-                'status': 'FAILED',
-                'errorMessage': str(e),
-                'errorDetails': traceback.format_exc()
-            }
-            
-            if self.task_id:  # Ensure taskId is preserved in error updates
-                error_data['taskId'] = self.task_id
-                
-            self.evaluation.update(**error_data)
+            self.logger.error(f"Failed to create or update Evaluation record: {str(e)}", exc_info=True)
             raise
 
-    async def _run_evaluation(self):
-        """Internal method to run the evaluation."""
-        processed_items = 0
-        current_accuracy = 0.0
-        
-        # Get the labeled samples
-        if self.labeled_samples:
-            df = pd.DataFrame(self.labeled_samples)
-        else:
-            df = pd.read_csv(self.labeled_samples_filename)
-        
-        # Update number_of_texts_to_sample if dataframe is smaller
-        self.number_of_texts_to_sample = min(len(df), self.requested_sample_size)
-        logging.info(f"Adjusted sample size from {self.requested_sample_size} to {self.number_of_texts_to_sample} based on available data")
-
-        # Sample the rows based on sampling method
-        if self.sampling_method == 'random':
-            selected_sample_rows = df.sample(
-                n=self.number_of_texts_to_sample,
-                random_state=self.random_seed
-            )
-        else:
-            selected_sample_rows = df.head(self.number_of_texts_to_sample)
-
         try:
-            # Process all results concurrently for each score
+            return await self._run_evaluation(tracker)
+        finally:
+            self.should_stop = True
+
+    async def _run_evaluation(self, tracker):
+        try:
+            # Load the labeled samples
+            import pandas as pd
+            if self.labeled_samples:
+                df = pd.DataFrame(self.labeled_samples)
+            else:
+                df = pd.read_csv(self.labeled_samples_filename)
+
+            # Adjust the sample size if necessary
+            self.number_of_texts_to_sample = min(len(df), self.requested_sample_size)
+            self.logger.info(f"Adjusted sample size from {self.requested_sample_size} to {self.number_of_texts_to_sample} based on available data")
+
+            # Sample rows based on the sampling method
+            if self.sampling_method == 'random':
+                selected_sample_rows = df.sample(n=self.number_of_texts_to_sample, random_state=self.random_seed)
+            elif self.sampling_method == 'sequential':
+                selected_sample_rows = df.head(self.number_of_texts_to_sample)
+            else:
+                selected_sample_rows = df
+
+            # Update tracker stage
+            tracker.advance_stage()
+            tracker.current_stage.status_message = "Processing evaluations..."
+            tracker.update(current_items=0)
+
+            # Process all scores concurrently
             score_tasks = []
             for score_name in self.score_names():
-                task = asyncio.create_task(
-                    self.score_all_texts_for_score(selected_sample_rows, score_name)
-                )
+                task = asyncio.create_task(self.score_all_texts_for_score(selected_sample_rows, score_name, tracker))
                 score_tasks.append(task)
 
-            # Wait for all score evaluations to complete
             all_results = await asyncio.gather(*score_tasks)
-            
-            # Flatten results from all scores and filter out exceptions
-            self.all_results = [
-                result for score_results in all_results 
-                for result in score_results 
-                if not isinstance(result, Exception)
-            ]
+            self.all_results = [result for score_results in all_results for result in score_results if not isinstance(result, Exception)]
 
-            # Calculate metrics from results
+            # Calculate metrics from the results
             metrics = self.calculate_metrics(self.all_results)
-            
-            # Update progress one final time
-            if self.progress_callback:
+
+            if hasattr(self, 'progress_callback') and self.progress_callback:
                 self.progress_callback(self.number_of_texts_to_sample)
-            
+
             return metrics
-            
         except Exception as e:
-            logging.error(f"Error in evaluation: {str(e)}")
-            raise
+            self.logger.error(f"Error in _run_evaluation: {e}", exc_info=True)
+            raise e
+        finally:
+            pass
 
