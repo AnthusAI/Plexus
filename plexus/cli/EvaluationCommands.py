@@ -95,6 +95,7 @@ def accuracy(
         nonlocal task_id  # Make task_id accessible to modify in the async function
         experiment = None
         task = None
+        evaluation_record = None  # Track the evaluation record
         try:
             # Create or get Task record for progress tracking
             if task_id:
@@ -190,11 +191,12 @@ def accuracy(
                         }
                         
                         try:
-                            evaluation = DashboardEvaluation.create(
+                            logging.info("Creating initial Evaluation record...")
+                            evaluation_record = DashboardEvaluation.create(
                                 client=client,
                                 **experiment_params
                             )
-                            logging.info(f"Created dashboard Evaluation record with ID: {evaluation.id}")
+                            logging.info(f"Created initial Evaluation record with ID: {evaluation_record.id}")
 
                             # Explicitly update to ensure task ID is set
                             mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
@@ -205,11 +207,11 @@ def accuracy(
                             }"""
                             client.execute(mutation, {
                                 'input': {
-                                    'id': evaluation.id,
+                                    'id': evaluation_record.id,
                                     'taskId': task.id
                                 }
                             })
-                            logging.info(f"Updated Evaluation record with taskId: {task.id}")
+                            logging.info(f"Updated Evaluation record {evaluation_record.id} with taskId: {task.id}")
                         except Exception as e:
                             logging.error(f"Failed to create or update Evaluation record: {str(e)}", exc_info=True)
                             raise
@@ -257,25 +259,127 @@ def accuracy(
                     scorecard_instance = scorecard_type(scorecard=scorecard_name)
                     logging.info(f"Using scorecard {scorecard_name} with class {scorecard_instance.__class__.__name__}")
 
-                    # Now that we have the scorecard instance, update the evaluation record with scorecard ID
-                    if hasattr(scorecard_instance, 'id'):
-                        try:
+                    # Do a single early lookup of both scorecard and score
+                    try:
+                        # First get the scorecard using its key
+                        scorecard_key = scorecard_instance.properties.get('key')
+                        if not scorecard_key:
+                            raise ValueError(f"Scorecard {scorecard_name} does not have a key defined in its properties")
+                            
+                        logging.info(f"Looking up Scorecard record for key: {scorecard_key}")
+                        query = """
+                        query GetScorecardAndScore($key: String!) {
+                            listScorecards(filter: { key: { eq: $key } }) {
+                                items {
+                                    id
+                                    name
+                                    key
+                                    sections {
+                                        items {
+                                            id
+                                            scores {
+                                                items {
+                                                    id
+                                                    name
+                                                    externalId
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        """
+                        
+                        variables = {
+                            'key': scorecard_key
+                        }
+                        
+                        result = client.execute(query, variables)
+                        logging.info(f"GraphQL query variables: {variables}")
+                        
+                        if not result or 'listScorecards' not in result or not result['listScorecards']['items']:
+                            raise ValueError(f"Could not find Scorecard with key: {scorecard_key}")
+                        
+                        scorecard_record = result['listScorecards']['items'][0]
+                        logging.info(f"Found Scorecard record with ID: {scorecard_record['id']}")
+                        
+                        # If we have a score name, try to find its ID
+                        score_id = None
+                        if score_name:
+                            logging.info(f"Looking up score with name/key: {score_name}")
+                            # First try to find the score in the API by name or key
+                            for section in scorecard_record['sections']['items']:
+                                if section['scores']['items']:
+                                    for score in section['scores']['items']:
+                                        if score['name'] == score_name or score['key'] == score_name:
+                                            score_id = score['id']
+                                            logging.info(f"Found Score record with ID: {score_id} matching name/key")
+                                            break
+                                if score_id:
+                                    break
+                            
+                            if not score_id:
+                                logging.warning(f"Could not find score with name/key: {score_name} in API, trying local config")
+                                # Try to find score in local config by name first
+                                score_config = next((score for score in scorecard_instance.scores 
+                                                   if score['name'] == score_name), None)
+                                
+                                # If not found by name, try by key
+                                if not score_config:
+                                    logging.info(f"Score not found by name in config, trying key: {score_name}")
+                                    score_config = next((score for score in scorecard_instance.scores 
+                                                       if score.get('key') == score_name), None)
+                                
+                                if score_config:
+                                    logging.info(f"Found score config: {score_config}")
+                                    if 'id' in score_config:
+                                        external_id = score_config['id']
+                                        # Try to find score by external ID in API
+                                        for section in scorecard_record['sections']['items']:
+                                            if section['scores']['items']:
+                                                for score in section['scores']['items']:
+                                                    if str(score['externalId']) == str(external_id):
+                                                        score_id = score['id']
+                                                        logging.info(f"Found Score record with ID: {score_id} matching external ID: {external_id}")
+                                                        break
+                                            if score_id:
+                                                break
+                                        if not score_id:
+                                            logging.warning(f"Could not find score with external ID {external_id} in API")
+                                    else:
+                                        logging.warning(f"Score config found but missing 'id': {score_config}")
+                                else:
+                                    logging.warning(f"Could not find score by either name or key in config: {score_name}")
+                        
+                        # Update evaluation record with both IDs
+                        if evaluation_record:
+                            update_data = {
+                                'id': evaluation_record.id,
+                                'scorecardId': scorecard_record['id']
+                            }
+                            if score_id:
+                                update_data['scoreId'] = score_id
+                                logging.info(f"Including score ID {score_id} in evaluation update")
+                            else:
+                                logging.warning("No score ID found to include in evaluation update")
+                            
+                            logging.info(f"Updating Evaluation record {evaluation_record.id} with: {update_data}")
                             mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
                                 updateEvaluation(input: $input) {
                                     id
                                     scorecardId
+                                    scoreId
                                 }
                             }"""
-                            client.execute(mutation, {
-                                'input': {
-                                    'id': evaluation.id,
-                                    'scorecardId': scorecard_instance.id
-                                }
-                            })
-                            logging.info(f"Updated Evaluation record with scorecardId: {scorecard_instance.id}")
-                        except Exception as e:
-                            logging.error(f"Failed to update Evaluation record with scorecardId: {str(e)}")
-                            # Continue execution even if update fails
+                            result = client.execute(mutation, {'input': update_data})
+                            logging.info(f"Evaluation update result: {result}")
+                    except Exception as e:
+                        error_msg = f"Failed to look up Scorecard/Score records: {str(e)}"
+                        logging.error(error_msg)
+                        if task:
+                            task.fail_processing(error_msg)
+                        raise
 
                     # Check if any score in the scorecard uses the data-driven approach
                     uses_data_driven = any('data' in score_config for score_config in scorecard_instance.scores)
@@ -300,16 +404,74 @@ def accuracy(
                         single_score_labeled_samples = []
                         labeled_samples_filename = None
                         
+                        # Initialize score_id to None
+                        score_id = None
+                        
                         # Look up Score ID from the API
                         score_config = next((score for score in scorecard_instance.scores 
                                            if score['name'] == single_score_name), None)
                         
                         if score_config and 'id' in score_config:
-                            score_id = score_config['id']
-                            logging.info(f"Found Score ID {score_id} for {single_score_name}")
+                            external_id = score_config['id']
+                            logging.info(f"Found Score external ID {external_id} for {single_score_name}")
+                            
+                            # Look up the actual Score record using scorecard ID and external ID
+                            try:
+                                query = """
+                                query GetScoreByExternalId($scorecardId: ID!, $externalId: Int!) {
+                                    listScores(filter: {
+                                        and: {
+                                            externalId: { eq: $externalId },
+                                            section: {
+                                                scorecardId: { eq: $scorecardId }
+                                            }
+                                        }
+                                    }) {
+                                        items {
+                                            id
+                                            name
+                                            externalId
+                                        }
+                                    }
+                                }
+                                """
+                                score_result = client.execute(query, {
+                                    'scorecardId': scorecard_record.id,
+                                    'externalId': int(external_id)
+                                })
+                                
+                                if score_result and 'listScores' in score_result and score_result['listScores']['items']:
+                                    score = score_result['listScores']['items'][0]
+                                    score_id = score['id']
+                                    logging.info(f"Found Score record with ID {score_id} for external ID {external_id}")
+                                    
+                                    # Update evaluation record with score ID if we have one
+                                    if evaluation_record:
+                                        try:
+                                            logging.info(f"Updating Evaluation record {evaluation_record.id} with scoreId: {score_id}")
+                                            mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                                                updateEvaluation(input: $input) {
+                                                    id
+                                                    scoreId
+                                                }
+                                            }"""
+                                            client.execute(mutation, {
+                                                'input': {
+                                                    'id': evaluation_record.id,
+                                                    'scoreId': score_id
+                                                }
+                                            })
+                                            logging.info(f"Successfully updated Evaluation record with scoreId")
+                                        except Exception as e:
+                                            logging.error(f"Failed to update Evaluation record with scoreId: {str(e)}")
+                                            # Continue execution even if update fails
+                                else:
+                                    logging.error(f"Could not find Score record for scorecard ID {scorecard_record.id} and external ID {external_id}")
+                            except Exception as e:
+                                logging.error(f"Error looking up Score record: {str(e)}")
+                                # Continue execution even if lookup fails
                         else:
-                            logging.warning(f"Could not find Score ID for {single_score_name}")
-                            score_id = None
+                            logging.warning(f"No external ID found for score {single_score_name}")
 
                         if uses_data_driven:
                             if score_config:
@@ -352,7 +514,10 @@ def accuracy(
                             'experiment_label': experiment_label,
                             'score_id': score_id,
                             'visualize': visualize,
-                            'task_id': task_id  # Pass task_id to experiment
+                            'task_id': task_id,  # Pass task_id to experiment
+                            'evaluation_id': evaluation_record.id if evaluation_record else None,  # Pass the evaluation ID
+                            'account_id': account.id if account else None,  # Pass account ID
+                            'scorecard_id': scorecard_record['id'] if scorecard_record else None  # Pass scorecard ID
                         }
                         
                         if uses_data_driven:
@@ -861,14 +1026,31 @@ def update(
         
         # Update the evaluation
         logger.info("Updating evaluation...")
-        updated = evaluation.update(**update_data)
-        logger.info(f"Updated evaluation: {updated.id}")
+        try:
+            logger.info(f"Updating evaluation record {evaluation.id} with: {update_data}")
+            mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                updateEvaluation(input: $input) {
+                    id
+                    scorecardId
+                    scoreId
+                }
+            }"""
+            client.execute(mutation, {
+                'input': {
+                    'id': evaluation.id,
+                    **update_data
+                }
+            })
+            logger.info("Successfully updated evaluation record with scorecard ID")
+        except Exception as e:
+            logger.error(f"Failed to update evaluation record with IDs: {str(e)}")
+            # Continue execution even if update fails
         
         # Output results
-        click.echo(f"Updated evaluation: {updated.id}")
-        click.echo(f"Type: {updated.type}")
-        click.echo(f"Status: {updated.status}")
-        click.echo(f"Updated at: {updated.updatedAt}")
+        click.echo(f"Updated evaluation: {evaluation.id}")
+        click.echo(f"Type: {evaluation.type}")
+        click.echo(f"Status: {evaluation.status}")
+        click.echo(f"Updated at: {evaluation.updatedAt}")
         
     except Exception as e:
         logger.error(f"Error updating evaluation: {str(e)}")
