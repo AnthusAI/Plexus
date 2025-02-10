@@ -257,15 +257,46 @@ const EvaluationRow = React.memo(({
 }: EvaluationRowProps) => {
   const taskData = typeof evaluation.task === 'function' ? (evaluation.task() as any) : evaluation.task;
   
-  const stageConfigs = (taskData?.stages?.items || []).map((stage: TaskStage) => ({
-    ...stage,
-    key: stage.name,
-    label: stage.name,
-    status: mapStatus(stage.status),
-    color: mapStatus(stage.status) === 'PENDING' ? 'bg-neutral' : 
-           mapStatus(stage.status) === 'FAILED' ? 'bg-false' : 
-           'bg-secondary'
-  }));
+  const stageConfigs = useMemo(() => {
+    if (!taskData?.stages?.items) return [];
+    return taskData.stages.items.map((stage: any) => ({
+      key: stage.name,
+      label: stage.name,
+      color: stage.status === 'COMPLETED' ? 'bg-primary' :
+             stage.status === 'FAILED' ? 'bg-false' :
+             'bg-neutral',
+      name: stage.name,
+      order: stage.order,
+      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      statusMessage: stage.statusMessage,
+      completed: stage.status === 'COMPLETED',
+      startedAt: stage.startedAt,
+      completedAt: stage.completedAt,
+      estimatedCompletionAt: stage.estimatedCompletionAt
+    }));
+  }, [taskData?.stages?.items]);
+
+  const stages = useMemo(() => {
+    if (!taskData?.stages?.items) return [];
+    return taskData.stages.items.map((stage: any) => ({
+      key: stage.name,
+      label: stage.name,
+      color: stage.status === 'COMPLETED' ? 'bg-primary' :
+             stage.status === 'FAILED' ? 'bg-false' :
+             'bg-neutral',
+      name: stage.name,
+      order: stage.order,
+      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      statusMessage: stage.statusMessage,
+      startedAt: stage.startedAt,
+      completedAt: stage.completedAt,
+      estimatedCompletionAt: stage.estimatedCompletionAt
+    }));
+  }, [taskData?.stages?.items]);
 
   // Convert null to undefined for string fields with explicit null checks
   const estimatedCompletionAt = taskData?.stages?.items?.find((s: TaskStage) => s.estimatedCompletionAt)?.estimatedCompletionAt === null ? 
@@ -305,6 +336,7 @@ const EvaluationRow = React.memo(({
                 showStages={true}
                 status={mapStatus(taskData?.status || evaluation.status)}
                 stageConfigs={stageConfigs}
+                stages={stages}
                 processedItems={taskData ? undefined : Number(evaluation.processedItems || 0)}
                 totalItems={taskData ? undefined : Number(evaluation.totalItems || 0)}
                 startedAt={startedAt}
@@ -364,6 +396,7 @@ const EvaluationRow = React.memo(({
           showStages={true}
           status={mapStatus(taskData?.status || evaluation.status)}
           stageConfigs={stageConfigs}
+          stages={stages}
           processedItems={taskData ? undefined : Number(evaluation.processedItems || 0)}
           totalItems={taskData ? undefined : Number(evaluation.totalItems || 0)}
           startedAt={startedAt}
