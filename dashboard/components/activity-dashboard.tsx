@@ -229,7 +229,7 @@ export default function ActivityDashboard() {
     if (!task) return null
 
     return (
-      <div className="bg-card rounded-lg p-4 h-full overflow-auto">
+      <div className="h-full overflow-auto">
         <Task
           variant="detail"
           task={task}
@@ -283,7 +283,6 @@ export default function ActivityDashboard() {
             {displayedTasks.map((task) => (
               <div 
                 key={task.id} 
-                className="bg-card rounded-lg p-3 cursor-pointer hover:bg-accent/50 transition-colors"
                 onClick={() => {
                   setSelectedTask(task.id)
                   if (isNarrowViewport) {
@@ -311,7 +310,7 @@ export default function ActivityDashboard() {
 
         {selectedTask && !isNarrowViewport && !isFullWidth && (
           <div
-            className="w-2 relative cursor-col-resize flex-shrink-0 group"
+            className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
             onMouseDown={handleDragStart}
           >
             <div className="absolute inset-0 rounded-full transition-colors duration-150 

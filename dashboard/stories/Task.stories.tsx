@@ -316,10 +316,13 @@ export const NoProgress: Story = {
   },
 }
 
-export const Detail = {
+export const Detail: Story = {
   args: {
     variant: 'detail',
-    task: Starting.args.task,
+    task: createTask('1', {
+      type: 'Starting',
+      description: 'Task is starting...'
+    }),
     isFullWidth: false,
     onToggleFullWidth: () => console.log('Toggle full width'),
     onClose: () => console.log('Close'),
@@ -327,12 +330,12 @@ export const Detail = {
     renderContent: TaskStoryContent,
   },
   decorators: [
-    (Story) => (
+    (StoryFn) => (
       <div className="w-[600px]">
-        <Story />
+        <StoryFn />
       </div>
-    ),
-  ],
+    )
+  ]
 }
 
 export const DetailFullWidth = {

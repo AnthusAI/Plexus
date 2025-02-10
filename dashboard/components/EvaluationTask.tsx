@@ -479,8 +479,8 @@ const DetailContent = React.memo(({
         }}
       >
         {showMainPanel && (
-          <div className="w-full h-full overflow-y-auto pr-2">
-            <div className="mb-4">
+          <div className="w-full h-full overflow-y-auto">
+            <div className="mb-3">
               <TaskStatus
                 variant="detail"
                 status={mapStatus(data.task?.status || data.status)}
@@ -498,7 +498,7 @@ const DetailContent = React.memo(({
               />
             </div>
 
-            <div className="mb-4">
+            <div className="mb-3">
               <ClassDistributionVisualizer
                 data={data.datasetClassDistribution}
                 isBalanced={data.isDatasetClassDistributionBalanced}
@@ -506,14 +506,14 @@ const DetailContent = React.memo(({
               />
             </div>
 
-            <div className="mb-4">
+            <div className="mb-3">
               <PredictedClassDistributionVisualizer
                 data={data.predictedClassDistribution}
                 onLabelSelect={handlePredictedLabelSelect}
               />
             </div>
 
-            <div className="mb-2">
+            <div className="mb-3">
               <MetricsGaugesExplanation
                 explanation={data.metricsExplanation}
                 goal={data.scoreGoal}
@@ -528,7 +528,7 @@ const DetailContent = React.memo(({
             {data.confusionMatrix?.matrix && 
              data.confusionMatrix.matrix.length > 0 && 
              data.confusionMatrix.labels && (
-              <div className="mt-4">
+              <div className="mt-3">
                 <ConfusionMatrix 
                   data={{
                     matrix: data.confusionMatrix.matrix,
@@ -540,7 +540,7 @@ const DetailContent = React.memo(({
             )}
 
             {!showAsColumns && data.scoreResults && data.scoreResults.length > 0 && (
-              <div className="mt-4">
+              <div className="mt-3">
                 <EvaluationTaskScoreResults 
                   results={parsedScoreResults} 
                   accuracy={data.accuracy ?? 0}
