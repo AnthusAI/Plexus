@@ -1750,6 +1750,7 @@ class AccuracyEvaluation(Evaluation):
         self.metrics_tasks = {}  # Dictionary to track metrics tasks per score
         self.should_stop = False
         self.completed_scores = set()  # Track which scores have completed all their results
+        self.override_data = {}  # Initialize empty override data dictionary
 
     async def run(self, tracker, progress_callback=None):
         """Modified run method to accept tracker argument"""
