@@ -104,7 +104,7 @@ export function TaskStatus({
   startedAt,
   estimatedCompletionAt,
   status,
-  stageConfigs,
+  stageConfigs = [],
   errorLabel = 'Failed',
   dispatchStatus,
   celeryTaskId,
@@ -178,34 +178,67 @@ export function TaskStatus({
 
   // Update the progress calculation logic
   const { processedItems: effectiveProcessedItems, totalItems: effectiveTotalItems } = (function getProgressFromStages() {
-    // If task is completed, use the last stage's progress
-    if (status === 'COMPLETED') {
-      const lastStage = stages
-        .sort((a, b) => (b.order || 0) - (a.order || 0))
-        .find(s => s.processedItems !== undefined && s.totalItems !== undefined);
-      if (lastStage) {
-        return {
-          processedItems: lastStage.processedItems,
-          totalItems: lastStage.totalItems
-        };
-      }
-    }
+    console.log('getProgressFromStages - Input stages:', stages.map(s => ({
+      name: s.name,
+      order: s.order,
+      processedItems: s.processedItems,
+      totalItems: s.totalItems,
+      status: s.status
+    })));
 
-    // For in-progress tasks, use current stage or fall back to overall progress
+    // Find the stage with highest order that has progress info
     if (stages?.length > 0) {
-      const currentStage = stages.find(s => s.name === currentStageName);
-      if (currentStage?.processedItems !== undefined && currentStage?.totalItems !== undefined) {
-        return {
-          processedItems: currentStage.processedItems,
-          totalItems: currentStage.totalItems
+      // First, sort by order descending
+      const sortedStages = [...stages].sort((a, b) => (b.order || 0) - (a.order || 0));
+      console.log('getProgressFromStages - Sorted stages:', sortedStages.map(s => ({
+        name: s.name,
+        order: s.order,
+        processedItems: s.processedItems,
+        totalItems: s.totalItems,
+        status: s.status
+      })));
+      
+      // Then find the first stage with valid numeric progress info
+      const stageWithProgress = sortedStages.find(stage => {
+        const proc = Number(stage.processedItems);
+        const tot = Number(stage.totalItems);
+        console.log('getProgressFromStages - Checking stage:', {
+          name: stage.name,
+          order: stage.order,
+          processedItems: stage.processedItems,
+          totalItems: stage.totalItems,
+          convertedProcessedItems: proc,
+          convertedTotalItems: tot,
+          isValid: !isNaN(proc) && !isNaN(tot) && tot > 0
+        });
+        return !isNaN(proc) && !isNaN(tot) && tot > 0;
+      });
+
+      console.log('getProgressFromStages - Found stage with progress:', stageWithProgress ? {
+        name: stageWithProgress.name,
+        order: stageWithProgress.order,
+        processedItems: stageWithProgress.processedItems,
+        totalItems: stageWithProgress.totalItems,
+        status: stageWithProgress.status
+      } : 'none');
+
+      if (stageWithProgress) {
+        const proc = Number(stageWithProgress.processedItems);
+        const tot = Number(stageWithProgress.totalItems);
+        const result = {
+          processedItems: status === 'COMPLETED' ? tot : proc,
+          totalItems: tot
         };
+        console.log('getProgressFromStages - Returning progress:', result);
+        return result;
       }
     }
-
-    // Fall back to overall progress
+    
+    // If no stages have progress info, return zeros
+    console.log('getProgressFromStages - No valid progress info found, returning zeros');
     return {
-      processedItems: processedItems || 0,
-      totalItems: totalItems || 0
+      processedItems: 0,
+      totalItems: 0
     };
   })();
 

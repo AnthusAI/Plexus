@@ -199,17 +199,17 @@ const GridContent = React.memo(({ data }: { data: EvaluationTaskData }) => {
     : undefined;
 
   const taskData = data.task;
-  const stageConfigs = (taskData?.stages?.items || [])
-    .sort((a, b) => (a.order || 0) - (b.order || 0))
-    .map(stage => ({
+  const stageConfigs = useMemo(() => {
+    if (!taskData?.stages?.items) return [];
+    return taskData.stages.items.map((stage: any) => ({
       key: stage.name,
-      label: stage.label || stage.name,
-      color: stage.status === 'COMPLETED' ? 'bg-primary' : 
-             stage.status === 'FAILED' ? 'bg-false' : 
+      label: stage.name,
+      color: stage.status === 'COMPLETED' ? 'bg-primary' :
+             stage.status === 'FAILED' ? 'bg-false' :
              'bg-neutral',
       name: stage.name,
-      order: stage.order || 0,
-      status: stage.status,
+      order: stage.order,
+      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
       processedItems: stage.processedItems,
       totalItems: stage.totalItems,
       statusMessage: stage.statusMessage,
@@ -218,6 +218,27 @@ const GridContent = React.memo(({ data }: { data: EvaluationTaskData }) => {
       completedAt: stage.completedAt,
       estimatedCompletionAt: stage.estimatedCompletionAt
     }));
+  }, [taskData?.stages?.items]);
+
+  const stages = useMemo(() => {
+    if (!taskData?.stages?.items) return [];
+    return taskData.stages.items.map((stage: any) => ({
+      key: stage.name,
+      label: stage.name,
+      color: stage.status === 'COMPLETED' ? 'bg-primary' :
+             stage.status === 'FAILED' ? 'bg-false' :
+             'bg-neutral',
+      name: stage.name,
+      order: stage.order,
+      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      statusMessage: stage.statusMessage,
+      startedAt: stage.startedAt,
+      completedAt: stage.completedAt,
+      estimatedCompletionAt: stage.estimatedCompletionAt
+    }));
+  }, [taskData?.stages?.items]);
 
   console.log('GridContent - Mapped stage configs:', {
     stageConfigsCount: stageConfigs.length,
@@ -235,6 +256,7 @@ const GridContent = React.memo(({ data }: { data: EvaluationTaskData }) => {
         estimatedCompletionAt={estimatedCompletionAt}
         errorMessage={data.errorMessage}
         stageConfigs={stageConfigs}
+        stages={stages}
       />
     </div>
   );
@@ -394,17 +416,17 @@ const DetailContent = React.memo(({
     return data.scoreResults?.map(parseScoreResult) ?? []
   }, [data.scoreResults])
 
-  const stageConfigs = (data.task?.stages?.items || [])
-    .sort((a, b) => (a.order || 0) - (b.order || 0))
-    .map(stage => ({
+  const stageConfigs = useMemo(() => {
+    if (!data.task?.stages?.items) return [];
+    return data.task.stages.items.map((stage: any) => ({
       key: stage.name,
-      label: stage.label || stage.name,
-      color: stage.status === 'COMPLETED' ? 'bg-primary' : 
-             stage.status === 'FAILED' ? 'bg-false' : 
+      label: stage.name,
+      color: stage.status === 'COMPLETED' ? 'bg-primary' :
+             stage.status === 'FAILED' ? 'bg-false' :
              'bg-neutral',
       name: stage.name,
-      order: stage.order || 0,
-      status: stage.status,
+      order: stage.order,
+      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
       processedItems: stage.processedItems,
       totalItems: stage.totalItems,
       statusMessage: stage.statusMessage,
@@ -413,6 +435,27 @@ const DetailContent = React.memo(({
       completedAt: stage.completedAt,
       estimatedCompletionAt: stage.estimatedCompletionAt
     }));
+  }, [data.task?.stages?.items]);
+
+  const stages = useMemo(() => {
+    if (!data.task?.stages?.items) return [];
+    return data.task.stages.items.map((stage: any) => ({
+      key: stage.name,
+      label: stage.name,
+      color: stage.status === 'COMPLETED' ? 'bg-primary' :
+             stage.status === 'FAILED' ? 'bg-false' :
+             'bg-neutral',
+      name: stage.name,
+      order: stage.order,
+      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      statusMessage: stage.statusMessage,
+      startedAt: stage.startedAt,
+      completedAt: stage.completedAt,
+      estimatedCompletionAt: stage.estimatedCompletionAt
+    }));
+  }, [data.task?.stages?.items]);
 
   console.log('DetailContent - Mapped stage configs:', {
     stageConfigsCount: stageConfigs.length,
@@ -451,6 +494,7 @@ const DetailContent = React.memo(({
                 }
                 errorMessage={data.errorMessage}
                 stageConfigs={stageConfigs}
+                stages={stages}
               />
             </div>
 
