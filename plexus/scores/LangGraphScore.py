@@ -888,7 +888,16 @@ class LangGraphScore(Score, LangChainUser):
                 "checkpoint_id": checkpoint_id
             }
         }
+        # Use the passed-in results if available, otherwise start with empty dict
         initial_results = {}
+        if model_input.results:
+            for result in model_input.results:
+                # First try to get the direct access value
+                if result['name'] in result:
+                    initial_results[result['name']] = result[result['name']]
+                # Fallback to nested result value if direct access not available
+                else:
+                    initial_results[result['name']] = result['result']['value']
 
         initial_state = self.combined_state_class(
             text=self.preprocess_text(model_input.text),
