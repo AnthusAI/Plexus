@@ -114,6 +114,8 @@ const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['type'] =
     isPredictedClassDistributionBalanced: rawEvaluation.isPredictedClassDistributionBalanced || null,
     metricsExplanation: rawEvaluation.metricsExplanation || null,
     accuracy: typeof rawEvaluation.accuracy === 'number' ? rawEvaluation.accuracy : null,
+    taskId: rawEvaluation.taskId || null,
+    task: rawEvaluation.task || null,
     items: async (options?: any) => ({ data: [], nextToken: null }),
     scoreResults: async (options?: any) => ({ data: [], nextToken: null }),
     scoringJobs: async (options?: any) => ({ data: [], nextToken: null }),
@@ -438,6 +440,38 @@ async function listEvaluations(accountId: string): ModelListResult<Schema['Evalu
               isDatasetClassDistributionBalanced
               predictedClassDistribution
               isPredictedClassDistributionBalanced
+              taskId
+              task {
+                id
+                type
+                status
+                target
+                command
+                description
+                dispatchStatus
+                metadata
+                createdAt
+                startedAt
+                completedAt
+                estimatedCompletionAt
+                errorMessage
+                errorDetails
+                currentStageId
+                stages {
+                  items {
+                    id
+                    name
+                    order
+                    status
+                    statusMessage
+                    startedAt
+                    completedAt
+                    estimatedCompletionAt
+                    processedItems
+                    totalItems
+                  }
+                }
+              }
             }
             nextToken
           }
