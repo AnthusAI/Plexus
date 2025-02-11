@@ -161,15 +161,6 @@ class Evaluation:
         self.experiment_label = experiment_label
         self.max_mismatches_to_report = max_mismatches_to_report
 
-        # Results tracking - separate results by score
-        self.results_by_score = {}  # Dictionary to store results for each score
-        self.processed_items_by_score = {}  # Track processed items per score
-        self.all_results = []  # Keep this for backwards compatibility
-        self.processed_items = 0
-        self.mismatches = []
-        self.total_correct = 0
-        self.total_questions = 0
-
         # Initialize dashboard client
         try:
             self.logger.info("Initializing Plexus Dashboard client...")
@@ -183,29 +174,41 @@ class Evaluation:
             
             self.account_id = account.id
             
-            self.logger.info(f"Looking up scorecard with name: {self.scorecard.name}")
-            if hasattr(self.scorecard, 'key'):
-                self.logger.info(f"Using scorecard key: {self.scorecard.key}")
-                scorecard_obj = DashboardScorecard.get_by_key(self.scorecard.key, self.dashboard_client)
-            elif hasattr(self.scorecard, 'id'):
-                self.logger.info(f"Using scorecard ID: {self.scorecard.id}")
-                scorecard_obj = DashboardScorecard.get_by_id(self.scorecard.id, self.dashboard_client)
-            else:
-                self.logger.info(f"Looking up scorecard by name: {self.scorecard.name}")
-                scorecard_obj = DashboardScorecard.get_by_name(self.scorecard.name, self.dashboard_client)
-            self.logger.info(f"Found scorecard: {scorecard_obj.name} ({scorecard_obj.id})")
+            # Initialize scorecard_id as None
+            self.scorecard_id = None
             
-            self.scorecard_id = scorecard_obj.id
+            self.logger.info(f"Looking up scorecard with name: {self.scorecard.name}")
+            try:
+                if hasattr(self.scorecard, 'key'):
+                    self.logger.info(f"Using scorecard key: {self.scorecard.key}")
+                    scorecard_obj = DashboardScorecard.get_by_key(self.scorecard.key, self.dashboard_client)
+                elif hasattr(self.scorecard, 'id'):
+                    self.logger.info(f"Using scorecard ID: {self.scorecard.id}")
+                    scorecard_obj = DashboardScorecard.get_by_id(self.scorecard.id, self.dashboard_client)
+                else:
+                    self.logger.info(f"Looking up scorecard by name: {self.scorecard.name}")
+                    scorecard_obj = DashboardScorecard.get_by_name(self.scorecard.name, self.dashboard_client)
+                
+                if scorecard_obj:
+                    self.logger.info(f"Found scorecard: {scorecard_obj.name} ({scorecard_obj.id})")
+                    self.scorecard_id = scorecard_obj.id
+                else:
+                    self.logger.error("Failed to find scorecard")
+                    raise ValueError(f"Could not find scorecard with name: {self.scorecard.name}")
+            except Exception as e:
+                self.logger.error(f"Error looking up scorecard: {str(e)}")
+                raise
 
         except Exception as e:
             self.logger.error(f"Failed to initialize dashboard client: {str(e)}", exc_info=True)
             self.dashboard_client = None
             self.experiment_id = None
+            self.scorecard_id = None
 
-        # Continue with additional initialization
-        self.results_by_score = {}
-        self.processed_items_by_score = {}
-        self.all_results = []
+        # Results tracking - separate results by score
+        self.results_by_score = {}  # Dictionary to store results for each score
+        self.processed_items_by_score = {}  # Track processed items per score
+        self.all_results = []  # Keep this for backwards compatibility
         self.processed_items = 0
         self.mismatches = []
         self.total_correct = 0
@@ -1597,30 +1600,57 @@ Total cost:       ${expenses['total_cost']:.6f}
             logging.info(f"content_id: {content_id}")
             logging.info(f"result dict: {truncate_dict_strings_inner(result)}")
 
-            # Create ScoreResult in a non-blocking way
-            data = {
-                'evaluationId': self.experiment_id,
-                'itemId': result['form_id'],  # Using form_id as the itemId
-                'accountId': self.account_id,
-                'scorecardId': self.scorecard_id,
-                'value': str(score_result.value),
-                'metadata': json.dumps({
-                    'item_id': result['form_id'],
-                    'results': {
-                        score_result.parameters.name: {
-                            'value': str(score_result.value),
-                            'confidence': None,
-                            'explanation': score_result.metadata.get('explanation'),
-                            'metadata': {
-                                'human_label': score_result.metadata.get('human_label'),
-                                'correct': score_result.metadata.get('correct'),
-                                'human_explanation': score_result.metadata.get('human_explanation'),
-                                'text': score_result.metadata.get('text')
-                            }
+            # Validate required attributes are available
+            if not hasattr(self, 'experiment_id') or not self.experiment_id:
+                raise ValueError("experiment_id is not set")
+            if not hasattr(self, 'account_id') or not self.account_id:
+                raise ValueError("account_id is not set")
+            if not hasattr(self, 'scorecard_id') or not self.scorecard_id:
+                raise ValueError("scorecard_id is not set")
+
+            # Ensure we have a valid string value
+            value = str(score_result.value) if score_result.value is not None else "N/A"
+            
+            # Ensure we have valid metadata
+            metadata_dict = {
+                'item_id': result.get('form_id', ''),
+                'results': {
+                    score_result.parameters.name: {
+                        'value': value,
+                        'confidence': None,
+                        'explanation': score_result.metadata.get('explanation', ''),
+                        'metadata': {
+                            'human_label': score_result.metadata.get('human_label', ''),
+                            'correct': score_result.metadata.get('correct', False),
+                            'human_explanation': score_result.metadata.get('human_explanation', ''),
+                            'text': score_result.metadata.get('text', '')
                         }
                     }
-                })
+                }
             }
+            
+            # Create data dictionary with all required fields
+            data = {
+                'evaluationId': self.experiment_id,
+                'itemId': str(result.get('form_id', '')),  # Ensure itemId is a string
+                'accountId': self.account_id,
+                'scorecardId': self.scorecard_id,
+                'value': value,
+                'metadata': json.dumps(metadata_dict)  # Ensure metadata is a JSON string
+            }
+
+            # Log the data being sent
+            self.logger.info("Preparing to create score result with data:")
+            for key, value in data.items():
+                self.logger.info(f"{key}: {value}")
+
+            # Validate all required fields are present and not None
+            required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'value', 'metadata']
+            missing_fields = [field for field in required_fields if not data.get(field)]
+            if missing_fields:
+                self.logger.error(f"Missing required fields: {', '.join(missing_fields)}")
+                self.logger.error(f"Current data: {data}")
+                raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
 
             mutation = """
             mutation CreateScoreResult($input: CreateScoreResultInput!) {
@@ -1644,12 +1674,8 @@ Total cost:       ${expenses['total_cost']:.6f}
             logging.info("Sending GraphQL mutation:")
             logging.info(f"Mutation: {mutation}")
             logging.info("Variables:")
-            logging.info(f"evaluationId: {data['evaluationId']}")
-            logging.info(f"itemId: {data['itemId']}")
-            logging.info(f"accountId: {data['accountId']}")
-            logging.info(f"scorecardId: {data['scorecardId']}")
-            logging.info(f"value: {data['value']}")
-            logging.info(f"metadata: {data['metadata']}")
+            for key, value in data.items():
+                logging.info(f"{key}: {value}")
             
             # Execute the API call in a non-blocking way
             response = await asyncio.to_thread(self.dashboard_client.execute, mutation, variables)
@@ -1738,7 +1764,9 @@ class ConsistencyEvaluation(Evaluation):
         mlflow.log_param("number_of_times_to_sample_each_text", self.number_of_times_to_sample_each_text)
 
 class AccuracyEvaluation(Evaluation):
-    def __init__(self, *, override_folder: str, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, visualize: bool = False, task_id: str = None, **kwargs):
+    def __init__(self, *, override_folder: str, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, scorecard_id: str = None, **kwargs):
+        # Store scorecard_id before calling super().__init__
+        self.scorecard_id = scorecard_id
         super().__init__(**kwargs)
         self.override_folder = override_folder
         self.labeled_samples = labeled_samples
@@ -1746,63 +1774,61 @@ class AccuracyEvaluation(Evaluation):
         self.score_id = score_id
         self.visualize = visualize
         self.task_id = task_id  # Store task ID
+        self.evaluation_id = evaluation_id  # Store evaluation ID
+        self.account_id = account_id  # Store account ID
+        # Don't overwrite scorecard_id here since it's already set
         self.results_queue = Queue()
         self.metrics_tasks = {}  # Dictionary to track metrics tasks per score
         self.should_stop = False
         self.completed_scores = set()  # Track which scores have completed all their results
         self.override_data = {}  # Initialize empty override data dictionary
+        self.logger = logging.getLogger('plexus/evaluation')  # Add dedicated logger
 
     async def run(self, tracker, progress_callback=None):
         """Modified run method to accept tracker argument"""
         self.progress_callback = progress_callback
         
-        # Create the Evaluation record IMMEDIATELY after Task setup
-        self.started_at = datetime.now(timezone.utc)
-        experiment_params = {
-            "type": "accuracy",
-            "accountId": self.account_id,
-            "scorecardId": self.scorecard_id,
-            "status": "SETUP",
-            "accuracy": 0.0,
-            "createdAt": self.started_at.isoformat().replace('+00:00', 'Z'),
-            "updatedAt": self.started_at.isoformat().replace('+00:00', 'Z'),
-            "totalItems": self.number_of_texts_to_sample,
-            "processedItems": 0,
-            "parameters": json.dumps({
-                "sampling_method": self.sampling_method,
-                "sample_size": self.number_of_texts_to_sample
-            }),
-            "startedAt": self.started_at.isoformat().replace('+00:00', 'Z'),
-            "estimatedRemainingSeconds": self.number_of_texts_to_sample,
-            "taskId": tracker.task.id  # Get task ID directly from tracker
-        }
+        # Store the evaluation ID from the parent process
+        self.experiment_id = self.evaluation_id
         
-        try:
-            response = DashboardEvaluation.create(
-                client=self.dashboard_client,
-                **experiment_params
-            )
-            self.experiment_id = response.id
-            self.logger.info(f"Created dashboard Evaluation record with ID: {self.experiment_id}")
-
-            # Explicitly update to ensure task ID is set
-            mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                updateEvaluation(input: $input) {
-                    id
-                    taskId
-                }
-            }"""
-            self.dashboard_client.execute(mutation, {
-                'input': {
-                    'id': self.experiment_id,
-                    'taskId': tracker.task.id
-                }
-            })
-            self.logger.info(f"Updated Evaluation record with taskId: {tracker.task.id}")
-        except Exception as e:
-            self.logger.error(f"Failed to create or update Evaluation record: {str(e)}", exc_info=True)
-            raise
-
+        if not self.experiment_id:
+            self.logger.error("No evaluation_id provided to AccuracyEvaluation")
+            raise ValueError("No evaluation_id provided to AccuracyEvaluation")
+        
+        # Initialize started_at for elapsed time calculations
+        self.started_at = datetime.now(timezone.utc)
+        
+        self.logger.info(f"Using existing evaluation record with ID: {self.experiment_id}")
+        
+        # Update the evaluation record with scorecard and score IDs
+        if self.dashboard_client:
+            update_data = {}
+            if self.scorecard_id:
+                update_data['scorecardId'] = self.scorecard_id
+            if self.score_id:
+                update_data['scoreId'] = self.score_id
+            
+            if update_data:
+                try:
+                    self.logger.info(f"Updating evaluation record {self.experiment_id} with: {update_data}")
+                    mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                        updateEvaluation(input: $input) {
+                            id
+                            scorecardId
+                            scoreId
+                        }
+                    }"""
+                    self.dashboard_client.execute(mutation, {
+                        'input': {
+                            'id': self.experiment_id,
+                            **update_data
+                        }
+                    })
+                    self.logger.info("Successfully updated evaluation record with scorecard and score IDs")
+                except Exception as e:
+                    self.logger.error(f"Failed to update evaluation record with IDs: {str(e)}")
+                    # Continue execution even if update fails
+        
         try:
             return await self._run_evaluation(tracker)
         finally:

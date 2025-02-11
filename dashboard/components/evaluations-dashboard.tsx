@@ -45,6 +45,7 @@ import { Observable } from 'rxjs';
 import { client, getClient } from "@/utils/amplify-client"  // Import both client and getClient
 import { GraphQLResult } from '@aws-amplify/api';
 import { TaskStatus } from '@/components/ui/task-status';
+import { TaskDispatchButton, evaluationsConfig } from '@/components/task-dispatch'
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -2289,7 +2290,7 @@ export default function EvaluationsDashboard(): JSX.Element {
           style={!isNarrowViewport && selectedEvaluation && !isFullWidth ? {
             width: `${leftPanelWidth}%`
           } : undefined}>
-            <div className="mb-4 flex-shrink-0">
+            <div className="mb-4 flex-shrink-0 flex justify-between items-start">
               <ScorecardContext 
                 selectedScorecard={selectedScorecard}
                 setSelectedScorecard={setSelectedScorecard}
@@ -2297,6 +2298,7 @@ export default function EvaluationsDashboard(): JSX.Element {
                 setSelectedScore={setSelectedScore}
                 availableFields={[]}
               />
+              <TaskDispatchButton config={evaluationsConfig} />
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto @container">
               {EvaluationList}
