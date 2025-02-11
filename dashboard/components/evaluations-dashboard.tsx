@@ -160,12 +160,10 @@ const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['type'] =
         fullEvaluation: rawEvaluation
       });
       
-      // If we have the score data already, use it
       if (rawEvaluation.score?.data) {
         return { data: rawEvaluation.score.data }
       }
       
-      // If we have a scoreId, fetch the score
       if (rawEvaluation.scoreId) {
         const { data: score } = await getFromModel<Schema['Score']['type']>(
           client.models.Score,
@@ -175,6 +173,19 @@ const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['type'] =
         return { data: score }
       }
       
+      return { data: null }
+    },
+    task: async () => {
+      if (rawEvaluation.task?.data) {
+        return { data: rawEvaluation.task.data }
+      }
+      if (rawEvaluation.taskId) {
+        const { data: task } = await getFromModel<Schema['Task']['type']>(
+          client.models.Task,
+          rawEvaluation.taskId
+        )
+        return { data: task }
+      }
       return { data: null }
     }
   };

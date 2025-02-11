@@ -82,7 +82,8 @@ const schema = a.schema({
         .secondaryIndexes((idx: (field: ScorecardIndexFields) => any) => [
             idx("accountId"),
             idx("key"),
-            idx("externalId")
+            idx("externalId"),
+            idx("name")
         ]),
 
     ScorecardSection: a
@@ -104,7 +105,7 @@ const schema = a.schema({
     Score: a
         .model({
             name: a.string().required(),
-            key: a.string().required(),
+            key: a.string(),
             description: a.string(),
             order: a.integer().required(),
             type: a.string().required(),
@@ -128,7 +129,8 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: ScoreIndexFields) => any) => [
             idx("sectionId"),
-            idx("externalId")
+            idx("externalId"),
+            idx("key"),
         ]),
 
     Evaluation: a
@@ -165,6 +167,8 @@ const schema = a.schema({
             isDatasetClassDistributionBalanced: a.boolean(),
             predictedClassDistribution: a.json(),
             isPredictedClassDistributionBalanced: a.boolean(),
+            taskId: a.string(),
+            task: a.belongsTo('Task', 'taskId')
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -336,7 +340,8 @@ const schema = a.schema({
             currentStage: a.belongsTo('TaskStage', 'currentStageId'),
             celeryTaskId: a.string(),
             workerNodeId: a.string(),
-            updatedAt: a.datetime()
+            updatedAt: a.datetime(),
+            evaluation: a.hasOne('Evaluation', 'taskId')
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),

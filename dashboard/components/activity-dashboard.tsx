@@ -12,6 +12,8 @@ import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import { Activity } from 'lucide-react'
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
+import ScorecardContext from "@/components/ScorecardContext"
+import { TaskDispatchButton } from "@/components/task-dispatch-button"
 
 // Import the types from data-operations
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
@@ -27,26 +29,42 @@ function transformTaskToActivity(task: ProcessedTask) {
   // Transform stages if present
   const stages = (task.stages || [])
     .sort((a: ProcessedTask['stages'][0], b: ProcessedTask['stages'][0]) => a.order - b.order)
-    .map((stage: ProcessedTask['stages'][0]): TaskStageConfig => ({
-      key: stage.name,
-      label: stage.name,
-      color: stage.name.toLowerCase() === 'processing' ? 'bg-secondary' : 'bg-primary',
-      name: stage.name,
-      order: stage.order,
-      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-      processedItems: stage.processedItems ?? undefined,
-      totalItems: stage.totalItems ?? undefined,
-      startedAt: stage.startedAt ?? undefined,
-      completedAt: stage.completedAt ?? undefined,
-      estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
-      statusMessage: stage.statusMessage ?? undefined
-    }))
+    .map((stage: ProcessedTask['stages'][0]): TaskStageConfig => {
+      // When a task fails, preserve the original status of incomplete stages
+      // Only stages that actually completed should show as completed
+      const status = stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+
+      // Only include startedAt if the stage actually started (status is RUNNING, COMPLETED, or FAILED)
+      const startedAt = (status === 'RUNNING' || status === 'COMPLETED' || status === 'FAILED') 
+        ? stage.startedAt ?? undefined 
+        : undefined
+
+      return {
+        key: stage.name,
+        label: stage.name,
+        color: stage.name.toLowerCase() === 'processing' ? 'bg-secondary' : 'bg-primary',
+        name: stage.name,
+        order: stage.order,
+        status,
+        processedItems: stage.processedItems ?? undefined,
+        totalItems: stage.totalItems ?? undefined,
+        startedAt,
+        completedAt: stage.completedAt ?? undefined,
+        estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+        statusMessage: stage.statusMessage ?? undefined
+      }
+    })
 
   // Get current stage info - highest order non-completed stage, or last stage if all completed
   const currentStage = stages.length > 0 ? 
     stages.reduce((current: TaskStageConfig | null, stage: TaskStageConfig) => {
       // If we haven't found a stage yet, use this one
       if (!current) return stage
+      
+      // For completed tasks, use the last stage
+      if (task.status === 'COMPLETED') {
+        return stage.order > (current.order || 0) ? stage : current
+      }
       
       // If this stage is RUNNING, it should be the current stage
       if (stage.status === 'RUNNING') return stage
@@ -64,40 +82,44 @@ function transformTaskToActivity(task: ProcessedTask) {
       if (current.status === 'PENDING') return current
       
       // If all stages are completed, use the last one
-      if (stage.status === 'COMPLETED' && stage === stages[stages.length - 1] && 
-          stages.every((s: TaskStageConfig) => s.order < stage.order ? s.status === 'COMPLETED' : true)) {
-        return stage
-      }
-      
-      return current
+      return stage.order > (current.order || 0) ? stage : current
     }, null) : null
 
   // Ensure we have a valid timestamp for the time field
   const timeStr = task.createdAt || new Date().toISOString()
 
-  return {
+  // Get the appropriate status message - keep both messages and let TaskStatus handle display logic
+  const statusMessage = currentStage?.statusMessage ?? undefined
+
+  const result = {
     id: task.id,
-    type: metadata.type || task.type,
-    scorecard: metadata.scorecard,
-    score: metadata.score,
+    type: String(metadata.type || task.type),
+    scorecard: (metadata.scorecard?.toString() || '') as string,
+    score: (metadata.score?.toString() || '') as string,
     time: timeStr,
-    command: task.command,
-    stages,
-    currentStageName: currentStage?.name,
-    processedItems: currentStage?.processedItems ?? 0,
-    totalItems: currentStage?.totalItems ?? 0,
-    startedAt: currentStage?.startedAt ?? undefined,
-    estimatedCompletionAt: currentStage?.estimatedCompletionAt ?? undefined,
-    completedAt: currentStage?.completedAt ?? undefined,
-    status: task.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-    stageConfigs: stages,
-    statusMessage: currentStage?.statusMessage ?? undefined,
+    description: task.command,
     data: {
       id: task.id,
       title: metadata.type || task.type,
       command: task.command
-    }
+    },
+    stages,
+    stageConfigs: stages,
+    currentStageName: currentStage?.name,
+    processedItems: currentStage?.processedItems ?? 0,
+    totalItems: currentStage?.totalItems ?? 0,
+    startedAt: task.startedAt ?? undefined,
+    estimatedCompletionAt: task.estimatedCompletionAt ?? undefined,
+    completedAt: task.completedAt ?? undefined,
+    status: task.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+    statusMessage: statusMessage,
+    errorMessage: task.status === 'FAILED' && task.errorMessage ? task.errorMessage : undefined,
+    dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? ('DISPATCHED' as const) : undefined,
+    celeryTaskId: task.celeryTaskId,
+    workerNodeId: task.workerNodeId
   }
+
+  return result
 }
 
 export default function ActivityDashboard() {
@@ -111,6 +133,8 @@ export default function ActivityDashboard() {
   const [selectedTask, setSelectedTask] = useState<string | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(50)
+  const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
+  const [selectedScore, setSelectedScore] = useState<string | null>(null)
   const isNarrowViewport = useMediaQuery("(max-width: 768px)")
   const { ref, inView } = useInView({
     threshold: 0,
@@ -126,13 +150,44 @@ export default function ActivityDashboard() {
 
   useEffect(() => {
     const transformed = recentTasks.map(transformTaskToActivity)
-    setDisplayedTasks(transformed)
-  }, [recentTasks])
+    // Sort tasks: use createdAt for in-progress tasks, updatedAt for completed ones
+    const sorted = [...transformed].sort((a, b) => {
+      // For completed/failed tasks, sort by updatedAt
+      if ((a.status === 'COMPLETED' || a.status === 'FAILED') && 
+          (b.status === 'COMPLETED' || b.status === 'FAILED')) {
+        return new Date(b.time).getTime() - new Date(a.time).getTime()
+      }
+      // For in-progress tasks or mixing in-progress with completed, sort by createdAt
+      return new Date(b.time).getTime() - new Date(a.time).getTime()
+    })
+    const filtered = sorted.filter(task => {
+      if (!selectedScorecard && !selectedScore) return true;
+      if (selectedScorecard && task.scorecard !== selectedScorecard) return false;
+      if (selectedScore && task.score !== selectedScore) return false;
+      return true;
+    })
+    setDisplayedTasks(filtered)
+  }, [recentTasks, selectedScorecard, selectedScore])
 
   useEffect(() => {
     const subscription = observeRecentTasks(12).subscribe({
       next: ({ items, isSynced }) => {
-        setRecentTasks(items)
+        // Sort items before setting state
+        const sortedItems = [...items].sort((a, b) => {
+          const aTime = a.status === 'COMPLETED' || a.status === 'FAILED' 
+            ? (a.updatedAt || a.createdAt)
+            : a.createdAt
+          const bTime = b.status === 'COMPLETED' || b.status === 'FAILED'
+            ? (b.updatedAt || b.createdAt)
+            : b.createdAt
+
+          // Default to current time if timestamps are undefined
+          const aDate = aTime ? new Date(aTime) : new Date()
+          const bDate = bTime ? new Date(bTime) : new Date()
+          
+          return bDate.getTime() - aDate.getTime()
+        })
+        setRecentTasks(sortedItems)
         if (isSynced) {
           setIsInitialLoading(false)
         }
@@ -203,7 +258,16 @@ export default function ActivityDashboard() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full p-1.5">
+      <div className="mb-3 flex justify-between items-start">
+        <ScorecardContext 
+          selectedScorecard={selectedScorecard}
+          setSelectedScorecard={setSelectedScorecard}
+          selectedScore={selectedScore}
+          setSelectedScore={setSelectedScore}
+        />
+        <TaskDispatchButton />
+      </div>
       <div className="flex h-full">
         <div 
           className={`
@@ -215,11 +279,11 @@ export default function ActivityDashboard() {
             width: `${leftPanelWidth}%`
           } : undefined}
         >
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {displayedTasks.map((task) => (
               <div 
                 key={task.id} 
-                className="bg-card rounded-lg p-4 cursor-pointer hover:bg-accent/50 transition-colors"
+                className="bg-card rounded-lg p-3 cursor-pointer hover:bg-accent/50 transition-colors"
                 onClick={() => {
                   setSelectedTask(task.id)
                   if (isNarrowViewport) {

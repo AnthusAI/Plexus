@@ -888,7 +888,13 @@ class LangGraphScore(Score, LangChainUser):
                 "checkpoint_id": checkpoint_id
             }
         }
+        # Use the passed-in results if available, otherwise start with empty dict
         initial_results = {}
+        if model_input.results:
+            for result in model_input.results:
+                if not isinstance(result, Score.Result):
+                    raise TypeError(f"Expected Score.Result object but got {type(result)}")
+                initial_results[result.parameters.name] = result.value
 
         initial_state = self.combined_state_class(
             text=self.preprocess_text(model_input.text),

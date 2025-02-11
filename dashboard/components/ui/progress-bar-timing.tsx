@@ -17,26 +17,22 @@ export function ProgressBarTiming({
   isFocused = false,
   className
 }: ProgressBarTimingProps) {
-  if (!elapsedTime && !estimatedTimeRemaining) return null
-
   return (
     <div className={cn("flex justify-between text-sm text-foreground h-5", className)}>
-      {elapsedTime && (
-        <div className="flex items-center gap-1">
-          {isInProgress ? (
-            <Loader2 
-              data-testid="loader-icon"
-              className="w-4 h-4 text-foreground animate-spin shrink-0" 
-            />
-          ) : (
-            <CircleCheck 
-              data-testid="check-icon"
-              className="w-4 h-4 text-foreground shrink-0" 
-            />
-          )}
-          <span>Elapsed: {elapsedTime}</span>
-        </div>
-      )}
+      <div className="flex items-center gap-1">
+        {isInProgress ? (
+          <Loader2 
+            data-testid="loader-icon"
+            className="w-4 h-4 text-foreground animate-spin shrink-0" 
+          />
+        ) : (
+          <CircleCheck 
+            data-testid="check-icon"
+            className="w-4 h-4 text-foreground shrink-0" 
+          />
+        )}
+        <span>Elapsed: {elapsedTime || '0s'}</span>
+      </div>
       {estimatedTimeRemaining && (
         <div className="flex items-center gap-1">
           {isInProgress ? (

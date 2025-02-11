@@ -35,15 +35,16 @@ export default function EnterprisePage() {
   return (
     <Layout>
       <StandardSection
-        headline={
-          <span>
-            <span className="text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text">Enterprise-Grade</span> AI Infrastructure
-          </span>
-        }
+        headline="Enterprise-Grade AI Infrastructure"
         headlinePosition="inline"
         variant="hero"
         layout="single"
         fullWidth
+        useWordReveal={true}
+        gradientWords={{
+          "Enterprise-Grade": { from: "primary", to: "accent" },
+          "AI": { from: "primary", to: "accent" }
+        }}
       >
         <div className="max-w-3xl mx-auto">
           <div className="space-y-8">

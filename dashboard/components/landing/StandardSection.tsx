@@ -1,4 +1,5 @@
 import React from 'react'
+import WordReveal from '@/components/ui/word-reveal'
 
 export interface SectionProps {
   headline: React.ReactNode;
@@ -11,6 +12,13 @@ export interface SectionProps {
   fullWidth?: boolean;
   children?: React.ReactNode;
   containerClassName?: string;
+  useWordReveal?: boolean;
+  gradientWords?: {
+    [key: string]: {
+      from: string;
+      to: string;
+    };
+  };
 }
 
 const Section: React.FC<SectionProps> = ({
@@ -23,7 +31,9 @@ const Section: React.FC<SectionProps> = ({
   rightColumnAlign = 'top',
   fullWidth,
   children,
-  containerClassName
+  containerClassName,
+  useWordReveal = false,
+  gradientWords = {}
 }) => {
   const isFramed = variant === 'framed';
   const isHero = variant === 'hero';
@@ -32,6 +42,13 @@ const Section: React.FC<SectionProps> = ({
   const headlineClasses = isHero
     ? 'text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tighter mb-8'
     : 'text-3xl md:text-4xl font-bold mb-6';
+
+  const renderHeadline = () => {
+    if (useWordReveal && typeof headline === 'string') {
+      return <WordReveal text={headline} className={headlineClasses} gradientWords={gradientWords} />;
+    }
+    return <h2 className={headlineClasses}>{headline}</h2>;
+  };
 
   return (
     <section 
@@ -42,16 +59,16 @@ const Section: React.FC<SectionProps> = ({
         <div className={`py-4`}>
           <div className="bg-background rounded-xl py-12 md:py-16 px-4 md:px-8">
             {headlinePosition === 'top' && (
-              <h2 className={`${headlineClasses} text-center`}>
-                {headline}
-              </h2>
+              <div className="text-center">
+                {renderHeadline()}
+              </div>
             )}
             {fullWidth || layout === 'single' ? (
               <>
                 {headlinePosition === 'inline' && (
-                  <h2 className={`${headlineClasses} text-center`}>
-                    {headline}
-                  </h2>
+                  <div className="text-center">
+                    {renderHeadline()}
+                  </div>
                 )}
                 {children}
               </>
@@ -60,9 +77,7 @@ const Section: React.FC<SectionProps> = ({
                 <div className={`flex-1 min-w-0 xl:w-[calc(50%-3rem)] flex ${rightColumnAlign === 'middle' ? 'items-center' : 'items-start'}`}>
                   <div className="w-full">
                     {headlinePosition === 'inline' && (
-                      <h2 className={`${headlineClasses} w-full`}>
-                        {headline}
-                      </h2>
+                      renderHeadline()
                     )}
                     <div className="flex flex-col md:flex-row xl:flex-col gap-8">
                       <div className="w-full md:w-1/2 xl:w-full">
