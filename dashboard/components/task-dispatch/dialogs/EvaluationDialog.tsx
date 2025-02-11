@@ -46,8 +46,8 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch }: TaskDi
   })
 
   const handleDispatch = () => {
-    // Extract evaluation type from action name
-    const evaluationType = action.name.toLowerCase() as EvaluationType
+    // Extract evaluation type from action name by removing "Evaluate " prefix and converting to lowercase
+    const evaluationType = action.name.replace(/^Evaluate\s+/, '').toLowerCase() as EvaluationType
     const generator = commands.evaluation[evaluationType]
     
     if (!generator || generator.type !== 'complex') {
@@ -71,7 +71,10 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch }: TaskDi
           />
         </div>
         <DialogHeader>
-          <DialogTitle>{action.name} Evaluation</DialogTitle>
+          <div className="flex items-center gap-2">
+            {action.icon}
+            <DialogTitle>{action.name}</DialogTitle>
+          </div>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-4 items-center gap-4">

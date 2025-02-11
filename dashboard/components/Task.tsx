@@ -62,7 +62,10 @@ const formatTaskTime = (dateString: string | null | undefined) => {
     if (isNaN(date.getTime())) {
       return '';
     }
-    return formatDistanceToNow(date, { addSuffix: true });
+    return formatDistanceToNow(date, { 
+      addSuffix: true,
+      includeSeconds: true
+    }).replace('about ', '');
   } catch (e) {
     console.warn('Invalid task time format:', dateString);
     return '';
@@ -174,36 +177,36 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
           <div className="text-lg font-bold">{task.type}</div>
           <div className="text-xs text-muted-foreground h-4">{task.scorecard || '\u00A0'}</div>
           <div className="text-xs text-muted-foreground h-4">{task.score || '\u00A0'}</div>
-          {variant !== 'grid' && (
-            <div className="text-xs text-muted-foreground mt-1">{formattedTime}</div>
-          )}
         </div>
         <div className="flex flex-col items-end">
           {variant === 'grid' ? (
             <>
               {children}
-              <div className="text-xs text-muted-foreground mt-1">{formattedTime}</div>
+              <div className="text-xs text-muted-foreground mt-1" style={{ textAlign: 'right' }}>{formattedTime}</div>
             </>
           ) : (
-            <div className="flex gap-2">
-              {controlButtons}
-              {onToggleFullWidth && (
-                <CardButton
-                  icon={isFullWidth ? RectangleVertical : Square}
-                  onClick={onToggleFullWidth}
-                  disabled={isLoading}
-                  aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
-                />
-              )}
-              {onClose && (
-                <CardButton
-                  icon={X}
-                  onClick={onClose}
-                  disabled={isLoading}
-                  aria-label="Close"
-                />
-              )}
-            </div>
+            <>
+              <div className="flex gap-2">
+                {controlButtons}
+                {onToggleFullWidth && (
+                  <CardButton
+                    icon={isFullWidth ? RectangleVertical : Square}
+                    onClick={onToggleFullWidth}
+                    disabled={isLoading}
+                    aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
+                  />
+                )}
+                {onClose && (
+                  <CardButton
+                    icon={X}
+                    onClick={onClose}
+                    disabled={isLoading}
+                    aria-label="Close"
+                  />
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1" style={{ textAlign: 'right' }}>{formattedTime}</div>
+            </>
           )}
         </div>
       </div>

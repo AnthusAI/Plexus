@@ -7,6 +7,7 @@ import '@aws-amplify/ui-react/styles.css';
 import { Amplify } from "aws-amplify";
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { Toaster } from "sonner";
 
 // Only configure Amplify if we're not in a CI environment
 if (process.env.NODE_ENV !== 'test') {
@@ -114,6 +115,7 @@ export default function ClientLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <Toaster richColors position="top-right" />
           <AuthWrapper>{children}</AuthWrapper>
         </ThemeProvider>
       </SidebarProvider>

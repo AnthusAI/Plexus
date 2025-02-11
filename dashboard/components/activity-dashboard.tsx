@@ -9,7 +9,7 @@ import { Schema } from '@/amplify/data/resource'
 import { listRecentTasks, observeRecentTasks, updateTask } from '@/utils/data-operations'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { Task, TaskHeader, TaskContent } from '@/components/Task'
-import { Activity, Square, X, MoreHorizontal, RefreshCw } from 'lucide-react'
+import { Activity, Square, X, MoreHorizontal, RefreshCw, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import ScorecardContext from "@/components/ScorecardContext"
@@ -17,17 +17,50 @@ import { TaskDispatchButton, activityConfig } from "@/components/task-dispatch"
 import { CardButton } from "@/components/CardButton"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { toast } from 'sonner'
+import EvaluationTask from '@/components/EvaluationTask'
 
 // Import the types from data-operations
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
+
+// Helper to get evaluation icon based on type
+function getEvaluationIcon(type: string) {
+  switch (type.toLowerCase()) {
+    case 'accuracy':
+      return <FlaskConical className="h-6 w-6" />
+    case 'consistency':
+      return <FlaskRound className="h-6 w-6" />
+    case 'alignment':
+      return <TestTubes className="h-6 w-6" />
+    default:
+      return <FlaskConical className="h-6 w-6" />
+  }
+}
+
+// Shared header rendering function
+function renderTaskHeader(task: ReturnType<typeof transformTaskToActivity>) {
+  return (props: any) => (
+    <TaskHeader {...props}>
+      <div className="w-full">
+        <div className="flex justify-end">
+          <Activity className="h-6 w-6" />
+        </div>
+      </div>
+    </TaskHeader>
+  )
+}
 
 function transformTaskToActivity(task: ProcessedTask) {
   if (!task || !task.id) {
     throw new Error('Invalid task: task or task.id is null')
   }
 
-  // Parse metadata for task info
-  const metadata = task.metadata ? JSON.parse(task.metadata) : {}
+  // Parse metadata for task info - ensure we have a default empty object
+  let metadata = {}
+  try {
+    metadata = task.metadata ? JSON.parse(task.metadata) : {}
+  } catch (e) {
+    console.warn('Failed to parse task metadata:', e)
+  }
 
   // Transform stages if present
   const stages = (task.stages || [])
@@ -84,7 +117,7 @@ function transformTaskToActivity(task: ProcessedTask) {
       if (stage.status === 'PENDING') return stage
       if (current.status === 'PENDING') return current
       
-      // If all stages are completed, use the last one
+      // For completed tasks, use the last stage
       return stage.order > (current.order || 0) ? stage : current
     }, null) : null
 
@@ -96,15 +129,41 @@ function transformTaskToActivity(task: ProcessedTask) {
 
   const result = {
     id: task.id,
-    type: String(metadata.type || task.type),
-    scorecard: (metadata.scorecard?.toString() || '') as string,
-    score: (metadata.score?.toString() || '') as string,
+    type: String((metadata as any)?.type || task.type),
+    scorecard: ((metadata as any)?.scorecard?.toString() || '') as string,
+    score: ((metadata as any)?.score?.toString() || '') as string,
     time: timeStr,
     description: task.command,
     data: {
       id: task.id,
-      title: metadata.type || task.type,
-      command: task.command
+      title: (metadata as any)?.type || task.type,
+      command: task.command,
+      accuracy: (metadata as any)?.accuracy ?? null,
+      metrics: (metadata as any)?.metrics ?? [],
+      processedItems: currentStage?.processedItems ?? 0,
+      totalItems: currentStage?.totalItems ?? 0,
+      progress: currentStage?.processedItems && currentStage.totalItems ? 
+        (currentStage.processedItems / currentStage.totalItems) * 100 : 0,
+      inferences: (metadata as any)?.inferences ?? 0,
+      cost: (metadata as any)?.cost ?? null,
+      status: task.status,
+      elapsedSeconds: (metadata as any)?.elapsedSeconds ?? null,
+      estimatedRemainingSeconds: (metadata as any)?.estimatedRemainingSeconds ?? null,
+      startedAt: task.startedAt ?? undefined,
+      errorMessage: task.errorMessage,
+      errorDetails: (metadata as any)?.errorDetails ?? null,
+      task: {
+        id: task.id,
+        type: task.type,
+        command: task.command,
+        status: task.status,
+        startedAt: task.startedAt,
+        completedAt: task.completedAt,
+        dispatchStatus: task.dispatchStatus,
+        celeryTaskId: task.celeryTaskId,
+        workerNodeId: task.workerNodeId,
+        stages: { items: task.stages }
+      }
     },
     stages,
     stageConfigs: stages,
@@ -236,9 +295,48 @@ export default function ActivityDashboard() {
     const handleAnnounceAgain = async () => {
       console.log('Announcing task again:', task.id)
       try {
+        // First update the main task record - reset all timing and error fields
+        console.log('Resetting task:', task.id, 'Current status:', task.status)
         const updatedTask = await updateTask(task.id, {
-          dispatchStatus: 'PENDING'
-        })
+          dispatchStatus: 'PENDING',
+          workerNodeId: null,
+          startedAt: null,
+          estimatedCompletionAt: null,
+          completedAt: null,
+          currentStageId: null, // Reset current stage
+          status: 'PENDING', // Reset task status
+          errorMessage: null, // Reset error fields
+          errorDetails: null,
+          stdout: null, // Reset output fields
+          stderr: null,
+          celeryTaskId: null // Reset task tracking fields
+        }, 'Task')
+        console.log('Task update result:', updatedTask)
+
+        // Then update each stage separately - reset all timing, progress, and error fields
+        if (task.stages) {
+          for (const stage of task.stages) {
+            console.log('Resetting stage:', stage.name, 'Current status:', stage.status)
+            const updatedStage = await updateTask(`${task.id}#${stage.name}`, {
+              status: 'PENDING',
+              startedAt: null,
+              estimatedCompletionAt: null,
+              completedAt: null,
+              processedItems: 0,
+              totalItems: stage.totalItems || null, // Preserve total items if it exists
+              statusMessage: "Not started",
+              errorMessage: null, // Reset error fields if they exist
+              errorDetails: null,
+              metadata: null, // Reset any stage-specific metadata
+              progress: null, // Reset any progress tracking
+              elapsedTime: null, // Reset timing information
+              estimatedTimeRemaining: null,
+              lastUpdateTime: null
+            }, 'TaskStage')
+            console.log('Stage update result:', updatedStage)
+          }
+        }
+
         if (updatedTask) {
           toast.success('Task re-announced successfully')
         } else {
@@ -255,7 +353,7 @@ export default function ActivityDashboard() {
         <DropdownMenuTrigger>
           <CardButton
             icon={MoreHorizontal}
-            onClick={handleAnnounceAgain}
+            onClick={() => {}}
             aria-label="More options"
           />
         </DropdownMenuTrigger>
@@ -268,24 +366,36 @@ export default function ActivityDashboard() {
       </DropdownMenu>
     )
 
-    return (
-      <div className="h-full overflow-auto">
-        <Task
+    if (task.type.toLowerCase().includes('evaluation')) {
+      return (
+        <EvaluationTask
           variant="detail"
           task={task}
+          controlButtons={controlButtons}
           isFullWidth={isFullWidth}
           onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
           onClose={() => {
             setSelectedTask(null)
             setIsFullWidth(false)
           }}
-          controlButtons={controlButtons}
-          renderHeader={(props) => (
-            <TaskHeader {...props} />
-          )}
-          renderContent={(props) => <TaskContent {...props} />}
         />
-      </div>
+      )
+    }
+
+    return (
+      <Task
+        variant="detail"
+        task={task}
+        controlButtons={controlButtons}
+        isFullWidth={isFullWidth}
+        onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+        onClose={() => {
+          setSelectedTask(null)
+          setIsFullWidth(false)
+        }}
+        renderHeader={renderTaskHeader(task)}
+        renderContent={(props) => <TaskContent {...props} />}
+      />
     )
   }
 
@@ -327,18 +437,25 @@ export default function ActivityDashboard() {
                   }
                 }}
               >
-                <Task
-                  variant="grid"
-                  task={task}
-                  renderHeader={(props) => (
-                    <TaskHeader {...props}>
-                      <div className="flex justify-end w-full">
-                        <Activity className="h-6 w-6" />
-                      </div>
-                    </TaskHeader>
-                  )}
-                  renderContent={(props) => <TaskContent {...props} />}
-                />
+                {task.type.toLowerCase().includes('evaluation') ? (
+                  <EvaluationTask
+                    variant="grid"
+                    task={task}
+                    onClick={() => {
+                      setSelectedTask(task.id)
+                      if (isNarrowViewport) {
+                        setIsFullWidth(true)
+                      }
+                    }}
+                  />
+                ) : (
+                  <Task
+                    variant="grid"
+                    task={task}
+                    renderHeader={renderTaskHeader(task)}
+                    renderContent={(props) => <TaskContent {...props} />}
+                  />
+                )}
               </div>
             ))}
             <div ref={ref} />

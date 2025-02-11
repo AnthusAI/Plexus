@@ -29,9 +29,11 @@ export function TaskDispatchButton({ config }: { config: TaskDispatchConfig }) {
     try {
       if (!selectedAction) return
 
+      const type = selectedAction.name === 'Accuracy' ? 'Accuracy Evaluation' : selectedAction.name.toLowerCase()
+
       const task = await createTask(
         command,
-        selectedAction.name.toLowerCase(),
+        type,
         target || selectedAction.target
       )
       
