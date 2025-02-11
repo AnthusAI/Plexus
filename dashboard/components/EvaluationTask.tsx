@@ -253,6 +253,7 @@ const GridContent = React.memo(({ data }: { data: EvaluationTaskData }) => {
         processedItems={data.processedItems}
         totalItems={data.totalItems}
         startedAt={data.startedAt || undefined}
+        completedAt={data.task?.completedAt || undefined}
         estimatedCompletionAt={estimatedCompletionAt}
         errorMessage={data.errorMessage}
         stageConfigs={stageConfigs}
@@ -487,6 +488,7 @@ const DetailContent = React.memo(({
                 processedItems={data.processedItems}
                 totalItems={data.totalItems}
                 startedAt={data.startedAt || undefined}
+                completedAt={data.task?.completedAt || undefined}
                 estimatedCompletionAt={
                   data.startedAt && data.estimatedRemainingSeconds 
                     ? new Date(new Date(data.startedAt).getTime() + (data.estimatedRemainingSeconds * 1000)).toISOString()
