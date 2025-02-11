@@ -10,6 +10,7 @@ export interface CardButtonProps {
   'aria-label'?: string
   active?: boolean
   label?: string
+  className?: string
 }
 
 export function CardButton({
@@ -18,7 +19,8 @@ export function CardButton({
   disabled,
   'aria-label': ariaLabel,
   active = false,
-  label
+  label,
+  className
 }: CardButtonProps) {
   return (
     <Button
@@ -27,7 +29,8 @@ export function CardButton({
       className={cn(
         label ? "gap-2" : "h-8 w-8",
         "rounded-md",
-        active ? "bg-accent" : "bg-card-light"
+        active ? "bg-accent" : "bg-border",
+        className
       )}
       onClick={onClick}
       disabled={disabled}
