@@ -186,6 +186,7 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
             </>
           ) : (
             <div className="flex gap-2">
+              {controlButtons}
               {onToggleFullWidth && (
                 <CardButton
                   icon={isFullWidth ? RectangleVertical : Square}
@@ -202,7 +203,6 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
                   aria-label="Close"
                 />
               )}
-              {controlButtons}
             </div>
           )}
         </div>

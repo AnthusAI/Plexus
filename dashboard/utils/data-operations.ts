@@ -574,4 +574,31 @@ export async function createTask(
     console.error('Error creating task:', error);
     return null;
   }
+}
+
+export async function updateTask(
+  id: string,
+  input: Partial<AmplifyTask>
+): Promise<ProcessedTask | null> {
+  try {
+    const currentClient = getClient();
+    if (!currentClient.models.Task) {
+      throw new Error('Task model not found');
+    }
+
+    // @ts-expect-error Complex union type in generated Amplify types
+    const response = await currentClient.models.Task.update({
+      id,
+      ...input
+    });
+
+    if (response.data) {
+      return processTask(response.data);
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error updating task:', error);
+    return null;
+  }
 } 
