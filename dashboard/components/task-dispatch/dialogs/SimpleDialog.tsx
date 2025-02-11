@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { toast } from "sonner"
 import {
   Dialog,
   DialogContent,
@@ -42,6 +43,8 @@ export function SimpleDialog({ action, isOpen, onClose, onDispatch }: TaskDialog
 
     const generatedCommand = generator.generate()
     onDispatch(generatedCommand, action.target)
+    onClose()
+    toast.success(`${action.name} action completed successfully`)
   }
 
   return (

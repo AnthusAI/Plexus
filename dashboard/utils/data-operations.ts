@@ -578,27 +578,28 @@ export async function createTask(
 
 export async function updateTask(
   id: string,
-  input: Partial<AmplifyTask>
+  input: Partial<AmplifyTask> | Partial<Schema['TaskStage']['type']>,
+  modelName: 'Task' | 'TaskStage' = 'Task'
 ): Promise<ProcessedTask | null> {
   try {
     const currentClient = getClient();
-    if (!currentClient.models.Task) {
-      throw new Error('Task model not found');
+    if (!currentClient.models[modelName]) {
+      throw new Error(`${modelName} model not found`);
     }
 
     // @ts-expect-error Complex union type in generated Amplify types
-    const response = await currentClient.models.Task.update({
+    const response = await currentClient.models[modelName].update({
       id,
       ...input
     });
 
     if (response.data) {
-      return processTask(response.data);
+      return modelName === 'Task' ? processTask(response.data) : null;
     }
 
     return null;
   } catch (error) {
-    console.error('Error updating task:', error);
+    console.error(`Error updating ${modelName}:`, error);
     return null;
   }
 } 

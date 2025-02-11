@@ -23,7 +23,24 @@ export interface EvaluationMetric {
   priority: boolean
 }
 
-export interface EvaluationTaskData {
+interface Distribution {
+  label: string
+  count: number
+}
+
+interface ScoreResult {
+  id: string
+  value: string | number
+  confidence: number | null
+  explanation: string | null
+  metadata: {
+    human_label: string | null
+    correct: boolean
+  }
+  itemId: string | null
+}
+
+export interface EvaluationTaskData extends BaseTaskData {
   id: string
   title: string
   accuracy: number | null
@@ -45,22 +62,11 @@ export interface EvaluationTaskData {
     labels: string[] | null
   } | null
   scoreGoal?: string | null
-  datasetClassDistribution?: { label: string, count: number }[]
+  datasetClassDistribution?: Distribution[]
   isDatasetClassDistributionBalanced?: boolean | null
-  predictedClassDistribution?: { label: string, count: number }[]
+  predictedClassDistribution?: Distribution[]
   isPredictedClassDistributionBalanced?: boolean | null
-  scoreResults?: Array<{
-    id: string
-    value: string | number
-    confidence?: number | null
-    explanation?: string | null
-    metadata?: any
-    createdAt?: string
-    itemId?: string
-    EvaluationId?: string
-    scorecardId?: string
-    [key: string]: any  // Allow additional properties
-  }>
+  scoreResults?: ScoreResult[]
   selectedScoreResult?: Schema['ScoreResult']['type'] | null
   task?: {
     id: string
@@ -181,85 +187,8 @@ function mapStatus(status: string): 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILE
 }
 
 const GridContent = React.memo(({ data }: { data: EvaluationTaskData }) => {
-  console.log('GridContent - Task data:', {
-    hasTask: !!data.task,
-    taskStatus: data.task?.status,
-    stagesCount: data.task?.stages?.items?.length,
-    stages: data.task?.stages?.items?.map(stage => ({
-      name: stage.name,
-      status: stage.status,
-      processedItems: stage.processedItems,
-      totalItems: stage.totalItems
-    }))
-  });
-
-  // Calculate estimatedCompletionAt if we have the necessary data
-  const estimatedCompletionAt = data.startedAt && data.estimatedRemainingSeconds 
-    ? new Date(new Date(data.startedAt).getTime() + (data.estimatedRemainingSeconds * 1000)).toISOString()
-    : undefined;
-
-  const taskData = data.task;
-  const stageConfigs = useMemo(() => {
-    if (!taskData?.stages?.items) return [];
-    return taskData.stages.items.map((stage: any) => ({
-      key: stage.name,
-      label: stage.name,
-      color: stage.status === 'COMPLETED' ? 'bg-primary' :
-             stage.status === 'FAILED' ? 'bg-false' :
-             'bg-neutral',
-      name: stage.name,
-      order: stage.order,
-      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-      processedItems: stage.processedItems,
-      totalItems: stage.totalItems,
-      statusMessage: stage.statusMessage,
-      completed: stage.status === 'COMPLETED',
-      startedAt: stage.startedAt,
-      completedAt: stage.completedAt,
-      estimatedCompletionAt: stage.estimatedCompletionAt
-    }));
-  }, [taskData?.stages?.items]);
-
-  const stages = useMemo(() => {
-    if (!taskData?.stages?.items) return [];
-    return taskData.stages.items.map((stage: any) => ({
-      key: stage.name,
-      label: stage.name,
-      color: stage.status === 'COMPLETED' ? 'bg-primary' :
-             stage.status === 'FAILED' ? 'bg-false' :
-             'bg-neutral',
-      name: stage.name,
-      order: stage.order,
-      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-      processedItems: stage.processedItems,
-      totalItems: stage.totalItems,
-      statusMessage: stage.statusMessage,
-      startedAt: stage.startedAt,
-      completedAt: stage.completedAt,
-      estimatedCompletionAt: stage.estimatedCompletionAt
-    }));
-  }, [taskData?.stages?.items]);
-
-  console.log('GridContent - Mapped stage configs:', {
-    stageConfigsCount: stageConfigs.length,
-    stageConfigs
-  });
-
-  return (
-    <div className="mt-4">
-      <TaskStatus
-        variant="grid"
-        status={mapStatus(taskData?.status || data.status)}
-        processedItems={data.processedItems}
-        totalItems={data.totalItems}
-        startedAt={data.startedAt || undefined}
-        estimatedCompletionAt={estimatedCompletionAt}
-        errorMessage={data.errorMessage}
-        stageConfigs={stageConfigs}
-        stages={stages}
-      />
-    </div>
-  );
+  // We don't need to show TaskStatus here as it's handled by the base Task component
+  return null;
 })
 
 interface ParsedScoreResult {
@@ -355,18 +284,6 @@ const DetailContent = React.memo(({
   selectedScoreResultId?: string | null
   onSelectScoreResult?: (id: string | null) => void
 }) => {
-  console.log('DetailContent - Task data:', {
-    hasTask: !!data.task,
-    taskStatus: data.task?.status,
-    stagesCount: data.task?.stages?.items?.length,
-    stages: data.task?.stages?.items?.map(stage => ({
-      name: stage.name,
-      status: stage.status,
-      processedItems: stage.processedItems,
-      totalItems: stage.totalItems
-    }))
-  });
-
   const [containerWidth, setContainerWidth] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const [selectedPredictedActual, setSelectedPredictedActual] = useState<{
@@ -416,52 +333,6 @@ const DetailContent = React.memo(({
     return data.scoreResults?.map(parseScoreResult) ?? []
   }, [data.scoreResults])
 
-  const stageConfigs = useMemo(() => {
-    if (!data.task?.stages?.items) return [];
-    return data.task.stages.items.map((stage: any) => ({
-      key: stage.name,
-      label: stage.name,
-      color: stage.status === 'COMPLETED' ? 'bg-primary' :
-             stage.status === 'FAILED' ? 'bg-false' :
-             'bg-neutral',
-      name: stage.name,
-      order: stage.order,
-      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-      processedItems: stage.processedItems,
-      totalItems: stage.totalItems,
-      statusMessage: stage.statusMessage,
-      completed: stage.status === 'COMPLETED',
-      startedAt: stage.startedAt,
-      completedAt: stage.completedAt,
-      estimatedCompletionAt: stage.estimatedCompletionAt
-    }));
-  }, [data.task?.stages?.items]);
-
-  const stages = useMemo(() => {
-    if (!data.task?.stages?.items) return [];
-    return data.task.stages.items.map((stage: any) => ({
-      key: stage.name,
-      label: stage.name,
-      color: stage.status === 'COMPLETED' ? 'bg-primary' :
-             stage.status === 'FAILED' ? 'bg-false' :
-             'bg-neutral',
-      name: stage.name,
-      order: stage.order,
-      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-      processedItems: stage.processedItems,
-      totalItems: stage.totalItems,
-      statusMessage: stage.statusMessage,
-      startedAt: stage.startedAt,
-      completedAt: stage.completedAt,
-      estimatedCompletionAt: stage.estimatedCompletionAt
-    }));
-  }, [data.task?.stages?.items]);
-
-  console.log('DetailContent - Mapped stage configs:', {
-    stageConfigsCount: stageConfigs.length,
-    stageConfigs
-  });
-
   return (
     <div 
       ref={containerRef}
@@ -480,24 +351,6 @@ const DetailContent = React.memo(({
       >
         {showMainPanel && (
           <div className="w-full h-full overflow-y-auto">
-            <div className="mb-3">
-              <TaskStatus
-                variant="detail"
-                status={mapStatus(data.task?.status || data.status)}
-                processedItems={data.processedItems}
-                totalItems={data.totalItems}
-                startedAt={data.startedAt || undefined}
-                estimatedCompletionAt={
-                  data.startedAt && data.estimatedRemainingSeconds 
-                    ? new Date(new Date(data.startedAt).getTime() + (data.estimatedRemainingSeconds * 1000)).toISOString()
-                    : undefined
-                }
-                errorMessage={data.errorMessage}
-                stageConfigs={stageConfigs}
-                stages={stages}
-              />
-            </div>
-
             <div className="mb-3">
               <ClassDistributionVisualizer
                 data={data.datasetClassDistribution}
@@ -593,22 +446,9 @@ export default function EvaluationTask({
   onToggleFullWidth,
   onClose,
   selectedScoreResultId,
-  onSelectScoreResult
+  onSelectScoreResult,
+  ...restProps
 }: EvaluationTaskProps) {
-  console.log('EvaluationTask - Received task data:', {
-    taskId: task.id,
-    hasTaskData: !!task.data,
-    hasTaskInData: !!task.data?.task,
-    taskStatus: task.data?.task?.status,
-    stagesCount: task.data?.task?.stages?.items?.length,
-    stages: task.data?.task?.stages?.items?.map(stage => ({
-      name: stage.name,
-      status: stage.status,
-      processedItems: stage.processedItems,
-      totalItems: stage.totalItems
-    }))
-  });
-
   const data = task.data ?? {} as EvaluationTaskData
   const computedType = computeEvaluationType(data)
 
@@ -668,6 +508,7 @@ export default function EvaluationTask({
       isFullWidth={isFullWidth}
       onToggleFullWidth={onToggleFullWidth}
       onClose={onClose}
+      {...restProps}
       renderHeader={(props) => (
         <TaskHeader {...props}>
           {headerContent}
