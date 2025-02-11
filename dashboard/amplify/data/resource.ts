@@ -104,7 +104,7 @@ const schema = a.schema({
     Score: a
         .model({
             name: a.string().required(),
-            key: a.string().required(),
+            key: a.string(),
             description: a.string(),
             order: a.integer().required(),
             type: a.string().required(),
