@@ -6,14 +6,17 @@ import { formatTimeAgo } from '@/utils/format-time'
 import { formatDuration } from '@/utils/format-duration'
 import { TaskStatus, TaskStageConfig } from '@/components/ui/task-status'
 import { Schema } from '@/amplify/data/resource'
-import { listRecentTasks, observeRecentTasks } from '@/utils/data-operations'
+import { listRecentTasks, observeRecentTasks, updateTask } from '@/utils/data-operations'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { Task, TaskHeader, TaskContent } from '@/components/Task'
-import { Activity } from 'lucide-react'
+import { Activity, Square, X, MoreHorizontal, RefreshCw } from 'lucide-react'
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import ScorecardContext from "@/components/ScorecardContext"
-import { TaskDispatchButton } from "@/components/task-dispatch-button"
+import { TaskDispatchButton, activityConfig } from "@/components/task-dispatch"
+import { CardButton } from "@/components/CardButton"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { toast } from 'sonner'
 
 // Import the types from data-operations
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
@@ -228,6 +231,43 @@ export default function ActivityDashboard() {
     const task = displayedTasks.find(t => t.id === selectedTask)
     if (!task) return null
 
+    console.log('Rendering selected task:', task.id)
+
+    const handleAnnounceAgain = async () => {
+      console.log('Announcing task again:', task.id)
+      try {
+        const updatedTask = await updateTask(task.id, {
+          dispatchStatus: 'PENDING'
+        })
+        if (updatedTask) {
+          toast.success('Task re-announced successfully')
+        } else {
+          toast.error('Failed to re-announce task')
+        }
+      } catch (error) {
+        console.error('Error re-announcing task:', error)
+        toast.error('Error re-announcing task')
+      }
+    }
+
+    const controlButtons = (
+      <DropdownMenu>
+        <DropdownMenuTrigger>
+          <CardButton
+            icon={MoreHorizontal}
+            onClick={handleAnnounceAgain}
+            aria-label="More options"
+          />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={handleAnnounceAgain}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Announce Again
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+
     return (
       <div className="h-full overflow-auto">
         <Task
@@ -239,12 +279,9 @@ export default function ActivityDashboard() {
             setSelectedTask(null)
             setIsFullWidth(false)
           }}
+          controlButtons={controlButtons}
           renderHeader={(props) => (
-            <TaskHeader {...props}>
-              <div className="flex justify-end w-full">
-                <Activity className="h-6 w-6" />
-              </div>
-            </TaskHeader>
+            <TaskHeader {...props} />
           )}
           renderContent={(props) => <TaskContent {...props} />}
         />
@@ -266,7 +303,7 @@ export default function ActivityDashboard() {
           selectedScore={selectedScore}
           setSelectedScore={setSelectedScore}
         />
-        <TaskDispatchButton />
+        <TaskDispatchButton config={activityConfig} />
       </div>
       <div className="flex h-full">
         <div 
