@@ -82,7 +82,8 @@ const schema = a.schema({
         .secondaryIndexes((idx: (field: ScorecardIndexFields) => any) => [
             idx("accountId"),
             idx("key"),
-            idx("externalId")
+            idx("externalId"),
+            idx("name")
         ]),
 
     ScorecardSection: a
@@ -128,7 +129,8 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: ScoreIndexFields) => any) => [
             idx("sectionId"),
-            idx("externalId")
+            idx("externalId"),
+            idx("key"),
         ]),
 
     Evaluation: a
