@@ -1619,11 +1619,6 @@ export default function EvaluationsDashboard(): JSX.Element {
                 }
               };
             });
-
-            // Set the first result as selected if none is selected
-            if (parsedResults.length > 0 && parsedResults[0]?.id && !selectedScoreResultId) {
-              setSelectedScoreResultId(parsedResults[0].id);
-            }
           } catch (error) {
             console.error('Error processing score results:', error);
           }
@@ -2301,9 +2296,7 @@ export default function EvaluationsDashboard(): JSX.Element {
           : null
       } : null;
 
-      // Preserve existing score results
-      const existingScoreResults = evaluationTaskProps?.data?.scoreResults ?? [];
-
+      // Reset score results when switching evaluations
       const taskProps = {
         id: selectedEvaluation.id,
         type: selectedEvaluation.type,
@@ -2344,7 +2337,7 @@ export default function EvaluationsDashboard(): JSX.Element {
               ? JSON.parse(selectedEvaluation.predictedClassDistribution)
               : undefined,
           isPredictedClassDistributionBalanced: selectedEvaluation.isPredictedClassDistributionBalanced ?? null,
-          scoreResults: existingScoreResults,
+          scoreResults: [], // Initialize with empty array when switching evaluations
           task: normalizedTaskData
         }
       };
