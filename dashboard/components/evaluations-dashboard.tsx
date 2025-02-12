@@ -44,6 +44,9 @@ import { TaskDispatchButton, evaluationsConfig } from '@/components/task-dispatc
 import { EvaluationCard, EvaluationGrid } from '@/features/evaluations'
 import { useEvaluationSubscriptions, useTaskUpdates } from '@/features/evaluations'
 import { formatStatus, getBadgeVariant, calculateProgress } from '@/features/evaluations'
+import EvaluationTask from '@/components/EvaluationTask'
+import { useMediaQuery } from "@/hooks/use-media-query"
+import { CardButton } from "@/components/CardButton"
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -203,6 +206,9 @@ export default function EvaluationsDashboard() {
   const [scoreNames, setScoreNames] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isFullWidth, setIsFullWidth] = useState(false)
+  const [leftPanelWidth, setLeftPanelWidth] = useState(50)
+  const isNarrowViewport = useMediaQuery("(max-width: 768px)")
 
   // Fetch account ID
   useEffect(() => {
@@ -365,6 +371,26 @@ export default function EvaluationsDashboard() {
     }
   }
 
+  const handleDragStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.pageX
+    const startWidth = leftPanelWidth
+
+    const handleDrag = (e: MouseEvent) => {
+      const delta = e.pageX - startX
+      const newWidth = Math.min(Math.max(startWidth + (delta / window.innerWidth) * 100, 20), 80)
+      setLeftPanelWidth(newWidth)
+    }
+
+    const handleDragEnd = () => {
+      document.removeEventListener('mousemove', handleDrag)
+      document.removeEventListener('mouseup', handleDragEnd)
+    }
+
+    document.addEventListener('mousemove', handleDrag)
+    document.addEventListener('mouseup', handleDragEnd)
+  }
+
   if (isLoading) {
     return (
       <div>
@@ -381,7 +407,7 @@ export default function EvaluationsDashboard() {
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Evaluations</h1>
-      </div>
+        </div>
         <div className="text-sm text-destructive">Error: {error}</div>
       </div>
     )
@@ -392,20 +418,193 @@ export default function EvaluationsDashboard() {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Evaluations</h1>
         <TaskDispatchButton config={evaluationsConfig} />
-        </div>
+      </div>
         
-      {evaluations.length === 0 ? (
-        <div className="text-sm text-muted-foreground">No evaluations found</div>
-      ) : (
-        <EvaluationGrid
-          evaluations={evaluations}
-          selectedEvaluationId={selectedEvaluationId}
-          scorecardNames={scorecardNames}
-          scoreNames={scoreNames}
-          onSelect={(evaluation) => setSelectedEvaluationId(evaluation.id)}
-          onDelete={handleDelete}
-        />
-      )}
+      <div className="flex h-full">
+        <div 
+          className={`
+            ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? '' : 'w-full'}
+            ${selectedEvaluationId && !isNarrowViewport && isFullWidth ? 'hidden' : ''}
+            h-full overflow-auto
+          `}
+          style={selectedEvaluationId && !isNarrowViewport && !isFullWidth ? {
+            width: `${leftPanelWidth}%`
+          } : undefined}
+        >
+          {evaluations.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No evaluations found</div>
+          ) : (
+            <EvaluationGrid
+              evaluations={evaluations}
+              selectedEvaluationId={selectedEvaluationId}
+              scorecardNames={scorecardNames}
+              scoreNames={scoreNames}
+              onSelect={(evaluation) => {
+                setSelectedEvaluationId(evaluation.id)
+                if (isNarrowViewport) {
+                  setIsFullWidth(true)
+                }
+              }}
+              onDelete={handleDelete}
+            />
+          )}
+        </div>
+
+        {selectedEvaluationId && !isNarrowViewport && !isFullWidth && (
+          <div
+            className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+            onMouseDown={handleDragStart}
+          >
+            <div className="absolute inset-0 rounded-full transition-colors duration-150 
+              group-hover:bg-accent" />
           </div>
+        )}
+
+        {selectedEvaluationId && !isNarrowViewport && !isFullWidth && (
+          <div 
+            className="h-full overflow-hidden"
+            style={{ width: `${100 - leftPanelWidth}%` }}
+          >
+            {evaluations.map((evaluation) => {
+              if (evaluation.id === selectedEvaluationId) {
+                return (
+                  <EvaluationTask
+                    key={evaluation.id}
+                    variant="detail"
+                    task={{
+                      id: evaluation.id,
+                      type: evaluation.type,
+                      scorecard: scorecardNames[evaluation.scorecardId] || 'Unknown Scorecard',
+                      score: scoreNames[evaluation.scoreId] || 'Unknown Score',
+                      time: evaluation.createdAt,
+                      data: {
+                        id: evaluation.id,
+                        title: `${scorecardNames[evaluation.scorecardId] || 'Unknown Scorecard'} - ${scoreNames[evaluation.scoreId] || 'Unknown Score'}`,
+                        metrics: evaluation.metrics ? JSON.parse(evaluation.metrics) : [],
+                        metricsExplanation: evaluation.metricsExplanation,
+                        accuracy: evaluation.accuracy,
+                        processedItems: evaluation.processedItems,
+                        totalItems: evaluation.totalItems,
+                        progress: calculateProgress(evaluation),
+                        inferences: evaluation.inferences,
+                        cost: evaluation.cost,
+                        status: evaluation.status,
+                        elapsedSeconds: evaluation.elapsedSeconds,
+                        estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds,
+                        startedAt: evaluation.startedAt,
+                        errorMessage: evaluation.errorMessage,
+                        errorDetails: evaluation.errorDetails,
+                        confusionMatrix: evaluation.confusionMatrix ? JSON.parse(evaluation.confusionMatrix) : null,
+                        scoreGoal: evaluation.scoreGoal,
+                        datasetClassDistribution: evaluation.datasetClassDistribution ? JSON.parse(evaluation.datasetClassDistribution) : null,
+                        isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
+                        predictedClassDistribution: evaluation.predictedClassDistribution ? JSON.parse(evaluation.predictedClassDistribution) : null,
+                        isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
+                        task: evaluation.task
+                      }
+                    }}
+                    controlButtons={
+                      <DropdownMenu>
+                        <DropdownMenuTrigger>
+                          <CardButton
+                            icon={MoreHorizontal}
+                            onClick={() => {}}
+                            aria-label="More options"
+                          />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleDelete(evaluation.id)}>
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    }
+                    isFullWidth={isFullWidth}
+                    onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                    onClose={() => {
+                      setSelectedEvaluationId(null)
+                      setIsFullWidth(false)
+                    }}
+                  />
+                );
+              }
+              return null;
+            })}
+          </div>
+        )}
+
+        {selectedEvaluationId && (isNarrowViewport || isFullWidth) && (
+          <div className="fixed inset-0 bg-background z-50">
+            {evaluations.map((evaluation) => {
+              if (evaluation.id === selectedEvaluationId) {
+                return (
+                  <EvaluationTask
+                    key={evaluation.id}
+                    variant="detail"
+                    task={{
+                      id: evaluation.id,
+                      type: evaluation.type,
+                      scorecard: scorecardNames[evaluation.scorecardId] || 'Unknown Scorecard',
+                      score: scoreNames[evaluation.scoreId] || 'Unknown Score',
+                      time: evaluation.createdAt,
+                      data: {
+                        id: evaluation.id,
+                        title: `${scorecardNames[evaluation.scorecardId] || 'Unknown Scorecard'} - ${scoreNames[evaluation.scoreId] || 'Unknown Score'}`,
+                        metrics: evaluation.metrics ? JSON.parse(evaluation.metrics) : [],
+                        metricsExplanation: evaluation.metricsExplanation,
+                        accuracy: evaluation.accuracy,
+                        processedItems: evaluation.processedItems,
+                        totalItems: evaluation.totalItems,
+                        progress: calculateProgress(evaluation),
+                        inferences: evaluation.inferences,
+                        cost: evaluation.cost,
+                        status: evaluation.status,
+                        elapsedSeconds: evaluation.elapsedSeconds,
+                        estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds,
+                        startedAt: evaluation.startedAt,
+                        errorMessage: evaluation.errorMessage,
+                        errorDetails: evaluation.errorDetails,
+                        confusionMatrix: evaluation.confusionMatrix ? JSON.parse(evaluation.confusionMatrix) : null,
+                        scoreGoal: evaluation.scoreGoal,
+                        datasetClassDistribution: evaluation.datasetClassDistribution ? JSON.parse(evaluation.datasetClassDistribution) : null,
+                        isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
+                        predictedClassDistribution: evaluation.predictedClassDistribution ? JSON.parse(evaluation.predictedClassDistribution) : null,
+                        isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
+                        task: evaluation.task
+                      }
+                    }}
+                    controlButtons={
+                      <DropdownMenu>
+                        <DropdownMenuTrigger>
+                          <CardButton
+                            icon={MoreHorizontal}
+                            onClick={() => {}}
+                            aria-label="More options"
+                          />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleDelete(evaluation.id)}>
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    }
+                    isFullWidth={isFullWidth}
+                    onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                    onClose={() => {
+                      setSelectedEvaluationId(null)
+                      setIsFullWidth(false)
+                    }}
+                  />
+                );
+              }
+              return null;
+            })}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }

@@ -177,46 +177,30 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         <ScrollArea className="flex-grow overflow-y-auto">
           <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
             {visibleMenuItems.map((item) => (
-              <TooltipProvider key={item.name}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Link href={item.path} passHref>
-                      <DashboardButton
-                        variant={
-                          (pathname === item.path || 
-                          (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
-                          (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
-                            ? "secondary"
-                            : "ghost"
-                        }
-                        className={`w-full justify-start group !rounded-[4px] ${
-                          (pathname === item.path || 
-                          (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
-                          (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
-                            ? "bg-secondary text-secondary-foreground"
-                            : ""
-                        } ${isLeftSidebarOpen ? '' : 'px-2'} ${
-                          isMobile ? 'py-3' : ''
-                        }`}
-                      >
-                        <item.icon className={`h-4 w-4 flex-shrink-0 ${
-                          (pathname === item.path || 
-                          (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
-                          (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
-                            ? "text-secondary-foreground"
-                            : "text-secondary group-hover:text-accent-foreground"
-                        }`} />
-                        {isLeftSidebarOpen && (
-                          <span className="ml-3">{item.name}</span>
-                        )}
-                      </DashboardButton>
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {item.name}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Link 
+                key={item.name}
+                href={item.path}
+                className={`flex items-center w-full px-3 py-2 group !rounded-[4px] ${
+                  (pathname === item.path || 
+                  (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
+                  (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
+                    ? "bg-secondary text-secondary-foreground"
+                    : "hover:bg-accent hover:text-accent-foreground"
+                } ${isLeftSidebarOpen ? '' : 'px-2'} ${
+                  isMobile ? 'py-3' : ''
+                }`}
+              >
+                <item.icon className={`h-4 w-4 flex-shrink-0 ${
+                  (pathname === item.path || 
+                  (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
+                  (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
+                    ? "text-secondary-foreground"
+                    : "text-secondary group-hover:text-accent-foreground"
+                }`} />
+                {isLeftSidebarOpen && (
+                  <span className="ml-3">{item.name}</span>
+                )}
+              </Link>
             ))}
           </div>
         </ScrollArea>
