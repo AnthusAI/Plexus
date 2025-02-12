@@ -441,6 +441,7 @@ export default function ActivityDashboard() {
                   <EvaluationTask
                     variant="grid"
                     task={task}
+                    isSelected={task.id === selectedTask}
                     onClick={() => {
                       setSelectedTask(task.id)
                       if (isNarrowViewport) {
@@ -452,6 +453,13 @@ export default function ActivityDashboard() {
                   <Task
                     variant="grid"
                     task={task}
+                    isSelected={task.id === selectedTask}
+                    onClick={() => {
+                      setSelectedTask(task.id)
+                      if (isNarrowViewport) {
+                        setIsFullWidth(true)
+                      }
+                    }}
                     renderHeader={renderTaskHeader(task)}
                     renderContent={(props) => <TaskContent {...props} />}
                   />

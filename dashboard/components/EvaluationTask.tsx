@@ -14,6 +14,7 @@ import { EvaluationTaskScoreResults } from '@/components/EvaluationTaskScoreResu
 import { EvaluationTaskScoreResultDetail } from '@/components/EvaluationTaskScoreResultDetail'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { BaseTaskData } from '@/types/base'
+import { EvaluationListAccuracyBar } from '@/components/EvaluationListAccuracyBar'
 
 export interface EvaluationMetric {
   name: string
@@ -187,8 +188,69 @@ function mapStatus(status: string): 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILE
 }
 
 const GridContent = React.memo(({ data }: { data: EvaluationTaskData }) => {
-  // We don't need to show TaskStatus here as it's handled by the base Task component
-  return null;
+  // Calculate progress and accuracy
+  const progress = data.processedItems && data.totalItems ? 
+    Math.round((data.processedItems / data.totalItems) * 100) : 0
+  const accuracy = data.accuracy ?? 0
+
+  console.log('GridContent render:', {
+    hasTaskData: !!data.task,
+    taskStatus: data.task?.status,
+    stages: data.task?.stages?.items,
+    progress,
+    accuracy
+  });
+
+  return (
+    <div className="space-y-2">
+      <TaskStatus
+        showStages={true}
+        status={mapStatus(data.task?.status || data.status)}
+        stageConfigs={data.task?.stages?.items?.map(stage => ({
+          key: stage.name,
+          label: stage.name,
+          color: stage.status === 'COMPLETED' ? 'bg-primary' :
+                stage.status === 'FAILED' ? 'bg-false' :
+                'bg-neutral',
+          name: stage.name,
+          order: stage.order,
+          status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+          processedItems: stage.processedItems,
+          totalItems: stage.totalItems,
+          statusMessage: stage.statusMessage,
+          startedAt: stage.startedAt,
+          completedAt: stage.completedAt,
+          estimatedCompletionAt: stage.estimatedCompletionAt
+        })) || []}
+        stages={data.task?.stages?.items?.map(stage => ({
+          key: stage.name,
+          label: stage.name,
+          color: stage.status === 'COMPLETED' ? 'bg-primary' :
+                stage.status === 'FAILED' ? 'bg-false' :
+                'bg-neutral',
+          name: stage.name,
+          order: stage.order,
+          status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+          processedItems: stage.processedItems,
+          totalItems: stage.totalItems,
+          statusMessage: stage.statusMessage,
+          startedAt: stage.startedAt,
+          completedAt: stage.completedAt,
+          estimatedCompletionAt: stage.estimatedCompletionAt
+        })) || []}
+        processedItems={data.processedItems}
+        totalItems={data.totalItems}
+        startedAt={data.task?.startedAt || data.startedAt}
+        completedAt={data.task?.completedAt}
+        estimatedCompletionAt={data.task?.estimatedCompletionAt}
+        errorMessage={data.task?.errorMessage || data.errorMessage}
+      />
+      <EvaluationListAccuracyBar 
+        progress={progress}
+        accuracy={accuracy}
+      />
+    </div>
+  )
 })
 
 interface ParsedScoreResult {
