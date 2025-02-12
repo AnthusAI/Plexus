@@ -8,7 +8,7 @@ import { TaskStatus, TaskStageConfig } from '@/components/ui/task-status'
 import { Schema } from '@/amplify/data/resource'
 import { listRecentTasks, observeRecentTasks, updateTask } from '@/utils/data-operations'
 import { useMediaQuery } from '@/hooks/use-media-query'
-import { Task, TaskHeader, TaskContent } from '@/components/Task'
+import { Task, TaskHeader, TaskContent, type BaseTaskProps } from '@/components/Task'
 import { Activity, Square, X, MoreHorizontal, RefreshCw, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
@@ -17,7 +17,7 @@ import { TaskDispatchButton, activityConfig } from "@/components/task-dispatch"
 import { CardButton } from "@/components/CardButton"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { toast } from 'sonner'
-import EvaluationTask from '@/components/EvaluationTask'
+import EvaluationTask, { type EvaluationTaskProps, type EvaluationTaskData } from '@/components/EvaluationTask'
 
 // Import the types from data-operations
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
@@ -127,7 +127,7 @@ function transformTaskToActivity(task: ProcessedTask) {
   // Get the appropriate status message - keep both messages and let TaskStatus handle display logic
   const statusMessage = currentStage?.statusMessage ?? undefined
 
-  const result = {
+  const result: EvaluationTaskProps['task'] = {
     id: task.id,
     type: String((metadata as any)?.type || task.type),
     scorecard: ((metadata as any)?.scorecard?.toString() || '') as string,
@@ -154,19 +154,20 @@ function transformTaskToActivity(task: ProcessedTask) {
       errorDetails: (metadata as any)?.errorDetails ?? null,
       task: {
         id: task.id,
+        accountId: '',  // Add required fields
         type: task.type,
         command: task.command,
         status: task.status,
+        target: task.target,  // Add required field
         startedAt: task.startedAt,
         completedAt: task.completedAt,
-        dispatchStatus: task.dispatchStatus,
+        dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
         celeryTaskId: task.celeryTaskId,
         workerNodeId: task.workerNodeId,
         stages: { items: task.stages }
       }
     },
     stages,
-    stageConfigs: stages,
     currentStageName: currentStage?.name,
     processedItems: currentStage?.processedItems ?? 0,
     totalItems: currentStage?.totalItems ?? 0,
@@ -176,7 +177,7 @@ function transformTaskToActivity(task: ProcessedTask) {
     status: task.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
     statusMessage: statusMessage,
     errorMessage: task.status === 'FAILED' && task.errorMessage ? task.errorMessage : undefined,
-    dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? ('DISPATCHED' as const) : undefined,
+    dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
     celeryTaskId: task.celeryTaskId,
     workerNodeId: task.workerNodeId
   }

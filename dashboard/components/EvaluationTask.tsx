@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useMemo } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { FlaskConical, Square, X, Split, ChevronLeft } from 'lucide-react'
 import MetricsGauges from '@/components/MetricsGauges'
-import { TaskStatus } from '@/components/ui/task-status'
+import { TaskStatus, type TaskStageConfig } from '@/components/ui/task-status'
 import { ConfusionMatrix } from '@/components/confusion-matrix'
 import { CardButton } from '@/components/CardButton'
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
@@ -41,9 +41,48 @@ interface ScoreResult {
   itemId: string | null
 }
 
+interface TaskStage {
+  id: string;
+  name: string;
+  order: number;
+  status: string;
+  statusMessage?: string;
+  startedAt?: string;
+  completedAt?: string;
+  estimatedCompletionAt?: string;
+  processedItems?: number;
+  totalItems?: number;
+}
+
+interface TaskData {
+  id: string;
+  accountId: string;
+  type: string;
+  status: string;
+  target: string;
+  command: string;
+  completedAt?: string;
+  startedAt?: string;
+  dispatchStatus?: 'DISPATCHED';
+  celeryTaskId?: string;
+  workerNodeId?: string;
+  description?: string;
+  metadata?: any;
+  createdAt?: string;
+  estimatedCompletionAt?: string;
+  errorMessage?: string;
+  errorDetails?: string;
+  currentStageId?: string;
+  stages?: {
+    items: TaskStage[];
+    nextToken?: string | null;
+  };
+}
+
 export interface EvaluationTaskData extends BaseTaskData {
   id: string
   title: string
+  command?: string
   accuracy: number | null
   metrics: EvaluationMetric[]
   metricsExplanation?: string | null
@@ -55,7 +94,7 @@ export interface EvaluationTaskData extends BaseTaskData {
   status: string
   elapsedSeconds: number | null
   estimatedRemainingSeconds: number | null
-  startedAt?: string | null
+  startedAt?: string | undefined
   errorMessage?: string
   errorDetails?: any | null
   confusionMatrix?: {
@@ -63,41 +102,16 @@ export interface EvaluationTaskData extends BaseTaskData {
     labels: string[] | null
   } | null
   scoreGoal?: string | null
-  datasetClassDistribution?: Distribution[]
+  datasetClassDistribution?: Array<{ label: string; count: number }>
   isDatasetClassDistributionBalanced?: boolean | null
-  predictedClassDistribution?: Distribution[]
+  predictedClassDistribution?: Array<{ label: string; count: number }>
   isPredictedClassDistributionBalanced?: boolean | null
   scoreResults?: ScoreResult[]
   selectedScoreResult?: Schema['ScoreResult']['type'] | null
-  task?: {
-    id: string
-    type: string
-    command?: string
-    status: string
-    startedAt?: string
-    completedAt?: string
-    dispatchStatus?: string
-    celeryTaskId?: string
-    workerNodeId?: string
-    stages?: {
-      items: Array<{
-        id: string
-        name: string
-        status: string
-        processedItems?: number
-        totalItems?: number
-        startedAt?: string
-        completedAt?: string
-        estimatedCompletionAt?: string
-        statusMessage?: string
-        order: number
-      }>
-      nextToken?: string | null
-    }
-  } | null
+  task?: TaskData | null
 }
 
-export interface EvaluationTaskProps {
+export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskData>, 'variant'> {
   variant?: 'grid' | 'detail'
   task: {
     id: string
@@ -108,40 +122,23 @@ export interface EvaluationTaskProps {
     summary?: string
     description?: string
     data: EvaluationTaskData
+    stages?: TaskStageConfig[]
+    currentStageName?: string
+    processedItems?: number
+    totalItems?: number
+    startedAt?: string
+    estimatedCompletionAt?: string
+    status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+    dispatchStatus?: 'DISPATCHED'
+    celeryTaskId?: string
+    workerNodeId?: string
+    completedAt?: string
+    errorMessage?: string
+    statusMessage?: string
   }
-  onClick?: () => void
-  controlButtons?: React.ReactNode
-  isFullWidth?: boolean
-  onToggleFullWidth?: () => void
-  onClose?: () => void
-  /** ID of the currently selected score result. Null means no result is selected */
   selectedScoreResultId?: string | null
-  /** Callback fired when a score result is selected or deselected */
   onSelectScoreResult?: (id: string | null) => void
-}
-
-function computeEvaluationType(data: EvaluationTaskData): string {
-  if (data.errorMessage || data.errorDetails) {
-    return "Error in Evaluation"
-  }
-  
-  if (data.progress === 100) {
-    return "Evaluation finished"
-  }
-  
-  if (data.progress >= 90) {
-    return "Evaluation finishing"
-  }
-  
-  if (data.progress >= 10) {
-    return "Evaluation running"
-  }
-  
-  if (data.progress > 0) {
-    return "Evaluation started"
-  }
-  
-  return "Evaluation pending"
+  extra?: boolean
 }
 
 function formatDuration(seconds: number): string {
@@ -170,14 +167,15 @@ function computeIsBalanced(distribution: { label: string, count: number }[] | nu
   )
 }
 
-function mapStatus(status: string): 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' {
-  const normalizedStatus = status.toUpperCase();
-  switch (normalizedStatus) {
+const mapTaskStatus = (status: string | undefined | null): 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' => {
+  if (!status) return 'PENDING';
+  const upperStatus = status.toUpperCase();
+  switch (upperStatus) {
     case 'PENDING':
     case 'RUNNING':
     case 'COMPLETED':
     case 'FAILED':
-      return normalizedStatus;
+      return upperStatus;
     case 'DONE':
       return 'COMPLETED';
     case 'ERROR':
@@ -187,8 +185,7 @@ function mapStatus(status: string): 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILE
   }
 }
 
-const GridContent = React.memo(({ data }: { data: EvaluationTaskData }) => {
-  // Calculate progress and accuracy
+const GridContent = React.memo(({ data, extra }: { data: EvaluationTaskData; extra?: boolean }) => {
   const progress = data.processedItems && data.totalItems ? 
     Math.round((data.processedItems / data.totalItems) * 100) : 0
   const accuracy = data.accuracy ?? 0
@@ -205,7 +202,7 @@ const GridContent = React.memo(({ data }: { data: EvaluationTaskData }) => {
     <div className="space-y-2">
       <TaskStatus
         showStages={true}
-        status={mapStatus(data.task?.status || data.status)}
+        status={mapTaskStatus(data.task?.status || data.status)}
         stageConfigs={data.task?.stages?.items?.map(stage => ({
           key: stage.name,
           label: stage.name,
@@ -244,11 +241,15 @@ const GridContent = React.memo(({ data }: { data: EvaluationTaskData }) => {
         completedAt={data.task?.completedAt}
         estimatedCompletionAt={data.task?.estimatedCompletionAt}
         errorMessage={data.task?.errorMessage || data.errorMessage}
+        command={data.task?.command || data.command}
+        statusMessage={data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage}
       />
-      <EvaluationListAccuracyBar 
-        progress={progress}
-        accuracy={accuracy}
-      />
+      {extra && (
+        <EvaluationListAccuracyBar 
+          progress={progress}
+          accuracy={accuracy}
+        />
+      )}
     </div>
   )
 })
@@ -432,7 +433,7 @@ const DetailContent = React.memo(({
               <TaskStatus
                 variant="detail"
                 showStages={true}
-                status={mapStatus(data.task?.status || data.status)}
+                status={mapTaskStatus(data.task?.status || data.status)}
                 stageConfigs={data.task?.stages?.items?.map(stage => ({
                   key: stage.name,
                   label: stage.name,
@@ -446,9 +447,9 @@ const DetailContent = React.memo(({
                   totalItems: stage.totalItems,
                   statusMessage: stage.statusMessage,
                   completed: stage.status === 'COMPLETED',
-                  startedAt: stage.startedAt,
-                  completedAt: stage.completedAt,
-                  estimatedCompletionAt: stage.estimatedCompletionAt
+                  startedAt: stage.startedAt || undefined,
+                  completedAt: stage.completedAt || undefined,
+                  estimatedCompletionAt: stage.estimatedCompletionAt || undefined
                 })) || []}
                 stages={data.task?.stages?.items?.map(stage => ({
                   key: stage.name,
@@ -462,16 +463,18 @@ const DetailContent = React.memo(({
                   processedItems: stage.processedItems,
                   totalItems: stage.totalItems,
                   statusMessage: stage.statusMessage,
-                  startedAt: stage.startedAt,
-                  completedAt: stage.completedAt,
-                  estimatedCompletionAt: stage.estimatedCompletionAt
+                  startedAt: stage.startedAt || undefined,
+                  completedAt: stage.completedAt || undefined,
+                  estimatedCompletionAt: stage.estimatedCompletionAt || undefined
                 })) || []}
                 processedItems={data.processedItems}
                 totalItems={data.totalItems}
-                startedAt={data.task?.startedAt || data.startedAt}
-                completedAt={data.task?.completedAt}
-                estimatedCompletionAt={data.task?.estimatedCompletionAt}
-                errorMessage={data.task?.errorMessage || data.errorMessage}
+                startedAt={data.task?.startedAt || data.startedAt || undefined}
+                completedAt={data.task?.completedAt || undefined}
+                estimatedCompletionAt={data.task?.estimatedCompletionAt || undefined}
+                errorMessage={data.task?.errorMessage || data.errorMessage || undefined}
+                command={data.task?.command || data.command}
+                statusMessage={data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage}
               />
             </div>
 
@@ -571,10 +574,10 @@ export default function EvaluationTask({
   onClose,
   selectedScoreResultId,
   onSelectScoreResult,
+  extra,
   ...restProps
 }: EvaluationTaskProps) {
   const data = task.data ?? {} as EvaluationTaskData
-  const computedType = computeEvaluationType(data)
 
   const metrics = useMemo(() => 
     variant === 'detail' ? 
@@ -619,19 +622,104 @@ export default function EvaluationTask({
     </div>
   ), [variant, onToggleFullWidth, onClose])
 
+  const taskData = task.data?.task as TaskData | undefined;
+  const taskWithDefaults = {
+    id: task.id,
+    type: task.type || '',
+    scorecard: task.scorecard,
+    score: task.score,
+    time: task.time,
+    description: variant === 'detail' ? undefined : task.summary,
+    data: task.data,
+    command: taskData?.command,
+    stages: taskData?.stages?.items?.map(stage => ({
+      key: stage.name,
+      label: stage.name,
+      color: stage.status === 'COMPLETED' ? 'bg-primary' :
+            stage.status === 'FAILED' ? 'bg-false' :
+            'bg-neutral',
+      name: stage.name,
+      order: stage.order,
+      status: mapTaskStatus(stage.status),
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      statusMessage: stage.statusMessage
+    })) || [],
+    currentStageName: taskData?.currentStageId || undefined,
+    processedItems: task.data?.processedItems,
+    totalItems: task.data?.totalItems,
+    startedAt: taskData?.startedAt || task.data?.startedAt || undefined,
+    estimatedCompletionAt: taskData?.estimatedCompletionAt || undefined,
+    status: mapTaskStatus(taskData?.status || task.data?.status),
+    dispatchStatus: taskData?.dispatchStatus,
+    celeryTaskId: taskData?.celeryTaskId,
+    workerNodeId: taskData?.workerNodeId,
+    completedAt: taskData?.completedAt || undefined,
+    errorMessage: taskData?.errorMessage || task.data?.errorMessage || undefined
+  }
+
+  // Type assertion to ensure all properties match BaseTaskProps
+  const typedTask = {
+    ...taskWithDefaults,
+    startedAt: taskWithDefaults.startedAt || undefined,
+    completedAt: taskWithDefaults.completedAt || undefined,
+    estimatedCompletionAt: taskWithDefaults.estimatedCompletionAt || undefined,
+    errorMessage: taskWithDefaults.errorMessage || undefined,
+    status: taskWithDefaults.status,
+    dispatchStatus: taskWithDefaults.dispatchStatus,
+    celeryTaskId: taskWithDefaults.celeryTaskId,
+    workerNodeId: taskWithDefaults.workerNodeId,
+    currentStageName: taskWithDefaults.currentStageName,
+    stages: taskWithDefaults.stages
+  } as unknown as BaseTaskProps['task']
+
+  // Update TaskStatus components to handle null values
+  const renderTaskStatus = (data: EvaluationTaskData) => {
+    const taskStages = data.task?.stages?.items?.map(stage => ({
+      key: stage.name,
+      label: stage.name,
+      color: stage.status === 'COMPLETED' ? 'bg-primary' :
+            stage.status === 'FAILED' ? 'bg-false' :
+            'bg-neutral',
+      name: stage.name,
+      order: stage.order,
+      status: mapTaskStatus(stage.status),
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      statusMessage: stage.statusMessage,
+      startedAt: stage.startedAt || undefined,
+      completedAt: stage.completedAt || undefined,
+      estimatedCompletionAt: stage.estimatedCompletionAt || undefined
+    })) || []
+
+    const taskStatus = {
+      showStages: true,
+      status: mapTaskStatus(data.task?.status || data.status),
+      stageConfigs: taskStages,
+      stages: taskStages,
+      processedItems: data.processedItems,
+      totalItems: data.totalItems,
+      startedAt: data.task?.startedAt || data.startedAt || undefined,
+      completedAt: data.task?.completedAt || undefined,
+      estimatedCompletionAt: data.task?.estimatedCompletionAt || undefined,
+      errorMessage: data.task?.errorMessage || data.errorMessage || undefined,
+      command: data.task?.command || data.command,
+      statusMessage: data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage || undefined
+    } as const
+
+    return <TaskStatus {...taskStatus} />
+  }
+
   return (
     <Task
       variant={variant}
-      task={{
-        ...task,
-        type: computedType,
-        description: variant === 'detail' ? undefined : task.summary
-      }}
+      task={typedTask}
       onClick={onClick}
       controlButtons={controlButtons}
       isFullWidth={isFullWidth}
       onToggleFullWidth={onToggleFullWidth}
       onClose={onClose}
+      extra={extra}
       {...restProps}
       renderHeader={(props) => (
         <TaskHeader {...props}>
@@ -639,9 +727,9 @@ export default function EvaluationTask({
         </TaskHeader>
       )}
       renderContent={(props) => (
-        <TaskContent {...props}>
+        <TaskContent {...props} hideTaskStatus={true}>
           {variant === 'grid' ? (
-            <GridContent data={data} />
+            <GridContent data={data} extra={extra} />
           ) : (
             <DetailContent 
               data={data}

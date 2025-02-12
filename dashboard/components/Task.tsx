@@ -16,6 +16,7 @@ export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
     score: string
     time: string
     description?: string
+    command?: string
     data?: TData
     stages?: TaskStageConfig[]
     currentStageName?: string
@@ -40,11 +41,13 @@ export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
   onRetry?: () => void
   showPreExecutionStages?: boolean
   isSelected?: boolean
+  extra?: boolean
 }
 
 interface TaskChildProps<TData extends BaseTaskData = BaseTaskData> extends BaseTaskProps<TData> {
   children?: React.ReactNode
   showProgress?: boolean
+  hideTaskStatus?: boolean
 }
 
 export interface TaskComponentProps<TData extends BaseTaskData = BaseTaskData> extends BaseTaskProps<TData> {
@@ -88,7 +91,8 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
   error,
   onRetry,
   showPreExecutionStages,
-  isSelected = false
+  isSelected = false,
+  extra = false
 }: TaskComponentProps<TData>) => {
   const childProps: TaskChildProps<TData> = {
     variant,
@@ -176,9 +180,9 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
     <CardHeader className="space-y-1.5 p-0 flex flex-col items-start">
       <div className="flex justify-between items-start w-full">
         <div className="flex flex-col pb-1">
-          <div className="text-lg font-bold">{task.type}</div>
-          <div className="text-xs text-muted-foreground h-4">{task.scorecard || '\u00A0'}</div>
-          <div className="text-xs text-muted-foreground h-4">{task.score || '\u00A0'}</div>
+          <div className="text-sm">{task.scorecard || '\u00A0'}</div>
+          <div className="text-sm">{task.score || '\u00A0'}</div>
+          <div className="text-sm">{task.type}</div>
         </div>
         <div className="flex flex-col items-end">
           {variant === 'grid' ? (
@@ -222,10 +226,12 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
   children, 
   visualization,
   showProgress = true,
+  hideTaskStatus = false,
   isLoading,
   showPreExecutionStages
 }: TaskChildProps<TData> & {
   visualization?: React.ReactNode
+  hideTaskStatus?: boolean
 }) => {
   // Get status message from current stage or last completed stage if task is done
   const statusMessage = (() => {
@@ -247,7 +253,7 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
 
   return (
     <CardContent className="h-full p-0 flex flex-col flex-1">
-      {showProgress && task.stages && (
+      {showProgress && !hideTaskStatus && task.stages && (
         <div>
           <TaskStatus
             showStages={true}
@@ -269,7 +275,7 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
             startedAt={task.startedAt}
             estimatedCompletionAt={task.estimatedCompletionAt}
             status={task.status || 'PENDING'}
-            command={task.data?.command}
+            command={task.command}
             statusMessage={statusMessage}
             errorMessage={task.errorMessage}
             dispatchStatus={task.dispatchStatus}
