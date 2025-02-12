@@ -1642,7 +1642,7 @@ Total cost:       ${expenses['total_cost']:.6f}
             # Log the data being sent
             self.logger.info("Preparing to create score result with data:")
             for key, value in data.items():
-                self.logger.info(f"{key}: {value}")
+                self.logger.info(f"{key}: {truncate_dict_strings_inner(value)}")
 
             # Validate all required fields are present and not None
             required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'value', 'metadata']
@@ -1693,8 +1693,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                 raise Exception("Failed to create score result - no data returned")
             
             # Log the successful response
-            logging.info("Successfully created score result:")
-            logging.info(f"Response: {response}")
+            logging.debug("Successfully created score result:")
+            logging.debug(f"Response: {truncate_dict_strings_inner(response)}")
             
         except Exception as e:
             logging.error(f"Error creating score result: {e}")
