@@ -50,6 +50,72 @@ import { TaskDispatchButton, evaluationsConfig } from '@/components/task-dispatc
 const ACCOUNT_KEY = 'call-criteria'
 
 // Add subscription queries after the ACCOUNT_KEY constant
+const EVALUATION_UPDATE_SUBSCRIPTION = `
+  subscription OnUpdateEvaluation {
+    onUpdateEvaluation {
+      id
+      type
+      accuracy
+      parameters
+      metrics
+      metricsExplanation
+      inferences
+      cost
+      createdAt
+      updatedAt
+      status
+      startedAt
+      totalItems
+      processedItems
+      errorMessage
+      errorDetails
+      accountId
+      scorecardId
+      scoreId
+      confusionMatrix
+      elapsedSeconds
+      estimatedRemainingSeconds
+      scoreGoal
+      datasetClassDistribution
+      isDatasetClassDistributionBalanced
+      predictedClassDistribution
+      isPredictedClassDistributionBalanced
+      taskId
+      task {
+        id
+        type
+        status
+        target
+        command
+        description
+        dispatchStatus
+        metadata
+        createdAt
+        startedAt
+        completedAt
+        estimatedCompletionAt
+        errorMessage
+        errorDetails
+        currentStageId
+        stages {
+          items {
+            id
+            name
+            order
+            status
+            statusMessage
+            startedAt
+            completedAt
+            estimatedCompletionAt
+            processedItems
+            totalItems
+          }
+        }
+      }
+    }
+  }
+`;
+
 const TASK_UPDATE_SUBSCRIPTION = `
   subscription OnUpdateTask {
     onUpdateTask {
@@ -381,7 +447,8 @@ const formatCreatedAt = (dateString: string | null | undefined) => {
   }
 };
 
-const EvaluationRow = React.memo(({ 
+// Replace EvaluationCard with this simplified version that uses EvaluationTask
+const EvaluationCard = React.memo(({ 
   evaluation, 
   selectedEvaluationId, 
   scorecardNames, 
@@ -391,175 +458,49 @@ const EvaluationRow = React.memo(({
 }: EvaluationRowProps) => {
   const taskData = typeof evaluation.task === 'function' ? (evaluation.task() as TaskData) : evaluation.task as TaskData;
   
-  const stageConfigs = useMemo(() => {
-    if (!taskData?.stages?.items) return [];
-    return taskData.stages.items.map((stage) => ({
-      key: stage.name,
-      label: stage.name,
-      color: stage.status === 'COMPLETED' ? 'bg-primary' :
-             stage.status === 'FAILED' ? 'bg-false' :
-             'bg-neutral',
-      name: stage.name,
-      order: stage.order,
-      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-      processedItems: stage.processedItems,
-      totalItems: stage.totalItems,
-      statusMessage: stage.statusMessage,
-      completed: stage.status === 'COMPLETED',
-      startedAt: stage.startedAt,
-      completedAt: stage.completedAt,
-      estimatedCompletionAt: stage.estimatedCompletionAt
-    }));
-  }, [taskData?.stages?.items]);
-
-  const stages = useMemo(() => {
-    if (!taskData?.stages?.items) return [];
-    return taskData.stages.items.map((stage) => ({
-      key: stage.name,
-      label: stage.name,
-      color: stage.status === 'COMPLETED' ? 'bg-primary' :
-             stage.status === 'FAILED' ? 'bg-false' :
-             'bg-neutral',
-      name: stage.name,
-      order: stage.order,
-      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-      processedItems: stage.processedItems,
-      totalItems: stage.totalItems,
-      statusMessage: stage.statusMessage,
-      startedAt: stage.startedAt,
-      completedAt: stage.completedAt,
-      estimatedCompletionAt: stage.estimatedCompletionAt
-    }));
-  }, [taskData?.stages?.items]);
-
-  const estimatedCompletionAt = taskData?.stages?.items?.find((s) => s.estimatedCompletionAt)?.estimatedCompletionAt === null ? 
-    undefined : 
-    taskData?.stages?.items?.find((s) => s.estimatedCompletionAt)?.estimatedCompletionAt;
-  const startedAt = taskData?.startedAt === null ? undefined : taskData?.startedAt || 
-                   evaluation.startedAt === null ? undefined : evaluation.startedAt;
-  const completedAt = taskData?.completedAt === null ? undefined : taskData?.completedAt;
-  const errorMessage = evaluation.errorMessage === null ? undefined : evaluation.errorMessage;
+  // Transform evaluation data into EvaluationTask format
+  const evaluationTaskData: EvaluationTaskData = {
+    id: evaluation.id,
+    title: scorecardNames[evaluation.id] || 'Unknown Scorecard',
+    accuracy: evaluation.accuracy ?? null,
+    metrics: [], // Add metrics if available
+    processedItems: Number(evaluation.processedItems || 0),
+    totalItems: Number(evaluation.totalItems || 0),
+    progress: calculateProgress(evaluation.processedItems, evaluation.totalItems),
+    inferences: evaluation.inferences || 0,
+    cost: evaluation.cost || null,
+    status: evaluation.status || 'PENDING',
+    elapsedSeconds: evaluation.elapsedSeconds || null,
+    estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds || null,
+    startedAt: evaluation.startedAt,
+    errorMessage: evaluation.errorMessage,
+    errorDetails: evaluation.errorDetails,
+    task: taskData
+  };
 
   return (
-    <TableRow 
-      onClick={() => onSelect(evaluation)} 
-      className="group cursor-pointer transition-colors duration-200 relative hover:bg-muted"
+    <div 
+      onClick={() => onSelect(evaluation)}
+      className={`
+        transition-colors duration-200
+        ${evaluation.id === selectedEvaluationId ? 'bg-card' : 'bg-frame'}
+      `}
     >
-      <TableCell className="font-medium">
-        <div className="block @[630px]:hidden">
-          <div className="flex justify-between">
-            <div className="w-[40%] space-y-0.5">
-              <div className="font-semibold truncate">
-                <span className={evaluation.id === selectedEvaluationId ? 'text-focus' : ''}>
-                  {scorecardNames[evaluation.id] || 'Unknown Scorecard'}
-                </span>
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {scoreNames[evaluation.id] || 'Unknown Score'}
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {formatCreatedAt(evaluation.createdAt)}
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {evaluation.type || ''}
-              </div>
-            </div>
-            <div className="w-[55%] space-y-2">
-              <TaskStatus
-                variant="list"
-                showStages={true}
-                status={mapStatus(taskData?.status || evaluation.status)}
-                stageConfigs={stageConfigs}
-                stages={stages}
-                processedItems={taskData ? undefined : Number(evaluation.processedItems || 0)}
-                totalItems={taskData ? undefined : Number(evaluation.totalItems || 0)}
-                startedAt={startedAt}
-                completedAt={completedAt}
-                estimatedCompletionAt={estimatedCompletionAt}
-                errorMessage={errorMessage}
-              />
-            </div>
-          </div>
-          <div className="mt-2 flex justify-end space-x-2">
-            <CardButton 
-              icon={Eye}
-              onClick={() => onSelect(evaluation)}
-            />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  className="h-8 w-8 p-0"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={async (e) => {
-                  e.stopPropagation();
-                  if (window.confirm('Are you sure you want to delete this evaluation?')) {
-                    await onDelete(evaluation.id);
-                  }
-                }}>
-                  <Trash2 className="h-4 w-4 mr-2" /> Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-        <div className="hidden @[630px]:block">
-          <div className="font-semibold">
-            <span className={evaluation.id === selectedEvaluationId ? 'text-focus' : ''}>
-              {scorecardNames[evaluation.id] || 'Unknown Scorecard'}
-            </span>
-          </div>
-          <div className="text-sm text-muted-foreground">
-            {scoreNames[evaluation.id] || 'Unknown Score'}
-          </div>
-          <div className="text-sm text-muted-foreground">
-            {formatCreatedAt(evaluation.createdAt)}
-          </div>
-        </div>
-      </TableCell>
-      <TableCell className="hidden @[630px]:table-cell text-sm text-muted-foreground">
-        {evaluation.type || ''}
-      </TableCell>
-      <TableCell className="hidden @[630px]:table-cell w-[15%] text-right">
-        <TaskStatus
-          variant="list"
-          showStages={true}
-          status={mapStatus(taskData?.status || evaluation.status)}
-          stageConfigs={stageConfigs}
-          stages={stages}
-          processedItems={taskData ? undefined : Number(evaluation.processedItems || 0)}
-          totalItems={taskData ? undefined : Number(evaluation.totalItems || 0)}
-          startedAt={startedAt}
-          completedAt={completedAt}
-          estimatedCompletionAt={estimatedCompletionAt}
-          errorMessage={errorMessage}
-        />
-      </TableCell>
-      <TableCell className="hidden @[630px]:table-cell w-[15%]">
-        <EvaluationListAccuracyBar 
-          progress={calculateProgress(evaluation.processedItems, evaluation.totalItems)}
-          accuracy={evaluation.accuracy ?? 0}
-          isFocused={evaluation.id === selectedEvaluationId}
-        />
-      </TableCell>
-      <TableCell className="hidden @[630px]:table-cell w-[10%] text-right">
-        <div className="flex items-center justify-end space-x-2">
-          <CardButton 
-            icon={Eye}
-            onClick={() => onSelect(evaluation)}
-          />
+      <EvaluationTask
+        variant="grid"
+        task={{
+          id: evaluation.id,
+          type: evaluation.type,
+          scorecard: scorecardNames[evaluation.id] || 'Unknown Scorecard',
+          score: scoreNames[evaluation.id] || 'Unknown Score',
+          time: evaluation.createdAt,
+          data: evaluationTaskData
+        }}
+        onClick={() => onSelect(evaluation)}
+        controlButtons={
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <Button 
-                variant="ghost" 
-                size="icon"
-                className="h-8 w-8 p-0"
-              >
+              <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -574,13 +515,11 @@ const EvaluationRow = React.memo(({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-      </TableCell>
-    </TableRow>
+        }
+      />
+    </div>
   );
 });
-
-EvaluationRow.displayName = 'EvaluationRow';
 
 function useViewportWidth() {
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
@@ -1445,44 +1384,34 @@ export default function EvaluationsDashboard(): JSX.Element {
     })
   }, [evaluations, selectedScorecard])
 
-  const EvaluationList = useMemo(() => (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-[40%]">Evaluation</TableHead>
-          <TableHead className="w-[10%] @[630px]:table-cell hidden">Type</TableHead>
-          <TableHead className="w-[20%] @[630px]:table-cell hidden text-right">Progress</TableHead>
-          <TableHead className="w-[20%] @[630px]:table-cell hidden text-right">Accuracy</TableHead>
-          <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {filteredEvaluations.map((Evaluation) => (
-          <EvaluationRow 
-            key={Evaluation.id} 
-            evaluation={Evaluation}
-            selectedEvaluationId={selectedEvaluation?.id ?? null}
-            scorecardNames={scorecardNames}
-            scoreNames={scoreNames}
-            onSelect={(evaluation) => {
-              setSelectedScoreResultId(null)
-              setSelectedEvaluation(evaluation)
-            }}
-            onDelete={async (evaluationId) => {
-              const success = await handleDeleteEvaluation(client, evaluationId);
-              if (success) {
-                setEvaluations(prev => prev.filter(e => e.id !== evaluationId));
-                if (selectedEvaluation?.id === evaluationId) {
-                  setSelectedEvaluation(null);
-                }
+  // Replace the EvaluationList memo with a grid layout
+  const EvaluationGrid = useMemo(() => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {filteredEvaluations.map((evaluation) => (
+        <EvaluationCard
+          key={evaluation.id}
+          evaluation={evaluation}
+          selectedEvaluationId={selectedEvaluation?.id ?? null}
+          scorecardNames={scorecardNames}
+          scoreNames={scoreNames}
+          onSelect={(evaluation) => {
+            setSelectedScoreResultId(null)
+            setSelectedEvaluation(evaluation)
+          }}
+          onDelete={async (evaluationId) => {
+            const success = await handleDeleteEvaluation(client, evaluationId);
+            if (success) {
+              setEvaluations(prev => prev.filter(e => e.id !== evaluationId));
+              if (selectedEvaluation?.id === evaluationId) {
+                setSelectedEvaluation(null);
               }
-              return success;
-            }}
-          />
-        ))}
-      </TableBody>
-    </Table>
-  ), [filteredEvaluations, selectedEvaluation?.id, scorecardNames, scoreNames])
+            }
+            return success;
+          }}
+        />
+      ))}
+    </div>
+  ), [filteredEvaluations, selectedEvaluation?.id, scorecardNames, scoreNames]);
 
   const EvaluationTaskComponent = useMemo(() => {
     if (!selectedEvaluation || !evaluationTaskProps) {
@@ -2455,6 +2384,270 @@ export default function EvaluationsDashboard(): JSX.Element {
     };
   }, [selectedEvaluation?.id, evaluationTaskProps]);
 
+  useEffect(() => {
+    if (!accountId) return;
+
+    const currentClient = getClient();
+    const subscriptions: { unsubscribe: () => void }[] = [];
+
+    // Subscribe to evaluation updates
+    const evaluationSub = (currentClient.graphql({
+      query: EVALUATION_UPDATE_SUBSCRIPTION
+    }) as unknown as { subscribe: Function }).subscribe({
+      next: ({ data }: { data?: { onUpdateEvaluation: Schema['Evaluation']['type'] } }) => {
+        if (data?.onUpdateEvaluation) {
+          const updatedEvaluation = transformEvaluation(data.onUpdateEvaluation);
+          if (updatedEvaluation) {
+            setEvaluations(prev => {
+              const index = prev.findIndex(e => e.id === updatedEvaluation.id);
+              if (index === -1) return prev;
+              const newEvaluations = [...prev];
+              newEvaluations[index] = updatedEvaluation;
+              return newEvaluations;
+            });
+
+            // Update selected evaluation if it's the one being updated
+            if (selectedEvaluation?.id === updatedEvaluation.id) {
+              setSelectedEvaluation(updatedEvaluation);
+            }
+          }
+        }
+      },
+      error: (error: Error) => {
+        console.error('Error in evaluation update subscription:', error);
+      }
+    });
+    subscriptions.push(evaluationSub);
+
+    // Subscribe to task updates
+    const taskSub = (currentClient.graphql({
+      query: TASK_UPDATE_SUBSCRIPTION
+    }) as unknown as { subscribe: Function }).subscribe({
+      next: ({ data }: { data?: { onUpdateTask: TaskData } }) => {
+        if (data?.onUpdateTask) {
+          const updatedTask = data.onUpdateTask;
+          
+          // Transform stages for TaskStatus component
+          const transformedStages = updatedTask.stages?.items?.map(stage => ({
+            key: stage.name,
+            label: stage.name,
+            color: stage.name.toLowerCase() === 'processing' ? 'bg-secondary' : 'bg-primary',
+            name: stage.name,
+            order: stage.order,
+            status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+            processedItems: stage.processedItems ?? undefined,
+            totalItems: stage.totalItems ?? undefined,
+            startedAt: stage.startedAt ?? undefined,
+            completedAt: stage.completedAt ?? undefined,
+            estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+            statusMessage: stage.statusMessage ?? undefined
+          })) || [];
+
+          // Get current stage info
+          const currentStage = transformedStages.length > 0 ? 
+            transformedStages.reduce((current, stage) => {
+              if (!current) return stage;
+              
+              if (updatedTask.status === 'COMPLETED') {
+                return stage.order > current.order ? stage : current;
+              }
+              
+              if (stage.status === 'RUNNING') return stage;
+              if (current.status === 'RUNNING') return current;
+              
+              if (stage.status === 'PENDING' && current.status === 'PENDING') {
+                return stage.order < current.order ? stage : current;
+              }
+              
+              if (stage.status === 'PENDING') return stage;
+              if (current.status === 'PENDING') return current;
+              
+              return stage.order > current.order ? stage : current;
+            }, null) : null;
+
+          setEvaluations(prev => {
+            return prev.map(evaluation => {
+              if (evaluation.task && typeof evaluation.task !== 'function' && evaluation.task.id === updatedTask.id) {
+                return {
+                  ...evaluation,
+                  task: {
+                    ...updatedTask,
+                    stages: {
+                      items: transformedStages
+                    }
+                  },
+                  processedItems: currentStage?.processedItems ?? 0,
+                  totalItems: currentStage?.totalItems ?? 0
+                };
+              }
+              return evaluation;
+            });
+          });
+
+          // Update selected evaluation if its task was updated
+          if (selectedEvaluation?.task && typeof selectedEvaluation.task !== 'function' && selectedEvaluation.task.id === updatedTask.id) {
+            setSelectedEvaluation(prev => prev ? {
+              ...prev,
+              task: {
+                ...updatedTask,
+                stages: {
+                  items: transformedStages
+                }
+              },
+              processedItems: currentStage?.processedItems ?? 0,
+              totalItems: currentStage?.totalItems ?? 0
+            } : null);
+          }
+        }
+      },
+      error: (error: Error) => {
+        console.error('Error in task update subscription:', error);
+      }
+    });
+    subscriptions.push(taskSub);
+
+    // Subscribe to task stage updates
+    const stageSub = (currentClient.graphql({
+      query: TASK_STAGE_UPDATE_SUBSCRIPTION
+    }) as unknown as { subscribe: Function }).subscribe({
+      next: ({ data }: { data?: { onUpdateTaskStage: TaskStageUpdateSubscriptionData['onUpdateTaskStage'] } }) => {
+        if (data?.onUpdateTaskStage) {
+          // When a stage updates, fetch the full task to get all stages
+          (async () => {
+            try {
+              const result = await currentClient.graphql({
+                query: `
+                  query GetTask($id: ID!) {
+                    getTask(id: $id) {
+                      id
+                      type
+                      status
+                      target
+                      command
+                      description
+                      dispatchStatus
+                      metadata
+                      createdAt
+                      startedAt
+                      completedAt
+                      estimatedCompletionAt
+                      errorMessage
+                      errorDetails
+                      currentStageId
+                      stages {
+                        items {
+                          id
+                          name
+                          order
+                          status
+                          statusMessage
+                          startedAt
+                          completedAt
+                          estimatedCompletionAt
+                          processedItems
+                          totalItems
+                        }
+                      }
+                    }
+                  }
+                `,
+                variables: {
+                  id: data.onUpdateTaskStage.taskId
+                }
+              });
+
+              if (result.data?.getTask) {
+                const updatedTask = result.data.getTask;
+                
+                // Transform stages for TaskStatus component
+                const transformedStages = updatedTask.stages?.items?.map(stage => ({
+                  key: stage.name,
+                  label: stage.name,
+                  color: stage.name.toLowerCase() === 'processing' ? 'bg-secondary' : 'bg-primary',
+                  name: stage.name,
+                  order: stage.order,
+                  status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+                  processedItems: stage.processedItems ?? undefined,
+                  totalItems: stage.totalItems ?? undefined,
+                  startedAt: stage.startedAt ?? undefined,
+                  completedAt: stage.completedAt ?? undefined,
+                  estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+                  statusMessage: stage.statusMessage ?? undefined
+                })) || [];
+
+                // Get current stage info
+                const currentStage = transformedStages.length > 0 ? 
+                  transformedStages.reduce((current, stage) => {
+                    if (!current) return stage;
+                    
+                    if (updatedTask.status === 'COMPLETED') {
+                      return stage.order > current.order ? stage : current;
+                    }
+                    
+                    if (stage.status === 'RUNNING') return stage;
+                    if (current.status === 'RUNNING') return current;
+                    
+                    if (stage.status === 'PENDING' && current.status === 'PENDING') {
+                      return stage.order < current.order ? stage : current;
+                    }
+                    
+                    if (stage.status === 'PENDING') return stage;
+                    if (current.status === 'PENDING') return current;
+                    
+                    return stage.order > current.order ? stage : current;
+                  }, null) : null;
+
+                setEvaluations(prev => {
+                  return prev.map(evaluation => {
+                    if (evaluation.task && typeof evaluation.task !== 'function' && evaluation.task.id === updatedTask.id) {
+                      return {
+                        ...evaluation,
+                        task: {
+                          ...updatedTask,
+                          stages: {
+                            items: transformedStages
+                          }
+                        },
+                        processedItems: currentStage?.processedItems ?? 0,
+                        totalItems: currentStage?.totalItems ?? 0
+                      };
+                    }
+                    return evaluation;
+                  });
+                });
+
+                // Update selected evaluation if its task was updated
+                if (selectedEvaluation?.task && typeof selectedEvaluation.task !== 'function' && selectedEvaluation.task.id === updatedTask.id) {
+                  setSelectedEvaluation(prev => prev ? {
+                    ...prev,
+                    task: {
+                      ...updatedTask,
+                      stages: {
+                        items: transformedStages
+                      }
+                    },
+                    processedItems: currentStage?.processedItems ?? 0,
+                    totalItems: currentStage?.totalItems ?? 0
+                  } : null);
+                }
+              }
+            } catch (error) {
+              console.error('Error fetching updated task:', error);
+            }
+          })();
+        }
+      },
+      error: (error: Error) => {
+        console.error('Error in task stage update subscription:', error);
+      }
+    });
+    subscriptions.push(stageSub);
+
+    return () => {
+      subscriptions.forEach(sub => sub.unsubscribe());
+    };
+  }, [accountId, selectedEvaluation?.id]);
+
   if (authStatus !== 'authenticated') {
     return <EvaluationDashboardSkeleton />;
   }
@@ -2472,60 +2665,57 @@ export default function EvaluationsDashboard(): JSX.Element {
   }
 
   return (
-    <ClientOnly>
-      <div className="h-full flex flex-col" ref={containerRef}>
-        <div className={`flex ${isNarrowViewport ? 'flex-col' : ''} flex-1 h-full w-full`}>
-          <div className={`
-            flex flex-col
-            ${isFullWidth ? 'hidden' : ''} 
-            ${(!selectedEvaluation || !isNarrowViewport) ? 'flex h-full' : 'hidden'}
-            ${(!selectedEvaluation || isNarrowViewport) ? 'w-full' : ''}
-          `}
-          style={!isNarrowViewport && selectedEvaluation && !isFullWidth ? {
-            width: `${leftPanelWidth}%`
-          } : undefined}>
-            <div className="mb-4 flex-shrink-0 flex justify-between items-start">
-              <ScorecardContext 
-                selectedScorecard={selectedScorecard}
-                setSelectedScorecard={setSelectedScorecard}
-                selectedScore={selectedScore}
-                setSelectedScore={setSelectedScore}
-                availableFields={[]}
-              />
-              <TaskDispatchButton config={evaluationsConfig} />
-            </div>
-            <div className="flex-1 min-h-0 overflow-y-auto @container">
-              {EvaluationList}
-            </div>
-          </div>
-
-          {selectedEvaluation && !isNarrowViewport && !isFullWidth && (
-            <div
-              className="w-2 relative cursor-col-resize flex-shrink-0 group"
-              onMouseDown={handleDragStart}
-            >
-              <div className="absolute inset-0 rounded-full transition-colors duration-150 
-                group-hover:bg-accent" />
-            </div>
-          )}
-
-          {selectedEvaluation && evaluationTaskProps && (
-            <div 
-              className={`
-                flex flex-col flex-1 
-                ${isNarrowViewport || isFullWidth ? 'w-full' : ''}
-                h-full
-              `}
-              style={!isNarrowViewport && !isFullWidth ? {
-                width: `${100 - leftPanelWidth}%`
-              } : undefined}
-            >
-              {EvaluationTaskComponent}
-            </div>
-          )}
-        </div>
+    <div className="flex flex-col h-full p-1.5">
+      <div className="mb-4 flex-shrink-0 flex justify-between items-start">
+        <ScorecardContext 
+          selectedScorecard={selectedScorecard}
+          setSelectedScorecard={setSelectedScorecard}
+          selectedScore={selectedScore}
+          setSelectedScore={setSelectedScore}
+          availableFields={[]}
+        />
+        <TaskDispatchButton config={evaluationsConfig} />
       </div>
-    </ClientOnly>
+      <div className="flex h-full">
+        <div 
+          className={`
+            ${selectedEvaluation && !isNarrowViewport && !isFullWidth ? '' : 'w-full'}
+            ${selectedEvaluation && !isNarrowViewport && isFullWidth ? 'hidden' : ''}
+            h-full overflow-auto
+          `}
+          style={selectedEvaluation && !isNarrowViewport && !isFullWidth ? {
+            width: `${leftPanelWidth}%`
+          } : undefined}
+        >
+          {EvaluationGrid}
+        </div>
+        
+        {selectedEvaluation && !isNarrowViewport && !isFullWidth && (
+          <div
+            className="w-2 relative cursor-col-resize flex-shrink-0 group"
+            onMouseDown={handleDragStart}
+          >
+            <div className="absolute inset-0 rounded-full transition-colors duration-150 
+              group-hover:bg-accent" />
+          </div>
+        )}
+        
+        {selectedEvaluation && evaluationTaskProps && (
+          <div 
+            className={`
+              flex flex-col flex-1 
+              ${isNarrowViewport || isFullWidth ? 'w-full' : ''}
+              h-full
+            `}
+            style={!isNarrowViewport && !isFullWidth ? {
+              width: `${100 - leftPanelWidth}%`
+            } : undefined}
+          >
+            {EvaluationTaskComponent}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

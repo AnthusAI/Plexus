@@ -39,6 +39,7 @@ export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
   error?: string
   onRetry?: () => void
   showPreExecutionStages?: boolean
+  isSelected?: boolean
 }
 
 interface TaskChildProps<TData extends BaseTaskData = BaseTaskData> extends BaseTaskProps<TData> {
@@ -86,7 +87,8 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
   isLoading = false,
   error,
   onRetry,
-  showPreExecutionStages
+  showPreExecutionStages,
+  isSelected = false
 }: TaskComponentProps<TData>) => {
   const childProps: TaskChildProps<TData> = {
     variant,
@@ -104,7 +106,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
 
   if (variant === 'nested') {
     return (
-      <div className="bg-background/50 p-3 rounded-md">
+      <div className="bg-background/50 p-3">
         {renderHeader(childProps)}
         {renderContent(childProps)}
       </div>
@@ -112,12 +114,12 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
   }
 
   return (
-    <Card 
+    <div 
       className={`
-        bg-card shadow-none border-none rounded-lg transition-colors duration-200 
-        flex flex-col h-full p-3 hover:bg-accent/50
-        ${variant === 'grid' ? 'cursor-pointer' : ''}
-        ${isLoading ? 'opacity-70' : ''}
+        transition-colors duration-200 
+        flex flex-col h-full p-3 rounded-lg
+        ${variant === 'grid' ? 'cursor-pointer hover:bg-accent/50' : ''}
+        ${variant === 'grid' ? (isSelected ? 'bg-card' : 'bg-frame') : 'bg-card'}
       `}
       onClick={variant === 'grid' && !isLoading ? onClick : undefined}
       role={variant === 'grid' ? 'button' : 'article'}
@@ -134,7 +136,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
       <div className="flex-none">
         {renderHeader(childProps)}
       </div>
-      <CardContent className="flex-1 min-h-0 p-0">
+      <div className="flex-1 min-h-0">
         {error ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             <div className="text-destructive mb-2">{error}</div>
@@ -152,8 +154,8 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
         ) : (
           renderContent(childProps)
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
 
