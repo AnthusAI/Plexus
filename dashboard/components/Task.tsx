@@ -84,18 +84,18 @@ const getTaskIcon = (type: string) => {
   
   if (taskType.includes('evaluation')) {
     if (taskType.includes('accuracy')) {
-      return <FlaskConical className="h-[2.25rem] w-[2.25rem]" />
+      return <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.5} />
     }
     if (taskType.includes('consistency')) {
-      return <FlaskRound className="h-[2.25rem] w-[2.25rem]" />
+      return <FlaskRound className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.5} />
     }
     if (taskType.includes('alignment')) {
-      return <TestTubes className="h-[2.25rem] w-[2.25rem]" />
+      return <TestTubes className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.5} />
     }
-    return <FlaskConical className="h-[2.25rem] w-[2.25rem]" />
+    return <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.5} />
   }
   
-  return <Activity className="h-[2.25rem] w-[2.25rem]" />
+  return <Activity className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.5} />
 }
 
 const Task = <TData extends BaseTaskData = BaseTaskData>({ 
