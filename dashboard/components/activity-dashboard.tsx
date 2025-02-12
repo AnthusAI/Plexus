@@ -54,6 +54,16 @@ function transformTaskToActivity(task: ProcessedTask) {
     throw new Error('Invalid task: task or task.id is null')
   }
 
+  console.warn('transformTaskToActivity input:', {
+    taskId: task.id,
+    type: task.type,
+    scorecard: task.scorecard,
+    score: task.score,
+    scorecardId: task.scorecardId,
+    scoreId: task.scoreId,
+    rawTask: task
+  });
+
   // Parse metadata for task info - ensure we have a default empty object
   let metadata = {}
   try {
@@ -127,16 +137,29 @@ function transformTaskToActivity(task: ProcessedTask) {
   // Get the appropriate status message - keep both messages and let TaskStatus handle display logic
   const statusMessage = currentStage?.statusMessage ?? undefined
 
+  // Get scorecard and score names, ensuring we handle undefined cases
+  const scorecardName = task.scorecard?.name ?? '-'
+  const scoreName = task.score?.name ?? '-'
+
+  console.warn('Using scorecard and score:', {
+    scorecardId: task.scorecardId,
+    scoreId: task.scoreId,
+    scorecard: task.scorecard,
+    score: task.score,
+    scorecardName,
+    scoreName
+  });
+
   const result: EvaluationTaskProps['task'] = {
     id: task.id,
     type: String((metadata as any)?.type || task.type),
-    scorecard: ((metadata as any)?.scorecard?.toString() || '-') as string,
-    score: ((metadata as any)?.score?.toString() || '-') as string,
+    scorecard: scorecardName,
+    score: scoreName,
     time: timeStr,
     description: task.command,
     data: {
       id: task.id,
-      title: `${(metadata as any)?.scorecard?.toString() || '-'} - ${(metadata as any)?.score?.toString() || '-'}`,
+      title: `${scorecardName} - ${scoreName}`,
       command: task.command,
       accuracy: (metadata as any)?.accuracy ?? null,
       metrics: (metadata as any)?.metrics ?? [],
@@ -182,6 +205,15 @@ function transformTaskToActivity(task: ProcessedTask) {
     workerNodeId: task.workerNodeId
   }
 
+  console.warn('transformTaskToActivity output:', {
+    taskId: result.id,
+    type: result.type,
+    scorecard: result.scorecard,
+    score: result.score,
+    title: result.data.title,
+    rawResult: result
+  });
+
   return result
 }
 
@@ -211,8 +243,52 @@ export default function ActivityDashboard() {
     }
   }, [authStatus, router]);
 
+  // Initial data load
   useEffect(() => {
+    async function loadInitialData() {
+      console.warn('Starting initial data load');
+      try {
+        const tasks = await listRecentTasks(12);
+        console.warn('Initial data load complete:', {
+          count: tasks.length,
+          taskIds: tasks.map(task => task.id),
+          taskDetails: tasks.map(task => ({
+            id: task.id,
+            scorecard: task.scorecard,
+            score: task.score
+          }))
+        });
+        setRecentTasks(tasks);
+        setIsInitialLoading(false);
+      } catch (error) {
+        console.error('Error loading initial data:', error);
+        setIsInitialLoading(false);
+      }
+    }
+
+    loadInitialData();
+  }, []);
+
+  // Handle task updates
+  useEffect(() => {
+    console.debug('Processing recentTasks for display:', {
+      count: recentTasks.length,
+      taskIds: recentTasks.map(task => task.id),
+      taskDetails: recentTasks.map(task => ({
+        id: task.id,
+        scorecard: task.scorecard,
+        score: task.score
+      }))
+    });
     const transformed = recentTasks.map(transformTaskToActivity)
+    console.debug('After transformation:', {
+      count: transformed.length,
+      taskDetails: transformed.map(task => ({
+        id: task.id,
+        scorecard: task.scorecard,
+        score: task.score
+      }))
+    });
     // Sort tasks: use createdAt for in-progress tasks, updatedAt for completed ones
     const sorted = [...transformed].sort((a, b) => {
       // For completed/failed tasks, sort by updatedAt
@@ -231,40 +307,6 @@ export default function ActivityDashboard() {
     })
     setDisplayedTasks(filtered)
   }, [recentTasks, selectedScorecard, selectedScore])
-
-  useEffect(() => {
-    const subscription = observeRecentTasks(12).subscribe({
-      next: ({ items, isSynced }) => {
-        // Sort items before setting state
-        const sortedItems = [...items].sort((a, b) => {
-          const aTime = a.status === 'COMPLETED' || a.status === 'FAILED' 
-            ? (a.updatedAt || a.createdAt)
-            : a.createdAt
-          const bTime = b.status === 'COMPLETED' || b.status === 'FAILED'
-            ? (b.updatedAt || b.createdAt)
-            : b.createdAt
-
-          // Default to current time if timestamps are undefined
-          const aDate = aTime ? new Date(aTime) : new Date()
-          const bDate = bTime ? new Date(bTime) : new Date()
-          
-          return bDate.getTime() - aDate.getTime()
-        })
-        setRecentTasks(sortedItems)
-        if (isSynced) {
-          setIsInitialLoading(false)
-        }
-      },
-      error: (error) => {
-        console.error('Error in task subscription:', error)
-        setIsInitialLoading(false)
-      }
-    })
-
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [])
 
   const handleDragStart = (e: React.MouseEvent) => {
     e.preventDefault()
