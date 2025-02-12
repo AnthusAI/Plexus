@@ -428,109 +428,113 @@ const DetailContent = React.memo(({
         }}
       >
         {showMainPanel && (
-          <div className="w-full h-full overflow-y-auto">
-            <div className="mb-3">
-              <TaskStatus
-                variant="detail"
-                showStages={true}
-                status={mapTaskStatus(data.task?.status || data.status)}
-                stageConfigs={data.task?.stages?.items?.map(stage => ({
-                  key: stage.name,
-                  label: stage.name,
-                  color: stage.status === 'COMPLETED' ? 'bg-primary' :
-                        stage.status === 'FAILED' ? 'bg-false' :
-                        'bg-neutral',
-                  name: stage.name,
-                  order: stage.order,
-                  status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-                  processedItems: stage.processedItems,
-                  totalItems: stage.totalItems,
-                  statusMessage: stage.statusMessage,
-                  completed: stage.status === 'COMPLETED',
-                  startedAt: stage.startedAt || undefined,
-                  completedAt: stage.completedAt || undefined,
-                  estimatedCompletionAt: stage.estimatedCompletionAt || undefined
-                })) || []}
-                stages={data.task?.stages?.items?.map(stage => ({
-                  key: stage.name,
-                  label: stage.name,
-                  color: stage.status === 'COMPLETED' ? 'bg-primary' :
-                        stage.status === 'FAILED' ? 'bg-false' :
-                        'bg-neutral',
-                  name: stage.name,
-                  order: stage.order,
-                  status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-                  processedItems: stage.processedItems,
-                  totalItems: stage.totalItems,
-                  statusMessage: stage.statusMessage,
-                  startedAt: stage.startedAt || undefined,
-                  completedAt: stage.completedAt || undefined,
-                  estimatedCompletionAt: stage.estimatedCompletionAt || undefined
-                })) || []}
-                processedItems={data.processedItems}
-                totalItems={data.totalItems}
-                startedAt={data.task?.startedAt || data.startedAt || undefined}
-                completedAt={data.task?.completedAt || undefined}
-                estimatedCompletionAt={data.task?.estimatedCompletionAt || undefined}
-                errorMessage={data.task?.errorMessage || data.errorMessage || undefined}
-                command={data.task?.command || data.command}
-                statusMessage={data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage}
-              />
-            </div>
+          <div className="w-full h-full flex flex-col">
+            <div className="flex-1 overflow-y-auto">
+              <div className="px-1">
+                <div className="mb-3">
+                  <TaskStatus
+                    variant="detail"
+                    showStages={true}
+                    status={mapTaskStatus(data.task?.status || data.status)}
+                    stageConfigs={data.task?.stages?.items?.map(stage => ({
+                      key: stage.name,
+                      label: stage.name,
+                      color: stage.status === 'COMPLETED' ? 'bg-primary' :
+                            stage.status === 'FAILED' ? 'bg-false' :
+                            'bg-neutral',
+                      name: stage.name,
+                      order: stage.order,
+                      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+                      processedItems: stage.processedItems,
+                      totalItems: stage.totalItems,
+                      statusMessage: stage.statusMessage,
+                      completed: stage.status === 'COMPLETED',
+                      startedAt: stage.startedAt || undefined,
+                      completedAt: stage.completedAt || undefined,
+                      estimatedCompletionAt: stage.estimatedCompletionAt || undefined
+                    })) || []}
+                    stages={data.task?.stages?.items?.map(stage => ({
+                      key: stage.name,
+                      label: stage.name,
+                      color: stage.status === 'COMPLETED' ? 'bg-primary' :
+                            stage.status === 'FAILED' ? 'bg-false' :
+                            'bg-neutral',
+                      name: stage.name,
+                      order: stage.order,
+                      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+                      processedItems: stage.processedItems,
+                      totalItems: stage.totalItems,
+                      statusMessage: stage.statusMessage,
+                      startedAt: stage.startedAt || undefined,
+                      completedAt: stage.completedAt || undefined,
+                      estimatedCompletionAt: stage.estimatedCompletionAt || undefined
+                    })) || []}
+                    processedItems={data.processedItems}
+                    totalItems={data.totalItems}
+                    startedAt={data.task?.startedAt || data.startedAt || undefined}
+                    completedAt={data.task?.completedAt || undefined}
+                    estimatedCompletionAt={data.task?.estimatedCompletionAt || undefined}
+                    errorMessage={data.task?.errorMessage || data.errorMessage || undefined}
+                    command={data.task?.command || data.command}
+                    statusMessage={data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage}
+                  />
+                </div>
 
-            <div className="mb-3">
-              <ClassDistributionVisualizer
-                data={data.datasetClassDistribution}
-                isBalanced={data.isDatasetClassDistributionBalanced}
-                onLabelSelect={handleActualLabelSelect}
-              />
-            </div>
+                <div className="mb-3">
+                  <ClassDistributionVisualizer
+                    data={data.datasetClassDistribution}
+                    isBalanced={data.isDatasetClassDistributionBalanced}
+                    onLabelSelect={handleActualLabelSelect}
+                  />
+                </div>
 
-            <div className="mb-3">
-              <PredictedClassDistributionVisualizer
-                data={data.predictedClassDistribution}
-                onLabelSelect={handlePredictedLabelSelect}
-              />
-            </div>
+                <div className="mb-3">
+                  <PredictedClassDistributionVisualizer
+                    data={data.predictedClassDistribution}
+                    onLabelSelect={handlePredictedLabelSelect}
+                  />
+                </div>
 
-            <div className="mb-3">
-              <MetricsGaugesExplanation
-                explanation={data.metricsExplanation}
-                goal={data.scoreGoal}
-              />
-            </div>
+                <div className="mb-3">
+                  <MetricsGaugesExplanation
+                    explanation={data.metricsExplanation}
+                    goal={data.scoreGoal}
+                  />
+                </div>
 
-            <MetricsGauges 
-              gauges={metrics} 
-              variant="detail"
-            />
-
-            {data.confusionMatrix?.matrix && 
-             data.confusionMatrix.matrix.length > 0 && 
-             data.confusionMatrix.labels && (
-              <div className="mt-3">
-                <ConfusionMatrix 
-                  data={{
-                    matrix: data.confusionMatrix.matrix,
-                    labels: data.confusionMatrix.labels
-                  }}
-                  onSelectionChange={setSelectedPredictedActual}
+                <MetricsGauges 
+                  gauges={metrics} 
+                  variant="detail"
                 />
-              </div>
-            )}
 
-            {!showAsColumns && data.scoreResults && data.scoreResults.length > 0 && (
-              <div className="mt-6">
-                <EvaluationTaskScoreResults 
-                  results={parsedScoreResults} 
-                  accuracy={data.accuracy ?? 0}
-                  selectedPredictedValue={selectedPredictedActual.predicted}
-                  selectedActualValue={selectedPredictedActual.actual}
-                  onResultSelect={handleScoreResultSelect}
-                  selectedScoreResult={selectedScoreResult}
-                />
+                {data.confusionMatrix?.matrix && 
+                 data.confusionMatrix.matrix.length > 0 && 
+                 data.confusionMatrix.labels && (
+                  <div className="mt-3">
+                    <ConfusionMatrix 
+                      data={{
+                        matrix: data.confusionMatrix.matrix,
+                        labels: data.confusionMatrix.labels
+                      }}
+                      onSelectionChange={setSelectedPredictedActual}
+                    />
+                  </div>
+                )}
+
+                {!showAsColumns && data.scoreResults && data.scoreResults.length > 0 && (
+                  <div className="mt-6">
+                    <EvaluationTaskScoreResults 
+                      results={parsedScoreResults} 
+                      accuracy={data.accuracy ?? 0}
+                      selectedPredictedValue={selectedPredictedActual.predicted}
+                      selectedActualValue={selectedPredictedActual.actual}
+                      onResultSelect={handleScoreResultSelect}
+                      selectedScoreResult={selectedScoreResult}
+                    />
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
