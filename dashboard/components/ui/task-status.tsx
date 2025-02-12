@@ -235,13 +235,50 @@ export function TaskStatus({
   // If the variant is 'list', render only a simple progress bar
   if (variant === 'list') {
     return (
-      <ProgressBar
-        progress={status === 'COMPLETED' ? 100 : progress}
-        processedItems={effectiveProcessedItems}
-        totalItems={effectiveTotalItems}
-        color={progressBarColor}
-        showTiming={false}
-      />
+      <div className="[&>*+*]:mt-2">
+        <StyleTag />
+        {variant === 'detail' && (
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex-grow" />
+            <div className="flex items-center space-x-2">
+              {onToggleFullWidth && (
+                <CardButton
+                  icon={isFullWidth ? RectangleVertical : Square}
+                  onClick={onToggleFullWidth}
+                />
+              )}
+              {onClose && (
+                <CardButton
+                  icon={X}
+                  onClick={onClose}
+                />
+              )}
+            </div>
+          </div>
+        )}
+        <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
+          <div className={`font-mono text-sm text-muted-foreground leading-6 ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
+            {command ? `$ ${command}` : '\u00A0'}
+          </div>
+          <div className={cn(
+            "text-sm flex items-center gap-2 leading-6",
+            truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
+            isError ? 'text-destructive font-medium' : ''
+          )}>
+            {isError && <AlertTriangle className="w-4 h-4 animate-pulse" />}
+            {statusMessage || '\u00A0'}
+          </div>
+        </div>
+        {showStages && (
+          <ProgressBar
+            progress={status === 'COMPLETED' ? 100 : progress}
+            processedItems={effectiveProcessedItems}
+            totalItems={effectiveTotalItems}
+            color={progressBarColor}
+            showTiming={false}
+          />
+        )}
+      </div>
     );
   }
 
@@ -310,42 +347,19 @@ export function TaskStatus({
   return (
     <div className="[&>*+*]:mt-2">
       <StyleTag />
-      {variant === 'detail' && (
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex-grow" />
-          <div className="flex items-center space-x-2">
-            {onToggleFullWidth && (
-              <CardButton
-                icon={isFullWidth ? RectangleVertical : Square}
-                onClick={onToggleFullWidth}
-              />
-            )}
-            {onClose && (
-              <CardButton
-                icon={X}
-                onClick={onClose}
-              />
-            )}
-          </div>
+      <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
+        <div className={`font-mono text-sm text-muted-foreground leading-6 ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
+          {command ? `$ ${command}` : '\u00A0'}
         </div>
-      )}
-      {(command || displayMessage || isFinished) && (
-        <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
-          {command && (
-            <div className={`font-mono text-sm text-muted-foreground ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
-              $ {command}
-            </div>
-          )}
-          <div className={cn(
-            "text-sm flex items-center gap-2",
-            truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
-            isError ? 'text-destructive font-medium' : ''
-          )}>
-            {isError && <AlertTriangle className="w-4 h-4 animate-pulse" />}
-            {displayMessage || '\u00A0'}
-          </div>
+        <div className={cn(
+          "text-sm flex items-center gap-2 leading-6",
+          truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
+          isError ? 'text-destructive font-medium' : ''
+        )}>
+          {isError && <AlertTriangle className="w-4 h-4 animate-pulse" />}
+          {displayMessage || '\u00A0'}
         </div>
-      )}
+      </div>
       {showEmptyState ? (
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
           <Radio className="w-4 h-4 animate-pulse" />
