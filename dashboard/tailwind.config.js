@@ -56,6 +56,7 @@ module.exports = {
                     foreground: 'var(--destructive-foreground)'
                 },
                 border: 'var(--border)',
+                frame: 'var(--frame)',
                 input: 'var(--input)',
                 ring: 'var(--ring)',
                 'user-chat': 'var(--user-chat)',

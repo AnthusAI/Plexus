@@ -23,7 +23,7 @@
     --focus: hsl(var(--mauve-12));
     --attention: hsl(0, 0%, 0%);
     --muted: hsl(var(--mauve-4));
-    --frame-bg: color-mix(in srgb, hsl(var(--mauve-4)) 25%, transparent);
+    --frame: hsl(var(--mauve-2));
     --muted-foreground: hsl(var(--mauve-10));
     --popover: hsl(var(--mauve-1));
     --popover-foreground: hsl(var(--mauve-11));
@@ -69,6 +69,7 @@
     --focus: hsl(var(--mauve-12));
     --attention: hsl(0, 0%, 100%);
     --muted: hsl(var(--mauve-3));
+    --frame: hsl(var(--mauve-2));
     --muted-foreground: hsl(var(--mauve-10));
     --popover: hsl(var(--mauve-3));
     --popover-foreground: hsl(var(--mauve-11));
