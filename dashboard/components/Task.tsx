@@ -6,6 +6,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { CardButton } from '@/components/CardButton'
 import { TaskStatus, TaskStageConfig } from './ui/task-status'
 import { BaseTaskData } from '@/types/base'
+import { cn } from '@/lib/utils'
 
 export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
   variant: 'grid' | 'detail' | 'nested'
@@ -177,7 +178,10 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
   const formattedTime = formatTaskTime(task.time);
 
   return (
-    <CardHeader className="space-y-1.5 p-0 flex flex-col items-start">
+    <CardHeader className={cn(
+      "space-y-1.5 p-0 flex flex-col items-start",
+      variant === 'detail' && "px-1"
+    )}>
       <div className="flex justify-between items-start w-full">
         <div className="flex flex-col pb-1">
           <div className="text-sm">{task.scorecard || '\u00A0'}</div>
