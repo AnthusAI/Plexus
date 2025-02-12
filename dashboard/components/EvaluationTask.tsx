@@ -366,50 +366,52 @@ const DetailContent = React.memo(({
       >
         {showMainPanel && (
           <div className="w-full h-full overflow-y-auto">
-            <TaskStatus
-              variant="detail"
-              showStages={true}
-              status={mapStatus(data.task?.status || data.status)}
-              stageConfigs={data.task?.stages?.items?.map(stage => ({
-                key: stage.name,
-                label: stage.name,
-                color: stage.status === 'COMPLETED' ? 'bg-primary' :
-                       stage.status === 'FAILED' ? 'bg-false' :
-                       'bg-neutral',
-                name: stage.name,
-                order: stage.order,
-                status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-                processedItems: stage.processedItems,
-                totalItems: stage.totalItems,
-                statusMessage: stage.statusMessage,
-                completed: stage.status === 'COMPLETED',
-                startedAt: stage.startedAt,
-                completedAt: stage.completedAt,
-                estimatedCompletionAt: stage.estimatedCompletionAt
-              })) || []}
-              stages={data.task?.stages?.items?.map(stage => ({
-                key: stage.name,
-                label: stage.name,
-                color: stage.status === 'COMPLETED' ? 'bg-primary' :
-                       stage.status === 'FAILED' ? 'bg-false' :
-                       'bg-neutral',
-                name: stage.name,
-                order: stage.order,
-                status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-                processedItems: stage.processedItems,
-                totalItems: stage.totalItems,
-                statusMessage: stage.statusMessage,
-                startedAt: stage.startedAt,
-                completedAt: stage.completedAt,
-                estimatedCompletionAt: stage.estimatedCompletionAt
-              })) || []}
-              processedItems={data.processedItems}
-              totalItems={data.totalItems}
-              startedAt={data.task?.startedAt || data.startedAt}
-              completedAt={data.task?.completedAt}
-              estimatedCompletionAt={data.task?.estimatedCompletionAt}
-              errorMessage={data.task?.errorMessage || data.errorMessage}
-            />
+            <div className="mb-3">
+              <TaskStatus
+                variant="detail"
+                showStages={true}
+                status={mapStatus(data.task?.status || data.status)}
+                stageConfigs={data.task?.stages?.items?.map(stage => ({
+                  key: stage.name,
+                  label: stage.name,
+                  color: stage.status === 'COMPLETED' ? 'bg-primary' :
+                        stage.status === 'FAILED' ? 'bg-false' :
+                        'bg-neutral',
+                  name: stage.name,
+                  order: stage.order,
+                  status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+                  processedItems: stage.processedItems,
+                  totalItems: stage.totalItems,
+                  statusMessage: stage.statusMessage,
+                  completed: stage.status === 'COMPLETED',
+                  startedAt: stage.startedAt,
+                  completedAt: stage.completedAt,
+                  estimatedCompletionAt: stage.estimatedCompletionAt
+                })) || []}
+                stages={data.task?.stages?.items?.map(stage => ({
+                  key: stage.name,
+                  label: stage.name,
+                  color: stage.status === 'COMPLETED' ? 'bg-primary' :
+                        stage.status === 'FAILED' ? 'bg-false' :
+                        'bg-neutral',
+                  name: stage.name,
+                  order: stage.order,
+                  status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+                  processedItems: stage.processedItems,
+                  totalItems: stage.totalItems,
+                  statusMessage: stage.statusMessage,
+                  startedAt: stage.startedAt,
+                  completedAt: stage.completedAt,
+                  estimatedCompletionAt: stage.estimatedCompletionAt
+                })) || []}
+                processedItems={data.processedItems}
+                totalItems={data.totalItems}
+                startedAt={data.task?.startedAt || data.startedAt}
+                completedAt={data.task?.completedAt}
+                estimatedCompletionAt={data.task?.estimatedCompletionAt}
+                errorMessage={data.task?.errorMessage || data.errorMessage}
+              />
+            </div>
 
             <div className="mb-3">
               <ClassDistributionVisualizer
@@ -453,7 +455,7 @@ const DetailContent = React.memo(({
             )}
 
             {!showAsColumns && data.scoreResults && data.scoreResults.length > 0 && (
-              <div className="mt-3">
+              <div className="mt-6">
                 <EvaluationTaskScoreResults 
                   results={parsedScoreResults} 
                   accuracy={data.accuracy ?? 0}
