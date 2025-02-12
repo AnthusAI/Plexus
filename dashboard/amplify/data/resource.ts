@@ -131,6 +131,7 @@ const schema = a.schema({
             idx("sectionId"),
             idx("externalId"),
             idx("key"),
+            idx("name")
         ]),
 
     Evaluation: a
