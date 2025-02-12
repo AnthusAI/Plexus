@@ -1,7 +1,7 @@
 import React from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Square, RectangleVertical, X } from 'lucide-react'
+import { Square, RectangleVertical, X, Activity, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { CardButton } from '@/components/CardButton'
 import { TaskStatus, TaskStageConfig } from './ui/task-status'
@@ -76,6 +76,27 @@ const formatTaskTime = (dateString: string | null | undefined) => {
     return '';
   }
 };
+
+// Add helper function to get task icon
+const getTaskIcon = (type: string) => {
+  // Convert to lowercase for case-insensitive comparison
+  const taskType = type.toLowerCase()
+  
+  if (taskType.includes('evaluation')) {
+    if (taskType.includes('accuracy')) {
+      return <FlaskConical className="h-[2.25rem] w-[2.25rem]" />
+    }
+    if (taskType.includes('consistency')) {
+      return <FlaskRound className="h-[2.25rem] w-[2.25rem]" />
+    }
+    if (taskType.includes('alignment')) {
+      return <TestTubes className="h-[2.25rem] w-[2.25rem]" />
+    }
+    return <FlaskConical className="h-[2.25rem] w-[2.25rem]" />
+  }
+  
+  return <Activity className="h-[2.25rem] w-[2.25rem]" />
+}
 
 const Task = <TData extends BaseTaskData = BaseTaskData>({ 
   variant, 
@@ -168,7 +189,6 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
 const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({ 
   task, 
   variant, 
-  children, 
   controlButtons,
   isFullWidth,
   onToggleFullWidth,
@@ -176,6 +196,7 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
   isLoading
 }: TaskChildProps<TData>) => {
   const formattedTime = formatTaskTime(task.time);
+  const taskIcon = getTaskIcon(task.type);
 
   return (
     <CardHeader className={cn(
@@ -186,13 +207,16 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
         <div className="flex flex-col pb-1">
           <div className="text-sm">{task.scorecard || '\u00A0'}</div>
           <div className="text-sm">{task.score || '\u00A0'}</div>
-          <div className="text-sm">{task.type}</div>
+          {variant !== 'grid' && (
+            <div className="text-sm">{task.type}</div>
+          )}
+          <div className="text-xs text-muted-foreground mt-1">{formattedTime}</div>
         </div>
         <div className="flex flex-col items-end">
           {variant === 'grid' ? (
             <>
-              {children}
-              <div className="text-xs text-muted-foreground mt-1" style={{ textAlign: 'right' }}>{formattedTime}</div>
+              <div className="text-sm">{task.type}</div>
+              <div className="mt-1">{taskIcon}</div>
             </>
           ) : (
             <>
@@ -215,7 +239,6 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
                   />
                 )}
               </div>
-              <div className="text-xs text-muted-foreground mt-1" style={{ textAlign: 'right' }}>{formattedTime}</div>
             </>
           )}
         </div>

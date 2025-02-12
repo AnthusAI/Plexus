@@ -604,32 +604,39 @@ export default function EvaluationTask({
   , [variant, data.metrics, data.accuracy])
 
   const headerContent = useMemo(() => (
-    <div className="flex justify-end w-full">
-      {variant === 'detail' ? (
-        <div className="flex items-center space-x-2">
-          {typeof onToggleFullWidth === 'function' && (
-            <CardButton
-              icon={Square}
-              onClick={onToggleFullWidth}
-            />
-          )}
-          {typeof onClose === 'function' && (
-            <CardButton
-              icon={X}
-              onClick={onClose}
-            />
-          )}
-        </div>
-      ) : (
-        <FlaskConical className="h-6 w-6" />
-      )}
-    </div>
+    variant === 'detail' ? (
+      <div className="flex items-center space-x-2">
+        {typeof onToggleFullWidth === 'function' && (
+          <CardButton
+            icon={Square}
+            onClick={onToggleFullWidth}
+          />
+        )}
+        {typeof onClose === 'function' && (
+          <CardButton
+            icon={X}
+            onClick={onClose}
+          />
+        )}
+      </div>
+    ) : null
   ), [variant, onToggleFullWidth, onClose])
 
   const taskData = task.data?.task as TaskData | undefined;
   const taskWithDefaults = {
     id: task.id,
-    type: task.type || '',
+    type: (() => {
+      // If we have a task record, use its type directly (just capitalize it)
+      if (taskData?.type) {
+        return taskData.type.split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(' ')
+      }
+      // Otherwise, this is from an Evaluation record, so append "Evaluation"
+      return `${(task.type || '').split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ')} Evaluation`.trim()
+    })(),
     scorecard: task.scorecard,
     score: task.score,
     time: task.time,

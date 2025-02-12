@@ -36,19 +36,6 @@ function getEvaluationIcon(type: string) {
   }
 }
 
-// Shared header rendering function
-function renderTaskHeader(task: ReturnType<typeof transformTaskToActivity>) {
-  return (props: any) => (
-    <TaskHeader {...props}>
-      <div className="w-full">
-        <div className="flex justify-end">
-          <Activity className="h-6 w-6" />
-        </div>
-      </div>
-    </TaskHeader>
-  )
-}
-
 function transformTaskToActivity(task: ProcessedTask) {
   if (!task || !task.id) {
     throw new Error('Invalid task: task or task.id is null')
@@ -436,7 +423,7 @@ export default function ActivityDashboard() {
           setSelectedTask(null)
           setIsFullWidth(false)
         }}
-        renderHeader={renderTaskHeader(task)}
+        renderHeader={TaskHeader}
         renderContent={(props) => <TaskContent {...props} />}
       />
     )
@@ -503,7 +490,7 @@ export default function ActivityDashboard() {
                         setIsFullWidth(true)
                       }
                     }}
-                    renderHeader={renderTaskHeader(task)}
+                    renderHeader={TaskHeader}
                     renderContent={(props) => <TaskContent {...props} />}
                   />
                 )}
