@@ -482,6 +482,7 @@ export default function EvaluationsDashboard() {
                         setIsFullWidth(true)
                       }
                     }}
+                    extra={true}
                   />
                 </div>
               ))}
