@@ -26,10 +26,17 @@ export function SimpleDialog({ action, isOpen, onClose, onDispatch }: TaskDialog
   const [command, setCommand] = useState(action.command as string)
 
   const handleDispatch = () => {
-    // Extract command type from action name
+    // If command is a string, use it directly
+    if (typeof action.command === 'string') {
+      onDispatch(action.command, action.target)
+      onClose()
+      toast.success(`${action.name} action completed successfully`)
+      return
+    }
+
+    // Otherwise try to use command generator
     const commandType = action.name.toLowerCase() as CommandType
     
-    // Handle special cases for evaluation commands
     if (commandType === 'evaluation') {
       console.error('Evaluation commands should use EvaluationDialog')
       return
