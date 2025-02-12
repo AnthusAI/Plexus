@@ -387,6 +387,7 @@ export function observeScoreResults(client: any, evaluationId: string) {
                 'value',
                 'confidence',
                 'metadata',
+                'explanation',
                 'correct',
                 'itemId',
                 'accountId',

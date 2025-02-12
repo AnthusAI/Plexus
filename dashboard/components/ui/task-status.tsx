@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { SegmentedProgressBar, SegmentConfig } from './segmented-progress-bar'
 import { ProgressBar } from './progress-bar'
 import { ProgressBarTiming } from './progress-bar-timing'
@@ -177,80 +177,60 @@ export function TaskStatus({
   }, [startedAt, estimatedCompletionAt, completedAt, isInProgress])
 
   // Update the progress calculation logic
-  const { processedItems: effectiveProcessedItems, totalItems: effectiveTotalItems } = (function getProgressFromStages() {
-    console.log('getProgressFromStages - Input stages:', stages.map(s => ({
-      name: s.name,
-      order: s.order,
-      processedItems: s.processedItems,
-      totalItems: s.totalItems,
-      status: s.status
-    })));
-
-    // Find the stage with highest order that has progress info
+  const { processedItems: effectiveProcessedItems, totalItems: effectiveTotalItems } = useMemo(() => {
+    // First try to get progress from stages
     if (stages?.length > 0) {
-      // First, sort by order descending
+      // Sort by order descending
       const sortedStages = [...stages].sort((a, b) => (b.order || 0) - (a.order || 0));
-      console.log('getProgressFromStages - Sorted stages:', sortedStages.map(s => ({
-        name: s.name,
-        order: s.order,
-        processedItems: s.processedItems,
-        totalItems: s.totalItems,
-        status: s.status
-      })));
       
-      // Then find the first stage with valid numeric progress info
+      // Find the first stage with valid numeric progress info
       const stageWithProgress = sortedStages.find(stage => {
         const proc = Number(stage.processedItems);
         const tot = Number(stage.totalItems);
-        console.log('getProgressFromStages - Checking stage:', {
-          name: stage.name,
-          order: stage.order,
-          processedItems: stage.processedItems,
-          totalItems: stage.totalItems,
-          convertedProcessedItems: proc,
-          convertedTotalItems: tot,
-          isValid: !isNaN(proc) && !isNaN(tot) && tot > 0
-        });
         return !isNaN(proc) && !isNaN(tot) && tot > 0;
       });
-
-      console.log('getProgressFromStages - Found stage with progress:', stageWithProgress ? {
-        name: stageWithProgress.name,
-        order: stageWithProgress.order,
-        processedItems: stageWithProgress.processedItems,
-        totalItems: stageWithProgress.totalItems,
-        status: stageWithProgress.status
-      } : 'none');
 
       if (stageWithProgress) {
         const proc = Number(stageWithProgress.processedItems);
         const tot = Number(stageWithProgress.totalItems);
-        const result = {
+        return {
           processedItems: status === 'COMPLETED' ? tot : proc,
           totalItems: tot
         };
-        console.log('getProgressFromStages - Returning progress:', result);
-        return result;
       }
     }
     
-    // If no stages have progress info, return zeros
-    console.log('getProgressFromStages - No valid progress info found, returning zeros');
+    // If no stages have progress info, fall back to direct processedItems/totalItems
+    const directProcessed = Number(processedItems);
+    const directTotal = Number(totalItems);
+    
+    if (!isNaN(directProcessed) && !isNaN(directTotal) && directTotal > 0) {
+      return {
+        processedItems: status === 'COMPLETED' ? directTotal : directProcessed,
+        totalItems: directTotal
+      };
+    }
+    
+    // If no valid progress info found anywhere, return zeros
     return {
       processedItems: 0,
       totalItems: 0
     };
-  })();
+  }, [stages, status, processedItems, totalItems]);
 
   // Calculate progress percentage
-  const progress = effectiveTotalItems > 0 ? 
-    Math.round((effectiveProcessedItems / effectiveTotalItems) * 100) : 
-    0;
+  const progress = useMemo(() => 
+    effectiveTotalItems > 0 ? 
+      Math.round((effectiveProcessedItems / effectiveTotalItems) * 100) : 
+      0
+  , [effectiveProcessedItems, effectiveTotalItems]);
 
   // Update the progress bar color based on status
-  const progressBarColor = status === 'COMPLETED' ? 'primary' :
-                          status === 'FAILED' ? 'false' :
-                          'secondary';
+  const progressBarColor = useMemo(() => 
+    status === 'COMPLETED' ? 'primary' :
+    status === 'FAILED' ? 'false' :
+    'secondary'
+  , [status]);
 
   // If the variant is 'list', render only a simple progress bar
   if (variant === 'list') {
