@@ -27,6 +27,16 @@ export type ProcessedTask = {
   celeryTaskId?: string;
   workerNodeId?: string;
   updatedAt?: string;  // Add updatedAt field
+  scorecardId?: string;
+  scoreId?: string;
+  scorecard?: {
+    id: string;
+    name: string;
+  };
+  score?: {
+    id: string;
+    name: string;
+  };
 };
 
 export type ProcessedTaskStage = {
@@ -111,6 +121,10 @@ export async function listFromModel<T extends { id: string }>(
     sortDirection?: 'ASC' | 'DESC'
   }
 ): Promise<AmplifyListResult<T>> {
+  console.warn('listFromModel called:', {
+    modelName,
+    options
+  });
   const currentClient = getClient();
   
   try {
@@ -119,13 +133,31 @@ export async function listFromModel<T extends { id: string }>(
     let currentNextToken = options?.nextToken
 
     do {
+      console.debug('Making list request:', {
+        modelName,
+        limit: options?.limit,
+        filter: options?.filter,
+        nextToken: currentNextToken,
+        include: modelName === 'Task' ? ['stages', 'scorecard', 'score'] : undefined
+      });
+
       const response = await (currentClient.models[modelName] as any).list({
         limit: options?.limit,
         filter: options?.filter,
         nextToken: currentNextToken,
         sortDirection: options?.sortDirection,
         // Include stages when listing tasks
-        include: modelName === 'Task' ? ['stages'] : undefined
+        include: modelName === 'Task' ? ['stages', 'scorecard', 'score'] : undefined
+      });
+
+      console.debug('List response:', {
+        modelName,
+        dataLength: response.data?.length,
+        firstItem: response.data?.[0] ? {
+          id: response.data[0].id,
+          scorecard: response.data[0].scorecard,
+          score: response.data[0].score
+        } : null
       });
 
       if (response.data?.length) {
@@ -152,6 +184,16 @@ export async function listFromModel<T extends { id: string }>(
         )
       }
     }
+
+    console.debug('listFromModel result:', {
+      modelName,
+      dataLength: allData.length,
+      firstItem: allData[0] ? {
+        id: allData[0].id,
+        scorecard: (allData[0] as any).scorecard,
+        score: (allData[0] as any).score
+      } : null
+    });
 
     return {
       data: allData,
@@ -202,7 +244,17 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
     dispatchStatus: task.dispatchStatus ?? undefined,
     celeryTaskId: task.celeryTaskId ?? undefined,
     workerNodeId: task.workerNodeId ?? undefined,
-    updatedAt: task.updatedAt ?? undefined
+    updatedAt: task.updatedAt ?? undefined,
+    scorecardId: task.scorecardId ?? undefined,
+    scoreId: task.scoreId ?? undefined,
+    scorecard: task.scorecard ? {
+      id: task.scorecard.id,
+      name: task.scorecard.name
+    } : undefined,
+    score: task.score ? {
+      id: task.score.id,
+      name: task.score.name
+    } : undefined
   }
 }
 
@@ -210,6 +262,7 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
 type ErrorHandler = (error: Error) => void;
 
 export function observeRecentTasks(limit: number = 12): Observable<{ items: ProcessedTask[], isSynced: boolean }> {
+  console.warn('observeRecentTasks called with limit:', limit);  // Changed to warn to make it more visible
   return new Observable(subscriber => {
     let isSynced = false
     const client = getClient()
@@ -218,6 +271,7 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
     const taskSubscriptions = [
       client.models.Task.onCreate({}).subscribe({
         next: () => {
+          console.debug('Task onCreate triggered, refreshing tasks');
           refreshTasks()
         },
         error: (error: Error) => {
@@ -226,6 +280,7 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
       }),
       client.models.Task.onUpdate({}).subscribe({
         next: () => {
+          console.debug('Task onUpdate triggered, refreshing tasks');
           refreshTasks()
         },
         error: (error: Error) => {
@@ -237,6 +292,7 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
     // Subscribe to stage updates
     const stageSubscription = (client.models.TaskStage as any).onUpdate({}).subscribe({
       next: () => {
+        console.debug('Stage onUpdate triggered, refreshing tasks');
         refreshTasks()
       },
       error: (error: Error) => {
@@ -245,11 +301,14 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
     })
 
     // Initial load
+    console.debug('Initiating initial task load');
     refreshTasks()
 
     async function refreshTasks() {
       try {
+        console.debug('refreshTasks called, fetching tasks');
         const tasks = await listRecentTasks(limit)
+        console.debug(`refreshTasks completed, got ${tasks.length} tasks`);
         subscriber.next({ items: tasks, isSynced: true })
         isSynced = true
       } catch (error) {
@@ -271,7 +330,15 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
 type TaskStageData = Schema['TaskStage']['type'];
 
 async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
-  console.debug(`Starting to process task ${task.id}`);
+  console.debug(`Starting to process task ${task.id}`, {
+    id: task.id,
+    type: task.type,
+    scorecard: task.scorecard,
+    score: task.score,
+    scorecardId: task.scorecardId,
+    scoreId: task.scoreId
+  });
+
   let stages: ProcessedTaskStage[] = [];
 
   try {
@@ -298,7 +365,17 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
         dispatchStatus: task.dispatchStatus ?? undefined,
         celeryTaskId: task.celeryTaskId ?? undefined,
         workerNodeId: task.workerNodeId ?? undefined,
-        updatedAt: task.updatedAt ?? undefined
+        updatedAt: task.updatedAt ?? undefined,
+        scorecardId: task.scorecardId ?? undefined,
+        scoreId: task.scoreId ?? undefined,
+        scorecard: task.scorecard ? {
+          id: task.scorecard.id,
+          name: task.scorecard.name
+        } : undefined,
+        score: task.score ? {
+          id: task.score.id,
+          name: task.score.name
+        } : undefined
       };
     }
 
@@ -361,9 +438,7 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
     console.error('Error loading stages for task:', error)
   }
 
-  console.debug(`Finished processing task ${task.id}, stages:`, stages);
-
-  return {
+  const processed: ProcessedTask = {
     id: task.id,
     command: task.command,
     type: task.type,
@@ -384,11 +459,33 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
     dispatchStatus: task.dispatchStatus ?? undefined,
     celeryTaskId: task.celeryTaskId ?? undefined,
     workerNodeId: task.workerNodeId ?? undefined,
-    updatedAt: task.updatedAt ?? undefined
-  }
+    updatedAt: task.updatedAt ?? undefined,
+    scorecardId: task.scorecardId ?? undefined,
+    scoreId: task.scoreId ?? undefined,
+    scorecard: task.scorecard ? {
+      id: task.scorecard.id,
+      name: task.scorecard.name
+    } : undefined,
+    score: task.score ? {
+      id: task.score.id,
+      name: task.score.name
+    } : undefined
+  };
+
+  console.debug(`Finished processing task ${task.id}`, {
+    id: processed.id,
+    type: processed.type,
+    scorecard: processed.scorecard,
+    score: processed.score,
+    scorecardId: processed.scorecardId,
+    scoreId: processed.scoreId
+  });
+
+  return processed;
 }
 
 export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask[]> {
+  console.warn('listRecentTasks called with limit:', limit);  // Changed to warn to make it more visible
   try {
     const currentClient = getClient();
     if (!currentClient.models.Task) {
@@ -409,6 +506,36 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
 
     const accountId = accountResponse.data[0].id;
     console.debug('Fetching tasks for account:', accountId);
+
+    // First try to get a single task to verify the relationships
+    const testResponse = await currentClient.graphql({
+      query: `
+        query GetTask($id: ID!) {
+          getTask(id: $id) {
+            id
+            accountId
+            type
+            status
+            scorecardId
+            scoreId
+            scorecard {
+              id
+              name
+            }
+            score {
+              id
+              name
+            }
+          }
+        }
+      `,
+      variables: {
+        id: "8da587dd-3030-49a3-a4fd-90630e61ed6c"  // Use the task ID you mentioned
+      },
+      authMode: 'userPool'
+    });
+
+    console.warn('Test task response:', JSON.stringify(testResponse, null, 2));
 
     const response = await currentClient.graphql({
       query: `
@@ -446,19 +573,13 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
               celeryTaskId
               workerNodeId
               updatedAt
-              stages {
-                items {
-                  id
-                  name
-                  order
-                  status
-                  statusMessage
-                  startedAt
-                  completedAt
-                  estimatedCompletionAt
-                  processedItems
-                  totalItems
-                }
+              scorecard {
+                id
+                name
+              }
+              score {
+                id
+                name
               }
             }
             nextToken
@@ -474,26 +595,46 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
     }) as unknown as GraphQLResult<ListTaskResponse>;
 
     if (response.errors?.length) {
+      console.error('GraphQL errors:', response.errors);
       throw new Error(`GraphQL errors: ${response.errors.map(e => e.message).join(', ')}`);
     }
 
-    console.debug('Raw GraphQL response:', JSON.stringify(response.data, null, 2));
+    if (!response.data) {
+      console.error('No data returned from GraphQL query');
+      return [];
+    }
+
+    console.warn('Raw GraphQL response data:', JSON.stringify(response.data, null, 2));
 
     const result = response.data;
     if (!result?.listTaskByAccountIdAndUpdatedAt?.items) {
+      console.error('No items found in GraphQL response');
       return [];
     }
 
     // Process tasks and load their stages
     const processedTasks = await Promise.all(
       result.listTaskByAccountIdAndUpdatedAt.items.map(async (task) => {
-        console.debug(`Processing task ${task.id}, stages:`, task.stages);
-        const processed = await processTask(task);
-        console.debug(`Processed task ${task.id}, final stages:`, processed.stages);
-        return processed;
+        console.debug(`Processing task ${task.id}, raw data:`, {
+          id: task.id,
+          type: task.type,
+          scorecard: task.scorecard,
+          score: task.score,
+          scorecardId: task.scorecardId,
+          scoreId: task.scoreId
+        });
+        return processTask(task);
       })
     );
 
+    console.debug('All processed tasks:', processedTasks.map(task => ({
+      id: task.id,
+      type: task.type,
+      scorecard: task.scorecard,
+      score: task.score,
+      scorecardId: task.scorecardId,
+      scoreId: task.scoreId
+    })));
     return processedTasks;
   } catch (error) {
     console.error('Error listing recent tasks:', error);
