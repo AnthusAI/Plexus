@@ -160,7 +160,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   const LeftSidebar = () => {
     return (
-      <div className={`flex flex-col h-full py-2 bg-muted ${isMobile ? 'pr-3' : 'pr-2'}`}>
+      <div className={`flex flex-col h-full py-2 bg-frame ${isMobile ? 'pr-3' : 'pr-2'}`}>
         <div className={`mb-4 ${isLeftSidebarOpen ? 'pl-2' : ''}`}>
           <Link href="/" className={`block relative ${isLeftSidebarOpen ? 'w-full max-w-md' : 'w-12 pl-2'}`}>
             <div className="absolute -inset-1 bg-gradient-to-r from-secondary to-primary rounded-md blur-sm opacity-50"></div>
@@ -272,7 +272,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                             src={`/avatar-${account.key}.png`} 
                             alt={account.name} 
                           />
-                          <AvatarFallback className="bg-muted dark:bg-border">
+                          <AvatarFallback className="bg-frame dark:bg-border">
                             {account.name.split(' ').map(word => word[0]).join('')}
                           </AvatarFallback>
                         </Avatar>
@@ -365,7 +365,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   const RightSidebar = () => {
     return (
-      <div className="flex flex-col h-full py-2 bg-muted">
+      <div className="flex flex-col h-full py-2 bg-frame">
         {rightSidebarState === 'collapsed' && (
           <div className="px-3 py-2">
             <TooltipProvider>
@@ -545,21 +545,21 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   }
 
   useEffect(() => {
-    document.body.classList.add('bg-muted')
+    document.body.classList.add('bg-frame')
     return () => {
-      document.body.classList.remove('bg-muted')
+      document.body.classList.remove('bg-frame')
     }
   }, [])
 
   return (
-    <div className="flex flex-col h-screen bg-muted">
+    <div className="flex flex-col h-screen bg-frame">
       <MobileHeader 
         toggleLeftSidebar={toggleLeftSidebar}
         toggleRightSidebar={toggleRightSidebar}
         rightSidebarState={rightSidebarState}
       />
       
-      <div className="flex flex-1 overflow-hidden bg-muted">
+      <div className="flex flex-1 overflow-hidden bg-frame">
         <aside
           className={`
             ${isMobile ? 'fixed top-[40px] bottom-0 left-0 z-50 bg-background/80 backdrop-blur-sm' : 
@@ -579,7 +579,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           }}
         >
           <div className={`
-            ${isMobile ? 'h-full w-40 bg-muted' : 'h-full'}
+            ${isMobile ? 'h-full w-40 bg-frame' : 'h-full'}
           `}>
             <LeftSidebar />
           </div>
@@ -616,7 +616,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           `}
         >
           <div className={`
-            ${isMobile ? 'h-full w-full bg-muted' : 'h-full'}
+            ${isMobile ? 'h-full w-full bg-frame' : 'h-full'}
             ${isMobile && rightSidebarState !== 'collapsed' ? 'flex flex-col' : ''}
           `}>
             {isMobile && rightSidebarState !== 'collapsed' && (
