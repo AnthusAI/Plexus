@@ -123,7 +123,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
         transition-colors duration-200 
         flex flex-col h-full p-3 rounded-lg
         ${variant === 'grid' ? 'cursor-pointer hover:bg-accent/50' : ''}
-        ${variant === 'grid' ? (isSelected ? 'bg-card' : 'bg-frame') : 'bg-card'}
+        ${variant === 'grid' ? (isSelected ? 'bg-card-light' : 'bg-frame') : 'bg-card-light'}
       `}
       onClick={variant === 'grid' && !isLoading ? onClick : undefined}
       role={variant === 'grid' ? 'button' : 'article'}

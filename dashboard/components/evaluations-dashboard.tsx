@@ -535,7 +535,7 @@ export default function EvaluationsDashboard() {
         )}
 
         {selectedEvaluationId && (isNarrowViewport || isFullWidth) && (
-          <div className="fixed inset-0 bg-background z-50">
+          <div className="fixed inset-0 z-50">
             {evaluations.map((evaluation) => {
               if (evaluation.id === selectedEvaluationId) {
                 return (

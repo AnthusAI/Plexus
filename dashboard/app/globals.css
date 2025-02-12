@@ -73,7 +73,7 @@
     --muted-foreground: hsl(var(--mauve-10));
     --popover: hsl(var(--mauve-3));
     --popover-foreground: hsl(var(--mauve-11));
-    --card: hsl(var(--mauve-3));
+    --card: hsl(var(--mauve-4));
     --card-light: hsl(var(--mauve-4));
     --card-light-foreground: hsl(var(--mauve-11));
     --card-foreground: hsl(var(--mauve-11));
