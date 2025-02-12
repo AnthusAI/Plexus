@@ -130,13 +130,13 @@ function transformTaskToActivity(task: ProcessedTask) {
   const result: EvaluationTaskProps['task'] = {
     id: task.id,
     type: String((metadata as any)?.type || task.type),
-    scorecard: ((metadata as any)?.scorecard?.toString() || '') as string,
-    score: ((metadata as any)?.score?.toString() || '') as string,
+    scorecard: ((metadata as any)?.scorecard?.toString() || '-') as string,
+    score: ((metadata as any)?.score?.toString() || '-') as string,
     time: timeStr,
     description: task.command,
     data: {
       id: task.id,
-      title: (metadata as any)?.type || task.type,
+      title: `${(metadata as any)?.scorecard?.toString() || '-'} - ${(metadata as any)?.score?.toString() || '-'}`,
       command: task.command,
       accuracy: (metadata as any)?.accuracy ?? null,
       metrics: (metadata as any)?.metrics ?? [],
