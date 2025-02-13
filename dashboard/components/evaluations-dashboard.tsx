@@ -51,6 +51,42 @@ import { CardButton } from "@/components/CardButton"
 import { GraphQLResult as APIGraphQLResult } from '@aws-amplify/api-graphql'
 import type { EvaluationTaskProps } from '@/components/EvaluationTask'
 import type { TaskData } from '@/types/evaluation'
+import { transformAmplifyTask } from '@/utils/data-operations'
+import type { AmplifyTask } from '@/utils/data-operations'
+
+type TaskResponse = {
+  id: string;
+  accountId: string;
+  type: string;
+  status: string;
+  target: string;
+  command: string;
+  description?: string;
+  dispatchStatus?: string;
+  metadata?: any;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  estimatedCompletionAt?: string;
+  errorMessage?: string;
+  errorDetails?: any;
+  currentStageId?: string;
+  stages?: {
+    items: Array<{
+      id: string;
+      name: string;
+      order: number;
+      status: string;
+      statusMessage?: string;
+      startedAt?: string;
+      completedAt?: string;
+      estimatedCompletionAt?: string;
+      processedItems: number;
+      totalItems: number;
+    }>;
+    nextToken?: string;
+  };
+};
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -335,38 +371,41 @@ export default function EvaluationsDashboard() {
     const evaluation = evaluations.find(e => e.id === selectedEvaluationId)
     if (!evaluation) return null
 
+    // Transform the task data using the utility function
+    const transformedTask = evaluation.task ? transformAmplifyTask(evaluation.task as unknown as AmplifyTask) : null
+
     // Convert task data to the expected format
-    const taskData: TaskData | null = evaluation.task ? {
-      id: String((evaluation.task as any).id || ''),
-      accountId: String((evaluation.task as any).accountId || ''),
-      type: String((evaluation.task as any).type || ''),
-      status: String((evaluation.task as any).status || ''),
-      target: String((evaluation.task as any).target || ''),
-      command: String((evaluation.task as any).command || ''),
-      description: String((evaluation.task as any).description || ''),
-      dispatchStatus: (evaluation.task as any).dispatchStatus,
-      metadata: (evaluation.task as any).metadata,
-      createdAt: String((evaluation.task as any).createdAt || ''),
-      startedAt: (evaluation.task as any).startedAt,
-      completedAt: (evaluation.task as any).completedAt,
-      estimatedCompletionAt: (evaluation.task as any).estimatedCompletionAt,
-      errorMessage: (evaluation.task as any).errorMessage,
-      errorDetails: (evaluation.task as any).errorDetails,
-      currentStageId: (evaluation.task as any).currentStageId,
-      stages: (evaluation.task as any).stages ? {
-        items: ((evaluation.task as any).stages.items || []).map((stage: any) => ({
-          id: String(stage.id || ''),
-          name: String(stage.name || ''),
-          order: Number(stage.order || 0),
-          status: String(stage.status || ''),
+    const taskData: TaskData | null = transformedTask ? {
+      id: transformedTask.id,
+      accountId: transformedTask.id.split(':')[0], // Assuming the accountId is the first part of the id
+      type: transformedTask.type,
+      status: transformedTask.status,
+      target: transformedTask.target,
+      command: transformedTask.command,
+      description: transformedTask.description,
+      dispatchStatus: transformedTask.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
+      metadata: transformedTask.metadata,
+      createdAt: transformedTask.createdAt || '',
+      startedAt: transformedTask.startedAt,
+      completedAt: transformedTask.completedAt,
+      estimatedCompletionAt: transformedTask.estimatedCompletionAt,
+      errorMessage: transformedTask.errorMessage,
+      errorDetails: transformedTask.errorDetails,
+      currentStageId: transformedTask.currentStageId,
+      stages: transformedTask.stages ? {
+        items: transformedTask.stages.map(stage => ({
+          id: stage.id,
+          name: stage.name,
+          order: stage.order,
+          status: stage.status,
           statusMessage: stage.statusMessage,
           startedAt: stage.startedAt,
           completedAt: stage.completedAt,
           estimatedCompletionAt: stage.estimatedCompletionAt,
-          processedItems: Number(stage.processedItems || 0),
-          totalItems: Number(stage.totalItems || 0)
+          processedItems: stage.processedItems || 0,
+          totalItems: stage.totalItems || 0
         })),
-        nextToken: (evaluation.task as any).stages.nextToken
+        nextToken: null
       } : undefined
     } : null
 
@@ -379,26 +418,25 @@ export default function EvaluationsDashboard() {
       data: {
         id: evaluation.id,
         title: `${evaluation.scorecard?.name || '-'} - ${evaluation.score?.name || '-'}`,
-        metrics: typeof evaluation.metrics === 'string' ? JSON.parse(evaluation.metrics) : (evaluation.metrics || []),
+        metrics: typeof evaluation.metrics === 'string' ? JSON.parse(evaluation.metrics as string) : (evaluation.metrics || []),
         metricsExplanation: evaluation.metricsExplanation || '',
         accuracy: typeof evaluation.accuracy === 'number' ? evaluation.accuracy : null,
         processedItems: Number(evaluation.processedItems || 0),
         totalItems: Number(evaluation.totalItems || 0),
         progress: Number(calculateProgress(evaluation.processedItems, evaluation.totalItems) || 0),
         inferences: Number(evaluation.inferences || 0),
-        cost: typeof evaluation.cost === 'number' ? evaluation.cost : null,
+        cost: evaluation.cost ?? null,
         status: evaluation.status || 'PENDING',
-        elapsedSeconds: typeof evaluation.elapsedSeconds === 'number' ? evaluation.elapsedSeconds : null,
-        estimatedRemainingSeconds: typeof evaluation.estimatedRemainingSeconds === 'number' ? evaluation.estimatedRemainingSeconds : null,
+        elapsedSeconds: evaluation.elapsedSeconds ?? null,
+        estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds ?? null,
         startedAt: evaluation.startedAt || undefined,
         errorMessage: evaluation.errorMessage || undefined,
         errorDetails: evaluation.errorDetails || undefined,
-        confusionMatrix: typeof evaluation.confusionMatrix === 'string' ? JSON.parse(evaluation.confusionMatrix) : evaluation.confusionMatrix,
+        confusionMatrix: typeof evaluation.confusionMatrix === 'string' ? JSON.parse(evaluation.confusionMatrix as string) : evaluation.confusionMatrix,
         scoreGoal: evaluation.scoreGoal ? String(evaluation.scoreGoal) : null,
-        datasetClassDistribution: typeof evaluation.datasetClassDistribution === 'string' ? JSON.parse(evaluation.datasetClassDistribution) : evaluation.datasetClassDistribution,
+        datasetClassDistribution: typeof evaluation.datasetClassDistribution === 'string' ? JSON.parse(evaluation.datasetClassDistribution as string) : evaluation.datasetClassDistribution,
         isDatasetClassDistributionBalanced: Boolean(evaluation.isDatasetClassDistributionBalanced),
-        predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ? JSON.parse(evaluation.predictedClassDistribution) : evaluation.predictedClassDistribution,
-        predictedClassDistribution: evaluation.predictedClassDistribution ? JSON.parse(evaluation.predictedClassDistribution) : null,
+        predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ? JSON.parse(evaluation.predictedClassDistribution as string) : evaluation.predictedClassDistribution,
         isPredictedClassDistributionBalanced: Boolean(evaluation.isPredictedClassDistributionBalanced),
         task: taskData
       }
@@ -515,27 +553,62 @@ export default function EvaluationsDashboard() {
                       data: {
                         id: evaluation.id,
                         title: `${evaluation.scorecard?.name || '-'} - ${evaluation.score?.name || '-'}`,
-                        metrics: evaluation.metrics ? JSON.parse(evaluation.metrics) : [],
+                        metrics: typeof evaluation.metrics === 'string' ? JSON.parse(evaluation.metrics as string) : [],
                         metricsExplanation: evaluation.metricsExplanation,
                         accuracy: evaluation.accuracy,
                         processedItems: evaluation.processedItems || 0,
                         totalItems: evaluation.totalItems || 0,
                         progress: calculateProgress(evaluation.processedItems, evaluation.totalItems),
                         inferences: evaluation.inferences || 0,
-                        cost: evaluation.cost,
+                        cost: evaluation.cost ?? null,
                         status: evaluation.status,
-                        elapsedSeconds: evaluation.elapsedSeconds,
-                        estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds,
-                        startedAt: evaluation.startedAt,
-                        errorMessage: evaluation.errorMessage,
+                        elapsedSeconds: evaluation.elapsedSeconds ?? null,
+                        estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds ?? null,
+                        startedAt: evaluation.startedAt || undefined,
+                        errorMessage: evaluation.errorMessage || undefined,
                         errorDetails: evaluation.errorDetails,
-                        confusionMatrix: evaluation.confusionMatrix ? JSON.parse(evaluation.confusionMatrix) : null,
+                        confusionMatrix: typeof evaluation.confusionMatrix === 'string' ? JSON.parse(evaluation.confusionMatrix as string) : null,
                         scoreGoal: evaluation.scoreGoal,
-                        datasetClassDistribution: evaluation.datasetClassDistribution ? JSON.parse(evaluation.datasetClassDistribution) : null,
+                        datasetClassDistribution: typeof evaluation.datasetClassDistribution === 'string' ? JSON.parse(evaluation.datasetClassDistribution as string) : null,
                         isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
-                        predictedClassDistribution: evaluation.predictedClassDistribution ? JSON.parse(evaluation.predictedClassDistribution) : null,
+                        predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ? JSON.parse(evaluation.predictedClassDistribution as string) : null,
                         isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
-                        task: evaluation.task
+                        task: evaluation.task ? (() => {
+                          const transformedTask = transformAmplifyTask(evaluation.task as unknown as AmplifyTask);
+                          return {
+                            id: transformedTask.id,
+                            accountId: transformedTask.id.split(':')[0], // Assuming the accountId is the first part of the id
+                            type: transformedTask.type,
+                            status: transformedTask.status,
+                            target: transformedTask.target,
+                            command: transformedTask.command,
+                            description: transformedTask.description,
+                            dispatchStatus: transformedTask.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
+                            metadata: transformedTask.metadata,
+                            createdAt: transformedTask.createdAt || '',
+                            startedAt: transformedTask.startedAt,
+                            completedAt: transformedTask.completedAt,
+                            estimatedCompletionAt: transformedTask.estimatedCompletionAt,
+                            errorMessage: transformedTask.errorMessage,
+                            errorDetails: transformedTask.errorDetails,
+                            currentStageId: transformedTask.currentStageId,
+                            stages: transformedTask.stages ? {
+                              items: transformedTask.stages.map(stage => ({
+                                id: stage.id,
+                                name: stage.name,
+                                order: stage.order,
+                                status: stage.status,
+                                statusMessage: stage.statusMessage,
+                                startedAt: stage.startedAt,
+                                completedAt: stage.completedAt,
+                                estimatedCompletionAt: stage.estimatedCompletionAt,
+                                processedItems: stage.processedItems || 0,
+                                totalItems: stage.totalItems || 0
+                              })),
+                              nextToken: null
+                            } : undefined
+                          };
+                        })() : null
                       }
                     }}
                     isSelected={evaluation.id === selectedEvaluationId}
