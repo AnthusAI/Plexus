@@ -206,22 +206,35 @@ export async function listFromModel<T extends { id: string }>(
 }
 
 export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
+  console.debug('transformAmplifyTask input:', {
+    taskId: task.id,
+    hasStages: !!task.stages,
+    stagesType: task.stages ? typeof task.stages : 'undefined',
+    rawStages: task.stages
+  });
+
   // Handle stages - if it's a LazyLoader, we'll return an empty array
   // The stages will be loaded later by the processTask function
-  const stages: ProcessedTaskStage[] = Array.isArray(task.stages) 
-    ? task.stages.map((stage: any) => ({
-        id: stage.id,
-        name: stage.name,
-        order: stage.order,
-        status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-        processedItems: stage.processedItems ?? undefined,
-        totalItems: stage.totalItems ?? undefined,
-        startedAt: stage.startedAt ?? undefined,
-        completedAt: stage.completedAt ?? undefined,
-        estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
-        statusMessage: stage.statusMessage ?? undefined
-      }))
-    : []
+  const stages: ProcessedTaskStage[] = task.stages?.items ? 
+    task.stages.items.map((stage: any) => ({
+      id: stage.id,
+      name: stage.name,
+      order: stage.order,
+      status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+      processedItems: stage.processedItems ?? undefined,
+      totalItems: stage.totalItems ?? undefined,
+      startedAt: stage.startedAt ?? undefined,
+      completedAt: stage.completedAt ?? undefined,
+      estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+      statusMessage: stage.statusMessage ?? undefined
+    }))
+    : [];
+
+  console.debug('Transformed stages:', {
+    taskId: task.id,
+    stagesCount: stages.length,
+    stages
+  });
 
   return {
     id: task.id,
@@ -1102,4 +1115,466 @@ export async function updateTask(
     console.error(`Error updating ${modelName}:`, error);
     return null;
   }
+}
+
+export async function listRecentEvaluations(limit: number = 100): Promise<Schema['Evaluation']['type'][]> {
+  console.warn('listRecentEvaluations called with limit:', limit);
+  try {
+    const currentClient = getClient();
+
+    // Get the account ID by key
+    const ACCOUNT_KEY = 'call-criteria';
+    const accountResponse = await listFromModel<Schema['Account']['type']>(
+      'Account',
+      { filter: { key: { eq: ACCOUNT_KEY } } }
+    );
+
+    if (!accountResponse.data?.length) {
+      console.error('No account found with key:', ACCOUNT_KEY);
+      return [];
+    }
+
+    const accountId = accountResponse.data[0].id;
+    console.debug('Fetching evaluations for account:', accountId);
+
+    const response = await currentClient.graphql({
+      query: `
+        query ListEvaluationByAccountIdAndUpdatedAt(
+          $accountId: String!
+          $sortDirection: ModelSortDirection!
+          $limit: Int
+        ) {
+          listEvaluationByAccountIdAndUpdatedAt(
+            accountId: $accountId
+            sortDirection: $sortDirection
+            limit: $limit
+          ) {
+            items {
+              id
+              type
+              parameters
+              metrics
+              metricsExplanation
+              inferences
+              accuracy
+              cost
+              createdAt
+              updatedAt
+              status
+              startedAt
+              elapsedSeconds
+              estimatedRemainingSeconds
+              totalItems
+              processedItems
+              errorMessage
+              errorDetails
+              accountId
+              scorecardId
+              scorecard {
+                id
+                name
+              }
+              scoreId
+              score {
+                id
+                name
+              }
+              confusionMatrix
+              scoreGoal
+              datasetClassDistribution
+              isDatasetClassDistributionBalanced
+              predictedClassDistribution
+              isPredictedClassDistributionBalanced
+              taskId
+              task {
+                id
+                type
+                status
+                target
+                command
+                description
+                dispatchStatus
+                metadata
+                createdAt
+                startedAt
+                completedAt
+                estimatedCompletionAt
+                errorMessage
+                errorDetails
+                currentStageId
+                stages {
+                  items {
+                    id
+                    name
+                    order
+                    status
+                    statusMessage
+                    startedAt
+                    completedAt
+                    estimatedCompletionAt
+                    processedItems
+                    totalItems
+                  }
+                }
+              }
+            }
+            nextToken
+          }
+        }
+      `,
+      variables: {
+        accountId: accountId.trim(),
+        sortDirection: 'DESC',
+        limit: limit || 100
+      }
+    });
+
+    if (response.errors?.length) {
+      console.error('GraphQL errors:', response.errors);
+      throw new Error(`GraphQL errors: ${response.errors.map(e => e.message).join(', ')}`);
+    }
+
+    if (!response.data) {
+      console.error('No data returned from GraphQL query');
+      return [];
+    }
+
+    console.debug('Raw GraphQL response:', {
+      evaluationCount: response.data?.listEvaluationByAccountIdAndUpdatedAt?.items?.length,
+      firstEvaluation: response.data?.listEvaluationByAccountIdAndUpdatedAt?.items?.[0] ? {
+        id: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].id,
+        taskId: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].taskId,
+        taskStages: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task?.stages?.items
+      } : null
+    });
+
+    const result = response.data;
+    if (!result?.listEvaluationByAccountIdAndUpdatedAt?.items) {
+      console.error('No items found in GraphQL response');
+      return [];
+    }
+
+    return result.listEvaluationByAccountIdAndUpdatedAt.items;
+  } catch (error) {
+    console.error('Error listing recent evaluations:', error);
+    return [];
+  }
+}
+
+export function observeRecentEvaluations(limit: number = 100): Observable<{ items: Schema['Evaluation']['type'][], isSynced: boolean }> {
+  console.warn('observeRecentEvaluations called with limit:', limit);
+  return new Observable(subscriber => {
+    let isSynced = false;
+    let currentEvaluations: Schema['Evaluation']['type'][] = [];
+    const client = getClient();
+
+    // Initial load
+    async function loadInitialEvaluations() {
+      try {
+        const evaluations = await listRecentEvaluations(limit);
+        currentEvaluations = evaluations;
+        subscriber.next({ items: currentEvaluations, isSynced: true });
+        isSynced = true;
+      } catch (error) {
+        console.error('Error in initial evaluations load:', error);
+        subscriber.next({ items: [], isSynced: false });
+      }
+    }
+
+    // Handle evaluation updates in-memory
+    async function handleEvaluationUpdate(updatedEvaluation: Schema['Evaluation']['type']) {
+      try {
+        console.debug('Processing evaluation update/create:', {
+          evaluationId: updatedEvaluation.id,
+          type: updatedEvaluation.type,
+          status: updatedEvaluation.status,
+          taskId: updatedEvaluation.taskId,
+          hasTask: !!updatedEvaluation.task
+        });
+
+        // If we have IDs but no data, fetch the related data
+        if (updatedEvaluation.scorecardId && !updatedEvaluation.scorecard) {
+          console.debug('Fetching scorecard data for ID:', updatedEvaluation.scorecardId);
+          const scorecardResponse = await client.graphql({
+            query: `
+              query GetScorecard($id: ID!) {
+                getScorecard(id: $id) {
+                  id
+                  name
+                  key
+                }
+              }
+            `,
+            variables: {
+              id: updatedEvaluation.scorecardId
+            }
+          });
+          updatedEvaluation.scorecard = scorecardResponse.data?.getScorecard;
+        }
+
+        if (updatedEvaluation.scoreId && !updatedEvaluation.score) {
+          console.debug('Fetching score data for ID:', updatedEvaluation.scoreId);
+          const scoreResponse = await client.graphql({
+            query: `
+              query GetScore($id: ID!) {
+                getScore(id: $id) {
+                  id
+                  name
+                  key
+                }
+              }
+            `,
+            variables: {
+              id: updatedEvaluation.scoreId
+            }
+          });
+          updatedEvaluation.score = scoreResponse.data?.getScore;
+        }
+
+        const evaluationIndex = currentEvaluations.findIndex(e => e.id === updatedEvaluation.id);
+        
+        if (evaluationIndex !== -1) {
+          // Update existing evaluation
+          const existingEvaluation = currentEvaluations[evaluationIndex];
+          
+          // Create the updated evaluation, prioritizing new data
+          const updatedEvaluationData = {
+            ...existingEvaluation,
+            ...updatedEvaluation,
+            task: updatedEvaluation.task || existingEvaluation.task
+          };
+
+          currentEvaluations[evaluationIndex] = updatedEvaluationData;
+        } else {
+          // For new evaluations, add to the beginning of the array
+          currentEvaluations.unshift(updatedEvaluation);
+          console.debug('Added new evaluation:', {
+            evaluationId: updatedEvaluation.id,
+            totalEvaluations: currentEvaluations.length
+          });
+        }
+
+        // Sort evaluations by updatedAt
+        currentEvaluations.sort((a, b) => 
+          new Date(b.updatedAt || b.createdAt || '').getTime() - 
+          new Date(a.updatedAt || a.createdAt || '').getTime()
+        );
+
+        // Trim to limit if needed
+        if (currentEvaluations.length > limit) {
+          currentEvaluations = currentEvaluations.slice(0, limit);
+        }
+
+        console.debug('Emitting updated evaluation list:', {
+          count: currentEvaluations.length,
+          evaluationIds: currentEvaluations.map(e => ({
+            id: e.id,
+            status: e.status,
+            taskId: e.taskId
+          }))
+        });
+        subscriber.next({ items: [...currentEvaluations], isSynced: true });
+      } catch (error) {
+        console.error('Error processing evaluation update:', error);
+      }
+    }
+
+    // Load initial data
+    loadInitialEvaluations();
+
+    // Set up subscriptions
+    const subscriptions = [
+      // Subscribe to evaluation updates
+      client.graphql({
+        query: `subscription OnUpdateEvaluation {
+          onUpdateEvaluation {
+            id
+            type
+            parameters
+            metrics
+            metricsExplanation
+            inferences
+            accuracy
+            cost
+            createdAt
+            updatedAt
+            status
+            startedAt
+            elapsedSeconds
+            estimatedRemainingSeconds
+            totalItems
+            processedItems
+            errorMessage
+            errorDetails
+            accountId
+            scorecardId
+            scorecard {
+              id
+              name
+            }
+            scoreId
+            score {
+              id
+              name
+            }
+            confusionMatrix
+            scoreGoal
+            datasetClassDistribution
+            isDatasetClassDistributionBalanced
+            predictedClassDistribution
+            isPredictedClassDistributionBalanced
+            taskId
+            task {
+              id
+              type
+              status
+              target
+              command
+              description
+              dispatchStatus
+              metadata
+              createdAt
+              startedAt
+              completedAt
+              estimatedCompletionAt
+              errorMessage
+              errorDetails
+              currentStageId
+              stages {
+                items {
+                  id
+                  name
+                  order
+                  status
+                  statusMessage
+                  startedAt
+                  completedAt
+                  estimatedCompletionAt
+                  processedItems
+                  totalItems
+                }
+              }
+            }
+          }
+        }`
+      }).subscribe({
+        next: (data: any) => {
+          console.debug('Raw onUpdate data received:', {
+            fullData: data,
+            evaluationData: data?.data?.onUpdateEvaluation
+          });
+          
+          const evaluationData = data?.data?.onUpdateEvaluation;
+          if (!evaluationData?.id) {
+            console.debug('Invalid evaluation update data:', data);
+            return;
+          }
+
+          handleEvaluationUpdate(evaluationData);
+        },
+        error: (error: Error) => console.error('Error in evaluation onUpdate subscription:', error)
+      }),
+
+      // Subscribe to evaluation creates
+      client.graphql({
+        query: `subscription OnCreateEvaluation {
+          onCreateEvaluation {
+            id
+            type
+            parameters
+            metrics
+            metricsExplanation
+            inferences
+            accuracy
+            cost
+            createdAt
+            updatedAt
+            status
+            startedAt
+            elapsedSeconds
+            estimatedRemainingSeconds
+            totalItems
+            processedItems
+            errorMessage
+            errorDetails
+            accountId
+            scorecardId
+            scorecard {
+              id
+              name
+            }
+            scoreId
+            score {
+              id
+              name
+            }
+            confusionMatrix
+            scoreGoal
+            datasetClassDistribution
+            isDatasetClassDistributionBalanced
+            predictedClassDistribution
+            isPredictedClassDistributionBalanced
+            taskId
+            task {
+              id
+              type
+              status
+              target
+              command
+              description
+              dispatchStatus
+              metadata
+              createdAt
+              startedAt
+              completedAt
+              estimatedCompletionAt
+              errorMessage
+              errorDetails
+              currentStageId
+              stages {
+                items {
+                  id
+                  name
+                  order
+                  status
+                  statusMessage
+                  startedAt
+                  completedAt
+                  estimatedCompletionAt
+                  processedItems
+                  totalItems
+                }
+              }
+            }
+          }
+        }`
+      }).subscribe({
+        next: (data: any) => {
+          console.debug('Raw onCreate data received:', {
+            fullData: data,
+            evaluationData: data?.data?.onCreateEvaluation
+          });
+          const evaluationData = data?.data?.onCreateEvaluation;
+          if (!evaluationData?.id) {
+            console.debug('Invalid evaluation create data:', data);
+            return;
+          }
+          console.log('Evaluation onCreate triggered:', { 
+            evaluationId: evaluationData.id,
+            type: evaluationData.type,
+            status: evaluationData.status,
+            taskId: evaluationData.taskId
+          });
+          handleEvaluationUpdate(evaluationData);
+        },
+        error: (error: Error) => console.error('Error in evaluation onCreate subscription:', error)
+      })
+    ];
+
+    // Cleanup function
+    return () => {
+      console.log('Cleaning up evaluation subscriptions');
+      subscriptions.forEach(sub => sub.unsubscribe());
+    };
+  });
 } 
