@@ -274,6 +274,16 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
         .reverse()
         .find(stage => stage.statusMessage)?.statusMessage
     }
+    // If there's a running stage, use its message
+    const runningStage = task.stages.find(stage => stage.status === 'RUNNING')
+    if (runningStage) {
+      return runningStage.statusMessage
+    }
+    // If all stages are pending, use the first stage's message
+    if (task.stages.every(stage => stage.status === 'PENDING')) {
+      const firstStage = [...task.stages].sort((a, b) => a.order - b.order)[0]
+      return firstStage?.statusMessage
+    }
     // Otherwise use current stage's message
     return task.stages.find(stage => stage.name === task.currentStageName)?.statusMessage
   })()
@@ -302,7 +312,7 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
             startedAt={task.startedAt}
             estimatedCompletionAt={task.estimatedCompletionAt}
             status={task.status || 'PENDING'}
-            command={task.command}
+            command={task.command || task.data?.command}
             statusMessage={statusMessage}
             errorMessage={task.errorMessage}
             dispatchStatus={task.dispatchStatus}
