@@ -449,7 +449,7 @@ def demo(target: str, task_id: Optional[str] = None, fail: bool = False) -> None
             order=1, 
             status_message="Loading AI models..."
         ),
-        "Running": StageConfig(
+        "Processing": StageConfig(
             order=2, 
             total_items=total_items,
             status_message="Processing items..."
@@ -554,7 +554,7 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
             time.sleep(0.15)  # Reduced from 0.3s to 0.15s per message
         
         # Main processing stage
-        tracker.advance_stage()  # Advance to "Running" stage
+        tracker.advance_stage()  # Advance to "Processing" stage
         
         # Process items with target rate - doubled duration with ±5s jitter
         current_item = 0
