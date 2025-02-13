@@ -312,7 +312,7 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
             startedAt={task.startedAt}
             estimatedCompletionAt={task.estimatedCompletionAt}
             status={task.status || 'PENDING'}
-            command={task.command}
+            command={task.command || task.data?.command}
             statusMessage={statusMessage}
             errorMessage={task.errorMessage}
             dispatchStatus={task.dispatchStatus}
