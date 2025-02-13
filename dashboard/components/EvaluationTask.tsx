@@ -247,6 +247,8 @@ const GridContent = React.memo(({ data, extra }: { data: EvaluationTaskData; ext
         errorMessage={data.task?.errorMessage || data.errorMessage}
         command={data.task?.command || data.command}
         statusMessage={data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage}
+        variant="grid"
+        extra={extra}
       />
       {extra && (
         <EvaluationListAccuracyBar 
