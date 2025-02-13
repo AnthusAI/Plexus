@@ -6,6 +6,7 @@ from .account import Account
 from ..client import _BaseAPIClient
 import logging
 import uuid
+import json
 
 if TYPE_CHECKING:
     from .task_stage import TaskStage
@@ -397,13 +398,21 @@ class Task(BaseModel):
         # First fail the current stage with the error message and progress count
         self.fail_current_stage(error_message, error_details, current_items)
         
-        # Then update the task level status and error info
-        self.update(
-            status="FAILED",
-            errorMessage=error_message,
-            errorDetails=error_details,
-            completedAt=self._format_datetime(datetime.now(timezone.utc))
-        )
+        # Then update the task level status and error info with all required fields
+        update_data = {
+            'accountId': self.accountId,
+            'type': self.type,
+            'status': 'FAILED',
+            'target': self.target,
+            'command': self.command,
+            'errorMessage': error_message,
+            'completedAt': self._format_datetime(datetime.now(timezone.utc)),
+            'updatedAt': self._format_datetime(datetime.now(timezone.utc))
+        }
+        if error_details:
+            update_data['errorDetails'] = json.dumps(error_details)
+            
+        self.update(**update_data)
 
     def fail_current_stage(
         self,

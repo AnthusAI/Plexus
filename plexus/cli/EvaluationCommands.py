@@ -181,8 +181,12 @@ def accuracy(
                         # Set worker ID immediately to show task as claimed
                         worker_id = f"{socket.gethostname()}-{os.getpid()}"
                         task.update(
-                            workerNodeId=worker_id,
+                            accountId=task.accountId,
+                            type=task.type,
                             status='RUNNING',
+                            target=task.target,
+                            command=task.command,
+                            workerNodeId=worker_id,
                             startedAt=datetime.now(timezone.utc).isoformat(),
                             updatedAt=datetime.now(timezone.utc).isoformat()
                         )
@@ -443,6 +447,12 @@ def accuracy(
                     else:
                         os.environ.pop('LANGCHAIN_TRACING_V2', None)
 
+                    # Initialize content_ids_to_sample_set from the parameter
+                    content_ids_to_sample_set = set()
+                    if content_ids_to_sample:
+                        content_ids_to_sample_set = {id.strip() for id in content_ids_to_sample.split(',') if id.strip()}
+                        logging.info(f"Will sample from content IDs: {content_ids_to_sample_set}")
+
                     if not scorecard_name:
                         error_msg = "Scorecard not specified"
                         logging.error(error_msg)
@@ -521,6 +531,11 @@ def accuracy(
                         if task:
                             logging.info(f"Updating task {task.id} with scorecard ID: {scorecard_record['id']}")
                             task.update(
+                                accountId=task.accountId,
+                                type=task.type,
+                                status=task.status,
+                                target=task.target,
+                                command=task.command,
                                 scorecardId=scorecard_record['id'],
                                 updatedAt=datetime.now(timezone.utc).isoformat()
                             )
@@ -578,6 +593,11 @@ def accuracy(
                             if score_id and task:
                                 logging.info(f"Updating task {task.id} with score ID: {score_id}")
                                 task.update(
+                                    accountId=task.accountId,
+                                    type=task.type,
+                                    status=task.status,
+                                    target=task.target,
+                                    command=task.command,
                                     scoreId=score_id,
                                     updatedAt=datetime.now(timezone.utc).isoformat()
                                 )
@@ -614,7 +634,6 @@ def accuracy(
                     # Check if any score in the scorecard uses the data-driven approach
                     uses_data_driven = any('data' in score_config for score_config in scorecard_instance.scores)
                     if uses_data_driven:
-                        tracker.current_stage.status_message = "Using data-driven approach for evaluation"
                         tracker.update(current_items=0)
 
                     if score_name is not None and score_name != '':
@@ -622,23 +641,16 @@ def accuracy(
                     else:
                         score_names = [score['name'] for score in scorecard_instance.scores]
 
-                    if not score_names:
-                        error_msg = "No score names specified"
-                        logging.error(error_msg)
-                        tracker.current_stage.status_message = error_msg
-                        tracker.update(current_items=0)
-                        if task:
-                            task.fail_processing(error_msg)
-                        return
+                    # Advance to Processing stage before starting evaluations
+                    tracker.advance_stage()
+                    tracker.current_stage.status_message = "Starting processing..."
+                    tracker.update(current_items=0)
+                    logging.info("Entered Processing stage")
 
-                    content_ids_to_sample_set = set(re.split(r',\s+', content_ids_to_sample.strip())) if content_ids_to_sample.strip() else None
-                    if content_ids_to_sample_set:
-                        tracker.current_stage.status_message = f"Will evaluate {len(content_ids_to_sample_set)} specific content IDs"
-                        tracker.update(current_items=0)
-
+                    # Process each score while keeping Processing stage active
                     for single_score_name in score_names:
                         logging.info(f"Running experiment for score: {single_score_name}")
-                        tracker.current_stage.status_message = f"Preparing evaluation for score: {single_score_name}"
+                        tracker.current_stage.status_message = f"Starting evaluation for score: {single_score_name}"
                         tracker.update(current_items=0)
                         
                         single_score_labeled_samples = []
@@ -783,14 +795,7 @@ def accuracy(
                         else:
                             single_score_experiment_args['labeled_samples_filename'] = labeled_samples_filename
                         
-                        # Advance to Processing stage
-                        tracker.advance_stage()
-                        tracker.current_stage.status_message = f"Starting processing for {single_score_name}..."
-                        tracker.update(current_items=0)
-                        logging.info(f"Entered Processing stage for {single_score_name}")
-
                         async with AccuracyEvaluation(**single_score_experiment_args) as experiment:
-                            # Processing stage - run evaluation
                             with CommandProgress.track(
                                 total=number_of_samples,
                                 status=f"Evaluating {single_score_name}..."
@@ -805,19 +810,24 @@ def accuracy(
                                         ),
                                         tracker.update(current_items=current),
                                         setattr(tracker.current_stage, 'status_message',
-                                               f"Processed {current} of {number_of_samples} evaluations for {single_score_name}")
+                                               f"Processing {single_score_name}: {current} of {number_of_samples} evaluations")
                                     )
                                 )
 
-                        # Advance to Finalizing stage
-                        tracker.advance_stage()
-                        tracker.current_stage.status_message = "Starting finalization..."
+                        logging.info(f"Completed evaluation for score: {single_score_name}")
+                        tracker.current_stage.status_message = f"Completed evaluation for score: {single_score_name}"
                         tracker.update(current_items=number_of_samples)
-                        logging.info("Entered Finalizing stage")
 
-                        logging.info("All score experiments completed.")
-                        tracker.current_stage.status_message = "Saving evaluation results..."
-                        tracker.update(current_items=number_of_samples)
+                    # Only advance to Finalizing stage after ALL scores are processed
+                    logging.info("All score evaluations completed")
+                    tracker.current_stage.status_message = "All evaluations complete, starting finalization..."
+                    tracker.update(current_items=number_of_samples)
+                    
+                    # Now safe to advance to Finalizing stage
+                    tracker.advance_stage()
+                    tracker.current_stage.status_message = "Starting finalization..."
+                    tracker.update(current_items=number_of_samples)
+                    logging.info("Entered Finalizing stage")
 
                     # Complete the task
                     # First log the complete task and evaluation state
@@ -873,7 +883,11 @@ def accuracy(
 
                             # Update task to completed status
                             task.update(
+                                accountId=task.accountId,
+                                type=task.type,
                                 status='COMPLETED',
+                                target=task.target,
+                                command=task.command,
                                 completedAt=datetime.now(timezone.utc).isoformat(),
                                 updatedAt=datetime.now(timezone.utc).isoformat()
                             )

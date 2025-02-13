@@ -1011,7 +1011,7 @@ class Evaluation:
                         await asyncio.to_thread(self.dashboard_client.execute, mutation, variables)
 
                     # Update task progress
-                    tracker.current_stage.status_message = f"Processing evaluations ({self.processed_items}/{total_rows})"
+                    tracker.current_stage.status_message = f"Generating predictions ({self.processed_items}/{total_rows})"
                     tracker.update(current_items=self.processed_items)
 
                     # Start metrics task if needed
@@ -1855,9 +1855,8 @@ class AccuracyEvaluation(Evaluation):
             else:
                 selected_sample_rows = df
 
-            # Update tracker stage
-            tracker.advance_stage()
-            tracker.current_stage.status_message = "Processing evaluations..."
+            # Update tracker status without advancing stage
+            tracker.current_stage.status_message = "Generating predictions..."
             tracker.update(current_items=0)
 
             # Process all scores concurrently
