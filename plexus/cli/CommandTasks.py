@@ -316,7 +316,7 @@ def register_tasks(app):
                             for stage in stages:
                                 stage_config = {
                                     "order": stage.order,
-                                    "statusMessage": "Evaluation complete." if stage.name == "Finalizing" else stage.statusMessage,
+                                    "statusMessage": "Evaluation completed." if stage.name == "Finalizing" else stage.statusMessage,
                                     "taskId": task.id
                                 }
                                 stages_config[stage.name] = stage_config
