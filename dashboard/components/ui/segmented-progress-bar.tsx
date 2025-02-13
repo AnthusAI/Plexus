@@ -5,6 +5,8 @@ export interface SegmentConfig {
   key: string
   label: string
   color?: string
+  status?: string
+  completed?: boolean
 }
 
 interface SegmentedProgressBarProps {
@@ -22,6 +24,7 @@ export function SegmentedProgressBar({
   errorLabel = 'Error',
   className = ''
 }: SegmentedProgressBarProps) {
+
   const currentIndex = segments.findIndex(s => 
     s.key.toLowerCase() === currentSegment.toLowerCase()
   )
@@ -35,6 +38,15 @@ export function SegmentedProgressBar({
         {segments.map((segment, index) => {
           const isBeforeCurrent = index < currentIndex
           const isCurrent = index === currentIndex
+          const isCompleted = segment.completed || segment.status === 'COMPLETED'
+          const isRunning = segment.status === 'RUNNING'
+
+          // Determine color based on completion state first, then position
+          const segmentColor = isCompleted ? segment.color ?? "bg-primary" :
+                             isRunning ? segment.color ?? "bg-secondary" :
+                             isBeforeCurrent ? segment.color ?? "bg-secondary" :
+                             isCurrent ? error ? "bg-false" : segment.color ?? "bg-secondary" :
+                             "bg-neutral";
 
           return (
             <div
@@ -42,9 +54,7 @@ export function SegmentedProgressBar({
               key={segment.key}
               className={cn(
                 "flex-1 flex items-center justify-center transition-colors duration-200 min-w-0",
-                isBeforeCurrent ? segment.color ?? "bg-secondary" :
-                isCurrent ? error ? "bg-false" : segment.color ?? "bg-secondary" :
-                "bg-neutral"
+                segmentColor
               )}
             >
               <span className={cn(
