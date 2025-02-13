@@ -3,6 +3,8 @@ import { getClient } from '@/utils/amplify-client'
 import { TaskData, TaskStage } from '@/types/tasks/evaluation'
 import { GET_TASK_QUERY } from '../graphql/queries'
 import type { GraphQLResult } from '@aws-amplify/api'
+import { Hub } from 'aws-amplify/utils'
+import { CONNECTION_STATE_CHANGE, ConnectionState } from 'aws-amplify/api'
 
 interface GetTaskResponse {
   getTask: TaskData
@@ -24,6 +26,16 @@ export function useTaskUpdates({ taskId, onTaskUpdate }: UseTaskUpdatesProps) {
     if (!taskId) return
 
     const currentClient = getClient()
+    console.log('Setting up task updates subscription for task:', taskId);
+
+    // Monitor subscription connection state
+    const hubUnsubscribe = Hub.listen('api', (data) => {
+      const { payload } = data;
+      if (payload.event === CONNECTION_STATE_CHANGE) {
+        const connectionState = payload.data.connectionState as ConnectionState;
+        console.log('Subscription connection state changed:', connectionState);
+      }
+    });
 
     // Function to fetch full task data
     const fetchTaskData = async () => {
@@ -95,11 +107,51 @@ export function useTaskUpdates({ taskId, onTaskUpdate }: UseTaskUpdatesProps) {
     // Initial fetch
     fetchTaskData()
 
-    // Set up polling interval for updates
-    const interval = setInterval(fetchTaskData, 5000)
+    // Use Amplify Gen2 models API for subscriptions
+    console.log('Creating Task.onUpdate subscription...');
+    const subscription = currentClient.models.Task.onUpdate({}).subscribe({
+      next: (data: any) => {
+        console.log('Task update subscription received data:', {
+          receivedTaskId: data?.id,
+          watchingTaskId: taskId,
+          fullData: data
+        });
+        
+        if (data?.id === taskId) {
+          console.log('Task update matches our task - refetching data');
+          fetchTaskData();
+        }
+      },
+      error: (error: Error) => {
+        console.error('Task update subscription error:', error);
+      }
+    });
+
+    // Also subscribe to stage updates since they're nested
+    console.log('Creating TaskStage.onUpdate subscription...');
+    const stageSubscription = currentClient.models.TaskStage.onUpdate({}).subscribe({
+      next: (data: any) => {
+        console.log('TaskStage update subscription received data:', {
+          receivedTaskId: data?.taskId,
+          watchingTaskId: taskId,
+          fullData: data
+        });
+        
+        if (data?.taskId === taskId) {
+          console.log('Task stage update matches our task - refetching data');
+          fetchTaskData();
+        }
+      },
+      error: (error: Error) => {
+        console.error('Task stage update subscription error:', error);
+      }
+    });
 
     return () => {
-      clearInterval(interval)
+      console.log('Cleaning up task update subscriptions');
+      subscription.unsubscribe();
+      stageSubscription.unsubscribe();
+      hubUnsubscribe();
     }
   }, [taskId, onTaskUpdate])
 } 

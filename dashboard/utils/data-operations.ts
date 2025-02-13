@@ -262,69 +262,443 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
 type ErrorHandler = (error: Error) => void;
 
 export function observeRecentTasks(limit: number = 12): Observable<{ items: ProcessedTask[], isSynced: boolean }> {
-  console.warn('observeRecentTasks called with limit:', limit);  // Changed to warn to make it more visible
+  console.warn('observeRecentTasks called with limit:', limit);
   return new Observable(subscriber => {
-    let isSynced = false
-    const client = getClient()
+    let isSynced = false;
+    let currentTasks: ProcessedTask[] = [];
+    const client = getClient();
 
-    // Subscribe to task updates
+    // Initial load
+    async function loadInitialTasks() {
+      try {
+        const tasks = await listRecentTasks(limit);
+        currentTasks = tasks;
+        subscriber.next({ items: currentTasks, isSynced: true });
+        isSynced = true;
+      } catch (error) {
+        console.error('Error in initial task load:', error);
+        subscriber.next({ items: [], isSynced: false });
+      }
+    }
+
+    // Handle task updates in-memory
+    async function handleTaskUpdate(updatedTask: AmplifyTask) {
+      try {
+        console.debug('Processing task update/create - Raw Input:', {
+          taskId: updatedTask.id,
+          type: updatedTask.type,
+          status: updatedTask.status,
+          hasStages: !!updatedTask.stages,
+          scorecardId: updatedTask.scorecardId,
+          scoreId: updatedTask.scoreId,
+          rawScorecard: updatedTask.scorecard,
+          rawScore: updatedTask.score
+        });
+
+        // If we have IDs but no data, fetch the related data
+        if (updatedTask.scorecardId && !updatedTask.scorecard) {
+          console.debug('Fetching scorecard data for ID:', updatedTask.scorecardId);
+          const scorecardResponse = await client.graphql({
+            query: `
+              query GetScorecard($id: ID!) {
+                getScorecard(id: $id) {
+                  id
+                  name
+                  key
+                }
+              }
+            `,
+            variables: {
+              id: updatedTask.scorecardId
+            }
+          });
+          updatedTask.scorecard = scorecardResponse.data?.getScorecard;
+          console.debug('Fetched scorecard:', updatedTask.scorecard);
+        }
+
+        if (updatedTask.scoreId && !updatedTask.score) {
+          console.debug('Fetching score data for ID:', updatedTask.scoreId);
+          const scoreResponse = await client.graphql({
+            query: `
+              query GetScore($id: ID!) {
+                getScore(id: $id) {
+                  id
+                  name
+                  key
+                }
+              }
+            `,
+            variables: {
+              id: updatedTask.scoreId
+            }
+          });
+          updatedTask.score = scoreResponse.data?.getScore;
+          console.debug('Fetched score:', updatedTask.score);
+        }
+
+        const processedTask = await processTask(updatedTask);
+        console.debug('Task after processing:', {
+          taskId: processedTask.id,
+          hasStages: processedTask.stages?.length,
+          scorecardId: processedTask.scorecardId,
+          scoreId: processedTask.scoreId,
+          processedScorecard: processedTask.scorecard,
+          processedScore: processedTask.score
+        });
+
+        const taskIndex = currentTasks.findIndex(t => t.id === processedTask.id);
+        
+        if (taskIndex !== -1) {
+          const existingTask = currentTasks[taskIndex];
+          console.debug('Existing task state:', {
+            taskId: existingTask.id,
+            existingScorecard: existingTask.scorecard,
+            existingScore: existingTask.score,
+            existingScorecardId: existingTask.scorecardId,
+            existingScoreId: existingTask.scoreId
+          });
+          
+          // Create the updated task, prioritizing new data
+          const updatedTaskData = {
+            ...existingTask,
+            ...processedTask,
+            stages: processedTask.stages?.length ? processedTask.stages : existingTask.stages,
+          };
+
+          // Handle scorecard updates with tracing
+          if (updatedTask.scorecardId) {
+            console.debug('Updating scorecard:', {
+              taskId: updatedTask.id,
+              newScorecardId: updatedTask.scorecardId,
+              oldScorecardId: existingTask.scorecardId,
+              newScorecard: updatedTask.scorecard,
+              oldScorecard: existingTask.scorecard
+            });
+            updatedTaskData.scorecardId = updatedTask.scorecardId;
+            if (updatedTask.scorecard) {
+              updatedTaskData.scorecard = {
+                id: updatedTask.scorecard.id,
+                name: updatedTask.scorecard.name
+              };
+            }
+          }
+
+          // Handle score updates with tracing
+          if (updatedTask.scoreId) {
+            console.debug('Updating score:', {
+              taskId: updatedTask.id,
+              newScoreId: updatedTask.scoreId,
+              oldScoreId: existingTask.scoreId,
+              newScore: updatedTask.score,
+              oldScore: existingTask.score
+            });
+            updatedTaskData.scoreId = updatedTask.scoreId;
+            if (updatedTask.score) {
+              updatedTaskData.score = {
+                id: updatedTask.score.id,
+                name: updatedTask.score.name
+              };
+            }
+          }
+
+          currentTasks[taskIndex] = updatedTaskData;
+
+          console.debug('Final updated task state:', {
+            taskId: currentTasks[taskIndex].id,
+            scorecardId: currentTasks[taskIndex].scorecardId,
+            scoreId: currentTasks[taskIndex].scoreId,
+            finalScorecard: currentTasks[taskIndex].scorecard,
+            finalScore: currentTasks[taskIndex].score
+          });
+        } else {
+          // For new tasks, add to the beginning of the array
+          currentTasks.unshift(processedTask);
+          console.debug('Added new task:', {
+            taskId: processedTask.id,
+            totalTasks: currentTasks.length,
+            scorecardId: processedTask.scorecardId,
+            scoreId: processedTask.scoreId,
+            scorecard: processedTask.scorecard,
+            score: processedTask.score
+          });
+        }
+
+        // Sort tasks
+        currentTasks.sort((a, b) => {
+          if ((a.status === 'COMPLETED' || a.status === 'FAILED') && 
+              (b.status === 'COMPLETED' || b.status === 'FAILED')) {
+            return new Date(b.updatedAt || b.createdAt || '').getTime() - 
+                   new Date(a.updatedAt || a.createdAt || '').getTime();
+          }
+          return new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime();
+        });
+
+        // Trim to limit if needed
+        if (currentTasks.length > limit) {
+          currentTasks = currentTasks.slice(0, limit);
+        }
+
+        console.debug('Emitting updated task list:', {
+          count: currentTasks.length,
+          taskIds: currentTasks.map(t => ({
+            id: t.id,
+            scorecardId: t.scorecardId,
+            scoreId: t.scoreId,
+            scorecard: t.scorecard?.name,
+            score: t.score?.name
+          }))
+        });
+        subscriber.next({ items: [...currentTasks], isSynced: true });
+      } catch (error) {
+        console.error('Error processing task update:', error);
+      }
+    }
+
+    // Handle stage updates in-memory
+    async function handleStageUpdate(updatedStage: any) {
+      try {
+        console.debug('Stage update received:', updatedStage);
+        
+        // Extract taskId from the stage data - handle both possible structures
+        const taskId = updatedStage?.taskId || updatedStage?.data?.taskId;
+        if (!taskId) {
+          console.warn('No taskId found in stage update:', updatedStage);
+          return;
+        }
+
+        const taskIndex = currentTasks.findIndex(t => t.id === taskId);
+        if (taskIndex === -1) {
+          console.debug(`Task ${taskId} not found in current tasks`);
+          return;
+        }
+
+        const task = currentTasks[taskIndex];
+        if (!task.stages) {
+          console.debug(`Task ${taskId} has no stages array`);
+          return;
+        }
+
+        // Get the actual stage data, handling both possible structures
+        const stageData = updatedStage?.data || updatedStage;
+        const stageIndex = task.stages.findIndex(s => s.id === stageData.id);
+        
+        if (stageIndex === -1) {
+          console.debug(`Stage ${stageData.id} not found in task ${taskId}`);
+          return;
+        }
+
+        // Update the specific stage
+        task.stages[stageIndex] = {
+          ...task.stages[stageIndex],
+          status: stageData.status ?? task.stages[stageIndex].status,
+          processedItems: stageData.processedItems ?? task.stages[stageIndex].processedItems,
+          totalItems: stageData.totalItems ?? task.stages[stageIndex].totalItems,
+          startedAt: stageData.startedAt ?? task.stages[stageIndex].startedAt,
+          completedAt: stageData.completedAt ?? task.stages[stageIndex].completedAt,
+          estimatedCompletionAt: stageData.estimatedCompletionAt ?? task.stages[stageIndex].estimatedCompletionAt,
+          statusMessage: stageData.statusMessage ?? task.stages[stageIndex].statusMessage
+        };
+        
+        // Update task status if needed
+        if (stageData.status === 'FAILED') {
+          task.status = 'FAILED';
+        } else if (stageData.status === 'COMPLETED' && 
+                  task.stages.every(s => s.status === 'COMPLETED')) {
+          task.status = 'COMPLETED';
+        }
+        
+        subscriber.next({ items: [...currentTasks], isSynced: true });
+      } catch (error) {
+        console.error('Error processing stage update:', error);
+      }
+    }
+
+    // Load initial data
+    loadInitialTasks();
+
+    // Set up subscriptions
     const taskSubscriptions = [
-      client.models.Task.onCreate({}).subscribe({
-        next: () => {
-          console.debug('Task onCreate triggered, refreshing tasks');
-          refreshTasks()
+      client.graphql({
+        query: `subscription OnCreateTask {
+          onCreateTask {
+            id
+            accountId
+            type
+            status
+            target
+            command
+            description
+            dispatchStatus
+            metadata
+            createdAt
+            startedAt
+            completedAt
+            estimatedCompletionAt
+            errorMessage
+            errorDetails
+            stdout
+            stderr
+            currentStageId
+            scorecardId
+            scoreId
+            celeryTaskId
+            workerNodeId
+            updatedAt
+            scorecard {
+              id
+              name
+              key
+            }
+            score {
+              id
+              name
+              key
+            }
+            stages {
+              items {
+                id
+                name
+                order
+                status
+                processedItems
+                totalItems
+                startedAt
+                completedAt
+                estimatedCompletionAt
+                statusMessage
+              }
+            }
+          }
+        }`
+      }).subscribe({
+        next: (data: any) => {
+          console.debug('Raw onCreate data received:', data);
+          const taskData = data?.data?.onCreateTask;
+          if (!taskData?.id) {
+            console.debug('Invalid task create data:', data);
+            return;
+          }
+          console.log('Task onCreate triggered:', { 
+            taskId: taskData.id,
+            type: taskData.type,
+            status: taskData.status,
+            scorecard: taskData.scorecard?.name,
+            score: taskData.score?.name
+          });
+          handleTaskUpdate(taskData);
         },
-        error: (error: Error) => {
-          console.error('Error in task onCreate subscription:', error)
-        }
+        error: (error: Error) => console.error('Error in task onCreate subscription:', error)
       }),
-      client.models.Task.onUpdate({}).subscribe({
-        next: () => {
-          console.debug('Task onUpdate triggered, refreshing tasks');
-          refreshTasks()
+      
+      client.graphql({
+        query: `subscription OnUpdateTask {
+          onUpdateTask {
+            id
+            accountId
+            type
+            status
+            target
+            command
+            description
+            dispatchStatus
+            metadata
+            createdAt
+            startedAt
+            completedAt
+            estimatedCompletionAt
+            errorMessage
+            errorDetails
+            stdout
+            stderr
+            currentStageId
+            scorecardId
+            scoreId
+            celeryTaskId
+            workerNodeId
+            updatedAt
+            scorecard {
+              id
+              name
+              key
+            }
+            score {
+              id
+              name
+              key
+            }
+            stages {
+              items {
+                id
+                name
+                order
+                status
+                processedItems
+                totalItems
+                startedAt
+                completedAt
+                estimatedCompletionAt
+                statusMessage
+              }
+            }
+          }
+        }`
+      }).subscribe({
+        next: (data: any) => {
+          console.debug('Raw onUpdate data received:', {
+            fullData: data,
+            taskData: data?.data?.onUpdateTask,
+            scorecardData: {
+              id: data?.data?.onUpdateTask?.scorecardId,
+              scorecard: data?.data?.onUpdateTask?.scorecard
+            },
+            scoreData: {
+              id: data?.data?.onUpdateTask?.scoreId,
+              score: data?.data?.onUpdateTask?.score
+            }
+          });
+          
+          const taskData = data?.data?.onUpdateTask;
+          if (!taskData?.id) {
+            console.debug('Invalid task update data:', data);
+            return;
+          }
+
+          handleTaskUpdate(taskData);
         },
-        error: (error: Error) => {
-          console.error('Error in task onUpdate subscription:', error)
-        }
+        error: (error: Error) => console.error('Error in task onUpdate subscription:', error)
       })
-    ]
+    ];
 
     // Subscribe to stage updates
     const stageSubscription = (client.models.TaskStage as any).onUpdate({}).subscribe({
-      next: () => {
-        console.debug('Stage onUpdate triggered, refreshing tasks');
-        refreshTasks()
-      },
-      error: (error: Error) => {
-        console.error('Error in stage onUpdate subscription:', error)
-      }
-    })
-
-    // Initial load
-    console.debug('Initiating initial task load');
-    refreshTasks()
-
-    async function refreshTasks() {
-      try {
-        console.debug('refreshTasks called, fetching tasks');
-        const tasks = await listRecentTasks(limit)
-        console.debug(`refreshTasks completed, got ${tasks.length} tasks`);
-        subscriber.next({ items: tasks, isSynced: true })
-        isSynced = true
-      } catch (error) {
-        console.error('Error refreshing tasks:', error)
-        if (!isSynced) {
-          subscriber.next({ items: [], isSynced: false })
+      next: (data: any) => {
+        console.debug('Raw stage update data received:', data);
+        // Handle both direct data and wrapped data cases
+        const stageData = data?.data?.onUpdateTaskStage || data;
+        if (!stageData?.id) {
+          console.debug('Invalid stage update data:', data);
+          return;
         }
-      }
-    }
+
+        console.log('Stage onUpdate triggered:', { 
+          stageId: stageData.id,
+          taskId: stageData.taskId,
+          status: stageData.status,
+          processedItems: stageData.processedItems,
+          totalItems: stageData.totalItems
+        });
+        handleStageUpdate(stageData);
+      },
+      error: (error: Error) => console.error('Error in stage onUpdate subscription:', error)
+    });
 
     // Cleanup function
     return () => {
-      taskSubscriptions.forEach(sub => sub.unsubscribe())
-      stageSubscription.unsubscribe()
-    }
-  })
+      console.log('Cleaning up task subscriptions');
+      taskSubscriptions.forEach(sub => sub.unsubscribe());
+      stageSubscription.unsubscribe();
+    };
+  });
 }
 
 type TaskStageData = Schema['TaskStage']['type'];
@@ -434,54 +808,55 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
     } else {
       console.debug(`Task ${task.id} has unknown stages format:`, task.stages);
     }
+
+    const processed: ProcessedTask = {
+      id: task.id,
+      command: task.command,
+      type: task.type,
+      status: task.status,
+      target: task.target,
+      description: task.description ?? undefined,
+      metadata: typeof task.metadata === 'string' ? task.metadata : JSON.stringify(task.metadata ?? null),
+      createdAt: task.createdAt ?? undefined,
+      startedAt: task.startedAt ?? undefined,
+      completedAt: task.completedAt ?? undefined,
+      estimatedCompletionAt: task.estimatedCompletionAt ?? undefined,
+      errorMessage: task.errorMessage ?? undefined,
+      errorDetails: typeof task.errorDetails === 'string' ? task.errorDetails : JSON.stringify(task.errorDetails ?? null),
+      stdout: task.stdout ?? undefined,
+      stderr: task.stderr ?? undefined,
+      currentStageId: task.currentStageId ?? undefined,
+      stages,
+      dispatchStatus: task.dispatchStatus ?? undefined,
+      celeryTaskId: task.celeryTaskId ?? undefined,
+      workerNodeId: task.workerNodeId ?? undefined,
+      updatedAt: task.updatedAt ?? undefined,
+      scorecardId: task.scorecardId ?? undefined,
+      scoreId: task.scoreId ?? undefined,
+      scorecard: task.scorecard ? {
+        id: task.scorecard.id,
+        name: task.scorecard.name
+      } : undefined,
+      score: task.score ? {
+        id: task.score.id,
+        name: task.score.name
+      } : undefined
+    };
+
+    console.debug(`Finished processing task ${task.id}`, {
+      id: processed.id,
+      type: processed.type,
+      scorecard: processed.scorecard,
+      score: processed.score,
+      scorecardId: processed.scorecardId,
+      scoreId: processed.scoreId
+    });
+
+    return processed;
   } catch (error: unknown) {
-    console.error('Error loading stages for task:', error)
+    console.error('Error processing task:', error);
+    throw error;
   }
-
-  const processed: ProcessedTask = {
-    id: task.id,
-    command: task.command,
-    type: task.type,
-    status: task.status,
-    target: task.target,
-    description: task.description ?? undefined,
-    metadata: typeof task.metadata === 'string' ? task.metadata : JSON.stringify(task.metadata ?? null),
-    createdAt: task.createdAt ?? undefined,
-    startedAt: task.startedAt ?? undefined,
-    completedAt: task.completedAt ?? undefined,
-    estimatedCompletionAt: task.estimatedCompletionAt ?? undefined,
-    errorMessage: task.errorMessage ?? undefined,
-    errorDetails: typeof task.errorDetails === 'string' ? task.errorDetails : JSON.stringify(task.errorDetails ?? null),
-    stdout: task.stdout ?? undefined,
-    stderr: task.stderr ?? undefined,
-    currentStageId: task.currentStageId ?? undefined,
-    stages,
-    dispatchStatus: task.dispatchStatus ?? undefined,
-    celeryTaskId: task.celeryTaskId ?? undefined,
-    workerNodeId: task.workerNodeId ?? undefined,
-    updatedAt: task.updatedAt ?? undefined,
-    scorecardId: task.scorecardId ?? undefined,
-    scoreId: task.scoreId ?? undefined,
-    scorecard: task.scorecard ? {
-      id: task.scorecard.id,
-      name: task.scorecard.name
-    } : undefined,
-    score: task.score ? {
-      id: task.score.id,
-      name: task.score.name
-    } : undefined
-  };
-
-  console.debug(`Finished processing task ${task.id}`, {
-    id: processed.id,
-    type: processed.type,
-    scorecard: processed.scorecard,
-    score: processed.score,
-    scorecardId: processed.scorecardId,
-    scoreId: processed.scoreId
-  });
-
-  return processed;
 }
 
 export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask[]> {
@@ -506,36 +881,6 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
 
     const accountId = accountResponse.data[0].id;
     console.debug('Fetching tasks for account:', accountId);
-
-    // First try to get a single task to verify the relationships
-    const testResponse = await currentClient.graphql({
-      query: `
-        query GetTask($id: ID!) {
-          getTask(id: $id) {
-            id
-            accountId
-            type
-            status
-            scorecardId
-            scoreId
-            scorecard {
-              id
-              name
-            }
-            score {
-              id
-              name
-            }
-          }
-        }
-      `,
-      variables: {
-        id: "8da587dd-3030-49a3-a4fd-90630e61ed6c"  // Use the task ID you mentioned
-      },
-      authMode: 'userPool'
-    });
-
-    console.warn('Test task response:', JSON.stringify(testResponse, null, 2));
 
     const response = await currentClient.graphql({
       query: `
@@ -580,6 +925,20 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
               score {
                 id
                 name
+              }
+              stages {
+                items {
+                  id
+                  name
+                  order
+                  status
+                  processedItems
+                  totalItems
+                  startedAt
+                  completedAt
+                  estimatedCompletionAt
+                  statusMessage
+                }
               }
             }
             nextToken

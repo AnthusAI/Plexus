@@ -868,18 +868,6 @@ def accuracy(
                                     for stage in task.get_stages()
                                 ]
                             }
-                            logging.info(f"Final task state:\n{json.dumps(task_details, indent=2)}")
-
-                            # Also log the raw task data to verify fields
-                            logging.info("Raw task data:")
-                            for attr in dir(task):
-                                if not attr.startswith('_'):  # Skip private attributes
-                                    try:
-                                        value = getattr(task, attr)
-                                        if not callable(value):  # Skip methods
-                                            logging.info(f"  {attr}: {value}")
-                                    except Exception as e:
-                                        logging.warning(f"Could not get value for {attr}: {e}")
 
                             # Update task to completed status
                             task.update(

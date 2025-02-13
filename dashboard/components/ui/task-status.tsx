@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { SegmentedProgressBar, SegmentConfig } from './segmented-progress-bar'
 import { ProgressBar } from './progress-bar'
 import { ProgressBarTiming } from './progress-bar-timing'
-import { Radio, Hand, ConciergeBell, Square, RectangleVertical, X, AlertTriangle } from 'lucide-react'
+import { Radio, Hand, ConciergeBell, Square, RectangleVertical, X, AlertTriangle, MessageSquareText, SquareChevronRight } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { StyleTag } from './style-tag'
 import { CardButton } from '@/components/CardButton'
@@ -79,7 +79,10 @@ export interface TaskStatusProps {
   isFullWidth?: boolean
   onToggleFullWidth?: () => void
   onClose?: () => void
+  extra?: boolean
 }
+
+const isGridVariant = (variant: TaskStatusProps['variant']): variant is 'grid' => variant === 'grid'
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) {
@@ -118,8 +121,10 @@ export function TaskStatus({
   variant,
   isFullWidth,
   onToggleFullWidth,
-  onClose
+  onClose,
+  extra = false
 }: TaskStatusProps) {
+
   const isInProgress = status === 'RUNNING'
   const isFinished = status === 'COMPLETED' || status === 'FAILED'
   const isError = status === 'FAILED'
@@ -176,14 +181,87 @@ export function TaskStatus({
     }
   }, [startedAt, estimatedCompletionAt, completedAt, isInProgress])
 
+  // Find first running stage if currentStageName is undefined
+  const effectiveCurrentStage = useMemo(() => {
+    // If we have an explicit currentStageName, use it
+    if (currentStageName) return currentStageName;
+
+    // If task is completed or failed, use completion
+    if (status === 'FAILED' || status === 'COMPLETED') return 'completion';
+
+    // Find the first RUNNING stage from the stage configs
+    const runningStage = stageConfigs.find(s => s.status === 'RUNNING');
+    if (runningStage) return runningStage.name;
+
+    // If no running stage, find the first PENDING stage
+    const pendingStage = stageConfigs.find(s => s.status === 'PENDING');
+    if (pendingStage) return pendingStage.name;
+
+    // Default to empty string if no stages found
+    return '';
+  }, [currentStageName, status, stageConfigs]);
+
+  // Convert TaskStageConfig to SegmentConfig for the progress bar
+  const segments = useMemo(() => {
+    const orderedStages = stageConfigs
+      .sort((a, b) => a.order - b.order)  // Ensure stages are ordered
+      .map(stage => {
+        const isRunning = stage.status === 'RUNNING';
+        const isCompleted = stage.status === 'COMPLETED';
+        
+        return {
+          key: stage.name,
+          label: stage.label || stage.name,
+          color: stage.color || (
+            isCompleted ? 'bg-primary' :
+            isRunning ? 'bg-secondary' :
+            stage.status === 'FAILED' ? 'bg-false' :
+            'bg-neutral'
+          ),
+          status: stage.status,
+          completed: isCompleted
+        };
+      });
+
+    // Always add completion segment with appropriate color based on status
+    orderedStages.push({
+      key: 'completion',
+      label: 'Complete',
+      color: status === 'COMPLETED' ? 'bg-true' :
+             status === 'FAILED' ? 'bg-false' :
+             'bg-neutral',
+      status: status === 'COMPLETED' ? 'COMPLETED' :
+              status === 'FAILED' ? 'FAILED' :
+              'PENDING',
+      completed: status === 'COMPLETED'
+    });
+
+    return orderedStages;
+  }, [stageConfigs, status]);
+
   // Update the progress calculation logic
   const { processedItems: effectiveProcessedItems, totalItems: effectiveTotalItems } = useMemo(() => {
     // First try to get progress from stages
     if (stages?.length > 0) {
-      // Sort by order descending
+      // First try to find a RUNNING stage with progress info
+      const runningStage = stages.find(stage => {
+        return stage.status === 'RUNNING';
+      });
+
+      if (runningStage) {
+        const proc = Number(runningStage.processedItems);
+        const tot = Number(runningStage.totalItems);
+        // Only use the stage's progress if it has valid numbers
+        if (!isNaN(proc) && !isNaN(tot) && tot > 0) {
+          return {
+            processedItems: proc,
+            totalItems: tot
+          };
+        }
+      }
+
+      // If no running stage found with progress, fall back to the last stage with progress
       const sortedStages = [...stages].sort((a, b) => (b.order || 0) - (a.order || 0));
-      
-      // Find the first stage with valid numeric progress info
       const stageWithProgress = sortedStages.find(stage => {
         const proc = Number(stage.processedItems);
         const tot = Number(stage.totalItems);
@@ -194,7 +272,7 @@ export function TaskStatus({
         const proc = Number(stageWithProgress.processedItems);
         const tot = Number(stageWithProgress.totalItems);
         return {
-          processedItems: status === 'COMPLETED' ? tot : proc,
+          processedItems: proc,
           totalItems: tot
         };
       }
@@ -206,7 +284,7 @@ export function TaskStatus({
     
     if (!isNaN(directProcessed) && !isNaN(directTotal) && directTotal > 0) {
       return {
-        processedItems: status === 'COMPLETED' ? directTotal : directProcessed,
+        processedItems: directProcessed,
         totalItems: directTotal
       };
     }
@@ -216,7 +294,7 @@ export function TaskStatus({
       processedItems: 0,
       totalItems: 0
     };
-  }, [stages, status, processedItems, totalItems]);
+  }, [stages, processedItems, totalItems]);
 
   // Calculate progress percentage
   const progress = useMemo(() => 
@@ -232,83 +310,8 @@ export function TaskStatus({
     'secondary'
   , [status]);
 
-  // If the variant is 'list', render only a simple progress bar
-  if (variant === 'list') {
-    return (
-      <div className="[&>*+*]:mt-2">
-        <StyleTag />
-        {variant === 'detail' && (
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex-grow" />
-            <div className="flex items-center space-x-2">
-              {onToggleFullWidth && (
-                <CardButton
-                  icon={isFullWidth ? RectangleVertical : Square}
-                  onClick={onToggleFullWidth}
-                />
-              )}
-              {onClose && (
-                <CardButton
-                  icon={X}
-                  onClick={onClose}
-                />
-              )}
-            </div>
-          </div>
-        )}
-        <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
-          <div className={`font-mono text-sm text-muted-foreground leading-6 ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
-            {command ? `$ ${command}` : '\u00A0'}
-          </div>
-          <div className={cn(
-            "text-sm flex items-center gap-2 leading-6",
-            truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
-            isError ? 'text-destructive font-medium' : ''
-          )}>
-            {isError && <AlertTriangle className="w-4 h-4 animate-pulse" />}
-            {statusMessage || '\u00A0'}
-          </div>
-        </div>
-        {showStages && (
-          <ProgressBar
-            progress={status === 'COMPLETED' ? 100 : progress}
-            processedItems={effectiveProcessedItems}
-            totalItems={effectiveTotalItems}
-            color={progressBarColor}
-            showTiming={false}
-          />
-        )}
-      </div>
-    );
-  }
-
-  // Convert TaskStageConfig to SegmentConfig for the progress bar
-  const segments = stageConfigs
-    .sort((a, b) => a.order - b.order)  // Ensure stages are ordered
-    .map(stage => ({
-      key: stage.name,
-      label: stage.label || stage.name,
-      color: stage.status === 'COMPLETED' ? 'bg-primary' :
-             stage.status === 'FAILED' ? 'bg-false' :
-             'bg-neutral',
-      status: stage.status,
-      completed: stage.status === 'COMPLETED'
-    }));
-
-  // Add completion segment if task is complete
-  if (status === 'COMPLETED') {
-    segments.push({
-      key: 'completion',
-      label: 'Complete',
-      color: 'bg-true',
-      status: 'COMPLETED',
-      completed: true
-    });
-  }
-
   const getPreExecutionStatus = () => {
     if (workerNodeId && workerNodeId.trim() !== '') {
-      console.debug('Task claimed by worker:', workerNodeId);
       return { 
         message: 'Claimed...', 
         icon: Hand,
@@ -316,14 +319,12 @@ export function TaskStatus({
       }
     }
     if (!celeryTaskId) {
-      console.debug('Task announced, no celery ID yet');
       return { 
         message: 'Announced...', 
         icon: ConciergeBell,
         animation: 'animate-jiggle'
       }
     }
-    console.debug('Task has celery ID:', celeryTaskId);
     return { 
       message: 'Announced...', 
       icon: Radio,
@@ -344,19 +345,80 @@ export function TaskStatus({
 
   const displayMessage = isError && errorMessage ? errorMessage : statusMessage
 
+  // If the variant is 'list', render only a simple progress bar
+  if (variant === 'list') {
+    return (
+      <div className="[&>*+*]:mt-2">
+        <StyleTag />
+        <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
+          {(!extra || !isGridVariant(variant)) && (
+            <div className={`font-mono text-sm text-muted-foreground leading-6 ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
+              {command ? command : '\u00A0'}
+            </div>
+          )}
+          <div className={cn(
+            "text-sm flex items-center gap-1",
+            truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
+            isError ? 'text-destructive font-medium' : ''
+          )}>
+            {isError ? (
+              <AlertTriangle className="w-4 h-4 animate-pulse" />
+            ) : displayMessage && (
+              <MessageSquareText className="w-4 h-4" />
+            )}
+            {displayMessage || '\u00A0'}
+          </div>
+        </div>
+        {showEmptyState ? (
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+            <Radio className="w-4 h-4 animate-pulse" />
+            <span>Announced...</span>
+          </div>
+        ) : preExecutionStatus ? (
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+            <preExecutionStatus.icon className={`w-4 h-4 ${preExecutionStatus.animation}`} />
+            <span>{preExecutionStatus.message}</span>
+          </div>
+        ) : (
+          <ProgressBarTiming
+            elapsedTime={elapsedTime}
+            estimatedTimeRemaining={estimatedTimeRemaining}
+            isInProgress={isInProgress}
+          />
+        )}
+        {showStages && (
+          <ProgressBar
+            progress={progress}
+            processedItems={effectiveProcessedItems}
+            totalItems={effectiveTotalItems}
+            color={progressBarColor}
+            showTiming={false}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="[&>*+*]:mt-2">
       <StyleTag />
       <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
-        <div className={`font-mono text-sm text-muted-foreground leading-6 ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
-          {command ? `$ ${command}` : '\u00A0'}
-        </div>
+        {(!extra || !isGridVariant(variant)) && (
+          <div className={`font-mono text-sm text-muted-foreground leading-6 flex items-center gap-1 ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
+            <SquareChevronRight className="w-4 h-4" />
+            {command ? command : '\u00A0'}
+          </div>
+        )}
         <div className={cn(
-          "text-sm flex items-center gap-2 leading-6",
+          "text-sm flex items-center gap-1",
           truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
           isError ? 'text-destructive font-medium' : ''
         )}>
-          {isError && <AlertTriangle className="w-4 h-4 animate-pulse" />}
+          {isError ? (
+            <AlertTriangle className="w-4 h-4 animate-pulse" />
+          ) : displayMessage && (
+            <MessageSquareText className="w-4 h-4" />
+          )}
           {displayMessage || '\u00A0'}
         </div>
       </div>
@@ -380,13 +442,13 @@ export function TaskStatus({
       {showStages && (
         <SegmentedProgressBar
           segments={segments}
-          currentSegment={status === 'FAILED' || status === 'COMPLETED' ? 'completion' : currentStageName || ''}
+          currentSegment={effectiveCurrentStage}
           error={status === 'FAILED'}
           errorLabel={errorLabel}
         />
       )}
       <ProgressBar
-        progress={status === 'COMPLETED' ? 100 : progress}
+        progress={progress}
         processedItems={effectiveProcessedItems}
         totalItems={effectiveTotalItems}
         color={progressBarColor}
