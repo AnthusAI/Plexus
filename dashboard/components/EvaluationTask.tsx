@@ -190,6 +190,24 @@ const GridContent = React.memo(({ data, extra }: { data: EvaluationTaskData; ext
     Math.round((data.processedItems / data.totalItems) * 100) : 0
   const accuracy = data.accuracy ?? 0
 
+  // Get status message from current stage or last completed stage if task is done
+  const statusMessage = (() => {
+    if (!data.task?.stages?.items?.length) return undefined
+    if (data.task.status === 'FAILED') {
+      // For failed tasks, find the failed stage's status message
+      const failedStage = data.task.stages.items.find(stage => stage.status === 'FAILED')
+      return failedStage?.statusMessage
+    }
+    if (data.task.status === 'COMPLETED') {
+      // Find the last stage with a status message
+      return [...data.task.stages.items]
+        .reverse()
+        .find(stage => stage.statusMessage)?.statusMessage
+    }
+    // Otherwise use current stage's message
+    return data.task.stages.items.find(stage => stage.status === 'RUNNING')?.statusMessage
+  })()
+
   return (
     <div className="space-y-2">
       <TaskStatus
@@ -238,7 +256,7 @@ const GridContent = React.memo(({ data, extra }: { data: EvaluationTaskData; ext
         estimatedCompletionAt={data.task?.estimatedCompletionAt}
         errorMessage={data.task?.errorMessage || data.errorMessage}
         command={data.task?.command || data.command}
-        statusMessage={data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage}
+        statusMessage={statusMessage}
         variant="grid"
         extra={extra}
       />
