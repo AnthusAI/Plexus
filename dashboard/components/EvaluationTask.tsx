@@ -203,6 +203,16 @@ const GridContent = React.memo(({ data, extra }: { data: EvaluationTaskData; ext
           .reverse()
           .find(stage => stage.statusMessage)?.statusMessage;
       }
+      // If there's a running stage, use its message
+      const runningStage = data.task.stages.items.find(stage => stage.status === 'RUNNING');
+      if (runningStage) {
+        return runningStage.statusMessage;
+      }
+      // If all stages are pending, use the first stage's message
+      if (data.task.stages.items.every(stage => stage.status === 'PENDING')) {
+        const firstStage = [...data.task.stages.items].sort((a, b) => a.order - b.order)[0];
+        return firstStage?.statusMessage;
+      }
       return data.task.stages.items.find(stage => stage.status === 'RUNNING')?.statusMessage;
     }
     
@@ -238,9 +248,9 @@ const GridContent = React.memo(({ data, extra }: { data: EvaluationTaskData; ext
           processedItems: stage.processedItems,
           totalItems: stage.totalItems,
           statusMessage: stage.statusMessage,
-          startedAt: stage.startedAt,
-          completedAt: stage.completedAt,
-          estimatedCompletionAt: stage.estimatedCompletionAt
+          startedAt: stage.startedAt || undefined,
+          completedAt: stage.completedAt || undefined,
+          estimatedCompletionAt: stage.estimatedCompletionAt || undefined
         })) || []}
         stages={data.task?.stages?.items?.map(stage => ({
           key: stage.name,
@@ -256,18 +266,18 @@ const GridContent = React.memo(({ data, extra }: { data: EvaluationTaskData; ext
           processedItems: stage.processedItems,
           totalItems: stage.totalItems,
           statusMessage: stage.statusMessage,
-          startedAt: stage.startedAt,
-          completedAt: stage.completedAt,
-          estimatedCompletionAt: stage.estimatedCompletionAt
+          startedAt: stage.startedAt || undefined,
+          completedAt: stage.completedAt || undefined,
+          estimatedCompletionAt: stage.estimatedCompletionAt || undefined
         })) || []}
         processedItems={data.processedItems}
         totalItems={data.totalItems}
-        startedAt={data.task?.startedAt || data.startedAt}
-        completedAt={data.task?.completedAt}
-        estimatedCompletionAt={data.task?.estimatedCompletionAt}
-        errorMessage={data.task?.errorMessage || data.errorMessage}
-        command={data.task?.command || data.command}
-        statusMessage={statusMessage}
+        startedAt={data.task?.startedAt || data.startedAt || undefined}
+        completedAt={data.task?.completedAt || undefined}
+        estimatedCompletionAt={data.task?.estimatedCompletionAt || undefined}
+        errorMessage={data.task?.errorMessage || data.errorMessage || undefined}
+        command={data.task?.command || data.command || undefined}
+        statusMessage={data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage}
         variant="grid"
         extra={extra}
       />
@@ -366,6 +376,7 @@ const DetailContent = React.memo(({
   metricsVariant,
   selectedScoreResultId,
   onSelectScoreResult,
+  extra
 }: { 
   data: EvaluationTaskData
   isFullWidth: boolean
@@ -373,6 +384,7 @@ const DetailContent = React.memo(({
   metricsVariant: 'grid' | 'detail'
   selectedScoreResultId?: string | null
   onSelectScoreResult?: (id: string | null) => void
+  extra?: boolean
 }) => {
   console.log('DetailContent render:', {
     hasTaskData: !!data.task,
@@ -508,6 +520,8 @@ const DetailContent = React.memo(({
                     errorMessage={data.task?.errorMessage || data.errorMessage || undefined}
                     command={data.task?.command || data.command}
                     statusMessage={data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage}
+                    truncateMessages={true}
+                    extra={extra}
                   />
                 </div>
 
@@ -785,6 +799,7 @@ export default function EvaluationTask({
               metricsVariant="detail"
               selectedScoreResultId={selectedScoreResultId}
               onSelectScoreResult={onSelectScoreResult}
+              extra={extra}
             />
           )}
         </TaskContent>

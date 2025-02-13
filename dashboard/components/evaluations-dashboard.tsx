@@ -53,6 +53,7 @@ import type { EvaluationTaskProps } from '@/components/EvaluationTask'
 import type { TaskData } from '@/types/evaluation'
 import { transformAmplifyTask } from '@/utils/data-operations'
 import type { AmplifyTask } from '@/utils/data-operations'
+import { listRecentEvaluations, observeRecentEvaluations } from '@/utils/data-operations'
 
 type TaskResponse = {
   id: string;
@@ -259,68 +260,38 @@ export default function EvaluationsDashboard() {
   useEffect(() => {
     if (!accountId) return
 
-    const fetchEvaluations = async () => {
-      try {
-        console.log('Fetching evaluations for account:', accountId)
-        const client = getClient()
-        const evaluationsResponse = await client.graphql<ListEvaluationResponse>({
-          query: LIST_EVALUATIONS,
-          variables: {
-            accountId,
-            sortDirection: 'DESC',
-            limit: 100
-          }
-        })
-
-        if ('data' in evaluationsResponse) {
-          console.log('GraphQL response:', {
-            hasData: !!evaluationsResponse.data,
-            hasErrors: !!(evaluationsResponse as any).errors,
-            errors: (evaluationsResponse as any).errors?.map((e: GraphQLError) => ({
-              message: e.message,
-              path: e.path
-            }))
-          })
-
-          if ((evaluationsResponse as any).errors?.length) {
-            throw new Error(`GraphQL errors: ${(evaluationsResponse as any).errors.map((e: GraphQLError) => e.message).join(', ')}`)
-          }
-
-          if (evaluationsResponse.data) {
-            const items = evaluationsResponse.data.listEvaluationByAccountIdAndUpdatedAt.items
-            console.log('Found evaluations:', items.length)
-            setEvaluations(items)
-          }
+    console.log('Setting up real-time evaluations subscription');
+    const subscription = observeRecentEvaluations(100).subscribe({
+      next: ({ items, isSynced }) => {
+        console.log('Received evaluations update:', {
+          count: items.length,
+          evaluationIds: items.map(e => e.id),
+          firstEvaluation: items[0] ? {
+            id: items[0].id,
+            taskId: items[0].taskId,
+            taskStages: items[0].task?.stages?.items,
+            status: items[0].status,
+            type: items[0].type
+          } : null,
+          isSynced
+        });
+        setEvaluations(items);
+        if (isSynced) {
+          setIsLoading(false);
         }
-        setIsLoading(false)
-      } catch (error) {
-        console.error('Error fetching evaluations:', error)
-        setError('Error fetching evaluations')
-        setIsLoading(false)
+      },
+      error: (error) => {
+        console.error('Evaluations subscription error:', error);
+        setError('Error fetching evaluations');
+        setIsLoading(false);
       }
-    }
+    });
 
-    fetchEvaluations()
-  }, [accountId])
-
-  // Subscribe to evaluation updates
-  useEvaluationSubscriptions({
-    accountId,
-    onEvaluationUpdate: (updatedEvaluation) => {
-      console.log('Received evaluation update:', updatedEvaluation.id)
-      setEvaluations(prev => prev.map(evaluation => 
-        evaluation.id === updatedEvaluation.id ? updatedEvaluation : evaluation
-      ))
-    },
-    onEvaluationCreate: (newEvaluation) => {
-      console.log('Received new evaluation:', newEvaluation.id)
-      setEvaluations(prev => [newEvaluation, ...prev])
-    },
-    onEvaluationDelete: (evaluationId) => {
-      console.log('Received evaluation deletion:', evaluationId)
-      setEvaluations(prev => prev.filter(evaluation => evaluation.id !== evaluationId))
-    }
-  })
+    return () => {
+      console.log('Cleaning up evaluations subscription');
+      subscription.unsubscribe();
+    };
+  }, [accountId]);
 
   const handleDelete = async (evaluationId: string) => {
     try {
@@ -409,6 +380,10 @@ export default function EvaluationsDashboard() {
       } : undefined
     } : null
 
+    // Get current stage info for progress tracking
+    const currentStage = taskData?.stages?.items?.find(s => s.status === 'RUNNING') || 
+                        taskData?.stages?.items?.[taskData.stages.items.length - 1]
+
     const task: EvaluationTaskProps['task'] = {
       id: evaluation.id,
       type: evaluation.type || '',
@@ -421,9 +396,9 @@ export default function EvaluationsDashboard() {
         metrics: typeof evaluation.metrics === 'string' ? JSON.parse(evaluation.metrics as string) : (evaluation.metrics || []),
         metricsExplanation: evaluation.metricsExplanation || '',
         accuracy: typeof evaluation.accuracy === 'number' ? evaluation.accuracy : null,
-        processedItems: Number(evaluation.processedItems || 0),
-        totalItems: Number(evaluation.totalItems || 0),
-        progress: Number(calculateProgress(evaluation.processedItems, evaluation.totalItems) || 0),
+        processedItems: currentStage?.processedItems || Number(evaluation.processedItems || 0),
+        totalItems: currentStage?.totalItems || Number(evaluation.totalItems || 0),
+        progress: Number(calculateProgress(currentStage?.processedItems || evaluation.processedItems, currentStage?.totalItems || evaluation.totalItems) || 0),
         inferences: Number(evaluation.inferences || 0),
         cost: evaluation.cost ?? null,
         status: evaluation.status || 'PENDING',
@@ -439,7 +414,24 @@ export default function EvaluationsDashboard() {
         predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ? JSON.parse(evaluation.predictedClassDistribution as string) : evaluation.predictedClassDistribution,
         isPredictedClassDistributionBalanced: Boolean(evaluation.isPredictedClassDistributionBalanced),
         task: taskData
-      }
+      },
+      stages: taskData?.stages?.items?.map(stage => ({
+        key: stage.name,
+        label: stage.name,
+        color: stage.status === 'COMPLETED' ? 'bg-primary' :
+               stage.status === 'RUNNING' ? 'bg-secondary' :
+               stage.status === 'FAILED' ? 'bg-false' :
+               'bg-neutral',
+        name: stage.name,
+        order: stage.order,
+        status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+        processedItems: stage.processedItems,
+        totalItems: stage.totalItems,
+        startedAt: stage.startedAt,
+        completedAt: stage.completedAt,
+        estimatedCompletionAt: stage.estimatedCompletionAt,
+        statusMessage: stage.statusMessage
+      })) || []
     }
 
     return (
@@ -609,7 +601,27 @@ export default function EvaluationsDashboard() {
                             } : undefined
                           };
                         })() : null
-                      }
+                      },
+                      stages: evaluation.task ? (() => {
+                        const transformedTask = transformAmplifyTask(evaluation.task as unknown as AmplifyTask);
+                        return transformedTask.stages.map(stage => ({
+                          key: stage.name,
+                          label: stage.name,
+                          color: stage.status === 'COMPLETED' ? 'bg-primary' :
+                                stage.status === 'RUNNING' ? 'bg-secondary' :
+                                stage.status === 'FAILED' ? 'bg-false' :
+                                'bg-neutral',
+                          name: stage.name,
+                          order: stage.order,
+                          status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+                          processedItems: stage.processedItems,
+                          totalItems: stage.totalItems,
+                          startedAt: stage.startedAt,
+                          completedAt: stage.completedAt,
+                          estimatedCompletionAt: stage.estimatedCompletionAt,
+                          statusMessage: stage.statusMessage
+                        }))
+                      })() : []
                     }}
                     isSelected={evaluation.id === selectedEvaluationId}
                     onClick={() => {

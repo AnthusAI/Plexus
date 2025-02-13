@@ -82,8 +82,6 @@ export interface TaskStatusProps {
   extra?: boolean
 }
 
-const isGridVariant = (variant: TaskStatusProps['variant']): variant is 'grid' => variant === 'grid'
-
 function formatDuration(seconds: number): string {
   if (seconds < 60) {
     return `${Math.floor(seconds)}s`
@@ -98,8 +96,8 @@ function formatDuration(seconds: number): string {
   return `${hours}h ${remainingMinutes}m`
 }
 
-export function TaskStatus({
-  showStages = true,
+export const TaskStatus: React.FC<TaskStatusProps> = ({
+  showStages = false,
   stages = [],
   currentStageName,
   processedItems,
@@ -107,23 +105,24 @@ export function TaskStatus({
   startedAt,
   estimatedCompletionAt,
   status,
+  command,
+  statusMessage,
+  errorMessage,
   stageConfigs = [],
-  errorLabel = 'Failed',
+  isLoading,
+  errorLabel,
   dispatchStatus,
   celeryTaskId,
   workerNodeId,
   showPreExecutionStages = false,
-  command,
-  statusMessage,
-  errorMessage,
   completedAt,
-  truncateMessages = true,
-  variant,
-  isFullWidth,
+  truncateMessages = false,
+  variant = 'grid',
+  isFullWidth = false,
   onToggleFullWidth,
   onClose,
   extra = false
-}: TaskStatusProps) {
+}) => {
 
   const isInProgress = status === 'RUNNING'
   const isFinished = status === 'COMPLETED' || status === 'FAILED'
@@ -351,9 +350,10 @@ export function TaskStatus({
       <div className="[&>*+*]:mt-2">
         <StyleTag />
         <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
-          {(!extra || !isGridVariant(variant)) && (
-            <div className={`font-mono text-sm text-muted-foreground leading-6 ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
-              {command ? command : '\u00A0'}
+          {command && !extra && (
+            <div className="font-mono text-sm text-muted-foreground leading-6 flex items-center gap-1 truncate">
+              <SquareChevronRight className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate">{command}</span>
             </div>
           )}
           <div className={cn(
@@ -403,10 +403,10 @@ export function TaskStatus({
     <div className="[&>*+*]:mt-2">
       <StyleTag />
       <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
-        {(!extra || !isGridVariant(variant)) && (
-          <div className={`font-mono text-sm text-muted-foreground leading-6 flex items-center gap-1 ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
-            <SquareChevronRight className="w-4 h-4" />
-            {command ? command : '\u00A0'}
+        {command && !extra && (
+          <div className="font-mono text-sm text-muted-foreground leading-6 flex items-center gap-1 truncate">
+            <SquareChevronRight className="w-4 h-4 flex-shrink-0" />
+            <span className="truncate">{command}</span>
           </div>
         )}
         <div className={cn(
