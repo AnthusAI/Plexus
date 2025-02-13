@@ -20,6 +20,7 @@ from plexus.dashboard.api.client import PlexusDashboardClient
 import json
 import datetime
 from plexus.cli.task_progress_tracker import TaskProgressTracker, StageConfig
+from datetime import timezone
 
 class ItemCountColumn(ProgressColumn):
     """Renders item count and total."""
@@ -281,7 +282,9 @@ def dispatch(
                 if result.get('stderr'):
                     print(result['stderr'], end='', file=sys.stderr)
             else:
-                logging.error(f"Command failed: {result.get('error', 'Unknown error')}")
+                error_msg = result.get('error')
+                if error_msg:
+                    logging.error(f"Command failed: {error_msg}")
                 # Print error output if available
                 if result.get('stderr'):
                     print(result['stderr'], end='', file=sys.stderr)
@@ -413,7 +416,12 @@ def get_progress_status(current: int, total: int) -> str:
     '--task-id',
     help='Task ID to update progress through the API'
 )
-def demo(target: str, task_id: Optional[str] = None) -> None:
+@click.option(
+    '--fail',
+    is_flag=True,
+    help='Simulate a random failure during the Running stage'
+)
+def demo(target: str, task_id: Optional[str] = None, fail: bool = False) -> None:
     """Run a demo task that processes 2000 items over 20 seconds."""
     from .CommandProgress import CommandProgress
     import time
@@ -438,16 +446,16 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
     stage_configs = {
         "Setup": StageConfig(
             order=1, 
-            status_message="Initializing demo task..."
+            status_message="Loading AI models..."
         ),
         "Running": StageConfig(
             order=2, 
             total_items=total_items,
-            status_message="Processing demo items..."
+            status_message="Processing items..."
         ),
         "Finalizing": StageConfig(
             order=3, 
-            status_message="Task completed."
+            status_message="Computing metrics..."
         )
     }
     
@@ -521,33 +529,58 @@ def demo(target: str, task_id: Optional[str] = None) -> None:
             total=total_items,
             status=stage_configs["Setup"].status_message
         )
-        _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size, max_batch_size, sleep_per_batch)
+        _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size, max_batch_size, sleep_per_batch, fail)
 
-def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size, max_batch_size, sleep_per_batch):
+def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size, max_batch_size, sleep_per_batch, fail):
     """Helper function to run the demo task with Rich progress bar."""
     import random
     
     try:
-        # Setup stage
+        # Setup stage with multiple status updates
         tracker.update(current_items=0)
-        time.sleep(random.uniform(1.0, 2.0))  # Simulate setup work
+        
+        # Quick setup phase with multiple status messages
+        setup_messages = [
+            "Loading base AI model...",
+            "Initializing model parameters...",
+            "Loading custom configurations...",
+            "Preparing processing pipeline..."
+        ]
+        
+        for msg in setup_messages:
+            tracker.current_stage.status_message = msg
+            tracker.update(current_items=0)
+            time.sleep(0.15)  # Reduced from 0.3s to 0.15s per message
         
         # Main processing stage
         tracker.advance_stage()  # Advance to "Running" stage
         
-        # Process items with target rate
+        # Process items with target rate - doubled duration with ±5s jitter
         current_item = 0
-        start_time = time.time()
+        stage_start_time = time.time()  # Track stage-specific start time
         last_api_update = 0  # To control API update frequency
-        target_duration = 20.0  # Target total processing time in seconds
         api_update_interval = 1  # Update API every 1 second
+        target_duration = 40.0 + random.uniform(-5.0, 5.0)  # 40 seconds ±5s jitter
         
-        # Initialize the last update time
-        last_update_time = time.time()
-
+        # If fail flag is set, calculate failure point between 30-70% progress
+        fail_at = int(total_items * random.uniform(0.3, 0.7)) if fail else None
+        
         while current_item < total_items:
+            # Check for simulated failure
+            if fail and current_item >= fail_at:
+                error_msg = f"Simulated failure at {current_item}/{total_items} items"
+                # First mark the task as failed to prevent further updates
+                tracker.fail(error_msg)
+                # Then update the progress display
+                progress.update(
+                    task_progress,
+                    completed=current_item,
+                    status="Failed"
+                )
+                raise Exception(error_msg)
+                
             # Calculate how many items we should have processed by now to stay on target
-            elapsed = time.time() - start_time
+            elapsed = time.time() - stage_start_time  # Use stage-specific elapsed time
             target_items = min(
                 total_items,
                 int((elapsed / target_duration) * total_items)
@@ -557,17 +590,12 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
             items_to_process = max(1, target_items - current_item)
             current_item = min(current_item + items_to_process, total_items)
             
+            # Calculate metrics for display using stage timing
+            elapsed = time.time() - stage_start_time
+            actual_items_per_sec = current_item / elapsed if elapsed > 0 else 0
+            
             # Update tracker with current progress
             tracker.update(current_items=current_item)
-            
-            # Only update API task periodically
-            current_time = time.time()
-            if current_time - last_api_update >= api_update_interval:
-                tracker.update(current_items=current_item)
-                last_api_update = current_time
-            
-            # Calculate progress metrics for display only
-            actual_items_per_sec = current_item / elapsed if elapsed > 0 else 0
             
             # Update Rich progress bar
             progress.update(
@@ -576,18 +604,34 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
                 status=f"{tracker.status} ({actual_items_per_sec:.1f} items/sec)"
             )
             
+            # If we've reached total items, advance to finalizing and exit immediately
+            if current_item >= total_items:
+                tracker.advance_stage()  # Advance to "Finalizing" stage
+                break
+            
+            # Only update API task periodically if we're still processing
+            current_time = time.time()
+            if current_time - last_api_update >= api_update_interval:
+                tracker.update(current_items=current_item)
+                last_api_update = current_time
+            
             # Sleep a tiny amount to allow for API updates and logging
-            time.sleep(0.1)
+            time.sleep(0.05)
         
-        # Final stage - make sure we update the API one last time
-        tracker.update(current_items=current_item)
-        tracker.advance_stage()  # Advance to "Finalizing" stage
+        # Finalizing stage with just two messages
+        finalizing_messages = [
+            "Computing metrics...",
+            "Generating report..."
+        ]
         
-        # Simulate some finalization work
-        time.sleep(random.uniform(1.0, 2.0))
+        for msg in finalizing_messages:
+            tracker.current_stage.status_message = msg
+            tracker.update(current_items=total_items)
+            time.sleep(0.15)  # Reduced from 0.3s to 0.15s per message
         
-        # Complete the task
-        tracker.complete()  # This will mark the task as complete
+        # Set completion message and complete task in one atomic operation
+        tracker.current_stage.status_message = "Task completed."
+        tracker.complete()  # This will mark the task as complete and send the final update
         
     except KeyboardInterrupt:
         error_message = (
@@ -595,10 +639,18 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
             f"({tracker.items_per_second:.1f} items/sec)"
         )
         logging.info(error_message)
-        if tracker.api_task:
-            tracker.api_task.fail_processing("Task cancelled by user")
+        try:
+            tracker.fail("Task cancelled by user")  # Use new fail() method
+            progress.update(task_progress, status="Cancelled")
+        except Exception as e:
+            logging.error(f"Failed to update task status on cancellation: {str(e)}")
     except Exception as e:
-        logging.error(f"Demo task failed: {str(e)}", exc_info=True)
-        if tracker.api_task:
-            tracker.api_task.fail_processing(str(e))
-        raise
+        error_message = str(e)
+        logging.error(f"Demo task failed: {error_message}", exc_info=True)
+        try:
+            if not tracker.is_failed:  # Only fail if not already failed
+                tracker.fail(error_message)  # Use new fail() method
+            progress.update(task_progress, status="Failed")
+        except Exception as update_error:
+            logging.error(f"Failed to update task status on error: {str(update_error)}")
+        raise  # Re-raise the original exception after updating the task status

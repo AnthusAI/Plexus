@@ -255,58 +255,83 @@ class LangGraphScore(Score, LangChainUser):
                 previous_node = node_instances[i-1][0]
                 node_config = next((node for node in graph_config
                                   if node['name'] == previous_node), None)
-                if node_config and 'conditions' in node_config:
-                    logging.info(f"Node '{previous_node}' has conditions: {node_config['conditions']}")
+                
+                if node_config:
+                    # Handle edge clause - direct routing with output aliasing
+                    if 'edge' in node_config:
+                        edge = node_config['edge']
+                        value_setter_name = f"{previous_node}_value_setter"
+                        # Create value setter node for the edge
+                        workflow.add_node(
+                            value_setter_name,
+                            LangGraphScore.create_value_setter_node(
+                                edge.get('output', {})
+                            )
+                        )
+                        # Add edge from previous node to value setter
+                        workflow.add_edge(previous_node, value_setter_name)
+                        # Add edge from value setter to target node
+                        target_node = edge.get('node', node_name)
+                        if target_node == 'END':
+                            workflow.add_edge(value_setter_name, END)
+                        else:
+                            workflow.add_edge(value_setter_name, target_node)
                     
-                    conditions = node_config['conditions']
-                    if isinstance(conditions, list):
-                        value_setters = {}
-                        # Create value setter nodes for each condition
-                        for j, condition in enumerate(conditions):
-                            value_setter_name = f"{previous_node}_value_setter_{j}"
-                            value_setters[condition['value'].lower()] = value_setter_name
-                            workflow.add_node(
-                                value_setter_name, 
-                                LangGraphScore.create_value_setter_node(
-                                    condition.get('output', {})
+                    # Handle conditions clause - conditional routing
+                    elif 'conditions' in node_config:
+                        logging.info(f"Node '{previous_node}' has conditions: {node_config['conditions']}")
+                        
+                        conditions = node_config['conditions']
+                        if isinstance(conditions, list):
+                            value_setters = {}
+                            # Create value setter nodes for each condition
+                            for j, condition in enumerate(conditions):
+                                value_setter_name = f"{previous_node}_value_setter_{j}"
+                                value_setters[condition['value'].lower()] = value_setter_name
+                                workflow.add_node(
+                                    value_setter_name, 
+                                    LangGraphScore.create_value_setter_node(
+                                        condition.get('output', {})
+                                    )
                                 )
+
+                            def create_routing_function(conditions, value_setters, next_node):
+                                def routing_function(state):
+                                    if hasattr(state, 'classification'):
+                                        state_value = state.classification.lower()
+                                        # Check if we have a value setter for this classification
+                                        if state_value in value_setters:
+                                            return value_setters[state_value]
+                                    # Default case - route to next node
+                                    return next_node
+                                return routing_function
+
+                            # Create a list of valid targets for conditional edges
+                            valid_targets = list(value_setters.values()) + [node_name]
+                            
+                            # Add conditional routing only to valid targets
+                            workflow.add_conditional_edges(
+                                previous_node,
+                                create_routing_function(conditions, value_setters, node_name),
+                                valid_targets
                             )
 
-                        def create_routing_function(conditions, value_setters, next_node):
-                            def routing_function(state):
-                                if hasattr(state, 'classification'):
-                                    state_value = state.classification.lower()
-                                    # Check if we have a value setter for this classification
-                                    if state_value in value_setters:
-                                        return value_setters[state_value]
-                                # Default case - route to next node
-                                return next_node
-                            return routing_function
-
-                        # Create a list of valid targets for conditional edges
-                        valid_targets = list(value_setters.values()) + [node_name]
-                        
-                        # Add conditional routing only to valid targets
-                        workflow.add_conditional_edges(
-                            previous_node,
-                            create_routing_function(conditions, value_setters, node_name),
-                            valid_targets
-                        )
-
-                        # Add edges from value setters to their target nodes
-                        for condition in conditions:
-                            value_setter_name = value_setters[condition['value'].lower()]
-                            target_node = condition.get('node', node_name)
-                            if target_node == 'END':
-                                workflow.add_edge(value_setter_name, END)
-                            else:
-                                workflow.add_edge(value_setter_name, target_node)
+                            # Add edges from value setters to their target nodes
+                            for condition in conditions:
+                                value_setter_name = value_setters[condition['value'].lower()]
+                                target_node = condition.get('node', node_name)
+                                if target_node == 'END':
+                                    workflow.add_edge(value_setter_name, END)
+                                else:
+                                    workflow.add_edge(value_setter_name, target_node)
+                        else:
+                            logging.error(f"Conditions is not a list: {conditions}")
+                            workflow.add_edge(previous_node, node_name)
+                    
+                    # No edge or conditions clause - add direct edge to next node
                     else:
-                        logging.error(f"Conditions is not a list: {conditions}")
+                        logging.debug(f"Node '{previous_node}' does not have conditions or edge clause")
                         workflow.add_edge(previous_node, node_name)
-                else:
-                    logging.debug(f"Node '{previous_node}' does not have conditions")
-                    workflow.add_edge(previous_node, node_name)
 
     async def build_compiled_workflow(self):
         """Build the LangGraph workflow with optional persistence."""
@@ -732,7 +757,9 @@ class LangGraphScore(Score, LangChainUser):
                     new_state[alias] = getattr(state, original)
                     logging.info(f"Added alias {alias}={getattr(state, original)} from {original}")
                 else:
-                    logging.warning(f"Original field '{original}' not found in state")
+                    # If the original isn't a state variable, treat it as a literal value
+                    new_state[alias] = original
+                    logging.info(f"Added literal value {alias}={original}")
             
             # Create new state with extra fields allowed
             combined_state = state.__class__(**new_state)
@@ -841,12 +868,37 @@ class LangGraphScore(Score, LangChainUser):
         return example_refinement_templates
 
     @staticmethod
-    def create_value_setter_node(output):
+    def create_value_setter_node(output_mapping: dict) -> FunctionType:
         def value_setter(state):
-            state.value = output.get('value', state.value)
-            state.explanation = output.get('explanation', state.explanation)
-            logging.info(f"Value setter node: Set value to: {state.value}, explanation to: {state.explanation}")
-            return state
+            logging.info("=== Value Setter Node Start ===")
+            logging.info(f"Input state type: {type(state)}")
+            logging.info(f"Input state fields: {state.model_fields.keys()}")
+            logging.info(f"Input state values: {truncate_dict_strings(state.model_dump(), max_length=80)}")
+            
+            # Create a new dict with all current state values
+            new_state = state.model_dump()
+            
+            # Add aliased values
+            for alias, original in output_mapping.items():
+                if hasattr(state, original):
+                    new_state[alias] = getattr(state, original)
+                    value = str(getattr(state, original))
+                    if len(value) > 80:
+                        value = value[:77] + "..."
+                    logging.info(f"Added alias {alias}={value} from {original}")
+                else:
+                    # If the original isn't a state variable, treat it as a literal value
+                    new_state[alias] = original
+                    logging.info(f"Added literal value {alias}={original}")
+            
+            # Create new state with extra fields allowed
+            combined_state = state.__class__(**new_state)
+            logging.info(f"Output state type: {type(combined_state)}")
+            logging.info(f"Output state fields: {combined_state.model_fields.keys()}")
+            logging.info(f"Output state values: {truncate_dict_strings(combined_state.model_dump(), max_length=80)}")
+            logging.info("=== Value Setter Node End ===")
+            return combined_state
+            
         return value_setter
 
     async def predict(
@@ -888,7 +940,13 @@ class LangGraphScore(Score, LangChainUser):
                 "checkpoint_id": checkpoint_id
             }
         }
+        # Use the passed-in results if available, otherwise start with empty dict
         initial_results = {}
+        if model_input.results:
+            for result in model_input.results:
+                if not isinstance(result, Score.Result):
+                    raise TypeError(f"Expected Score.Result object but got {type(result)}")
+                initial_results[result.parameters.name] = result.value
 
         initial_state = self.combined_state_class(
             text=self.preprocess_text(model_input.text),
