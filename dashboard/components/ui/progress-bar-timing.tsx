@@ -1,6 +1,6 @@
 import React from "react"
 import { cn } from "@/lib/utils"
-import { Loader2, AlarmClock, AlarmClockCheck, CircleCheck } from "lucide-react"
+import { Timer, AlarmClock, AlarmClockCheck } from "lucide-react"
 
 export interface ProgressBarTimingProps {
   elapsedTime?: string
@@ -20,17 +20,13 @@ export function ProgressBarTiming({
   return (
     <div className={cn("flex justify-between text-sm text-foreground h-5", className)}>
       <div className="flex items-center gap-1">
-        {isInProgress ? (
-          <Loader2 
-            data-testid="loader-icon"
-            className="w-4 h-4 text-foreground animate-spin shrink-0" 
-          />
-        ) : (
-          <CircleCheck 
-            data-testid="check-icon"
-            className="w-4 h-4 text-foreground shrink-0" 
-          />
-        )}
+        <Timer 
+          data-testid="timer-icon"
+          className={cn(
+            "w-4 h-4 text-foreground shrink-0",
+            isInProgress && "animate-pulse"
+          )}
+        />
         <span>Elapsed: {elapsedTime || '0s'}</span>
       </div>
       {estimatedTimeRemaining && (

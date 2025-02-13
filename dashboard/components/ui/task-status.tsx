@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { SegmentedProgressBar, SegmentConfig } from './segmented-progress-bar'
 import { ProgressBar } from './progress-bar'
 import { ProgressBarTiming } from './progress-bar-timing'
-import { Radio, Hand, ConciergeBell, Square, RectangleVertical, X, AlertTriangle } from 'lucide-react'
+import { Radio, Hand, ConciergeBell, Square, RectangleVertical, X, AlertTriangle, MessageSquareText, SquareChevronRight } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { StyleTag } from './style-tag'
 import { CardButton } from '@/components/CardButton'
@@ -124,15 +124,6 @@ export function TaskStatus({
   onClose,
   extra = false
 }: TaskStatusProps) {
-  console.log('TaskStatus received props:', {
-    currentStageName,
-    status,
-    stageConfigs: stageConfigs.map(s => ({
-      name: s.name,
-      status: s.status,
-      order: s.order
-    }))
-  });
 
   const isInProgress = status === 'RUNNING'
   const isFinished = status === 'COMPLETED' || status === 'FAILED'
@@ -362,15 +353,19 @@ export function TaskStatus({
         <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
           {(!extra || !isGridVariant(variant)) && (
             <div className={`font-mono text-sm text-muted-foreground leading-6 ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
-              {command ? `$ ${command}` : '\u00A0'}
+              {command ? command : '\u00A0'}
             </div>
           )}
           <div className={cn(
-            "text-sm flex items-center gap-2 leading-6",
+            "text-sm flex items-center gap-1",
             truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
             isError ? 'text-destructive font-medium' : ''
           )}>
-            {isError && <AlertTriangle className="w-4 h-4 animate-pulse" />}
+            {isError ? (
+              <AlertTriangle className="w-4 h-4 animate-pulse" />
+            ) : displayMessage && (
+              <MessageSquareText className="w-4 h-4" />
+            )}
             {displayMessage || '\u00A0'}
           </div>
         </div>
@@ -409,16 +404,21 @@ export function TaskStatus({
       <StyleTag />
       <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
         {(!extra || !isGridVariant(variant)) && (
-          <div className={`font-mono text-sm text-muted-foreground leading-6 ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
-            {command ? `$ ${command}` : '\u00A0'}
+          <div className={`font-mono text-sm text-muted-foreground leading-6 flex items-center gap-1 ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
+            <SquareChevronRight className="w-4 h-4" />
+            {command ? command : '\u00A0'}
           </div>
         )}
         <div className={cn(
-          "text-sm flex items-center gap-2 leading-6",
+          "text-sm flex items-center gap-1",
           truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
           isError ? 'text-destructive font-medium' : ''
         )}>
-          {isError && <AlertTriangle className="w-4 h-4 animate-pulse" />}
+          {isError ? (
+            <AlertTriangle className="w-4 h-4 animate-pulse" />
+          ) : displayMessage && (
+            <MessageSquareText className="w-4 h-4" />
+          )}
           {displayMessage || '\u00A0'}
         </div>
       </div>

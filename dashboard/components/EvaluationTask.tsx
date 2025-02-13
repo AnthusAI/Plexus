@@ -190,14 +190,6 @@ const GridContent = React.memo(({ data, extra }: { data: EvaluationTaskData; ext
     Math.round((data.processedItems / data.totalItems) * 100) : 0
   const accuracy = data.accuracy ?? 0
 
-  console.log('GridContent render:', {
-    hasTaskData: !!data.task,
-    taskStatus: data.task?.status,
-    stages: data.task?.stages?.items,
-    progress,
-    accuracy
-  });
-
   return (
     <div className="space-y-2">
       <TaskStatus
