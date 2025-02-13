@@ -36,6 +36,41 @@ class TestScorecard:
             return None
         self.mock_registry.get_properties.side_effect = get_properties_side_effect
 
+        # Create a mock score class
+        mock_score_class = MagicMock()
+        mock_score_instance = MagicMock()
+
+        # Set up the async get_score_result method
+        async def mock_get_score_result(*args, **kwargs):
+            return Mock(value='Pass')
+        
+        mock_score_instance.get_score_result = mock_get_score_result
+
+        # Set up the async predict method
+        async def mock_predict(*args, **kwargs):
+            return Mock(value='Pass')
+        
+        mock_score_instance.predict = mock_predict
+
+        # Set up the async create method
+        async def mock_create(**kwargs):
+            return mock_score_instance
+
+        mock_score_class.create = mock_create
+        
+        # Set up the registry's get method to return the mock score class
+        def mock_get(score_name):
+            return mock_score_class
+            
+        self.mock_registry.get.side_effect = mock_get
+
+        # Mock get_score_result to be async
+        async def mock_get_score_result(*args, **kwargs):
+            score_name = kwargs.get('score')
+            return Mock(name=score_name, value='Pass')
+        
+        self.scorecard.get_score_result = mock_get_score_result
+
     @pytest.fixture(autouse=True)
     def setup_method(self):
         self.setUp()
@@ -104,12 +139,33 @@ class TestScorecard:
             return None
         self.mock_registry.get_properties.side_effect = get_properties_side_effect
 
-        # Mock the get_score_result method
+        # Create a mock score class
+        mock_score_class = MagicMock()
+        mock_score_instance = MagicMock()
+
+        # Set up the async get_score_result method
         async def mock_get_score_result(*args, **kwargs):
-            score_name = kwargs.get('score')
-            return [Mock(name=score_name)]
+            return Mock(value='Pass')
         
-        self.scorecard.get_score_result = mock_get_score_result
+        mock_score_instance.get_score_result = mock_get_score_result
+
+        # Set up the async predict method
+        async def mock_predict(*args, **kwargs):
+            return Mock(value='Pass')
+        
+        mock_score_instance.predict = mock_predict
+
+        # Set up the async create method
+        async def mock_create(**kwargs):
+            return mock_score_instance
+
+        mock_score_class.create = mock_create
+        
+        # Set up the registry's get method to return the mock score class
+        def mock_get(score_name):
+            return mock_score_class
+            
+        self.mock_registry.get.side_effect = mock_get
 
         # Call the method we're testing
         result = await self.scorecard.score_entire_text(
@@ -124,18 +180,35 @@ class TestScorecard:
     @pytest.mark.asyncio
     async def test_score_entire_text_with_dependencies(self):
         """Test scoring with dependencies"""
-        # Mock the get_score_result method
-        mock_results = {
-            'Score1': [Mock(value='Pass')],
-            'Score2': [Mock(value='Good')],
-            'Score3': [Mock(value='Great')]
-        }
+        # Create a mock score class
+        mock_score_class = MagicMock()
+        mock_score_instance = MagicMock()
+
+        # Set up the async predict method
+        async def mock_predict(context=None, model_input=None):
+            # Extract score name from the configuration
+            score_name = mock_score_instance.score_name
+            mock_results = {
+                'Score1': Mock(value='Pass'),
+                'Score2': Mock(value='Good'),
+                'Score3': Mock(value='Great')
+            }
+            return mock_results.get(score_name, Mock(value='Pass'))
         
-        async def mock_get_score_result(*args, **kwargs):
-            score_name = kwargs.get('score')
-            return mock_results[score_name]
+        mock_score_instance.predict = mock_predict
+
+        # Set up the async create method
+        async def mock_create(**kwargs):
+            mock_score_instance.score_name = kwargs.get('score_name')
+            return mock_score_instance
+
+        mock_score_class.create = mock_create
         
-        self.scorecard.get_score_result = mock_get_score_result
+        # Set up the registry's get method to return the mock score class
+        def mock_get(score_name):
+            return mock_score_class
+            
+        self.mock_registry.get.side_effect = mock_get
 
         # Call the method we're testing
         result = await self.scorecard.score_entire_text(
@@ -154,16 +227,34 @@ class TestScorecard:
     @pytest.mark.asyncio
     async def test_score_entire_text_skips_failed_conditions(self):
         """Test that scores are skipped when their dependency conditions are not met"""
-        # Mock the get_score_result method
-        mock_results = {
-            'Score1': [Mock(value='Fail')]
-        }
+        # Create a mock score class
+        mock_score_class = MagicMock()
+        mock_score_instance = MagicMock()
+
+        # Set up the async predict method
+        async def mock_predict(context=None, model_input=None):
+            # Extract score name from the configuration
+            score_name = mock_score_instance.score_name
+            mock_results = {
+                'Score1': Mock(value='Fail'),
+                'Score3': Mock(value='Pass')  # This should be skipped due to Score1's Fail value
+            }
+            return mock_results.get(score_name, Mock(value='Pass'))
         
-        async def mock_get_score_result(*args, **kwargs):
-            score_name = kwargs.get('score')
-            return mock_results[score_name]
+        mock_score_instance.predict = mock_predict
+
+        # Set up the async create method
+        async def mock_create(**kwargs):
+            mock_score_instance.score_name = kwargs.get('score_name')
+            return mock_score_instance
+
+        mock_score_class.create = mock_create
         
-        self.scorecard.get_score_result = mock_get_score_result
+        # Set up the registry's get method to return the mock score class
+        def mock_get(score_name):
+            return mock_score_class
+            
+        self.mock_registry.get.side_effect = mock_get
 
         # Call the method we're testing
         result = await self.scorecard.score_entire_text(
@@ -175,6 +266,7 @@ class TestScorecard:
         
         # Verify Score3 was skipped (not in results)
         assert '1' in result  # Score1 should be present
+        assert result['1'].value == 'Fail'  # Score1 should have failed
         assert '3' not in result  # Score3 should be skipped
 
     @pytest.mark.asyncio
@@ -198,12 +290,33 @@ class TestScorecard:
             return None
         self.mock_registry.get_properties.side_effect = get_properties_side_effect
 
-        # Mock get_score_result to return a single Result object
+        # Create a mock score class
+        mock_score_class = MagicMock()
+        mock_score_instance = MagicMock()
+
+        # Set up the async get_score_result method
         async def mock_get_score_result(*args, **kwargs):
-            score_name = kwargs.get('score')
-            return Mock(name=score_name, value='Pass')
+            return Mock(value='Pass')
         
-        self.scorecard.get_score_result = mock_get_score_result
+        mock_score_instance.get_score_result = mock_get_score_result
+
+        # Set up the async predict method
+        async def mock_predict(*args, **kwargs):
+            return Mock(value='Pass')
+        
+        mock_score_instance.predict = mock_predict
+
+        # Set up the async create method
+        async def mock_create(**kwargs):
+            return mock_score_instance
+
+        mock_score_class.create = mock_create
+        
+        # Set up the registry's get method to return the mock score class
+        def mock_get(score_name):
+            return mock_score_class
+            
+        self.mock_registry.get.side_effect = mock_get
 
         # Call the method we're testing
         result = await self.scorecard.score_entire_text(
@@ -237,12 +350,33 @@ class TestScorecard:
             return None
         self.mock_registry.get_properties.side_effect = get_properties_side_effect
 
-        # Mock get_score_result to return a list of Result objects
+        # Create a mock score class
+        mock_score_class = MagicMock()
+        mock_score_instance = MagicMock()
+
+        # Set up the async get_score_result method
         async def mock_get_score_result(*args, **kwargs):
-            score_name = kwargs.get('score')
-            return [Mock(name=score_name, value='Pass')]
+            return [Mock(value='Pass')]
         
-        self.scorecard.get_score_result = mock_get_score_result
+        mock_score_instance.get_score_result = mock_get_score_result
+
+        # Set up the async predict method
+        async def mock_predict(*args, **kwargs):
+            return [Mock(value='Pass')]
+        
+        mock_score_instance.predict = mock_predict
+
+        # Set up the async create method
+        async def mock_create(**kwargs):
+            return mock_score_instance
+
+        mock_score_class.create = mock_create
+        
+        # Set up the registry's get method to return the mock score class
+        def mock_get(score_name):
+            return mock_score_class
+            
+        self.mock_registry.get.side_effect = mock_get
 
         # Call the method we're testing
         result = await self.scorecard.score_entire_text(
