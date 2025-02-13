@@ -48,6 +48,9 @@ import { formatStatus, getBadgeVariant, calculateProgress } from '@/features/eva
 import EvaluationTask from '@/components/EvaluationTask'
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { CardButton } from "@/components/CardButton"
+import { GraphQLResult as APIGraphQLResult } from '@aws-amplify/api-graphql'
+import type { EvaluationTaskProps } from '@/components/EvaluationTask'
+import type { TaskData } from '@/types/evaluation'
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -147,6 +150,11 @@ const LIST_EVALUATIONS = `
   }
 `
 
+interface GraphQLError {
+  message: string;
+  path?: string[];
+}
+
 interface ListAccountResponse {
   listAccounts: {
     items: Array<{
@@ -173,6 +181,8 @@ export default function EvaluationsDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(50)
+  const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
+  const [selectedScore, setSelectedScore] = useState<string | null>(null)
   const isNarrowViewport = useMediaQuery("(max-width: 768px)")
   const { ref, inView } = useInView({
     threshold: 0,
@@ -190,8 +200,8 @@ export default function EvaluationsDashboard() {
             filter: { key: { eq: ACCOUNT_KEY } }
           }
         })
-        console.log('Account response:', accountResponse)
-        if (accountResponse.data?.listAccounts?.items?.length) {
+
+        if ('data' in accountResponse && accountResponse.data?.listAccounts?.items?.length) {
           const id = accountResponse.data.listAccounts.items[0].id
           console.log('Found account ID:', id)
           setAccountId(id)
@@ -226,23 +236,25 @@ export default function EvaluationsDashboard() {
           }
         })
 
-        console.log('GraphQL response:', {
-          hasData: !!evaluationsResponse.data,
-          hasErrors: !!evaluationsResponse.errors,
-          errors: evaluationsResponse.errors?.map(e => ({
-            message: e.message,
-            path: e.path
-          }))
-        })
+        if ('data' in evaluationsResponse) {
+          console.log('GraphQL response:', {
+            hasData: !!evaluationsResponse.data,
+            hasErrors: !!(evaluationsResponse as any).errors,
+            errors: (evaluationsResponse as any).errors?.map((e: GraphQLError) => ({
+              message: e.message,
+              path: e.path
+            }))
+          })
 
-        if (evaluationsResponse.errors?.length) {
-          throw new Error(`GraphQL errors: ${evaluationsResponse.errors.map(e => e.message).join(', ')}`)
-        }
+          if ((evaluationsResponse as any).errors?.length) {
+            throw new Error(`GraphQL errors: ${(evaluationsResponse as any).errors.map((e: GraphQLError) => e.message).join(', ')}`)
+          }
 
-        if (evaluationsResponse.data) {
-          const items = evaluationsResponse.data.listEvaluationByAccountIdAndUpdatedAt.items
-          console.log('Found evaluations:', items.length)
-          setEvaluations(items)
+          if (evaluationsResponse.data) {
+            const items = evaluationsResponse.data.listEvaluationByAccountIdAndUpdatedAt.items
+            console.log('Found evaluations:', items.length)
+            setEvaluations(items)
+          }
         }
         setIsLoading(false)
       } catch (error) {
@@ -323,36 +335,72 @@ export default function EvaluationsDashboard() {
     const evaluation = evaluations.find(e => e.id === selectedEvaluationId)
     if (!evaluation) return null
 
+    // Convert task data to the expected format
+    const taskData: TaskData | null = evaluation.task ? {
+      id: String((evaluation.task as any).id || ''),
+      accountId: String((evaluation.task as any).accountId || ''),
+      type: String((evaluation.task as any).type || ''),
+      status: String((evaluation.task as any).status || ''),
+      target: String((evaluation.task as any).target || ''),
+      command: String((evaluation.task as any).command || ''),
+      description: String((evaluation.task as any).description || ''),
+      dispatchStatus: (evaluation.task as any).dispatchStatus,
+      metadata: (evaluation.task as any).metadata,
+      createdAt: String((evaluation.task as any).createdAt || ''),
+      startedAt: (evaluation.task as any).startedAt,
+      completedAt: (evaluation.task as any).completedAt,
+      estimatedCompletionAt: (evaluation.task as any).estimatedCompletionAt,
+      errorMessage: (evaluation.task as any).errorMessage,
+      errorDetails: (evaluation.task as any).errorDetails,
+      currentStageId: (evaluation.task as any).currentStageId,
+      stages: (evaluation.task as any).stages ? {
+        items: ((evaluation.task as any).stages.items || []).map((stage: any) => ({
+          id: String(stage.id || ''),
+          name: String(stage.name || ''),
+          order: Number(stage.order || 0),
+          status: String(stage.status || ''),
+          statusMessage: stage.statusMessage,
+          startedAt: stage.startedAt,
+          completedAt: stage.completedAt,
+          estimatedCompletionAt: stage.estimatedCompletionAt,
+          processedItems: Number(stage.processedItems || 0),
+          totalItems: Number(stage.totalItems || 0)
+        })),
+        nextToken: (evaluation.task as any).stages.nextToken
+      } : undefined
+    } : null
+
     const task: EvaluationTaskProps['task'] = {
       id: evaluation.id,
-      type: evaluation.type,
+      type: evaluation.type || '',
       scorecard: evaluation.scorecard?.name || '-',
       score: evaluation.score?.name || '-',
-      time: evaluation.createdAt,
+      time: evaluation.createdAt || '',
       data: {
         id: evaluation.id,
         title: `${evaluation.scorecard?.name || '-'} - ${evaluation.score?.name || '-'}`,
-        metrics: evaluation.metrics ? JSON.parse(evaluation.metrics) : [],
-        metricsExplanation: evaluation.metricsExplanation,
-        accuracy: evaluation.accuracy,
-        processedItems: evaluation.processedItems || 0,
-        totalItems: evaluation.totalItems || 0,
-        progress: calculateProgress(evaluation),
-        inferences: evaluation.inferences || 0,
-        cost: evaluation.cost,
-        status: evaluation.status,
-        elapsedSeconds: evaluation.elapsedSeconds,
-        estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds,
-        startedAt: evaluation.startedAt,
-        errorMessage: evaluation.errorMessage,
-        errorDetails: evaluation.errorDetails,
-        confusionMatrix: evaluation.confusionMatrix ? JSON.parse(evaluation.confusionMatrix) : null,
-        scoreGoal: evaluation.scoreGoal,
-        datasetClassDistribution: evaluation.datasetClassDistribution ? JSON.parse(evaluation.datasetClassDistribution) : null,
-        isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
+        metrics: typeof evaluation.metrics === 'string' ? JSON.parse(evaluation.metrics) : (evaluation.metrics || []),
+        metricsExplanation: evaluation.metricsExplanation || '',
+        accuracy: typeof evaluation.accuracy === 'number' ? evaluation.accuracy : null,
+        processedItems: Number(evaluation.processedItems || 0),
+        totalItems: Number(evaluation.totalItems || 0),
+        progress: Number(calculateProgress(evaluation) || 0),
+        inferences: Number(evaluation.inferences || 0),
+        cost: typeof evaluation.cost === 'number' ? evaluation.cost : null,
+        status: evaluation.status || 'PENDING',
+        elapsedSeconds: typeof evaluation.elapsedSeconds === 'number' ? evaluation.elapsedSeconds : null,
+        estimatedRemainingSeconds: typeof evaluation.estimatedRemainingSeconds === 'number' ? evaluation.estimatedRemainingSeconds : null,
+        startedAt: evaluation.startedAt || undefined,
+        errorMessage: evaluation.errorMessage || undefined,
+        errorDetails: evaluation.errorDetails || undefined,
+        confusionMatrix: typeof evaluation.confusionMatrix === 'string' ? JSON.parse(evaluation.confusionMatrix) : evaluation.confusionMatrix,
+        scoreGoal: evaluation.scoreGoal ? String(evaluation.scoreGoal) : null,
+        datasetClassDistribution: typeof evaluation.datasetClassDistribution === 'string' ? JSON.parse(evaluation.datasetClassDistribution) : evaluation.datasetClassDistribution,
+        isDatasetClassDistributionBalanced: Boolean(evaluation.isDatasetClassDistributionBalanced),
+        predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ? JSON.parse(evaluation.predictedClassDistribution) : evaluation.predictedClassDistribution,
         predictedClassDistribution: evaluation.predictedClassDistribution ? JSON.parse(evaluation.predictedClassDistribution) : null,
-        isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
-        task: evaluation.task
+        isPredictedClassDistributionBalanced: Boolean(evaluation.isPredictedClassDistributionBalanced),
+        task: taskData
       }
     }
 
@@ -387,6 +435,16 @@ export default function EvaluationsDashboard() {
     )
   }
 
+  // Add filtering logic for evaluations based on selected scorecard and score
+  const filteredEvaluations = useMemo(() => {
+    return evaluations.filter(evaluation => {
+      if (!selectedScorecard && !selectedScore) return true;
+      if (selectedScorecard && evaluation.scorecard?.name !== selectedScorecard) return false;
+      if (selectedScore && evaluation.score?.name !== selectedScore) return false;
+      return true;
+    });
+  }, [evaluations, selectedScorecard, selectedScore]);
+
   if (isLoading) {
     return (
       <div>
@@ -410,12 +468,17 @@ export default function EvaluationsDashboard() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Evaluations</h1>
+    <div className="flex flex-col h-full p-1.5">
+      <div className="flex justify-between items-start mb-3">
+        <ScorecardContext 
+          selectedScorecard={selectedScorecard}
+          setSelectedScorecard={setSelectedScorecard}
+          selectedScore={selectedScore}
+          setSelectedScore={setSelectedScore}
+        />
         <TaskDispatchButton config={evaluationsConfig} />
       </div>
-        
+      
       <div className="flex h-full">
         <div 
           className={`
@@ -427,11 +490,11 @@ export default function EvaluationsDashboard() {
             width: `${leftPanelWidth}%`
           } : undefined}
         >
-          {evaluations.length === 0 ? (
+          {filteredEvaluations.length === 0 ? (
             <div className="text-sm text-muted-foreground">No evaluations found</div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {evaluations.map((evaluation) => (
+              {filteredEvaluations.map((evaluation) => (
                 <div 
                   key={evaluation.id} 
                   onClick={() => {
