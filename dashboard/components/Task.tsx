@@ -2,7 +2,7 @@ import React from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Square, RectangleVertical, X } from 'lucide-react'
-import { formatTimeAgo } from '@/utils/format-time'
+import { formatDistanceToNow } from 'date-fns'
 import { CardButton } from '@/components/CardButton'
 import { TaskStatus, TaskStageConfig } from './ui/task-status'
 import { BaseTaskData } from '@/types/base'
@@ -28,6 +28,7 @@ export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
     celeryTaskId?: string
     workerNodeId?: string
     completedAt?: string
+    errorMessage?: string
   }
   onClick?: () => void
   controlButtons?: React.ReactNode
@@ -94,7 +95,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
     <Card 
       className={`
         bg-card shadow-none border-none rounded-lg transition-colors duration-200 
-        flex flex-col h-full min-w-[300px]
+        flex flex-col h-full
         ${variant === 'grid' ? 'cursor-pointer' : ''}
         ${isLoading ? 'opacity-70' : ''}
       `}
@@ -113,7 +114,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
       <div className="flex-none">
         {renderHeader(childProps)}
       </div>
-      <CardContent className="flex-1 min-h-0 p-2">
+      <CardContent className="flex-1 min-h-0 p-0">
         {error ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             <div className="text-destructive mb-2">{error}</div>
@@ -146,20 +147,25 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
   onClose,
   isLoading
 }: TaskChildProps<TData>) => {
-  const formattedTime = formatTimeAgo(task.time, variant === 'grid')
+  const formattedTime = formatDistanceToNow(new Date(task.time), { addSuffix: true })
 
   return (
-    <CardHeader className="space-y-1.5 px-2 py-2 flex flex-col items-start">
+    <CardHeader className="space-y-1.5 p-0 flex flex-col items-start">
       <div className="flex justify-between items-start w-full">
-        <div className="flex flex-col">
+        <div className="flex flex-col pb-1">
           <div className="text-lg font-bold">{task.type}</div>
-          <div className="text-xs text-muted-foreground">{task.scorecard}</div>
-          <div className="text-xs text-muted-foreground">{task.score}</div>
-          <div className="text-xs text-muted-foreground mt-1">{formattedTime}</div>
+          <div className="text-xs text-muted-foreground h-4">{task.scorecard || '\u00A0'}</div>
+          <div className="text-xs text-muted-foreground h-4">{task.score || '\u00A0'}</div>
+          {variant !== 'grid' && (
+            <div className="text-xs text-muted-foreground mt-1">{formattedTime}</div>
+          )}
         </div>
         <div className="flex flex-col items-end">
           {variant === 'grid' ? (
-            children
+            <>
+              {children}
+              <div className="text-xs text-muted-foreground mt-1">{formattedTime}</div>
+            </>
           ) : (
             <div className="flex gap-2">
               {onToggleFullWidth && (
@@ -201,7 +207,12 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
   // Get status message from current stage or last completed stage if task is done
   const statusMessage = (() => {
     if (!task.stages?.length) return undefined
-    if (task.status === 'COMPLETED' || task.status === 'FAILED') {
+    if (task.status === 'FAILED') {
+      // For failed tasks, find the failed stage's status message
+      const failedStage = task.stages.find(stage => stage.status === 'FAILED')
+      return failedStage?.statusMessage
+    }
+    if (task.status === 'COMPLETED') {
       // Find the last stage with a status message
       return [...task.stages]
         .reverse()
@@ -218,7 +229,17 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
           <TaskStatus
             showStages={true}
             stages={task.stages}
-            stageConfigs={task.stages}
+            stageConfigs={task.stages.map(stage => ({
+              key: stage.name,
+              label: stage.label || stage.name,
+              color: stage.color || 'bg-primary',
+              name: stage.name,
+              order: stage.order,
+              status: stage.status,
+              processedItems: stage.processedItems,
+              totalItems: stage.totalItems,
+              statusMessage: stage.statusMessage
+            }))}
             currentStageName={task.currentStageName}
             processedItems={task.processedItems}
             totalItems={task.totalItems}
@@ -227,6 +248,7 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
             status={task.status || 'PENDING'}
             command={task.data?.command}
             statusMessage={statusMessage}
+            errorMessage={task.errorMessage}
             dispatchStatus={task.dispatchStatus}
             celeryTaskId={task.celeryTaskId}
             workerNodeId={task.workerNodeId}

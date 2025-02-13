@@ -7,39 +7,54 @@ import { TaskStageConfig } from '@/components/ui/task-status'
 import { BaseTaskData } from '@/types/base'
 import { cn } from '@/lib/utils'
 
+const TOTAL_ITEMS = 100
+const DEMO_DURATION = 20000 // 20 seconds total
+const PROCESS_INTERVAL = 100 // Update every 100ms
+
 const demoStages: TaskStageConfig[] = [
   {
-    key: 'Initializing',
-    label: 'Initializing',
+    key: 'Setup',
+    label: 'Setup',
     color: 'bg-primary',
-    name: 'Initializing',
-    order: 0,
-    status: 'PENDING',
-    statusMessage: 'Preparing task execution...'
-  },
-  {
-    key: 'Processing',
-    label: 'Processing',
-    color: 'bg-secondary',
-    name: 'Processing',
+    name: 'Setup',
     order: 1,
     status: 'PENDING',
-    statusMessage: 'Starting item processing...'
+    processedItems: 0,
+    totalItems: TOTAL_ITEMS,
+    startedAt: undefined,
+    completedAt: undefined,
+    estimatedCompletionAt: undefined,
+    statusMessage: 'Loading AI models...'
+  },
+  {
+    key: 'Running',
+    label: 'Running',
+    color: 'bg-secondary',
+    name: 'Running',
+    order: 2,
+    status: 'PENDING',
+    processedItems: 0,
+    totalItems: TOTAL_ITEMS,
+    startedAt: undefined,
+    completedAt: undefined,
+    estimatedCompletionAt: undefined,
+    statusMessage: 'Processing items...'
   },
   {
     key: 'Finalizing',
     label: 'Finalizing',
     color: 'bg-primary',
     name: 'Finalizing',
-    order: 2,
+    order: 3,
     status: 'PENDING',
-    statusMessage: 'Waiting to finalize...'
+    processedItems: 0,
+    totalItems: TOTAL_ITEMS,
+    startedAt: undefined,
+    completedAt: undefined,
+    estimatedCompletionAt: undefined,
+    statusMessage: 'Computing metrics...'
   }
 ]
-
-const TOTAL_ITEMS = 100
-const DEMO_DURATION = 20000 // 20 seconds total
-const PROCESS_INTERVAL = 100 // Update every 100ms
 
 interface TaskDemoProps {
   startDelay?: number
@@ -63,7 +78,7 @@ const TaskDemoBase = ({
   taskId,
   shouldStart = true
 }: TaskDemoProps) => {
-  const [currentStage, setCurrentStage] = useState<string>('Initializing')
+  const [currentStage, setCurrentStage] = useState<string>('Setup')
   const [startTime, setStartTime] = useState<string | null>(null)
   const [estimatedEndTime, setEstimatedEndTime] = useState<string | null>(null)
   const [completedTime, setCompletedTime] = useState<string | null>(null)
@@ -107,21 +122,23 @@ const TaskDemoBase = ({
         // Update stages for initialization
         setStages(prev => prev.map(stage => ({
           ...stage,
-          status: stage.name === 'Initializing' ? 'RUNNING' : 'PENDING',
-          startedAt: taskStartTime,  // Use the same start time for all stages
-          statusMessage: stage.name === 'Initializing' ? 'Loading models...' : stage.statusMessage
+          status: stage.name === 'Setup' ? 'RUNNING' : 'PENDING',
+          startedAt: stage.name === 'Setup' ? taskStartTime : undefined,
+          processedItems: stage.name === 'Setup' ? 0 : undefined,
+          totalItems: stage.name === 'Setup' ? TOTAL_ITEMS : undefined,
+          statusMessage: stage.name === 'Setup' ? 'Loading AI models...' : stage.statusMessage
         })))
 
-        // Stage timing
+        // Initialize stage messages
         const initDuration = DEMO_DURATION * 0.15 // 3 seconds
         const processingDuration = DEMO_DURATION * 0.6 // 12 seconds
         const finalizingDuration = DEMO_DURATION * 0.25 // 5 seconds
 
-        // Initialize stage messages
         const initMessageTimeout = setTimeout(() => {
           setStages(prev => prev.map(stage => ({
             ...stage,
-            statusMessage: stage.name === 'Initializing' ? 'Post-load testing...' : stage.statusMessage
+            statusMessage: stage.name === 'Setup' ? 'Post-load testing...' : stage.statusMessage,
+            processedItems: stage.name === 'Setup' ? TOTAL_ITEMS : undefined
           })))
         }, initDuration * 0.5)
 
@@ -130,13 +147,15 @@ const TaskDemoBase = ({
           const stageTime = new Date()
           setStages(prev => prev.map(stage => ({
             ...stage,
-            status: stage.name === 'Initializing' ? 'COMPLETED' : 
-                    stage.name === 'Processing' ? 'RUNNING' : 'PENDING',
-            completedAt: stage.name === 'Initializing' ? stageTime.toISOString() : undefined,
-            startedAt: taskStartTime,  // Keep using the original start time
-            statusMessage: stage.name === 'Processing' ? 'Starting to process items...' : stage.statusMessage
+            status: stage.name === 'Setup' ? 'COMPLETED' : 
+                    stage.name === 'Running' ? 'RUNNING' : 'PENDING',
+            completedAt: stage.name === 'Setup' ? stageTime.toISOString() : undefined,
+            startedAt: stage.name === 'Running' ? taskStartTime : stage.startedAt,
+            processedItems: stage.name === 'Running' ? 0 : stage.processedItems,
+            totalItems: stage.name === 'Running' ? TOTAL_ITEMS : stage.totalItems,
+            statusMessage: stage.name === 'Running' ? 'Starting to process items...' : stage.statusMessage
           })))
-          setCurrentStage('Processing')
+          setCurrentStage('Running')
 
           // Initialize progress tracking
           progressRef.current = {
@@ -155,22 +174,14 @@ const TaskDemoBase = ({
             progressRef.current.currentItems = Math.floor(progressRef.current.itemsProcessed)
             setCurrentProgress(progressRef.current.currentItems)
 
-            // Update status message based on progress without updating all stages
-            const progress = progressRef.current.currentItems / TOTAL_ITEMS
-            let statusMessage = ''
-            if (progress < 0.25) {
-              statusMessage = 'Starting processing...'
-            } else if (progress < 0.6) {
-              statusMessage = 'Processing items...'
-            } else if (progress < 0.90) {
-              statusMessage = 'Cruising...'
-            } else {
-              statusMessage = 'Completing final items...'
-            }
-
+            // Update status message and progress for the Running stage
             setStages(prev => prev.map(stage => 
-              stage.name === 'Processing' 
-                ? { ...stage, statusMessage } 
+              stage.name === 'Running' 
+                ? { 
+                    ...stage, 
+                    processedItems: progressRef.current.currentItems,
+                    statusMessage: getStatusMessage(progressRef.current.currentItems / TOTAL_ITEMS)
+                  } 
                 : stage
             ))
           }, PROCESS_INTERVAL)
@@ -188,12 +199,12 @@ const TaskDemoBase = ({
           setStages(prev => prev.map(stage => ({
             ...stage,
             status: stage.name === 'Finalizing' ? 'RUNNING' : 
-                    stage.name === 'Processing' ? 'COMPLETED' : stage.status,
-            completedAt: stage.name === 'Processing' ? stageTime.toISOString() : undefined,
-            startedAt: taskStartTime,  // Keep using the original start time
-            statusMessage: stage.name === 'Finalizing' ? 'Starting finalization process...' : stage.statusMessage,
-            processedItems: stage.name === 'Finalizing' ? undefined : stage.processedItems,
-            totalItems: stage.name === 'Finalizing' ? undefined : stage.totalItems
+                    stage.name === 'Running' ? 'COMPLETED' : stage.status,
+            completedAt: stage.name === 'Running' ? stageTime.toISOString() : undefined,
+            startedAt: stage.name === 'Finalizing' ? taskStartTime : stage.startedAt,
+            processedItems: stage.name === 'Running' ? TOTAL_ITEMS : undefined,
+            totalItems: stage.name === 'Running' ? TOTAL_ITEMS : undefined,
+            statusMessage: stage.name === 'Finalizing' ? 'Starting finalization process...' : stage.statusMessage
           })))
           setCurrentStage('Finalizing')
 
@@ -225,6 +236,19 @@ const TaskDemoBase = ({
             clearTimeout(finalizing3Timeout)
           }
         }, initDuration + processingDuration)
+
+        // Helper function to get status message based on progress
+        function getStatusMessage(progress: number): string {
+          if (progress < 0.25) {
+            return 'Starting processing...'
+          } else if (progress < 0.6) {
+            return 'Processing items...'
+          } else if (progress < 0.90) {
+            return 'Cruising...'
+          } else {
+            return 'Completing final items...'
+          }
+        }
 
         // Complete
         const completeTimeout = setTimeout(() => {
@@ -271,7 +295,20 @@ const TaskDemoBase = ({
     scorecard: 'ABC, Inc Scorecard',
     score: 'DNC Requested?',
     time: startTime!,  // Use the original start time, it will always be set
-    stages,
+    description: 'plexus evaluate accuracy --scorecard abc-inc-scorecard --score "DNC Requested?"',
+    stages: stages.map(stage => ({
+      ...stage,
+      key: stage.name,
+      label: stage.name,
+      color: stage.name.toLowerCase() === 'processing' ? 'bg-secondary' : 'bg-primary',
+      order: stage.order || 0,
+      processedItems: stage.processedItems || 0,
+      totalItems: stage.totalItems || TOTAL_ITEMS,
+      startedAt: stage.startedAt,
+      completedAt: stage.completedAt,
+      estimatedCompletionAt: stage.estimatedCompletionAt,
+      statusMessage: stage.statusMessage || ''
+    })),
     currentStageName: currentStage,
     processedItems: currentProgress,
     totalItems: TOTAL_ITEMS,
@@ -283,7 +320,11 @@ const TaskDemoBase = ({
       id: taskId,
       title: 'Demo Task',
       command: 'plexus evaluate accuracy --scorecard abc-inc-scorecard --score "DNC Requested?"'
-    } as BaseTaskData
+    } as BaseTaskData,
+    dispatchStatus: undefined,
+    celeryTaskId: undefined,
+    workerNodeId: undefined,
+    errorMessage: undefined
   }
 
   return (

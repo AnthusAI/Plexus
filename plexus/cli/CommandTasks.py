@@ -11,6 +11,7 @@ from typing import Optional
 import socket
 import os
 import time
+import random
 
 def register_tasks(app):
     """Register Celery tasks with the application."""
@@ -23,6 +24,48 @@ def register_tasks(app):
     def execute_command(self: Task, command_string: str, target: str = "default/command", task_id: Optional[str] = None) -> dict:
         """Execute a Plexus command and return its result."""
         try:
+            # IMMEDIATELY claim the task if we have a task_id
+            if task_id:
+                logging.info(f"Celery assigned task {task_id} to worker - attempting immediate claim")
+                api_url = os.environ.get('PLEXUS_API_URL')
+                api_key = os.environ.get('PLEXUS_API_KEY')
+                
+                if api_url and api_key:
+                    from plexus.dashboard.api.models.task import Task
+                    from plexus.dashboard.api.client import PlexusDashboardClient
+                    
+                    client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+                    worker_id = f"{socket.gethostname()}-{os.getpid()}"
+                    
+                    try:
+                        task = Task.get_by_id(task_id, client)
+                        # First update - claim the task
+                        task.update(
+                            celeryTaskId=self.request.id,
+                            workerNodeId=worker_id,
+                            status='PENDING',  # Keep as pending while claimed
+                            type=task.type,
+                            target=task.target,
+                            command=task.command,
+                            accountId=task.accountId,
+                            dispatchStatus='DISPATCHED',  # Set to DISPATCHED when claimed
+                            updatedAt=datetime.now(timezone.utc).isoformat()
+                        )
+                        logging.info(f"Successfully claimed task {task_id} with worker ID {worker_id}")
+                        
+                        # Brief pause to ensure UI can show claimed state
+                        time.sleep(0.5)
+                        
+                        # Second update - start processing
+                        task.update(
+                            status='RUNNING',
+                            startedAt=datetime.now(timezone.utc).isoformat(),
+                            updatedAt=datetime.now(timezone.utc).isoformat()
+                        )
+                        logging.info(f"Started processing task {task_id}")
+                    except Exception as e:
+                        logging.error(f"Failed to claim task {task_id}: {str(e)}")
+            
             logging.info(f"Received command: '{command_string}' with target: '{target}' and task_id: '{task_id}'")
             
             # Initialize task tracking
@@ -39,27 +82,10 @@ def register_tasks(app):
                 
                 client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
                 
-                # Always try to get or create task at the Celery task level
+                # Now proceed with task processing
                 if task_id:
-                    # If we have a task_id, try to get existing task
-                    logging.info(f"Initializing PlexusDashboardClient to get task {task_id}")
-                    
-                    # Retry getting task a few times to handle timing issues
-                    max_retries = 3
-                    retry_delay = 1  # seconds
-                    
-                    for attempt in range(max_retries):
-                        try:
-                            task = Task.get_by_id(task_id, client)
-                            logging.info(f"Successfully retrieved task {task_id}, starting processing")
-                            task.start_processing()
-                            break
-                        except Exception as e:
-                            if attempt < max_retries - 1:
-                                logging.warning(f"Attempt {attempt + 1} to get Task {task_id} failed: {str(e)}, retrying...")
-                                time.sleep(retry_delay)
-                            else:
-                                logging.error(f"All attempts to get Task {task_id} failed: {str(e)}")
+                    # Get the task for further updates
+                    task = Task.get_by_id(task_id, client)
                 else:
                     # Create new task if no task_id provided
                     try:
@@ -154,12 +180,12 @@ def register_tasks(app):
                 sys.argv = ['plexus'] + args
                 
                 # Import the main CLI function
-                from plexus.cli.CommandLineInterface import main
+                from plexus.cli.CommandLineInterface import cli
                 
                 # Execute the command with output capture
                 with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
                     try:
-                        main(standalone_mode=False)
+                        cli(standalone_mode=False)
                         status = 'success'
                     except SystemExit as e:
                         status = 'success' if e.code == 0 else 'error'
@@ -172,7 +198,28 @@ def register_tasks(app):
                     if status == 'success':
                         task.complete_processing()
                     else:
-                        task.fail_processing(str(e) if 'e' in locals() else 'Command failed')
+                        # Clear progress callback immediately to prevent further updates
+                        CommandProgress.set_update_callback(None)
+                        
+                        # Get error message from stderr if available, otherwise use exception message
+                        error_msg = stderr_capture.getvalue().strip() or (str(e) if 'e' in locals() else None)
+                        if error_msg:
+                            task.fail_processing(error_msg)
+                        else:
+                            # If we somehow have no error message, find the failed stage's message
+                            stages = task.get_stages()
+                            if stages:
+                                # Look for a failed stage first
+                                failed_stage = next((stage for stage in stages if stage.status == 'FAILED'), None)
+                                if failed_stage and failed_stage.statusMessage:
+                                    error_msg = failed_stage.statusMessage
+                                else:
+                                    # If no failed stage found, use current stage's message
+                                    current_stage = next((stage for stage in stages if stage.status == 'RUNNING'), None)
+                                    error_msg = (current_stage.statusMessage if current_stage else None) or "Command failed"
+                                task.fail_processing(error_msg)
+                            else:
+                                task.fail_processing("Command failed")
                 
                 return {
                     'status': status,
@@ -185,8 +232,9 @@ def register_tasks(app):
             finally:
                 # Restore the original argv
                 sys.argv = original_argv
-                # Clear progress callback
-                CommandProgress.set_update_callback(None)
+                # Only clear callback if not already cleared due to failure
+                if status == 'success':
+                    CommandProgress.set_update_callback(None)
                 
         except Exception as e:
             logging.error(f"Command failed: {str(e)}")
@@ -212,6 +260,11 @@ def register_tasks(app):
         target_duration = 20  # seconds
         sleep_per_item = target_duration / total_items
         
+        # Parse command args to check for --fail flag
+        args = shlex.split(target)
+        should_fail = '--fail' in args
+        fail_at = random.randint(600, 1400) if should_fail else None  # Fail between 30-70% progress
+        
         logging.info("Starting demo task processing...")
         
         try:
@@ -219,6 +272,10 @@ def register_tasks(app):
             
             for i in range(total_items):
                 current_item = i + 1
+                
+                # Simulate random failure if --fail flag is set
+                if should_fail and current_item >= fail_at:
+                    raise Exception(f"Simulated failure at {current_item}/{total_items} items")
                 
                 # Update progress every 50 items or on the last item
                 if i % 50 == 0 or i == total_items - 1:

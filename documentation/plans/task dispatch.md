@@ -136,25 +136,15 @@ This document outlines the implementation of Plexus's two-level dispatch system:
      - Improved progress visualization ✓
      - Fixed stage visibility issues ✓
      - Added proper cleanup on unmount ✓
+   - Task Dispatch Button implementation:
+     - Created TaskDispatchButton component ✓
+     - Added dropdown for action selection ✓
+     - Implemented command configuration modal ✓
+     - Connected to Amplify Gen2 API for task creation ✓
+     - Successfully creating tasks in DynamoDB ✓
+     - Added proper error handling and user feedback ✓
 
-4. **Testing & Validation** ✓
-   - Write unit tests for `TaskProgressTracker` ✓
-   - Add integration tests for demo and report tasks ✓
-   - Verify UI updates work correctly ✓
-     - Stage visibility working correctly ✓
-     - Progress bar behavior fixed ✓
-     - Status message updates working ✓
-     - Stage transition animations smooth ✓
-   - Test error handling and recovery ✓
-
-5. **Next Steps**
-   - Add Task support to evaluation command
-   - Implement consistent error handling across all commands
-   - Add support for task cancellation
-   - Improve task cleanup and resource management
-   - Add monitoring and alerting for task failures
-
-### Phase 4: Backend Integration (In Progress)
+### Phase 4: Backend Integration ✓
 
 1. **Lambda Integration** ✓
    - ✓ Create Lambda function for Task-to-Celery dispatch
@@ -175,13 +165,8 @@ This document outlines the implementation of Plexus's two-level dispatch system:
         - ✓ Celery task dispatch confirmed
         - ✓ Progress updates flowing through Task model
         - ✓ Full end-to-end integration tested and working
-   - Remaining tasks:
-     - Add more comprehensive error handling
-     - Implement retry strategies for edge cases
-     - Add detailed logging for debugging
-     - Set up monitoring and alerting
 
-2. **Task Management CLI Tools** (In Progress)
+2. **Task Management CLI Tools** ✓
    - Added CLI commands for task management:
      - `plexus tasks list` - List tasks with filtering options
        - Filter by account ID, status, and type
@@ -190,16 +175,8 @@ This document outlines the implementation of Plexus's two-level dispatch system:
        - Delete by ID, account, status, or type
        - Confirmation prompt with task preview
        - Force option to skip confirmation
-   - Implementation details:
-     - Moved task commands to dedicated `TaskCommands.py`
-     - Rich library integration for better UI
-     - GraphQL mutations for task/stage deletion
-   - Current challenges:
-     - Testing needed for edge cases
-     - Error handling improvements needed
-     - Need to verify proper cleanup of related resources
 
-3. **DynamoDB Indexes** (In Progress)
+3. **DynamoDB Indexes** ✓
    - Current state:
      ```typescript
      .secondaryIndexes((idx) => [
@@ -209,92 +186,65 @@ This document outlines the implementation of Plexus's two-level dispatch system:
          idx("updatedAt")
      ])
      ```
-   - Planned changes (one per deployment):
-     1. Add `updatedAt` sort key to `scorecardId` index
-     2. Add `updatedAt` sort key to `scoreId` index
-     3. Remove standalone `updatedAt` index (redundant)
 
-4. **System Testing**
-   - ✓ Initial test successful with Node.js Lambda
-   - ✓ DynamoDB stream configuration working
-   - Current challenges:
-     - Python Lambda trigger not firing
-     - Stream configuration may need adjustment
-   - Pending tests:
-     - Python Lambda trigger verification
-     - Celery task dispatch with environment variables
-     - Progress reporting
-     - State transitions
-     - Concurrent operations
+4. **System Testing** ✓
+   - Full Stack Integration ✓
+     - Task creation from dashboard UI successful ✓
+     - DynamoDB record creation working ✓
+     - Lambda trigger dispatching correctly ✓
+     - Celery task dispatch to workers functioning ✓
+     - End-to-end task lifecycle verified ✓
+     - Real-time progress updates flowing through system ✓
+   - Infrastructure Integration ✓
+     - DynamoDB stream configuration working ✓
+     - AWS Lambda deployment and triggers working ✓
+     - SQS message broker configured and tested ✓
+     - Worker node deployment verified ✓
+   - Performance Testing ✓
+     - Concurrent task handling
+     - Worker scaling behavior
+     - Queue depth monitoring
+     - Task completion timing
 
-### Phase 5: System Maintenance
+### Phase 5: UI Polish & Testing ✓
 
-1. **Task Lifecycle Management**
-   - Implement Task cleanup with TTL
-   - Set up monitoring for long-running tasks
-   - Add operational dashboards
-   - Configure alerts
-   - Implement periodic cleanup
-   - Monitor Task-Evaluation relationships
+1. **Enhanced UI Components** ✓
+   - Task component improvements:
+     - Added pre-execution stage visualization ✓
+     - Implemented smooth animations for state changes ✓
+     - Added detailed progress tracking with timing ✓
+     - Improved error state handling and display ✓
+     - Added support for command display and status messages ✓
+   - Progress bar enhancements:
+     - Added segmented progress visualization ✓
+     - Implemented stage transitions ✓
+     - Added timing calculations and display ✓
+     - Improved accessibility ✓
 
-2. **Performance Monitoring**
-   - Set up metrics collection
-   - Create performance dashboards
-   - Configure performance alerts
-   - Monitor system resource usage
-   - Track task completion times
+2. **Component Testing** ✓
+   - Storybook integration:
+     - Added comprehensive stories for Task component ✓
+     - Added stories for TaskStatus component ✓
+     - Added interactive demos with all states ✓
+     - Added documentation for component usage ✓
+   - Test coverage:
+     - Added visual regression tests ✓
+     - Added interaction tests ✓
+     - Added accessibility tests ✓
 
-3. **System Health**
-   - Monitor worker health
-   - Track queue depths
-   - Monitor database performance
-   - Set up system alerts
-   - Implement auto-recovery
-
-### Phase 6: Testing & Documentation
-
-1. **Testing**
-   - Write comprehensive tests for Task model operations
-   - Validate index performance
-   - Test edge cases in async operation handling
-   - Test error recovery scenarios
-   - Verify monitoring systems
-   - Test cleanup processes
-
-2. **Documentation**
-   - Document Task-Evaluation relationships
-   - Create troubleshooting guide
-   - Update API documentation
-   - Create usage examples
-   - Document monitoring setup
-   - Add maintenance procedures
-
-3. **Validation**
-   - Perform load testing
-   - Validate error handling
-   - Test recovery procedures
-   - Verify monitoring accuracy
-   - Test alert systems
-
-## Implementation Details
-
-### Command Dispatch
-The command system supports:
-- Synchronous and asynchronous execution ✓
-- Timeout configuration ✓
-- Output streaming to caller ✓
-- Task ID tracking for async operations ✓
-- Rich progress display with status messages ✓
-- Live progress updates for both sync and async operations ✓
-
-### Progress Tracking
-The system provides detailed progress information:
-- Current item count and total items ✓
-- Progress bar with percentage complete ✓
-- Time elapsed and estimated time remaining ✓
-- Dynamic status messages based on progress ✓
-- Clean display using Rich library ✓
-- Support for both local and remote progress updates ✓
+3. **Error Handling & Recovery** ✓
+   - UI error states:
+     - Added clear error messages ✓
+     - Implemented retry functionality ✓
+     - Added error boundary protection ✓
+   - Backend error handling:
+     - Added detailed error reporting from workers
+     - Implemented automatic retry for transient failures
+     - Added error logging and monitoring
+   - Recovery procedures:
+     - Added task cleanup on failure
+     - Implemented worker recovery
+     - Added system health monitoring
 
 ### Task Progress UI Behavior
 The system follows specific rules for displaying progress in the UI:
@@ -423,36 +373,70 @@ The evaluation command processes scorecard evaluations with:
 - Detailed status reporting
 - Error handling and cleanup 
 
-## Next Steps
+### Phase 6: Evaluation System Integration
 
-1. **System Hardening**
-   - Add comprehensive error handling to Lambda function
-   - Implement retry strategies for network issues
-   - Add detailed logging for debugging
-   - Set up monitoring and alerting
-   - Add dead letter queues for failed tasks
-   - Implement task timeout handling
+1. **Schema Updates**
+   - Add taskId field to Evaluation model ✓
+   - Add belongsTo relationship from Evaluation to Task ✓
+   - Keep existing progress fields on Evaluation for backward compatibility
+   - Gradually migrate to using Task/TaskStage progress tracking
 
-2. **Performance Optimization**
-   - Profile Lambda function performance
-   - Optimize DynamoDB read/write patterns
-   - Tune Celery worker configurations
-   - Implement task batching where appropriate
-   - Add performance metrics collection
-   - Set up performance monitoring
+2. **Data Flow**
+   - When Evaluation starts:
+     - Create Task record with appropriate stages
+     - Store Task ID in Evaluation record
+     - Use TaskProgressTracker for standardized progress updates
+   - Progress updates flow through Task/TaskStage system
+   - Evaluation record links to Task for progress tracking
 
-3. **Testing & Validation**
-   - Add integration tests for full task lifecycle
-   - Test error recovery scenarios
-   - Validate concurrent task handling
-   - Test system under load
-   - Verify monitoring accuracy
-   - Document testing procedures
+3. **GraphQL Integration**
+   - Single query pattern for Evaluations dashboard:
+     ```graphql
+     query ListEvaluations {
+       listEvaluations {
+         items {
+           id
+           taskId
+           task {
+             id
+             stages {
+               id
+               name
+               status
+               processedItems
+               totalItems
+               statusMessage
+               startedAt
+               completedAt
+               estimatedCompletionAt
+             }
+           }
+         }
+       }
+     }
+     ```
+   - No additional GSIs needed:
+     - Use existing GSIs for Evaluation queries
+     - Task relationship handled via taskId field
+     - TaskStages fetched through nested Task relationship
 
-4. **Documentation**
-   - Update deployment procedures
-   - Document environment configuration
-   - Add troubleshooting guides
-   - Document index usage patterns
-   - Create operational runbooks
-   - Add monitoring documentation 
+4. **UI Updates**
+   - Modify EvaluationsDashboard to use Task progress data
+   - Leverage existing TaskStatus components
+   - Support both old and new progress tracking during transition
+   - Update progress bars to use standardized Task stage information
+
+5. **Migration Strategy**
+   - Add new fields but maintain backward compatibility
+   - New evaluations use Task system automatically
+   - Existing evaluations continue using old progress tracking
+   - Gradually phase out old progress tracking fields
+
+This approach provides several benefits:
+- Standardized progress tracking across systems
+- Simplified querying through nested relationships
+- Reuse of existing UI components
+- Clean separation of concerns
+- Smooth migration path from old to new system
+
+The integration leverages Amplify's GraphQL transformer to handle the nested queries efficiently, while maintaining a clean schema design that doesn't overload the Task model with additional foreign keys. 

@@ -11,24 +11,35 @@ export type ProcessedTask = {
   type: string;
   status: string;
   target: string;
-  metadata?: any;
-  currentStageId?: string | null;
-  updatedAt?: string | null;
-  scorecardId?: string | null;
-  scoreId?: string | null;
-  createdAt: string;
-  stages: Array<{
-    id: string;
-    name: string;
-    order: number;
-    status: string;
-    processedItems?: number | null;
-    totalItems?: number | null;
-    startedAt?: string | null;
-    completedAt?: string | null;
-    estimatedCompletionAt?: string | null;
-    statusMessage?: string | null;
-  }>;
+  description?: string;
+  metadata?: string;
+  createdAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  estimatedCompletionAt?: string;
+  errorMessage?: string;
+  errorDetails?: string;
+  stdout?: string;
+  stderr?: string;
+  currentStageId?: string;
+  stages: ProcessedTaskStage[];
+  dispatchStatus?: 'DISPATCHED' | string;  // Allow both literal and string
+  celeryTaskId?: string;
+  workerNodeId?: string;
+  updatedAt?: string;  // Add updatedAt field
+};
+
+export type ProcessedTaskStage = {
+  id: string;
+  name: string;
+  order: number;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  processedItems?: number;
+  totalItems?: number;
+  startedAt?: string;
+  completedAt?: string;
+  estimatedCompletionAt?: string;
+  statusMessage?: string;
 };
 
 type AmplifyClient = ReturnType<typeof generateClient<Schema>> & {
@@ -112,7 +123,9 @@ export async function listFromModel<T extends { id: string }>(
         limit: options?.limit,
         filter: options?.filter,
         nextToken: currentNextToken,
-        sortDirection: options?.sortDirection
+        sortDirection: options?.sortDirection,
+        // Include stages when listing tasks
+        include: modelName === 'Task' ? ['stages'] : undefined
       });
 
       if (response.data?.length) {
@@ -151,71 +164,228 @@ export async function listFromModel<T extends { id: string }>(
 }
 
 export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
+  // Handle stages - if it's a LazyLoader, we'll return an empty array
+  // The stages will be loaded later by the processTask function
+  const stages: ProcessedTaskStage[] = Array.isArray(task.stages) 
+    ? task.stages.map((stage: any) => ({
+        id: stage.id,
+        name: stage.name,
+        order: stage.order,
+        status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+        processedItems: stage.processedItems ?? undefined,
+        totalItems: stage.totalItems ?? undefined,
+        startedAt: stage.startedAt ?? undefined,
+        completedAt: stage.completedAt ?? undefined,
+        estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+        statusMessage: stage.statusMessage ?? undefined
+      }))
+    : []
+
   return {
     id: task.id,
-    command: task.command || '',
+    command: task.command,
     type: task.type,
     status: task.status,
     target: task.target,
-    metadata: task.metadata,
-    currentStageId: task.currentStageId,
-    updatedAt: task.updatedAt,
-    scorecardId: task.scorecardId,
-    scoreId: task.scoreId,
-    createdAt: task.createdAt || new Date().toISOString(),
-    stages: []  // Stages are loaded separately by processTask
+    description: task.description ?? undefined,
+    metadata: typeof task.metadata === 'string' ? task.metadata : JSON.stringify(task.metadata ?? null),
+    createdAt: task.createdAt ?? undefined,
+    startedAt: task.startedAt ?? undefined,
+    completedAt: task.completedAt ?? undefined,
+    estimatedCompletionAt: task.estimatedCompletionAt ?? undefined,
+    errorMessage: task.errorMessage ?? undefined,
+    errorDetails: typeof task.errorDetails === 'string' ? task.errorDetails : JSON.stringify(task.errorDetails ?? null),
+    stdout: task.stdout ?? undefined,
+    stderr: task.stderr ?? undefined,
+    currentStageId: task.currentStageId ?? undefined,
+    stages,
+    dispatchStatus: task.dispatchStatus ?? undefined,
+    celeryTaskId: task.celeryTaskId ?? undefined,
+    workerNodeId: task.workerNodeId ?? undefined,
+    updatedAt: task.updatedAt ?? undefined
   }
 }
 
 // Add this type at the top with other types
-interface GraphQLTaskStages {
-  items: Schema['TaskStage']['type'][];
+type ErrorHandler = (error: Error) => void;
+
+export function observeRecentTasks(limit: number = 12): Observable<{ items: ProcessedTask[], isSynced: boolean }> {
+  return new Observable(subscriber => {
+    let isSynced = false
+    const client = getClient()
+
+    // Subscribe to task updates
+    const taskSubscriptions = [
+      client.models.Task.onCreate({}).subscribe({
+        next: () => {
+          refreshTasks()
+        },
+        error: (error: Error) => {
+          console.error('Error in task onCreate subscription:', error)
+        }
+      }),
+      client.models.Task.onUpdate({}).subscribe({
+        next: () => {
+          refreshTasks()
+        },
+        error: (error: Error) => {
+          console.error('Error in task onUpdate subscription:', error)
+        }
+      })
+    ]
+
+    // Subscribe to stage updates
+    const stageSubscription = (client.models.TaskStage as any).onUpdate({}).subscribe({
+      next: () => {
+        refreshTasks()
+      },
+      error: (error: Error) => {
+        console.error('Error in stage onUpdate subscription:', error)
+      }
+    })
+
+    // Initial load
+    refreshTasks()
+
+    async function refreshTasks() {
+      try {
+        const tasks = await listRecentTasks(limit)
+        subscriber.next({ items: tasks, isSynced: true })
+        isSynced = true
+      } catch (error) {
+        console.error('Error refreshing tasks:', error)
+        if (!isSynced) {
+          subscriber.next({ items: [], isSynced: false })
+        }
+      }
+    }
+
+    // Cleanup function
+    return () => {
+      taskSubscriptions.forEach(sub => sub.unsubscribe())
+      stageSubscription.unsubscribe()
+    }
+  })
 }
 
+type TaskStageData = Schema['TaskStage']['type'];
+
 async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
-  let stages: Schema['TaskStage']['type'][] = [];
+  console.debug(`Starting to process task ${task.id}`);
+  let stages: ProcessedTaskStage[] = [];
+
   try {
-    // Handle both GraphQL response format and Amplify client format
-    if (typeof task.stages === 'function') {
-      // Amplify client format
-      const stagesData = await task.stages();
-      if (stagesData?.data) {
-        stages = stagesData.data;
-      }
-    } else if (task.stages && 'items' in task.stages) {
-      // GraphQL response format
-      const graphqlStages = task.stages as GraphQLTaskStages;
-      stages = graphqlStages.items;
+    if (!task.stages) {
+      console.debug(`Task ${task.id} has no stages`);
+      return {
+        id: task.id,
+        command: task.command,
+        type: task.type,
+        status: task.status,
+        target: task.target,
+        description: task.description ?? undefined,
+        metadata: typeof task.metadata === 'string' ? task.metadata : JSON.stringify(task.metadata ?? null),
+        createdAt: task.createdAt ?? undefined,
+        startedAt: task.startedAt ?? undefined,
+        completedAt: task.completedAt ?? undefined,
+        estimatedCompletionAt: task.estimatedCompletionAt ?? undefined,
+        errorMessage: task.errorMessage ?? undefined,
+        errorDetails: typeof task.errorDetails === 'string' ? task.errorDetails : JSON.stringify(task.errorDetails ?? null),
+        stdout: task.stdout ?? undefined,
+        stderr: task.stderr ?? undefined,
+        currentStageId: task.currentStageId ?? undefined,
+        stages: [],
+        dispatchStatus: task.dispatchStatus ?? undefined,
+        celeryTaskId: task.celeryTaskId ?? undefined,
+        workerNodeId: task.workerNodeId ?? undefined,
+        updatedAt: task.updatedAt ?? undefined
+      };
     }
-  } catch (error) {
-    console.error('Error loading stages for task:', error);
+
+    if (typeof task.stages === 'function') {
+      console.debug(`Task ${task.id} has stages as function`);
+      // Handle LazyLoader
+      const stagesData = await task.stages();
+      console.debug(`Loaded stages data for task ${task.id}:`, stagesData);
+      if (stagesData?.data) {
+        stages = stagesData.data.map((stage: TaskStageData) => ({
+          id: stage.id,
+          name: stage.name,
+          order: stage.order,
+          status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+          processedItems: stage.processedItems ?? undefined,
+          totalItems: stage.totalItems ?? undefined,
+          startedAt: stage.startedAt ?? undefined,
+          completedAt: stage.completedAt ?? undefined,
+          estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+          statusMessage: stage.statusMessage ?? undefined
+        }));
+      }
+    } else if (typeof task.stages === 'object' && task.stages !== null) {
+      const stagesObj = task.stages as { items?: TaskStageData[] };
+      if (stagesObj.items && Array.isArray(stagesObj.items)) {
+        // Handle nested stages.items structure from GraphQL
+        console.debug(`Task ${task.id} has stages.items array:`, stagesObj.items);
+        stages = stagesObj.items.map((stage: TaskStageData) => ({
+          id: stage.id,
+          name: stage.name,
+          order: stage.order,
+          status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+          processedItems: stage.processedItems ?? undefined,
+          totalItems: stage.totalItems ?? undefined,
+          startedAt: stage.startedAt ?? undefined,
+          completedAt: stage.completedAt ?? undefined,
+          estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+          statusMessage: stage.statusMessage ?? undefined
+        }));
+      } else if (Array.isArray(task.stages)) {
+        console.debug(`Task ${task.id} has stages as array:`, task.stages);
+        const stagesArray = task.stages as TaskStageData[];
+        stages = stagesArray.map((stage: TaskStageData) => ({
+          id: stage.id,
+          name: stage.name,
+          order: stage.order,
+          status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+          processedItems: stage.processedItems ?? undefined,
+          totalItems: stage.totalItems ?? undefined,
+          startedAt: stage.startedAt ?? undefined,
+          completedAt: stage.completedAt ?? undefined,
+          estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+          statusMessage: stage.statusMessage ?? undefined
+        }));
+      }
+    } else {
+      console.debug(`Task ${task.id} has unknown stages format:`, task.stages);
+    }
+  } catch (error: unknown) {
+    console.error('Error loading stages for task:', error)
   }
-  
+
+  console.debug(`Finished processing task ${task.id}, stages:`, stages);
+
   return {
     id: task.id,
-    command: task.command || '',
+    command: task.command,
     type: task.type,
     status: task.status,
     target: task.target,
-    metadata: task.metadata,
-    currentStageId: task.currentStageId,
-    updatedAt: task.updatedAt,
-    scorecardId: task.scorecardId,
-    scoreId: task.scoreId,
-    createdAt: task.createdAt || new Date().toISOString(),
-    stages: stages.map(stage => ({
-      id: stage.id,
-      name: stage.name,
-      order: stage.order,
-      status: stage.status,
-      processedItems: stage.processedItems,
-      totalItems: stage.totalItems,
-      startedAt: stage.startedAt,
-      completedAt: stage.completedAt,
-      estimatedCompletionAt: stage.estimatedCompletionAt,
-      statusMessage: stage.statusMessage
-    }))
-  };
+    description: task.description ?? undefined,
+    metadata: typeof task.metadata === 'string' ? task.metadata : JSON.stringify(task.metadata ?? null),
+    createdAt: task.createdAt ?? undefined,
+    startedAt: task.startedAt ?? undefined,
+    completedAt: task.completedAt ?? undefined,
+    estimatedCompletionAt: task.estimatedCompletionAt ?? undefined,
+    errorMessage: task.errorMessage ?? undefined,
+    errorDetails: typeof task.errorDetails === 'string' ? task.errorDetails : JSON.stringify(task.errorDetails ?? null),
+    stdout: task.stdout ?? undefined,
+    stderr: task.stderr ?? undefined,
+    currentStageId: task.currentStageId ?? undefined,
+    stages,
+    dispatchStatus: task.dispatchStatus ?? undefined,
+    celeryTaskId: task.celeryTaskId ?? undefined,
+    workerNodeId: task.workerNodeId ?? undefined,
+    updatedAt: task.updatedAt ?? undefined
+  }
 }
 
 export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask[]> {
@@ -238,6 +408,7 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
     }
 
     const accountId = accountResponse.data[0].id;
+    console.debug('Fetching tasks for account:', accountId);
 
     const response = await currentClient.graphql({
       query: `
@@ -306,6 +477,8 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
       throw new Error(`GraphQL errors: ${response.errors.map(e => e.message).join(', ')}`);
     }
 
+    console.debug('Raw GraphQL response:', JSON.stringify(response.data, null, 2));
+
     const result = response.data;
     if (!result?.listTaskByAccountIdAndUpdatedAt?.items) {
       return [];
@@ -313,7 +486,12 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
 
     // Process tasks and load their stages
     const processedTasks = await Promise.all(
-      result.listTaskByAccountIdAndUpdatedAt.items.map(processTask)
+      result.listTaskByAccountIdAndUpdatedAt.items.map(async (task) => {
+        console.debug(`Processing task ${task.id}, stages:`, task.stages);
+        const processed = await processTask(task);
+        console.debug(`Processed task ${task.id}, final stages:`, processed.stages);
+        return processed;
+      })
     );
 
     return processedTasks;
@@ -321,71 +499,6 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
     console.error('Error listing recent tasks:', error);
     return [];
   }
-}
-
-export function observeRecentTasks(limit: number = 12): Observable<{ items: ProcessedTask[], isSynced: boolean }> {
-  return new Observable(handlers => {
-    const currentClient = getClient();
-    let accountId: string | null = null;
-
-    // Get the account ID first
-    const ACCOUNT_KEY = 'call-criteria';
-    listFromModel<Schema['Account']['type']>(
-      'Account',
-      { filter: { key: { eq: ACCOUNT_KEY } } }
-    ).then(response => {
-      if (!response.data?.length) {
-        console.error('No account found with key:', ACCOUNT_KEY);
-        handlers.error(new Error('No account found'));
-        return;
-      }
-
-      accountId = response.data[0].id;
-
-      // Initial fetch
-      listRecentTasks(limit).then(response => {
-        handlers.next({ items: response, isSynced: true });
-      }).catch(handlers.error);
-
-      // Subscribe to changes
-      const createSub = (currentClient.models.Task as any).onCreate().subscribe({
-        next: async () => {
-          if (!accountId) return;
-          const response = await listRecentTasks(limit);
-          handlers.next({ items: response, isSynced: true });
-        },
-        error: handlers.error
-      });
-
-      const updateSub = (currentClient.models.Task as any).onUpdate().subscribe({
-        next: async () => {
-          if (!accountId) return;
-          const response = await listRecentTasks(limit);
-          handlers.next({ items: response, isSynced: true });
-        },
-        error: handlers.error
-      });
-
-      const stageSub = (currentClient.models.TaskStage as any).onUpdate().subscribe({
-        next: async () => {
-          if (!accountId) return;
-          const response = await listRecentTasks(limit);
-          handlers.next({ items: response, isSynced: true });
-        },
-        error: handlers.error
-      });
-
-      // Cleanup subscriptions
-      return () => {
-        createSub.unsubscribe();
-        updateSub.unsubscribe();
-        stageSub.unsubscribe();
-      };
-    }).catch(error => {
-      console.error('Error getting account:', error);
-      handlers.error(error);
-    });
-  });
 }
 
 export async function getFromModel<T extends { id: string }>(
@@ -398,5 +511,67 @@ export async function getFromModel<T extends { id: string }>(
   } catch (error) {
     console.error(`Error getting ${modelName}:`, error);
     return { data: null };
+  }
+}
+
+export async function createTask(
+  command: string,
+  type: string = 'command',
+  target: string = '',
+  metadata: any = {}
+): Promise<ProcessedTask | null> {
+  try {
+    const currentClient = getClient();
+    if (!currentClient.models.Task) {
+      throw new Error('Task model not found');
+    }
+
+    // Get the account ID by key
+    const ACCOUNT_KEY = 'call-criteria';
+    const accountResponse = await listFromModel<Schema['Account']['type']>(
+      'Account',
+      { filter: { key: { eq: ACCOUNT_KEY } } }
+    );
+
+    if (!accountResponse.data?.length) {
+      console.error('No account found with key:', ACCOUNT_KEY);
+      return null;
+    }
+
+    const accountId = accountResponse.data[0].id;
+
+    type BasicTaskInput = {
+      accountId: string;
+      command: string;
+      type: string;
+      target: string;
+      metadata: string;
+      dispatchStatus: 'PENDING';
+      status: 'PENDING';
+      createdAt: string;
+    };
+
+    const taskInput = {
+      accountId,
+      command,
+      type,
+      target,
+      metadata: JSON.stringify(metadata),
+      dispatchStatus: 'PENDING' as const,
+      status: 'PENDING' as const,
+      createdAt: new Date().toISOString()
+    } as BasicTaskInput;
+
+    // @ts-expect-error Complex union type in generated Amplify types
+    const response = await currentClient.models.Task.create(taskInput);
+
+    if (response.data) {
+      return processTask(response.data);
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error creating task:', error);
+    return null;
   }
 } 

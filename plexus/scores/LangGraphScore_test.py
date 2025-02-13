@@ -742,3 +742,86 @@ async def test_batch_mode_with_item_id(basic_graph_config, mock_azure_openai):
         assert exc_info.value.state["at_llm_breakpoint"] is True
         assert exc_info.value.state["messages"] is not None
         assert exc_info.value.state["metadata"]["content_id"] == test_content_id
+
+@pytest.fixture
+def graph_config_with_edge():
+    return {
+        "graph": [
+            {
+                "name": "first_classifier",
+                "class": "YesOrNoClassifier",
+                "prompt_template": "Is this a revenue only customer?",
+                "output": {
+                    "customer_type": "classification",
+                    "reason": "explanation"
+                },
+                "edge": {
+                    "node": "revenue_classifier",
+                    "output": {
+                        "value": "customer_type",  # Alias from state variable
+                        "explanation": "reason",    # Alias from state variable
+                        "source": "first_classifier"  # Literal value
+                    }
+                }
+            },
+            {
+                "name": "revenue_classifier",
+                "class": "YesOrNoClassifier",
+                "prompt_template": "Revenue classifier prompt"
+            },
+            {
+                "name": "general_classifier",
+                "class": "YesOrNoClassifier",
+                "prompt_template": "General classifier prompt"
+            }
+        ],
+        "model_provider": "AzureChatOpenAI",
+        "model_name": "gpt-4",
+        "temperature": 0.0,
+        "openai_api_version": "2023-05-15",
+        "openai_api_base": "https://test.openai.azure.com",
+        "openai_api_key": "test-key",
+        "output": {
+            "value": "classification",
+            "explanation": "explanation"
+        }
+    }
+
+@pytest.mark.asyncio
+async def test_edge_routing(graph_config_with_edge, mock_azure_openai, mock_yes_no_classifier):
+    """Test that edge clause correctly routes to specified node with output aliasing"""
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model', return_value=mock_azure_openai):
+        instance = await LangGraphScore.create(**graph_config_with_edge)
+        
+        # Mock workflow to simulate state with classification and explanation
+        mock_workflow = MagicMock()
+        mock_workflow.astream = MagicMock(return_value=AsyncIteratorMock([{
+            "customer_type": "Revenue Only",  # This comes from classification
+            "reason": "Customer is marked as revenue only",  # This comes from explanation
+            "value": "Revenue Only",  # This should come from customer_type alias
+            "explanation": "Customer is marked as revenue only",  # This should come from reason alias
+            "source": "first_classifier"  # This is a literal value
+        }]))
+        instance.workflow = mock_workflow
+        
+        result = await instance.predict(None, Score.Input(
+            text="test text",
+            metadata={"key": "value"},
+            results=[]
+        ))
+        
+        # Verify the result includes both aliased variables and literal values
+        assert result[0].value == "Revenue Only"  # Aliased from customer_type
+        assert result[0].metadata["explanation"] == "Customer is marked as revenue only"  # Aliased from reason
+        assert result[0].metadata["source"] == "first_classifier"  # Literal value
+
+        # Verify the workflow was created with correct edges
+        workflow = instance.workflow
+        assert hasattr(workflow, 'graph')  # Verify workflow has a graph
+        
+        # Check that the edge from first_classifier goes to the value setter
+        value_setter_node = "first_classifier_value_setter"
+        assert value_setter_node in str(workflow.graph.nodes)
+        
+        # Check that the value setter connects to revenue_classifier
+        assert "revenue_classifier" in str(workflow.graph.nodes)

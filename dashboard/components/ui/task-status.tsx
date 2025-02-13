@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { SegmentedProgressBar, SegmentConfig } from './segmented-progress-bar'
 import { ProgressBar } from './progress-bar'
 import { ProgressBarTiming } from './progress-bar-timing'
-import { Radio, Hand, ConciergeBell, Square, RectangleVertical, X } from 'lucide-react'
+import { Radio, Hand, ConciergeBell, Square, RectangleVertical, X, AlertTriangle } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { StyleTag } from './style-tag'
 import { CardButton } from '@/components/CardButton'
@@ -64,6 +64,7 @@ export interface TaskStatusProps {
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
   command?: string
   statusMessage?: string
+  errorMessage?: string
   stageConfigs?: TaskStageConfig[]
   isLoading?: boolean
   errorLabel?: string
@@ -110,6 +111,7 @@ export function TaskStatus({
   showPreExecutionStages = false,
   command,
   statusMessage,
+  errorMessage,
   completedAt,
   truncateMessages = true,
   variant,
@@ -119,14 +121,81 @@ export function TaskStatus({
 }: TaskStatusProps) {
   const isInProgress = status === 'RUNNING'
   const isFinished = status === 'COMPLETED' || status === 'FAILED'
+  const isError = status === 'FAILED'
 
-  // Find the most recent stage with valid progress information
+  // State for computed timing values
+  const [elapsedTime, setElapsedTime] = useState<string>('')
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string>('')
+
+  // Update timing values every second while not completed
+  useEffect(() => {
+    const updateTiming = () => {
+      // If no task start time, show 0s
+      if (!startedAt) {
+        setElapsedTime('0s')
+        return
+      }
+
+      const taskStartTime = new Date(startedAt)
+      const endTime = completedAt ? new Date(completedAt) : new Date()
+
+      // Calculate elapsed time from task start to end time
+      const elapsedSeconds = Math.floor(
+        (endTime.getTime() - taskStartTime.getTime()) / 1000
+      )
+
+      const formattedTime = formatDuration(elapsedSeconds)
+
+      setElapsedTime(formattedTime)
+
+      // Only show ETA if in progress and we have an estimate
+      if (isInProgress && estimatedCompletionAt) {
+        const estimated = new Date(estimatedCompletionAt)
+        const remainingSeconds = Math.floor(
+          (estimated.getTime() - endTime.getTime()) / 1000
+        )
+        if (remainingSeconds > 0) {
+          setEstimatedTimeRemaining(formatDuration(remainingSeconds))
+        } else {
+          setEstimatedTimeRemaining('')
+        }
+      } else {
+        setEstimatedTimeRemaining('')
+      }
+    }
+
+    // Initial update
+    updateTiming()
+
+    // Update every second until completed
+    const interval = !completedAt ? setInterval(updateTiming, 1000) : null
+
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [startedAt, estimatedCompletionAt, completedAt, isInProgress])
+
+  // Get progress information from stages if available, otherwise use props
   const getProgressFromStages = () => {
     if (!stages || stages.length === 0) {
       return { processedItems, totalItems }
     }
 
-    // Start from the current stage and work backwards
+    // For completed tasks, find the stage with the most progress
+    if (status === 'COMPLETED') {
+      const stageWithProgress = stages
+        .filter(s => s.totalItems !== undefined && s.totalItems > 0)
+        .sort((a, b) => (b.totalItems || 0) - (a.totalItems || 0))[0]
+      
+      if (stageWithProgress) {
+        return {
+          processedItems: stageWithProgress.processedItems,
+          totalItems: stageWithProgress.totalItems
+        }
+      }
+    }
+
+    // For running tasks, start from current stage and work backwards
     const currentStageIndex = stages.findIndex(s => s.name === currentStageName)
     if (currentStageIndex === -1) {
       return { processedItems, totalItems }
@@ -162,97 +231,65 @@ export function TaskStatus({
   const progress = effectiveProcessedItems && effectiveTotalItems ? 
     (effectiveProcessedItems / effectiveTotalItems) * 100 : 0
 
-  // State for computed timing values
-  const [elapsedTime, setElapsedTime] = useState<string>('')
-  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string>('')
-
-  // Update timing values every second while not completed
-  useEffect(() => {
-    const updateTiming = () => {
-      if (!startedAt) {
-        setElapsedTime('0s')
-        return
-      }
-
-      const now = new Date()
-      const started = new Date(startedAt)
-      
-      // For finished tasks, use completedAt time instead of current time
-      const endTime = completedAt ? 
-        new Date(completedAt) : now
-
-      const elapsedSeconds = Math.floor(
-        (endTime.getTime() - started.getTime()) / 1000
-      )
-
-      setElapsedTime(formatDuration(elapsedSeconds))
-
-      // Only show ETA if in progress and we have an estimate
-      if (isInProgress && estimatedCompletionAt) {
-        const estimated = new Date(estimatedCompletionAt)
-        const remainingSeconds = Math.floor(
-          (estimated.getTime() - now.getTime()) / 1000
-        )
-        if (remainingSeconds > 0) {
-          setEstimatedTimeRemaining(formatDuration(remainingSeconds))
-        } else {
-          setEstimatedTimeRemaining('')
-        }
-      } else {
-        setEstimatedTimeRemaining('')
-      }
-    }
-
-    // Initial update
-    updateTiming()
-
-    // Update every second until completed
-    const interval = !completedAt ? setInterval(updateTiming, 1000) : null
-
-    return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [startedAt, estimatedCompletionAt, completedAt, isInProgress])
-
   // Convert TaskStageConfig to SegmentConfig for the progress bar
   const segmentConfigs: SegmentConfig[] = stageConfigs ? [
     ...stageConfigs.map(stage => ({
       key: stage.name,
       label: stage.label,
-      color: stage.color
+      color: stage.status === 'PENDING' ? 'bg-neutral' : 
+             stage.status === 'FAILED' ? 'bg-false' : 
+             stage.color,
+      status: stage.status
     })),
     // Only add completion segment if we have other stages
     ...(stageConfigs.length > 0 ? [{
       key: 'completion',
       label: status === 'FAILED' ? 'Failed' : 'Complete',
-      color: status === 'FAILED' ? 'bg-false' : 'bg-true'
+      color: status === 'FAILED' ? 'bg-false' : 'bg-true',
+      status: status
     }] : [])
   ] : []
 
   const getPreExecutionStatus = () => {
-    if (!dispatchStatus) return { 
-      message: 'Starting...', 
+    if (workerNodeId && workerNodeId.trim() !== '') {
+      console.debug('Task claimed by worker:', workerNodeId);
+      return { 
+        message: 'Claimed...', 
+        icon: Hand,
+        animation: 'animate-wave'
+      }
+    }
+    if (!celeryTaskId) {
+      console.debug('Task announced, no celery ID yet');
+      return { 
+        message: 'Announced...', 
+        icon: ConciergeBell,
+        animation: 'animate-jiggle'
+      }
+    }
+    console.debug('Task has celery ID:', celeryTaskId);
+    return { 
+      message: 'Announced...', 
       icon: Radio,
       animation: 'animate-pulse'
     }
-    if (!celeryTaskId) return { 
-      message: 'Task announced...', 
-      icon: ConciergeBell,
-      animation: 'animate-jiggle'
-    }
-    if (!workerNodeId) return { 
-      message: 'Task claimed.', 
-      icon: Hand,
-      animation: 'animate-wave'
-    }
-    return null
   }
 
-  const preExecutionStatus = showPreExecutionStages ? getPreExecutionStatus() : null
-  const showEmptyState = !stages.length && !preExecutionStatus
+  // Only show pre-execution status when:
+  // 1. Task is in PENDING state
+  // 2. Has no stages (not started processing yet)
+  // 3. Either has a worker node ID or showPreExecutionStages is true
+  const shouldShowPreExecution = status === 'PENDING' && 
+    (!stages || stages.length === 0) && 
+    ((workerNodeId && workerNodeId.trim() !== '') || showPreExecutionStages)
+
+  const preExecutionStatus = shouldShowPreExecution ? getPreExecutionStatus() : null
+  const showEmptyState = !stages.length && !preExecutionStatus && status === 'PENDING'
+
+  const displayMessage = isError && errorMessage ? errorMessage : statusMessage
 
   return (
-    <div className="space-y-2">
+    <div className="[&>*+*]:mt-2">
       <StyleTag />
       {variant === 'detail' && (
         <div className="flex justify-between items-center mb-4">
@@ -273,22 +310,27 @@ export function TaskStatus({
           </div>
         </div>
       )}
-      {(command || statusMessage || isFinished) && (
-        <div className="rounded-lg bg-card-light px-2 py-1 space-y-1">
+      {(command || displayMessage || isFinished) && (
+        <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
           {command && (
             <div className={`font-mono text-sm text-muted-foreground ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
               $ {command}
             </div>
           )}
-          <div className={`text-sm ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
-            {statusMessage || '\u00A0'}
+          <div className={cn(
+            "text-sm flex items-center gap-2",
+            truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
+            isError ? 'text-destructive font-medium' : ''
+          )}>
+            {isError && <AlertTriangle className="w-4 h-4 animate-pulse" />}
+            {displayMessage || '\u00A0'}
           </div>
         </div>
       )}
       {showEmptyState ? (
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
           <Radio className="w-4 h-4 animate-pulse" />
-          <span>Starting...</span>
+          <span>Announced...</span>
         </div>
       ) : preExecutionStatus ? (
         <div className="flex items-center gap-1 text-sm text-muted-foreground">

@@ -228,7 +228,7 @@ class Scorecard:
         score_class = self.score_registry.get(score)
         if score_class is None:
             logging.error(f"Score with name '{score}' not found.")
-            return [plexus.scores.Score.Result(value="Error", error=f"Score with name '{score}' not found.")]
+            return [Score.Result(value="Error", error=f"Score with name '{score}' not found.")]
 
         score_configuration = self.score_registry.get_properties(score)
         if (score_class is not None):
@@ -247,7 +247,7 @@ class Scorecard:
 
             if score_instance is None:
                 logging.error(f"Score with name '{score}' not found in scorecard '{self.name}'.")
-                return [plexus.scores.Score.Result(value="Error", error=f"Score with name '{score}' not found in scorecard '{self.name}'.")]
+                return [Score.Result(value="Error", error=f"Score with name '{score}' not found in scorecard '{self.name}'.")]
 
             # Add required metadata for LangGraphScore
             if isinstance(score_instance, LangGraphScore):
@@ -262,13 +262,28 @@ class Scorecard:
                 })
 
             try:
+                # Convert results to Score.Result objects if needed
+                converted_results = []
+                for result in results:
+                    if isinstance(result, Score.Result):
+                        converted_results.append(result)
+                    elif isinstance(result, dict):
+                        converted_results.append(Score.Result(
+                            value=result['value'],
+                            metadata=result.get('metadata', {}),
+                            parameters=Score.Parameters(name=result['name']),
+                            error=result.get('error')
+                        ))
+                    else:
+                        raise TypeError(f"Expected Score.Result or dict but got {type(result)}")
+
                 # Let BatchProcessingPause propagate up
                 score_result = await score_instance.predict(
                     context=None,
-                    model_input=plexus.scores.Score.Input(
+                    model_input=Score.Input(
                         text=text,
                         metadata=metadata,
-                        results=results
+                        results=converted_results
                     )
                 )
 
@@ -331,7 +346,7 @@ class Scorecard:
         else:
             error_string = f"No score found for question: \"{score}\""
             logging.error(error_string)
-            return [plexus.scores.Score.Result(value="Error", error=error_string)]
+            return [Score.Result(value="Error", error=error_string)]
 
     async def score_entire_text(self, *, text: str, metadata: dict, modality: Optional[str] = None, subset_of_score_names: Optional[List[str]] = None) -> Dict[str, Score.Result]:
         if subset_of_score_names is None:
@@ -380,22 +395,50 @@ class Scorecard:
                     logging.info(f"Skipping score {score_name} as conditions are not met")
                     # Remove this score from remaining scores but don't add it to results
                     remaining_scores.discard(score_id)
-                    raise plexus.scores.Score.SkippedScoreException(
+                    raise Score.SkippedScoreException(
                         score_name=score_name,
                         reason="Dependency conditions not met"
                     )
                     
                 logging.info(f"About to predict score {score_name} at {pd.Timestamp.now()}")
-                score_result = await asyncio.wait_for(
-                    self.get_score_result(
-                        scorecard=self.scorecard_identifier,
-                        score=score_name,
+                # Create list of results in the format expected by get_score_result
+                current_results = []
+                for name, result in results_by_score_id.items():
+                    # Convert to Score.Result if it isn't already
+                    if not isinstance(result, Score.Result):
+                        if isinstance(result, dict):
+                            result = Score.Result(
+                                value=result['value'],
+                                metadata=result.get('metadata', {}),
+                                parameters=Score.Parameters(name=name),
+                                error=result.get('error')
+                            )
+                    current_results.append(result)
+
+                logging.info(f"Processing score: {score_name} with dependencies: {[r.parameters.name for r in current_results]}")
+                logging.info(f"Results available: {[r.value for r in current_results]}")
+
+                # Get the score class and create an instance
+                score_class = self.score_registry.get(score_name)
+                if not score_class:
+                    raise ValueError(f"No score class found for {score_name}")
+                    
+                score_configuration = self.score_registry.get_properties(score_name)
+                score_configuration.update({
+                    'scorecard_name': self.name,
+                    'score_name': score_name
+                })
+                score_instance = await score_class.create(**score_configuration)
+                if not score_instance:
+                    raise ValueError(f"Failed to create score instance for {score_name}")
+
+                score_result = await score_instance.predict(
+                    context=None,
+                    model_input=Score.Input(
                         text=text,
                         metadata=metadata,
-                        modality=modality,
-                        results=results
-                    ),
-                    timeout=3600  # Increase to 1 hour for debugging
+                        results=current_results
+                    )
                 )
                 
                 if score_result is None:
@@ -424,14 +467,14 @@ class Scorecard:
                            all(dep in results_by_score_id for dep in waiting_score_info['deps']):
                             await processing_queue.put(waiting_score_id)
 
-            except plexus.scores.Score.SkippedScoreException as e:
+            except Score.SkippedScoreException as e:
                 logging.info(f"Score {score_name} was skipped: {e.reason}")
                 return
 
             except BatchProcessingPause as e:
                 logging.info(f"Score {score_name} paused for batch processing (thread_id: {e.thread_id})")
                 # Store the paused state in results
-                results_by_score_id[score_id] = plexus.scores.Score.Result(
+                results_by_score_id[score_id] = Score.Result(
                     value="PAUSED",
                     error=str(e),
                     parameters=Score.Parameters(
