@@ -264,86 +264,150 @@ type ErrorHandler = (error: Error) => void;
 export function observeRecentTasks(limit: number = 12): Observable<{ items: ProcessedTask[], isSynced: boolean }> {
   console.warn('observeRecentTasks called with limit:', limit);
   return new Observable(subscriber => {
-    let isSynced = false
-    const client = getClient()
+    let isSynced = false;
+    let currentTasks: ProcessedTask[] = [];
+    const client = getClient();
 
-    // Subscribe to task updates
+    // Initial load
+    async function loadInitialTasks() {
+      try {
+        const tasks = await listRecentTasks(limit);
+        currentTasks = tasks;
+        subscriber.next({ items: currentTasks, isSynced: true });
+        isSynced = true;
+      } catch (error) {
+        console.error('Error in initial task load:', error);
+        subscriber.next({ items: [], isSynced: false });
+      }
+    }
+
+    // Handle task updates in-memory
+    async function handleTaskUpdate(updatedTask: AmplifyTask) {
+      try {
+        const processedTask = await processTask(updatedTask);
+        const taskIndex = currentTasks.findIndex(t => t.id === processedTask.id);
+        
+        if (taskIndex !== -1) {
+          // Merge the update with existing task data
+          const existingTask = currentTasks[taskIndex];
+          currentTasks[taskIndex] = {
+            ...existingTask,
+            ...processedTask,
+            // Preserve stages if the update doesn't include them
+            stages: processedTask.stages?.length ? processedTask.stages : existingTask.stages,
+            // Preserve scorecard and score data more carefully
+            scorecard: processedTask.scorecard?.name ? processedTask.scorecard : existingTask.scorecard,
+            score: processedTask.score?.name ? processedTask.score : existingTask.score,
+            // Also preserve the IDs if they're not in the update
+            scorecardId: processedTask.scorecardId || existingTask.scorecardId,
+            scoreId: processedTask.scoreId || existingTask.scoreId
+          };
+        } else if (currentTasks.length < limit) {
+          // Add new task if under limit
+          currentTasks.unshift(processedTask);
+        }
+        
+        // Sort tasks
+        currentTasks.sort((a, b) => {
+          if ((a.status === 'COMPLETED' || a.status === 'FAILED') && 
+              (b.status === 'COMPLETED' || b.status === 'FAILED')) {
+            return new Date(b.updatedAt || b.createdAt || '').getTime() - 
+                   new Date(a.updatedAt || a.createdAt || '').getTime();
+          }
+          return new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime();
+        });
+
+        // Trim to limit if needed
+        if (currentTasks.length > limit) {
+          currentTasks = currentTasks.slice(0, limit);
+        }
+
+        subscriber.next({ items: [...currentTasks], isSynced: true });
+      } catch (error) {
+        console.error('Error processing task update:', error);
+      }
+    }
+
+    // Handle stage updates in-memory
+    async function handleStageUpdate(updatedStage: any) {
+      try {
+        const taskId = updatedStage.taskId;
+        const taskIndex = currentTasks.findIndex(t => t.id === taskId);
+        
+        if (taskIndex !== -1) {
+          const task = currentTasks[taskIndex];
+          const stageIndex = task.stages?.findIndex(s => s.id === updatedStage.id);
+          
+          if (stageIndex !== undefined && stageIndex !== -1 && task.stages) {
+            // Update the specific stage
+            task.stages[stageIndex] = {
+              ...task.stages[stageIndex],
+              status: updatedStage.status ?? task.stages[stageIndex].status,
+              processedItems: updatedStage.processedItems ?? task.stages[stageIndex].processedItems,
+              totalItems: updatedStage.totalItems ?? task.stages[stageIndex].totalItems,
+              startedAt: updatedStage.startedAt ?? task.stages[stageIndex].startedAt,
+              completedAt: updatedStage.completedAt ?? task.stages[stageIndex].completedAt,
+              estimatedCompletionAt: updatedStage.estimatedCompletionAt ?? task.stages[stageIndex].estimatedCompletionAt,
+              statusMessage: updatedStage.statusMessage ?? task.stages[stageIndex].statusMessage
+            };
+            
+            // Update task status if needed
+            if (updatedStage.status === 'FAILED') {
+              task.status = 'FAILED';
+            } else if (updatedStage.status === 'COMPLETED' && 
+                      task.stages.every(s => s.status === 'COMPLETED')) {
+              task.status = 'COMPLETED';
+            }
+            
+            subscriber.next({ items: currentTasks, isSynced: true });
+          }
+        }
+      } catch (error) {
+        console.error('Error processing stage update:', error);
+      }
+    }
+
+    // Load initial data
+    loadInitialTasks();
+
+    // Set up subscriptions
     const taskSubscriptions = [
       client.models.Task.onCreate({}).subscribe({
         next: (data: any) => {
-          console.log('Task onCreate triggered:', {
-            taskId: data?.id,
-            hasStages: data?.stages?.items?.length > 0,
-            stages: data?.stages?.items
-          });
-          refreshTasks()
+          console.log('Task onCreate triggered:', { taskId: data?.id });
+          handleTaskUpdate(data);
         },
-        error: (error: Error) => {
-          console.error('Error in task onCreate subscription:', error)
-        }
+        error: (error: Error) => console.error('Error in task onCreate subscription:', error)
       }),
+      
       client.models.Task.onUpdate({}).subscribe({
         next: (data: any) => {
-          console.log('Task onUpdate triggered:', {
-            taskId: data?.id,
-            hasStages: data?.stages?.items?.length > 0,
-            stages: data?.stages?.items
-          });
-          refreshTasks()
+          console.log('Task onUpdate triggered:', { taskId: data?.id });
+          handleTaskUpdate(data);
         },
-        error: (error: Error) => {
-          console.error('Error in task onUpdate subscription:', error)
-        }
+        error: (error: Error) => console.error('Error in task onUpdate subscription:', error)
       })
-    ]
+    ];
 
     // Subscribe to stage updates
     const stageSubscription = (client.models.TaskStage as any).onUpdate({}).subscribe({
       next: (data: any) => {
-        console.log('Stage onUpdate triggered:', {
+        console.log('Stage onUpdate triggered:', { 
           stageId: data?.id,
-          taskId: data?.taskId,
-          name: data?.name,
-          status: data?.status,
-          processedItems: data?.processedItems,
-          totalItems: data?.totalItems
+          taskId: data?.taskId 
         });
-        refreshTasks()
+        handleStageUpdate(data);
       },
-      error: (error: Error) => {
-        console.error('Error in stage onUpdate subscription:', error)
-      }
-    })
-
-    // Initial load
-    console.log('Initiating initial task load');
-    refreshTasks()
-
-    async function refreshTasks() {
-      try {
-        console.log('refreshTasks called, fetching tasks');
-        const tasks = await listRecentTasks(limit)
-        console.log(`refreshTasks completed, got ${tasks.length} tasks:`, {
-          taskIds: tasks.map(task => task.id),
-          taskStatuses: tasks.map(task => task.status)
-        });
-        subscriber.next({ items: tasks, isSynced: true })
-        isSynced = true
-      } catch (error) {
-        console.error('Error refreshing tasks:', error)
-        if (!isSynced) {
-          subscriber.next({ items: [], isSynced: false })
-        }
-      }
-    }
+      error: (error: Error) => console.error('Error in stage onUpdate subscription:', error)
+    });
 
     // Cleanup function
     return () => {
       console.log('Cleaning up task subscriptions');
-      taskSubscriptions.forEach(sub => sub.unsubscribe())
-      stageSubscription.unsubscribe()
-    }
-  })
+      taskSubscriptions.forEach(sub => sub.unsubscribe());
+      stageSubscription.unsubscribe();
+    };
+  });
 }
 
 type TaskStageData = Schema['TaskStage']['type'];
