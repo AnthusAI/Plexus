@@ -203,6 +203,16 @@ const GridContent = React.memo(({ data, extra }: { data: EvaluationTaskData; ext
           .reverse()
           .find(stage => stage.statusMessage)?.statusMessage;
       }
+      // If there's a running stage, use its message
+      const runningStage = data.task.stages.items.find(stage => stage.status === 'RUNNING');
+      if (runningStage) {
+        return runningStage.statusMessage;
+      }
+      // If all stages are pending, use the first stage's message
+      if (data.task.stages.items.every(stage => stage.status === 'PENDING')) {
+        const firstStage = [...data.task.stages.items].sort((a, b) => a.order - b.order)[0];
+        return firstStage?.statusMessage;
+      }
       return data.task.stages.items.find(stage => stage.status === 'RUNNING')?.statusMessage;
     }
     

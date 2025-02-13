@@ -38,7 +38,9 @@ export function TaskDispatchButton({ config }: { config: TaskDispatchConfig }) {
       )
       
       if (task) {
-        toast.success("Task dispatched successfully")
+        toast.success("Task announced", {
+          description: <span className="font-mono text-sm truncate block">{command}</span>
+        })
       } else {
         toast.error("Failed to dispatch task")
       }

@@ -123,8 +123,8 @@ export default function ClientLayout({
             visibleToasts={6}
             className="toaster group"
             style={{
-              '--toast-background': 'var(--background)',
-              '--toast-color': 'var(--foreground)',
+              '--toast-background': 'var(--muted-foreground)',
+              '--toast-color': 'var(--background)',
               '--toast-border': 'var(--border)',
               '--toast-success': 'var(--true)',
               '--toast-error': 'var(--false)',
@@ -136,6 +136,7 @@ export default function ClientLayout({
                 color: 'var(--toast-color)',
                 border: '1px solid var(--toast-border)'
               },
+              className: "flex items-start gap-3",
               duration: 8000 // Default duration doubled from 4000ms to 8000ms
             }}
           />
