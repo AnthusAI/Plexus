@@ -192,20 +192,31 @@ const GridContent = React.memo(({ data, extra }: { data: EvaluationTaskData; ext
 
   // Get status message from current stage or last completed stage if task is done
   const statusMessage = (() => {
-    if (!data.task?.stages?.items?.length) return undefined
-    if (data.task.status === 'FAILED') {
-      // For failed tasks, find the failed stage's status message
-      const failedStage = data.task.stages.items.find(stage => stage.status === 'FAILED')
-      return failedStage?.statusMessage
+    // If we have task data with stages, use that
+    if (data.task?.stages?.items?.length) {
+      if (data.task.status === 'FAILED') {
+        const failedStage = data.task.stages.items.find(stage => stage.status === 'FAILED')
+        return failedStage?.statusMessage;
+      }
+      if (data.task.status === 'COMPLETED') {
+        return [...data.task.stages.items]
+          .reverse()
+          .find(stage => stage.statusMessage)?.statusMessage;
+      }
+      return data.task.stages.items.find(stage => stage.status === 'RUNNING')?.statusMessage;
     }
-    if (data.task.status === 'COMPLETED') {
-      // Find the last stage with a status message
-      return [...data.task.stages.items]
-        .reverse()
-        .find(stage => stage.statusMessage)?.statusMessage
+    
+    // Otherwise, construct a status message from the evaluation data
+    if (data.status === 'COMPLETED') {
+      return `Processed ${data.processedItems} of ${data.totalItems} items`;
     }
-    // Otherwise use current stage's message
-    return data.task.stages.items.find(stage => stage.status === 'RUNNING')?.statusMessage
+    if (data.status === 'FAILED') {
+      return data.errorMessage || 'Task failed';
+    }
+    if (data.status === 'RUNNING') {
+      return `Processing ${data.processedItems} of ${data.totalItems} items...`;
+    }
+    return undefined;
   })()
 
   return (
@@ -643,6 +654,7 @@ export default function EvaluationTask({
   ), [variant, onToggleFullWidth, onClose])
 
   const taskData = task.data?.task as TaskData | undefined;
+
   const taskWithDefaults = {
     id: task.id,
     type: (() => {

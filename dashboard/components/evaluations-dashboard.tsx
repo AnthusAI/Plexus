@@ -377,7 +377,7 @@ export default function EvaluationsDashboard() {
     // Convert task data to the expected format
     const taskData: TaskData | null = transformedTask ? {
       id: transformedTask.id,
-      accountId: transformedTask.id.split(':')[0], // Assuming the accountId is the first part of the id
+      accountId: transformedTask.id?.split(':')[0] || '',
       type: transformedTask.type,
       status: transformedTask.status,
       target: transformedTask.target,
@@ -577,7 +577,7 @@ export default function EvaluationsDashboard() {
                           const transformedTask = transformAmplifyTask(evaluation.task as unknown as AmplifyTask);
                           return {
                             id: transformedTask.id,
-                            accountId: transformedTask.id.split(':')[0], // Assuming the accountId is the first part of the id
+                            accountId: transformedTask.id?.split(':')[0] || '',
                             type: transformedTask.type,
                             status: transformedTask.status,
                             target: transformedTask.target,
