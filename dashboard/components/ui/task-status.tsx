@@ -79,7 +79,10 @@ export interface TaskStatusProps {
   isFullWidth?: boolean
   onToggleFullWidth?: () => void
   onClose?: () => void
+  extra?: boolean
 }
+
+const isGridVariant = (variant: TaskStatusProps['variant']): variant is 'grid' => variant === 'grid'
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) {
@@ -118,7 +121,8 @@ export function TaskStatus({
   variant,
   isFullWidth,
   onToggleFullWidth,
-  onClose
+  onClose,
+  extra = false
 }: TaskStatusProps) {
   console.log('TaskStatus received props:', {
     currentStageName,
@@ -356,9 +360,11 @@ export function TaskStatus({
       <div className="[&>*+*]:mt-2">
         <StyleTag />
         <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
-          <div className={`font-mono text-sm text-muted-foreground leading-6 ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
-            {command ? `$ ${command}` : '\u00A0'}
-          </div>
+          {(!extra || !isGridVariant(variant)) && (
+            <div className={`font-mono text-sm text-muted-foreground leading-6 ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
+              {command ? `$ ${command}` : '\u00A0'}
+            </div>
+          )}
           <div className={cn(
             "text-sm flex items-center gap-2 leading-6",
             truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
@@ -402,9 +408,11 @@ export function TaskStatus({
     <div className="[&>*+*]:mt-2">
       <StyleTag />
       <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
-        <div className={`font-mono text-sm text-muted-foreground leading-6 ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
-          {command ? `$ ${command}` : '\u00A0'}
-        </div>
+        {(!extra || !isGridVariant(variant)) && (
+          <div className={`font-mono text-sm text-muted-foreground leading-6 ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
+            {command ? `$ ${command}` : '\u00A0'}
+          </div>
+        )}
         <div className={cn(
           "text-sm flex items-center gap-2 leading-6",
           truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
