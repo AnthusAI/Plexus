@@ -115,7 +115,30 @@ export default function ClientLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <Toaster richColors position="top-right" />
+          <Toaster 
+            position="bottom-right"
+            theme="system"
+            closeButton
+            expand={true}
+            visibleToasts={6}
+            className="toaster group"
+            style={{
+              '--toast-background': 'var(--background)',
+              '--toast-color': 'var(--foreground)',
+              '--toast-border': 'var(--border)',
+              '--toast-success': 'var(--true)',
+              '--toast-error': 'var(--false)',
+              '--toast-info': 'var(--primary)'
+            } as React.CSSProperties}
+            toastOptions={{
+              style: {
+                background: 'var(--toast-background)',
+                color: 'var(--toast-color)',
+                border: '1px solid var(--toast-border)'
+              },
+              duration: 8000 // Default duration doubled from 4000ms to 8000ms
+            }}
+          />
           <AuthWrapper>{children}</AuthWrapper>
         </ThemeProvider>
       </SidebarProvider>
