@@ -923,7 +923,7 @@ def accuracy(
                                 eval_details = result['getEvaluation']
                                 logging.info(f"Final evaluation state:\n{json.dumps(eval_details, indent=2)}")
 
-                        tracker.current_stage.status_message = "Evaluation Complete"
+                        tracker.current_stage.status_message = "Evaluation completed."
                         tracker.update(current_items=number_of_samples)
                         tracker.complete()
 
