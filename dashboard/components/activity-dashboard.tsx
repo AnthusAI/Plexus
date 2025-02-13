@@ -41,14 +41,15 @@ function transformTaskToActivity(task: ProcessedTask) {
     throw new Error('Invalid task: task or task.id is null')
   }
 
-  console.warn('transformTaskToActivity input:', {
-    taskId: task.id,
-    type: task.type,
-    scorecard: task.scorecard,
-    score: task.score,
-    scorecardId: task.scorecardId,
-    scoreId: task.scoreId,
-    rawTask: task
+  console.log('Raw task data:', {
+    id: task.id,
+    status: task.status,
+    stages: task.stages?.map(s => ({
+      name: s.name,
+      status: s.status,
+      processedItems: s.processedItems,
+      totalItems: s.totalItems
+    }))
   });
 
   // Parse metadata for task info - ensure we have a default empty object
@@ -72,15 +73,36 @@ function transformTaskToActivity(task: ProcessedTask) {
         ? stage.startedAt ?? undefined 
         : undefined
 
+      // Only set processedItems if the stage has actually started processing
+      const processedItems = (status === 'RUNNING' || status === 'COMPLETED')
+        ? stage.processedItems ?? 0  // Default to 0 instead of undefined
+        : 0
+
+      // Only set totalItems if we have a valid value
+      const totalItems = stage.totalItems ?? undefined
+
+      console.log('Transforming stage:', {
+        name: stage.name,
+        originalStatus: stage.status,
+        mappedStatus: status,
+        originalProcessedItems: stage.processedItems,
+        mappedProcessedItems: processedItems,
+        originalTotalItems: stage.totalItems,
+        mappedTotalItems: totalItems
+      });
+
       return {
         key: stage.name,
         label: stage.name,
-        color: stage.name.toLowerCase() === 'processing' ? 'bg-secondary' : 'bg-primary',
+        color: status === 'COMPLETED' ? 'bg-primary' :
+               status === 'RUNNING' ? 'bg-secondary' :
+               status === 'FAILED' ? 'bg-false' :
+               'bg-neutral',
         name: stage.name,
         order: stage.order,
         status,
-        processedItems: stage.processedItems ?? undefined,
-        totalItems: stage.totalItems ?? undefined,
+        processedItems,
+        totalItems,
         startedAt,
         completedAt: stage.completedAt ?? undefined,
         estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
@@ -88,65 +110,38 @@ function transformTaskToActivity(task: ProcessedTask) {
       }
     })
 
-  // Get current stage info - highest order non-completed stage, or last stage if all completed
-  const currentStage = stages.length > 0 ? 
-    stages.reduce((current: TaskStageConfig | null, stage: TaskStageConfig) => {
-      // If we haven't found a stage yet, use this one
-      if (!current) return stage
-      
-      // For completed tasks, use the last stage
-      if (task.status === 'COMPLETED') {
-        return stage.order > (current.order || 0) ? stage : current
-      }
-      
-      // If this stage is RUNNING, it should be the current stage
-      if (stage.status === 'RUNNING') return stage
-      
-      // If current stage is RUNNING, keep it
-      if (current.status === 'RUNNING') return current
-      
-      // If neither stage is RUNNING, prefer the earliest PENDING stage
-      if (stage.status === 'PENDING' && current.status === 'PENDING') {
-        return stage.order < current.order ? stage : current
-      }
-      
-      // If one stage is PENDING and the other isn't, prefer the PENDING stage
-      if (stage.status === 'PENDING') return stage
-      if (current.status === 'PENDING') return current
-      
-      // For completed tasks, use the last stage
-      return stage.order > (current.order || 0) ? stage : current
-    }, null) : null
+  // Get current stage info
+  const currentStage = stages.find(s => s.status === 'RUNNING') || stages[stages.length - 1];
+  
+  console.log('Transformed task data:', {
+    id: task.id,
+    stages: stages.map(s => ({
+      name: s.name,
+      status: s.status,
+      processedItems: s.processedItems,
+      totalItems: s.totalItems
+    })),
+    currentStage: currentStage ? {
+      name: currentStage.name,
+      status: currentStage.status,
+      processedItems: currentStage.processedItems,
+      totalItems: currentStage.totalItems
+    } : null
+  });
 
   // Ensure we have a valid timestamp for the time field
   const timeStr = task.createdAt || new Date().toISOString()
 
-  // Get the appropriate status message - keep both messages and let TaskStatus handle display logic
-  const statusMessage = currentStage?.statusMessage ?? undefined
-
-  // Get scorecard and score names, ensuring we handle undefined cases
-  const scorecardName = task.scorecard?.name ?? '-'
-  const scoreName = task.score?.name ?? '-'
-
-  console.warn('Using scorecard and score:', {
-    scorecardId: task.scorecardId,
-    scoreId: task.scoreId,
-    scorecard: task.scorecard,
-    score: task.score,
-    scorecardName,
-    scoreName
-  });
-
   const result: EvaluationTaskProps['task'] = {
     id: task.id,
     type: String((metadata as any)?.type || task.type),
-    scorecard: scorecardName,
-    score: scoreName,
+    scorecard: task.scorecard?.name ?? '-',
+    score: task.score?.name ?? '-',
     time: timeStr,
     description: task.command,
     data: {
       id: task.id,
-      title: `${scorecardName} - ${scoreName}`,
+      title: `${task.scorecard?.name ?? '-'} - ${task.score?.name ?? '-'}`,
       command: task.command,
       accuracy: (metadata as any)?.accuracy ?? null,
       metrics: (metadata as any)?.metrics ?? [],
@@ -174,7 +169,7 @@ function transformTaskToActivity(task: ProcessedTask) {
         dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
         celeryTaskId: task.celeryTaskId,
         workerNodeId: task.workerNodeId,
-        stages: { items: task.stages }
+        stages: { items: stages }
       }
     },
     stages,
@@ -185,20 +180,24 @@ function transformTaskToActivity(task: ProcessedTask) {
     estimatedCompletionAt: task.estimatedCompletionAt ?? undefined,
     completedAt: task.completedAt ?? undefined,
     status: task.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-    statusMessage: statusMessage,
+    statusMessage: currentStage?.statusMessage,
     errorMessage: task.status === 'FAILED' && task.errorMessage ? task.errorMessage : undefined,
     dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
     celeryTaskId: task.celeryTaskId,
     workerNodeId: task.workerNodeId
   }
 
-  console.warn('transformTaskToActivity output:', {
-    taskId: result.id,
-    type: result.type,
-    scorecard: result.scorecard,
-    score: result.score,
-    title: result.data.title,
-    rawResult: result
+  console.log('Final transformed result:', {
+    id: result.id,
+    status: result.status,
+    processedItems: result.processedItems,
+    totalItems: result.totalItems,
+    stages: result.stages?.map(s => ({
+      name: s.name,
+      status: s.status,
+      processedItems: s.processedItems,
+      totalItems: s.totalItems
+    }))
   });
 
   return result
@@ -254,6 +253,27 @@ export default function ActivityDashboard() {
     }
 
     loadInitialData();
+
+    // Set up real-time subscription
+    console.log('Setting up real-time task subscription');
+    const subscription = observeRecentTasks(12).subscribe({
+      next: ({ items, isSynced }) => {
+        console.log('Received task update:', {
+          count: items.length,
+          isSynced,
+          taskIds: items.map(task => task.id)
+        });
+        setRecentTasks(items);
+      },
+      error: (error) => {
+        console.error('Task subscription error:', error);
+      }
+    });
+
+    return () => {
+      console.log('Cleaning up task subscription');
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Handle task updates
@@ -263,19 +283,18 @@ export default function ActivityDashboard() {
       taskIds: recentTasks.map(task => task.id),
       taskDetails: recentTasks.map(task => ({
         id: task.id,
-        scorecard: task.scorecard,
-        score: task.score
+        status: task.status,
+        stages: task.stages?.map(s => ({
+          name: s.name,
+          status: s.status,
+          processedItems: s.processedItems,
+          totalItems: s.totalItems
+        }))
       }))
     });
-    const transformed = recentTasks.map(transformTaskToActivity)
-    console.debug('After transformation:', {
-      count: transformed.length,
-      taskDetails: transformed.map(task => ({
-        id: task.id,
-        scorecard: task.scorecard,
-        score: task.score
-      }))
-    });
+
+    const transformed = recentTasks.map(transformTaskToActivity);
+    
     // Sort tasks: use createdAt for in-progress tasks, updatedAt for completed ones
     const sorted = [...transformed].sort((a, b) => {
       // For completed/failed tasks, sort by updatedAt
@@ -285,15 +304,49 @@ export default function ActivityDashboard() {
       }
       // For in-progress tasks or mixing in-progress with completed, sort by createdAt
       return new Date(b.time).getTime() - new Date(a.time).getTime()
-    })
+    });
+
     const filtered = sorted.filter(task => {
       if (!selectedScorecard && !selectedScore) return true;
       if (selectedScorecard && task.scorecard !== selectedScorecard) return false;
       if (selectedScore && task.score !== selectedScore) return false;
       return true;
-    })
-    setDisplayedTasks(filtered)
-  }, [recentTasks, selectedScorecard, selectedScore])
+    });
+
+    // Compare with previous state to avoid unnecessary updates
+    setDisplayedTasks(prevTasks => {
+      // If lengths are different, definitely need to update
+      if (!prevTasks || prevTasks.length !== filtered.length) {
+        return filtered;
+      }
+
+      // Check if any task's data has meaningfully changed
+      const hasChanges = filtered.some((task, index) => {
+        const prevTask = prevTasks[index];
+        if (!prevTask || prevTask.id !== task.id) return true;
+
+        // Check for changes in progress-related fields
+        const prevStage = prevTask.stages?.find(s => s.status === 'RUNNING');
+        const currentStage = task.stages?.find(s => s.status === 'RUNNING');
+
+        if (prevStage && currentStage) {
+          return (
+            prevStage.processedItems !== currentStage.processedItems ||
+            prevStage.totalItems !== currentStage.totalItems ||
+            prevStage.status !== currentStage.status
+          );
+        }
+
+        return (
+          prevTask.status !== task.status ||
+          prevTask.processedItems !== task.processedItems ||
+          prevTask.totalItems !== task.totalItems
+        );
+      });
+
+      return hasChanges ? filtered : prevTasks;
+    });
+  }, [recentTasks, selectedScorecard, selectedScore]);
 
   const handleDragStart = (e: React.MouseEvent) => {
     e.preventDefault()

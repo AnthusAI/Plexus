@@ -262,7 +262,7 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
 type ErrorHandler = (error: Error) => void;
 
 export function observeRecentTasks(limit: number = 12): Observable<{ items: ProcessedTask[], isSynced: boolean }> {
-  console.warn('observeRecentTasks called with limit:', limit);  // Changed to warn to make it more visible
+  console.warn('observeRecentTasks called with limit:', limit);
   return new Observable(subscriber => {
     let isSynced = false
     const client = getClient()
@@ -270,8 +270,12 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
     // Subscribe to task updates
     const taskSubscriptions = [
       client.models.Task.onCreate({}).subscribe({
-        next: () => {
-          console.debug('Task onCreate triggered, refreshing tasks');
+        next: (data: any) => {
+          console.log('Task onCreate triggered:', {
+            taskId: data?.id,
+            hasStages: data?.stages?.items?.length > 0,
+            stages: data?.stages?.items
+          });
           refreshTasks()
         },
         error: (error: Error) => {
@@ -279,8 +283,12 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
         }
       }),
       client.models.Task.onUpdate({}).subscribe({
-        next: () => {
-          console.debug('Task onUpdate triggered, refreshing tasks');
+        next: (data: any) => {
+          console.log('Task onUpdate triggered:', {
+            taskId: data?.id,
+            hasStages: data?.stages?.items?.length > 0,
+            stages: data?.stages?.items
+          });
           refreshTasks()
         },
         error: (error: Error) => {
@@ -291,8 +299,15 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
 
     // Subscribe to stage updates
     const stageSubscription = (client.models.TaskStage as any).onUpdate({}).subscribe({
-      next: () => {
-        console.debug('Stage onUpdate triggered, refreshing tasks');
+      next: (data: any) => {
+        console.log('Stage onUpdate triggered:', {
+          stageId: data?.id,
+          taskId: data?.taskId,
+          name: data?.name,
+          status: data?.status,
+          processedItems: data?.processedItems,
+          totalItems: data?.totalItems
+        });
         refreshTasks()
       },
       error: (error: Error) => {
@@ -301,14 +316,17 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
     })
 
     // Initial load
-    console.debug('Initiating initial task load');
+    console.log('Initiating initial task load');
     refreshTasks()
 
     async function refreshTasks() {
       try {
-        console.debug('refreshTasks called, fetching tasks');
+        console.log('refreshTasks called, fetching tasks');
         const tasks = await listRecentTasks(limit)
-        console.debug(`refreshTasks completed, got ${tasks.length} tasks`);
+        console.log(`refreshTasks completed, got ${tasks.length} tasks:`, {
+          taskIds: tasks.map(task => task.id),
+          taskStatuses: tasks.map(task => task.status)
+        });
         subscriber.next({ items: tasks, isSynced: true })
         isSynced = true
       } catch (error) {
@@ -321,6 +339,7 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
 
     // Cleanup function
     return () => {
+      console.log('Cleaning up task subscriptions');
       taskSubscriptions.forEach(sub => sub.unsubscribe())
       stageSubscription.unsubscribe()
     }
@@ -507,36 +526,6 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
     const accountId = accountResponse.data[0].id;
     console.debug('Fetching tasks for account:', accountId);
 
-    // First try to get a single task to verify the relationships
-    const testResponse = await currentClient.graphql({
-      query: `
-        query GetTask($id: ID!) {
-          getTask(id: $id) {
-            id
-            accountId
-            type
-            status
-            scorecardId
-            scoreId
-            scorecard {
-              id
-              name
-            }
-            score {
-              id
-              name
-            }
-          }
-        }
-      `,
-      variables: {
-        id: "8da587dd-3030-49a3-a4fd-90630e61ed6c"  // Use the task ID you mentioned
-      },
-      authMode: 'userPool'
-    });
-
-    console.warn('Test task response:', JSON.stringify(testResponse, null, 2));
-
     const response = await currentClient.graphql({
       query: `
         query ListTaskByAccountIdAndUpdatedAt(
@@ -580,6 +569,20 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
               score {
                 id
                 name
+              }
+              stages {
+                items {
+                  id
+                  name
+                  order
+                  status
+                  processedItems
+                  totalItems
+                  startedAt
+                  completedAt
+                  estimatedCompletionAt
+                  statusMessage
+                }
               }
             }
             nextToken

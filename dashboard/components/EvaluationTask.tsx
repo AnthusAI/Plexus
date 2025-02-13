@@ -206,9 +206,11 @@ const GridContent = React.memo(({ data, extra }: { data: EvaluationTaskData; ext
         stageConfigs={data.task?.stages?.items?.map(stage => ({
           key: stage.name,
           label: stage.name,
-          color: stage.status === 'COMPLETED' ? 'bg-primary' :
-                stage.status === 'FAILED' ? 'bg-false' :
-                'bg-neutral',
+          color: stage.name === 'Processing' ? 'bg-secondary' : (
+            stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
+            stage.status === 'FAILED' ? 'bg-false' :
+            'bg-neutral'
+          ),
           name: stage.name,
           order: stage.order,
           status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
@@ -222,9 +224,11 @@ const GridContent = React.memo(({ data, extra }: { data: EvaluationTaskData; ext
         stages={data.task?.stages?.items?.map(stage => ({
           key: stage.name,
           label: stage.name,
-          color: stage.status === 'COMPLETED' ? 'bg-primary' :
-                stage.status === 'FAILED' ? 'bg-false' :
-                'bg-neutral',
+          color: stage.name === 'Processing' ? 'bg-secondary' : (
+            stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
+            stage.status === 'FAILED' ? 'bg-false' :
+            'bg-neutral'
+          ),
           name: stage.name,
           order: stage.order,
           status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
@@ -439,9 +443,11 @@ const DetailContent = React.memo(({
                     stageConfigs={data.task?.stages?.items?.map(stage => ({
                       key: stage.name,
                       label: stage.name,
-                      color: stage.status === 'COMPLETED' ? 'bg-primary' :
-                            stage.status === 'FAILED' ? 'bg-false' :
-                            'bg-neutral',
+                      color: stage.name === 'Processing' ? 'bg-secondary' : (
+                        stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
+                        stage.status === 'FAILED' ? 'bg-false' :
+                        'bg-neutral'
+                      ),
                       name: stage.name,
                       order: stage.order,
                       status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
@@ -456,9 +462,11 @@ const DetailContent = React.memo(({
                     stages={data.task?.stages?.items?.map(stage => ({
                       key: stage.name,
                       label: stage.name,
-                      color: stage.status === 'COMPLETED' ? 'bg-primary' :
-                            stage.status === 'FAILED' ? 'bg-false' :
-                            'bg-neutral',
+                      color: stage.name === 'Processing' ? 'bg-secondary' : (
+                        stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
+                        stage.status === 'FAILED' ? 'bg-false' :
+                        'bg-neutral'
+                      ),
                       name: stage.name,
                       order: stage.order,
                       status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
@@ -646,9 +654,11 @@ export default function EvaluationTask({
     stages: taskData?.stages?.items?.map(stage => ({
       key: stage.name,
       label: stage.name,
-      color: stage.status === 'COMPLETED' ? 'bg-primary' :
-            stage.status === 'FAILED' ? 'bg-false' :
-            'bg-neutral',
+      color: stage.name === 'Processing' ? 'bg-secondary' : (
+        stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
+        stage.status === 'FAILED' ? 'bg-false' :
+        'bg-neutral'
+      ),
       name: stage.name,
       order: stage.order,
       status: mapTaskStatus(stage.status),
@@ -689,9 +699,11 @@ export default function EvaluationTask({
     const taskStages = data.task?.stages?.items?.map(stage => ({
       key: stage.name,
       label: stage.name,
-      color: stage.status === 'COMPLETED' ? 'bg-primary' :
-            stage.status === 'FAILED' ? 'bg-false' :
-            'bg-neutral',
+      color: stage.name === 'Processing' ? 'bg-secondary' : (
+        stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
+        stage.status === 'FAILED' ? 'bg-false' :
+        'bg-neutral'
+      ),
       name: stage.name,
       order: stage.order,
       status: mapTaskStatus(stage.status),
