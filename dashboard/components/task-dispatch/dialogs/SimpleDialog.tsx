@@ -30,7 +30,6 @@ export function SimpleDialog({ action, isOpen, onClose, onDispatch }: TaskDialog
     if (typeof action.command === 'string') {
       onDispatch(action.command, action.target)
       onClose()
-      toast.success(`${action.name} action completed successfully`)
       return
     }
 
@@ -51,7 +50,6 @@ export function SimpleDialog({ action, isOpen, onClose, onDispatch }: TaskDialog
     const generatedCommand = generator.generate()
     onDispatch(generatedCommand, action.target)
     onClose()
-    toast.success(`${action.name} action completed successfully`)
   }
 
   return (
