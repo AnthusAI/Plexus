@@ -133,7 +133,7 @@ def test_get_stages():
     )
 
     mock_client.execute.return_value = {
-        'listTaskStages': {
+        'listTaskStageByTaskId': {
             'items': [
                 {
                     'id': 'test-stage-1',
@@ -160,8 +160,8 @@ def test_get_stages():
 
     mock_client.execute.assert_called_once()
     query = mock_client.execute.call_args[0][0]
-    assert 'query ListTaskStages($taskId: String!)' in query
-    assert 'listTaskStages(filter: { taskId: { eq: $taskId } })' in query
+    assert 'query ListTaskStageByTaskId($taskId: String!, $limit: Int, $nextToken: String)' in query
+    assert 'listTaskStageByTaskId(taskId: $taskId, limit: $limit, nextToken: $nextToken)' in query
 
 def test_start_processing():
     mock_client = MagicMock()
@@ -251,32 +251,84 @@ def test_fail_processing():
         client=mock_client
     )
 
-    mock_client.execute.side_effect = [
-        {
-            'getTask': {
-                'accountId': 'test-account',
-                'type': 'TEST',
-                'status': 'RUNNING',
-                'target': 'test/target',
-                'command': 'test command'
+    def mock_execute(query, variables):
+        if 'query GetTask($id: ID!)' in query:
+            return {
+                'getTask': {
+                    'id': 'test-task-id',
+                    'accountId': 'test-account',
+                    'type': 'TEST',
+                    'status': 'RUNNING',
+                    'target': 'test/target',
+                    'command': 'test command'
+                }
             }
-        },
-        {
-            'updateTask': {
-                'id': 'test-task-id',
-                'accountId': 'test-account',
-                'type': 'TEST',
-                'status': 'FAILED',
-                'target': 'test/target',
-                'command': 'test command',
-                'errorMessage': 'Test error',
-                'errorDetails': {'details': 'test'}
+        elif 'query ListTaskStageByTaskId' in query:
+            return {
+                'listTaskStageByTaskId': {
+                    'items': [
+                        {
+                            'id': 'test-stage-1',
+                            'taskId': 'test-task-id',
+                            'name': 'Running',
+                            'order': 1,
+                            'status': 'RUNNING',
+                            'statusMessage': None,
+                            'startedAt': None,
+                            'completedAt': None,
+                            'estimatedCompletionAt': None,
+                            'processedItems': 0,
+                            'totalItems': 1
+                        }
+                    ]
+                }
             }
-        }
-    ]
+        elif 'mutation UpdateTaskStage' in query:
+            return {
+                'updateTaskStage': {
+                    'id': 'test-stage-1',
+                    'taskId': 'test-task-id',
+                    'name': 'Running',
+                    'order': 1,
+                    'status': 'FAILED',
+                    'statusMessage': 'Error: Test error',
+                    'startedAt': None,
+                    'completedAt': '2024-01-01T00:00:00Z',
+                    'estimatedCompletionAt': None,
+                    'processedItems': 0,
+                    'totalItems': 1
+                }
+            }
+        elif 'mutation UpdateTask' in query:
+            return {
+                'updateTask': {
+                    'id': 'test-task-id',
+                    'accountId': 'test-account',
+                    'type': 'TEST',
+                    'status': 'FAILED',
+                    'target': 'test/target',
+                    'command': 'test command',
+                    'errorMessage': 'Test error',
+                    'errorDetails': {'details': 'test'}
+                }
+            }
+        elif 'query GetTaskStage($id: ID!)' in query:
+            if variables['id'] == 'test-stage-1':
+                return {
+                    'getTaskStage': {
+                        'id': 'test-stage-1',
+                        'taskId': 'test-task-id',
+                        'name': 'Running',
+                        'order': 1,
+                        'status': variables.get('status', 'RUNNING')
+                    }
+                }
+            return {}
+        return {}
 
+    mock_client.execute = MagicMock(side_effect=mock_execute)
     mock_task.fail_processing('Test error', {'details': 'test'})
-    assert mock_client.execute.call_count == 2
+    assert mock_client.execute.call_count == 6
 
 def test_update_progress():
     mock_client = MagicMock()
@@ -305,30 +357,28 @@ def test_update_progress():
         }
     }
 
-    mock_client.execute.side_effect = [
-        {
-            'getTask': {
-                'accountId': 'test-account',
-                'type': 'TEST',
-                'status': 'RUNNING',
-                'target': 'test/target',
-                'command': 'test command'
+    def mock_execute(query, variables):
+        if 'query GetTask($id: ID!)' in query:
+            return {
+                'getTask': {
+                    'id': 'test-task-id',
+                    'accountId': 'test-account',
+                    'type': 'TEST',
+                    'status': 'RUNNING',
+                    'target': 'test/target',
+                    'command': 'test command'
+                }
             }
-        },
-        {
-            'updateTask': {
-                'id': 'test-task-id',
-                'accountId': 'test-account',
-                'type': 'TEST',
-                'status': 'RUNNING',
-                'target': 'test/target',
-                'command': 'test command'
+        elif 'query ListTaskStageByTaskId' in query:
+            return {
+                'listTaskStageByTaskId': {
+                    'items': []
+                }
             }
-        },
-        {
-            'listTaskStages': {
-                'items': [
-                    {
+        elif 'mutation CreateTaskStage' in query:
+            if variables['input']['name'] == 'Setup':
+                return {
+                    'createTaskStage': {
                         'id': 'test-stage-1',
                         'taskId': mock_task.id,
                         'name': 'Setup',
@@ -336,9 +386,15 @@ def test_update_progress():
                         'status': 'COMPLETED',
                         'statusMessage': 'Setup complete',
                         'processedItems': 1,
-                        'totalItems': 1
-                    },
-                    {
+                        'totalItems': 1,
+                        'startedAt': None,
+                        'completedAt': None,
+                        'estimatedCompletionAt': None
+                    }
+                }
+            else:
+                return {
+                    'createTaskStage': {
                         'id': 'test-stage-2',
                         'taskId': mock_task.id,
                         'name': 'Running',
@@ -346,56 +402,92 @@ def test_update_progress():
                         'status': 'RUNNING',
                         'statusMessage': 'Processing...',
                         'processedItems': 50,
-                        'totalItems': 100
+                        'totalItems': 100,
+                        'startedAt': None,
+                        'completedAt': None,
+                        'estimatedCompletionAt': None
                     }
-                ]
-            }
-        },
-        # Get current state for Setup stage
-        {
-            'getTaskStage': {
-                'taskId': mock_task.id,
-                'name': 'Setup',
-                'order': 1,
-                'status': 'COMPLETED'
-            }
-        },
-        # Update Setup stage
-        {
-            'updateTaskStage': {
-                'id': 'test-stage-1',
-                'taskId': mock_task.id,
-                'name': 'Setup',
-                'order': 1,
-                'status': 'COMPLETED',
-                'statusMessage': 'Setup complete',
-                'processedItems': 1,
-                'totalItems': 1
-            }
-        },
-        # Get current state for Running stage
-        {
-            'getTaskStage': {
-                'taskId': mock_task.id,
-                'name': 'Running',
-                'order': 2,
-                'status': 'RUNNING'
-            }
-        },
-        # Update Running stage
-        {
-            'updateTaskStage': {
-                'id': 'test-stage-2',
-                'taskId': mock_task.id,
-                'name': 'Running',
-                'order': 2,
-                'status': 'RUNNING',
-                'statusMessage': 'Processing...',
-                'processedItems': 50,
-                'totalItems': 100
-            }
-        }
-    ]
+                }
+        elif 'mutation UpdateTaskStage' in query:
+            if variables['input']['name'] == 'Setup':
+                return {
+                    'updateTaskStage': {
+                        'id': 'test-stage-1',
+                        'taskId': mock_task.id,
+                        'name': 'Setup',
+                        'order': 1,
+                        'status': 'COMPLETED',
+                        'statusMessage': 'Setup complete',
+                        'processedItems': 1,
+                        'totalItems': 1,
+                        'startedAt': None,
+                        'completedAt': None,
+                        'estimatedCompletionAt': None
+                    }
+                }
+            else:
+                return {
+                    'updateTaskStage': {
+                        'id': 'test-stage-2',
+                        'taskId': mock_task.id,
+                        'name': 'Running',
+                        'order': 2,
+                        'status': 'RUNNING',
+                        'statusMessage': 'Processing...',
+                        'processedItems': 50,
+                        'totalItems': 100,
+                        'startedAt': None,
+                        'completedAt': None,
+                        'estimatedCompletionAt': None
+                    }
+                }
+        elif 'mutation UpdateTask' in query:
+            if 'currentStageId' in variables['input']:
+                return {
+                    'updateTask': {
+                        'id': 'test-task-id',
+                        'accountId': 'test-account',
+                        'type': 'TEST',
+                        'status': 'RUNNING',
+                        'target': 'test/target',
+                        'command': 'test command',
+                        'currentStageId': variables['input']['currentStageId']
+                    }
+                }
+            else:
+                return {
+                    'updateTask': {
+                        'id': 'test-task-id',
+                        'accountId': 'test-account',
+                        'type': 'TEST',
+                        'status': 'RUNNING',
+                        'target': 'test/target',
+                        'command': 'test command'
+                    }
+                }
+        elif 'query GetTaskStage($id: ID!)' in query:
+            if variables['id'] == 'test-stage-1':
+                return {
+                    'getTaskStage': {
+                        'taskId': 'test-task-id',
+                        'name': 'Setup',
+                        'order': 1,
+                        'status': 'COMPLETED'
+                    }
+                }
+            elif variables['id'] == 'test-stage-2':
+                return {
+                    'getTaskStage': {
+                        'taskId': 'test-task-id',
+                        'name': 'Running',
+                        'order': 2,
+                        'status': 'RUNNING'
+                    }
+                }
+            return {}
+        return {}
+
+    mock_client.execute = MagicMock(side_effect=mock_execute)
 
     stages = mock_task.update_progress(
         50,  # current
@@ -409,4 +501,4 @@ def test_update_progress():
     assert stages[0].status == 'COMPLETED'
     assert stages[1].name == 'Running'
     assert stages[1].status == 'RUNNING'
-    assert mock_client.execute.call_count == 7  # Initial task update + list stages + 2 stages * 2 calls each 
+    assert mock_client.execute.call_count == 11
