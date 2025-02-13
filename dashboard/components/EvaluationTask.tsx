@@ -185,49 +185,60 @@ const mapTaskStatus = (status: string | undefined | null): 'PENDING' | 'RUNNING'
   }
 }
 
+const getStatusMessage = (data: EvaluationTaskData) => {
+  // If we have task data with stages, use that
+  if (data.task?.stages?.items?.length) {
+    // If task failed, show the failed stage's message
+    if (data.task.status === 'FAILED') {
+      const failedStage = data.task.stages.items.find(stage => stage.status === 'FAILED')
+      return failedStage?.statusMessage;
+    }
+
+    // If task completed, show the last stage's message
+    if (data.task.status === 'COMPLETED') {
+      return [...data.task.stages.items]
+        .reverse()
+        .find(stage => stage.statusMessage)?.statusMessage;
+    }
+
+    // If there's a running stage, use its message
+    const runningStage = data.task.stages.items.find(stage => stage.status === 'RUNNING');
+    if (runningStage?.statusMessage) {
+      return runningStage.statusMessage;
+    }
+
+    // If no running stage message, find the last non-pending stage with a message
+    const lastActiveStage = [...data.task.stages.items]
+      .sort((a, b) => b.order - a.order)
+      .find(stage => stage.status !== 'PENDING' && stage.statusMessage);
+    if (lastActiveStage?.statusMessage) {
+      return lastActiveStage.statusMessage;
+    }
+
+    // If all stages are pending, use the first stage's message
+    if (data.task.stages.items.every(stage => stage.status === 'PENDING')) {
+      const firstStage = [...data.task.stages.items].sort((a, b) => a.order - b.order)[0];
+      return firstStage?.statusMessage;
+    }
+  }
+  
+  // Otherwise, construct a status message from the evaluation data
+  if (data.status === 'COMPLETED') {
+    return `Processed ${data.processedItems} of ${data.totalItems} items`;
+  }
+  if (data.status === 'FAILED') {
+    return data.errorMessage || 'Task failed';
+  }
+  if (data.status === 'RUNNING') {
+    return `Processing ${data.processedItems} of ${data.totalItems} items...`;
+  }
+  return undefined;
+}
+
 const GridContent = React.memo(({ data, extra }: { data: EvaluationTaskData; extra?: boolean }) => {
   const progress = data.processedItems && data.totalItems ? 
     Math.round((data.processedItems / data.totalItems) * 100) : 0
   const accuracy = data.accuracy ?? 0
-
-  // Get status message from current stage or last completed stage if task is done
-  const statusMessage = (() => {
-    // If we have task data with stages, use that
-    if (data.task?.stages?.items?.length) {
-      if (data.task.status === 'FAILED') {
-        const failedStage = data.task.stages.items.find(stage => stage.status === 'FAILED')
-        return failedStage?.statusMessage;
-      }
-      if (data.task.status === 'COMPLETED') {
-        return [...data.task.stages.items]
-          .reverse()
-          .find(stage => stage.statusMessage)?.statusMessage;
-      }
-      // If there's a running stage, use its message
-      const runningStage = data.task.stages.items.find(stage => stage.status === 'RUNNING');
-      if (runningStage) {
-        return runningStage.statusMessage;
-      }
-      // If all stages are pending, use the first stage's message
-      if (data.task.stages.items.every(stage => stage.status === 'PENDING')) {
-        const firstStage = [...data.task.stages.items].sort((a, b) => a.order - b.order)[0];
-        return firstStage?.statusMessage;
-      }
-      return data.task.stages.items.find(stage => stage.status === 'RUNNING')?.statusMessage;
-    }
-    
-    // Otherwise, construct a status message from the evaluation data
-    if (data.status === 'COMPLETED') {
-      return `Processed ${data.processedItems} of ${data.totalItems} items`;
-    }
-    if (data.status === 'FAILED') {
-      return data.errorMessage || 'Task failed';
-    }
-    if (data.status === 'RUNNING') {
-      return `Processing ${data.processedItems} of ${data.totalItems} items...`;
-    }
-    return undefined;
-  })()
 
   return (
     <div className="space-y-2">
@@ -277,7 +288,7 @@ const GridContent = React.memo(({ data, extra }: { data: EvaluationTaskData; ext
         estimatedCompletionAt={data.task?.estimatedCompletionAt || undefined}
         errorMessage={data.task?.errorMessage || data.errorMessage || undefined}
         command={data.task?.command || data.command || undefined}
-        statusMessage={data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage}
+        statusMessage={getStatusMessage(data)}
         variant="grid"
         extra={extra}
       />
@@ -519,7 +530,7 @@ const DetailContent = React.memo(({
                     estimatedCompletionAt={data.task?.estimatedCompletionAt || undefined}
                     errorMessage={data.task?.errorMessage || data.errorMessage || undefined}
                     command={data.task?.command || data.command}
-                    statusMessage={data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage}
+                    statusMessage={getStatusMessage(data)}
                     truncateMessages={true}
                     extra={extra}
                   />
