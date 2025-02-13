@@ -24,16 +24,6 @@ export function SegmentedProgressBar({
   errorLabel = 'Error',
   className = ''
 }: SegmentedProgressBarProps) {
-  console.log('SegmentedProgressBar render:', {
-    segments: segments.map(s => ({
-      key: s.key,
-      status: s.status,
-      completed: s.completed,
-      color: s.color
-    })),
-    currentSegment,
-    error
-  });
 
   const currentIndex = segments.findIndex(s => 
     s.key.toLowerCase() === currentSegment.toLowerCase()
@@ -57,17 +47,6 @@ export function SegmentedProgressBar({
                              isBeforeCurrent ? segment.color ?? "bg-secondary" :
                              isCurrent ? error ? "bg-false" : segment.color ?? "bg-secondary" :
                              "bg-neutral";
-
-          console.log('Segment color calculation:', {
-            key: segment.key,
-            isBeforeCurrent,
-            isCurrent,
-            isCompleted,
-            isRunning,
-            assignedColor: segmentColor,
-            originalColor: segment.color,
-            status: segment.status
-          });
 
           return (
             <div

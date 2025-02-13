@@ -41,17 +41,6 @@ function transformTaskToActivity(task: ProcessedTask) {
     throw new Error('Invalid task: task or task.id is null')
   }
 
-  console.log('Raw task data:', {
-    id: task.id,
-    status: task.status,
-    stages: task.stages?.map(s => ({
-      name: s.name,
-      status: s.status,
-      processedItems: s.processedItems,
-      totalItems: s.totalItems
-    }))
-  });
-
   // Parse metadata for task info - ensure we have a default empty object
   let metadata = {}
   try {
@@ -81,16 +70,6 @@ function transformTaskToActivity(task: ProcessedTask) {
       // Only set totalItems if we have a valid value
       const totalItems = stage.totalItems ?? undefined
 
-      console.log('Transforming stage:', {
-        name: stage.name,
-        originalStatus: stage.status,
-        mappedStatus: status,
-        originalProcessedItems: stage.processedItems,
-        mappedProcessedItems: processedItems,
-        originalTotalItems: stage.totalItems,
-        mappedTotalItems: totalItems
-      });
-
       return {
         key: stage.name,
         label: stage.name,
@@ -113,35 +92,23 @@ function transformTaskToActivity(task: ProcessedTask) {
   // Get current stage info
   const currentStage = stages.find(s => s.status === 'RUNNING') || stages[stages.length - 1];
   
-  console.log('Transformed task data:', {
-    id: task.id,
-    stages: stages.map(s => ({
-      name: s.name,
-      status: s.status,
-      processedItems: s.processedItems,
-      totalItems: s.totalItems
-    })),
-    currentStage: currentStage ? {
-      name: currentStage.name,
-      status: currentStage.status,
-      processedItems: currentStage.processedItems,
-      totalItems: currentStage.totalItems
-    } : null
-  });
-
   // Ensure we have a valid timestamp for the time field
   const timeStr = task.createdAt || new Date().toISOString()
+
+  // Ensure we have valid scorecard and score data
+  const scorecard = task.scorecard?.name ?? '-'
+  const score = task.score?.name ?? '-'
 
   const result: EvaluationTaskProps['task'] = {
     id: task.id,
     type: String((metadata as any)?.type || task.type),
-    scorecard: task.scorecard?.name ?? '-',
-    score: task.score?.name ?? '-',
+    scorecard,
+    score,
     time: timeStr,
     description: task.command,
     data: {
       id: task.id,
-      title: `${task.scorecard?.name ?? '-'} - ${task.score?.name ?? '-'}`,
+      title: `${scorecard} - ${score}`,
       command: task.command,
       accuracy: (metadata as any)?.accuracy ?? null,
       metrics: (metadata as any)?.metrics ?? [],
@@ -159,11 +126,11 @@ function transformTaskToActivity(task: ProcessedTask) {
       errorDetails: (metadata as any)?.errorDetails ?? null,
       task: {
         id: task.id,
-        accountId: '',  // Add required fields
+        accountId: '',
         type: task.type,
         command: task.command,
         status: task.status,
-        target: task.target,  // Add required field
+        target: task.target,
         startedAt: task.startedAt,
         completedAt: task.completedAt,
         dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
@@ -186,19 +153,6 @@ function transformTaskToActivity(task: ProcessedTask) {
     celeryTaskId: task.celeryTaskId,
     workerNodeId: task.workerNodeId
   }
-
-  console.log('Final transformed result:', {
-    id: result.id,
-    status: result.status,
-    processedItems: result.processedItems,
-    totalItems: result.totalItems,
-    stages: result.stages?.map(s => ({
-      name: s.name,
-      status: s.status,
-      processedItems: s.processedItems,
-      totalItems: s.totalItems
-    }))
-  });
 
   return result
 }
@@ -258,11 +212,6 @@ export default function ActivityDashboard() {
     console.log('Setting up real-time task subscription');
     const subscription = observeRecentTasks(12).subscribe({
       next: ({ items, isSynced }) => {
-        console.log('Received task update:', {
-          count: items.length,
-          isSynced,
-          taskIds: items.map(task => task.id)
-        });
         setRecentTasks(items);
       },
       error: (error) => {
