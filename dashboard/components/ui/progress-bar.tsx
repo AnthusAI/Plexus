@@ -65,7 +65,7 @@ export function ProgressBar({
           isFocused={isFocused}
         />
       )}
-      <div className="relative w-full h-8 bg-neutral rounded-md">
+      <div className="relative w-full h-8 bg-progress-background rounded-md">
         <div
           role="progressbar"
           className={cn(

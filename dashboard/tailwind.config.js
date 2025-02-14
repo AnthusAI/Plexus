@@ -71,6 +71,7 @@ module.exports = {
                 true: 'var(--true)',
                 false: 'var(--false)',
                 neutral: 'var(--neutral)',
+                'progress-background': 'var(--progress-background)',
                 'gauge-background': 'var(--gauge-background)',
                 'gauge-inviable': 'var(--gauge-inviable)',
                 'gauge-converging': 'var(--gauge-converging)', 
