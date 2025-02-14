@@ -522,7 +522,7 @@ export default function EvaluationsDashboard() {
           className={`
             ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? '' : 'w-full'}
             ${selectedEvaluationId && !isNarrowViewport && isFullWidth ? 'hidden' : ''}
-            h-full overflow-auto @container
+            h-full overflow-y-auto overflow-x-hidden @container
           `}
           style={selectedEvaluationId && !isNarrowViewport && !isFullWidth ? {
             width: `${leftPanelWidth}%`

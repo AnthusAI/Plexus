@@ -742,7 +742,7 @@ export default function ActivityDashboard() {
           className={`
             ${selectedTask && !isNarrowViewport && !isFullWidth ? '' : 'w-full'}
             ${selectedTask && !isNarrowViewport && isFullWidth ? 'hidden' : ''}
-            h-full overflow-auto @container
+            h-full overflow-y-auto overflow-x-hidden @container
           `}
           style={selectedTask && !isNarrowViewport && !isFullWidth ? {
             width: `${leftPanelWidth}%`
