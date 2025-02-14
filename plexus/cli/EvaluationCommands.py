@@ -34,6 +34,7 @@ import concurrent.futures
 import time
 import threading
 import socket
+import types  # Add this at the top with other imports
 
 set_log_group('plexus/cli/evaluation')
 
@@ -735,19 +736,23 @@ def accuracy(
                                     tracker.current_stage.status_message = f"Loading dataset for {single_score_name}..."
                                     tracker.update(current_items=0)
 
+                                    # Define a bound progress callback function
+                                    def progress_callback_fn(self, current):
+                                        progress.update(
+                                            current=current,
+                                            total=number_of_samples,
+                                            status=f"Loaded {current} of {number_of_samples} samples"
+                                        )
+                                        self.update(current_items=current)
+                                        self.current_stage.status_message = f"Loaded {current} of {number_of_samples} samples for {single_score_name}"
+                                    
+                                    # Create a bound method from the function
+                                    bound_progress_callback = types.MethodType(progress_callback_fn, tracker)
+
                                     single_score_labeled_samples = get_data_driven_samples(
                                         scorecard_instance, scorecard_name, single_score_name, 
                                         score_config, fresh, content_ids_to_sample_set,
-                                        progress_callback=lambda current: (
-                                            progress.update(
-                                                current=current,
-                                                total=number_of_samples,
-                                                status=f"Loaded {current} of {number_of_samples} samples"
-                                            ),
-                                            tracker.update(current_items=current),
-                                            setattr(tracker.current_stage, 'status_message', 
-                                                   f"Loaded {current} of {number_of_samples} samples for {single_score_name}")
-                                        ),
+                                        progress_callback=bound_progress_callback,
                                         number_of_samples=number_of_samples
                                     )
                                     
@@ -921,7 +926,7 @@ def accuracy(
                             result = client.execute(query, {'id': evaluation_record.id})
                             if result and 'getEvaluation' in result:
                                 eval_details = result['getEvaluation']
-                                logging.info(f"Final evaluation state:\n{json.dumps(eval_details, indent=2)}")
+                                logging.info(f"Final evaluation state:\n{truncate_dict_strings_inner(eval_details, indent=2)}")
 
                         tracker.current_stage.status_message = "Evaluation completed."
                         tracker.update(current_items=number_of_samples)
@@ -1005,6 +1010,50 @@ def get_data_driven_samples(
     logging.info(f"Columns: {score_instance.dataframe.columns.tolist()}")
     logging.info(f"Shape: {score_instance.dataframe.shape}")
 
+    # Get the actual number of samples from the dataframe - THIS IS THE ONLY SOURCE OF TRUTH
+    actual_sample_count = len(score_instance.dataframe)
+    logging.info(f"[TRACE] Found actual_sample_count: {actual_sample_count}")
+
+    # Set the actual count as our single source of truth right when we find it
+    if progress_callback and hasattr(progress_callback, '__self__'):
+        tracker = progress_callback.__self__
+        logging.info(f"[TRACE] Got tracker instance {id(tracker)} from progress_callback.__self__")
+        logging.info(f"[TRACE] Before set_total_items: tracker instance {id(tracker)} has total_items={tracker.total_items}")
+        
+        # First, set the actual total items count we just discovered
+        # This is our single source of truth for the total count
+        new_total = tracker.set_total_items(actual_sample_count)
+        logging.info(f"[TRACE] After set_total_items: tracker instance {id(tracker)} has total_items={new_total}")
+        
+        # Verify the total was set correctly before proceeding
+        if new_total != actual_sample_count:
+            logging.error(f"[TRACE] Failed to set total_items to {actual_sample_count} - got {new_total} instead")
+            raise RuntimeError(f"Failed to set total items to {actual_sample_count}")
+        
+        # Set the status message
+        status_message = f"Successfully loaded {actual_sample_count} samples for {score_name}"
+        if tracker.current_stage:
+            logging.info(f"[TRACE] Current stage {tracker.current_stage.name} in tracker instance {id(tracker)} has total_items={tracker.current_stage.total_items}")
+            tracker.current_stage.status_message = status_message
+            # Reset processed items to 0 since we're starting fresh
+            tracker.current_stage.processed_items = 0
+            
+            # Verify stage total_items was updated
+            if tracker.current_stage.total_items != actual_sample_count:
+                logging.error(f"[TRACE] Stage {tracker.current_stage.name} has incorrect total_items: {tracker.current_stage.total_items} != {actual_sample_count}")
+                raise RuntimeError(f"Stage {tracker.current_stage.name} total_items not updated correctly")
+        
+        # Now update progress - by this point total_items is set to actual_sample_count
+        logging.info(f"[TRACE] Calling update(0) on tracker instance {id(tracker)} with total_items={tracker.total_items}")
+        tracker.update(0, status_message)
+        
+        # Final verification after update
+        if tracker.total_items != actual_sample_count:
+            logging.error(f"[TRACE] After update, tracker has incorrect total_items: {tracker.total_items} != {actual_sample_count}")
+            raise RuntimeError("Total items not maintained after update")
+    elif progress_callback:
+        progress_callback(0)
+
     samples = score_instance.dataframe.to_dict('records')
 
     content_ids_to_exclude_filename = f"tuning/{scorecard_name}/{score_name}/training_ids.txt"
@@ -1049,12 +1098,8 @@ def get_data_driven_samples(
         }
         processed_samples.append(processed_sample)
     
-    # Add progress updates if callback provided
-    if progress_callback:
-        # Report progress as min(current_samples, total_requested_samples)
-        current_progress = min(len(processed_samples), number_of_samples) if number_of_samples else len(processed_samples)
-        progress_callback(current_progress)
-    
+    # No need for a final progress update here since we're just returning the samples
+    # The actual processing/progress will happen when these samples are used
     return processed_samples
 
 def get_csv_samples(csv_filename):
