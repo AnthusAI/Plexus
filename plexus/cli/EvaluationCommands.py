@@ -821,24 +821,24 @@ def accuracy(
 
                         logging.info(f"Completed evaluation for score: {single_score_name}")
                         tracker.current_stage.status_message = f"Completed evaluation for score: {single_score_name}"
-                        tracker.update(current_items=number_of_samples)
+                        tracker.update(current_items=tracker.total_items)
 
                     # Only advance to Finalizing stage after ALL scores are processed
                     logging.info("All score evaluations completed")
                     tracker.current_stage.status_message = "All evaluations complete, starting finalization..."
-                    tracker.update(current_items=number_of_samples)
+                    tracker.update(current_items=tracker.total_items)
                     
                     # Now safe to advance to Finalizing stage
                     tracker.advance_stage()
                     tracker.current_stage.status_message = "Starting finalization..."
-                    tracker.update(current_items=number_of_samples)
+                    tracker.update(current_items=tracker.total_items)
                     logging.info("Entered Finalizing stage")
 
                     # Complete the task
                     # First log the complete task and evaluation state
                     try:
                         tracker.current_stage.status_message = "Logging final evaluation state..."
-                        tracker.update(current_items=number_of_samples)
+                        tracker.update(current_items=tracker.total_items)
                         
                         # Get and log final task state
                         if task:
@@ -929,14 +929,14 @@ def accuracy(
                                 logging.info(f"Final evaluation state:\n{truncate_dict_strings_inner(eval_details, indent=2)}")
 
                         tracker.current_stage.status_message = "Evaluation completed."
-                        tracker.update(current_items=number_of_samples)
+                        tracker.update(current_items=tracker.total_items)
                         tracker.complete()
 
                     except Exception as e:
                         error_msg = f"Error logging final states: {str(e)}"
                         logging.error(error_msg)
                         tracker.current_stage.status_message = error_msg
-                        tracker.update(current_items=number_of_samples)
+                        tracker.update(current_items=tracker.total_items)
                         # Continue with completion even if logging fails
 
                 except Exception as e:
