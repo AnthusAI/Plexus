@@ -138,6 +138,7 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
     truncateMessages
   });
 
+  const [isMessageExpanded, setIsMessageExpanded] = useState(false);
   const isInProgress = status === 'RUNNING'
   const isFinished = status === 'COMPLETED' || status === 'FAILED'
   const isError = status === 'FAILED'
@@ -363,6 +364,10 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
     onCommandDisplayChange(commandDisplay === 'show' ? 'full' : 'show');
   };
 
+  const handleMessageClick = () => {
+    setIsMessageExpanded(prev => !prev);
+  };
+
   // If the variant is 'list', render only a simple progress bar
   if (variant === 'list') {
     return (
@@ -403,15 +408,27 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
           {(statusMessageDisplay === 'always' || 
             (statusMessageDisplay === 'error-only' && isError) ||
             (statusMessageDisplay === 'never' && isError && errorMessage)) && (
-            <div className={cn(
-              "text-sm flex items-center gap-1",
-              truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
-              isError ? 'text-destructive font-medium' : ''
-            )}>
+            <div 
+              className={cn(
+                "text-sm flex items-center gap-1 cursor-pointer hover:text-foreground",
+                !isMessageExpanded && "truncate",
+                isMessageExpanded && "whitespace-pre-wrap",
+                isError ? 'text-destructive font-medium' : ''
+              )}
+              onClick={handleMessageClick}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleMessageClick();
+                }
+              }}
+            >
               {isError ? (
-                <AlertTriangle className="w-4 h-4 animate-pulse" />
+                <AlertTriangle className="w-4 h-4 animate-pulse flex-shrink-0" />
               ) : displayMessage && (
-                <MessageSquareText className="w-4 h-4" />
+                <MessageSquareText className="w-4 h-4 flex-shrink-0" />
               )}
               {displayMessage || '\u00A0'}
             </div>
@@ -486,15 +503,27 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
         {(statusMessageDisplay === 'always' || 
           (statusMessageDisplay === 'error-only' && isError) ||
           (statusMessageDisplay === 'never' && isError && errorMessage)) && (
-          <div className={cn(
-            "text-sm flex items-center gap-1",
-            truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
-            isError ? 'text-destructive font-medium' : ''
-          )}>
+          <div 
+            className={cn(
+              "text-sm flex items-center gap-1 cursor-pointer hover:text-foreground",
+              !isMessageExpanded && "truncate",
+              isMessageExpanded && "whitespace-pre-wrap",
+              isError ? 'text-destructive font-medium' : ''
+            )}
+            onClick={handleMessageClick}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleMessageClick();
+              }
+            }}
+          >
             {isError ? (
-              <AlertTriangle className="w-4 h-4 animate-pulse" />
+              <AlertTriangle className="w-4 h-4 animate-pulse flex-shrink-0" />
             ) : displayMessage && (
-              <MessageSquareText className="w-4 h-4" />
+              <MessageSquareText className="w-4 h-4 flex-shrink-0" />
             )}
             {displayMessage || '\u00A0'}
           </div>
