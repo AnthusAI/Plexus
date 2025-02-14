@@ -140,6 +140,7 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
   onSelectScoreResult?: (id: string | null) => void
   extra?: boolean
   isSelected?: boolean
+  commandDisplay?: 'hide' | 'show' | 'full'
 }
 
 function formatDuration(seconds: number): string {
@@ -292,11 +293,12 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
         completedAt={data.task?.completedAt || undefined}
         estimatedCompletionAt={data.task?.estimatedCompletionAt || undefined}
         errorMessage={data.task?.errorMessage || data.errorMessage || undefined}
-        command={data.task?.command || data.command || undefined}
+        command={data.task?.command || data.command}
         statusMessage={getStatusMessage(data)}
         variant="grid"
         extra={extra}
         isSelected={isSelected}
+        commandDisplay="hide"
       />
       {extra && (
         <EvaluationListAccuracyBar 
@@ -394,7 +396,9 @@ const DetailContent = React.memo(({
   selectedScoreResultId,
   onSelectScoreResult,
   extra,
-  isSelected
+  isSelected,
+  commandDisplay = 'show',
+  onCommandDisplayChange
 }: { 
   data: EvaluationTaskData
   isFullWidth: boolean
@@ -404,6 +408,8 @@ const DetailContent = React.memo(({
   onSelectScoreResult?: (id: string | null) => void
   extra?: boolean
   isSelected?: boolean
+  commandDisplay?: 'hide' | 'show' | 'full'
+  onCommandDisplayChange?: (display: 'show' | 'full') => void
 }) => {
   console.log('DetailContent render:', {
     hasTaskData: !!data.task,
@@ -542,6 +548,8 @@ const DetailContent = React.memo(({
                     truncateMessages={true}
                     extra={extra}
                     isSelected={true}
+                    commandDisplay={commandDisplay}
+                    onCommandDisplayChange={onCommandDisplayChange}
                   />
                 </div>
 
@@ -645,10 +653,14 @@ export default function EvaluationTask({
   onSelectScoreResult,
   extra,
   isSelected,
+  commandDisplay: initialCommandDisplay = 'show',
   ...restProps
 }: EvaluationTaskProps) {
+  const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay);
+
   console.debug('EvaluationTask received props:', {
     taskId: task.id,
+    commandDisplay,
     data: {
       accuracy: task.data.accuracy,
       metrics: task.data.metrics,
@@ -815,6 +827,7 @@ export default function EvaluationTask({
       onClose={onClose}
       extra={extra}
       isSelected={isSelected}
+      commandDisplay={commandDisplay}
       {...restProps}
       renderHeader={(props) => (
         <TaskHeader {...props}>
@@ -835,6 +848,8 @@ export default function EvaluationTask({
               onSelectScoreResult={onSelectScoreResult}
               extra={extra}
               isSelected={isSelected}
+              commandDisplay={commandDisplay}
+              onCommandDisplayChange={setCommandDisplay}
             />
           )}
         </TaskContent>
