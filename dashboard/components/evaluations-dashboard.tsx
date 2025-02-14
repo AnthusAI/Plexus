@@ -514,7 +514,7 @@ export default function EvaluationsDashboard() {
           className={`
             ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? '' : 'w-full'}
             ${selectedEvaluationId && !isNarrowViewport && isFullWidth ? 'hidden' : ''}
-            h-full overflow-auto
+            h-full overflow-auto @container
           `}
           style={selectedEvaluationId && !isNarrowViewport && !isFullWidth ? {
             width: `${leftPanelWidth}%`
@@ -523,7 +523,10 @@ export default function EvaluationsDashboard() {
           {filteredEvaluations.length === 0 ? (
             <div className="text-sm text-muted-foreground">No evaluations found</div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className={`
+              grid gap-3
+              ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
+            `}>
               {filteredEvaluations.map((evaluation) => (
                 <div 
                   key={evaluation.id} 

@@ -452,13 +452,16 @@ export default function ActivityDashboard() {
           className={`
             ${selectedTask && !isNarrowViewport && !isFullWidth ? '' : 'w-full'}
             ${selectedTask && !isNarrowViewport && isFullWidth ? 'hidden' : ''}
-            h-full overflow-auto
+            h-full overflow-auto @container
           `}
           style={selectedTask && !isNarrowViewport && !isFullWidth ? {
             width: `${leftPanelWidth}%`
           } : undefined}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className={`
+            grid gap-3
+            ${selectedTask && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
+          `}>
             {displayedTasks.map((task) => (
               <div 
                 key={task.id} 
