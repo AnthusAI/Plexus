@@ -413,7 +413,15 @@ export default function EvaluationsDashboard() {
         isDatasetClassDistributionBalanced: Boolean(evaluation.isDatasetClassDistributionBalanced),
         predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ? JSON.parse(evaluation.predictedClassDistribution as string) : evaluation.predictedClassDistribution,
         isPredictedClassDistributionBalanced: Boolean(evaluation.isPredictedClassDistributionBalanced),
-        task: taskData
+        task: taskData,
+        scoreResults: evaluation.scoreResults?.items?.map(result => ({
+          id: result.id,
+          value: result.value,
+          confidence: result.confidence,
+          explanation: result.explanation,
+          metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
+          itemId: result.itemId
+        })) || []
       },
       stages: taskData?.stages?.items?.map(stage => ({
         key: stage.name,
@@ -603,7 +611,15 @@ export default function EvaluationsDashboard() {
                               nextToken: null
                             } : undefined
                           };
-                        })() : null
+                        })() : null,
+                        scoreResults: evaluation.scoreResults?.items?.map(result => ({
+                          id: result.id,
+                          value: result.value,
+                          confidence: result.confidence,
+                          explanation: result.explanation,
+                          metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
+                          itemId: result.itemId
+                        })) || []
                       },
                       stages: evaluation.task ? (() => {
                         const transformedTask = transformAmplifyTask(evaluation.task as unknown as AmplifyTask);
