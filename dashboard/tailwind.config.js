@@ -10,6 +10,8 @@ module.exports = {
         { pattern: /^bg-/ },
         { pattern: /^text-.*-foreground$/ },
         'grid',
+        'bg-progress-background',
+        'bg-progress-background-selected'
     ],
     theme: {
         extend: {
@@ -72,6 +74,7 @@ module.exports = {
                 false: 'var(--false)',
                 neutral: 'var(--neutral)',
                 'progress-background': 'var(--progress-background)',
+                'progress-background-selected': 'var(--progress-background-selected)',
                 'gauge-background': 'var(--gauge-background)',
                 'gauge-inviable': 'var(--gauge-inviable)',
                 'gauge-converging': 'var(--gauge-converging)', 

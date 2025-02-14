@@ -15,6 +15,7 @@ interface SegmentedProgressBarProps {
   error?: boolean
   errorLabel?: string
   className?: string
+  isSelected?: boolean
 }
 
 export function SegmentedProgressBar({ 
@@ -22,16 +23,17 @@ export function SegmentedProgressBar({
   currentSegment,
   error = false,
   errorLabel = 'Error',
-  className = ''
+  className = '',
+  isSelected = false
 }: SegmentedProgressBarProps) {
-
   const currentIndex = segments.findIndex(s => 
     s.key.toLowerCase() === currentSegment.toLowerCase()
   )
   
   return (
     <div className={cn(
-      "w-full h-8 bg-progress-background rounded-md overflow-hidden border border-border", 
+      "w-full h-8 rounded-md overflow-hidden border border-border",
+      isSelected ? "bg-progress-background-selected" : "bg-progress-background",
       className
     )}>
       <div role="list" className="h-full w-full flex gap-1">

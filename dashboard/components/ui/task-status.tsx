@@ -80,6 +80,7 @@ export interface TaskStatusProps {
   onToggleFullWidth?: () => void
   onClose?: () => void
   extra?: boolean
+  isSelected?: boolean
 }
 
 function formatDuration(seconds: number): string {
@@ -121,9 +122,9 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
   isFullWidth = false,
   onToggleFullWidth,
   onClose,
-  extra = false
+  extra = false,
+  isSelected = false
 }) => {
-
   const isInProgress = status === 'RUNNING'
   const isFinished = status === 'COMPLETED' || status === 'FAILED'
   const isError = status === 'FAILED'
@@ -393,6 +394,7 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
             totalItems={effectiveTotalItems}
             color={progressBarColor}
             showTiming={false}
+            isSelected={isSelected}
           />
         )}
       </div>
@@ -445,6 +447,7 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
           currentSegment={effectiveCurrentStage}
           error={status === 'FAILED'}
           errorLabel={errorLabel}
+          isSelected={isSelected}
         />
       )}
       <ProgressBar
@@ -453,6 +456,7 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
         totalItems={effectiveTotalItems}
         color={progressBarColor}
         showTiming={false}
+        isSelected={isSelected}
       />
     </div>
   )
