@@ -43,6 +43,8 @@ export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
   showPreExecutionStages?: boolean
   isSelected?: boolean
   extra?: boolean
+  commandDisplay?: 'hide' | 'show' | 'full'
+  statusMessageDisplay?: 'always' | 'never' | 'error-only'
 }
 
 interface TaskChildProps<TData extends BaseTaskData = BaseTaskData> extends BaseTaskProps<TData> {
@@ -116,7 +118,9 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
   onRetry,
   showPreExecutionStages,
   isSelected = false,
-  extra = false
+  extra = false,
+  commandDisplay = 'show',
+  statusMessageDisplay = 'always'
 }: TaskComponentProps<TData>) => {
   const childProps: TaskChildProps<TData> = {
     variant,
@@ -130,7 +134,10 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
     error,
     onRetry,
     showPreExecutionStages,
-    isSelected: variant === 'detail' ? true : isSelected
+    isSelected: variant === 'detail' ? true : isSelected,
+    commandDisplay,
+    statusMessageDisplay,
+    extra
   }
 
   if (variant === 'nested') {
@@ -259,11 +266,22 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
   hideTaskStatus = false,
   isLoading,
   showPreExecutionStages,
-  isSelected = false
+  isSelected = false,
+  commandDisplay = 'show',
+  statusMessageDisplay = 'always',
+  extra = false
 }: TaskChildProps<TData> & {
   visualization?: React.ReactNode
   hideTaskStatus?: boolean
 }) => {
+  console.debug('TaskContent render:', {
+    taskId: task.id,
+    variant,
+    command: task.command,
+    commandDisplay,
+    hideTaskStatus
+  });
+
   // Get status message from current stage or last completed stage if task is done
   const statusMessage = (() => {
     if (!task.stages?.length) return undefined
@@ -294,29 +312,18 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
 
   return (
     <CardContent className="h-full p-0 flex flex-col flex-1">
-      {showProgress && !hideTaskStatus && task.stages && (
+      {!hideTaskStatus && (
         <div>
           <TaskStatus
-            showStages={true}
-            stages={task.stages}
-            stageConfigs={task.stages.map(stage => ({
-              key: stage.name,
-              label: stage.label || stage.name,
-              color: stage.color || 'bg-primary',
-              name: stage.name,
-              order: stage.order,
-              status: stage.status,
-              processedItems: stage.processedItems,
-              totalItems: stage.totalItems,
-              statusMessage: stage.statusMessage
-            }))}
+            showStages={showProgress}
+            stages={task.stages || []}
             currentStageName={task.currentStageName}
             processedItems={task.processedItems}
             totalItems={task.totalItems}
             startedAt={task.startedAt}
             estimatedCompletionAt={task.estimatedCompletionAt}
             status={task.status || 'PENDING'}
-            command={task.command || task.data?.command}
+            command={task.command}
             statusMessage={statusMessage}
             errorMessage={task.errorMessage}
             dispatchStatus={task.dispatchStatus}
@@ -327,6 +334,9 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
             truncateMessages={variant === 'grid'}
             isSelected={isSelected}
             variant={variant}
+            commandDisplay={commandDisplay}
+            statusMessageDisplay={statusMessageDisplay}
+            extra={extra}
           />
         </div>
       )}

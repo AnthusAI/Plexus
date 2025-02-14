@@ -590,28 +590,12 @@ export default function ActivityDashboard() {
     const task = displayedTasks.find(t => t.id === selectedTask)
     if (!task) return null
 
-    console.debug('Rendering selected task - Full task data:', {
+    console.debug('Rendering selected task in Activity Dashboard:', {
       taskId: task.id,
       type: task.type,
-      data: {
-        accuracy: task.data.accuracy,
-        metrics: task.data.metrics,
-        processedItems: task.data.processedItems,
-        totalItems: task.data.totalItems,
-        scoreResults: task.data.scoreResults?.length,
-        confusionMatrix: !!task.data.confusionMatrix,
-        scoreGoal: task.data.scoreGoal,
-        task: {
-          id: task.data.task?.id,
-          status: task.data.task?.status,
-          stages: task.data.task?.stages?.items?.map(s => ({
-            name: s.name,
-            status: s.status,
-            processedItems: s.processedItems,
-            totalItems: s.totalItems
-          }))
-        }
-      }
+      command: task.command || task.data?.command,
+      isEvaluation: task.type.toLowerCase().includes('evaluation'),
+      commandDisplay: 'full' // Verify we're setting this correctly
     });
 
     const handleAnnounceAgain = async () => {
@@ -700,6 +684,7 @@ export default function ActivityDashboard() {
             setSelectedTask(null)
             setIsFullWidth(false)
           }}
+          commandDisplay="full"
         />
       )
     }
@@ -717,6 +702,7 @@ export default function ActivityDashboard() {
         }}
         renderHeader={TaskHeader}
         renderContent={(props) => <TaskContent {...props} />}
+        commandDisplay="full"
       />
     )
   }
