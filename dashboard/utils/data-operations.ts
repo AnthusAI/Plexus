@@ -1217,6 +1217,18 @@ export async function listRecentEvaluations(limit: number = 100): Promise<Schema
                   }
                 }
               }
+              scoreResults {
+                items {
+                  id
+                  value
+                  confidence
+                  metadata
+                  explanation
+                  itemId
+                  createdAt
+                }
+                nextToken
+              }
             }
             nextToken
           }
