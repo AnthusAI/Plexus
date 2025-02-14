@@ -49,12 +49,14 @@ interface TaskChildProps<TData extends BaseTaskData = BaseTaskData> extends Base
   children?: React.ReactNode
   showProgress?: boolean
   hideTaskStatus?: boolean
+  isSelected?: boolean
 }
 
 export interface TaskComponentProps<TData extends BaseTaskData = BaseTaskData> extends BaseTaskProps<TData> {
   renderHeader: (props: TaskChildProps<TData>) => React.ReactNode
   renderContent: (props: TaskChildProps<TData>) => React.ReactNode
   showProgress?: boolean
+  isSelected?: boolean
 }
 
 // Add the safe date formatting helper
@@ -127,7 +129,8 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
     isLoading,
     error,
     onRetry,
-    showPreExecutionStages
+    showPreExecutionStages,
+    isSelected: variant === 'detail' ? true : isSelected
   }
 
   if (variant === 'nested') {
@@ -255,7 +258,8 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
   showProgress = true,
   hideTaskStatus = false,
   isLoading,
-  showPreExecutionStages
+  showPreExecutionStages,
+  isSelected = false
 }: TaskChildProps<TData> & {
   visualization?: React.ReactNode
   hideTaskStatus?: boolean
@@ -321,6 +325,8 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
             showPreExecutionStages={showPreExecutionStages}
             completedAt={task.completedAt}
             truncateMessages={variant === 'grid'}
+            isSelected={isSelected}
+            variant={variant}
           />
         </div>
       )}

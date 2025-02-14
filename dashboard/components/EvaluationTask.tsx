@@ -139,6 +139,7 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
   selectedScoreResultId?: string | null
   onSelectScoreResult?: (id: string | null) => void
   extra?: boolean
+  isSelected?: boolean
 }
 
 function formatDuration(seconds: number): string {
@@ -235,7 +236,11 @@ const getStatusMessage = (data: EvaluationTaskData) => {
   return undefined;
 }
 
-const GridContent = React.memo(({ data, extra }: { data: EvaluationTaskData; extra?: boolean }) => {
+const GridContent = React.memo(({ data, extra, isSelected }: { 
+  data: EvaluationTaskData; 
+  extra?: boolean;
+  isSelected?: boolean;
+}) => {
   const progress = data.processedItems && data.totalItems ? 
     Math.round((data.processedItems / data.totalItems) * 100) : 0
   const accuracy = data.accuracy ?? 0
@@ -291,6 +296,7 @@ const GridContent = React.memo(({ data, extra }: { data: EvaluationTaskData; ext
         statusMessage={getStatusMessage(data)}
         variant="grid"
         extra={extra}
+        isSelected={isSelected}
       />
       {extra && (
         <EvaluationListAccuracyBar 
@@ -387,7 +393,8 @@ const DetailContent = React.memo(({
   metricsVariant,
   selectedScoreResultId,
   onSelectScoreResult,
-  extra
+  extra,
+  isSelected
 }: { 
   data: EvaluationTaskData
   isFullWidth: boolean
@@ -396,6 +403,7 @@ const DetailContent = React.memo(({
   selectedScoreResultId?: string | null
   onSelectScoreResult?: (id: string | null) => void
   extra?: boolean
+  isSelected?: boolean
 }) => {
   console.log('DetailContent render:', {
     hasTaskData: !!data.task,
@@ -533,6 +541,7 @@ const DetailContent = React.memo(({
                     statusMessage={getStatusMessage(data)}
                     truncateMessages={true}
                     extra={extra}
+                    isSelected={true}
                   />
                 </div>
 
@@ -635,6 +644,7 @@ export default function EvaluationTask({
   selectedScoreResultId,
   onSelectScoreResult,
   extra,
+  isSelected,
   ...restProps
 }: EvaluationTaskProps) {
   const data = task.data ?? {} as EvaluationTaskData
@@ -776,7 +786,8 @@ export default function EvaluationTask({
       estimatedCompletionAt: data.task?.estimatedCompletionAt || undefined,
       errorMessage: data.task?.errorMessage || data.errorMessage || undefined,
       command: data.task?.command || data.command,
-      statusMessage: data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage || undefined
+      statusMessage: data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage || undefined,
+      isSelected
     } as const
 
     return <TaskStatus {...taskStatus} />
@@ -792,6 +803,7 @@ export default function EvaluationTask({
       onToggleFullWidth={onToggleFullWidth}
       onClose={onClose}
       extra={extra}
+      isSelected={isSelected}
       {...restProps}
       renderHeader={(props) => (
         <TaskHeader {...props}>
@@ -801,7 +813,7 @@ export default function EvaluationTask({
       renderContent={(props) => (
         <TaskContent {...props} hideTaskStatus={true}>
           {variant === 'grid' ? (
-            <GridContent data={data} extra={extra} />
+            <GridContent data={data} extra={extra} isSelected={isSelected} />
           ) : (
             <DetailContent 
               data={data}
@@ -811,6 +823,7 @@ export default function EvaluationTask({
               selectedScoreResultId={selectedScoreResultId}
               onSelectScoreResult={onSelectScoreResult}
               extra={extra}
+              isSelected={isSelected}
             />
           )}
         </TaskContent>
