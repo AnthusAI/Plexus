@@ -81,6 +81,9 @@ export interface TaskStatusProps {
   onClose?: () => void
   extra?: boolean
   isSelected?: boolean
+  commandDisplay?: 'hide' | 'show' | 'full'
+  statusMessageDisplay?: 'always' | 'never' | 'error-only'
+  onCommandDisplayChange?: (display: 'show' | 'full') => void
 }
 
 function formatDuration(seconds: number): string {
@@ -123,8 +126,18 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
   onToggleFullWidth,
   onClose,
   extra = false,
-  isSelected = false
+  isSelected = false,
+  commandDisplay = 'show',
+  statusMessageDisplay = 'always',
+  onCommandDisplayChange
 }) => {
+  console.debug('TaskStatus render:', {
+    command,
+    commandDisplay,
+    variant,
+    truncateMessages
+  });
+
   const isInProgress = status === 'RUNNING'
   const isFinished = status === 'COMPLETED' || status === 'FAILED'
   const isError = status === 'FAILED'
@@ -332,7 +345,7 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
     }
   }
 
-  // Only show pre-execution status when:
+  // Show pre-execution status when:
   // 1. Task is in PENDING state
   // 2. Has no stages (not started processing yet)
   // 3. Either has a worker node ID or showPreExecutionStages is true
@@ -345,30 +358,64 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
 
   const displayMessage = isError && errorMessage ? errorMessage : statusMessage
 
+  const handleCommandClick = () => {
+    if (commandDisplay === 'hide' || !onCommandDisplayChange) return;
+    onCommandDisplayChange(commandDisplay === 'show' ? 'full' : 'show');
+  };
+
   // If the variant is 'list', render only a simple progress bar
   if (variant === 'list') {
     return (
       <div className="[&>*+*]:mt-2">
         <StyleTag />
         <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
-          {command && !extra && (
-            <div className="font-mono text-sm text-muted-foreground leading-6 flex items-center gap-1 truncate">
-              <SquareChevronRight className="w-4 h-4 flex-shrink-0" />
-              <span className="truncate">{command}</span>
+          {command && commandDisplay !== 'hide' && (
+            <div 
+              className={cn(
+                "font-mono text-sm text-muted-foreground leading-6 flex items-start gap-1",
+                {
+                  "overflow-hidden": commandDisplay === 'show',
+                  "cursor-pointer hover:text-foreground": !!onCommandDisplayChange
+                }
+              )}
+              onClick={handleCommandClick}
+              role={onCommandDisplayChange ? "button" : undefined}
+              tabIndex={onCommandDisplayChange ? 0 : undefined}
+              onKeyDown={onCommandDisplayChange ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleCommandClick();
+                }
+              } : undefined}
+            >
+              <SquareChevronRight 
+                className={cn(
+                  "w-4 h-4 flex-shrink-0 mt-1",
+                  onCommandDisplayChange && "cursor-pointer"
+                )} 
+              />
+              <span className={cn({
+                "truncate": commandDisplay === 'show',
+                "whitespace-pre-wrap break-all": commandDisplay === 'full'
+              })}>{command}</span>
             </div>
           )}
-          <div className={cn(
-            "text-sm flex items-center gap-1",
-            truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
-            isError ? 'text-destructive font-medium' : ''
-          )}>
-            {isError ? (
-              <AlertTriangle className="w-4 h-4 animate-pulse" />
-            ) : displayMessage && (
-              <MessageSquareText className="w-4 h-4" />
-            )}
-            {displayMessage || '\u00A0'}
-          </div>
+          {(statusMessageDisplay === 'always' || 
+            (statusMessageDisplay === 'error-only' && isError) ||
+            (statusMessageDisplay === 'never' && isError && errorMessage)) && (
+            <div className={cn(
+              "text-sm flex items-center gap-1",
+              truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
+              isError ? 'text-destructive font-medium' : ''
+            )}>
+              {isError ? (
+                <AlertTriangle className="w-4 h-4 animate-pulse" />
+              ) : displayMessage && (
+                <MessageSquareText className="w-4 h-4" />
+              )}
+              {displayMessage || '\u00A0'}
+            </div>
+          )}
         </div>
         {showEmptyState ? (
           <div className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -405,24 +452,53 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
     <div className="[&>*+*]:mt-2">
       <StyleTag />
       <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
-        {command && !extra && (
-          <div className="font-mono text-sm text-muted-foreground leading-6 flex items-center gap-1 truncate">
-            <SquareChevronRight className="w-4 h-4 flex-shrink-0" />
-            <span className="truncate">{command}</span>
+        {command && commandDisplay !== 'hide' && (
+          <div 
+            className={cn(
+              "font-mono text-sm text-muted-foreground leading-6 flex items-start gap-1",
+              {
+                "overflow-hidden": commandDisplay === 'show',
+                "cursor-pointer hover:text-foreground": !!onCommandDisplayChange
+              }
+            )}
+            onClick={handleCommandClick}
+            role={onCommandDisplayChange ? "button" : undefined}
+            tabIndex={onCommandDisplayChange ? 0 : undefined}
+            onKeyDown={onCommandDisplayChange ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleCommandClick();
+              }
+            } : undefined}
+          >
+            <SquareChevronRight 
+              className={cn(
+                "w-4 h-4 flex-shrink-0 mt-1",
+                onCommandDisplayChange && "cursor-pointer"
+              )} 
+            />
+            <span className={cn({
+              "truncate": commandDisplay === 'show',
+              "whitespace-pre-wrap break-all": commandDisplay === 'full'
+            })}>{command}</span>
           </div>
         )}
-        <div className={cn(
-          "text-sm flex items-center gap-1",
-          truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
-          isError ? 'text-destructive font-medium' : ''
-        )}>
-          {isError ? (
-            <AlertTriangle className="w-4 h-4 animate-pulse" />
-          ) : displayMessage && (
-            <MessageSquareText className="w-4 h-4" />
-          )}
-          {displayMessage || '\u00A0'}
-        </div>
+        {(statusMessageDisplay === 'always' || 
+          (statusMessageDisplay === 'error-only' && isError) ||
+          (statusMessageDisplay === 'never' && isError && errorMessage)) && (
+          <div className={cn(
+            "text-sm flex items-center gap-1",
+            truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
+            isError ? 'text-destructive font-medium' : ''
+          )}>
+            {isError ? (
+              <AlertTriangle className="w-4 h-4 animate-pulse" />
+            ) : displayMessage && (
+              <MessageSquareText className="w-4 h-4" />
+            )}
+            {displayMessage || '\u00A0'}
+          </div>
+        )}
       </div>
       {showEmptyState ? (
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
