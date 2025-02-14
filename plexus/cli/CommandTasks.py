@@ -291,9 +291,16 @@ def register_tasks(app):
                         # Get current stages
                         stages = task.get_stages()
                         if stages:
-                            # Get total items from the Processing stage if available
+                            # Get total items and current progress from the Processing stage
                             processing_stage = next((stage for stage in stages if stage.name == "Processing"), None)
-                            total_items = processing_stage.totalItems if processing_stage else 0
+                            if processing_stage:
+                                total_items = processing_stage.totalItems
+                                current_items = processing_stage.processedItems
+                                logging.info(f"Final progress: {current_items}/{total_items} items")
+                            else:
+                                total_items = 0
+                                current_items = 0
+                                logging.warning("No Processing stage found for final update")
                             
                             # First update to show logging state
                             stages_config = {}
@@ -303,12 +310,16 @@ def register_tasks(app):
                                     "statusMessage": "Logging final evaluation state..." if stage.name == "Finalizing" else stage.statusMessage,
                                     "taskId": task.id
                                 }
+                                # Preserve the actual progress for the Processing stage
+                                if stage.name == "Processing":
+                                    stage_config["totalItems"] = total_items
+                                    stage_config["processedItems"] = current_items
                                 stages_config[stage.name] = stage_config
                             
                             # Update with logging state
                             task.update_progress(
-                                total_items,  # Use total_items instead of state.total
-                                total_items,  # Use total_items for both current and total
+                                current_items,
+                                total_items,
                                 stages_config
                             )
 
@@ -319,12 +330,16 @@ def register_tasks(app):
                                     "statusMessage": "Evaluation completed." if stage.name == "Finalizing" else stage.statusMessage,
                                     "taskId": task.id
                                 }
+                                # Preserve the actual progress for the Processing stage
+                                if stage.name == "Processing":
+                                    stage_config["totalItems"] = total_items
+                                    stage_config["processedItems"] = current_items
                                 stages_config[stage.name] = stage_config
                             
                             # Final update before completing
                             task.update_progress(
-                                total_items,  # Use total_items instead of state.total
-                                total_items,  # Use total_items for both current and total
+                                current_items,
+                                total_items,
                                 stages_config
                             )
                         
