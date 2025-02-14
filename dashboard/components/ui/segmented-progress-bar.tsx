@@ -31,7 +31,7 @@ export function SegmentedProgressBar({
   
   return (
     <div className={cn(
-      "w-full h-8 bg-neutral rounded-md overflow-hidden border border-border", 
+      "w-full h-8 bg-progress-background rounded-md overflow-hidden border border-border", 
       className
     )}>
       <div role="list" className="h-full w-full flex gap-1">
@@ -46,7 +46,7 @@ export function SegmentedProgressBar({
                              isRunning ? segment.color ?? "bg-secondary" :
                              isBeforeCurrent ? segment.color ?? "bg-secondary" :
                              isCurrent ? error ? "bg-false" : segment.color ?? "bg-secondary" :
-                             "bg-neutral";
+                             "bg-progress-background";
 
           return (
             <div
