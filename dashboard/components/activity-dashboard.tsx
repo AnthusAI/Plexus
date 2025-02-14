@@ -22,6 +22,100 @@ import EvaluationTask, { type EvaluationTaskProps, type EvaluationTaskData } fro
 // Import the types from data-operations
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
 
+// Add this query after the imports
+const LIST_TASKS = `
+  query ListTaskByAccountIdAndUpdatedAt(
+    $accountId: String!
+    $sortDirection: ModelSortDirection
+    $limit: Int
+  ) {
+    listTaskByAccountIdAndUpdatedAt(
+      accountId: $accountId
+      sortDirection: $sortDirection
+      limit: $limit
+    ) {
+      items {
+        id
+        type
+        status
+        target
+        command
+        description
+        dispatchStatus
+        metadata
+        createdAt
+        startedAt
+        completedAt
+        estimatedCompletionAt
+        errorMessage
+        errorDetails
+        currentStageId
+        scorecardId
+        scoreId
+        celeryTaskId
+        workerNodeId
+        scorecard {
+          id
+          name
+        }
+        score {
+          id
+          name
+        }
+        stages {
+          items {
+            id
+            name
+            order
+            status
+            statusMessage
+            startedAt
+            completedAt
+            estimatedCompletionAt
+            processedItems
+            totalItems
+          }
+        }
+        evaluation {
+          id
+          type
+          metrics
+          metricsExplanation
+          inferences
+          accuracy
+          cost
+          status
+          startedAt
+          elapsedSeconds
+          estimatedRemainingSeconds
+          totalItems
+          processedItems
+          errorMessage
+          errorDetails
+          confusionMatrix
+          scoreGoal
+          datasetClassDistribution
+          isDatasetClassDistributionBalanced
+          predictedClassDistribution
+          isPredictedClassDistributionBalanced
+          scoreResults {
+            items {
+              id
+              value
+              confidence
+              metadata
+              explanation
+              itemId
+              createdAt
+            }
+          }
+        }
+      }
+      nextToken
+    }
+  }
+`
+
 // Helper to get evaluation icon based on type
 function getEvaluationIcon(type: string) {
   switch (type.toLowerCase()) {
@@ -40,6 +134,29 @@ function transformTaskToActivity(task: ProcessedTask) {
   if (!task || !task.id) {
     throw new Error('Invalid task: task or task.id is null')
   }
+
+  // Add detailed logging of the raw task data
+  console.debug('transformTaskToActivity - Raw task data:', {
+    taskId: task.id,
+    type: task.type,
+    rawEvaluation: task.evaluation,
+    hasEvaluation: !!task.evaluation,
+    evaluationFields: task.evaluation ? {
+      id: task.evaluation.id,
+      type: task.evaluation.type,
+      metrics: task.evaluation.metrics,
+      accuracy: task.evaluation.accuracy,
+      processedItems: task.evaluation.processedItems,
+      totalItems: task.evaluation.totalItems,
+      scoreResults: task.evaluation.scoreResults,
+      confusionMatrix: task.evaluation.confusionMatrix,
+      scoreGoal: task.evaluation.scoreGoal,
+      datasetClassDistribution: task.evaluation.datasetClassDistribution,
+      predictedClassDistribution: task.evaluation.predictedClassDistribution
+    } : null,
+    rawStages: task.stages,
+    rawMetadata: task.metadata
+  });
 
   // Parse metadata for task info - ensure we have a default empty object
   let metadata = {}
@@ -99,6 +216,149 @@ function transformTaskToActivity(task: ProcessedTask) {
   const scorecard = task.scorecard?.name ?? '-'
   const score = task.score?.name ?? '-'
 
+  // Get evaluation data if this is an evaluation task
+  const evaluation = task.evaluation
+  let evaluationData: EvaluationTaskData | undefined = undefined;
+  
+  if (evaluation) {
+    try {
+      // Log raw evaluation data before transformation
+      console.debug('Raw evaluation data before transformation:', {
+        taskId: task.id,
+        evaluation: {
+          id: evaluation.id,
+          type: evaluation.type,
+          metrics: evaluation.metrics,
+          accuracy: evaluation.accuracy,
+          processedItems: evaluation.processedItems,
+          totalItems: evaluation.totalItems,
+          scoreResults: evaluation.scoreResults,
+          confusionMatrix: evaluation.confusionMatrix,
+          scoreGoal: evaluation.scoreGoal
+        }
+      });
+
+      // Parse metrics if it's a string
+      let parsedMetrics = [];
+      try {
+        if (typeof evaluation.metrics === 'string') {
+          parsedMetrics = JSON.parse(evaluation.metrics);
+        } else if (Array.isArray(evaluation.metrics)) {
+          parsedMetrics = evaluation.metrics;
+        }
+      } catch (e) {
+        console.error('Error parsing metrics:', e);
+      }
+
+      // Parse confusion matrix if it's a string
+      let parsedConfusionMatrix = null;
+      try {
+        if (typeof evaluation.confusionMatrix === 'string') {
+          parsedConfusionMatrix = JSON.parse(evaluation.confusionMatrix);
+        } else if (evaluation.confusionMatrix) {
+          parsedConfusionMatrix = evaluation.confusionMatrix;
+        }
+      } catch (e) {
+        console.error('Error parsing confusion matrix:', e);
+      }
+
+      // Parse dataset class distribution if it's a string
+      let parsedDatasetClassDistribution = null;
+      try {
+        if (typeof evaluation.datasetClassDistribution === 'string') {
+          parsedDatasetClassDistribution = JSON.parse(evaluation.datasetClassDistribution);
+        } else if (evaluation.datasetClassDistribution) {
+          parsedDatasetClassDistribution = evaluation.datasetClassDistribution;
+        }
+      } catch (e) {
+        console.error('Error parsing dataset class distribution:', e);
+      }
+
+      // Parse predicted class distribution if it's a string
+      let parsedPredictedClassDistribution = null;
+      try {
+        if (typeof evaluation.predictedClassDistribution === 'string') {
+          parsedPredictedClassDistribution = JSON.parse(evaluation.predictedClassDistribution);
+        } else if (evaluation.predictedClassDistribution) {
+          parsedPredictedClassDistribution = evaluation.predictedClassDistribution;
+        }
+      } catch (e) {
+        console.error('Error parsing predicted class distribution:', e);
+      }
+
+      evaluationData = {
+        id: evaluation.id,
+        title: `${scorecard} - ${score}`,
+        command: task.command,
+        metrics: parsedMetrics,
+        metricsExplanation: evaluation.metricsExplanation || null,
+        accuracy: typeof evaluation.accuracy === 'number' ? evaluation.accuracy : null,
+        processedItems: Number(evaluation.processedItems) || currentStage?.processedItems || 0,
+        totalItems: Number(evaluation.totalItems) || currentStage?.totalItems || 0,
+        progress: evaluation.processedItems && evaluation.totalItems ? 
+          (Number(evaluation.processedItems) / Number(evaluation.totalItems)) * 100 : 0,
+        inferences: Number(evaluation.inferences) || 0,
+        cost: evaluation.cost ?? null,
+        status: evaluation.status || task.status,
+        elapsedSeconds: evaluation.elapsedSeconds ?? null,
+        estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds ?? null,
+        startedAt: evaluation.startedAt || task.startedAt || undefined,
+        errorMessage: evaluation.errorMessage || task.errorMessage,
+        errorDetails: evaluation.errorDetails,
+        confusionMatrix: parsedConfusionMatrix,
+        scoreGoal: evaluation.scoreGoal,
+        datasetClassDistribution: parsedDatasetClassDistribution,
+        isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
+        predictedClassDistribution: parsedPredictedClassDistribution,
+        isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
+        scoreResults: evaluation.scoreResults?.items?.map(result => ({
+          id: result.id,
+          value: result.value,
+          confidence: result.confidence,
+          explanation: result.explanation,
+          metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
+          itemId: result.itemId
+        })) || [],
+        task: {
+          id: task.id,
+          accountId: '',
+          type: task.type,
+          command: task.command,
+          status: task.status,
+          target: task.target,
+          startedAt: task.startedAt,
+          completedAt: task.completedAt,
+          dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
+          celeryTaskId: task.celeryTaskId,
+          workerNodeId: task.workerNodeId,
+          stages: { items: stages }
+        }
+      }
+
+      // Log the transformed evaluation data
+      console.debug('Transformed evaluation data:', {
+        taskId: task.id,
+        evaluationData: {
+          metrics: evaluationData.metrics,
+          accuracy: evaluationData.accuracy,
+          processedItems: evaluationData.processedItems,
+          totalItems: evaluationData.totalItems,
+          scoreResults: evaluationData.scoreResults?.length,
+          confusionMatrix: evaluationData.confusionMatrix,
+          scoreGoal: evaluationData.scoreGoal
+        }
+      });
+    } catch (error) {
+      console.error('Error transforming evaluation data:', error, {
+        evaluationId: evaluation.id,
+        metrics: evaluation.metrics,
+        confusionMatrix: evaluation.confusionMatrix,
+        datasetClassDistribution: evaluation.datasetClassDistribution,
+        predictedClassDistribution: evaluation.predictedClassDistribution
+      });
+    }
+  }
+
   const result: EvaluationTaskProps['task'] = {
     id: task.id,
     type: String((metadata as any)?.type || task.type),
@@ -106,12 +366,13 @@ function transformTaskToActivity(task: ProcessedTask) {
     score,
     time: timeStr,
     description: task.command,
-    data: {
+    data: evaluationData || {
       id: task.id,
       title: `${scorecard} - ${score}`,
       command: task.command,
       accuracy: (metadata as any)?.accuracy ?? null,
       metrics: (metadata as any)?.metrics ?? [],
+      metricsExplanation: null,
       processedItems: currentStage?.processedItems ?? 0,
       totalItems: currentStage?.totalItems ?? 0,
       progress: currentStage?.processedItems && currentStage.totalItems ? 
@@ -124,6 +385,13 @@ function transformTaskToActivity(task: ProcessedTask) {
       startedAt: task.startedAt ?? undefined,
       errorMessage: task.errorMessage,
       errorDetails: (metadata as any)?.errorDetails ?? null,
+      confusionMatrix: null,
+      scoreGoal: null,
+      datasetClassDistribution: null,
+      isDatasetClassDistributionBalanced: null,
+      predictedClassDistribution: null,
+      isPredictedClassDistributionBalanced: null,
+      scoreResults: [],
       task: {
         id: task.id,
         accountId: '',
@@ -188,17 +456,17 @@ export default function ActivityDashboard() {
     async function loadInitialData() {
       console.warn('Starting initial data load');
       try {
-        const tasks = await listRecentTasks(12);
+        const response = await listRecentTasks(12);
         console.warn('Initial data load complete:', {
-          count: tasks.length,
-          taskIds: tasks.map(task => task.id),
-          taskDetails: tasks.map(task => ({
-            id: task.id,
-            scorecard: task.scorecard,
-            score: task.score
+          count: response.items.length,
+          taskIds: response.items.map(item => item.id),
+          taskDetails: response.items.map(item => ({
+            id: item.id,
+            scorecard: item.scorecard,
+            score: item.score
           }))
         });
-        setRecentTasks(tasks);
+        setRecentTasks(response.items);
         setIsInitialLoading(false);
       } catch (error) {
         console.error('Error loading initial data:', error);
@@ -322,7 +590,29 @@ export default function ActivityDashboard() {
     const task = displayedTasks.find(t => t.id === selectedTask)
     if (!task) return null
 
-    console.log('Rendering selected task:', task.id)
+    console.debug('Rendering selected task - Full task data:', {
+      taskId: task.id,
+      type: task.type,
+      data: {
+        accuracy: task.data.accuracy,
+        metrics: task.data.metrics,
+        processedItems: task.data.processedItems,
+        totalItems: task.data.totalItems,
+        scoreResults: task.data.scoreResults?.length,
+        confusionMatrix: !!task.data.confusionMatrix,
+        scoreGoal: task.data.scoreGoal,
+        task: {
+          id: task.data.task?.id,
+          status: task.data.task?.status,
+          stages: task.data.task?.stages?.items?.map(s => ({
+            name: s.name,
+            status: s.status,
+            processedItems: s.processedItems,
+            totalItems: s.totalItems
+          }))
+        }
+      }
+    });
 
     const handleAnnounceAgain = async () => {
       console.log('Announcing task again:', task.id)

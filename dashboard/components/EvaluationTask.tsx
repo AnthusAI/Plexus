@@ -647,6 +647,17 @@ export default function EvaluationTask({
   isSelected,
   ...restProps
 }: EvaluationTaskProps) {
+  console.debug('EvaluationTask received props:', {
+    taskId: task.id,
+    data: {
+      accuracy: task.data.accuracy,
+      metrics: task.data.metrics,
+      scoreResults: task.data.scoreResults,
+      confusionMatrix: task.data.confusionMatrix,
+      scoreGoal: task.data.scoreGoal
+    }
+  });
+
   const data = task.data ?? {} as EvaluationTaskData
 
   const metrics = useMemo(() => 

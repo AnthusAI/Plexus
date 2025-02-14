@@ -37,6 +37,40 @@ export type ProcessedTask = {
     id: string;
     name: string;
   };
+  evaluation?: {
+    id: string;
+    type: string;
+    metrics: any;
+    metricsExplanation?: string | null;
+    inferences: number;
+    accuracy: number | null;
+    cost: number | null;
+    status: string;
+    startedAt?: string;
+    elapsedSeconds: number | null;
+    estimatedRemainingSeconds: number | null;
+    totalItems: number;
+    processedItems: number;
+    errorMessage?: string;
+    errorDetails?: any;
+    confusionMatrix?: any;
+    scoreGoal?: string;
+    datasetClassDistribution?: any;
+    isDatasetClassDistributionBalanced?: boolean;
+    predictedClassDistribution?: any;
+    isPredictedClassDistributionBalanced?: boolean;
+    scoreResults?: {
+      items?: Array<{
+        id: string;
+        value: string | number;
+        confidence: number | null;
+        metadata: any;
+        explanation: string | null;
+        itemId: string | null;
+        createdAt: string;
+      }>;
+    };
+  };
 };
 
 export type ProcessedTaskStage = {
@@ -210,7 +244,9 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
     taskId: task.id,
     hasStages: !!task.stages,
     stagesType: task.stages ? typeof task.stages : 'undefined',
-    rawStages: task.stages
+    rawStages: task.stages,
+    hasEvaluation: !!task.evaluation,
+    evaluationData: task.evaluation
   });
 
   // Handle stages - if it's a LazyLoader, we'll return an empty array
@@ -235,6 +271,79 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
     stagesCount: stages.length,
     stages
   });
+
+  // Transform evaluation data if present
+  let evaluation = undefined;
+  if (task.evaluation) {
+    try {
+      // Parse metrics if it's a string
+      let metrics = task.evaluation.metrics;
+      try {
+        if (typeof metrics === 'string') {
+          metrics = JSON.parse(metrics);
+        }
+      } catch (e) {
+        console.error('Error parsing metrics:', e);
+      }
+
+      // Parse confusion matrix if it's a string
+      let confusionMatrix = task.evaluation.confusionMatrix;
+      try {
+        if (typeof confusionMatrix === 'string') {
+          confusionMatrix = JSON.parse(confusionMatrix);
+        }
+      } catch (e) {
+        console.error('Error parsing confusion matrix:', e);
+      }
+
+      // Parse dataset class distribution if it's a string
+      let datasetClassDistribution = task.evaluation.datasetClassDistribution;
+      try {
+        if (typeof datasetClassDistribution === 'string') {
+          datasetClassDistribution = JSON.parse(datasetClassDistribution);
+        }
+      } catch (e) {
+        console.error('Error parsing dataset class distribution:', e);
+      }
+
+      // Parse predicted class distribution if it's a string
+      let predictedClassDistribution = task.evaluation.predictedClassDistribution;
+      try {
+        if (typeof predictedClassDistribution === 'string') {
+          predictedClassDistribution = JSON.parse(predictedClassDistribution);
+        }
+      } catch (e) {
+        console.error('Error parsing predicted class distribution:', e);
+      }
+
+      evaluation = {
+        id: task.evaluation.id,
+        type: task.evaluation.type,
+        metrics,
+        metricsExplanation: task.evaluation.metricsExplanation,
+        inferences: Number(task.evaluation.inferences) || 0,
+        accuracy: typeof task.evaluation.accuracy === 'number' ? task.evaluation.accuracy : null,
+        cost: task.evaluation.cost ?? null,
+        status: task.evaluation.status,
+        startedAt: task.evaluation.startedAt,
+        elapsedSeconds: task.evaluation.elapsedSeconds ?? null,
+        estimatedRemainingSeconds: task.evaluation.estimatedRemainingSeconds ?? null,
+        totalItems: Number(task.evaluation.totalItems) || 0,
+        processedItems: Number(task.evaluation.processedItems) || 0,
+        errorMessage: task.evaluation.errorMessage,
+        errorDetails: task.evaluation.errorDetails,
+        confusionMatrix,
+        scoreGoal: task.evaluation.scoreGoal,
+        datasetClassDistribution,
+        isDatasetClassDistributionBalanced: task.evaluation.isDatasetClassDistributionBalanced,
+        predictedClassDistribution,
+        isPredictedClassDistributionBalanced: task.evaluation.isPredictedClassDistributionBalanced,
+        scoreResults: task.evaluation.scoreResults
+      };
+    } catch (error) {
+      console.error('Error transforming evaluation data:', error);
+    }
+  }
 
   return {
     id: task.id,
@@ -267,7 +376,8 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
     score: task.score ? {
       id: task.score.id,
       name: task.score.name
-    } : undefined
+    } : undefined,
+    evaluation
   }
 }
 
@@ -581,6 +691,40 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
                 statusMessage
               }
             }
+            evaluation {
+              id
+              type
+              metrics
+              metricsExplanation
+              inferences
+              accuracy
+              cost
+              status
+              startedAt
+              elapsedSeconds
+              estimatedRemainingSeconds
+              totalItems
+              processedItems
+              errorMessage
+              errorDetails
+              confusionMatrix
+              scoreGoal
+              datasetClassDistribution
+              isDatasetClassDistributionBalanced
+              predictedClassDistribution
+              isPredictedClassDistributionBalanced
+              scoreResults {
+                items {
+                  id
+                  value
+                  confidence
+                  metadata
+                  explanation
+                  itemId
+                  createdAt
+                }
+              }
+            }
           }
         }`
       }).subscribe({
@@ -653,6 +797,40 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
                 statusMessage
               }
             }
+            evaluation {
+              id
+              type
+              metrics
+              metricsExplanation
+              inferences
+              accuracy
+              cost
+              status
+              startedAt
+              elapsedSeconds
+              estimatedRemainingSeconds
+              totalItems
+              processedItems
+              errorMessage
+              errorDetails
+              confusionMatrix
+              scoreGoal
+              datasetClassDistribution
+              isDatasetClassDistributionBalanced
+              predictedClassDistribution
+              isPredictedClassDistributionBalanced
+              scoreResults {
+                items {
+                  id
+                  value
+                  confidence
+                  metadata
+                  explanation
+                  itemId
+                  createdAt
+                }
+              }
+            }
           }
         }`
       }).subscribe({
@@ -718,109 +896,40 @@ type TaskStageData = Schema['TaskStage']['type'];
 
 async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
   console.debug(`Starting to process task ${task.id}`, {
-    id: task.id,
+    taskId: task.id,
     type: task.type,
-    scorecard: task.scorecard,
-    score: task.score,
-    scorecardId: task.scorecardId,
-    scoreId: task.scoreId
+    hasStages: !!task.stages,
+    stagesType: task.stages ? typeof task.stages : 'undefined',
+    rawStages: task.stages,
+    hasEvaluation: !!task.evaluation,
+    evaluationData: task.evaluation
   });
-
-  let stages: ProcessedTaskStage[] = [];
 
   try {
     if (!task.stages) {
-      console.debug(`Task ${task.id} has no stages`);
-      return {
-        id: task.id,
-        command: task.command,
-        type: task.type,
-        status: task.status,
-        target: task.target,
-        description: task.description ?? undefined,
-        metadata: typeof task.metadata === 'string' ? task.metadata : JSON.stringify(task.metadata ?? null),
-        createdAt: task.createdAt ?? undefined,
-        startedAt: task.startedAt ?? undefined,
-        completedAt: task.completedAt ?? undefined,
-        estimatedCompletionAt: task.estimatedCompletionAt ?? undefined,
-        errorMessage: task.errorMessage ?? undefined,
-        errorDetails: typeof task.errorDetails === 'string' ? task.errorDetails : JSON.stringify(task.errorDetails ?? null),
-        stdout: task.stdout ?? undefined,
-        stderr: task.stderr ?? undefined,
-        currentStageId: task.currentStageId ?? undefined,
-        stages: [],
-        dispatchStatus: task.dispatchStatus ?? undefined,
-        celeryTaskId: task.celeryTaskId ?? undefined,
-        workerNodeId: task.workerNodeId ?? undefined,
-        updatedAt: task.updatedAt ?? undefined,
-        scorecardId: task.scorecardId ?? undefined,
-        scoreId: task.scoreId ?? undefined,
-        scorecard: task.scorecard ? {
-          id: task.scorecard.id,
-          name: task.scorecard.name
-        } : undefined,
-        score: task.score ? {
-          id: task.score.id,
-          name: task.score.name
-        } : undefined
-      };
+      // If stages is missing, try to load them
+      const stagesResponse = await listFromModel<Schema['TaskStage']['type']>(
+        'TaskStage',
+        { filter: { taskId: { eq: task.id } } }
+      );
+      task.stages = { items: stagesResponse.data || [] };
     }
 
-    if (typeof task.stages === 'function') {
-      console.debug(`Task ${task.id} has stages as function`);
-      // Handle LazyLoader
-      const stagesData = await task.stages();
-      console.debug(`Loaded stages data for task ${task.id}:`, stagesData);
-      if (stagesData?.data) {
-        stages = stagesData.data.map((stage: TaskStageData) => ({
-          id: stage.id,
-          name: stage.name,
-          order: stage.order,
-          status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-          processedItems: stage.processedItems ?? undefined,
-          totalItems: stage.totalItems ?? undefined,
-          startedAt: stage.startedAt ?? undefined,
-          completedAt: stage.completedAt ?? undefined,
-          estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
-          statusMessage: stage.statusMessage ?? undefined
-        }));
-      }
-    } else if (typeof task.stages === 'object' && task.stages !== null) {
-      const stagesObj = task.stages as { items?: TaskStageData[] };
-      if (stagesObj.items && Array.isArray(stagesObj.items)) {
-        // Handle nested stages.items structure from GraphQL
-        console.debug(`Task ${task.id} has stages.items array:`, stagesObj.items);
-        stages = stagesObj.items.map((stage: TaskStageData) => ({
-          id: stage.id,
-          name: stage.name,
-          order: stage.order,
-          status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-          processedItems: stage.processedItems ?? undefined,
-          totalItems: stage.totalItems ?? undefined,
-          startedAt: stage.startedAt ?? undefined,
-          completedAt: stage.completedAt ?? undefined,
-          estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
-          statusMessage: stage.statusMessage ?? undefined
-        }));
-      } else if (Array.isArray(task.stages)) {
-        console.debug(`Task ${task.id} has stages as array:`, task.stages);
-        const stagesArray = task.stages as TaskStageData[];
-        stages = stagesArray.map((stage: TaskStageData) => ({
-          id: stage.id,
-          name: stage.name,
-          order: stage.order,
-          status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-          processedItems: stage.processedItems ?? undefined,
-          totalItems: stage.totalItems ?? undefined,
-          startedAt: stage.startedAt ?? undefined,
-          completedAt: stage.completedAt ?? undefined,
-          estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
-          statusMessage: stage.statusMessage ?? undefined
-        }));
-      }
-    } else {
-      console.debug(`Task ${task.id} has unknown stages format:`, task.stages);
-    }
+    // Sort stages by order
+    const stages: ProcessedTaskStage[] = (task.stages?.items || [])
+      .sort((a: any, b: any) => a.order - b.order)
+      .map((stage: any) => ({
+        id: stage.id,
+        name: stage.name,
+        order: stage.order,
+        status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+        processedItems: stage.processedItems ?? undefined,
+        totalItems: stage.totalItems ?? undefined,
+        startedAt: stage.startedAt ?? undefined,
+        completedAt: stage.completedAt ?? undefined,
+        estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+        statusMessage: stage.statusMessage ?? undefined
+      }));
 
     const processed: ProcessedTask = {
       id: task.id,
@@ -853,6 +962,30 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
       score: task.score ? {
         id: task.score.id,
         name: task.score.name
+      } : undefined,
+      evaluation: task.evaluation ? {
+        id: task.evaluation.id,
+        type: task.evaluation.type,
+        metrics: task.evaluation.metrics,
+        metricsExplanation: task.evaluation.metricsExplanation,
+        inferences: task.evaluation.inferences,
+        accuracy: task.evaluation.accuracy,
+        cost: task.evaluation.cost,
+        status: task.evaluation.status,
+        startedAt: task.evaluation.startedAt,
+        elapsedSeconds: task.evaluation.elapsedSeconds,
+        estimatedRemainingSeconds: task.evaluation.estimatedRemainingSeconds,
+        totalItems: task.evaluation.totalItems,
+        processedItems: task.evaluation.processedItems,
+        errorMessage: task.evaluation.errorMessage,
+        errorDetails: task.evaluation.errorDetails,
+        confusionMatrix: task.evaluation.confusionMatrix,
+        scoreGoal: task.evaluation.scoreGoal,
+        datasetClassDistribution: task.evaluation.datasetClassDistribution,
+        isDatasetClassDistributionBalanced: task.evaluation.isDatasetClassDistributionBalanced,
+        predictedClassDistribution: task.evaluation.predictedClassDistribution,
+        isPredictedClassDistributionBalanced: task.evaluation.isPredictedClassDistributionBalanced,
+        scoreResults: task.evaluation.scoreResults
       } : undefined
     };
 
@@ -862,7 +995,9 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
       scorecard: processed.scorecard,
       score: processed.score,
       scorecardId: processed.scorecardId,
-      scoreId: processed.scoreId
+      scoreId: processed.scoreId,
+      hasEvaluation: !!processed.evaluation,
+      evaluationData: processed.evaluation
     });
 
     return processed;
@@ -873,7 +1008,7 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
 }
 
 export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask[]> {
-  console.warn('listRecentTasks called with limit:', limit);  // Changed to warn to make it more visible
+  console.warn('listRecentTasks called with limit:', limit);
   try {
     const currentClient = getClient();
     if (!currentClient.models.Task) {
@@ -953,6 +1088,40 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
                   statusMessage
                 }
               }
+              evaluation {
+                id
+                type
+                metrics
+                metricsExplanation
+                inferences
+                accuracy
+                cost
+                status
+                startedAt
+                elapsedSeconds
+                estimatedRemainingSeconds
+                totalItems
+                processedItems
+                errorMessage
+                errorDetails
+                confusionMatrix
+                scoreGoal
+                datasetClassDistribution
+                isDatasetClassDistributionBalanced
+                predictedClassDistribution
+                isPredictedClassDistributionBalanced
+                scoreResults {
+                  items {
+                    id
+                    value
+                    confidence
+                    metadata
+                    explanation
+                    itemId
+                    createdAt
+                  }
+                }
+              }
             }
             nextToken
           }
@@ -976,7 +1145,23 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
       return [];
     }
 
-    console.warn('Raw GraphQL response data:', JSON.stringify(response.data, null, 2));
+    console.debug('Raw GraphQL response - Task with evaluation:', {
+      taskCount: response.data?.listTaskByAccountIdAndUpdatedAt?.items?.length,
+      firstTask: response.data?.listTaskByAccountIdAndUpdatedAt?.items?.[0] ? {
+        id: response.data.listTaskByAccountIdAndUpdatedAt.items[0].id,
+        type: response.data.listTaskByAccountIdAndUpdatedAt.items[0].type,
+        hasEvaluation: !!response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation,
+        evaluation: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation ? {
+          id: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation.id,
+          type: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation.type,
+          metrics: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation.metrics,
+          accuracy: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation.accuracy,
+          processedItems: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation.processedItems,
+          totalItems: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation.totalItems,
+          scoreResults: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation.scoreResults
+        } : null
+      } : null
+    });
 
     const result = response.data;
     if (!result?.listTaskByAccountIdAndUpdatedAt?.items) {
@@ -993,7 +1178,9 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
           scorecard: task.scorecard,
           score: task.score,
           scorecardId: task.scorecardId,
-          scoreId: task.scoreId
+          scoreId: task.scoreId,
+          hasEvaluation: !!task.evaluation,
+          evaluationData: task.evaluation
         });
         return processTask(task);
       })
@@ -1005,7 +1192,9 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
       scorecard: task.scorecard,
       score: task.score,
       scorecardId: task.scorecardId,
-      scoreId: task.scoreId
+      scoreId: task.scoreId,
+      hasEvaluation: !!task.evaluation,
+      evaluationData: task.evaluation
     })));
     return processedTasks;
   } catch (error) {
@@ -1274,121 +1463,133 @@ export async function listRecentEvaluations(limit: number = 100): Promise<Schema
 }
 
 export function observeRecentEvaluations(limit: number = 100): Observable<{ items: Schema['Evaluation']['type'][], isSynced: boolean }> {
-  console.warn('observeRecentEvaluations called with limit:', limit);
   return new Observable(subscriber => {
     let isSynced = false;
-    let currentEvaluations: Schema['Evaluation']['type'][] = [];
-    const client = getClient();
-
-    // Initial load
+    let evaluations: Schema['Evaluation']['type'][] = [];
+    
     async function loadInitialEvaluations() {
       try {
-        const evaluations = await listRecentEvaluations(limit);
-        currentEvaluations = evaluations;
-        subscriber.next({ items: currentEvaluations, isSynced: true });
+        const response = await listRecentEvaluations(limit);
+        console.debug('Initial evaluations load:', {
+          count: response.length,
+          firstEvaluation: response[0] ? {
+            id: response[0].id,
+            type: response[0].type,
+            metrics: response[0].metrics,
+            accuracy: response[0].accuracy,
+            scoreResults: response[0].scoreResults,
+            task: response[0].task ? {
+              id: response[0].task.id,
+              status: response[0].task.status,
+              stages: response[0].task.stages
+            } : null
+          } : null
+        });
+        evaluations = response;
+        subscriber.next({ items: evaluations, isSynced: true });
         isSynced = true;
       } catch (error) {
-        console.error('Error in initial evaluations load:', error);
-        subscriber.next({ items: [], isSynced: false });
+        console.error('Error loading initial evaluations:', error);
+        subscriber.error(error);
       }
     }
 
-    // Handle evaluation updates in-memory
     async function handleEvaluationUpdate(updatedEvaluation: Schema['Evaluation']['type']) {
-      try {
-        console.debug('Processing evaluation update/create:', {
-          evaluationId: updatedEvaluation.id,
-          type: updatedEvaluation.type,
-          status: updatedEvaluation.status,
-          taskId: updatedEvaluation.taskId,
-          hasTask: !!updatedEvaluation.task
-        });
+      console.debug('Evaluation update received:', {
+        id: updatedEvaluation.id,
+        type: updatedEvaluation.type,
+        metrics: updatedEvaluation.metrics,
+        accuracy: updatedEvaluation.accuracy,
+        scoreResults: updatedEvaluation.scoreResults,
+        task: updatedEvaluation.task ? {
+          id: updatedEvaluation.task.id,
+          status: updatedEvaluation.task.status,
+          stages: updatedEvaluation.task.stages
+        } : null
+      });
 
-        // If we have IDs but no data, fetch the related data
-        if (updatedEvaluation.scorecardId && !updatedEvaluation.scorecard) {
-          console.debug('Fetching scorecard data for ID:', updatedEvaluation.scorecardId);
-          const scorecardResponse = await client.graphql({
-            query: `
-              query GetScorecard($id: ID!) {
-                getScorecard(id: $id) {
-                  id
-                  name
-                  key
-                }
+      // If we have IDs but no data, fetch the related data
+      if (updatedEvaluation.scorecardId && !updatedEvaluation.scorecard) {
+        console.debug('Fetching scorecard data for ID:', updatedEvaluation.scorecardId);
+        const scorecardResponse = await client.graphql({
+          query: `
+            query GetScorecard($id: ID!) {
+              getScorecard(id: $id) {
+                id
+                name
+                key
               }
-            `,
-            variables: {
-              id: updatedEvaluation.scorecardId
             }
-          });
-          updatedEvaluation.scorecard = scorecardResponse.data?.getScorecard;
-        }
-
-        if (updatedEvaluation.scoreId && !updatedEvaluation.score) {
-          console.debug('Fetching score data for ID:', updatedEvaluation.scoreId);
-          const scoreResponse = await client.graphql({
-            query: `
-              query GetScore($id: ID!) {
-                getScore(id: $id) {
-                  id
-                  name
-                  key
-                }
-              }
-            `,
-            variables: {
-              id: updatedEvaluation.scoreId
-            }
-          });
-          updatedEvaluation.score = scoreResponse.data?.getScore;
-        }
-
-        const evaluationIndex = currentEvaluations.findIndex(e => e.id === updatedEvaluation.id);
-        
-        if (evaluationIndex !== -1) {
-          // Update existing evaluation
-          const existingEvaluation = currentEvaluations[evaluationIndex];
-          
-          // Create the updated evaluation, prioritizing new data
-          const updatedEvaluationData = {
-            ...existingEvaluation,
-            ...updatedEvaluation,
-            task: updatedEvaluation.task || existingEvaluation.task
-          };
-
-          currentEvaluations[evaluationIndex] = updatedEvaluationData;
-        } else {
-          // For new evaluations, add to the beginning of the array
-          currentEvaluations.unshift(updatedEvaluation);
-          console.debug('Added new evaluation:', {
-            evaluationId: updatedEvaluation.id,
-            totalEvaluations: currentEvaluations.length
-          });
-        }
-
-        // Sort evaluations by updatedAt
-        currentEvaluations.sort((a, b) => 
-          new Date(b.updatedAt || b.createdAt || '').getTime() - 
-          new Date(a.updatedAt || a.createdAt || '').getTime()
-        );
-
-        // Trim to limit if needed
-        if (currentEvaluations.length > limit) {
-          currentEvaluations = currentEvaluations.slice(0, limit);
-        }
-
-        console.debug('Emitting updated evaluation list:', {
-          count: currentEvaluations.length,
-          evaluationIds: currentEvaluations.map(e => ({
-            id: e.id,
-            status: e.status,
-            taskId: e.taskId
-          }))
+          `,
+          variables: {
+            id: updatedEvaluation.scorecardId
+          }
         });
-        subscriber.next({ items: [...currentEvaluations], isSynced: true });
-      } catch (error) {
-        console.error('Error processing evaluation update:', error);
+        updatedEvaluation.scorecard = scorecardResponse.data?.getScorecard;
       }
+
+      if (updatedEvaluation.scoreId && !updatedEvaluation.score) {
+        console.debug('Fetching score data for ID:', updatedEvaluation.scoreId);
+        const scoreResponse = await client.graphql({
+          query: `
+            query GetScore($id: ID!) {
+              getScore(id: $id) {
+                id
+                name
+                key
+              }
+            }
+          `,
+          variables: {
+            id: updatedEvaluation.scoreId
+          }
+        });
+        updatedEvaluation.score = scoreResponse.data?.getScore;
+      }
+
+      const evaluationIndex = evaluations.findIndex(e => e.id === updatedEvaluation.id);
+      
+      if (evaluationIndex !== -1) {
+        // Update existing evaluation
+        const existingEvaluation = evaluations[evaluationIndex];
+        
+        // Create the updated evaluation, prioritizing new data
+        const updatedEvaluationData = {
+          ...existingEvaluation,
+          ...updatedEvaluation,
+          task: updatedEvaluation.task || existingEvaluation.task
+        };
+
+        evaluations[evaluationIndex] = updatedEvaluationData;
+      } else {
+        // For new evaluations, add to the beginning of the array
+        evaluations.unshift(updatedEvaluation);
+        console.debug('Added new evaluation:', {
+          evaluationId: updatedEvaluation.id,
+          totalEvaluations: evaluations.length
+        });
+      }
+
+      // Sort evaluations by updatedAt
+      evaluations.sort((a, b) => 
+        new Date(b.updatedAt || b.createdAt || '').getTime() - 
+        new Date(a.updatedAt || a.createdAt || '').getTime()
+      );
+
+      // Trim to limit if needed
+      if (evaluations.length > limit) {
+        evaluations = evaluations.slice(0, limit);
+      }
+
+      console.debug('Emitting updated evaluation list:', {
+        count: evaluations.length,
+        evaluationIds: evaluations.map(e => ({
+          id: e.id,
+          status: e.status,
+          taskId: e.taskId
+        }))
+      });
+      subscriber.next({ items: [...evaluations], isSynced: true });
     }
 
     // Load initial data
