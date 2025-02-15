@@ -730,7 +730,7 @@ def accuracy(
                             if score_config:
                                 # Setup stage - dataset preparation
                                 with CommandProgress.track(
-                                    total=number_of_samples,
+                                    total=tracker.total_items,
                                     status=f"Loading dataset for {single_score_name}..."
                                 ) as progress:
                                     tracker.current_stage.status_message = f"Loading dataset for {single_score_name}..."
@@ -740,11 +740,11 @@ def accuracy(
                                     def progress_callback_fn(self, current):
                                         progress.update(
                                             current=current,
-                                            total=number_of_samples,
-                                            status=f"Loaded {current} of {number_of_samples} samples"
+                                            total=tracker.total_items,
+                                            status=f"Loaded {current} of {tracker.total_items} samples"
                                         )
                                         self.update(current_items=current)
-                                        self.current_stage.status_message = f"Loaded {current} of {number_of_samples} samples for {single_score_name}"
+                                        self.current_stage.status_message = f"Loaded {current} of {tracker.total_items} samples for {single_score_name}"
                                     
                                     # Create a bound method from the function
                                     bound_progress_callback = types.MethodType(progress_callback_fn, tracker)
@@ -753,7 +753,7 @@ def accuracy(
                                         scorecard_instance, scorecard_name, single_score_name, 
                                         score_config, fresh, content_ids_to_sample_set,
                                         progress_callback=bound_progress_callback,
-                                        number_of_samples=number_of_samples
+                                        number_of_samples=tracker.total_items
                                     )
                                     
                                     if single_score_labeled_samples:
@@ -774,7 +774,7 @@ def accuracy(
                             'scorecard_name': scorecard_name,
                             'scorecard': scorecard_instance,
                             'override_folder': override_folder,
-                            'number_of_texts_to_sample': number_of_samples,
+                            'number_of_texts_to_sample': tracker.total_items,
                             'sampling_method': sampling_method,
                             'random_seed': random_seed,
                             'subset_of_score_names': [single_score_name],
@@ -802,7 +802,7 @@ def accuracy(
                         
                         async with AccuracyEvaluation(**single_score_experiment_args) as experiment:
                             with CommandProgress.track(
-                                total=number_of_samples,
+                                total=tracker.total_items,
                                 status=f"Evaluating {single_score_name}..."
                             ) as progress:
                                 await experiment.run(
@@ -810,12 +810,12 @@ def accuracy(
                                     progress_callback=lambda current: (
                                         progress.update(
                                             current=current,
-                                            total=number_of_samples,
-                                            status=f"Processed {current} of {number_of_samples} evaluations"
+                                            total=tracker.total_items,
+                                            status=f"Processed {current} of {tracker.total_items} evaluations"
                                         ),
                                         tracker.update(current_items=current),
                                         setattr(tracker.current_stage, 'status_message',
-                                               f"Processing {single_score_name}: {current} of {number_of_samples} evaluations")
+                                               f"Processing {single_score_name}: {current} of {tracker.total_items} evaluations")
                                     )
                                 )
 
