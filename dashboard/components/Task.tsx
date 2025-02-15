@@ -263,13 +263,6 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
   visualization?: React.ReactNode
   hideTaskStatus?: boolean
 }) => {
-  console.debug('TaskContent render:', {
-    taskId: task.id,
-    variant,
-    command: task.command,
-    commandDisplay,
-    hideTaskStatus
-  });
 
   // Get status message from current stage or last completed stage if task is done
   const statusMessage = (() => {
