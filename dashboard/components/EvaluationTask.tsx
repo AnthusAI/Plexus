@@ -304,6 +304,7 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
         <EvaluationListAccuracyBar 
           progress={progress}
           accuracy={accuracy}
+          isSelected={isSelected}
         />
       )}
     </div>
