@@ -23,7 +23,7 @@ export type ProcessedTask = {
   stderr?: string;
   currentStageId?: string;
   stages: ProcessedTaskStage[];
-  dispatchStatus?: 'DISPATCHED' | string;  // Allow both literal and string
+  dispatchStatus?: 'DISPATCHED';
   celeryTaskId?: string;
   workerNodeId?: string;
   updatedAt?: string;  // Add updatedAt field

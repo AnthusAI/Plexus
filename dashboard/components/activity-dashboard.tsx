@@ -336,18 +336,20 @@ function transformTaskToActivity(task: ProcessedTask) {
       }
 
       // Log the transformed evaluation data
-      console.debug('Transformed evaluation data:', {
-        taskId: task.id,
-        evaluationData: {
-          metrics: evaluationData.metrics,
-          accuracy: evaluationData.accuracy,
-          processedItems: evaluationData.processedItems,
-          totalItems: evaluationData.totalItems,
-          scoreResults: evaluationData.scoreResults?.length,
-          confusionMatrix: evaluationData.confusionMatrix,
-          scoreGoal: evaluationData.scoreGoal
-        }
-      });
+      if (evaluationData) {
+        console.debug('Transformed evaluation data:', {
+          taskId: task.id,
+          evaluationData: {
+            metrics: evaluationData.metrics,
+            accuracy: evaluationData.accuracy,
+            processedItems: evaluationData.processedItems,
+            totalItems: evaluationData.totalItems,
+            scoreResults: evaluationData.scoreResults?.length,
+            confusionMatrix: evaluationData.confusionMatrix,
+            scoreGoal: evaluationData.scoreGoal
+          }
+        });
+      }
     } catch (error) {
       console.error('Error transforming evaluation data:', error, {
         evaluationId: evaluation.id,
@@ -458,15 +460,15 @@ export default function ActivityDashboard() {
       try {
         const response = await listRecentTasks(12);
         console.warn('Initial data load complete:', {
-          count: response.items.length,
-          taskIds: response.items.map(item => item.id),
-          taskDetails: response.items.map(item => ({
+          count: response.length,
+          taskIds: response.map((item: ProcessedTask) => item.id),
+          taskDetails: response.map((item: ProcessedTask) => ({
             id: item.id,
             scorecard: item.scorecard,
             score: item.score
           }))
         });
-        setRecentTasks(response.items);
+        setRecentTasks(response);
         setIsInitialLoading(false);
       } catch (error) {
         console.error('Error loading initial data:', error);
