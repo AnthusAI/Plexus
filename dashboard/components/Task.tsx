@@ -214,20 +214,30 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
       variant === 'detail' && "px-1"
     )}>
       <div className="flex justify-between items-start w-full">
-        <div className="flex flex-col pb-1">
+        <div className="flex flex-col pb-1 leading-none">
           <div className="text-sm">{task.scorecard || '\u00A0'}</div>
           <div className="text-sm">{task.score || '\u00A0'}</div>
           {variant !== 'grid' && (
-            <div className="text-sm">{task.type}</div>
+            <div className="text-sm text-muted-foreground">{task.type}</div>
           )}
           <div className="text-xs text-muted-foreground mt-1">{formattedTime}</div>
         </div>
         <div className="flex flex-col items-end">
           {variant === 'grid' ? (
-            <>
-              <div className="text-sm">{task.type}</div>
-              <div className="mt-1">{taskIcon}</div>
-            </>
+            <div className="flex items-start gap-2">
+              <div className="text-sm text-muted-foreground text-right">
+                {(() => {
+                  const [firstWord, ...restWords] = task.type.split(/\s+/);
+                  return (
+                    <>
+                      {firstWord}<br />
+                      {restWords.join(' ')}
+                    </>
+                  );
+                })()}
+              </div>
+              <div className="text-muted-foreground mt-[0.15rem]">{taskIcon}</div>
+            </div>
           ) : (
             <>
               <div className="flex gap-2">
