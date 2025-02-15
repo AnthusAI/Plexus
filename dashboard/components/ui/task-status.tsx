@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { StyleTag } from './style-tag'
 import { CardButton } from '@/components/CardButton'
 import { isEqual } from 'lodash'
+import { Timestamp } from './timestamp'
 
 // Add custom animation styles
 const animations = `
@@ -541,12 +542,14 @@ export const TaskStatus = React.memo(({
           <span>{preExecutionStatus.message}</span>
         </div>
       ) : (
-        <ProgressBarTiming
-          elapsedTime={elapsedTime}
-          estimatedTimeRemaining={estimatedTimeRemaining}
-          isInProgress={isInProgress}
-          className="text-muted-foreground"
-        />
+        startedAt && (
+          <Timestamp 
+            time={startedAt} 
+            completionTime={completedAt} 
+            variant="elapsed" 
+            className="text-muted-foreground"
+          />
+        )
       )}
       {showStages && (
         <SegmentedProgressBar
