@@ -1,17 +1,18 @@
 import { BaseTaskData } from '../base'
 import { TaskStatus } from '../shared'
+import { LazyLoader } from '@/utils/types'
 
-export interface TaskStage {
+export type TaskStage = {
   id: string
   name: string
   order: number
-  status: string
-  statusMessage?: string
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  processedItems?: number
+  totalItems?: number
   startedAt?: string
   completedAt?: string
   estimatedCompletionAt?: string
-  processedItems?: number
-  totalItems?: number
+  statusMessage?: string
 }
 
 export interface ConfusionMatrix {
@@ -49,27 +50,74 @@ export type EvaluationTaskData = BaseTaskData & {
   task?: TaskData | null
 }
 
-export interface TaskData {
+export type TaskData = {
   id: string
-  accountId: string
+  command: string
   type: string
   status: string
   target: string
-  command: string
   description?: string
-  dispatchStatus?: 'DISPATCHED'
   metadata?: any
   createdAt?: string
   startedAt?: string
   completedAt?: string
   estimatedCompletionAt?: string
   errorMessage?: string
-  errorDetails?: string
+  errorDetails?: any
+  stdout?: string
+  stderr?: string
   currentStageId?: string
   stages?: {
     items: TaskStage[]
-    nextToken?: string | null
   }
+  dispatchStatus?: 'DISPATCHED'
+  celeryTaskId?: string
+  workerNodeId?: string
+  updatedAt?: string
+  scorecardId?: string
+  scoreId?: string
+  scorecard?: LazyLoader<{
+    id: string
+    name: string
+  }>
+  score?: LazyLoader<{
+    id: string
+    name: string
+  }>
+  evaluation?: LazyLoader<{
+    id: string
+    type: string
+    metrics: any
+    metricsExplanation?: string
+    inferences: number
+    accuracy: number
+    cost: number | null
+    status: string
+    startedAt?: string
+    elapsedSeconds: number | null
+    estimatedRemainingSeconds: number | null
+    totalItems: number
+    processedItems: number
+    errorMessage?: string
+    errorDetails?: any
+    confusionMatrix?: any
+    scoreGoal?: string
+    datasetClassDistribution?: any
+    isDatasetClassDistributionBalanced?: boolean
+    predictedClassDistribution?: any
+    isPredictedClassDistributionBalanced?: boolean
+    scoreResults?: {
+      items?: Array<{
+        id: string
+        value: string | number
+        confidence: number | null
+        metadata: any
+        explanation: string | null
+        itemId: string | null
+        createdAt: string
+      }>
+    }
+  }>
 }
 
 // Props type for components

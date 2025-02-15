@@ -2,8 +2,95 @@ import { generateClient } from 'aws-amplify/data';
 import { Schema } from '@/amplify/data/resource';
 import { Observable } from 'rxjs';
 
-// Define the shape of the task data we expect from Amplify
-export type AmplifyTask = Schema['Task']['type'];
+// Define LazyLoader type
+type LazyLoader<T> = T | (() => Promise<T>);
+
+// Define base types for nested objects
+type TaskStageType = {
+  id: string;
+  name: string;
+  order: number;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  processedItems?: number;
+  totalItems?: number;
+  startedAt?: string;
+  completedAt?: string;
+  estimatedCompletionAt?: string;
+  statusMessage?: string;
+};
+
+type EvaluationType = {
+  id: string;
+  type: string;
+  metrics: any;
+  metricsExplanation?: string;
+  inferences: number;
+  accuracy: number;
+  cost: number | null;
+  status: string;
+  startedAt?: string;
+  elapsedSeconds: number | null;
+  estimatedRemainingSeconds: number | null;
+  totalItems: number;
+  processedItems: number;
+  errorMessage?: string;
+  errorDetails?: any;
+  confusionMatrix?: any;
+  scoreGoal?: string;
+  datasetClassDistribution?: any;
+  isDatasetClassDistributionBalanced?: boolean;
+  predictedClassDistribution?: any;
+  isPredictedClassDistributionBalanced?: boolean;
+  scoreResults?: {
+    items?: Array<{
+      id: string;
+      value: string | number;
+      confidence: number | null;
+      metadata: any;
+      explanation: string | null;
+      itemId: string | null;
+      createdAt: string;
+    }>;
+  };
+};
+
+// Update AmplifyTask type to properly handle lazy-loaded properties
+export type AmplifyTask = {
+  id: string;
+  command: string;
+  type: string;
+  status: string;
+  target: string;
+  description?: string;
+  metadata?: any;
+  createdAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  estimatedCompletionAt?: string;
+  errorMessage?: string;
+  errorDetails?: any;
+  stdout?: string;
+  stderr?: string;
+  currentStageId?: string;
+  stages?: {
+    items: TaskStageType[];
+  };
+  dispatchStatus?: 'DISPATCHED';
+  celeryTaskId?: string;
+  workerNodeId?: string;
+  updatedAt?: string;
+  scorecardId?: string;
+  scoreId?: string;
+  scorecard?: LazyLoader<{
+    id: string;
+    name: string;
+  }>;
+  score?: LazyLoader<{
+    id: string;
+    name: string;
+  }>;
+  evaluation?: LazyLoader<EvaluationType>;
+};
 
 export type ProcessedTask = {
   id: string;
@@ -139,6 +226,26 @@ type ListTaskResponse = {
   };
 };
 
+// Add GraphQL response types
+type GraphQLResponse<T> = {
+  data?: T;
+  errors?: Array<{
+    message: string;
+    locations?: Array<{
+      line: number;
+      column: number;
+    }>;
+    path?: string[];
+  }>;
+};
+
+type SubscriptionResponse<T> = {
+  provider: any;
+  value: {
+    data: T;
+  };
+};
+
 export function getClient(): AmplifyClient {
   if (!client) {
     client = generateClient<Schema>() as AmplifyClient;
@@ -146,7 +253,7 @@ export function getClient(): AmplifyClient {
   return client;
 }
 
-export async function listFromModel<T extends { id: string }>(
+export async function listFromModel<T>(
   modelName: keyof AmplifyClient['models'],
   options?: {
     limit?: number,
@@ -154,88 +261,25 @@ export async function listFromModel<T extends { id: string }>(
     nextToken?: string,
     sortDirection?: 'ASC' | 'DESC'
   }
-): Promise<AmplifyListResult<T>> {
-  console.warn('listFromModel called:', {
-    modelName,
-    options
-  });
+): Promise<{ data?: T[], nextToken?: string }> {
   const currentClient = getClient();
   
   try {
-    // Collect all results across pages
-    let allData: T[] = []
-    let currentNextToken = options?.nextToken
-
-    do {
-      console.debug('Making list request:', {
-        modelName,
-        limit: options?.limit,
-        filter: options?.filter,
-        nextToken: currentNextToken,
-        include: modelName === 'Task' ? ['stages', 'scorecard', 'score'] : undefined
-      });
-
-      const response = await (currentClient.models[modelName] as any).list({
-        limit: options?.limit,
-        filter: options?.filter,
-        nextToken: currentNextToken,
-        sortDirection: options?.sortDirection,
-        // Include stages when listing tasks
-        include: modelName === 'Task' ? ['stages', 'scorecard', 'score'] : undefined
-      });
-
-      console.debug('List response:', {
-        modelName,
-        dataLength: response.data?.length,
-        firstItem: response.data?.[0] ? {
-          id: response.data[0].id,
-          scorecard: response.data[0].scorecard,
-          score: response.data[0].score
-        } : null
-      });
-
-      if (response.data?.length) {
-        allData = [...allData, ...response.data]
-      }
-
-      currentNextToken = response.nextToken
-    } while (currentNextToken && (!options?.limit || allData.length < options.limit))
-
-    // If we have a limit, respect it exactly
-    if (options?.limit && allData.length > options.limit) {
-      allData = allData.slice(0, options.limit)
-    }
-
-    // Sort by updatedAt if available, otherwise by createdAt
-    if (allData.length > 0) {
-      if ('updatedAt' in allData[0]) {
-        allData.sort((a: any, b: any) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        )
-      } else if ('createdAt' in allData[0]) {
-        allData.sort((a: any, b: any) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        )
-      }
-    }
-
-    console.debug('listFromModel result:', {
-      modelName,
-      dataLength: allData.length,
-      firstItem: allData[0] ? {
-        id: allData[0].id,
-        scorecard: (allData[0] as any).scorecard,
-        score: (allData[0] as any).score
-      } : null
+    const response = await (currentClient.models[modelName] as any).list({
+      limit: options?.limit,
+      filter: options?.filter,
+      nextToken: options?.nextToken,
+      sortDirection: options?.sortDirection,
+      include: modelName === 'Task' ? ['stages', 'scorecard', 'score'] : undefined
     });
 
     return {
-      data: allData,
-      nextToken: currentNextToken
+      data: response.data,
+      nextToken: response.nextToken
     };
   } catch (error) {
-    console.error(`Error listing ${modelName}:`, error);
-    return { data: [], nextToken: null };
+    console.error(`Error in listFromModel for ${modelName}:`, error);
+    return { data: [] };
   }
 }
 
@@ -249,35 +293,29 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
     evaluationData: task.evaluation
   });
 
-  // Handle stages - if it's a LazyLoader, we'll return an empty array
-  // The stages will be loaded later by the processTask function
-  const stages: ProcessedTaskStage[] = task.stages?.items ? 
-    task.stages.items.map((stage: any) => ({
-      id: stage.id,
-      name: stage.name,
-      order: stage.order,
-      status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-      processedItems: stage.processedItems ?? undefined,
-      totalItems: stage.totalItems ?? undefined,
-      startedAt: stage.startedAt ?? undefined,
-      completedAt: stage.completedAt ?? undefined,
-      estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
-      statusMessage: stage.statusMessage ?? undefined
-    }))
-    : [];
-
-  console.debug('Transformed stages:', {
-    taskId: task.id,
-    stagesCount: stages.length,
-    stages
-  });
+  // Handle stages
+  const stages: ProcessedTaskStage[] = task.stages?.items?.map((stage: TaskStageType) => ({
+    id: stage.id,
+    name: stage.name,
+    order: stage.order,
+    status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+    processedItems: stage.processedItems ?? undefined,
+    totalItems: stage.totalItems ?? undefined,
+    startedAt: stage.startedAt ?? undefined,
+    completedAt: stage.completedAt ?? undefined,
+    estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+    statusMessage: stage.statusMessage ?? undefined
+  })) ?? [];
 
   // Transform evaluation data if present
   let evaluation = undefined;
   if (task.evaluation) {
     try {
+      const evaluationData = typeof task.evaluation === 'function' ? 
+        await task.evaluation() : task.evaluation;
+
       // Parse metrics if it's a string
-      let metrics = task.evaluation.metrics;
+      let metrics = evaluationData.metrics;
       try {
         if (typeof metrics === 'string') {
           metrics = JSON.parse(metrics);
@@ -287,7 +325,7 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
       }
 
       // Parse confusion matrix if it's a string
-      let confusionMatrix = task.evaluation.confusionMatrix;
+      let confusionMatrix = evaluationData.confusionMatrix;
       try {
         if (typeof confusionMatrix === 'string') {
           confusionMatrix = JSON.parse(confusionMatrix);
@@ -297,7 +335,7 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
       }
 
       // Parse dataset class distribution if it's a string
-      let datasetClassDistribution = task.evaluation.datasetClassDistribution;
+      let datasetClassDistribution = evaluationData.datasetClassDistribution;
       try {
         if (typeof datasetClassDistribution === 'string') {
           datasetClassDistribution = JSON.parse(datasetClassDistribution);
@@ -307,7 +345,7 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
       }
 
       // Parse predicted class distribution if it's a string
-      let predictedClassDistribution = task.evaluation.predictedClassDistribution;
+      let predictedClassDistribution = evaluationData.predictedClassDistribution;
       try {
         if (typeof predictedClassDistribution === 'string') {
           predictedClassDistribution = JSON.parse(predictedClassDistribution);
@@ -317,33 +355,40 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
       }
 
       evaluation = {
-        id: task.evaluation.id,
-        type: task.evaluation.type,
+        id: evaluationData.id,
+        type: evaluationData.type,
         metrics,
-        metricsExplanation: task.evaluation.metricsExplanation,
-        inferences: Number(task.evaluation.inferences) || 0,
-        accuracy: typeof task.evaluation.accuracy === 'number' ? task.evaluation.accuracy : null,
-        cost: task.evaluation.cost ?? null,
-        status: task.evaluation.status,
-        startedAt: task.evaluation.startedAt,
-        elapsedSeconds: task.evaluation.elapsedSeconds ?? null,
-        estimatedRemainingSeconds: task.evaluation.estimatedRemainingSeconds ?? null,
-        totalItems: Number(task.evaluation.totalItems) || 0,
-        processedItems: Number(task.evaluation.processedItems) || 0,
-        errorMessage: task.evaluation.errorMessage,
-        errorDetails: task.evaluation.errorDetails,
+        metricsExplanation: evaluationData.metricsExplanation,
+        inferences: Number(evaluationData.inferences) || 0,
+        accuracy: typeof evaluationData.accuracy === 'number' ? evaluationData.accuracy : null,
+        cost: evaluationData.cost ?? null,
+        status: evaluationData.status,
+        startedAt: evaluationData.startedAt,
+        elapsedSeconds: evaluationData.elapsedSeconds ?? null,
+        estimatedRemainingSeconds: evaluationData.estimatedRemainingSeconds ?? null,
+        totalItems: Number(evaluationData.totalItems) || 0,
+        processedItems: Number(evaluationData.processedItems) || 0,
+        errorMessage: evaluationData.errorMessage,
+        errorDetails: evaluationData.errorDetails,
         confusionMatrix,
-        scoreGoal: task.evaluation.scoreGoal,
+        scoreGoal: evaluationData.scoreGoal,
         datasetClassDistribution,
-        isDatasetClassDistributionBalanced: task.evaluation.isDatasetClassDistributionBalanced,
+        isDatasetClassDistributionBalanced: evaluationData.isDatasetClassDistributionBalanced,
         predictedClassDistribution,
-        isPredictedClassDistributionBalanced: task.evaluation.isPredictedClassDistributionBalanced,
-        scoreResults: task.evaluation.scoreResults
+        isPredictedClassDistributionBalanced: evaluationData.isPredictedClassDistributionBalanced,
+        scoreResults: evaluationData.scoreResults
       };
     } catch (error) {
       console.error('Error transforming evaluation data:', error);
     }
   }
+
+  // Handle scorecard and score
+  const scorecard = task.scorecard ? 
+    (typeof task.scorecard === 'function' ? await task.scorecard() : task.scorecard) : undefined;
+  
+  const score = task.score ?
+    (typeof task.score === 'function' ? await task.score() : task.score) : undefined;
 
   return {
     id: task.id,
@@ -363,22 +408,22 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
     stderr: task.stderr ?? undefined,
     currentStageId: task.currentStageId ?? undefined,
     stages,
-    dispatchStatus: task.dispatchStatus ?? undefined,
+    dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
     celeryTaskId: task.celeryTaskId ?? undefined,
     workerNodeId: task.workerNodeId ?? undefined,
     updatedAt: task.updatedAt ?? undefined,
     scorecardId: task.scorecardId ?? undefined,
     scoreId: task.scoreId ?? undefined,
-    scorecard: task.scorecard ? {
-      id: task.scorecard.id,
-      name: task.scorecard.name
+    scorecard: scorecard ? {
+      id: scorecard.id,
+      name: scorecard.name
     } : undefined,
-    score: task.score ? {
-      id: task.score.id,
-      name: task.score.name
+    score: score ? {
+      id: score.id,
+      name: score.name
     } : undefined,
     evaluation
-  }
+  };
 }
 
 // Add this type at the top with other types
@@ -640,253 +685,49 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
     loadInitialTasks();
 
     // Set up subscriptions
-    const taskSubscriptions = [
-      client.graphql({
-        query: `subscription OnCreateTask {
-          onCreateTask {
-            id
-            accountId
-            type
-            status
-            target
-            command
-            description
-            dispatchStatus
-            metadata
-            createdAt
-            startedAt
-            completedAt
-            estimatedCompletionAt
-            errorMessage
-            errorDetails
-            stdout
-            stderr
-            currentStageId
-            scorecardId
-            scoreId
-            celeryTaskId
-            workerNodeId
-            updatedAt
-            scorecard {
-              id
-              name
-              key
-            }
-            score {
-              id
-              name
-              key
-            }
-            stages {
-              items {
-                id
-                name
-                order
-                status
-                processedItems
-                totalItems
-                startedAt
-                completedAt
-                estimatedCompletionAt
-                statusMessage
-              }
-            }
-            evaluation {
-              id
-              type
-              metrics
-              metricsExplanation
-              inferences
-              accuracy
-              cost
-              status
-              startedAt
-              elapsedSeconds
-              estimatedRemainingSeconds
-              totalItems
-              processedItems
-              errorMessage
-              errorDetails
-              confusionMatrix
-              scoreGoal
-              datasetClassDistribution
-              isDatasetClassDistributionBalanced
-              predictedClassDistribution
-              isPredictedClassDistributionBalanced
-              scoreResults {
-                items {
-                  id
-                  value
-                  confidence
-                  metadata
-                  explanation
-                  itemId
-                  createdAt
-                }
-              }
-            }
-          }
-        }`
-      }).subscribe({
-        next: (data: any) => {
-          console.debug('Raw onCreate data received:', data);
-          const taskData = data?.data?.onCreateTask;
-          if (!taskData?.id) {
-            console.debug('Invalid task create data:', data);
-            return;
-          }
-          console.log('Task onCreate triggered:', { 
-            taskId: taskData.id,
-            type: taskData.type,
-            status: taskData.status,
-            scorecard: taskData.scorecard?.name,
-            score: taskData.score?.name
-          });
+    const taskSubscription = client.models.Task.onCreate({}).subscribe({
+      next: (response: SubscriptionResponse<{ onCreateTask: AmplifyTask }>) => {
+        const taskData = response.value.data.onCreateTask;
+        if (taskData) {
           handleTaskUpdate(taskData);
-        },
-        error: (error: Error) => console.error('Error in task onCreate subscription:', error)
-      }),
-      
-      client.graphql({
-        query: `subscription OnUpdateTask {
-          onUpdateTask {
-            id
-            accountId
-            type
-            status
-            target
-            command
-            description
-            dispatchStatus
-            metadata
-            createdAt
-            startedAt
-            completedAt
-            estimatedCompletionAt
-            errorMessage
-            errorDetails
-            stdout
-            stderr
-            currentStageId
-            scorecardId
-            scoreId
-            celeryTaskId
-            workerNodeId
-            updatedAt
-            scorecard {
-              id
-              name
-              key
-            }
-            score {
-              id
-              name
-              key
-            }
-            stages {
-              items {
-                id
-                name
-                order
-                status
-                processedItems
-                totalItems
-                startedAt
-                completedAt
-                estimatedCompletionAt
-                statusMessage
-              }
-            }
-            evaluation {
-              id
-              type
-              metrics
-              metricsExplanation
-              inferences
-              accuracy
-              cost
-              status
-              startedAt
-              elapsedSeconds
-              estimatedRemainingSeconds
-              totalItems
-              processedItems
-              errorMessage
-              errorDetails
-              confusionMatrix
-              scoreGoal
-              datasetClassDistribution
-              isDatasetClassDistributionBalanced
-              predictedClassDistribution
-              isPredictedClassDistributionBalanced
-              scoreResults {
-                items {
-                  id
-                  value
-                  confidence
-                  metadata
-                  explanation
-                  itemId
-                  createdAt
-                }
-              }
-            }
-          }
-        }`
-      }).subscribe({
-        next: (data: any) => {
-          console.debug('Raw onUpdate data received:', {
-            fullData: data,
-            taskData: data?.data?.onUpdateTask,
-            scorecardData: {
-              id: data?.data?.onUpdateTask?.scorecardId,
-              scorecard: data?.data?.onUpdateTask?.scorecard
-            },
-            scoreData: {
-              id: data?.data?.onUpdateTask?.scoreId,
-              score: data?.data?.onUpdateTask?.score
-            }
-          });
-          
-          const taskData = data?.data?.onUpdateTask;
-          if (!taskData?.id) {
-            console.debug('Invalid task update data:', data);
-            return;
-          }
+        }
+      },
+      error: (error: any) => {
+        console.error('Error in task subscription:', error);
+      }
+    });
 
+    // Subscribe to task updates
+    const taskUpdateSubscription = client.models.Task.onUpdate({}).subscribe({
+      next: (response: SubscriptionResponse<{ onUpdateTask: AmplifyTask }>) => {
+        const taskData = response.value.data.onUpdateTask;
+        if (taskData) {
           handleTaskUpdate(taskData);
-        },
-        error: (error: Error) => console.error('Error in task onUpdate subscription:', error)
-      })
-    ];
+        }
+      },
+      error: (error: any) => {
+        console.error('Error in task update subscription:', error);
+      }
+    });
 
     // Subscribe to stage updates
-    const stageSubscription = (client.models.TaskStage as any).onUpdate({}).subscribe({
-      next: (data: any) => {
-        console.debug('Raw stage update data received:', data);
-        // Handle both direct data and wrapped data cases
-        const stageData = data?.data?.onUpdateTaskStage || data;
-        if (!stageData?.id) {
-          console.debug('Invalid stage update data:', data);
-          return;
+    const stageSubscription = client.models.TaskStage.onUpdate({}).subscribe({
+      next: (response: SubscriptionResponse<{ onUpdateTaskStage: TaskStageType }>) => {
+        const stageData = response.value.data.onUpdateTaskStage;
+        if (stageData) {
+          handleStageUpdate(stageData);
         }
-
-        console.log('Stage onUpdate triggered:', { 
-          stageId: stageData.id,
-          taskId: stageData.taskId,
-          status: stageData.status,
-          processedItems: stageData.processedItems,
-          totalItems: stageData.totalItems
-        });
-        handleStageUpdate(stageData);
       },
-      error: (error: Error) => console.error('Error in stage onUpdate subscription:', error)
+      error: (error: any) => {
+        console.error('Error in stage subscription:', error);
+      }
     });
 
     // Cleanup function
     return () => {
       console.log('Cleaning up task subscriptions');
-      taskSubscriptions.forEach(sub => sub.unsubscribe());
+      taskSubscription.unsubscribe();
+      taskUpdateSubscription.unsubscribe();
       stageSubscription.unsubscribe();
     };
   });
@@ -949,7 +790,7 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
       stderr: task.stderr ?? undefined,
       currentStageId: task.currentStageId ?? undefined,
       stages,
-      dispatchStatus: task.dispatchStatus ?? undefined,
+      dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
       celeryTaskId: task.celeryTaskId ?? undefined,
       workerNodeId: task.workerNodeId ?? undefined,
       updatedAt: task.updatedAt ?? undefined,
