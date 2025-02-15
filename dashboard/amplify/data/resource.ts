@@ -129,8 +129,7 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: ScoreIndexFields) => any) => [
             idx("sectionId"),
-            idx("externalId"),
-            idx("key"),
+            idx("externalId")
         ]),
 
     Evaluation: a
