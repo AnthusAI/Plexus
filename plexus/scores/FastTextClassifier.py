@@ -278,18 +278,27 @@ class FastTextClassifier(Score):
         local_model_path = mlflow.pyfunc.get_model_uri(model_uri)
         return local_model_path
 
-    def predict(self, model_input, text_column='text'):
-        if isinstance(model_input, pd.DataFrame) and text_column in model_input.columns:
-            texts = model_input[text_column].tolist()
-            logging.debug(f"Running inference on texts: {texts}")
-        else:
-            logging.error("Model input should be a DataFrame with a text column.")
-            raise ValueError("Model input should be a DataFrame with a text column.")
+    def predict(self, context: mlflow.pyfunc.PythonModelContext, model_input: list[Score.Input]) -> list[Score.Result]:
+        """
+        Make predictions on a batch of input data.
 
+        Parameters
+        ----------
+        context : mlflow.pyfunc.PythonModelContext
+            The MLflow context containing model artifacts and configuration
+        model_input : list[Score.Input]
+            A list of input instances to make predictions on
+
+        Returns
+        -------
+        list[Score.Result]
+            A list of prediction results
+        """
         predictions = []
         confidence_scores = []
 
-        for text in texts:
+        for input_instance in model_input:
+            text = input_instance.text
             prediction = self.model.predict(text, k=len(self.model.labels))
             labels, confs = prediction
 
@@ -298,10 +307,18 @@ class FastTextClassifier(Score):
                 for label, conf in zip(labels, confs):
                     label_index = self.label_map[label.replace('__label__', '')]
                     conf_scores[label_index] = conf
-                confidence_scores.append(conf_scores)
+                confidence = np.max(conf_scores)
+                predicted_label = self.label_map[labels[0].replace('__label__', '')]
             else:
-                confidence_scores.append(confs[0])  # Only keep the positive class confidence
+                confidence = confs[0]  # Only keep the positive class confidence
+                predicted_label = labels[0].replace('__label__', '')
 
-            predictions.append(self.label_map[labels[0].replace('__label__', '')])
+            predictions.append(
+                Score.Result(
+                    parameters=self.parameters,
+                    value=predicted_label,
+                    metadata={'confidence': float(confidence)}
+                )
+            )
 
-        return np.array(predictions), np.array(confidence_scores)
+        return predictions

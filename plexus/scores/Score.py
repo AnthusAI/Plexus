@@ -422,21 +422,23 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         # self.model = mlflow.keras.load_model(context.artifacts["model"])
 
     @abstractmethod
-    def predict(self, context, model_input: Input) -> Union[Result, List[Result]]:
+    def predict(self, context: mlflow.pyfunc.PythonModelContext, model_input: Any) -> Any:
         """
         Make predictions on the input data.
 
         Parameters
         ----------
-        context : Any
-            Context for the prediction (e.g., MLflow context)
-        model_input : Score.Input
-            The input data for making predictions.
+        context : mlflow.pyfunc.PythonModelContext
+            The MLflow context containing model artifacts and configuration
+        model_input : Any
+            The input data to make predictions on. Subclasses should validate and
+            convert this to the appropriate type (e.g., list[Input])
 
         Returns
         -------
-        Union[Score.Result, List[Score.Result]]
-            Either a single Score.Result or a list of Score.Results
+        Any
+            The prediction results. Subclasses should ensure this is converted to
+            the appropriate type (e.g., list[Result])
         """
         pass
 

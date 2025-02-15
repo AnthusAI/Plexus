@@ -2,6 +2,7 @@ import os
 import logging
 import traceback
 import graphviz
+import mlflow
 from types import FunctionType
 from typing import Type, Tuple, Literal, Optional, Any, TypedDict, List, Dict, Union
 from pydantic import BaseModel, ConfigDict, create_model, Field
@@ -901,100 +902,70 @@ class LangGraphScore(Score, LangChainUser):
             
         return value_setter
 
-    async def predict(
-        self,
-        model_input: Score.Input,
-        thread_id: Optional[str] = None,
-        batch_data: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> Score.Result:
+    def predict(self, context: Any, model_input: Any) -> Any:
         """
-        Make predictions using the LangGraph workflow.
+        Make predictions on the input data.
 
         Parameters
         ----------
-        model_input : Score.Input
-            The input data containing text and metadata
-        thread_id : Optional[str]
-            Thread ID for checkpointing
-        batch_data : Optional[Dict[str, Any]]
-            Additional data for batch processing
-        **kwargs : Any
-            Additional keyword arguments
+        context : Any
+            The MLflow context containing model artifacts and configuration
+        model_input : Any
+            The input data to make predictions on. Will be converted to list[Score.Input]
 
         Returns
         -------
-        Score.Result
-            The prediction result with value and explanation
+        Any
+            The prediction results. Will be converted to list[Score.Result]
         """
-        # Generate checkpoint IDs if not provided
-        if not thread_id:
+        results = []
+        
+        for input_instance in model_input:
+            # Generate checkpoint IDs for this instance
             thread_id = str(uuid.uuid4())
-        checkpoint_ns = f"{self.parameters.name}_{thread_id}" if self.parameters.name else str(uuid.uuid4())
-        checkpoint_id = str(uuid.uuid4())
+            checkpoint_ns = f"{self.parameters.name}_{thread_id}" if self.parameters.name else str(uuid.uuid4())
+            checkpoint_id = str(uuid.uuid4())
 
-        thread = {
-            "configurable": {
-                "thread_id": thread_id,
-                "checkpoint_ns": checkpoint_ns,
-                "checkpoint_id": checkpoint_id
-            }
-        }
-        # Use the passed-in results if available, otherwise start with empty dict
-        initial_results = {}
-        if model_input.results:
-            for result in model_input.results:
-                if not isinstance(result, Score.Result):
-                    raise TypeError(f"Expected Score.Result object but got {type(result)}")
-                initial_results[result.parameters.name] = result.value
-
-        initial_state = self.combined_state_class(
-            text=self.preprocess_text(model_input.text),
-            metadata=model_input.metadata,
-            results=initial_results,
-            retry_count=0,
-            at_llm_breakpoint=False
-        ).model_dump()
-
-        if batch_data:
-            initial_state.update(batch_data)
-
-        try:
-            logging.info("=== Pre-invoke State Inspection ===")
-            logging.info(f"Initial state type: {type(initial_state)}")
-            logging.info(f"Initial state keys: {initial_state.keys()}")
-            logging.info(f"Workflow type: {type(self.workflow)}")
-            
-            graph_result = await self.workflow.ainvoke(
-                initial_state,
-                config=thread
-            )
-            
-            # Convert graph result to Score.Result
-            return Score.Result(
-                parameters=self.parameters,
-                value=graph_result.get('value', 'Error'),
-                metadata={
-                    'explanation': graph_result.get('explanation'),
-                    'good_call': graph_result.get('good_call'),
-                    'good_call_explanation': graph_result.get('good_call_explanation'),
-                    'non_qualifying_reason': graph_result.get('non_qualifying_reason'),
-                    'non_qualifying_explanation': graph_result.get('non_qualifying_explanation'),
-                    'confidence': graph_result.get('confidence'),
-                    'classification': graph_result.get('classification'),
-                    'source': graph_result.get('source')
+            thread = {
+                "configurable": {
+                    "thread_id": thread_id,
+                    "checkpoint_ns": checkpoint_ns,
+                    "checkpoint_id": checkpoint_id
                 }
+            }
+
+            # Use the passed-in results if available, otherwise start with empty dict
+            initial_results = {}
+            if input_instance.results:
+                for result in input_instance.results:
+                    if not isinstance(result, Score.Result):
+                        raise TypeError(f"Expected Score.Result object but got {type(result)}")
+                    initial_results[result.parameters.name] = result.value
+
+            initial_state = self.combined_state_class(
+                text=self.preprocess_text(input_instance.text),
+                metadata=input_instance.metadata,
+                results=initial_results,
+                retry_count=0,
+                at_llm_breakpoint=False
+            ).model_dump()
+
+            # Run the workflow for this instance
+            final_state = self.workflow.invoke(initial_state)
+            
+            # Convert the final state to a Result
+            results.append(
+                Score.Result(
+                    parameters=self.parameters,
+                    value=final_state.get('value', ''),
+                    metadata={
+                        'explanation': final_state.get('explanation', ''),
+                        'confidence': final_state.get('confidence', 1.0)
+                    }
+                )
             )
-        except BatchProcessingPause:
-            # Let BatchProcessingPause propagate up
-            raise
-        except Exception as e:
-            logging.error(f"Error in predict: {e}")
-            return Score.Result(
-                parameters=self.parameters,
-                value="Error",
-                error=str(e)
-            )
+
+        return results
 
     def preprocess_text(self, text):
         # Join all text elements into a single string

@@ -2,7 +2,6 @@ import os
 from dotenv import load_dotenv
 load_dotenv('.env', override=True)
 
-import sys
 import click
 import importlib
 import builtins
@@ -24,17 +23,19 @@ from sklearn.metrics import (
     accuracy_score
 )
 
-from .DataCommands import data
-from .EvaluationCommands import evaluate, evaluations
-from .TrainingCommands import train
-from .ReportingCommands import report
-from .PredictionCommands import predict
-from .TuningCommands import tuning
-from .AnalyzeCommands import analyze
-from .console import console
-from .BatchCommands import batch
-from .CommandDispatch import command
-from .TaskCommands import tasks
+from plexus.cli.DataCommands import data
+from plexus.cli.EvaluationCommands import evaluate, evaluations
+from plexus.cli.TrainingCommands import train
+from plexus.cli.ReportingCommands import report
+from plexus.cli.PredictionCommands import predict
+from plexus.cli.TuningCommands import tuning
+from plexus.cli.AnalyzeCommands import analyze
+from plexus.cli.console import console
+from plexus.cli.BatchCommands import batch
+from plexus.cli.CommandDispatch import command
+from plexus.cli.TaskCommands import tasks
+from plexus.cli.MCPCommands import mcp
+from plexus.mcp import Plexus
 
 # Import dashboard-specific modules
 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -102,6 +103,9 @@ cli.add_command(command)
 # Dashboard CLI Commands
 cli.add_command(evaluations)
 cli.add_command(tasks)
+
+# MCP Commands
+cli.add_command(mcp)
 
 @cli.group()
 def scores():
@@ -346,6 +350,25 @@ def delete(task_id: Optional[str], account_id: Optional[str], status: Optional[s
         deleted_count += 1
     
     console.print(f"\n[green]Successfully deleted {deleted_count} tasks and their stages[/green]")
+
+@cli.group()
+def mcp():
+    """Model Context Protocol (MCP) commands."""
+    pass
+
+@mcp.command()
+@click.option("--name", default="plexus", help="Name of the MCP server")
+@click.option("--loglevel", default="INFO", help="Logging level")
+def serve(name: str, loglevel: str):
+    """Start the MCP server."""
+    logging.basicConfig(
+        level=getattr(logging, loglevel.upper()),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    logger.info("Starting MCP server...")
+    server = Plexus(name=name)
+    server.run()
 
 def main():
     """Entry point for the Plexus CLI."""
