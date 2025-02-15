@@ -328,10 +328,13 @@ function transformTaskToActivity(task: ProcessedTask) {
           target: task.target,
           startedAt: task.startedAt,
           completedAt: task.completedAt,
-          dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
+          dispatchStatus: undefined,
           celeryTaskId: task.celeryTaskId,
           workerNodeId: task.workerNodeId,
-          stages: { items: stages }
+          stages: { items: stages.map(stage => ({
+            ...stage,
+            id: stage.name // Use name as id since it's guaranteed to exist in TaskStageConfig
+          })) }
         }
       }
 
@@ -403,10 +406,13 @@ function transformTaskToActivity(task: ProcessedTask) {
         target: task.target,
         startedAt: task.startedAt,
         completedAt: task.completedAt,
-        dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
+        dispatchStatus: undefined,
         celeryTaskId: task.celeryTaskId,
         workerNodeId: task.workerNodeId,
-        stages: { items: stages }
+        stages: { items: stages.map(stage => ({
+          ...stage,
+          id: stage.name // Use name as id since it's guaranteed to exist in TaskStageConfig
+        })) }
       }
     },
     stages,
@@ -419,7 +425,7 @@ function transformTaskToActivity(task: ProcessedTask) {
     status: task.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
     statusMessage: currentStage?.statusMessage,
     errorMessage: task.status === 'FAILED' && task.errorMessage ? task.errorMessage : undefined,
-    dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
+    dispatchStatus: undefined,
     celeryTaskId: task.celeryTaskId,
     workerNodeId: task.workerNodeId
   }
@@ -606,7 +612,7 @@ export default function ActivityDashboard() {
         // First update the main task record - reset all timing and error fields
         console.log('Resetting task:', task.id, 'Current status:', task.status)
         const updatedTask = await updateTask(task.id, {
-          dispatchStatus: 'PENDING',
+          dispatchStatus: undefined,
           workerNodeId: null,
           startedAt: null,
           estimatedCompletionAt: null,
