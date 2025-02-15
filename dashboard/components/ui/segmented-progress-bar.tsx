@@ -60,7 +60,8 @@ export function SegmentedProgressBar({
               )}
             >
               <span className={cn(
-                "text-sm font-medium truncate px-1 text-primary-foreground min-w-0 max-w-full"
+                "text-sm font-medium truncate px-1 text-primary-foreground min-w-0 max-w-full",
+                !isCurrent && "text-muted-foreground"
               )}>
                 {isCurrent && error ? errorLabel : segment.label}
               </span>
