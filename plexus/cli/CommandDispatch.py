@@ -631,7 +631,7 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
             time.sleep(0.15)  # Reduced from 0.3s to 0.15s per message
         
         # Set completion message and complete task in one atomic operation
-        tracker.current_stage.status_message = "Task completed."
+        tracker.current_stage.status_message = "Demo command completed"
         tracker.complete()  # This will mark the task as complete and send the final update
         
     except KeyboardInterrupt:
