@@ -469,7 +469,10 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
   return (
     <div className="[&>*+*]:mt-2">
       <StyleTag />
-      <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
+      <div className={cn(
+        "rounded-lg px-1 py-1 space-y-1 -mx-1",
+        variant === 'detail' ? "bg-gauge-background" : "bg-background"
+      )}>
         {command && commandDisplay !== 'hide' && (
           <div 
             className={cn(
