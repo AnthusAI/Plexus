@@ -15,6 +15,7 @@ import { EvaluationTaskScoreResultDetail } from '@/components/EvaluationTaskScor
 import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { BaseTaskData } from '@/types/base'
 import { EvaluationListAccuracyBar } from '@/components/EvaluationListAccuracyBar'
+import isEqual from 'lodash/isEqual'
 
 export interface EvaluationMetric {
   name: string
@@ -242,64 +243,72 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   extra?: boolean;
   isSelected?: boolean;
 }) => {
-  const progress = data.processedItems && data.totalItems ? 
-    Math.round((data.processedItems / data.totalItems) * 100) : 0
-  const accuracy = data.accuracy ?? 0
+  const progress = useMemo(() => 
+    data.processedItems && data.totalItems ? 
+      Math.round((data.processedItems / data.totalItems) * 100) : 0
+  , [data.processedItems, data.totalItems]);
+  
+  const accuracy = data.accuracy ?? 0;
+
+  const stages = useMemo(() => 
+    data.task?.stages?.items?.map(stage => ({
+      key: stage.name,
+      label: stage.name,
+      color: stage.name === 'Processing' ? 'bg-secondary' : (
+        stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
+        stage.status === 'FAILED' ? 'bg-false' :
+        'bg-neutral'
+      ),
+      name: stage.name,
+      order: stage.order,
+      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      statusMessage: stage.statusMessage,
+      startedAt: stage.startedAt || undefined,
+      completedAt: stage.completedAt || undefined,
+      estimatedCompletionAt: stage.estimatedCompletionAt || undefined
+    })) || []
+  , [data.task?.stages?.items]);
+
+  const taskStatus = useMemo(() => ({
+    showStages: true,
+    status: mapTaskStatus(data.task?.status || data.status),
+    stageConfigs: stages,
+    stages,
+    processedItems: data.processedItems,
+    totalItems: data.totalItems,
+    startedAt: data.task?.startedAt || data.startedAt || undefined,
+    completedAt: data.task?.completedAt || undefined,
+    estimatedCompletionAt: data.task?.estimatedCompletionAt || undefined,
+    errorMessage: data.task?.errorMessage || data.errorMessage || undefined,
+    command: data.task?.command || data.command,
+    statusMessage: getStatusMessage(data),
+    variant: 'grid' as const,
+    extra,
+    isSelected,
+    commandDisplay: 'hide' as const
+  }), [
+    data.task?.status,
+    data.status,
+    stages,
+    data.processedItems,
+    data.totalItems,
+    data.task?.startedAt,
+    data.startedAt,
+    data.task?.completedAt,
+    data.task?.estimatedCompletionAt,
+    data.task?.errorMessage,
+    data.errorMessage,
+    data.task?.command,
+    data.command,
+    extra,
+    isSelected
+  ]);
 
   return (
     <div className="space-y-2">
-      <TaskStatus
-        showStages={true}
-        status={mapTaskStatus(data.task?.status || data.status)}
-        stageConfigs={data.task?.stages?.items?.map(stage => ({
-          key: stage.name,
-          label: stage.name,
-          color: stage.name === 'Processing' ? 'bg-secondary' : (
-            stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
-            stage.status === 'FAILED' ? 'bg-false' :
-            'bg-neutral'
-          ),
-          name: stage.name,
-          order: stage.order,
-          status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-          processedItems: stage.processedItems,
-          totalItems: stage.totalItems,
-          statusMessage: stage.statusMessage,
-          startedAt: stage.startedAt || undefined,
-          completedAt: stage.completedAt || undefined,
-          estimatedCompletionAt: stage.estimatedCompletionAt || undefined
-        })) || []}
-        stages={data.task?.stages?.items?.map(stage => ({
-          key: stage.name,
-          label: stage.name,
-          color: stage.name === 'Processing' ? 'bg-secondary' : (
-            stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
-            stage.status === 'FAILED' ? 'bg-false' :
-            'bg-neutral'
-          ),
-          name: stage.name,
-          order: stage.order,
-          status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-          processedItems: stage.processedItems,
-          totalItems: stage.totalItems,
-          statusMessage: stage.statusMessage,
-          startedAt: stage.startedAt || undefined,
-          completedAt: stage.completedAt || undefined,
-          estimatedCompletionAt: stage.estimatedCompletionAt || undefined
-        })) || []}
-        processedItems={data.processedItems}
-        totalItems={data.totalItems}
-        startedAt={data.task?.startedAt || data.startedAt || undefined}
-        completedAt={data.task?.completedAt || undefined}
-        estimatedCompletionAt={data.task?.estimatedCompletionAt || undefined}
-        errorMessage={data.task?.errorMessage || data.errorMessage || undefined}
-        command={data.task?.command || data.command}
-        statusMessage={getStatusMessage(data)}
-        variant="grid"
-        extra={extra}
-        isSelected={isSelected}
-        commandDisplay="hide"
-      />
+      <TaskStatus {...taskStatus} />
       {extra && (
         <EvaluationListAccuracyBar 
           progress={progress}
@@ -309,7 +318,43 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
       )}
     </div>
   )
-})
+}, (prevProps, nextProps) => {
+  // Custom comparison function to prevent unnecessary re-renders
+  if (prevProps.extra !== nextProps.extra || prevProps.isSelected !== nextProps.isSelected) {
+    return false;
+  }
+
+  const prevData = prevProps.data;
+  const nextData = nextProps.data;
+
+  // Compare task stages
+  const prevStages = prevData.task?.stages?.items;
+  const nextStages = nextData.task?.stages?.items;
+  if (!isEqual(prevStages, nextStages)) {
+    return false;
+  }
+
+  // Compare essential task data
+  if (
+    prevData.processedItems !== nextData.processedItems ||
+    prevData.totalItems !== nextData.totalItems ||
+    prevData.accuracy !== nextData.accuracy ||
+    prevData.status !== nextData.status ||
+    prevData.task?.status !== nextData.task?.status ||
+    prevData.task?.command !== nextData.task?.command ||
+    prevData.command !== nextData.command ||
+    prevData.errorMessage !== nextData.errorMessage ||
+    prevData.task?.errorMessage !== nextData.task?.errorMessage ||
+    prevData.startedAt !== nextData.startedAt ||
+    prevData.task?.startedAt !== nextData.task?.startedAt ||
+    prevData.task?.completedAt !== nextData.task?.completedAt ||
+    prevData.task?.estimatedCompletionAt !== nextData.task?.estimatedCompletionAt
+  ) {
+    return false;
+  }
+
+  return true;
+});
 
 interface ParsedScoreResult {
   id: string
@@ -714,7 +759,7 @@ export default function EvaluationTask({
 
   const taskData = task.data?.task as TaskData | undefined;
 
-  const taskWithDefaults = {
+  const taskWithDefaults = useMemo(() => ({
     id: task.id,
     type: (() => {
       // If we have a task record, use its type directly (just capitalize it)
@@ -760,7 +805,7 @@ export default function EvaluationTask({
     workerNodeId: taskData?.workerNodeId,
     completedAt: taskData?.completedAt || undefined,
     errorMessage: taskData?.errorMessage || task.data?.errorMessage || undefined
-  }
+  }), [task, taskData, variant]);
 
   // Type assertion to ensure all properties match BaseTaskProps
   const typedTask = {

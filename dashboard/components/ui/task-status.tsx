@@ -6,6 +6,7 @@ import { Radio, Hand, ConciergeBell, Square, RectangleVertical, X, AlertTriangle
 import { cn } from "@/lib/utils"
 import { StyleTag } from './style-tag'
 import { CardButton } from '@/components/CardButton'
+import { isEqual } from 'lodash'
 
 // Add custom animation styles
 const animations = `
@@ -100,7 +101,7 @@ function formatDuration(seconds: number): string {
   return `${hours}h ${remainingMinutes}m`
 }
 
-export const TaskStatus: React.FC<TaskStatusProps> = ({
+export const TaskStatus = React.memo(({
   showStages = false,
   stages = [],
   currentStageName,
@@ -130,7 +131,7 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
   commandDisplay = 'show',
   statusMessageDisplay = 'always',
   onCommandDisplayChange
-}) => {
+}: TaskStatusProps) => {
   console.debug('TaskStatus render:', {
     command,
     commandDisplay,
@@ -143,57 +144,53 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
   const isFinished = status === 'COMPLETED' || status === 'FAILED'
   const isError = status === 'FAILED'
 
-  // State for computed timing values
-  const [elapsedTime, setElapsedTime] = useState<string>('')
-  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string>('')
+  // Memoize timing calculations
+  const timingValues = useMemo(() => {
+    if (!startedAt) {
+      return {
+        elapsedTime: '0s',
+        estimatedTimeRemaining: ''
+      };
+    }
+
+    const taskStartTime = new Date(startedAt);
+    const endTime = completedAt ? new Date(completedAt) : new Date();
+    const elapsedSeconds = Math.floor((endTime.getTime() - taskStartTime.getTime()) / 1000);
+    const formattedElapsedTime = formatDuration(elapsedSeconds);
+
+    let formattedEstimatedTime = '';
+    if (isInProgress && estimatedCompletionAt) {
+      const estimated = new Date(estimatedCompletionAt);
+      const remainingSeconds = Math.floor((estimated.getTime() - endTime.getTime()) / 1000);
+      if (remainingSeconds > 0) {
+        formattedEstimatedTime = formatDuration(remainingSeconds);
+      }
+    }
+
+    return {
+      elapsedTime: formattedElapsedTime,
+      estimatedTimeRemaining: formattedEstimatedTime
+    };
+  }, [startedAt, completedAt, isInProgress, estimatedCompletionAt]);
+
+  // State for timing values
+  const [elapsedTime, setElapsedTime] = useState(timingValues.elapsedTime);
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState(timingValues.estimatedTimeRemaining);
 
   // Update timing values every second while not completed
   useEffect(() => {
-    const updateTiming = () => {
-      // If no task start time, show 0s
-      if (!startedAt) {
-        setElapsedTime('0s')
-        return
-      }
+    setElapsedTime(timingValues.elapsedTime);
+    setEstimatedTimeRemaining(timingValues.estimatedTimeRemaining);
 
-      const taskStartTime = new Date(startedAt)
-      const endTime = completedAt ? new Date(completedAt) : new Date()
+    if (!completedAt) {
+      const interval = setInterval(() => {
+        setElapsedTime(timingValues.elapsedTime);
+        setEstimatedTimeRemaining(timingValues.estimatedTimeRemaining);
+      }, 1000);
 
-      // Calculate elapsed time from task start to end time
-      const elapsedSeconds = Math.floor(
-        (endTime.getTime() - taskStartTime.getTime()) / 1000
-      )
-
-      const formattedTime = formatDuration(elapsedSeconds)
-
-      setElapsedTime(formattedTime)
-
-      // Only show ETA if in progress and we have an estimate
-      if (isInProgress && estimatedCompletionAt) {
-        const estimated = new Date(estimatedCompletionAt)
-        const remainingSeconds = Math.floor(
-          (estimated.getTime() - endTime.getTime()) / 1000
-        )
-        if (remainingSeconds > 0) {
-          setEstimatedTimeRemaining(formatDuration(remainingSeconds))
-        } else {
-          setEstimatedTimeRemaining('')
-        }
-      } else {
-        setEstimatedTimeRemaining('')
-      }
+      return () => clearInterval(interval);
     }
-
-    // Initial update
-    updateTiming()
-
-    // Update every second until completed
-    const interval = !completedAt ? setInterval(updateTiming, 1000) : null
-
-    return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [startedAt, estimatedCompletionAt, completedAt, isInProgress])
+  }, [timingValues, completedAt]);
 
   // Find first running stage if currentStageName is undefined
   const effectiveCurrentStage = useMemo(() => {
@@ -570,4 +567,34 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
       />
     </div>
   )
-} 
+}, (prevProps: TaskStatusProps, nextProps: TaskStatusProps) => {
+  // Custom comparison function
+  return (
+    prevProps.showStages === nextProps.showStages &&
+    isEqual(prevProps.stages, nextProps.stages) &&
+    prevProps.currentStageName === nextProps.currentStageName &&
+    prevProps.processedItems === nextProps.processedItems &&
+    prevProps.totalItems === nextProps.totalItems &&
+    prevProps.startedAt === nextProps.startedAt &&
+    prevProps.estimatedCompletionAt === nextProps.estimatedCompletionAt &&
+    prevProps.status === nextProps.status &&
+    prevProps.command === nextProps.command &&
+    prevProps.statusMessage === nextProps.statusMessage &&
+    prevProps.errorMessage === nextProps.errorMessage &&
+    isEqual(prevProps.stageConfigs, nextProps.stageConfigs) &&
+    prevProps.isLoading === nextProps.isLoading &&
+    prevProps.errorLabel === nextProps.errorLabel &&
+    prevProps.dispatchStatus === nextProps.dispatchStatus &&
+    prevProps.celeryTaskId === nextProps.celeryTaskId &&
+    prevProps.workerNodeId === nextProps.workerNodeId &&
+    prevProps.showPreExecutionStages === nextProps.showPreExecutionStages &&
+    prevProps.completedAt === nextProps.completedAt &&
+    prevProps.truncateMessages === nextProps.truncateMessages &&
+    prevProps.variant === nextProps.variant &&
+    prevProps.isFullWidth === nextProps.isFullWidth &&
+    prevProps.extra === nextProps.extra &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.commandDisplay === nextProps.commandDisplay &&
+    prevProps.statusMessageDisplay === nextProps.statusMessageDisplay
+  );
+}); 

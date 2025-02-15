@@ -342,43 +342,48 @@ export default function EvaluationsDashboard() {
     const evaluation = evaluations.find(e => e.id === selectedEvaluationId)
     if (!evaluation) return null
 
-    // Transform the task data using the utility function
-    const transformedTask = evaluation.task ? transformAmplifyTask(evaluation.task as unknown as AmplifyTask) : null
+    const transformedTask = useMemo(() => {
+      if (!evaluation.task) return null;
+      return transformAmplifyTask(evaluation.task as unknown as AmplifyTask);
+    }, [evaluation.task]);
 
     // Convert task data to the expected format
-    const taskData: TaskData | null = transformedTask ? {
-      id: transformedTask.id,
-      accountId: transformedTask.id?.split(':')[0] || '',
-      type: transformedTask.type,
-      status: transformedTask.status,
-      target: transformedTask.target,
-      command: transformedTask.command,
-      description: transformedTask.description,
-      dispatchStatus: transformedTask.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
-      metadata: transformedTask.metadata,
-      createdAt: transformedTask.createdAt || '',
-      startedAt: transformedTask.startedAt,
-      completedAt: transformedTask.completedAt,
-      estimatedCompletionAt: transformedTask.estimatedCompletionAt,
-      errorMessage: transformedTask.errorMessage,
-      errorDetails: transformedTask.errorDetails,
-      currentStageId: transformedTask.currentStageId,
-      stages: transformedTask.stages ? {
-        items: transformedTask.stages.map(stage => ({
-          id: stage.id,
-          name: stage.name,
-          order: stage.order,
-          status: stage.status,
-          statusMessage: stage.statusMessage,
-          startedAt: stage.startedAt,
-          completedAt: stage.completedAt,
-          estimatedCompletionAt: stage.estimatedCompletionAt,
-          processedItems: stage.processedItems || 0,
-          totalItems: stage.totalItems || 0
-        })),
-        nextToken: null
-      } : undefined
-    } : null
+    const taskData = useMemo(() => {
+      if (!transformedTask) return null;
+      return {
+        id: transformedTask.id,
+        accountId: transformedTask.id?.split(':')[0] || '',
+        type: transformedTask.type,
+        status: transformedTask.status,
+        target: transformedTask.target,
+        command: transformedTask.command,
+        description: transformedTask.description,
+        dispatchStatus: transformedTask.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
+        metadata: transformedTask.metadata,
+        createdAt: transformedTask.createdAt || '',
+        startedAt: transformedTask.startedAt,
+        completedAt: transformedTask.completedAt,
+        estimatedCompletionAt: transformedTask.estimatedCompletionAt,
+        errorMessage: transformedTask.errorMessage,
+        errorDetails: transformedTask.errorDetails,
+        currentStageId: transformedTask.currentStageId,
+        stages: transformedTask.stages ? {
+          items: transformedTask.stages.map(stage => ({
+            id: stage.id,
+            name: stage.name,
+            order: stage.order,
+            status: stage.status,
+            statusMessage: stage.statusMessage,
+            startedAt: stage.startedAt,
+            completedAt: stage.completedAt,
+            estimatedCompletionAt: stage.estimatedCompletionAt,
+            processedItems: stage.processedItems || 0,
+            totalItems: stage.totalItems || 0
+          })),
+          nextToken: null
+        } : undefined
+      };
+    }, [transformedTask]);
 
     // Get current stage info for progress tracking
     const currentStage = taskData?.stages?.items?.find(s => s.status === 'RUNNING') || 
