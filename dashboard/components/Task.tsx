@@ -2,11 +2,11 @@ import React from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Square, RectangleVertical, X, Activity, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
 import { CardButton } from '@/components/CardButton'
 import { TaskStatus, TaskStageConfig } from './ui/task-status'
 import { BaseTaskData } from '@/types/base'
 import { cn } from '@/lib/utils'
+import { Timestamp } from './ui/timestamp'
 
 export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
   variant: 'grid' | 'detail' | 'nested'
@@ -60,26 +60,6 @@ export interface TaskComponentProps<TData extends BaseTaskData = BaseTaskData> e
   showProgress?: boolean
   isSelected?: boolean
 }
-
-// Add the safe date formatting helper
-const formatTaskTime = (dateString: string | null | undefined) => {
-  if (!dateString) return '';
-  
-  try {
-    const date = new Date(dateString);
-    // Check if date is valid
-    if (isNaN(date.getTime())) {
-      return '';
-    }
-    return formatDistanceToNow(date, { 
-      addSuffix: true,
-      includeSeconds: true
-    }).replace('about ', '');
-  } catch (e) {
-    console.warn('Invalid task time format:', dateString);
-    return '';
-  }
-};
 
 // Add helper function to get task icon
 const getTaskIcon = (type: string) => {
@@ -205,7 +185,6 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
   onClose,
   isLoading
 }: TaskChildProps<TData>) => {
-  const formattedTime = formatTaskTime(task.time);
   const taskIcon = getTaskIcon(task.type);
 
   return (
@@ -220,7 +199,7 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
           {variant !== 'grid' && (
             <div className="text-sm text-muted-foreground">{task.type}</div>
           )}
-          <div className="text-xs text-muted-foreground mt-1">{formattedTime}</div>
+          <Timestamp time={task.time} variant="relative" />
         </div>
         <div className="flex flex-col items-end">
           {variant === 'grid' ? (
