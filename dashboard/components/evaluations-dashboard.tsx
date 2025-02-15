@@ -419,7 +419,7 @@ export default function EvaluationsDashboard() {
         predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ? JSON.parse(evaluation.predictedClassDistribution as string) : evaluation.predictedClassDistribution,
         isPredictedClassDistributionBalanced: Boolean(evaluation.isPredictedClassDistributionBalanced),
         task: taskData,
-        scoreResults: evaluation.scoreResults?.items?.map(result => ({
+        scoreResults: evaluation.scoreResults?.items?.map((result: Schema['ScoreResult']['type']) => ({
           id: result.id,
           value: result.value,
           confidence: result.confidence,
@@ -617,7 +617,7 @@ export default function EvaluationsDashboard() {
                             } : undefined
                           };
                         })() : null,
-                        scoreResults: evaluation.scoreResults?.items?.map(result => ({
+                        scoreResults: evaluation.scoreResults?.items?.map((result: Schema['ScoreResult']['type']) => ({
                           id: result.id,
                           value: result.value,
                           confidence: result.confidence,
