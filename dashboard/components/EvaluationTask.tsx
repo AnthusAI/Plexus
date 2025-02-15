@@ -704,18 +704,6 @@ export default function EvaluationTask({
 }: EvaluationTaskProps) {
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay);
 
-  console.debug('EvaluationTask received props:', {
-    taskId: task.id,
-    commandDisplay,
-    data: {
-      accuracy: task.data.accuracy,
-      metrics: task.data.metrics,
-      scoreResults: task.data.scoreResults,
-      confusionMatrix: task.data.confusionMatrix,
-      scoreGoal: task.data.scoreGoal
-    }
-  });
-
   const data = task.data ?? {} as EvaluationTaskData
 
   const metrics = useMemo(() => 
