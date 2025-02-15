@@ -449,6 +449,7 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
             elapsedTime={elapsedTime}
             estimatedTimeRemaining={estimatedTimeRemaining}
             isInProgress={isInProgress}
+            className="text-muted-foreground"
           />
         )}
         {showStages && (
@@ -544,6 +545,7 @@ export const TaskStatus: React.FC<TaskStatusProps> = ({
           elapsedTime={elapsedTime}
           estimatedTimeRemaining={estimatedTimeRemaining}
           isInProgress={isInProgress}
+          className="text-muted-foreground"
         />
       )}
       {showStages && (

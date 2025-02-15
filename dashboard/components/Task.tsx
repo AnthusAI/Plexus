@@ -218,15 +218,15 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
           <div className="text-sm">{task.scorecard || '\u00A0'}</div>
           <div className="text-sm">{task.score || '\u00A0'}</div>
           {variant !== 'grid' && (
-            <div className="text-sm">{task.type}</div>
+            <div className="text-sm text-muted-foreground">{task.type}</div>
           )}
           <div className="text-xs text-muted-foreground mt-1">{formattedTime}</div>
         </div>
         <div className="flex flex-col items-end">
           {variant === 'grid' ? (
             <>
-              <div className="text-sm">{task.type}</div>
-              <div className="mt-1">{taskIcon}</div>
+              <div className="text-sm text-muted-foreground">{task.type}</div>
+              <div className="mt-1 text-muted-foreground">{taskIcon}</div>
             </>
           ) : (
             <>
