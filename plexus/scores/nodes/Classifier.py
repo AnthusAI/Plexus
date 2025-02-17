@@ -207,7 +207,7 @@ class Classifier(BaseNode):
             return self.GraphState(
                 **{k: v for k, v in state.model_dump().items() if k not in ['messages', 'completion', 'chat_history']},
                 messages=message_dicts,
-                chat_history=[],  # Always start with empty chat history unless in retry
+                chat_history=state.chat_history if hasattr(state, 'chat_history') else [],
                 completion=None  # Always start with no completion
             )
 
@@ -263,51 +263,43 @@ class Classifier(BaseNode):
             logging.info(f"Preparing retry attempt {state.retry_count + 1}")
             logging.debug(f"Retry message: {retry_message}")
             
-            chat_history = state.chat_history if state.chat_history else []
-            
-            # Convert existing chat history to LangChain objects if needed
-            converted_history = []
-            for msg in chat_history:
-                if isinstance(msg, dict):
-                    msg_type = msg.get('type', '').lower()
-                    if msg_type == 'human':
-                        converted_history.append(HumanMessage(content=msg['content']))
-                    elif msg_type == 'ai':
-                        converted_history.append(AIMessage(content=msg['content']))
-                    elif msg_type == 'system':
-                        converted_history.append(SystemMessage(content=msg['content']))
+            # Get the initial system and human messages
+            initial_messages = []
+            if hasattr(state, 'messages') and state.messages:
+                for msg in state.messages[:2]:  # Only take the first two messages (system and initial human)
+                    if isinstance(msg, dict):
+                        initial_messages.append(msg)
                     else:
-                        converted_history.append(BaseMessage(content=msg['content']))
-                else:
-                    converted_history.append(msg)
+                        initial_messages.append({
+                            'type': msg.__class__.__name__.lower().replace('message', ''),
+                            'content': msg.content,
+                            '_type': msg.__class__.__name__
+                        })
+
+            # Initialize or update chat history
+            chat_history = []
+            if state.chat_history:
+                chat_history.extend(state.chat_history)
             
             # Add the last completion to chat history if it exists
             if state.completion is not None:
-                converted_history.append(AIMessage(content=state.completion))
+                chat_history.append({
+                    'type': 'ai',
+                    'content': state.completion,
+                    '_type': 'AIMessage'
+                })
             
             # Add the retry message
-            converted_history.append(retry_message)
-            
-            # Convert all messages back to dictionaries for state storage
-            message_dicts = [{
-                'type': msg.__class__.__name__.lower().replace('message', ''),
-                'content': msg.content,
-                '_type': msg.__class__.__name__
-            } for msg in converted_history]
-            
-            # Get the initial system and human messages from state.messages
-            initial_messages = []
-            if hasattr(state, 'messages') and state.messages:
-                for msg in state.messages:
-                    if msg.get('type') in ['system', 'human']:
-                        initial_messages.append(msg)
-                    else:
-                        break
+            chat_history.append({
+                'type': 'human',
+                'content': retry_message.content,
+                '_type': 'HumanMessage'
+            })
             
             # Store messages as dicts in state and explicitly clear completion
             new_state = self.GraphState(
-                chat_history=message_dicts,
-                messages=initial_messages + message_dicts,  # Combine initial messages with chat history
+                chat_history=chat_history,
+                messages=initial_messages + chat_history,  # Combine initial messages with chat history
                 retry_count=state.retry_count + 1,
                 completion=None,  # Explicitly clear completion for next LLM call
                 **{k: v for k, v in state.model_dump().items() 
