@@ -218,34 +218,147 @@ interface ListEvaluationResponse {
 }
 
 function transformEvaluation(evaluation: Schema['Evaluation']['type']): Evaluation {
-  return {
+  // Add detailed logging of the raw evaluation data
+  console.debug('transformEvaluation - Raw evaluation data:', {
+    evaluationId: evaluation.id,
+    type: evaluation.type,
+    rawTask: evaluation.task,
+    hasTask: !!evaluation.task,
+    taskFields: evaluation.task ? {
+      id: evaluation.task.id,
+      type: evaluation.task.type,
+      status: evaluation.task.status,
+      stages: evaluation.task.stages
+    } : null,
+    rawMetrics: evaluation.metrics,
+    rawScoreResults: evaluation.scoreResults
+  });
+
+  // Parse metrics if it's a string
+  let parsedMetrics = null;
+  try {
+    if (typeof evaluation.metrics === 'string') {
+      parsedMetrics = JSON.parse(evaluation.metrics);
+    } else if (evaluation.metrics) {
+      parsedMetrics = evaluation.metrics;
+    }
+  } catch (e) {
+    console.error('Error parsing metrics:', e);
+  }
+
+  // Parse confusion matrix if it's a string
+  let parsedConfusionMatrix = null;
+  try {
+    if (typeof evaluation.confusionMatrix === 'string') {
+      parsedConfusionMatrix = JSON.parse(evaluation.confusionMatrix);
+    } else if (evaluation.confusionMatrix) {
+      parsedConfusionMatrix = evaluation.confusionMatrix;
+    }
+  } catch (e) {
+    console.error('Error parsing confusion matrix:', e);
+  }
+
+  // Parse dataset class distribution if it's a string
+  let parsedDatasetClassDistribution = null;
+  try {
+    if (typeof evaluation.datasetClassDistribution === 'string') {
+      parsedDatasetClassDistribution = JSON.parse(evaluation.datasetClassDistribution);
+    } else if (evaluation.datasetClassDistribution) {
+      parsedDatasetClassDistribution = evaluation.datasetClassDistribution;
+    }
+  } catch (e) {
+    console.error('Error parsing dataset class distribution:', e);
+  }
+
+  // Parse predicted class distribution if it's a string
+  let parsedPredictedClassDistribution = null;
+  try {
+    if (typeof evaluation.predictedClassDistribution === 'string') {
+      parsedPredictedClassDistribution = JSON.parse(evaluation.predictedClassDistribution);
+    } else if (evaluation.predictedClassDistribution) {
+      parsedPredictedClassDistribution = evaluation.predictedClassDistribution;
+    }
+  } catch (e) {
+    console.error('Error parsing predicted class distribution:', e);
+  }
+
+  // Parse score results if needed
+  let parsedScoreResults = null;
+  try {
+    if (evaluation.scoreResults?.items) {
+      parsedScoreResults = {
+        items: evaluation.scoreResults.items.map(result => ({
+          id: result.id,
+          value: result.value,
+          confidence: result.confidence,
+          metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
+          itemId: result.itemId
+        }))
+      };
+    }
+  } catch (e) {
+    console.error('Error parsing score results:', e);
+  }
+
+  // Transform task if present
+  let transformedTask = null;
+  if (evaluation.task && typeof evaluation.task !== 'function') {
+    try {
+      transformedTask = {
+        ...evaluation.task,
+        stages: evaluation.task.stages?.items?.map(stage => ({
+          ...stage,
+          status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+        })) || []
+      };
+    } catch (e) {
+      console.error('Error transforming task:', e);
+    }
+  }
+
+  const result: Evaluation = {
     id: evaluation.id,
     type: evaluation.type,
-    task: evaluation.task && typeof evaluation.task !== 'function' ? evaluation.task : null,
+    task: transformedTask,
     scorecard: evaluation.scorecard && typeof evaluation.scorecard !== 'function' ? evaluation.scorecard : null,
     score: evaluation.score && typeof evaluation.score !== 'function' ? evaluation.score : null,
     createdAt: evaluation.createdAt,
-    metrics: evaluation.metrics,
+    metrics: parsedMetrics,
     metricsExplanation: evaluation.metricsExplanation || null,
-    accuracy: evaluation.accuracy || null,
-    processedItems: evaluation.processedItems || null,
-    totalItems: evaluation.totalItems || null,
-    inferences: evaluation.inferences || null,
-    cost: evaluation.cost || null,
+    accuracy: typeof evaluation.accuracy === 'number' ? evaluation.accuracy : null,
+    processedItems: Number(evaluation.processedItems) || null,
+    totalItems: Number(evaluation.totalItems) || null,
+    inferences: Number(evaluation.inferences) || null,
+    cost: evaluation.cost ?? null,
     status: evaluation.status || null,
-    elapsedSeconds: evaluation.elapsedSeconds || null,
-    estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds || null,
+    elapsedSeconds: evaluation.elapsedSeconds ?? null,
+    estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds ?? null,
     startedAt: evaluation.startedAt || null,
     errorMessage: evaluation.errorMessage || null,
     errorDetails: evaluation.errorDetails,
-    confusionMatrix: evaluation.confusionMatrix,
+    confusionMatrix: parsedConfusionMatrix,
     scoreGoal: evaluation.scoreGoal || null,
-    datasetClassDistribution: evaluation.datasetClassDistribution,
-    isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced || null,
-    predictedClassDistribution: evaluation.predictedClassDistribution,
-    isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced || null,
-    scoreResults: evaluation.scoreResults || null
-  }
+    datasetClassDistribution: parsedDatasetClassDistribution,
+    isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced ?? null,
+    predictedClassDistribution: parsedPredictedClassDistribution,
+    isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced ?? null,
+    scoreResults: parsedScoreResults
+  };
+
+  // Log the transformed result
+  console.debug('transformEvaluation - Transformed result:', {
+    evaluationId: result.id,
+    type: result.type,
+    taskId: result.task?.id,
+    taskStatus: result.task?.status,
+    metrics: result.metrics,
+    accuracy: result.accuracy,
+    processedItems: result.processedItems,
+    totalItems: result.totalItems,
+    scoreResultsCount: result.scoreResults?.items?.length
+  });
+
+  return result;
 }
 
 export default function EvaluationsDashboard() {
@@ -302,7 +415,7 @@ export default function EvaluationsDashboard() {
 
     console.log('Setting up real-time evaluations subscription');
     const subscription = observeRecentEvaluations(100).subscribe({
-      next: ({ items, isSynced }) => {
+      next: async ({ items, isSynced }) => {
         console.log('Received evaluations update:', {
           count: items.length,
           evaluationIds: items.map(e => e.id),
@@ -315,8 +428,8 @@ export default function EvaluationsDashboard() {
           isSynced
         });
         // Transform the items before setting state
-        const transformedItems = items.map(transformEvaluation);
-        setEvaluations(transformedItems);
+        const transformedItems = await Promise.all(items.map(transformEvaluation));
+        setEvaluations(transformedItems.filter(Boolean));
         if (isSynced) {
           setIsLoading(false);
         }
