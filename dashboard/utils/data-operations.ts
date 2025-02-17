@@ -765,8 +765,7 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
     evaluation: task.evaluation ? await unwrapLazyLoader(task.evaluation) : undefined,
     stages: task.stages ? {
       items: task.stages.items ? await Promise.all(task.stages.items.map(async (stage) => ({
-        ...stage,
-        task: stage.task ? await unwrapLazyLoader(stage.task) : undefined
+        ...stage
       }))) : []
     } : undefined
   };
@@ -810,7 +809,12 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
       accuracy: unwrappedTask.evaluation.accuracy,
       processedItems: unwrappedTask.evaluation.processedItems,
       totalItems: unwrappedTask.evaluation.totalItems,
-      scoreResults: unwrappedTask.evaluation.scoreResults
+      scoreResults: unwrappedTask.evaluation.scoreResults,
+      inferences: unwrappedTask.evaluation.inferences,
+      cost: unwrappedTask.evaluation.cost,
+      status: unwrappedTask.evaluation.status,
+      elapsedSeconds: unwrappedTask.evaluation.elapsedSeconds,
+      estimatedRemainingSeconds: unwrappedTask.evaluation.estimatedRemainingSeconds
     } : undefined
   };
 }
