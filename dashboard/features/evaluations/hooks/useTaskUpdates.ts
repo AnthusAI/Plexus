@@ -137,14 +137,9 @@ export function useTaskUpdates({ taskId, onTaskUpdate }: UseTaskUpdatesProps) {
 
     // Use Amplify Gen2 models API for subscriptions
     console.log('Creating Task.onUpdate subscription...');
-    const subscription = currentClient.graphql<GraphQLSubscription<OnUpdateTaskSubscription>>({
-      query: `subscription OnUpdateTask($id: ID!) {
-        onUpdateTask(id: $id) {
-          id
-        }
-      }`,
-      variables: { id: taskId }
-    }).subscribe({
+    // @ts-ignore - Amplify Gen2 subscription typing issue
+    const taskObservable: Observable<any> = currentClient.models.Task.onUpdate({});
+    const subscription = taskObservable.subscribe({
       next: () => {
         console.log('Task update - refetching data');
         fetchTaskData();
@@ -156,14 +151,9 @@ export function useTaskUpdates({ taskId, onTaskUpdate }: UseTaskUpdatesProps) {
 
     // Also subscribe to stage updates since they're nested
     console.log('Creating TaskStage.onUpdate subscription...');
-    const stageSubscription = currentClient.graphql<GraphQLSubscription<OnUpdateTaskStageSubscription>>({
-      query: `subscription OnUpdateTaskStage($taskId: ID!) {
-        onUpdateTaskStage(taskId: $taskId) {
-          taskId
-        }
-      }`,
-      variables: { taskId }
-    }).subscribe({
+    // @ts-ignore - Amplify Gen2 subscription typing issue
+    const stageObservable: Observable<any> = currentClient.models.TaskStage.onUpdate({});
+    const stageSubscription = stageObservable.subscribe({
       next: () => {
         console.log('Task stage update - refetching data');
         fetchTaskData();
