@@ -52,6 +52,7 @@ export type EvaluationTaskData = BaseTaskData & {
 
 export type TaskData = {
   id: string
+  accountId: string
   command: string
   type: string
   status: string

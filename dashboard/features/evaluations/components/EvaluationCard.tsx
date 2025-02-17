@@ -58,6 +58,10 @@ interface RawTask {
   }
 }
 
+const isValidStatus = (status: string | undefined): status is 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' => {
+  return status === 'PENDING' || status === 'RUNNING' || status === 'COMPLETED' || status === 'FAILED';
+};
+
 export const EvaluationCard = React.memo(({ 
   evaluation, 
   selectedEvaluationId, 
@@ -118,15 +122,14 @@ export const EvaluationCard = React.memo(({
                   id: stage.id || '',
                   name: stage.name || '',
                   order: stage.order || 0,
-                  status: stage.status || '',
+                  status: isValidStatus(stage.status) ? stage.status : 'PENDING',
                   statusMessage: stage.statusMessage === null ? undefined : stage.statusMessage,
                   startedAt: stage.startedAt === null ? undefined : stage.startedAt,
                   completedAt: stage.completedAt === null ? undefined : stage.completedAt,
                   estimatedCompletionAt: stage.estimatedCompletionAt === null ? undefined : stage.estimatedCompletionAt,
                   processedItems: stage.processedItems,
                   totalItems: stage.totalItems
-                })),
-                nextToken: null
+                }))
               } : undefined
             }
             setTaskData(transformedTask)

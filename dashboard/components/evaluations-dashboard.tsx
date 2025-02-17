@@ -39,7 +39,7 @@ import { listFromModel, observeQueryFromModel, getFromModel, observeScoreResults
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter } from 'next/navigation'
 import { Observable } from 'rxjs'
-import { client, getClient } from '@/utils/amplify-client'
+import { getClient } from '@/utils/amplify-client'
 import type { GraphQLResult, GraphQLSubscription } from '@aws-amplify/api'
 import { TaskDispatchButton, evaluationsConfig } from '@/components/task-dispatch'
 import { EvaluationCard, EvaluationGrid } from '@/features/evaluations'
@@ -52,42 +52,51 @@ import { GraphQLResult as APIGraphQLResult } from '@aws-amplify/api-graphql'
 import type { EvaluationTaskProps } from '@/components/EvaluationTask'
 import type { TaskData } from '@/types/evaluation'
 import { transformAmplifyTask } from '@/utils/data-operations'
-import type { AmplifyTask } from '@/utils/data-operations'
-import { listRecentEvaluations, observeRecentEvaluations } from '@/utils/data-operations'
+import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
+import { listRecentEvaluations, observeRecentEvaluations, transformAmplifyTask as transformEvaluationData } from '@/utils/data-operations'
+import { TaskDisplay } from "@/components/TaskDisplay"
+
+type Evaluation = {
+  id: string
+  type: string
+  scorecard?: { name: string } | null
+  score?: { name: string } | null
+  createdAt: string
+  metrics?: any
+  metricsExplanation?: string | null
+  accuracy?: number | null
+  processedItems?: number | null
+  totalItems?: number | null
+  inferences?: number | null
+  cost?: number | null
+  status?: string | null
+  elapsedSeconds?: number | null
+  estimatedRemainingSeconds?: number | null
+  startedAt?: string | null
+  errorMessage?: string | null
+  errorDetails?: any
+  confusionMatrix?: any
+  scoreGoal?: string | null
+  datasetClassDistribution?: any
+  isDatasetClassDistributionBalanced?: boolean | null
+  predictedClassDistribution?: any
+  isPredictedClassDistributionBalanced?: boolean | null
+  task: AmplifyTask | null
+  scoreResults?: {
+    items?: Array<{
+      id: string
+      value: string | number
+      confidence: number | null
+      metadata: any
+      itemId: string | null
+    }>
+  } | null
+}
 
 type TaskResponse = {
-  id: string;
-  accountId: string;
-  type: string;
-  status: string;
-  target: string;
-  command: string;
-  description?: string;
-  dispatchStatus?: string;
-  metadata?: any;
-  createdAt: string;
-  startedAt?: string;
-  completedAt?: string;
-  estimatedCompletionAt?: string;
-  errorMessage?: string;
-  errorDetails?: any;
-  currentStageId?: string;
-  stages?: {
-    items: Array<{
-      id: string;
-      name: string;
-      order: number;
-      status: string;
-      statusMessage?: string;
-      startedAt?: string;
-      completedAt?: string;
-      estimatedCompletionAt?: string;
-      processedItems: number;
-      totalItems: number;
-    }>;
-    nextToken?: string;
-  };
-};
+  items: Evaluation[]
+  nextToken: string | null
+}
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -208,11 +217,42 @@ interface ListEvaluationResponse {
   };
 }
 
+function transformEvaluation(evaluation: Schema['Evaluation']['type']): Evaluation {
+  return {
+    id: evaluation.id,
+    type: evaluation.type,
+    task: evaluation.task && typeof evaluation.task !== 'function' ? evaluation.task : null,
+    scorecard: evaluation.scorecard && typeof evaluation.scorecard !== 'function' ? evaluation.scorecard : null,
+    score: evaluation.score && typeof evaluation.score !== 'function' ? evaluation.score : null,
+    createdAt: evaluation.createdAt,
+    metrics: evaluation.metrics,
+    metricsExplanation: evaluation.metricsExplanation || null,
+    accuracy: evaluation.accuracy || null,
+    processedItems: evaluation.processedItems || null,
+    totalItems: evaluation.totalItems || null,
+    inferences: evaluation.inferences || null,
+    cost: evaluation.cost || null,
+    status: evaluation.status || null,
+    elapsedSeconds: evaluation.elapsedSeconds || null,
+    estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds || null,
+    startedAt: evaluation.startedAt || null,
+    errorMessage: evaluation.errorMessage || null,
+    errorDetails: evaluation.errorDetails,
+    confusionMatrix: evaluation.confusionMatrix,
+    scoreGoal: evaluation.scoreGoal || null,
+    datasetClassDistribution: evaluation.datasetClassDistribution,
+    isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced || null,
+    predictedClassDistribution: evaluation.predictedClassDistribution,
+    isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced || null,
+    scoreResults: evaluation.scoreResults || null
+  }
+}
+
 export default function EvaluationsDashboard() {
   const { user } = useAuthenticator()
   const router = useRouter()
   const [accountId, setAccountId] = useState<string | null>(null)
-  const [evaluations, setEvaluations] = useState<Schema['Evaluation']['type'][]>([])
+  const [evaluations, setEvaluations] = useState<Evaluation[]>([])
   const [selectedEvaluationId, setSelectedEvaluationId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -224,14 +264,14 @@ export default function EvaluationsDashboard() {
   const { ref, inView } = useInView({
     threshold: 0,
   })
+  const [processedTaskData, setProcessedTaskData] = useState<ProcessedTask | null>(null);
 
   // Fetch account ID
   useEffect(() => {
     const fetchAccountId = async () => {
       try {
         console.log('Fetching account ID...')
-        const client = getClient()
-        const accountResponse = await client.graphql<ListAccountResponse>({
+        const accountResponse = await getClient().graphql<ListAccountResponse>({
           query: LIST_ACCOUNTS,
           variables: {
             filter: { key: { eq: ACCOUNT_KEY } }
@@ -269,13 +309,14 @@ export default function EvaluationsDashboard() {
           firstEvaluation: items[0] ? {
             id: items[0].id,
             taskId: items[0].taskId,
-            taskStages: items[0].task?.stages?.items,
             status: items[0].status,
             type: items[0].type
           } : null,
           isSynced
         });
-        setEvaluations(items);
+        // Transform the items before setting state
+        const transformedItems = items.map(transformEvaluation);
+        setEvaluations(transformedItems);
         if (isSynced) {
           setIsLoading(false);
         }
@@ -342,115 +383,11 @@ export default function EvaluationsDashboard() {
     const evaluation = evaluations.find(e => e.id === selectedEvaluationId)
     if (!evaluation) return null
 
-    const transformedTask = useMemo(() => {
-      if (!evaluation.task) return null;
-      return transformAmplifyTask(evaluation.task as unknown as AmplifyTask);
-    }, [evaluation.task]);
-
-    // Convert task data to the expected format
-    const taskData = useMemo(() => {
-      if (!transformedTask) return null;
-      return {
-        id: transformedTask.id,
-        accountId: transformedTask.id?.split(':')[0] || '',
-        type: transformedTask.type,
-        status: transformedTask.status,
-        target: transformedTask.target,
-        command: transformedTask.command,
-        description: transformedTask.description,
-        dispatchStatus: transformedTask.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
-        metadata: transformedTask.metadata,
-        createdAt: transformedTask.createdAt || '',
-        startedAt: transformedTask.startedAt,
-        completedAt: transformedTask.completedAt,
-        estimatedCompletionAt: transformedTask.estimatedCompletionAt,
-        errorMessage: transformedTask.errorMessage,
-        errorDetails: transformedTask.errorDetails,
-        currentStageId: transformedTask.currentStageId,
-        stages: transformedTask.stages ? {
-          items: transformedTask.stages.map(stage => ({
-            id: stage.id,
-            name: stage.name,
-            order: stage.order,
-            status: stage.status,
-            statusMessage: stage.statusMessage,
-            startedAt: stage.startedAt,
-            completedAt: stage.completedAt,
-            estimatedCompletionAt: stage.estimatedCompletionAt,
-            processedItems: stage.processedItems || 0,
-            totalItems: stage.totalItems || 0
-          })),
-          nextToken: null
-        } : undefined
-      };
-    }, [transformedTask]);
-
-    // Get current stage info for progress tracking
-    const currentStage = taskData?.stages?.items?.find(s => s.status === 'RUNNING') || 
-                        taskData?.stages?.items?.[taskData.stages.items.length - 1]
-
-    const task: EvaluationTaskProps['task'] = {
-      id: evaluation.id,
-      type: evaluation.type || '',
-      scorecard: evaluation.scorecard?.name || '-',
-      score: evaluation.score?.name || '-',
-      time: evaluation.createdAt || '',
-      data: {
-        id: evaluation.id,
-        title: `${evaluation.scorecard?.name || '-'} - ${evaluation.score?.name || '-'}`,
-        metrics: typeof evaluation.metrics === 'string' ? JSON.parse(evaluation.metrics as string) : (evaluation.metrics || []),
-        metricsExplanation: evaluation.metricsExplanation || '',
-        accuracy: typeof evaluation.accuracy === 'number' ? evaluation.accuracy : null,
-        processedItems: currentStage?.processedItems || Number(evaluation.processedItems || 0),
-        totalItems: currentStage?.totalItems || Number(evaluation.totalItems || 0),
-        progress: Number(calculateProgress(currentStage?.processedItems || evaluation.processedItems, currentStage?.totalItems || evaluation.totalItems) || 0),
-        inferences: Number(evaluation.inferences || 0),
-        cost: evaluation.cost ?? null,
-        status: evaluation.status || 'PENDING',
-        elapsedSeconds: evaluation.elapsedSeconds ?? null,
-        estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds ?? null,
-        startedAt: evaluation.startedAt || undefined,
-        errorMessage: evaluation.errorMessage || undefined,
-        errorDetails: evaluation.errorDetails || undefined,
-        confusionMatrix: typeof evaluation.confusionMatrix === 'string' ? JSON.parse(evaluation.confusionMatrix as string) : evaluation.confusionMatrix,
-        scoreGoal: evaluation.scoreGoal ? String(evaluation.scoreGoal) : null,
-        datasetClassDistribution: typeof evaluation.datasetClassDistribution === 'string' ? JSON.parse(evaluation.datasetClassDistribution as string) : evaluation.datasetClassDistribution,
-        isDatasetClassDistributionBalanced: Boolean(evaluation.isDatasetClassDistributionBalanced),
-        predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ? JSON.parse(evaluation.predictedClassDistribution as string) : evaluation.predictedClassDistribution,
-        isPredictedClassDistributionBalanced: Boolean(evaluation.isPredictedClassDistributionBalanced),
-        task: taskData,
-        scoreResults: evaluation.scoreResults?.items?.map((result: Schema['ScoreResult']['type']) => ({
-          id: result.id,
-          value: result.value,
-          confidence: result.confidence,
-          explanation: result.explanation,
-          metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
-          itemId: result.itemId
-        })) || []
-      },
-      stages: taskData?.stages?.items?.map(stage => ({
-        key: stage.name,
-        label: stage.name,
-        color: stage.status === 'COMPLETED' ? 'bg-primary' :
-               stage.status === 'RUNNING' ? 'bg-secondary' :
-               stage.status === 'FAILED' ? 'bg-false' :
-               'bg-neutral',
-        name: stage.name,
-        order: stage.order,
-        status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-        processedItems: stage.processedItems,
-        totalItems: stage.totalItems,
-        startedAt: stage.startedAt,
-        completedAt: stage.completedAt,
-        estimatedCompletionAt: stage.estimatedCompletionAt,
-        statusMessage: stage.statusMessage
-      })) || []
-    }
-
     return (
-      <EvaluationTask
+      <TaskDisplay
         variant="detail"
-        task={task}
+        task={evaluation.task}
+        evaluationData={evaluation}
         controlButtons={
           <DropdownMenu>
             <DropdownMenuTrigger>
@@ -550,103 +487,10 @@ export default function EvaluationsDashboard() {
                     }
                   }}
                 >
-                  <EvaluationTask
+                  <TaskDisplay
                     variant="grid"
-                    task={{
-                      id: evaluation.id,
-                      type: evaluation.type,
-                      scorecard: evaluation.scorecard?.name || '-',
-                      score: evaluation.score?.name || '-',
-                      time: evaluation.createdAt,
-                      data: {
-                        id: evaluation.id,
-                        title: `${evaluation.scorecard?.name || '-'} - ${evaluation.score?.name || '-'}`,
-                        metrics: typeof evaluation.metrics === 'string' ? JSON.parse(evaluation.metrics as string) : [],
-                        metricsExplanation: evaluation.metricsExplanation,
-                        accuracy: evaluation.accuracy,
-                        processedItems: evaluation.processedItems || 0,
-                        totalItems: evaluation.totalItems || 0,
-                        progress: calculateProgress(evaluation.processedItems, evaluation.totalItems),
-                        inferences: evaluation.inferences || 0,
-                        cost: evaluation.cost ?? null,
-                        status: evaluation.status,
-                        elapsedSeconds: evaluation.elapsedSeconds ?? null,
-                        estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds ?? null,
-                        startedAt: evaluation.startedAt || undefined,
-                        errorMessage: evaluation.errorMessage || undefined,
-                        errorDetails: evaluation.errorDetails,
-                        confusionMatrix: typeof evaluation.confusionMatrix === 'string' ? JSON.parse(evaluation.confusionMatrix as string) : null,
-                        scoreGoal: evaluation.scoreGoal,
-                        datasetClassDistribution: typeof evaluation.datasetClassDistribution === 'string' ? JSON.parse(evaluation.datasetClassDistribution as string) : null,
-                        isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
-                        predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ? JSON.parse(evaluation.predictedClassDistribution as string) : null,
-                        isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
-                        task: evaluation.task ? (() => {
-                          const transformedTask = transformAmplifyTask(evaluation.task as unknown as AmplifyTask);
-                          return {
-                            id: transformedTask.id,
-                            accountId: transformedTask.id?.split(':')[0] || '',
-                            type: transformedTask.type,
-                            status: transformedTask.status,
-                            target: transformedTask.target,
-                            command: transformedTask.command,
-                            description: transformedTask.description,
-                            dispatchStatus: transformedTask.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
-                            metadata: transformedTask.metadata,
-                            createdAt: transformedTask.createdAt || '',
-                            startedAt: transformedTask.startedAt,
-                            completedAt: transformedTask.completedAt,
-                            estimatedCompletionAt: transformedTask.estimatedCompletionAt,
-                            errorMessage: transformedTask.errorMessage,
-                            errorDetails: transformedTask.errorDetails,
-                            currentStageId: transformedTask.currentStageId,
-                            stages: transformedTask.stages ? {
-                              items: transformedTask.stages.map(stage => ({
-                                id: stage.id,
-                                name: stage.name,
-                                order: stage.order,
-                                status: stage.status,
-                                statusMessage: stage.statusMessage,
-                                startedAt: stage.startedAt,
-                                completedAt: stage.completedAt,
-                                estimatedCompletionAt: stage.estimatedCompletionAt,
-                                processedItems: stage.processedItems || 0,
-                                totalItems: stage.totalItems || 0
-                              })),
-                              nextToken: null
-                            } : undefined
-                          };
-                        })() : null,
-                        scoreResults: evaluation.scoreResults?.items?.map((result: Schema['ScoreResult']['type']) => ({
-                          id: result.id,
-                          value: result.value,
-                          confidence: result.confidence,
-                          explanation: result.explanation,
-                          metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
-                          itemId: result.itemId
-                        })) || []
-                      },
-                      stages: evaluation.task ? (() => {
-                        const transformedTask = transformAmplifyTask(evaluation.task as unknown as AmplifyTask);
-                        return transformedTask.stages.map(stage => ({
-                          key: stage.name,
-                          label: stage.name,
-                          color: stage.status === 'COMPLETED' ? 'bg-primary' :
-                                stage.status === 'RUNNING' ? 'bg-secondary' :
-                                stage.status === 'FAILED' ? 'bg-false' :
-                                'bg-neutral',
-                          name: stage.name,
-                          order: stage.order,
-                          status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-                          processedItems: stage.processedItems,
-                          totalItems: stage.totalItems,
-                          startedAt: stage.startedAt,
-                          completedAt: stage.completedAt,
-                          estimatedCompletionAt: stage.estimatedCompletionAt,
-                          statusMessage: stage.statusMessage
-                        }))
-                      })() : []
-                    }}
+                    task={evaluation.task}
+                    evaluationData={evaluation}
                     isSelected={evaluation.id === selectedEvaluationId}
                     onClick={() => {
                       setSelectedEvaluationId(evaluation.id)

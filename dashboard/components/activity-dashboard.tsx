@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useInView } from 'react-intersection-observer'
 import { formatTimeAgo } from '@/utils/format-time'
 import { formatDuration } from '@/utils/format-duration'
-import { TaskStatus, TaskStageConfig } from '@/components/ui/task-status'
+import { TaskStageConfig } from '@/components/ui/task-status'
 import { Schema } from '@/amplify/data/resource'
 import { listRecentTasks, observeRecentTasks, updateTask } from '@/utils/data-operations'
 import { useMediaQuery } from '@/hooks/use-media-query'
@@ -21,6 +21,8 @@ import EvaluationTask, { type EvaluationTaskProps, type EvaluationTaskData } fro
 
 // Import the types from data-operations
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
+
+type TaskStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
 
 // Add this query after the imports
 const LIST_TASKS = `
@@ -159,9 +161,13 @@ function transformTaskToActivity(task: ProcessedTask) {
   });
 
   // Parse metadata for task info - ensure we have a default empty object
-  let metadata = {}
+  let metadata: Record<string, unknown> = {}
   try {
-    metadata = task.metadata ? JSON.parse(task.metadata) : {}
+    if (typeof task.metadata === 'string' && task.metadata) {
+      metadata = JSON.parse(task.metadata)
+    } else if (task.metadata && typeof task.metadata === 'object') {
+      metadata = task.metadata
+    }
   } catch (e) {
     console.warn('Failed to parse task metadata:', e)
   }
@@ -333,7 +339,8 @@ function transformTaskToActivity(task: ProcessedTask) {
           workerNodeId: task.workerNodeId,
           stages: { items: stages.map(stage => ({
             ...stage,
-            id: stage.name // Use name as id since it's guaranteed to exist in TaskStageConfig
+            id: stage.name,
+            status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
           })) }
         }
       }
@@ -384,25 +391,24 @@ function transformTaskToActivity(task: ProcessedTask) {
         (currentStage.processedItems / currentStage.totalItems) * 100 : 0,
       inferences: (metadata as any)?.inferences ?? 0,
       cost: (metadata as any)?.cost ?? null,
-      status: task.status,
+      status: task.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
       elapsedSeconds: (metadata as any)?.elapsedSeconds ?? null,
       estimatedRemainingSeconds: (metadata as any)?.estimatedRemainingSeconds ?? null,
-      startedAt: task.startedAt ?? undefined,
+      startedAt: task.startedAt,
       errorMessage: task.errorMessage,
-      errorDetails: (metadata as any)?.errorDetails ?? null,
-      confusionMatrix: null,
-      scoreGoal: null,
-      datasetClassDistribution: null,
-      isDatasetClassDistributionBalanced: null,
-      predictedClassDistribution: null,
-      isPredictedClassDistributionBalanced: null,
+      errorDetails: task.errorDetails,
+      confusionMatrix: (metadata as any)?.confusionMatrix,
+      datasetClassDistribution: (metadata as any)?.datasetClassDistribution ?? undefined,
+      isDatasetClassDistributionBalanced: (metadata as any)?.isDatasetClassDistributionBalanced ?? null,
+      predictedClassDistribution: (metadata as any)?.predictedClassDistribution ?? undefined,
+      isPredictedClassDistributionBalanced: (metadata as any)?.isPredictedClassDistributionBalanced ?? null,
       scoreResults: [],
       task: {
         id: task.id,
         accountId: '',
         type: task.type,
         command: task.command,
-        status: task.status,
+        status: task.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
         target: task.target,
         startedAt: task.startedAt,
         completedAt: task.completedAt,
@@ -411,7 +417,8 @@ function transformTaskToActivity(task: ProcessedTask) {
         workerNodeId: task.workerNodeId,
         stages: { items: stages.map(stage => ({
           ...stage,
-          id: stage.name // Use name as id since it's guaranteed to exist in TaskStageConfig
+          id: stage.name,
+          status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
         })) }
       }
     },
@@ -601,7 +608,7 @@ export default function ActivityDashboard() {
     console.debug('Rendering selected task in Activity Dashboard:', {
       taskId: task.id,
       type: task.type,
-      command: task.command || task.data?.command,
+      command: task.description || task.data?.command,
       isEvaluation: task.type.toLowerCase().includes('evaluation'),
       commandDisplay: 'full' // Verify we're setting this correctly
     });

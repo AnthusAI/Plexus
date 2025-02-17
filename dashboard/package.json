@@ -22,6 +22,8 @@
     "ci": "npm run ci:typecheck && npm run ci:unit && npm run ci:storybook"
   },
   "dependencies": {
+    "@aws-amplify/api": "^6.3.0",
+    "@aws-amplify/api-graphql": "^4.7.4",
     "@aws-amplify/ui-react": "^6.1.13",
     "@aws-sdk/client-dynamodb": "^3.0.0",
     "@aws-sdk/client-sqs": "^3.0.0",
