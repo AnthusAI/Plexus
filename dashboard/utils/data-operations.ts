@@ -1,4 +1,5 @@
 import { generateClient } from 'aws-amplify/data';
+import type { GraphQLResult, GraphQLSubscription } from '@aws-amplify/api';
 import { Schema } from '@/amplify/data/resource';
 import { Observable } from 'rxjs';
 
@@ -62,7 +63,7 @@ export type AmplifyTask = {
   status: string;
   target: string;
   description?: string;
-  metadata?: any;
+  metadata?: Record<string, unknown> | string;
   createdAt?: string;
   startedAt?: string;
   completedAt?: string;
@@ -99,7 +100,7 @@ export type ProcessedTask = {
   status: string;
   target: string;
   description?: string;
-  metadata?: string;
+  metadata?: Record<string, unknown> | string;
   createdAt?: string;
   startedAt?: string;
   completedAt?: string;
@@ -214,11 +215,6 @@ interface GraphQLError {
   path?: string[];
 }
 
-interface GraphQLResult<T> {
-  data?: T;
-  errors?: GraphQLError[];
-}
-
 type ListTaskResponse = {
   listTaskByAccountIdAndUpdatedAt: {
     items: Schema['Task']['type'][];
@@ -245,6 +241,10 @@ type SubscriptionResponse<T> = {
     data: T;
   };
 };
+
+function isGraphQLResult<T>(response: GraphQLResult<T> | GraphQLSubscription<T>): response is GraphQLResult<T> {
+  return 'data' in response && 'errors' in response;
+}
 
 export function getClient(): AmplifyClient {
   if (!client) {
@@ -283,7 +283,22 @@ export async function listFromModel<T>(
   }
 }
 
-export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
+// Helper function to safely get value from a LazyLoader
+function getValueFromLazyLoader<T>(loader: LazyLoader<T>): T | undefined {
+  if (typeof loader === 'function') {
+    return undefined; // We can't synchronously get the value from a promise
+  }
+  return loader;
+}
+
+async function unwrapLazyLoader<T>(loader: LazyLoader<T>): Promise<T> {
+  if (typeof loader === 'function') {
+    return (loader as () => Promise<T>)();
+  }
+  return loader;
+}
+
+export async function transformAmplifyTask(task: AmplifyTask): Promise<ProcessedTask> {
   console.debug('transformAmplifyTask input:', {
     taskId: task.id,
     hasStages: !!task.stages,
@@ -384,11 +399,9 @@ export function transformAmplifyTask(task: AmplifyTask): ProcessedTask {
   }
 
   // Handle scorecard and score
-  const scorecard = task.scorecard ? 
-    (typeof task.scorecard === 'function' ? await task.scorecard() : task.scorecard) : undefined;
+  const scorecard = task.scorecard ? await unwrapLazyLoader(task.scorecard) : undefined;
   
-  const score = task.score ?
-    (typeof task.score === 'function' ? await task.score() : task.score) : undefined;
+  const score = task.score ? await unwrapLazyLoader(task.score) : undefined;
 
   return {
     id: task.id,
@@ -736,116 +749,62 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
 type TaskStageData = Schema['TaskStage']['type'];
 
 async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
-  console.debug(`Starting to process task ${task.id}`, {
-    taskId: task.id,
-    type: task.type,
-    hasStages: !!task.stages,
-    stagesType: task.stages ? typeof task.stages : 'undefined',
-    rawStages: task.stages,
-    hasEvaluation: !!task.evaluation,
-    evaluationData: task.evaluation
-  });
+  // Unwrap any LazyLoader properties
+  const unwrappedTask = {
+    ...task,
+    scorecard: task.scorecard ? await unwrapLazyLoader(task.scorecard) : undefined,
+    score: task.score ? await unwrapLazyLoader(task.score) : undefined,
+    evaluation: task.evaluation ? await unwrapLazyLoader(task.evaluation) : undefined,
+    stages: task.stages ? {
+      items: task.stages.items ? await Promise.all(task.stages.items.map(async (stage) => ({
+        ...stage,
+        task: stage.task ? await unwrapLazyLoader(stage.task) : undefined
+      }))) : []
+    } : undefined
+  };
 
-  try {
-    if (!task.stages) {
-      // If stages is missing, try to load them
-      const stagesResponse = await listFromModel<Schema['TaskStage']['type']>(
-        'TaskStage',
-        { filter: { taskId: { eq: task.id } } }
-      );
-      task.stages = { items: stagesResponse.data || [] };
-    }
-
-    // Sort stages by order
-    const stages: ProcessedTaskStage[] = (task.stages?.items || [])
-      .sort((a: any, b: any) => a.order - b.order)
-      .map((stage: any) => ({
-        id: stage.id,
-        name: stage.name,
-        order: stage.order,
-        status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-        processedItems: stage.processedItems ?? undefined,
-        totalItems: stage.totalItems ?? undefined,
-        startedAt: stage.startedAt ?? undefined,
-        completedAt: stage.completedAt ?? undefined,
-        estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
-        statusMessage: stage.statusMessage ?? undefined
-      }));
-
-    const processed: ProcessedTask = {
-      id: task.id,
-      command: task.command,
-      type: task.type,
-      status: task.status,
-      target: task.target,
-      description: task.description ?? undefined,
-      metadata: typeof task.metadata === 'string' ? task.metadata : JSON.stringify(task.metadata ?? null),
-      createdAt: task.createdAt ?? undefined,
-      startedAt: task.startedAt ?? undefined,
-      completedAt: task.completedAt ?? undefined,
-      estimatedCompletionAt: task.estimatedCompletionAt ?? undefined,
-      errorMessage: task.errorMessage ?? undefined,
-      errorDetails: typeof task.errorDetails === 'string' ? task.errorDetails : JSON.stringify(task.errorDetails ?? null),
-      stdout: task.stdout ?? undefined,
-      stderr: task.stderr ?? undefined,
-      currentStageId: task.currentStageId ?? undefined,
-      stages,
-      dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
-      celeryTaskId: task.celeryTaskId ?? undefined,
-      workerNodeId: task.workerNodeId ?? undefined,
-      updatedAt: task.updatedAt ?? undefined,
-      scorecardId: task.scorecardId ?? undefined,
-      scoreId: task.scoreId ?? undefined,
-      scorecard: task.scorecard ? {
-        id: task.scorecard.id,
-        name: task.scorecard.name
-      } : undefined,
-      score: task.score ? {
-        id: task.score.id,
-        name: task.score.name
-      } : undefined,
-      evaluation: task.evaluation ? {
-        id: task.evaluation.id,
-        type: task.evaluation.type,
-        metrics: task.evaluation.metrics,
-        metricsExplanation: task.evaluation.metricsExplanation,
-        inferences: task.evaluation.inferences,
-        accuracy: task.evaluation.accuracy,
-        cost: task.evaluation.cost,
-        status: task.evaluation.status,
-        startedAt: task.evaluation.startedAt,
-        elapsedSeconds: task.evaluation.elapsedSeconds,
-        estimatedRemainingSeconds: task.evaluation.estimatedRemainingSeconds,
-        totalItems: task.evaluation.totalItems,
-        processedItems: task.evaluation.processedItems,
-        errorMessage: task.evaluation.errorMessage,
-        errorDetails: task.evaluation.errorDetails,
-        confusionMatrix: task.evaluation.confusionMatrix,
-        scoreGoal: task.evaluation.scoreGoal,
-        datasetClassDistribution: task.evaluation.datasetClassDistribution,
-        isDatasetClassDistributionBalanced: task.evaluation.isDatasetClassDistributionBalanced,
-        predictedClassDistribution: task.evaluation.predictedClassDistribution,
-        isPredictedClassDistributionBalanced: task.evaluation.isPredictedClassDistributionBalanced,
-        scoreResults: task.evaluation.scoreResults
-      } : undefined
-    };
-
-    console.debug(`Finished processing task ${task.id}`, {
-      id: processed.id,
-      type: processed.type,
-      scorecard: processed.scorecard,
-      score: processed.score,
-      scorecardId: processed.scorecardId,
-      scoreId: processed.scoreId,
-      hasEvaluation: !!processed.evaluation,
-      evaluationData: processed.evaluation
-    });
-
-    return processed;
-  } catch (error: unknown) {
-    console.error('Error processing task:', error);
-    throw error;
-  }
+  return {
+    id: unwrappedTask.id,
+    command: unwrappedTask.command,
+    type: unwrappedTask.type,
+    status: unwrappedTask.status,
+    target: unwrappedTask.target,
+    description: unwrappedTask.description ?? undefined,
+    metadata: typeof unwrappedTask.metadata === 'string' ? unwrappedTask.metadata : JSON.stringify(unwrappedTask.metadata ?? null),
+    createdAt: unwrappedTask.createdAt ?? undefined,
+    startedAt: unwrappedTask.startedAt ?? undefined,
+    completedAt: unwrappedTask.completedAt ?? undefined,
+    estimatedCompletionAt: unwrappedTask.estimatedCompletionAt ?? undefined,
+    errorMessage: unwrappedTask.errorMessage ?? undefined,
+    errorDetails: typeof unwrappedTask.errorDetails === 'string' ? unwrappedTask.errorDetails : JSON.stringify(unwrappedTask.errorDetails ?? null),
+    stdout: unwrappedTask.stdout ?? undefined,
+    stderr: unwrappedTask.stderr ?? undefined,
+    currentStageId: unwrappedTask.currentStageId ?? undefined,
+    stages: unwrappedTask.stages?.items ?? [],
+    dispatchStatus: unwrappedTask.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
+    celeryTaskId: unwrappedTask.celeryTaskId ?? undefined,
+    workerNodeId: unwrappedTask.workerNodeId ?? undefined,
+    updatedAt: unwrappedTask.updatedAt ?? undefined,
+    scorecardId: unwrappedTask.scorecardId ?? undefined,
+    scoreId: unwrappedTask.scoreId ?? undefined,
+    scorecard: unwrappedTask.scorecard ? {
+      id: unwrappedTask.scorecard.id,
+      name: unwrappedTask.scorecard.name
+    } : undefined,
+    score: unwrappedTask.score ? {
+      id: unwrappedTask.score.id,
+      name: unwrappedTask.score.name
+    } : undefined,
+    evaluation: unwrappedTask.evaluation ? {
+      id: unwrappedTask.evaluation.id,
+      type: unwrappedTask.evaluation.type,
+      metrics: unwrappedTask.evaluation.metrics,
+      accuracy: unwrappedTask.evaluation.accuracy,
+      processedItems: unwrappedTask.evaluation.processedItems,
+      totalItems: unwrappedTask.evaluation.totalItems,
+      scoreResults: unwrappedTask.evaluation.scoreResults
+    } : undefined
+  };
 }
 
 export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask[]> {
@@ -1270,6 +1229,11 @@ export async function listRecentEvaluations(limit: number = 100): Promise<Schema
         limit: limit || 100
       }
     });
+
+    if (!isGraphQLResult(response)) {
+      console.error('Unexpected response type');
+      return [];
+    }
 
     if (response.errors?.length) {
       console.error('GraphQL errors:', response.errors);

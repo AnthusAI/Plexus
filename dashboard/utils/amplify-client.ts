@@ -1,6 +1,7 @@
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 import { GraphQLResult } from '@aws-amplify/api'
+import type { GraphqlSubscriptionResult } from '@aws-amplify/api-graphql'
 
 let client: ReturnType<typeof generateClient<Schema>> | null = null;
 
@@ -20,7 +21,13 @@ export async function graphqlRequest<T>(query: string, variables?: Record<string
       query,
       variables
     });
-    return response;
+    
+    // Check if response is a subscription result
+    if ('subscribe' in response) {
+      throw new Error('Subscription responses should be handled by observeGraphQL');
+    }
+    
+    return response as GraphQLResponse<T>;
   } catch (error) {
     console.error('GraphQL request error:', error);
     throw error;
