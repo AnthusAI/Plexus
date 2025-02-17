@@ -2,9 +2,7 @@ import { generateClient } from 'aws-amplify/data';
 import type { GraphQLResult, GraphQLSubscription } from '@aws-amplify/api';
 import { Schema } from '@/amplify/data/resource';
 import { Observable } from 'rxjs';
-
-// Define LazyLoader type
-type LazyLoader<T> = T | (() => Promise<T>);
+import { LazyLoader } from './types';
 
 // Define base types for nested objects
 type TaskStageType = {
@@ -493,7 +491,9 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
               id: updatedTask.scorecardId
             }
           });
-          updatedTask.scorecard = scorecardResponse.data?.getScorecard;
+          if (isGraphQLResult(scorecardResponse)) {
+            updatedTask.scorecard = scorecardResponse.data?.getScorecard;
+          }
           console.debug('Fetched scorecard:', updatedTask.scorecard);
         }
 
@@ -513,7 +513,9 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
               id: updatedTask.scoreId
             }
           });
-          updatedTask.score = scoreResponse.data?.getScore;
+          if (isGraphQLResult(scoreResponse)) {
+            updatedTask.score = scoreResponse.data?.getScore;
+          }
           console.debug('Fetched score:', updatedTask.score);
         }
 
@@ -557,10 +559,13 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
             });
             updatedTaskData.scorecardId = updatedTask.scorecardId;
             if (updatedTask.scorecard) {
-              updatedTaskData.scorecard = {
-                id: updatedTask.scorecard.id,
-                name: updatedTask.scorecard.name
-              };
+              const scorecardValue = getValueFromLazyLoader(updatedTask.scorecard);
+              if (scorecardValue) {
+                updatedTaskData.scorecard = {
+                  id: scorecardValue.id,
+                  name: scorecardValue.name
+                };
+              }
             }
           }
 
@@ -575,10 +580,13 @@ export function observeRecentTasks(limit: number = 12): Observable<{ items: Proc
             });
             updatedTaskData.scoreId = updatedTask.scoreId;
             if (updatedTask.score) {
-              updatedTaskData.score = {
-                id: updatedTask.score.id,
-                name: updatedTask.score.name
-              };
+              const scoreValue = getValueFromLazyLoader(updatedTask.score);
+              if (scoreValue) {
+                updatedTaskData.score = {
+                  id: scoreValue.id,
+                  name: scoreValue.name
+                };
+              }
             }
           }
 
@@ -951,15 +959,19 @@ export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask
         id: response.data.listTaskByAccountIdAndUpdatedAt.items[0].id,
         type: response.data.listTaskByAccountIdAndUpdatedAt.items[0].type,
         hasEvaluation: !!response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation,
-        evaluation: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation ? {
-          id: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation.id,
-          type: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation.type,
-          metrics: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation.metrics,
-          accuracy: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation.accuracy,
-          processedItems: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation.processedItems,
-          totalItems: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation.totalItems,
-          scoreResults: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation.scoreResults
-        } : null
+        evaluation: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation ? 
+          (() => {
+            const evaluationValue = getValueFromLazyLoader(response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation);
+            return evaluationValue ? {
+              id: evaluationValue.id,
+              type: evaluationValue.type,
+              metrics: evaluationValue.metrics,
+              accuracy: evaluationValue.accuracy,
+              processedItems: evaluationValue.processedItems,
+              totalItems: evaluationValue.totalItems,
+              scoreResults: evaluationValue.scoreResults
+            } : undefined;
+          })() : undefined
       } : null
     });
 
@@ -1330,7 +1342,9 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
             id: updatedEvaluation.scorecardId
           }
         });
-        updatedEvaluation.scorecard = scorecardResponse.data?.getScorecard;
+        if (isGraphQLResult(scorecardResponse)) {
+          updatedEvaluation.scorecard = scorecardResponse.data?.getScorecard;
+        }
       }
 
       if (updatedEvaluation.scoreId && !updatedEvaluation.score) {
@@ -1349,7 +1363,9 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
             id: updatedEvaluation.scoreId
           }
         });
-        updatedEvaluation.score = scoreResponse.data?.getScore;
+        if (isGraphQLResult(scoreResponse)) {
+          updatedEvaluation.score = scoreResponse.data?.getScore;
+        }
       }
 
       const evaluationIndex = evaluations.findIndex(e => e.id === updatedEvaluation.id);
