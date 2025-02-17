@@ -1,8 +1,14 @@
 import { generateClient } from 'aws-amplify/data';
-import type { GraphQLResult, GraphQLSubscription } from '@aws-amplify/api';
-import { Schema } from '@/amplify/data/resource';
+import { GraphQLResult, GraphQLSubscription } from '@aws-amplify/api';
+import type { Schema } from '../amplify/data/resource';
 import { Observable } from 'rxjs';
 import { LazyLoader } from './types';
+import type { AmplifyTask } from '../types/tasks/amplify';
+import type { ProcessedTask } from '../types/tasks/processed';
+import { getClient } from './amplify-client';
+export { getClient };
+import { TASK_UPDATE_SUBSCRIPTION } from '../graphql/evaluation-queries';
+import { Hub } from 'aws-amplify/utils';
 
 // Define base types for nested objects
 type TaskStageType = {
@@ -60,8 +66,8 @@ export type AmplifyTask = {
   type: string;
   status: string;
   target: string;
-  description?: string;
-  metadata?: Record<string, unknown> | string;
+  description?: string | null;
+  metadata?: Record<string, unknown> | null;  // Updated to match schema
   createdAt?: string;
   startedAt?: string;
   completedAt?: string;
@@ -98,7 +104,7 @@ export type ProcessedTask = {
   status: string;
   target: string;
   description?: string;
-  metadata?: Record<string, unknown> | string;
+  metadata?: Record<string, unknown> | null;
   createdAt?: string;
   startedAt?: string;
   completedAt?: string;
@@ -173,6 +179,12 @@ export type ProcessedTaskStage = {
 };
 
 type AmplifyClient = ReturnType<typeof generateClient<Schema>> & {
+  graphql: {
+    query: (options: { query: string }) => Promise<GraphQLResult<any>>;
+    subscribe: (options: { query: string }) => {
+      subscribe: (handlers: SubscriptionHandler<any>) => { unsubscribe: () => void };
+    };
+  };
   models: {
     Task: {
       list: (options: { 
@@ -182,8 +194,6 @@ type AmplifyClient = ReturnType<typeof generateClient<Schema>> & {
         data: Array<Schema['Task']['type']>;
         nextToken?: string | null;
       }>;
-      onCreate: (options: {}) => { subscribe: (handlers: { next: () => void; error: (error: any) => void }) => { unsubscribe: () => void } };
-      onUpdate: (options: {}) => { subscribe: (handlers: { next: () => void; error: (error: any) => void }) => { unsubscribe: () => void } };
     };
     TaskStage: {
       onUpdate: (options: {}) => { subscribe: (handlers: { next: () => void; error: (error: any) => void }) => { unsubscribe: () => void } };
@@ -233,22 +243,20 @@ type GraphQLResponse<T> = {
   }>;
 };
 
+// Update the subscription type to match activity dashboard
 type SubscriptionResponse<T> = {
-  provider: any;
-  value: {
-    data: T;
-  };
+  data: T;
 };
 
-function isGraphQLResult<T>(response: GraphQLResult<T> | GraphQLSubscription<T>): response is GraphQLResult<T> {
-  return 'data' in response && 'errors' in response;
-}
+// Add a type for the subscription handler
+type SubscriptionHandler<T> = {
+  next: (response: SubscriptionResponse<T>) => void;
+  error: (error: any) => void;
+};
 
-export function getClient(): AmplifyClient {
-  if (!client) {
-    client = generateClient<Schema>() as AmplifyClient;
-  }
-  return client;
+// Add a type guard for GraphQL results
+function isGraphQLResult<T>(response: GraphQLResult<T> | GraphQLSubscription<T>): response is GraphQLResult<T> {
+  return !('subscribe' in response);
 }
 
 export async function listFromModel<T>(
@@ -319,6 +327,17 @@ export async function transformAmplifyTask(task: AmplifyTask): Promise<Processed
     estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
     statusMessage: stage.statusMessage ?? undefined
   })) ?? [];
+
+  // Convert metadata from string to JSON object if needed
+  let processedMetadata: Record<string, unknown> | null = null;
+  if (task.metadata) {
+    try {
+      processedMetadata = task.metadata;  // Already a JSON object from API
+    } catch (e) {
+      console.error('Error handling metadata:', e);
+      processedMetadata = null;
+    }
+  }
 
   // Transform evaluation data if present
   let evaluation = undefined;
@@ -408,7 +427,7 @@ export async function transformAmplifyTask(task: AmplifyTask): Promise<Processed
     status: task.status,
     target: task.target,
     description: task.description ?? undefined,
-    metadata: typeof task.metadata === 'string' ? task.metadata : JSON.stringify(task.metadata ?? null),
+    metadata: processedMetadata,
     createdAt: task.createdAt ?? undefined,
     startedAt: task.startedAt ?? undefined,
     completedAt: task.completedAt ?? undefined,
@@ -440,318 +459,29 @@ export async function transformAmplifyTask(task: AmplifyTask): Promise<Processed
 // Add this type at the top with other types
 type ErrorHandler = (error: Error) => void;
 
-export function observeRecentTasks(limit: number = 12): Observable<{ items: ProcessedTask[], isSynced: boolean }> {
-  console.warn('observeRecentTasks called with limit:', limit);
-  return new Observable(subscriber => {
-    let isSynced = false;
-    let currentTasks: ProcessedTask[] = [];
-    const client = getClient();
+export function observeRecentTasks(limit: number = 10) {
+  const client = getClient();
+  
+  return {
+    subscribe(handler: SubscriptionHandler<any>) {
+      const subscription = client.graphql({
+        query: TASK_UPDATE_SUBSCRIPTION
+      }) as unknown as { subscribe: Function };
 
-    // Initial load
-    async function loadInitialTasks() {
-      try {
-        const tasks = await listRecentTasks(limit);
-        currentTasks = tasks;
-        subscriber.next({ items: currentTasks, isSynced: true });
-        isSynced = true;
-      } catch (error) {
-        console.error('Error in initial task load:', error);
-        subscriber.next({ items: [], isSynced: false });
-      }
+      return subscription.subscribe({
+        next: ({ data }: { data?: { onUpdateTask: Schema['Task']['type'] } }) => {
+          if (data?.onUpdateTask) {
+            const updatedTask = data.onUpdateTask;
+            handler.next({ data: updatedTask });
+          }
+        },
+        error: (error: Error) => {
+          handler.error(error);
+          console.error('Error in task subscription:', error);
+        }
+      });
     }
-
-    // Handle task updates in-memory
-    async function handleTaskUpdate(updatedTask: AmplifyTask) {
-      try {
-        console.debug('Processing task update/create - Raw Input:', {
-          taskId: updatedTask.id,
-          type: updatedTask.type,
-          status: updatedTask.status,
-          hasStages: !!updatedTask.stages,
-          scorecardId: updatedTask.scorecardId,
-          scoreId: updatedTask.scoreId,
-          rawScorecard: updatedTask.scorecard,
-          rawScore: updatedTask.score
-        });
-
-        // If we have IDs but no data, fetch the related data
-        if (updatedTask.scorecardId && !updatedTask.scorecard) {
-          console.debug('Fetching scorecard data for ID:', updatedTask.scorecardId);
-          const scorecardResponse = await client.graphql({
-            query: `
-              query GetScorecard($id: ID!) {
-                getScorecard(id: $id) {
-                  id
-                  name
-                  key
-                }
-              }
-            `,
-            variables: {
-              id: updatedTask.scorecardId
-            }
-          });
-          if (isGraphQLResult(scorecardResponse)) {
-            updatedTask.scorecard = scorecardResponse.data?.getScorecard;
-          }
-          console.debug('Fetched scorecard:', updatedTask.scorecard);
-        }
-
-        if (updatedTask.scoreId && !updatedTask.score) {
-          console.debug('Fetching score data for ID:', updatedTask.scoreId);
-          const scoreResponse = await client.graphql({
-            query: `
-              query GetScore($id: ID!) {
-                getScore(id: $id) {
-                  id
-                  name
-                  key
-                }
-              }
-            `,
-            variables: {
-              id: updatedTask.scoreId
-            }
-          });
-          if (isGraphQLResult(scoreResponse)) {
-            updatedTask.score = scoreResponse.data?.getScore;
-          }
-          console.debug('Fetched score:', updatedTask.score);
-        }
-
-        const processedTask = await processTask(updatedTask);
-        console.debug('Task after processing:', {
-          taskId: processedTask.id,
-          hasStages: processedTask.stages?.length,
-          scorecardId: processedTask.scorecardId,
-          scoreId: processedTask.scoreId,
-          processedScorecard: processedTask.scorecard,
-          processedScore: processedTask.score
-        });
-
-        const taskIndex = currentTasks.findIndex(t => t.id === processedTask.id);
-        
-        if (taskIndex !== -1) {
-          const existingTask = currentTasks[taskIndex];
-          console.debug('Existing task state:', {
-            taskId: existingTask.id,
-            existingScorecard: existingTask.scorecard,
-            existingScore: existingTask.score,
-            existingScorecardId: existingTask.scorecardId,
-            existingScoreId: existingTask.scoreId
-          });
-          
-          // Create the updated task, prioritizing new data
-          const updatedTaskData = {
-            ...existingTask,
-            ...processedTask,
-            stages: processedTask.stages?.length ? processedTask.stages : existingTask.stages,
-          };
-
-          // Handle scorecard updates with tracing
-          if (updatedTask.scorecardId) {
-            console.debug('Updating scorecard:', {
-              taskId: updatedTask.id,
-              newScorecardId: updatedTask.scorecardId,
-              oldScorecardId: existingTask.scorecardId,
-              newScorecard: updatedTask.scorecard,
-              oldScorecard: existingTask.scorecard
-            });
-            updatedTaskData.scorecardId = updatedTask.scorecardId;
-            if (updatedTask.scorecard) {
-              const scorecardValue = getValueFromLazyLoader(updatedTask.scorecard);
-              if (scorecardValue) {
-                updatedTaskData.scorecard = {
-                  id: scorecardValue.id,
-                  name: scorecardValue.name
-                };
-              }
-            }
-          }
-
-          // Handle score updates with tracing
-          if (updatedTask.scoreId) {
-            console.debug('Updating score:', {
-              taskId: updatedTask.id,
-              newScoreId: updatedTask.scoreId,
-              oldScoreId: existingTask.scoreId,
-              newScore: updatedTask.score,
-              oldScore: existingTask.score
-            });
-            updatedTaskData.scoreId = updatedTask.scoreId;
-            if (updatedTask.score) {
-              const scoreValue = getValueFromLazyLoader(updatedTask.score);
-              if (scoreValue) {
-                updatedTaskData.score = {
-                  id: scoreValue.id,
-                  name: scoreValue.name
-                };
-              }
-            }
-          }
-
-          currentTasks[taskIndex] = updatedTaskData;
-
-          console.debug('Final updated task state:', {
-            taskId: currentTasks[taskIndex].id,
-            scorecardId: currentTasks[taskIndex].scorecardId,
-            scoreId: currentTasks[taskIndex].scoreId,
-            finalScorecard: currentTasks[taskIndex].scorecard,
-            finalScore: currentTasks[taskIndex].score
-          });
-        } else {
-          // For new tasks, add to the beginning of the array
-          currentTasks.unshift(processedTask);
-          console.debug('Added new task:', {
-            taskId: processedTask.id,
-            totalTasks: currentTasks.length,
-            scorecardId: processedTask.scorecardId,
-            scoreId: processedTask.scoreId,
-            scorecard: processedTask.scorecard,
-            score: processedTask.score
-          });
-        }
-
-        // Sort tasks
-        currentTasks.sort((a, b) => {
-          if ((a.status === 'COMPLETED' || a.status === 'FAILED') && 
-              (b.status === 'COMPLETED' || b.status === 'FAILED')) {
-            return new Date(b.updatedAt || b.createdAt || '').getTime() - 
-                   new Date(a.updatedAt || a.createdAt || '').getTime();
-          }
-          return new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime();
-        });
-
-        // Trim to limit if needed
-        if (currentTasks.length > limit) {
-          currentTasks = currentTasks.slice(0, limit);
-        }
-
-        console.debug('Emitting updated task list:', {
-          count: currentTasks.length,
-          taskIds: currentTasks.map(t => ({
-            id: t.id,
-            scorecardId: t.scorecardId,
-            scoreId: t.scoreId,
-            scorecard: t.scorecard?.name,
-            score: t.score?.name
-          }))
-        });
-        subscriber.next({ items: [...currentTasks], isSynced: true });
-      } catch (error) {
-        console.error('Error processing task update:', error);
-      }
-    }
-
-    // Handle stage updates in-memory
-    async function handleStageUpdate(updatedStage: any) {
-      try {
-        console.debug('Stage update received:', updatedStage);
-        
-        // Extract taskId from the stage data - handle both possible structures
-        const taskId = updatedStage?.taskId || updatedStage?.data?.taskId;
-        if (!taskId) {
-          console.warn('No taskId found in stage update:', updatedStage);
-          return;
-        }
-
-        const taskIndex = currentTasks.findIndex(t => t.id === taskId);
-        if (taskIndex === -1) {
-          console.debug(`Task ${taskId} not found in current tasks`);
-          return;
-        }
-
-        const task = currentTasks[taskIndex];
-        if (!task.stages) {
-          console.debug(`Task ${taskId} has no stages array`);
-          return;
-        }
-
-        // Get the actual stage data, handling both possible structures
-        const stageData = updatedStage?.data || updatedStage;
-        const stageIndex = task.stages.findIndex(s => s.id === stageData.id);
-        
-        if (stageIndex === -1) {
-          console.debug(`Stage ${stageData.id} not found in task ${taskId}`);
-          return;
-        }
-
-        // Update the specific stage
-        task.stages[stageIndex] = {
-          ...task.stages[stageIndex],
-          status: stageData.status ?? task.stages[stageIndex].status,
-          processedItems: stageData.processedItems ?? task.stages[stageIndex].processedItems,
-          totalItems: stageData.totalItems ?? task.stages[stageIndex].totalItems,
-          startedAt: stageData.startedAt ?? task.stages[stageIndex].startedAt,
-          completedAt: stageData.completedAt ?? task.stages[stageIndex].completedAt,
-          estimatedCompletionAt: stageData.estimatedCompletionAt ?? task.stages[stageIndex].estimatedCompletionAt,
-          statusMessage: stageData.statusMessage ?? task.stages[stageIndex].statusMessage
-        };
-        
-        // Update task status if needed
-        if (stageData.status === 'FAILED') {
-          task.status = 'FAILED';
-        } else if (stageData.status === 'COMPLETED' && 
-                  task.stages.every(s => s.status === 'COMPLETED')) {
-          task.status = 'COMPLETED';
-        }
-        
-        subscriber.next({ items: [...currentTasks], isSynced: true });
-      } catch (error) {
-        console.error('Error processing stage update:', error);
-      }
-    }
-
-    // Load initial data
-    loadInitialTasks();
-
-    // Set up subscriptions
-    const taskSubscription = client.models.Task.onCreate({}).subscribe({
-      next: (response: SubscriptionResponse<{ onCreateTask: AmplifyTask }>) => {
-        const taskData = response.value.data.onCreateTask;
-        if (taskData) {
-          handleTaskUpdate(taskData);
-        }
-      },
-      error: (error: any) => {
-        console.error('Error in task subscription:', error);
-      }
-    });
-
-    // Subscribe to task updates
-    const taskUpdateSubscription = client.models.Task.onUpdate({}).subscribe({
-      next: (response: SubscriptionResponse<{ onUpdateTask: AmplifyTask }>) => {
-        const taskData = response.value.data.onUpdateTask;
-        if (taskData) {
-          handleTaskUpdate(taskData);
-        }
-      },
-      error: (error: any) => {
-        console.error('Error in task update subscription:', error);
-      }
-    });
-
-    // Subscribe to stage updates
-    const stageSubscription = client.models.TaskStage.onUpdate({}).subscribe({
-      next: (response: SubscriptionResponse<{ onUpdateTaskStage: TaskStageType }>) => {
-        const stageData = response.value.data.onUpdateTaskStage;
-        if (stageData) {
-          handleStageUpdate(stageData);
-        }
-      },
-      error: (error: any) => {
-        console.error('Error in stage subscription:', error);
-      }
-    });
-
-    // Cleanup function
-    return () => {
-      console.log('Cleaning up task subscriptions');
-      taskSubscription.unsubscribe();
-      taskUpdateSubscription.unsubscribe();
-      stageSubscription.unsubscribe();
-    };
-  });
+  };
 }
 
 type TaskStageData = Schema['TaskStage']['type'];
@@ -770,6 +500,17 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
     } : undefined
   };
 
+  // Convert metadata from string to JSON object if needed
+  let processedMetadata: Record<string, unknown> | null = null;
+  if (unwrappedTask.metadata) {
+    try {
+      processedMetadata = unwrappedTask.metadata;  // Already a JSON object from API
+    } catch (e) {
+      console.error('Error handling metadata:', e);
+      processedMetadata = null;
+    }
+  }
+
   return {
     id: unwrappedTask.id,
     command: unwrappedTask.command,
@@ -777,7 +518,7 @@ async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
     status: unwrappedTask.status,
     target: unwrappedTask.target,
     description: unwrappedTask.description ?? undefined,
-    metadata: typeof unwrappedTask.metadata === 'string' ? unwrappedTask.metadata : JSON.stringify(unwrappedTask.metadata ?? null),
+    metadata: processedMetadata,
     createdAt: unwrappedTask.createdAt ?? undefined,
     startedAt: unwrappedTask.startedAt ?? undefined,
     completedAt: unwrappedTask.completedAt ?? undefined,
@@ -1036,7 +777,7 @@ export async function createTask(
   command: string,
   type: string = 'command',
   target: string = '',
-  metadata: any = {}
+  metadata: Record<string, unknown> | null = null
 ): Promise<ProcessedTask | null> {
   try {
     const currentClient = getClient();
@@ -1063,7 +804,7 @@ export async function createTask(
       command: string;
       type: string;
       target: string;
-      metadata: string;
+      metadata: Record<string, unknown> | null;
       dispatchStatus: 'PENDING';
       status: 'PENDING';
       createdAt: string;
@@ -1074,7 +815,7 @@ export async function createTask(
       command,
       type,
       target,
-      metadata: JSON.stringify(metadata),
+      metadata,
       dispatchStatus: 'PENDING' as const,
       status: 'PENDING' as const,
       createdAt: new Date().toISOString()
@@ -1287,6 +1028,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
   return new Observable(subscriber => {
     let isSynced = false;
     let evaluations: Schema['Evaluation']['type'][] = [];
+    const client = getClient();
     
     async function loadInitialEvaluations() {
       try {
@@ -1423,7 +1165,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
     // Set up subscriptions
     const subscriptions = [
       // Subscribe to evaluation updates
-      client.graphql({
+      (client.graphql({
         query: `subscription OnUpdateEvaluation {
           onUpdateEvaluation {
             id
@@ -1495,7 +1237,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
             }
           }
         }`
-      }).subscribe({
+      }) as unknown as { subscribe: Function }).subscribe({
         next: (data: any) => {
           console.debug('Raw onUpdate data received:', {
             fullData: data,
@@ -1514,7 +1256,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
       }),
 
       // Subscribe to evaluation creates
-      client.graphql({
+      (client.graphql({
         query: `subscription OnCreateEvaluation {
           onCreateEvaluation {
             id
@@ -1586,7 +1328,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
             }
           }
         }`
-      }).subscribe({
+      }) as unknown as { subscribe: Function }).subscribe({
         next: (data: any) => {
           console.debug('Raw onCreate data received:', {
             fullData: data,
@@ -1615,4 +1357,111 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
       subscriptions.forEach(sub => sub.unsubscribe());
     };
   });
+}
+
+async function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
+  if (!evaluation) return null;
+
+  try {
+    // Unwrap task if it's a LazyLoader
+    const task = evaluation.task ? await unwrapLazyLoader(evaluation.task) : null;
+    
+    // Unwrap scorecard if it's a LazyLoader
+    const scorecard = evaluation.scorecard ? await unwrapLazyLoader(evaluation.scorecard) : null;
+    
+    // Unwrap score if it's a LazyLoader
+    const score = evaluation.score ? await unwrapLazyLoader(evaluation.score) : null;
+
+    // Parse metrics if it's a string
+    let metrics = evaluation.metrics;
+    try {
+      if (typeof metrics === 'string') {
+        metrics = JSON.parse(metrics);
+      }
+    } catch (e) {
+      console.error('Error parsing metrics:', e);
+    }
+
+    // Parse confusion matrix if it's a string
+    let confusionMatrix = evaluation.confusionMatrix;
+    try {
+      if (typeof confusionMatrix === 'string') {
+        confusionMatrix = JSON.parse(confusionMatrix);
+      }
+    } catch (e) {
+      console.error('Error parsing confusion matrix:', e);
+    }
+
+    // Parse dataset class distribution if it's a string
+    let datasetClassDistribution = evaluation.datasetClassDistribution;
+    try {
+      if (typeof datasetClassDistribution === 'string') {
+        datasetClassDistribution = JSON.parse(datasetClassDistribution);
+      }
+    } catch (e) {
+      console.error('Error parsing dataset class distribution:', e);
+    }
+
+    // Parse predicted class distribution if it's a string
+    let predictedClassDistribution = evaluation.predictedClassDistribution;
+    try {
+      if (typeof predictedClassDistribution === 'string') {
+        predictedClassDistribution = JSON.parse(predictedClassDistribution);
+      }
+    } catch (e) {
+      console.error('Error parsing predicted class distribution:', e);
+    }
+
+    // Parse score results if it's a string
+    let scoreResults = evaluation.scoreResults;
+    try {
+      if (typeof scoreResults === 'string') {
+        scoreResults = JSON.parse(scoreResults);
+      }
+    } catch (e) {
+      console.error('Error parsing score results:', e);
+    }
+
+    return {
+      id: evaluation.id,
+      type: evaluation.type,
+      metrics,
+      metricsExplanation: evaluation.metricsExplanation,
+      inferences: Number(evaluation.inferences) || 0,
+      accuracy: typeof evaluation.accuracy === 'number' ? evaluation.accuracy : null,
+      cost: evaluation.cost ?? null,
+      status: evaluation.status,
+      startedAt: evaluation.startedAt,
+      elapsedSeconds: evaluation.elapsedSeconds ?? null,
+      estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds ?? null,
+      totalItems: Number(evaluation.totalItems) || 0,
+      processedItems: Number(evaluation.processedItems) || 0,
+      errorMessage: evaluation.errorMessage,
+      errorDetails: evaluation.errorDetails,
+      confusionMatrix,
+      scoreGoal: evaluation.scoreGoal,
+      datasetClassDistribution,
+      isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
+      predictedClassDistribution,
+      isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
+      scoreResults,
+      task: task ? {
+        id: task.id,
+        type: task.type,
+        status: task.status,
+        stages: task.stages
+      } : null,
+      scorecard: scorecard ? {
+        id: scorecard.id,
+        name: scorecard.name
+      } : null,
+      score: score ? {
+        id: score.id,
+        name: score.name
+      } : null
+    };
+  } catch (error) {
+    console.error('Error transforming evaluation:', error);
+    return null;
+  }
 } 
