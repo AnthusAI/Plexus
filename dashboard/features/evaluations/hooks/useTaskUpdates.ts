@@ -2,9 +2,28 @@ import { useEffect } from 'react'
 import { getClient } from '@/utils/amplify-client'
 import { TaskData, TaskStage } from '@/types/tasks/evaluation'
 import { GET_TASK_QUERY } from '../graphql/queries'
-import type { GraphQLResult } from '@aws-amplify/api'
+import type { GraphQLResult, GraphQLSubscription } from '@aws-amplify/api'
 import { Hub } from 'aws-amplify/utils'
 import { CONNECTION_STATE_CHANGE, ConnectionState } from 'aws-amplify/api'
+import type { Schema } from '@/amplify/data/resource'
+import { Observable } from 'zen-observable-ts'
+
+interface HubPayload {
+  event: string;
+  data: {
+    connectionState: ConnectionState;
+  };
+}
+
+interface TaskUpdateData {
+  id: string;
+  [key: string]: any;
+}
+
+interface TaskStageUpdateData {
+  taskId: string;
+  [key: string]: any;
+}
 
 interface GetTaskResponse {
   getTask: TaskData
@@ -21,6 +40,18 @@ interface UseTaskUpdatesProps {
   onTaskUpdate: (task: TaskData) => void
 }
 
+interface OnUpdateTaskSubscription {
+  onUpdateTask: {
+    id: string
+  }
+}
+
+interface OnUpdateTaskStageSubscription {
+  onUpdateTaskStage: {
+    taskId: string
+  }
+}
+
 export function useTaskUpdates({ taskId, onTaskUpdate }: UseTaskUpdatesProps) {
   useEffect(() => {
     if (!taskId) return
@@ -32,7 +63,7 @@ export function useTaskUpdates({ taskId, onTaskUpdate }: UseTaskUpdatesProps) {
     const hubUnsubscribe = Hub.listen('api', (data) => {
       const { payload } = data;
       if (payload.event === CONNECTION_STATE_CHANGE) {
-        const connectionState = payload.data.connectionState as ConnectionState;
+        const connectionState = (payload as HubPayload).data.connectionState;
         console.log('Subscription connection state changed:', connectionState);
       }
     });
@@ -90,11 +121,8 @@ export function useTaskUpdates({ taskId, onTaskUpdate }: UseTaskUpdatesProps) {
           const normalizedTask: TaskData = {
             ...updatedTask,
             stages: {
-              items: transformedStages,
-              nextToken: null
-            },
-            processedItems: currentStage?.processedItems ?? 0,
-            totalItems: currentStage?.totalItems ?? 0
+              items: transformedStages
+            }
           }
 
           onTaskUpdate(normalizedTask)
@@ -109,18 +137,17 @@ export function useTaskUpdates({ taskId, onTaskUpdate }: UseTaskUpdatesProps) {
 
     // Use Amplify Gen2 models API for subscriptions
     console.log('Creating Task.onUpdate subscription...');
-    const subscription = currentClient.models.Task.onUpdate({}).subscribe({
-      next: (data: any) => {
-        console.log('Task update subscription received data:', {
-          receivedTaskId: data?.id,
-          watchingTaskId: taskId,
-          fullData: data
-        });
-        
-        if (data?.id === taskId) {
-          console.log('Task update matches our task - refetching data');
-          fetchTaskData();
+    const subscription = currentClient.graphql<GraphQLSubscription<OnUpdateTaskSubscription>>({
+      query: `subscription OnUpdateTask($id: ID!) {
+        onUpdateTask(id: $id) {
+          id
         }
+      }`,
+      variables: { id: taskId }
+    }).subscribe({
+      next: () => {
+        console.log('Task update - refetching data');
+        fetchTaskData();
       },
       error: (error: Error) => {
         console.error('Task update subscription error:', error);
@@ -129,18 +156,17 @@ export function useTaskUpdates({ taskId, onTaskUpdate }: UseTaskUpdatesProps) {
 
     // Also subscribe to stage updates since they're nested
     console.log('Creating TaskStage.onUpdate subscription...');
-    const stageSubscription = currentClient.models.TaskStage.onUpdate({}).subscribe({
-      next: (data: any) => {
-        console.log('TaskStage update subscription received data:', {
-          receivedTaskId: data?.taskId,
-          watchingTaskId: taskId,
-          fullData: data
-        });
-        
-        if (data?.taskId === taskId) {
-          console.log('Task stage update matches our task - refetching data');
-          fetchTaskData();
+    const stageSubscription = currentClient.graphql<GraphQLSubscription<OnUpdateTaskStageSubscription>>({
+      query: `subscription OnUpdateTaskStage($taskId: ID!) {
+        onUpdateTaskStage(taskId: $taskId) {
+          taskId
         }
+      }`,
+      variables: { taskId }
+    }).subscribe({
+      next: () => {
+        console.log('Task stage update - refetching data');
+        fetchTaskData();
       },
       error: (error: Error) => {
         console.error('Task stage update subscription error:', error);
