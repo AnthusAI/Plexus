@@ -753,7 +753,8 @@ def accuracy(
                                         scorecard_instance, scorecard_name, single_score_name, 
                                         score_config, fresh, content_ids_to_sample_set,
                                         progress_callback=bound_progress_callback,
-                                        number_of_samples=tracker.total_items
+                                        number_of_samples=tracker.total_items,
+                                        random_seed=random_seed
                                     )
                                     
                                     if single_score_labeled_samples:
@@ -991,7 +992,8 @@ def get_data_driven_samples(
     fresh, 
     content_ids_to_sample_set,
     progress_callback=None,
-    number_of_samples=None
+    number_of_samples=None,
+    random_seed=None
 ):
     score_class_name = score_config['class']
     score_module_path = f'plexus.scores.{score_class_name}'
@@ -1010,9 +1012,15 @@ def get_data_driven_samples(
     logging.info(f"Columns: {score_instance.dataframe.columns.tolist()}")
     logging.info(f"Shape: {score_instance.dataframe.shape}")
 
-    # Get the actual number of samples from the dataframe - THIS IS THE ONLY SOURCE OF TRUTH
-    actual_sample_count = len(score_instance.dataframe)
-    logging.info(f"[TRACE] Found actual_sample_count: {actual_sample_count}")
+    # Sample the dataframe if number_of_samples is specified
+    if number_of_samples and number_of_samples < len(score_instance.dataframe):
+        logging.info(f"Sampling {number_of_samples} records from {len(score_instance.dataframe)} total records")
+        score_instance.dataframe = score_instance.dataframe.sample(n=number_of_samples, random_state=random_seed)
+        actual_sample_count = number_of_samples
+        logging.info(f"Using random_seed: {random_seed if random_seed is not None else 'None (fully random)'}")
+    else:
+        actual_sample_count = len(score_instance.dataframe)
+        logging.info(f"Using all {actual_sample_count} records (no sampling needed)")
 
     # Set the actual count as our single source of truth right when we find it
     if progress_callback and hasattr(progress_callback, '__self__'):
