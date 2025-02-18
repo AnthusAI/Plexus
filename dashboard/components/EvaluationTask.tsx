@@ -103,9 +103,9 @@ export interface EvaluationTaskData extends BaseTaskData {
     labels: string[] | null
   } | null
   scoreGoal?: string | null
-  datasetClassDistribution?: Array<{ label: string; count: number }>
+  datasetClassDistribution?: Array<Distribution>
   isDatasetClassDistributionBalanced?: boolean | null
-  predictedClassDistribution?: Array<{ label: string; count: number }>
+  predictedClassDistribution?: Array<Distribution>
   isPredictedClassDistributionBalanced?: boolean | null
   scoreResults?: ScoreResult[]
   selectedScoreResult?: Schema['ScoreResult']['type'] | null
@@ -458,18 +458,20 @@ const DetailContent = React.memo(({
   onCommandDisplayChange?: (display: 'show' | 'full') => void
 }) => {
   console.log('DetailContent render:', {
-    hasTaskData: !!data.task,
-    taskStatus: data.task?.status,
-    evaluationStatus: data.status,
-    processedItems: data.processedItems,
-    totalItems: data.totalItems,
-    stageCount: data.task?.stages?.items?.length,
-    stages: data.task?.stages?.items?.map(s => ({
-      name: s.name,
-      status: s.status,
-      processedItems: s.processedItems,
-      totalItems: s.totalItems
-    }))
+    distributions: {
+      dataset: data.datasetClassDistribution,
+      predicted: data.predictedClassDistribution,
+      isBalanced: {
+        dataset: data.isDatasetClassDistributionBalanced,
+        predicted: data.isPredictedClassDistributionBalanced
+      }
+    },
+    scoreResults: {
+      count: data.scoreResults?.length,
+      firstResult: data.scoreResults?.[0],
+      selectedId: selectedScoreResultId,
+      selectedResult: data.scoreResults?.find(r => r.id === selectedScoreResultId)
+    }
   });
 
   const [containerWidth, setContainerWidth] = useState(0)

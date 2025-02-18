@@ -99,6 +99,19 @@ type TaskResponse = {
   nextToken: string | null
 }
 
+type ScoreResultItem = {
+  id: string;
+  value: string | number;
+  confidence: number | null;
+  metadata: any;
+  itemId: string | null;
+};
+
+type ScoreResultsResponse = {
+  items?: ScoreResultItem[];
+  data?: ScoreResultItem[];
+};
+
 const ACCOUNT_KEY = 'call-criteria'
 
 const LIST_ACCOUNTS = `
@@ -260,10 +273,12 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
   } : null;
 
   // Transform score results
-  const rawScoreResultsResponse = getValueFromLazyLoader(evaluation.scoreResults);
-  const rawScoreResults = rawScoreResultsResponse?.data;
+  const rawScoreResultsResponse = getValueFromLazyLoader(evaluation.scoreResults) as ScoreResultsResponse;
+  // Handle both cases - either data is already in correct format with items,
+  // or needs to be unwrapped from data property
+  const rawScoreResults = rawScoreResultsResponse?.items || rawScoreResultsResponse?.data;
   const scoreResults = rawScoreResults ? {
-    items: rawScoreResults.map(result => {
+    items: rawScoreResults.map((result: ScoreResultItem) => {
       const metadata = typeof result.metadata === 'string' ? 
         JSON.parse(result.metadata) : result.metadata;
       return {
@@ -340,6 +355,8 @@ export default function EvaluationsDashboard() {
     threshold: 0,
   })
   const [processedTaskData, setProcessedTaskData] = useState<ProcessedTask | null>(null);
+  const [selectedEvaluation, setSelectedEvaluation] = useState<string | null>(null)
+  const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null)
 
   // Fetch account ID
   useEffect(() => {
@@ -517,6 +534,8 @@ export default function EvaluationsDashboard() {
           setSelectedEvaluationId(null)
           setIsFullWidth(false)
         }}
+        selectedScoreResultId={selectedScoreResultId}
+        onSelectScoreResult={(id) => setSelectedScoreResultId(id)}
       />
     )
   }
@@ -530,6 +549,11 @@ export default function EvaluationsDashboard() {
       return true;
     });
   }, [evaluations, selectedScorecard, selectedScore]);
+
+  // Add this handler
+  const handleScoreResultSelect = useCallback((id: string | null) => {
+    setSelectedScoreResultId(id);
+  }, []);
 
   if (isLoading) {
     return (
@@ -605,6 +629,8 @@ export default function EvaluationsDashboard() {
                       }
                     }}
                     extra={true}
+                    selectedScoreResultId={selectedScoreResultId}
+                    onSelectScoreResult={handleScoreResultSelect}
                   />
                 </div>
               ))}
