@@ -123,10 +123,20 @@ export type TaskData = {
 
 // Props type for components
 export interface EvaluationTaskProps {
-  id: string
-  type: string
-  scorecard: string
-  score: string
-  time: string
-  data: EvaluationTaskData
+  variant?: 'grid' | 'detail'
+  task: {
+    id: string
+    type: string
+    scorecard: string
+    score: string
+    time: string
+    data: EvaluationTaskData
+  }
+  onClick?: () => void
+  controlButtons?: React.ReactNode
+  isFullWidth?: boolean
+  onToggleFullWidth?: () => void
+  onClose?: () => void
+  isSelected?: boolean
+  extra?: boolean
 } 

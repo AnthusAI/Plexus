@@ -337,11 +337,20 @@ function transformTaskToActivity(task: ProcessedTask) {
           dispatchStatus: undefined,
           celeryTaskId: task.celeryTaskId,
           workerNodeId: task.workerNodeId,
-          stages: { items: stages.map(stage => ({
-            ...stage,
-            id: stage.name,
-            status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
-          })) }
+          stages: {
+            items: stages.map(stage => ({
+              id: stage.name,
+              name: stage.name,
+              order: stage.order || 0,
+              status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+              processedItems: stage.processedItems,
+              totalItems: stage.totalItems,
+              startedAt: stage.startedAt,
+              completedAt: stage.completedAt,
+              estimatedCompletionAt: stage.estimatedCompletionAt,
+              statusMessage: stage.statusMessage
+            }))
+          }
         }
       }
 
@@ -415,11 +424,20 @@ function transformTaskToActivity(task: ProcessedTask) {
         dispatchStatus: undefined,
         celeryTaskId: task.celeryTaskId,
         workerNodeId: task.workerNodeId,
-        stages: { items: stages.map(stage => ({
-          ...stage,
-          id: stage.name,
-          status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
-        })) }
+        stages: {
+          items: stages.map(stage => ({
+            id: stage.name,
+            name: stage.name,
+            order: stage.order || 0,
+            status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+            processedItems: stage.processedItems,
+            totalItems: stage.totalItems,
+            startedAt: stage.startedAt,
+            completedAt: stage.completedAt,
+            estimatedCompletionAt: stage.estimatedCompletionAt,
+            statusMessage: stage.statusMessage
+          }))
+        }
       }
     },
     stages,
@@ -467,35 +485,47 @@ export default function ActivityDashboard() {
   }, [authStatus, router]);
 
   // Initial data load
-  useEffect(() => {
-    async function loadInitialData() {
-      console.warn('Starting initial data load');
-      try {
-        const response = await listRecentTasks(12);
-        console.warn('Initial data load complete:', {
-          count: response.length,
-          taskIds: response.map((item: ProcessedTask) => item.id),
-          taskDetails: response.map((item: ProcessedTask) => ({
-            id: item.id,
-            scorecard: item.scorecard,
-            score: item.score
-          }))
-        });
-        setRecentTasks(response);
-        setIsInitialLoading(false);
-      } catch (error) {
-        console.error('Error loading initial data:', error);
-        setIsInitialLoading(false);
-      }
+  const fetchRecentTasks = async () => {
+    try {
+      const response = await listRecentTasks();
+      console.warn('Initial data load complete:', {
+        count: response.tasks.length,
+        taskIds: response.tasks.map((item: ProcessedTask) => item.id),
+        taskDetails: response.tasks.map((item: ProcessedTask) => ({
+          id: item.id,
+          status: item.status,
+          type: item.type
+        }))
+      });
+      setRecentTasks(response.tasks);
+      setIsInitialLoading(false);
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+      setIsInitialLoading(false);
     }
+  };
 
-    loadInitialData();
+  useEffect(() => {
+    fetchRecentTasks();
 
     // Set up real-time subscription
     console.log('Setting up real-time task subscription');
     const subscription = observeRecentTasks(12).subscribe({
-      next: ({ items, isSynced }) => {
-        setRecentTasks(items);
+      next: ({ data }) => {
+        if (data) {
+          setRecentTasks(prev => {
+            const taskIndex = prev.findIndex(task => task.id === data.id);
+            if (taskIndex !== -1) {
+              // Update existing task
+              const updatedTasks = [...prev];
+              updatedTasks[taskIndex] = data;
+              return updatedTasks;
+            } else {
+              // Add new task at the beginning
+              return [data, ...prev].slice(0, 12);
+            }
+          });
+        }
       },
       error: (error) => {
         console.error('Task subscription error:', error);

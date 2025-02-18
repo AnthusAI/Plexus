@@ -55,6 +55,7 @@ import { transformAmplifyTask } from '@/utils/data-operations'
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
 import { listRecentEvaluations, observeRecentEvaluations, transformAmplifyTask as transformEvaluationData } from '@/utils/data-operations'
 import { TaskDisplay } from "@/components/TaskDisplay"
+import { getValueFromLazyLoader, unwrapLazyLoader } from '@/utils/data-operations'
 
 type Evaluation = {
   id: string
@@ -190,6 +191,17 @@ const LIST_EVALUATIONS = `
             }
           }
         }
+        scoreResults {
+          items {
+            id
+            value
+            confidence
+            metadata
+            explanation
+            itemId
+            createdAt
+          }
+        }
       }
       nextToken
     }
@@ -217,148 +229,98 @@ interface ListEvaluationResponse {
   };
 }
 
-function transformEvaluation(evaluation: Schema['Evaluation']['type']): Evaluation {
-  // Add detailed logging of the raw evaluation data
-  console.debug('transformEvaluation - Raw evaluation data:', {
-    evaluationId: evaluation.id,
-    type: evaluation.type,
-    rawTask: evaluation.task,
-    hasTask: !!evaluation.task,
-    taskFields: evaluation.task ? {
-      id: evaluation.task.id,
-      type: evaluation.task.type,
-      status: evaluation.task.status,
-      stages: evaluation.task.stages
-    } : null,
-    rawMetrics: evaluation.metrics,
-    rawScoreResults: evaluation.scoreResults
+export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
+  if (!evaluation) return null;
+
+  const rawTaskResponse = getValueFromLazyLoader(evaluation.task);
+  const rawTask = rawTaskResponse?.data;
+  const rawStages = getValueFromLazyLoader(rawTask?.stages);
+  const task: AmplifyTask | null = rawTask ? {
+    id: rawTask.id,
+    command: rawTask.command,
+    type: rawTask.type,
+    status: rawTask.status,
+    target: rawTask.target,
+    stages: () => Promise.resolve({
+      data: {
+        items: (rawStages?.data || []).map(stage => ({
+          id: stage.id,
+          name: stage.name,
+          order: stage.order,
+          status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+          processedItems: stage.processedItems ?? undefined,
+          totalItems: stage.totalItems ?? undefined,
+          startedAt: stage.startedAt ?? undefined,
+          completedAt: stage.completedAt ?? undefined,
+          estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+          statusMessage: stage.statusMessage ?? undefined
+        }))
+      }
+    })
+  } : null;
+
+  // Transform score results
+  const rawScoreResultsResponse = getValueFromLazyLoader(evaluation.scoreResults);
+  const rawScoreResults = rawScoreResultsResponse?.data;
+  const scoreResults = rawScoreResults ? {
+    items: rawScoreResults.map(result => {
+      const metadata = typeof result.metadata === 'string' ? 
+        JSON.parse(result.metadata) : result.metadata;
+      return {
+        id: result.id,
+        value: result.value,
+        confidence: result.confidence ?? null,
+        metadata: metadata || {},
+        itemId: result.itemId
+      };
+    })
+  } : undefined;
+
+  // Log the raw evaluation data for debugging
+  console.log('Raw evaluation data:', {
+    id: evaluation.id,
+    metrics: evaluation.metrics,
+    scoreResults: evaluation.scoreResults,
+    task: task
   });
 
-  // Parse metrics if it's a string
-  let parsedMetrics = null;
-  try {
-    if (typeof evaluation.metrics === 'string') {
-      parsedMetrics = JSON.parse(evaluation.metrics);
-    } else if (evaluation.metrics) {
-      parsedMetrics = evaluation.metrics;
-    }
-  } catch (e) {
-    console.error('Error parsing metrics:', e);
-  }
-
-  // Parse confusion matrix if it's a string
-  let parsedConfusionMatrix = null;
-  try {
-    if (typeof evaluation.confusionMatrix === 'string') {
-      parsedConfusionMatrix = JSON.parse(evaluation.confusionMatrix);
-    } else if (evaluation.confusionMatrix) {
-      parsedConfusionMatrix = evaluation.confusionMatrix;
-    }
-  } catch (e) {
-    console.error('Error parsing confusion matrix:', e);
-  }
-
-  // Parse dataset class distribution if it's a string
-  let parsedDatasetClassDistribution = null;
-  try {
-    if (typeof evaluation.datasetClassDistribution === 'string') {
-      parsedDatasetClassDistribution = JSON.parse(evaluation.datasetClassDistribution);
-    } else if (evaluation.datasetClassDistribution) {
-      parsedDatasetClassDistribution = evaluation.datasetClassDistribution;
-    }
-  } catch (e) {
-    console.error('Error parsing dataset class distribution:', e);
-  }
-
-  // Parse predicted class distribution if it's a string
-  let parsedPredictedClassDistribution = null;
-  try {
-    if (typeof evaluation.predictedClassDistribution === 'string') {
-      parsedPredictedClassDistribution = JSON.parse(evaluation.predictedClassDistribution);
-    } else if (evaluation.predictedClassDistribution) {
-      parsedPredictedClassDistribution = evaluation.predictedClassDistribution;
-    }
-  } catch (e) {
-    console.error('Error parsing predicted class distribution:', e);
-  }
-
-  // Parse score results if needed
-  let parsedScoreResults = null;
-  try {
-    if (evaluation.scoreResults?.items) {
-      parsedScoreResults = {
-        items: evaluation.scoreResults.items.map(result => ({
-          id: result.id,
-          value: result.value,
-          confidence: result.confidence,
-          metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
-          itemId: result.itemId
-        }))
-      };
-    }
-  } catch (e) {
-    console.error('Error parsing score results:', e);
-  }
-
-  // Transform task if present
-  let transformedTask = null;
-  if (evaluation.task && typeof evaluation.task !== 'function') {
-    try {
-      transformedTask = {
-        ...evaluation.task,
-        stages: evaluation.task.stages?.items?.map(stage => ({
-          ...stage,
-          status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
-        })) || []
-      };
-    } catch (e) {
-      console.error('Error transforming task:', e);
-    }
-  }
-
-  const result: Evaluation = {
+  // Transform the evaluation into the format expected by components
+  const transformedEvaluation: Evaluation = {
     id: evaluation.id,
     type: evaluation.type,
-    task: transformedTask,
-    scorecard: evaluation.scorecard && typeof evaluation.scorecard !== 'function' ? evaluation.scorecard : null,
-    score: evaluation.score && typeof evaluation.score !== 'function' ? evaluation.score : null,
+    scorecard: evaluation.scorecard,
+    score: evaluation.score,
     createdAt: evaluation.createdAt,
-    metrics: parsedMetrics,
-    metricsExplanation: evaluation.metricsExplanation || null,
-    accuracy: typeof evaluation.accuracy === 'number' ? evaluation.accuracy : null,
-    processedItems: Number(evaluation.processedItems) || null,
-    totalItems: Number(evaluation.totalItems) || null,
-    inferences: Number(evaluation.inferences) || null,
-    cost: evaluation.cost ?? null,
-    status: evaluation.status || null,
-    elapsedSeconds: evaluation.elapsedSeconds ?? null,
-    estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds ?? null,
-    startedAt: evaluation.startedAt || null,
-    errorMessage: evaluation.errorMessage || null,
+    metrics: typeof evaluation.metrics === 'string' ? 
+      JSON.parse(evaluation.metrics) : evaluation.metrics,
+    metricsExplanation: evaluation.metricsExplanation,
+    accuracy: evaluation.accuracy,
+    processedItems: evaluation.processedItems,
+    totalItems: evaluation.totalItems,
+    inferences: evaluation.inferences,
+    cost: evaluation.cost,
+    status: evaluation.status,
+    elapsedSeconds: evaluation.elapsedSeconds,
+    estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds,
+    startedAt: evaluation.startedAt,
+    errorMessage: evaluation.errorMessage,
     errorDetails: evaluation.errorDetails,
-    confusionMatrix: parsedConfusionMatrix,
-    scoreGoal: evaluation.scoreGoal || null,
-    datasetClassDistribution: parsedDatasetClassDistribution,
-    isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced ?? null,
-    predictedClassDistribution: parsedPredictedClassDistribution,
-    isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced ?? null,
-    scoreResults: parsedScoreResults
+    confusionMatrix: typeof evaluation.confusionMatrix === 'string' ? 
+      JSON.parse(evaluation.confusionMatrix) : evaluation.confusionMatrix,
+    datasetClassDistribution: typeof evaluation.datasetClassDistribution === 'string' ?
+      JSON.parse(evaluation.datasetClassDistribution) : evaluation.datasetClassDistribution,
+    isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
+    predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ?
+      JSON.parse(evaluation.predictedClassDistribution) : evaluation.predictedClassDistribution,
+    isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
+    task,
+    scoreResults
   };
 
-  // Log the transformed result
-  console.debug('transformEvaluation - Transformed result:', {
-    evaluationId: result.id,
-    type: result.type,
-    taskId: result.task?.id,
-    taskStatus: result.task?.status,
-    metrics: result.metrics,
-    accuracy: result.accuracy,
-    processedItems: result.processedItems,
-    totalItems: result.totalItems,
-    scoreResultsCount: result.scoreResults?.items?.length
-  });
+  // Log the transformed data for debugging
+  console.log('Transformed evaluation:', transformedEvaluation);
 
-  return result;
+  return transformedEvaluation;
 }
 
 export default function EvaluationsDashboard() {
@@ -416,20 +378,38 @@ export default function EvaluationsDashboard() {
     console.log('Setting up real-time evaluations subscription');
     const subscription = observeRecentEvaluations(100).subscribe({
       next: async ({ items, isSynced }) => {
-        console.log('Received evaluations update:', {
+        console.log('Raw evaluations data:', {
           count: items.length,
-          evaluationIds: items.map(e => e.id),
           firstEvaluation: items[0] ? {
             id: items[0].id,
-            taskId: items[0].taskId,
-            status: items[0].status,
-            type: items[0].type
-          } : null,
-          isSynced
+            type: items[0].type,
+            metrics: items[0].metrics,
+            accuracy: items[0].accuracy,
+            scorecard: items[0].scorecard,
+            score: items[0].score,
+            task: items[0].task,
+            scoreResults: items[0].scoreResults
+          } : null
         });
+
         // Transform the items before setting state
         const transformedItems = await Promise.all(items.map(transformEvaluation));
-        setEvaluations(transformedItems.filter(Boolean));
+        console.log('Transformed evaluations:', {
+          count: transformedItems.length,
+          firstEvaluation: transformedItems[0] ? {
+            id: transformedItems[0].id,
+            type: transformedItems[0].type,
+            metrics: transformedItems[0].metrics,
+            accuracy: transformedItems[0].accuracy,
+            scorecard: transformedItems[0].scorecard,
+            score: transformedItems[0].score,
+            task: transformedItems[0].task,
+            scoreResults: transformedItems[0].scoreResults
+          } : null
+        });
+
+        const nonNullEvaluations = transformedItems.filter((item): item is Evaluation => item !== null);
+        setEvaluations(nonNullEvaluations);
         if (isSynced) {
           setIsLoading(false);
         }
@@ -495,6 +475,19 @@ export default function EvaluationsDashboard() {
     if (!selectedEvaluationId) return null
     const evaluation = evaluations.find(e => e.id === selectedEvaluationId)
     if (!evaluation) return null
+
+    console.log('Rendering task for evaluation:', {
+      evaluationId: evaluation.id,
+      evaluationData: {
+        type: evaluation.type,
+        metrics: evaluation.metrics,
+        accuracy: evaluation.accuracy,
+        scorecard: evaluation.scorecard,
+        score: evaluation.score,
+        task: evaluation.task,
+        scoreResults: evaluation.scoreResults
+      }
+    });
 
     return (
       <TaskDisplay

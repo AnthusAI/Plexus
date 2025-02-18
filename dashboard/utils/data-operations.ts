@@ -3,8 +3,8 @@ import { GraphQLResult, GraphQLSubscription } from '@aws-amplify/api';
 import type { Schema } from '../amplify/data/resource';
 import { Observable } from 'rxjs';
 import { LazyLoader } from './types';
-import type { AmplifyTask } from '../types/tasks/amplify';
-import type { ProcessedTask } from '../types/tasks/processed';
+import type { BaseTaskData, BaseActivity } from '../types/base';
+import type { BatchJobTaskData, EvaluationTaskData, ActivityData } from '../types/tasks';
 import { getClient } from './amplify-client';
 export { getClient };
 import { TASK_UPDATE_SUBSCRIPTION } from '../graphql/evaluation-queries';
@@ -67,34 +67,77 @@ export type AmplifyTask = {
   status: string;
   target: string;
   description?: string | null;
-  metadata?: Record<string, unknown> | null;  // Updated to match schema
-  createdAt?: string;
-  startedAt?: string;
-  completedAt?: string;
-  estimatedCompletionAt?: string;
-  errorMessage?: string;
+  metadata?: any;  // Simplified to match API's JSON field
+  createdAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  estimatedCompletionAt?: string | null;
+  errorMessage?: string | null;
   errorDetails?: any;
-  stdout?: string;
-  stderr?: string;
-  currentStageId?: string;
-  stages?: {
-    items: TaskStageType[];
-  };
-  dispatchStatus?: 'DISPATCHED';
-  celeryTaskId?: string;
-  workerNodeId?: string;
-  updatedAt?: string;
-  scorecardId?: string;
-  scoreId?: string;
+  stdout?: string | null;
+  stderr?: string | null;
+  currentStageId?: string | null;
+  stages?: LazyLoader<{
+    data?: {
+      items: TaskStageType[];
+    } | null;
+  }>;
+  dispatchStatus?: string | null;
+  celeryTaskId?: string | null;
+  workerNodeId?: string | null;
+  updatedAt?: string | null;
+  scorecardId?: string | null;
+  scoreId?: string | null;
   scorecard?: LazyLoader<{
-    id: string;
-    name: string;
+    data?: {
+      id: string;
+      name: string;
+    } | null;
   }>;
   score?: LazyLoader<{
-    id: string;
-    name: string;
+    data?: {
+      id: string;
+      name: string;
+    } | null;
   }>;
-  evaluation?: LazyLoader<EvaluationType>;
+  evaluation?: LazyLoader<{
+    data?: {
+      id: string;
+      type: string;
+      metrics: any;
+      metricsExplanation?: string;
+      inferences: number;
+      accuracy: number;
+      cost: number | null;
+      status: string;
+      startedAt?: string;
+      elapsedSeconds: number | null;
+      estimatedRemainingSeconds: number | null;
+      totalItems: number;
+      processedItems: number;
+      errorMessage?: string;
+      errorDetails?: any;
+      confusionMatrix?: any;
+      scoreGoal?: string;
+      datasetClassDistribution?: any;
+      isDatasetClassDistributionBalanced?: boolean;
+      predictedClassDistribution?: any;
+      isPredictedClassDistributionBalanced?: boolean;
+      scoreResults?: {
+        data?: {
+          items?: Array<{
+            id: string;
+            value: string | number;
+            confidence: number | null;
+            metadata: any;
+            explanation: string | null;
+            itemId: string | null;
+            createdAt: string;
+          }>;
+        } | null;
+      };
+    } | null;
+  }>;
 };
 
 export type ProcessedTask = {
@@ -290,14 +333,16 @@ export async function listFromModel<T>(
 }
 
 // Helper function to safely get value from a LazyLoader
-function getValueFromLazyLoader<T>(loader: LazyLoader<T>): T | undefined {
+export function getValueFromLazyLoader<T>(loader: LazyLoader<T>): T | undefined {
+  if (!loader) return undefined;
   if (typeof loader === 'function') {
     return undefined; // We can't synchronously get the value from a promise
   }
   return loader;
 }
 
-async function unwrapLazyLoader<T>(loader: LazyLoader<T>): Promise<T> {
+export async function unwrapLazyLoader<T>(loader: LazyLoader<T>): Promise<T> {
+  if (!loader) return Promise.reject(new Error('Loader is null or undefined'));
   if (typeof loader === 'function') {
     return (loader as () => Promise<T>)();
   }
@@ -315,18 +360,20 @@ export async function transformAmplifyTask(task: AmplifyTask): Promise<Processed
   });
 
   // Handle stages
-  const stages: ProcessedTaskStage[] = task.stages?.items?.map((stage: TaskStageType) => ({
-    id: stage.id,
-    name: stage.name,
-    order: stage.order,
-    status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-    processedItems: stage.processedItems ?? undefined,
-    totalItems: stage.totalItems ?? undefined,
-    startedAt: stage.startedAt ?? undefined,
-    completedAt: stage.completedAt ?? undefined,
-    estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
-    statusMessage: stage.statusMessage ?? undefined
-  })) ?? [];
+  const stages: ProcessedTaskStage[] = (typeof task.stages === 'function' ? 
+    [] : // Can't synchronously get data from a promise
+    task.stages?.data?.items?.map((stage: TaskStageType) => ({
+      id: stage.id,
+      name: stage.name,
+      order: stage.order,
+      status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+      processedItems: stage.processedItems ?? undefined,
+      totalItems: stage.totalItems ?? undefined,
+      startedAt: stage.startedAt ?? undefined,
+      completedAt: stage.completedAt ?? undefined,
+      estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+      statusMessage: stage.statusMessage ?? undefined
+    }))) ?? [];
 
   // Convert metadata from string to JSON object if needed
   let processedMetadata: Record<string, unknown> | null = null;
@@ -347,7 +394,7 @@ export async function transformAmplifyTask(task: AmplifyTask): Promise<Processed
         await task.evaluation() : task.evaluation;
 
       // Parse metrics if it's a string
-      let metrics = evaluationData.metrics;
+      let metrics = evaluationData.data?.metrics;
       try {
         if (typeof metrics === 'string') {
           metrics = JSON.parse(metrics);
@@ -357,7 +404,7 @@ export async function transformAmplifyTask(task: AmplifyTask): Promise<Processed
       }
 
       // Parse confusion matrix if it's a string
-      let confusionMatrix = evaluationData.confusionMatrix;
+      let confusionMatrix = evaluationData.data?.confusionMatrix;
       try {
         if (typeof confusionMatrix === 'string') {
           confusionMatrix = JSON.parse(confusionMatrix);
@@ -367,7 +414,7 @@ export async function transformAmplifyTask(task: AmplifyTask): Promise<Processed
       }
 
       // Parse dataset class distribution if it's a string
-      let datasetClassDistribution = evaluationData.datasetClassDistribution;
+      let datasetClassDistribution = evaluationData.data?.datasetClassDistribution;
       try {
         if (typeof datasetClassDistribution === 'string') {
           datasetClassDistribution = JSON.parse(datasetClassDistribution);
@@ -377,7 +424,7 @@ export async function transformAmplifyTask(task: AmplifyTask): Promise<Processed
       }
 
       // Parse predicted class distribution if it's a string
-      let predictedClassDistribution = evaluationData.predictedClassDistribution;
+      let predictedClassDistribution = evaluationData.data?.predictedClassDistribution;
       try {
         if (typeof predictedClassDistribution === 'string') {
           predictedClassDistribution = JSON.parse(predictedClassDistribution);
@@ -386,30 +433,40 @@ export async function transformAmplifyTask(task: AmplifyTask): Promise<Processed
         console.error('Error parsing predicted class distribution:', e);
       }
 
-      evaluation = {
-        id: evaluationData.id,
-        type: evaluationData.type,
-        metrics,
-        metricsExplanation: evaluationData.metricsExplanation,
-        inferences: Number(evaluationData.inferences) || 0,
-        accuracy: typeof evaluationData.accuracy === 'number' ? evaluationData.accuracy : null,
-        cost: evaluationData.cost ?? null,
-        status: evaluationData.status,
-        startedAt: evaluationData.startedAt,
-        elapsedSeconds: evaluationData.elapsedSeconds ?? null,
-        estimatedRemainingSeconds: evaluationData.estimatedRemainingSeconds ?? null,
-        totalItems: Number(evaluationData.totalItems) || 0,
-        processedItems: Number(evaluationData.processedItems) || 0,
-        errorMessage: evaluationData.errorMessage,
-        errorDetails: evaluationData.errorDetails,
+      evaluation = evaluationData?.data?.id && evaluationData.data.type ? {
+        id: evaluationData.data.id,
+        type: evaluationData.data.type,
+        metrics: metrics,
+        metricsExplanation: evaluationData.data.metricsExplanation ?? undefined,
+        inferences: Number(evaluationData.data.inferences) || 0,
+        accuracy: typeof evaluationData.data.accuracy === 'number' ? evaluationData.data.accuracy : null,
+        cost: evaluationData.data.cost ?? null,
+        status: evaluationData.data.status || 'PENDING',
+        startedAt: evaluationData.data.startedAt,
+        elapsedSeconds: evaluationData.data.elapsedSeconds ?? null,
+        estimatedRemainingSeconds: evaluationData.data.estimatedRemainingSeconds ?? null,
+        totalItems: Number(evaluationData.data.totalItems) || 0,
+        processedItems: Number(evaluationData.data.processedItems) || 0,
+        errorMessage: evaluationData.data.errorMessage,
+        errorDetails: evaluationData.data.errorDetails,
         confusionMatrix,
-        scoreGoal: evaluationData.scoreGoal,
+        scoreGoal: evaluationData.data.scoreGoal,
         datasetClassDistribution,
-        isDatasetClassDistributionBalanced: evaluationData.isDatasetClassDistributionBalanced,
+        isDatasetClassDistributionBalanced: evaluationData.data.isDatasetClassDistributionBalanced,
         predictedClassDistribution,
-        isPredictedClassDistributionBalanced: evaluationData.isPredictedClassDistributionBalanced,
-        scoreResults: evaluationData.scoreResults
-      };
+        isPredictedClassDistributionBalanced: evaluationData.data.isPredictedClassDistributionBalanced,
+        scoreResults: evaluationData.data.scoreResults?.data?.items ? {
+          items: evaluationData.data.scoreResults.data.items.map(item => ({
+            id: item.id,
+            value: item.value,
+            confidence: item.confidence ?? null,
+            metadata: item.metadata,
+            explanation: item.explanation ?? null,
+            itemId: item.itemId,
+            createdAt: item.createdAt
+          }))
+        } : undefined
+      } : undefined;
     } catch (error) {
       console.error('Error transforming evaluation data:', error);
     }
@@ -444,13 +501,13 @@ export async function transformAmplifyTask(task: AmplifyTask): Promise<Processed
     updatedAt: task.updatedAt ?? undefined,
     scorecardId: task.scorecardId ?? undefined,
     scoreId: task.scoreId ?? undefined,
-    scorecard: scorecard ? {
-      id: scorecard.id,
-      name: scorecard.name
+    scorecard: scorecard?.data?.id && scorecard.data.name ? {
+      id: scorecard.data.id,
+      name: scorecard.data.name
     } : undefined,
-    score: score ? {
-      id: score.id,
-      name: score.name
+    score: score?.data?.id && score.data.name ? {
+      id: score.data.id,
+      name: score.data.name
     } : undefined,
     evaluation
   };
@@ -487,276 +544,294 @@ export function observeRecentTasks(limit: number = 10) {
 type TaskStageData = Schema['TaskStage']['type'];
 
 async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
-  // Unwrap any LazyLoader properties
-  const unwrappedTask = {
-    ...task,
-    scorecard: task.scorecard ? await unwrapLazyLoader(task.scorecard) : undefined,
-    score: task.score ? await unwrapLazyLoader(task.score) : undefined,
-    evaluation: task.evaluation ? await unwrapLazyLoader(task.evaluation) : undefined,
-    stages: task.stages ? {
-      items: task.stages.items ? await Promise.all(task.stages.items.map(async (stage) => ({
-        ...stage
-      }))) : []
-    } : undefined
-  };
-
-  // Convert metadata from string to JSON object if needed
-  let processedMetadata: Record<string, unknown> | null = null;
-  if (unwrappedTask.metadata) {
-    try {
-      processedMetadata = unwrappedTask.metadata;  // Already a JSON object from API
-    } catch (e) {
-      console.error('Error handling metadata:', e);
-      processedMetadata = null;
+  // Parse metadata if it's a string
+  let parsedMetadata: Record<string, unknown> | null = null;
+  if (task.metadata) {
+    if (typeof task.metadata === 'string') {
+      try {
+        parsedMetadata = JSON.parse(task.metadata);
+      } catch (e) {
+        console.warn('Failed to parse task metadata:', e);
+      }
+    } else if (typeof task.metadata === 'object') {
+      parsedMetadata = task.metadata;
     }
   }
 
+  // Handle stages - ensure we handle both function and direct data cases
+  const stages: ProcessedTaskStage[] = await (async () => {
+    if (typeof task.stages === 'function') {
+      try {
+        const stagesResult = await task.stages();
+        return stagesResult.data?.items?.map((stage: TaskStageType) => ({
+          id: stage.id,
+          name: stage.name,
+          order: stage.order,
+          status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+          processedItems: stage.processedItems ?? undefined,
+          totalItems: stage.totalItems ?? undefined,
+          startedAt: stage.startedAt ?? undefined,
+          completedAt: stage.completedAt ?? undefined,
+          estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+          statusMessage: stage.statusMessage ?? undefined
+        })) ?? [];
+      } catch (e) {
+        console.warn('Failed to fetch stages:', e);
+        return [];
+      }
+    }
+    return task.stages?.data?.items?.map((stage: TaskStageType) => ({
+      id: stage.id,
+      name: stage.name,
+      order: stage.order,
+      status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+      processedItems: stage.processedItems ?? undefined,
+      totalItems: stage.totalItems ?? undefined,
+      startedAt: stage.startedAt ?? undefined,
+      completedAt: stage.completedAt ?? undefined,
+      estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+      statusMessage: stage.statusMessage ?? undefined
+    })) ?? [];
+  })();
+
+  // Transform evaluation data if present
+  let evaluation = undefined;
+  if (task.evaluation) {
+    try {
+      const evaluationData = typeof task.evaluation === 'function' ? 
+        await task.evaluation() : task.evaluation;
+
+      // Parse metrics if it's a string
+      let metrics = evaluationData.data?.metrics;
+      try {
+        if (typeof metrics === 'string') {
+          metrics = JSON.parse(metrics);
+        }
+      } catch (e) {
+        console.error('Error parsing metrics:', e);
+      }
+
+      // Parse confusion matrix if it's a string
+      let confusionMatrix = evaluationData.data?.confusionMatrix;
+      try {
+        if (typeof confusionMatrix === 'string') {
+          confusionMatrix = JSON.parse(confusionMatrix);
+        }
+      } catch (e) {
+        console.error('Error parsing confusion matrix:', e);
+      }
+
+      // Parse dataset class distribution if it's a string
+      let datasetClassDistribution = evaluationData.data?.datasetClassDistribution;
+      try {
+        if (typeof datasetClassDistribution === 'string') {
+          datasetClassDistribution = JSON.parse(datasetClassDistribution);
+        }
+      } catch (e) {
+        console.error('Error parsing dataset class distribution:', e);
+      }
+
+      // Parse predicted class distribution if it's a string
+      let predictedClassDistribution = evaluationData.data?.predictedClassDistribution;
+      try {
+        if (typeof predictedClassDistribution === 'string') {
+          predictedClassDistribution = JSON.parse(predictedClassDistribution);
+        }
+      } catch (e) {
+        console.error('Error parsing predicted class distribution:', e);
+      }
+
+      evaluation = {
+        id: evaluationData.data?.id || '',
+        type: evaluationData.data?.type || 'unknown',
+        metrics,
+        metricsExplanation: evaluationData.data?.metricsExplanation,
+        inferences: Number(evaluationData.data?.inferences) || 0,
+        accuracy: typeof evaluationData.data?.accuracy === 'number' ? evaluationData.data?.accuracy : null,
+        cost: evaluationData.data?.cost ?? null,
+        status: evaluationData.data?.status || 'PENDING',
+        startedAt: evaluationData.data?.startedAt,
+        elapsedSeconds: evaluationData.data?.elapsedSeconds ?? null,
+        estimatedRemainingSeconds: evaluationData.data?.estimatedRemainingSeconds ?? null,
+        totalItems: Number(evaluationData.data?.totalItems) || 0,
+        processedItems: Number(evaluationData.data?.processedItems) || 0,
+        errorMessage: evaluationData.data?.errorMessage,
+        errorDetails: evaluationData.data?.errorDetails,
+        confusionMatrix,
+        scoreGoal: evaluationData.data?.scoreGoal,
+        datasetClassDistribution,
+        isDatasetClassDistributionBalanced: evaluationData.data?.isDatasetClassDistributionBalanced,
+        predictedClassDistribution,
+        isPredictedClassDistributionBalanced: evaluationData.data?.isPredictedClassDistributionBalanced,
+        scoreResults: evaluationData.data?.scoreResults?.data?.items ? {
+          items: evaluationData.data.scoreResults.data.items.map(item => ({
+            id: item.id,
+            value: item.value,
+            confidence: item.confidence ?? null,
+            metadata: item.metadata,
+            explanation: item.explanation ?? null,
+            itemId: item.itemId,
+            createdAt: item.createdAt
+          }))
+        } : undefined
+      };
+    } catch (error) {
+      console.error('Error transforming evaluation data:', error);
+    }
+  }
+
+  // Handle scorecard and score
+  const scorecard = task.scorecard ? await unwrapLazyLoader(task.scorecard) : undefined;
+  
+  const score = task.score ? await unwrapLazyLoader(task.score) : undefined;
+
   return {
-    id: unwrappedTask.id,
-    command: unwrappedTask.command,
-    type: unwrappedTask.type,
-    status: unwrappedTask.status,
-    target: unwrappedTask.target,
-    description: unwrappedTask.description ?? undefined,
-    metadata: processedMetadata,
-    createdAt: unwrappedTask.createdAt ?? undefined,
-    startedAt: unwrappedTask.startedAt ?? undefined,
-    completedAt: unwrappedTask.completedAt ?? undefined,
-    estimatedCompletionAt: unwrappedTask.estimatedCompletionAt ?? undefined,
-    errorMessage: unwrappedTask.errorMessage ?? undefined,
-    errorDetails: typeof unwrappedTask.errorDetails === 'string' ? unwrappedTask.errorDetails : JSON.stringify(unwrappedTask.errorDetails ?? null),
-    stdout: unwrappedTask.stdout ?? undefined,
-    stderr: unwrappedTask.stderr ?? undefined,
-    currentStageId: unwrappedTask.currentStageId ?? undefined,
-    stages: unwrappedTask.stages?.items ?? [],
-    dispatchStatus: unwrappedTask.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
-    celeryTaskId: unwrappedTask.celeryTaskId ?? undefined,
-    workerNodeId: unwrappedTask.workerNodeId ?? undefined,
-    updatedAt: unwrappedTask.updatedAt ?? undefined,
-    scorecardId: unwrappedTask.scorecardId ?? undefined,
-    scoreId: unwrappedTask.scoreId ?? undefined,
-    scorecard: unwrappedTask.scorecard ? {
-      id: unwrappedTask.scorecard.id,
-      name: unwrappedTask.scorecard.name
+    id: task.id,
+    command: task.command,
+    type: task.type,
+    status: task.status,
+    target: task.target,
+    description: task.description ?? undefined,
+    metadata: parsedMetadata,
+    createdAt: task.createdAt ?? undefined,
+    startedAt: task.startedAt ?? undefined,
+    completedAt: task.completedAt ?? undefined,
+    estimatedCompletionAt: task.estimatedCompletionAt ?? undefined,
+    errorMessage: task.errorMessage ?? undefined,
+    errorDetails: typeof task.errorDetails === 'string' ? task.errorDetails : JSON.stringify(task.errorDetails ?? null),
+    stdout: task.stdout ?? undefined,
+    stderr: task.stderr ?? undefined,
+    currentStageId: task.currentStageId ?? undefined,
+    stages,
+    dispatchStatus: task.dispatchStatus === 'DISPATCHED' ? 'DISPATCHED' : undefined,
+    celeryTaskId: task.celeryTaskId ?? undefined,
+    workerNodeId: task.workerNodeId ?? undefined,
+    updatedAt: task.updatedAt ?? undefined,
+    scorecardId: task.scorecardId ?? undefined,
+    scoreId: task.scoreId ?? undefined,
+    scorecard: scorecard?.data?.id && scorecard.data.name ? {
+      id: scorecard.data.id,
+      name: scorecard.data.name
     } : undefined,
-    score: unwrappedTask.score ? {
-      id: unwrappedTask.score.id,
-      name: unwrappedTask.score.name
+    score: score?.data?.id && score.data.name ? {
+      id: score.data.id,
+      name: score.data.name
     } : undefined,
-    evaluation: unwrappedTask.evaluation ? {
-      id: unwrappedTask.evaluation.id,
-      type: unwrappedTask.evaluation.type,
-      metrics: unwrappedTask.evaluation.metrics,
-      accuracy: unwrappedTask.evaluation.accuracy,
-      processedItems: unwrappedTask.evaluation.processedItems,
-      totalItems: unwrappedTask.evaluation.totalItems,
-      scoreResults: unwrappedTask.evaluation.scoreResults,
-      inferences: unwrappedTask.evaluation.inferences,
-      cost: unwrappedTask.evaluation.cost,
-      status: unwrappedTask.evaluation.status,
-      elapsedSeconds: unwrappedTask.evaluation.elapsedSeconds,
-      estimatedRemainingSeconds: unwrappedTask.evaluation.estimatedRemainingSeconds
-    } : undefined
+    evaluation
   };
 }
 
-export async function listRecentTasks(limit: number = 10): Promise<ProcessedTask[]> {
-  console.warn('listRecentTasks called with limit:', limit);
+// Add this helper function to convert raw API response to AmplifyTask
+function convertToAmplifyTask(rawData: any): AmplifyTask {
+  // Create a lazy loader for stages
+  const stagesLoader = () => Promise.resolve({
+    data: {
+      items: (rawData.stages?.items ?? []).map((stage: any) => ({
+        id: stage.id,
+        name: stage.name,
+        order: stage.order,
+        status: stage.status,
+        processedItems: stage.processedItems,
+        totalItems: stage.totalItems,
+        startedAt: stage.startedAt,
+        completedAt: stage.completedAt,
+        estimatedCompletionAt: stage.estimatedCompletionAt,
+        statusMessage: stage.statusMessage
+      }))
+    }
+  });
+
+  // Create lazy loaders for scorecard and score
+  const scorecardLoader = rawData.scorecard ? () => Promise.resolve({
+    data: {
+      id: rawData.scorecard.id,
+      name: rawData.scorecard.name
+    }
+  }) : undefined;
+
+  const scoreLoader = rawData.score ? () => Promise.resolve({
+    data: {
+      id: rawData.score.id,
+      name: rawData.score.name
+    }
+  }) : undefined;
+
+  // Create lazy loader for evaluation
+  const evaluationLoader = rawData.evaluation ? () => Promise.resolve({
+    data: rawData.evaluation
+  }) : undefined;
+
+  return {
+    id: rawData.id,
+    command: rawData.command,
+    type: rawData.type,
+    status: rawData.status,
+    target: rawData.target,
+    description: rawData.description ?? null,
+    metadata: rawData.metadata,
+    createdAt: rawData.createdAt ?? null,
+    startedAt: rawData.startedAt ?? null,
+    completedAt: rawData.completedAt ?? null,
+    estimatedCompletionAt: rawData.estimatedCompletionAt ?? null,
+    errorMessage: rawData.errorMessage ?? null,
+    errorDetails: rawData.errorDetails,
+    stdout: rawData.stdout ?? null,
+    stderr: rawData.stderr ?? null,
+    currentStageId: rawData.currentStageId ?? null,
+    stages: stagesLoader,
+    dispatchStatus: rawData.dispatchStatus ?? null,
+    celeryTaskId: rawData.celeryTaskId ?? null,
+    workerNodeId: rawData.workerNodeId ?? null,
+    updatedAt: rawData.updatedAt ?? null,
+    scorecardId: rawData.scorecardId ?? null,
+    scoreId: rawData.scoreId ?? null,
+    scorecard: scorecardLoader,
+    score: scoreLoader,
+    evaluation: evaluationLoader
+  };
+}
+
+export async function listRecentTasks(
+  limit = 10,
+  nextToken?: string
+): Promise<{ tasks: ProcessedTask[]; nextToken?: string }> {
   try {
     const currentClient = getClient();
-    if (!currentClient.models.Task) {
-      throw new Error('Task model not found');
-    }
+    const taskClient = currentClient.models.Task as {
+      list: (options: {
+        limit?: number;
+        nextToken?: string;
+        filter?: Record<string, any>;
+      }) => Promise<{ data: Schema['Task']['type'][], nextToken?: string | null }>;
+    };
 
-    // Get the account ID by key
-    const ACCOUNT_KEY = 'call-criteria';
-    const accountResponse = await listFromModel<Schema['Account']['type']>(
-      'Account',
-      { filter: { key: { eq: ACCOUNT_KEY } } }
-    );
-
-    if (!accountResponse.data?.length) {
-      console.error('No account found with key:', ACCOUNT_KEY);
-      return [];
-    }
-
-    const accountId = accountResponse.data[0].id;
-    console.debug('Fetching tasks for account:', accountId);
-
-    const response = await currentClient.graphql({
-      query: `
-        query ListTaskByAccountIdAndUpdatedAt(
-          $accountId: String!
-          $sortDirection: ModelSortDirection!
-          $limit: Int
-        ) {
-          listTaskByAccountIdAndUpdatedAt(
-            accountId: $accountId
-            sortDirection: $sortDirection
-            limit: $limit
-          ) {
-            items {
-              id
-              accountId
-              type
-              status
-              target
-              command
-              description
-              dispatchStatus
-              metadata
-              createdAt
-              startedAt
-              completedAt
-              estimatedCompletionAt
-              errorMessage
-              errorDetails
-              stdout
-              stderr
-              currentStageId
-              scorecardId
-              scoreId
-              celeryTaskId
-              workerNodeId
-              updatedAt
-              scorecard {
-                id
-                name
-              }
-              score {
-                id
-                name
-              }
-              stages {
-                items {
-                  id
-                  name
-                  order
-                  status
-                  processedItems
-                  totalItems
-                  startedAt
-                  completedAt
-                  estimatedCompletionAt
-                  statusMessage
-                }
-              }
-              evaluation {
-                id
-                type
-                metrics
-                metricsExplanation
-                inferences
-                accuracy
-                cost
-                status
-                startedAt
-                elapsedSeconds
-                estimatedRemainingSeconds
-                totalItems
-                processedItems
-                errorMessage
-                errorDetails
-                confusionMatrix
-                scoreGoal
-                datasetClassDistribution
-                isDatasetClassDistributionBalanced
-                predictedClassDistribution
-                isPredictedClassDistributionBalanced
-                scoreResults {
-                  items {
-                    id
-                    value
-                    confidence
-                    metadata
-                    explanation
-                    itemId
-                    createdAt
-                  }
-                }
-              }
-            }
-            nextToken
-          }
+    const response = await taskClient.list({
+      limit,
+      nextToken,
+      filter: {
+        createdAt: {
+          gt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
         }
-      `,
-      variables: {
-        accountId: accountId.trim(),
-        sortDirection: 'DESC',
-        limit: limit || 100
-      },
-      authMode: 'userPool'
-    }) as unknown as GraphQLResult<ListTaskResponse>;
-
-    if (response.errors?.length) {
-      console.error('GraphQL errors:', response.errors);
-      throw new Error(`GraphQL errors: ${response.errors.map(e => e.message).join(', ')}`);
-    }
-
-    if (!response.data) {
-      console.error('No data returned from GraphQL query');
-      return [];
-    }
-
-    console.debug('Raw GraphQL response - Task with evaluation:', {
-      taskCount: response.data?.listTaskByAccountIdAndUpdatedAt?.items?.length,
-      firstTask: response.data?.listTaskByAccountIdAndUpdatedAt?.items?.[0] ? {
-        id: response.data.listTaskByAccountIdAndUpdatedAt.items[0].id,
-        type: response.data.listTaskByAccountIdAndUpdatedAt.items[0].type,
-        hasEvaluation: !!response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation,
-        evaluation: response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation ? 
-          (() => {
-            const evaluationValue = getValueFromLazyLoader(response.data.listTaskByAccountIdAndUpdatedAt.items[0].evaluation);
-            return evaluationValue ? {
-              id: evaluationValue.id,
-              type: evaluationValue.type,
-              metrics: evaluationValue.metrics,
-              accuracy: evaluationValue.accuracy,
-              processedItems: evaluationValue.processedItems,
-              totalItems: evaluationValue.totalItems,
-              scoreResults: evaluationValue.scoreResults
-            } : undefined;
-          })() : undefined
-      } : null
+      }
     });
 
-    const result = response.data;
-    if (!result?.listTaskByAccountIdAndUpdatedAt?.items) {
-      console.error('No items found in GraphQL response');
-      return [];
+    if (response.data) {
+      const tasks = await Promise.all(
+        response.data.map(async (task) => {
+          const convertedTask = convertToAmplifyTask(task);
+          return processTask(convertedTask);
+        })
+      );
+      return {
+        tasks: tasks.filter((t): t is ProcessedTask => t !== null),
+        nextToken: response.nextToken || undefined
+      };
     }
 
-    // Process tasks and load their stages
-    const processedTasks = await Promise.all(
-      result.listTaskByAccountIdAndUpdatedAt.items.map(async (task) => {
-        console.debug(`Processing task ${task.id}, raw data:`, {
-          id: task.id,
-          type: task.type,
-          scorecard: task.scorecard,
-          score: task.score,
-          scorecardId: task.scorecardId,
-          scoreId: task.scoreId,
-          hasEvaluation: !!task.evaluation,
-          evaluationData: task.evaluation
-        });
-        return processTask(task);
-      })
-    );
-
-    console.debug('All processed tasks:', processedTasks.map(task => ({
-      id: task.id,
-      type: task.type,
-      scorecard: task.scorecard,
-      score: task.score,
-      scorecardId: task.scorecardId,
-      scoreId: task.scoreId,
-      hasEvaluation: !!task.evaluation,
-      evaluationData: task.evaluation
-    })));
-    return processedTasks;
+    return { tasks: [] };
   } catch (error) {
-    console.error('Error listing recent tasks:', error);
-    return [];
+    console.error('Error listing tasks:', error);
+    return { tasks: [] };
   }
 }
 
@@ -765,7 +840,11 @@ export async function getFromModel<T extends { id: string }>(
   id: string
 ): Promise<{ data: T | null }> {
   try {
-    const response = await (client.models[modelName] as any).get({ id });
+    const currentClient = getClient();
+    const response = await (currentClient.models[modelName] as any).get({ id });
+    if (modelName === 'Task' && response.data) {
+      return { data: convertToAmplifyTask(response.data) as unknown as T };
+    }
     return response;
   } catch (error) {
     console.error(`Error getting ${modelName}:`, error);
@@ -774,58 +853,18 @@ export async function getFromModel<T extends { id: string }>(
 }
 
 export async function createTask(
-  command: string,
-  type: string = 'command',
-  target: string = '',
-  metadata: Record<string, unknown> | null = null
+  input: Omit<AmplifyTask, 'id' | 'createdAt' | 'updatedAt'> & { accountId: string }
 ): Promise<ProcessedTask | null> {
   try {
     const currentClient = getClient();
-    if (!currentClient.models.Task) {
-      throw new Error('Task model not found');
-    }
-
-    // Get the account ID by key
-    const ACCOUNT_KEY = 'call-criteria';
-    const accountResponse = await listFromModel<Schema['Account']['type']>(
-      'Account',
-      { filter: { key: { eq: ACCOUNT_KEY } } }
-    );
-
-    if (!accountResponse.data?.length) {
-      console.error('No account found with key:', ACCOUNT_KEY);
-      return null;
-    }
-
-    const accountId = accountResponse.data[0].id;
-
-    type BasicTaskInput = {
-      accountId: string;
-      command: string;
-      type: string;
-      target: string;
-      metadata: Record<string, unknown> | null;
-      dispatchStatus: 'PENDING';
-      status: 'PENDING';
-      createdAt: string;
-    };
-
-    const taskInput = {
-      accountId,
-      command,
-      type,
-      target,
-      metadata,
-      dispatchStatus: 'PENDING' as const,
-      status: 'PENDING' as const,
+    const response = await (currentClient.models.Task as any).create({
+      ...input,
       createdAt: new Date().toISOString()
-    } as BasicTaskInput;
-
-    // @ts-expect-error Complex union type in generated Amplify types
-    const response = await currentClient.models.Task.create(taskInput);
+    });
 
     if (response.data) {
-      return processTask(response.data);
+      const convertedTask = convertToAmplifyTask(response.data);
+      return processTask(convertedTask);
     }
 
     return null;
@@ -846,25 +885,24 @@ export async function updateTask(
       throw new Error(`${modelName} model not found`);
     }
 
-    // @ts-expect-error Complex union type in generated Amplify types
-    const response = await currentClient.models[modelName].update({
+    const response = await (currentClient.models[modelName] as any).update({
       id,
       ...input
     });
 
     if (response.data) {
-      return modelName === 'Task' ? processTask(response.data) : null;
+      return modelName === 'Task' ? processTask(convertToAmplifyTask(response.data)) : null;
     }
 
     return null;
   } catch (error) {
-    console.error(`Error updating ${modelName}:`, error);
+    console.error('Error updating task:', error);
     return null;
   }
 }
 
-export async function listRecentEvaluations(limit: number = 100): Promise<Schema['Evaluation']['type'][]> {
-  console.warn('listRecentEvaluations called with limit:', limit);
+export async function listRecentEvaluations(limit: number = 100): Promise<any[]> {
+  console.log('listRecentEvaluations called with limit:', limit);
   try {
     const currentClient = getClient();
 
@@ -881,7 +919,7 @@ export async function listRecentEvaluations(limit: number = 100): Promise<Schema
     }
 
     const accountId = accountResponse.data[0].id;
-    console.debug('Fetching evaluations for account:', accountId);
+    console.log('Fetching evaluations for account:', accountId);
 
     const response = await currentClient.graphql({
       query: `
@@ -987,6 +1025,18 @@ export async function listRecentEvaluations(limit: number = 100): Promise<Schema
       }
     });
 
+    console.log('GraphQL response:', {
+      hasData: isGraphQLResult(response) && !!response.data,
+      hasErrors: isGraphQLResult(response) && !!response.errors,
+      itemCount: isGraphQLResult(response) ? response.data?.listEvaluationByAccountIdAndUpdatedAt?.items?.length : 0,
+      firstItem: isGraphQLResult(response) && response.data?.listEvaluationByAccountIdAndUpdatedAt?.items?.[0] ? {
+        id: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].id,
+        type: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].type,
+        metrics: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].metrics,
+        task: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task
+      } : null
+    });
+
     if (!isGraphQLResult(response)) {
       console.error('Unexpected response type');
       return [];
@@ -1002,15 +1052,6 @@ export async function listRecentEvaluations(limit: number = 100): Promise<Schema
       return [];
     }
 
-    console.debug('Raw GraphQL response:', {
-      evaluationCount: response.data?.listEvaluationByAccountIdAndUpdatedAt?.items?.length,
-      firstEvaluation: response.data?.listEvaluationByAccountIdAndUpdatedAt?.items?.[0] ? {
-        id: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].id,
-        taskId: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].taskId,
-        taskStages: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task?.stages?.items
-      } : null
-    });
-
     const result = response.data;
     if (!result?.listEvaluationByAccountIdAndUpdatedAt?.items) {
       console.error('No items found in GraphQL response');
@@ -1024,444 +1065,145 @@ export async function listRecentEvaluations(limit: number = 100): Promise<Schema
   }
 }
 
-export function observeRecentEvaluations(limit: number = 100): Observable<{ items: Schema['Evaluation']['type'][], isSynced: boolean }> {
+export function observeRecentEvaluations(limit: number = 100): Observable<{ items: any[], isSynced: boolean }> {
   return new Observable(subscriber => {
-    let isSynced = false;
-    let evaluations: Schema['Evaluation']['type'][] = [];
-    const client = getClient();
-    
+    let evaluations: any[] = [];
+    let subscriptionCleanup: { unsubscribe: () => void } | null = null;
+
+    // Load initial data
     async function loadInitialEvaluations() {
       try {
         const response = await listRecentEvaluations(limit);
-        console.debug('Initial evaluations load:', {
+        console.log('Initial evaluations response:', {
           count: response.length,
           firstEvaluation: response[0] ? {
             id: response[0].id,
             type: response[0].type,
             metrics: response[0].metrics,
-            accuracy: response[0].accuracy,
+            task: response[0].task,
             scoreResults: response[0].scoreResults,
-            task: response[0].task ? {
-              id: response[0].task.id,
-              status: response[0].task.status,
-              stages: response[0].task.stages
-            } : null
+            rawResponse: response[0]
           } : null
         });
+        
         evaluations = response;
         subscriber.next({ items: evaluations, isSynced: true });
-        isSynced = true;
       } catch (error) {
         console.error('Error loading initial evaluations:', error);
         subscriber.error(error);
       }
     }
 
-    async function handleEvaluationUpdate(updatedEvaluation: Schema['Evaluation']['type']) {
-      console.debug('Evaluation update received:', {
-        id: updatedEvaluation.id,
-        type: updatedEvaluation.type,
-        metrics: updatedEvaluation.metrics,
-        accuracy: updatedEvaluation.accuracy,
-        scoreResults: updatedEvaluation.scoreResults,
-        task: updatedEvaluation.task ? {
-          id: updatedEvaluation.task.id,
-          status: updatedEvaluation.task.status,
-          stages: updatedEvaluation.task.stages
-        } : null
-      });
-
-      // If we have IDs but no data, fetch the related data
-      if (updatedEvaluation.scorecardId && !updatedEvaluation.scorecard) {
-        console.debug('Fetching scorecard data for ID:', updatedEvaluation.scorecardId);
-        const scorecardResponse = await client.graphql({
-          query: `
-            query GetScorecard($id: ID!) {
-              getScorecard(id: $id) {
+    // Set up subscription
+    try {
+      console.log('Setting up evaluation subscription...');
+      const client = getClient();
+      subscriptionCleanup = (client.graphql({
+        query: `
+          subscription OnUpdateEvaluation {
+            onUpdateEvaluation {
+              id
+              type
+              parameters
+              metrics
+              metricsExplanation
+              inferences
+              accuracy
+              cost
+              createdAt
+              updatedAt
+              status
+              startedAt
+              elapsedSeconds
+              estimatedRemainingSeconds
+              totalItems
+              processedItems
+              errorMessage
+              errorDetails
+              accountId
+              scorecardId
+              scoreId
+              confusionMatrix
+              scoreGoal
+              datasetClassDistribution
+              isDatasetClassDistributionBalanced
+              predictedClassDistribution
+              isPredictedClassDistributionBalanced
+              taskId
+              task {
                 id
-                name
-                key
+                type
+                status
+                target
+                command
+                description
+                dispatchStatus
+                metadata
+                createdAt
+                startedAt
+                completedAt
+                estimatedCompletionAt
+                errorMessage
+                errorDetails
+                currentStageId
+                stages {
+                  items {
+                    id
+                    name
+                    order
+                    status
+                    statusMessage
+                    startedAt
+                    completedAt
+                    estimatedCompletionAt
+                    processedItems
+                    totalItems
+                  }
+                }
+              }
+              scoreResults {
+                items {
+                  id
+                  value
+                  confidence
+                  metadata
+                  explanation
+                  itemId
+                  createdAt
+                }
               }
             }
-          `,
-          variables: {
-            id: updatedEvaluation.scorecardId
           }
-        });
-        if (isGraphQLResult(scorecardResponse)) {
-          updatedEvaluation.scorecard = scorecardResponse.data?.getScorecard;
-        }
-      }
-
-      if (updatedEvaluation.scoreId && !updatedEvaluation.score) {
-        console.debug('Fetching score data for ID:', updatedEvaluation.scoreId);
-        const scoreResponse = await client.graphql({
-          query: `
-            query GetScore($id: ID!) {
-              getScore(id: $id) {
-                id
-                name
-                key
-              }
-            }
-          `,
-          variables: {
-            id: updatedEvaluation.scoreId
+        `
+      }) as unknown as { subscribe: Function }).subscribe({
+        next: ({ data }: { data?: { onUpdateEvaluation: any } }) => {
+          if (data?.onUpdateEvaluation) {
+            const updatedEvaluation = data.onUpdateEvaluation;
+            evaluations = evaluations.map(evaluation => 
+              evaluation.id === updatedEvaluation.id ? updatedEvaluation : evaluation
+            );
+            subscriber.next({ items: evaluations, isSynced: true });
           }
-        });
-        if (isGraphQLResult(scoreResponse)) {
-          updatedEvaluation.score = scoreResponse.data?.getScore;
+        },
+        error: (error: Error) => {
+          console.error('Error in evaluation subscription:', error);
+          subscriber.error(error);
         }
-      }
-
-      const evaluationIndex = evaluations.findIndex(e => e.id === updatedEvaluation.id);
-      
-      if (evaluationIndex !== -1) {
-        // Update existing evaluation
-        const existingEvaluation = evaluations[evaluationIndex];
-        
-        // Create the updated evaluation, prioritizing new data
-        const updatedEvaluationData = {
-          ...existingEvaluation,
-          ...updatedEvaluation,
-          task: updatedEvaluation.task || existingEvaluation.task
-        };
-
-        evaluations[evaluationIndex] = updatedEvaluationData;
-      } else {
-        // For new evaluations, add to the beginning of the array
-        evaluations.unshift(updatedEvaluation);
-        console.debug('Added new evaluation:', {
-          evaluationId: updatedEvaluation.id,
-          totalEvaluations: evaluations.length
-        });
-      }
-
-      // Sort evaluations by updatedAt
-      evaluations.sort((a, b) => 
-        new Date(b.updatedAt || b.createdAt || '').getTime() - 
-        new Date(a.updatedAt || a.createdAt || '').getTime()
-      );
-
-      // Trim to limit if needed
-      if (evaluations.length > limit) {
-        evaluations = evaluations.slice(0, limit);
-      }
-
-      console.debug('Emitting updated evaluation list:', {
-        count: evaluations.length,
-        evaluationIds: evaluations.map(e => ({
-          id: e.id,
-          status: e.status,
-          taskId: e.taskId
-        }))
       });
-      subscriber.next({ items: [...evaluations], isSynced: true });
+    } catch (error) {
+      console.error('Error setting up evaluation subscription:', error);
+      subscriber.error(error);
     }
 
     // Load initial data
     loadInitialEvaluations();
 
-    // Set up subscriptions
-    const subscriptions = [
-      // Subscribe to evaluation updates
-      (client.graphql({
-        query: `subscription OnUpdateEvaluation {
-          onUpdateEvaluation {
-            id
-            type
-            parameters
-            metrics
-            metricsExplanation
-            inferences
-            accuracy
-            cost
-            createdAt
-            updatedAt
-            status
-            startedAt
-            elapsedSeconds
-            estimatedRemainingSeconds
-            totalItems
-            processedItems
-            errorMessage
-            errorDetails
-            accountId
-            scorecardId
-            scorecard {
-              id
-              name
-            }
-            scoreId
-            score {
-              id
-              name
-            }
-            confusionMatrix
-            scoreGoal
-            datasetClassDistribution
-            isDatasetClassDistributionBalanced
-            predictedClassDistribution
-            isPredictedClassDistributionBalanced
-            taskId
-            task {
-              id
-              type
-              status
-              target
-              command
-              description
-              dispatchStatus
-              metadata
-              createdAt
-              startedAt
-              completedAt
-              estimatedCompletionAt
-              errorMessage
-              errorDetails
-              currentStageId
-              stages {
-                items {
-                  id
-                  name
-                  order
-                  status
-                  statusMessage
-                  startedAt
-                  completedAt
-                  estimatedCompletionAt
-                  processedItems
-                  totalItems
-                }
-              }
-            }
-          }
-        }`
-      }) as unknown as { subscribe: Function }).subscribe({
-        next: (data: any) => {
-          console.debug('Raw onUpdate data received:', {
-            fullData: data,
-            evaluationData: data?.data?.onUpdateEvaluation
-          });
-          
-          const evaluationData = data?.data?.onUpdateEvaluation;
-          if (!evaluationData?.id) {
-            console.debug('Invalid evaluation update data:', data);
-            return;
-          }
-
-          handleEvaluationUpdate(evaluationData);
-        },
-        error: (error: Error) => console.error('Error in evaluation onUpdate subscription:', error)
-      }),
-
-      // Subscribe to evaluation creates
-      (client.graphql({
-        query: `subscription OnCreateEvaluation {
-          onCreateEvaluation {
-            id
-            type
-            parameters
-            metrics
-            metricsExplanation
-            inferences
-            accuracy
-            cost
-            createdAt
-            updatedAt
-            status
-            startedAt
-            elapsedSeconds
-            estimatedRemainingSeconds
-            totalItems
-            processedItems
-            errorMessage
-            errorDetails
-            accountId
-            scorecardId
-            scorecard {
-              id
-              name
-            }
-            scoreId
-            score {
-              id
-              name
-            }
-            confusionMatrix
-            scoreGoal
-            datasetClassDistribution
-            isDatasetClassDistributionBalanced
-            predictedClassDistribution
-            isPredictedClassDistributionBalanced
-            taskId
-            task {
-              id
-              type
-              status
-              target
-              command
-              description
-              dispatchStatus
-              metadata
-              createdAt
-              startedAt
-              completedAt
-              estimatedCompletionAt
-              errorMessage
-              errorDetails
-              currentStageId
-              stages {
-                items {
-                  id
-                  name
-                  order
-                  status
-                  statusMessage
-                  startedAt
-                  completedAt
-                  estimatedCompletionAt
-                  processedItems
-                  totalItems
-                }
-              }
-            }
-          }
-        }`
-      }) as unknown as { subscribe: Function }).subscribe({
-        next: (data: any) => {
-          console.debug('Raw onCreate data received:', {
-            fullData: data,
-            evaluationData: data?.data?.onCreateEvaluation
-          });
-          const evaluationData = data?.data?.onCreateEvaluation;
-          if (!evaluationData?.id) {
-            console.debug('Invalid evaluation create data:', data);
-            return;
-          }
-          console.log('Evaluation onCreate triggered:', { 
-            evaluationId: evaluationData.id,
-            type: evaluationData.type,
-            status: evaluationData.status,
-            taskId: evaluationData.taskId
-          });
-          handleEvaluationUpdate(evaluationData);
-        },
-        error: (error: Error) => console.error('Error in evaluation onCreate subscription:', error)
-      })
-    ];
-
     // Cleanup function
     return () => {
-      console.log('Cleaning up evaluation subscriptions');
-      subscriptions.forEach(sub => sub.unsubscribe());
+      console.log('Cleaning up evaluation subscription');
+      if (subscriptionCleanup) {
+        subscriptionCleanup.unsubscribe();
+      }
     };
   });
 }
-
-async function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
-  if (!evaluation) return null;
-
-  try {
-    // Unwrap task if it's a LazyLoader
-    const task = evaluation.task ? await unwrapLazyLoader(evaluation.task) : null;
-    
-    // Unwrap scorecard if it's a LazyLoader
-    const scorecard = evaluation.scorecard ? await unwrapLazyLoader(evaluation.scorecard) : null;
-    
-    // Unwrap score if it's a LazyLoader
-    const score = evaluation.score ? await unwrapLazyLoader(evaluation.score) : null;
-
-    // Parse metrics if it's a string
-    let metrics = evaluation.metrics;
-    try {
-      if (typeof metrics === 'string') {
-        metrics = JSON.parse(metrics);
-      }
-    } catch (e) {
-      console.error('Error parsing metrics:', e);
-    }
-
-    // Parse confusion matrix if it's a string
-    let confusionMatrix = evaluation.confusionMatrix;
-    try {
-      if (typeof confusionMatrix === 'string') {
-        confusionMatrix = JSON.parse(confusionMatrix);
-      }
-    } catch (e) {
-      console.error('Error parsing confusion matrix:', e);
-    }
-
-    // Parse dataset class distribution if it's a string
-    let datasetClassDistribution = evaluation.datasetClassDistribution;
-    try {
-      if (typeof datasetClassDistribution === 'string') {
-        datasetClassDistribution = JSON.parse(datasetClassDistribution);
-      }
-    } catch (e) {
-      console.error('Error parsing dataset class distribution:', e);
-    }
-
-    // Parse predicted class distribution if it's a string
-    let predictedClassDistribution = evaluation.predictedClassDistribution;
-    try {
-      if (typeof predictedClassDistribution === 'string') {
-        predictedClassDistribution = JSON.parse(predictedClassDistribution);
-      }
-    } catch (e) {
-      console.error('Error parsing predicted class distribution:', e);
-    }
-
-    // Parse score results if it's a string
-    let scoreResults = evaluation.scoreResults;
-    try {
-      if (typeof scoreResults === 'string') {
-        scoreResults = JSON.parse(scoreResults);
-      }
-    } catch (e) {
-      console.error('Error parsing score results:', e);
-    }
-
-    return {
-      id: evaluation.id,
-      type: evaluation.type,
-      metrics,
-      metricsExplanation: evaluation.metricsExplanation,
-      inferences: Number(evaluation.inferences) || 0,
-      accuracy: typeof evaluation.accuracy === 'number' ? evaluation.accuracy : null,
-      cost: evaluation.cost ?? null,
-      status: evaluation.status,
-      startedAt: evaluation.startedAt,
-      elapsedSeconds: evaluation.elapsedSeconds ?? null,
-      estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds ?? null,
-      totalItems: Number(evaluation.totalItems) || 0,
-      processedItems: Number(evaluation.processedItems) || 0,
-      errorMessage: evaluation.errorMessage,
-      errorDetails: evaluation.errorDetails,
-      confusionMatrix,
-      scoreGoal: evaluation.scoreGoal,
-      datasetClassDistribution,
-      isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
-      predictedClassDistribution,
-      isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
-      scoreResults,
-      task: task ? {
-        id: task.id,
-        type: task.type,
-        status: task.status,
-        stages: task.stages
-      } : null,
-      scorecard: scorecard ? {
-        id: scorecard.id,
-        name: scorecard.name
-      } : null,
-      score: score ? {
-        id: score.id,
-        name: score.name
-      } : null
-    };
-  } catch (error) {
-    console.error('Error transforming evaluation:', error);
-    return null;
-  }
-} 
