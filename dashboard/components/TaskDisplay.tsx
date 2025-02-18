@@ -6,6 +6,19 @@ import type { TaskStatus } from '@/types/shared'
 import EvaluationTask from '@/components/EvaluationTask'
 import { Task, TaskHeader, TaskContent } from '@/components/Task'
 
+interface ProcessedTaskStage {
+  id: string;
+  name: string;
+  order: number;
+  status: string;
+  statusMessage?: string;
+  startedAt?: string;
+  completedAt?: string;
+  estimatedCompletionAt?: string;
+  processedItems?: number;
+  totalItems?: number;
+}
+
 interface TaskDisplayProps {
   task: AmplifyTask | null
   variant?: 'grid' | 'detail'
@@ -53,6 +66,7 @@ interface TaskDisplayProps {
   onClose?: () => void
   selectedScoreResultId?: string | null
   onSelectScoreResult?: (id: string | null) => void
+  commandDisplay?: 'show' | 'hide'
 }
 
 function calculateProgress(processedItems?: number | null, totalItems?: number | null): number {
@@ -60,7 +74,32 @@ function calculateProgress(processedItems?: number | null, totalItems?: number |
   return Math.round((processedItems / totalItems) * 100)
 }
 
-export function TaskDisplay({ task, variant = 'grid', isSelected, onClick, extra = false, evaluationData, controlButtons, isFullWidth, onToggleFullWidth, onClose, selectedScoreResultId, onSelectScoreResult }: TaskDisplayProps) {
+export function TaskDisplay({
+  variant = 'grid',
+  task,
+  evaluationData,
+  onClick,
+  controlButtons,
+  isFullWidth,
+  onToggleFullWidth,
+  onClose,
+  selectedScoreResultId,
+  onSelectScoreResult,
+  extra,
+  isSelected,
+  commandDisplay: initialCommandDisplay = 'show'
+}: TaskDisplayProps) {
+  console.debug('TaskDisplay render:', {
+    taskId: task?.id,
+    variant,
+    taskStatus: task?.status,
+    taskStartedAt: task?.startedAt,
+    taskCompletedAt: task?.completedAt,
+    evaluationId: evaluationData?.id,
+    evaluationStatus: evaluationData?.status,
+    taskData: task
+  });
+
   const [processedTask, setProcessedTask] = useState<ProcessedTask | null>(null)
 
   useEffect(() => {
@@ -71,6 +110,12 @@ export function TaskDisplay({ task, variant = 'grid', isSelected, onClick, extra
       }
       try {
         const result = await transformAmplifyTask(task)
+        console.debug('Processed task:', {
+          taskId: result.id,
+          taskStatus: result.status,
+          taskStartedAt: result.startedAt,
+          taskCompletedAt: result.completedAt
+        });
         setProcessedTask(result)
       } catch (error) {
         console.error('Error processing task:', error)
@@ -87,6 +132,10 @@ export function TaskDisplay({ task, variant = 'grid', isSelected, onClick, extra
       scorecard: evaluationData.scorecard?.name || '-',
       score: evaluationData.score?.name || '-',
       time: evaluationData.createdAt || new Date().toISOString(),
+      startedAt: processedTask?.startedAt || task?.startedAt || evaluationData.startedAt,
+      completedAt: processedTask?.completedAt || task?.completedAt,
+      estimatedCompletionAt: processedTask?.estimatedCompletionAt || task?.estimatedCompletionAt,
+      status: (processedTask?.status || task?.status || evaluationData.status || 'PENDING') as TaskStatus,
       data: {
         id: evaluationData.id,
         title: `${evaluationData.scorecard?.name || '-'} - ${evaluationData.score?.name || '-'}`,
@@ -110,10 +159,12 @@ export function TaskDisplay({ task, variant = 'grid', isSelected, onClick, extra
         progress: calculateProgress(evaluationData.processedItems, evaluationData.totalItems),
         inferences: Number(evaluationData.inferences || 0),
         cost: evaluationData.cost ?? null,
-        status: (evaluationData.status || 'PENDING') as TaskStatus,
+        status: (processedTask?.status || task?.status || evaluationData.status || 'PENDING') as TaskStatus,
         elapsedSeconds: evaluationData.elapsedSeconds ?? null,
         estimatedRemainingSeconds: evaluationData.estimatedRemainingSeconds ?? null,
-        startedAt: evaluationData.startedAt || undefined,
+        startedAt: processedTask?.startedAt || task?.startedAt || evaluationData.startedAt,
+        completedAt: processedTask?.completedAt || task?.completedAt,
+        estimatedCompletionAt: processedTask?.estimatedCompletionAt || task?.estimatedCompletionAt,
         errorMessage: evaluationData.errorMessage || undefined,
         errorDetails: evaluationData.errorDetails || undefined,
         confusionMatrix: typeof evaluationData.confusionMatrix === 'string' ? 
@@ -126,7 +177,7 @@ export function TaskDisplay({ task, variant = 'grid', isSelected, onClick, extra
         predictedClassDistribution: typeof evaluationData.predictedClassDistribution === 'string' ? 
           JSON.parse(evaluationData.predictedClassDistribution) : evaluationData.predictedClassDistribution,
         isPredictedClassDistributionBalanced: evaluationData.isPredictedClassDistributionBalanced ?? null,
-        scoreResults: evaluationData.scoreResults?.items?.map(result => {
+        scoreResults: evaluationData.scoreResults?.items?.map((result: any) => {
           // Parse metadata if it's a string
           const metadata = (() => {
             try {
@@ -167,7 +218,7 @@ export function TaskDisplay({ task, variant = 'grid', isSelected, onClick, extra
           ...processedTask,
           accountId: evaluationData.id,
           stages: {
-            items: processedTask.stages?.map(stage => ({
+            items: processedTask.stages.map((stage: ProcessedTaskStage) => ({
               id: stage.id,
               name: stage.name,
               order: stage.order,
@@ -178,7 +229,7 @@ export function TaskDisplay({ task, variant = 'grid', isSelected, onClick, extra
               estimatedCompletionAt: stage.estimatedCompletionAt,
               processedItems: stage.processedItems,
               totalItems: stage.totalItems
-            })) || []
+            }))
           }
         } : null
       }

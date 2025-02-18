@@ -87,8 +87,12 @@ export function Timestamp({
     }
 
     updateTime()
-    // Only set up interval if we're not showing absolute time
-    if (!showAbsolute || variant === 'elapsed') {
+    
+    // Only set up interval if:
+    // 1. We're showing relative time and not absolute time, OR
+    // 2. We're showing elapsed time and there's no completion time
+    if ((!showAbsolute && variant === 'relative') || 
+        (variant === 'elapsed' && !completionTime)) {
       const interval = setInterval(updateTime, 1000)
       return () => clearInterval(interval)
     }
