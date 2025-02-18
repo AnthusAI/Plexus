@@ -133,12 +133,6 @@ export const TaskStatus = React.memo(({
   statusMessageDisplay = 'always',
   onCommandDisplayChange
 }: TaskStatusProps) => {
-  console.debug('TaskStatus render:', {
-    command,
-    commandDisplay,
-    variant,
-    truncateMessages
-  });
 
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
   const isInProgress = status === 'RUNNING'

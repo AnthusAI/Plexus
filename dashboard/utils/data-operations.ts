@@ -9,6 +9,8 @@ import { getClient } from './amplify-client';
 export { getClient };
 import { TASK_UPDATE_SUBSCRIPTION } from '../graphql/evaluation-queries';
 import { Hub } from 'aws-amplify/utils';
+import type { ScoreResult } from "@/types/evaluation";
+import type { AmplifyListResult } from "@/types/shared";
 
 // Define base types for nested objects
 type TaskStageType = {
@@ -253,10 +255,10 @@ type AmplifyClient = ReturnType<typeof generateClient<Schema>> & {
   };
 }
 
-export type AmplifyListResult<T> = {
-  data: T[];
+export type ModelListResult<T> = {
+  items: T[];
   nextToken?: string | null;
-}
+};
 
 let client: AmplifyClient;
 
@@ -902,7 +904,7 @@ export async function updateTask(
 }
 
 export async function listRecentEvaluations(limit: number = 100): Promise<any[]> {
-  console.log('listRecentEvaluations called with limit:', limit);
+  console.debug('listRecentEvaluations called with limit:', limit);
   try {
     const currentClient = getClient();
 
@@ -919,7 +921,7 @@ export async function listRecentEvaluations(limit: number = 100): Promise<any[]>
     }
 
     const accountId = accountResponse.data[0].id;
-    console.log('Fetching evaluations for account:', accountId);
+    console.debug('Fetching evaluations for account:', accountId);
 
     const response = await currentClient.graphql({
       query: `
@@ -1009,9 +1011,14 @@ export async function listRecentEvaluations(limit: number = 100): Promise<any[]>
                   metadata
                   explanation
                   itemId
+                  correct
                   createdAt
+                  scoringJob {
+                    id
+                    status
+                    metadata
+                  }
                 }
-                nextToken
               }
             }
             nextToken
@@ -1025,7 +1032,7 @@ export async function listRecentEvaluations(limit: number = 100): Promise<any[]>
       }
     });
 
-    console.log('GraphQL response:', {
+    console.debug('GraphQL response:', {
       hasData: isGraphQLResult(response) && !!response.data,
       hasErrors: isGraphQLResult(response) && !!response.errors,
       itemCount: isGraphQLResult(response) ? response.data?.listEvaluationByAccountIdAndUpdatedAt?.items?.length : 0,
@@ -1033,7 +1040,8 @@ export async function listRecentEvaluations(limit: number = 100): Promise<any[]>
         id: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].id,
         type: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].type,
         metrics: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].metrics,
-        task: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task
+        task: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task,
+        scoreResults: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].scoreResults
       } : null
     });
 
@@ -1074,7 +1082,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
     async function loadInitialEvaluations() {
       try {
         const response = await listRecentEvaluations(limit);
-        console.log('Initial evaluations response:', {
+        console.debug('Initial evaluations response:', {
           count: response.length,
           firstEvaluation: response[0] ? {
             id: response[0].id,
@@ -1096,7 +1104,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
 
     // Set up subscription
     try {
-      console.log('Setting up evaluation subscription...');
+      console.debug('Setting up evaluation subscription...');
       const client = getClient();
       subscriptionCleanup = (client.graphql({
         query: `
@@ -1169,7 +1177,13 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                   metadata
                   explanation
                   itemId
+                  correct
                   createdAt
+                  scoringJob {
+                    id
+                    status
+                    metadata
+                  }
                 }
               }
             }
@@ -1179,6 +1193,11 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
         next: ({ data }: { data?: { onUpdateEvaluation: any } }) => {
           if (data?.onUpdateEvaluation) {
             const updatedEvaluation = data.onUpdateEvaluation;
+            console.debug('Received evaluation update:', {
+              id: updatedEvaluation.id,
+              scoreResultsCount: updatedEvaluation.scoreResults?.items?.length,
+              firstScoreResult: updatedEvaluation.scoreResults?.items?.[0]
+            });
             evaluations = evaluations.map(evaluation => 
               evaluation.id === updatedEvaluation.id ? updatedEvaluation : evaluation
             );
@@ -1200,10 +1219,323 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
 
     // Cleanup function
     return () => {
-      console.log('Cleaning up evaluation subscription');
+      console.debug('Cleaning up evaluation subscription');
       if (subscriptionCleanup) {
         subscriptionCleanup.unsubscribe();
       }
     };
   });
+}
+
+// Update the ScoreResult type to include createdAt
+export interface LocalScoreResult {
+  id: string;
+  value: string | number;
+  confidence: number | null;
+  metadata: {
+    human_label: string | null;
+    correct: boolean;
+    human_explanation: string | null;
+    text: string | null;
+  };
+  explanation: string | null;
+  itemId: string | null;
+  createdAt: string;
+}
+
+// Add type for score results data structure
+type ScoreResultsData = {
+  data?: {
+    items: Array<Schema['ScoreResult']['type']>;
+  };
+};
+
+// Add these type definitions at the top of the file
+type RawScoreResult = {
+  id: string;
+  value: string | number;
+  confidence: number | null;
+  metadata: any;
+  explanation: string | null;
+  itemId: string | null;
+  correct: boolean;
+  createdAt: string;
+  scoringJob?: {
+    id: string;
+    status: string;
+    metadata: any;
+  };
+};
+
+type RawScoreResults = {
+  items: RawScoreResult[];
+};
+
+// Update the transformEvaluation function's score results handling
+export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
+  console.log('TRANSFORM EVALUATION CALLED - TEST'); // Simple test log
+  
+  console.debug('transformEvaluation entry point:', {
+    evaluationId: evaluation?.id,
+    hasScoreResults: !!evaluation?.scoreResults,
+    scoreResultsType: evaluation?.scoreResults ? typeof evaluation.scoreResults : 'undefined',
+    rawScoreResults: evaluation?.scoreResults,
+    rawScoreResultsKeys: evaluation?.scoreResults ? Object.keys(evaluation.scoreResults) : [],
+    fullEvaluation: evaluation // Log the full evaluation object
+  });
+
+  if (!evaluation) {
+    console.debug('Early return: evaluation is null');
+    return null;
+  }
+
+  console.debug('About to get rawTaskResponse');
+  const rawTaskResponse = getValueFromLazyLoader(evaluation.task);
+  console.debug('rawTaskResponse:', rawTaskResponse);
+
+  const rawTask = rawTaskResponse?.data;
+  console.debug('rawTask:', rawTask);
+
+  const rawStages = getValueFromLazyLoader(rawTask?.stages);
+  console.debug('rawStages:', rawStages);
+  
+  console.debug('About to start score results transformation');
+  
+  // Transform score results with improved error handling and logging
+  const scoreResults = (() => {
+    try {
+      console.debug('Inside score results transformation try block');
+      console.debug('Starting score results transformation - CHECKPOINT 1:', {
+        hasScoreResults: !!evaluation.scoreResults,
+        scoreResultsType: typeof evaluation.scoreResults,
+        rawValue: evaluation.scoreResults,
+        isFunction: typeof evaluation.scoreResults === 'function'
+      });
+
+      // First unwrap the lazy-loaded score results
+      const rawResultsResponse = getValueFromLazyLoader(evaluation.scoreResults);
+      console.debug('After getValueFromLazyLoader - CHECKPOINT 2:', {
+        hasResponse: !!rawResultsResponse,
+        responseType: typeof rawResultsResponse,
+        rawResponse: rawResultsResponse,
+        responseKeys: rawResultsResponse ? Object.keys(rawResultsResponse) : []
+      });
+
+      // Extract items from the response structure
+      const items = (() => {
+        if (!rawResultsResponse) {
+          console.debug('CHECKPOINT 3A: No rawResultsResponse');
+          return undefined;
+        }
+        
+        // Handle both direct items array and nested data structure
+        if (Array.isArray(rawResultsResponse)) {
+          console.debug('CHECKPOINT 3B: Found items as direct array', {
+            itemCount: rawResultsResponse.length,
+            firstItem: rawResultsResponse[0]
+          });
+          return rawResultsResponse as RawScoreResult[];
+        }
+        
+        const response = rawResultsResponse as any;
+        if (Array.isArray(response.items)) {
+          console.debug('CHECKPOINT 3C: Found items directly in response', {
+            itemCount: response.items.length,
+            firstItem: response.items[0]
+          });
+          return response.items as RawScoreResult[];
+        }
+        if (response.data?.items && Array.isArray(response.data.items)) {
+          console.debug('CHECKPOINT 3D: Found items in data property', {
+            itemCount: response.data.items.length,
+            firstItem: response.data.items[0]
+          });
+          return response.data.items as RawScoreResult[];
+        }
+        console.debug('CHECKPOINT 3E: Could not find items in response structure:', {
+          responseKeys: Object.keys(response),
+          hasData: 'data' in response,
+          dataKeys: response.data ? Object.keys(response.data) : null,
+          fullResponse: response
+        });
+        return undefined;
+      })();
+
+      console.debug('After items extraction - CHECKPOINT 4:', {
+        hasItems: !!items,
+        itemCount: items?.length,
+        firstItem: items?.[0]
+      });
+
+      if (!items?.length) {
+        console.debug('CHECKPOINT 5: No score result items found to transform');
+        return undefined;
+      }
+
+      const transformedItems = items.map((result: RawScoreResult, index: number) => {
+        console.debug(`Transforming score result ${index} - CHECKPOINT 6:`, {
+          id: result.id,
+          value: result.value,
+          metadata: result.metadata,
+          rawResult: result
+        });
+
+        // Parse metadata if it's a string
+        const metadata = (() => {
+          try {
+            if (typeof result.metadata === 'string') {
+              console.debug(`CHECKPOINT 7A: Parsing metadata string for result ${result.id}`);
+              const parsed = JSON.parse(result.metadata);
+              if (typeof parsed === 'string') {
+                console.debug(`CHECKPOINT 7B: Double parsing metadata for result ${result.id}`);
+                return JSON.parse(parsed);
+              }
+              return parsed;
+            }
+            return result.metadata || {};
+          } catch (e) {
+            console.error(`CHECKPOINT 7C: Error parsing metadata for result ${result.id}:`, e);
+            return {};
+          }
+        })();
+
+        return {
+          id: result.id,
+          value: result.value,
+          confidence: result.confidence ?? null,
+          explanation: result.explanation ?? null,
+          metadata: {
+            human_label: metadata.human_label ?? null,
+            correct: Boolean(metadata.correct ?? result.correct),
+            human_explanation: metadata.human_explanation ?? null,
+            text: metadata.text ?? null
+          },
+          itemId: result.itemId,
+          createdAt: result.createdAt || new Date().toISOString()
+        };
+      });
+
+      console.debug('Final transformed score results - CHECKPOINT 8:', {
+        count: transformedItems.length,
+        items: transformedItems
+      });
+
+      return { items: transformedItems };
+    } catch (error: unknown) {
+      console.error('Error in score results transformation - CHECKPOINT 9:', error);
+      if (error instanceof Error) {
+        console.error('Error details:', {
+          errorName: error.name,
+          errorMessage: error.message,
+          errorStack: error.stack
+        });
+      }
+      return undefined;
+    }
+  })();
+
+  const task: AmplifyTask | null = rawTask ? {
+    id: rawTask.id,
+    command: rawTask.command,
+    type: rawTask.type,
+    status: rawTask.status,
+    target: rawTask.target,
+    stages: { 
+      data: { 
+        items: (rawStages?.data || []).map(stage => ({
+          id: stage.id,
+          name: stage.name,
+          order: stage.order,
+          status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+          processedItems: stage.processedItems ?? undefined,
+          totalItems: stage.totalItems ?? undefined,
+          startedAt: stage.startedAt ?? undefined,
+          completedAt: stage.completedAt ?? undefined,
+          estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+          statusMessage: stage.statusMessage ?? undefined
+        }))
+      }
+    }
+  } : null;
+
+  // Add debug logging for the final evaluation object
+  const transformedEvaluation: Evaluation = {
+    id: evaluation.id,
+    type: evaluation.type,
+    scorecard: evaluation.scorecard,
+    score: evaluation.score,
+    createdAt: evaluation.createdAt,
+    metrics: typeof evaluation.metrics === 'string' ? 
+      JSON.parse(evaluation.metrics) : evaluation.metrics,
+    metricsExplanation: evaluation.metricsExplanation,
+    accuracy: evaluation.accuracy,
+    processedItems: evaluation.processedItems,
+    totalItems: evaluation.totalItems,
+    inferences: evaluation.inferences,
+    cost: evaluation.cost,
+    status: evaluation.status,
+    elapsedSeconds: evaluation.elapsedSeconds,
+    estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds,
+    startedAt: evaluation.startedAt,
+    errorMessage: evaluation.errorMessage,
+    errorDetails: evaluation.errorDetails,
+    confusionMatrix: typeof evaluation.confusionMatrix === 'string' ? 
+      JSON.parse(evaluation.confusionMatrix) : evaluation.confusionMatrix,
+    datasetClassDistribution: typeof evaluation.datasetClassDistribution === 'string' ?
+      JSON.parse(evaluation.datasetClassDistribution) : evaluation.datasetClassDistribution,
+    isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
+    predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ?
+      JSON.parse(evaluation.predictedClassDistribution) : evaluation.predictedClassDistribution,
+    isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
+    task,
+    scoreResults
+  };
+
+  console.debug('Transformed evaluation:', {
+    id: transformedEvaluation.id,
+    hasScoreResults: !!transformedEvaluation.scoreResults,
+    scoreResultsCount: transformedEvaluation.scoreResults?.items?.length,
+    firstScoreResult: transformedEvaluation.scoreResults?.items?.[0],
+    rawScoreResults: evaluation.scoreResults
+  });
+
+  return transformedEvaluation;
+}
+
+// Add to the existing types at the top
+export type Evaluation = {
+  id: string
+  type: string
+  scorecard?: { name: string } | null
+  score?: { name: string } | null
+  createdAt: string
+  metrics?: any
+  metricsExplanation?: string | null
+  accuracy?: number | null
+  processedItems?: number | null
+  totalItems?: number | null
+  inferences?: number | null
+  cost?: number | null
+  status?: string | null
+  elapsedSeconds?: number | null
+  estimatedRemainingSeconds?: number | null
+  startedAt?: string | null
+  errorMessage?: string | null
+  errorDetails?: any
+  confusionMatrix?: any
+  scoreGoal?: string | null
+  datasetClassDistribution?: any
+  isDatasetClassDistributionBalanced?: boolean | null
+  predictedClassDistribution?: any
+  isPredictedClassDistributionBalanced?: boolean | null
+  task: AmplifyTask | null
+  scoreResults?: {
+    items?: Array<{
+      id: string
+      value: string | number
+      confidence: number | null
+      metadata: any
+      itemId: string | null
+    }>
+  } | null
 }

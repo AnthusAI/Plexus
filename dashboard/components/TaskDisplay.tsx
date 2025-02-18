@@ -51,6 +51,8 @@ interface TaskDisplayProps {
   isFullWidth?: boolean
   onToggleFullWidth?: () => void
   onClose?: () => void
+  selectedScoreResultId?: string | null
+  onSelectScoreResult?: (id: string | null) => void
 }
 
 function calculateProgress(processedItems?: number | null, totalItems?: number | null): number {
@@ -58,7 +60,7 @@ function calculateProgress(processedItems?: number | null, totalItems?: number |
   return Math.round((processedItems / totalItems) * 100)
 }
 
-export function TaskDisplay({ task, variant = 'grid', isSelected, onClick, extra = false, evaluationData, controlButtons, isFullWidth, onToggleFullWidth, onClose }: TaskDisplayProps) {
+export function TaskDisplay({ task, variant = 'grid', isSelected, onClick, extra = false, evaluationData, controlButtons, isFullWidth, onToggleFullWidth, onClose, selectedScoreResultId, onSelectScoreResult }: TaskDisplayProps) {
   const [processedTask, setProcessedTask] = useState<ProcessedTask | null>(null)
 
   useEffect(() => {
@@ -116,6 +118,51 @@ export function TaskDisplay({ task, variant = 'grid', isSelected, onClick, extra
         errorDetails: evaluationData.errorDetails || undefined,
         confusionMatrix: typeof evaluationData.confusionMatrix === 'string' ? 
           JSON.parse(evaluationData.confusionMatrix) : evaluationData.confusionMatrix,
+        metricsExplanation: evaluationData.metricsExplanation || null,
+        scoreGoal: evaluationData.scoreGoal || null,
+        datasetClassDistribution: typeof evaluationData.datasetClassDistribution === 'string' ? 
+          JSON.parse(evaluationData.datasetClassDistribution) : evaluationData.datasetClassDistribution,
+        isDatasetClassDistributionBalanced: evaluationData.isDatasetClassDistributionBalanced ?? null,
+        predictedClassDistribution: typeof evaluationData.predictedClassDistribution === 'string' ? 
+          JSON.parse(evaluationData.predictedClassDistribution) : evaluationData.predictedClassDistribution,
+        isPredictedClassDistributionBalanced: evaluationData.isPredictedClassDistributionBalanced ?? null,
+        scoreResults: evaluationData.scoreResults?.items?.map(result => {
+          // Parse metadata if it's a string
+          const metadata = (() => {
+            try {
+              if (typeof result.metadata === 'string') {
+                const parsed = JSON.parse(result.metadata);
+                // Handle double-stringified JSON
+                if (typeof parsed === 'string') {
+                  return JSON.parse(parsed);
+                }
+                return parsed;
+              }
+              return result.metadata || {};
+            } catch (e) {
+              console.error('Error parsing score result metadata:', e);
+              return {};
+            }
+          })();
+
+          // Extract results from nested structure if present
+          const firstResultKey = metadata?.results ? Object.keys(metadata.results)[0] : null;
+          const scoreResult = firstResultKey && metadata.results ? metadata.results[firstResultKey] : null;
+
+          return {
+            id: result.id,
+            value: result.value,
+            confidence: result.confidence ?? null,
+            explanation: scoreResult?.explanation ?? metadata.explanation ?? null,
+            metadata: {
+              human_label: scoreResult?.metadata?.human_label ?? metadata.human_label ?? null,
+              correct: Boolean(scoreResult?.metadata?.correct ?? metadata.correct),
+              human_explanation: scoreResult?.metadata?.human_explanation ?? metadata.human_explanation ?? null,
+              text: scoreResult?.metadata?.text ?? metadata.text ?? null
+            },
+            itemId: result.itemId
+          };
+        }) || [],
         task: processedTask ? {
           ...processedTask,
           accountId: evaluationData.id,
@@ -133,14 +180,7 @@ export function TaskDisplay({ task, variant = 'grid', isSelected, onClick, extra
               totalItems: stage.totalItems
             })) || []
           }
-        } : null,
-        scoreResults: evaluationData.scoreResults?.items?.map(result => ({
-          id: result.id,
-          value: result.value,
-          confidence: result.confidence,
-          metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
-          itemId: result.itemId
-        })) || []
+        } : null
       }
     },
     onClick,
@@ -149,7 +189,9 @@ export function TaskDisplay({ task, variant = 'grid', isSelected, onClick, extra
     onToggleFullWidth,
     onClose,
     isSelected,
-    extra
+    extra,
+    selectedScoreResultId,
+    onSelectScoreResult
   } as EvaluationTaskProps
 
   return <EvaluationTask {...taskProps} variant={variant} />
