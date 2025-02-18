@@ -12,6 +12,7 @@ export function TaskDispatchButton({ config }: { config: TaskDispatchConfig }) {
   const [selectedAction, setSelectedAction] = useState<TaskAction | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
   const handleActionSelect = (action: TaskAction) => {
     setSelectedAction(action)
@@ -25,31 +26,42 @@ export function TaskDispatchButton({ config }: { config: TaskDispatchConfig }) {
     setIsDropdownOpen(false)
   }
 
-  const handleDispatch = async (command: string, target?: string) => {
+  const handleDispatch = async () => {
+    if (!selectedAction?.name || !selectedAction?.command) {
+      toast.error("Invalid action configuration");
+      return;
+    }
+
+    // Get the command string, handling both direct strings and function commands
+    const commandStr = typeof selectedAction.command === 'function' 
+      ? selectedAction.command({}) 
+      : selectedAction.command;
+
     try {
-      if (!selectedAction) return
-
-      const type = selectedAction.name === 'Accuracy' ? 'Accuracy Evaluation' : selectedAction.name.toLowerCase()
-
-      const task = await createTask(
-        command,
-        type,
-        target || selectedAction.target
-      )
-      
+      setIsLoading(true);
+      const task = await createTask({
+        type: selectedAction.name === 'Accuracy' ? 'Accuracy Evaluation' : selectedAction.name.toLowerCase(),
+        target: selectedAction.target || '',
+        command: commandStr,
+        accountId: 'call-criteria',
+        dispatchStatus: 'PENDING',
+        status: 'PENDING'
+      });
       if (task) {
         toast.success("Task announced", {
-          description: <span className="font-mono text-sm truncate block">{command}</span>
-        })
+          description: <span className="font-mono text-sm truncate block">{commandStr}</span>
+        });
       } else {
-        toast.error("Failed to dispatch task")
+        toast.error("Failed to dispatch task");
       }
     } catch (error) {
-      console.error("Error dispatching task:", error)
-      toast.error("Error dispatching task")
+      console.error("Error dispatching task:", error);
+      toast.error("Error dispatching task");
+    } finally {
+      setIsLoading(false);
     }
-    handleCloseDialog()
-  }
+    handleCloseDialog();
+  };
 
   // Get the dialog component for the selected action
   const DialogComponent = selectedAction ? config.dialogs[selectedAction.dialogType] : null
@@ -58,7 +70,7 @@ export function TaskDispatchButton({ config }: { config: TaskDispatchConfig }) {
     <>
       <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="bg-card hover:bg-accent">
+          <Button variant="ghost" className="bg-card hover:bg-accent" disabled={isLoading}>
             {config.buttonLabel} <ChevronDown className="ml-2 h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
