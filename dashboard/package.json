@@ -22,6 +22,8 @@
     "ci": "npm run ci:typecheck && npm run ci:unit && npm run ci:storybook"
   },
   "dependencies": {
+    "@aws-amplify/api": "^6.3.0",
+    "@aws-amplify/api-graphql": "^4.7.4",
     "@aws-amplify/ui-react": "^6.1.13",
     "@aws-sdk/client-dynamodb": "^3.0.0",
     "@aws-sdk/client-sqs": "^3.0.0",
@@ -81,7 +83,8 @@
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.5.2",
     "tailwindcss": "^3.3.0",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "zen-observable-ts": "^1.1.0"
   },
   "devDependencies": {
     "@aws-amplify/backend": "^1.8.0",

@@ -53,7 +53,7 @@ const Section: React.FC<SectionProps> = ({
   return (
     <section 
       className={`${isFramed || isHero ? '' : 'py-8'} ${!isFramed && !isHero ? (containerClassName || 'bg-background') : ''}`}
-      style={isFramed || isHero ? { background: 'var(--frame-bg)' } : undefined}
+      style={isFramed || isHero ? { background: 'var(--frame)' } : undefined}
     >
       <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto">
         <div className={`py-4`}>
