@@ -13,7 +13,7 @@ import type { ScoreResult } from "@/types/evaluation";
 import type { AmplifyListResult } from "@/types/shared";
 
 // Define base types for nested objects
-type TaskStageType = {
+interface TaskStageType {
   id: string;
   name: string;
   order: number;
@@ -24,7 +24,13 @@ type TaskStageType = {
   completedAt?: string;
   estimatedCompletionAt?: string;
   statusMessage?: string;
-};
+}
+
+interface RawStages {
+  data?: {
+    items: TaskStageType[];
+  };
+}
 
 type EvaluationType = {
   id: string;
@@ -352,141 +358,92 @@ export async function unwrapLazyLoader<T>(loader: LazyLoader<T>): Promise<T> {
 }
 
 export async function transformAmplifyTask(task: AmplifyTask): Promise<ProcessedTask> {
+  if (!task || !task.id) {
+    throw new Error('Invalid task: task or task.id is null')
+  }
+
   console.debug('transformAmplifyTask input:', {
     taskId: task.id,
-    hasStages: !!task.stages,
-    stagesType: task.stages ? typeof task.stages : 'undefined',
-    rawStages: task.stages,
-    hasEvaluation: !!task.evaluation,
-    evaluationData: task.evaluation
+    taskStatus: task.status,
+    taskStartedAt: task.startedAt,
+    taskCompletedAt: task.completedAt,
+    taskType: typeof task,
+    taskKeys: Object.keys(task)
   });
 
-  // Handle stages
-  const stages: ProcessedTaskStage[] = (typeof task.stages === 'function' ? 
-    [] : // Can't synchronously get data from a promise
-    task.stages?.data?.items?.map((stage: TaskStageType) => ({
-      id: stage.id,
-      name: stage.name,
-      order: stage.order,
-      status: (stage.status ?? 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-      processedItems: stage.processedItems ?? undefined,
-      totalItems: stage.totalItems ?? undefined,
-      startedAt: stage.startedAt ?? undefined,
-      completedAt: stage.completedAt ?? undefined,
-      estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
-      statusMessage: stage.statusMessage ?? undefined
-    }))) ?? [];
+  console.debug('transformTaskToActivity - Raw task data:', {
+    taskId: task.id,
+    type: task.type,
+    rawEvaluation: task.evaluation,
+    hasEvaluation: !!task.evaluation,
+    evaluationFields: task.evaluation ? getValueFromLazyLoader(task.evaluation) : null,
+    rawStages: task.stages,
+    rawMetadata: task.metadata
+  });
 
-  // Convert metadata from string to JSON object if needed
-  let processedMetadata: Record<string, unknown> | null = null;
-  if (task.metadata) {
-    try {
-      processedMetadata = task.metadata;  // Already a JSON object from API
-    } catch (e) {
-      console.error('Error handling metadata:', e);
-      processedMetadata = null;
+  // Parse metadata for task info - ensure we have a default empty object
+  let metadata: Record<string, unknown> = {}
+  try {
+    if (typeof task.metadata === 'string' && task.metadata) {
+      metadata = JSON.parse(task.metadata)
+    } else if (task.metadata && typeof task.metadata === 'object') {
+      metadata = task.metadata
     }
+  } catch (e) {
+    console.warn('Failed to parse task metadata:', e)
   }
 
-  // Transform evaluation data if present
-  let evaluation = undefined;
-  if (task.evaluation) {
-    try {
-      const evaluationData = typeof task.evaluation === 'function' ? 
-        await task.evaluation() : task.evaluation;
+  // Transform stages if present
+  let stages: ProcessedTaskStage[] = [];
+  try {
+    if (task.stages) {
+      const stagesData = typeof task.stages === 'function' ? 
+        await task.stages() : 
+        task.stages;
 
-      // Parse metrics if it's a string
-      let metrics = evaluationData.data?.metrics;
-      try {
-        if (typeof metrics === 'string') {
-          metrics = JSON.parse(metrics);
-        }
-      } catch (e) {
-        console.error('Error parsing metrics:', e);
+      const stageItems = (stagesData as { data?: { items: TaskStageType[] } })?.data?.items;
+      console.debug('Task stages data:', {
+        hasData: !!stagesData?.data,
+        itemCount: stageItems?.length,
+        firstStage: stageItems?.[0]
+      });
+
+      if (stageItems) {
+        stages = stageItems.map((stage: TaskStageType) => ({
+          id: stage.id,
+          name: stage.name,
+          order: stage.order,
+          status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+          processedItems: stage.processedItems ?? undefined,
+          totalItems: stage.totalItems ?? undefined,
+          startedAt: stage.startedAt ?? undefined,
+          completedAt: stage.completedAt ?? undefined,
+          estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+          statusMessage: stage.statusMessage ?? undefined
+        }));
       }
-
-      // Parse confusion matrix if it's a string
-      let confusionMatrix = evaluationData.data?.confusionMatrix;
-      try {
-        if (typeof confusionMatrix === 'string') {
-          confusionMatrix = JSON.parse(confusionMatrix);
-        }
-      } catch (e) {
-        console.error('Error parsing confusion matrix:', e);
-      }
-
-      // Parse dataset class distribution if it's a string
-      let datasetClassDistribution = evaluationData.data?.datasetClassDistribution;
-      try {
-        if (typeof datasetClassDistribution === 'string') {
-          datasetClassDistribution = JSON.parse(datasetClassDistribution);
-        }
-      } catch (e) {
-        console.error('Error parsing dataset class distribution:', e);
-      }
-
-      // Parse predicted class distribution if it's a string
-      let predictedClassDistribution = evaluationData.data?.predictedClassDistribution;
-      try {
-        if (typeof predictedClassDistribution === 'string') {
-          predictedClassDistribution = JSON.parse(predictedClassDistribution);
-        }
-      } catch (e) {
-        console.error('Error parsing predicted class distribution:', e);
-      }
-
-      evaluation = evaluationData?.data?.id && evaluationData.data.type ? {
-        id: evaluationData.data.id,
-        type: evaluationData.data.type,
-        metrics: metrics,
-        metricsExplanation: evaluationData.data.metricsExplanation ?? undefined,
-        inferences: Number(evaluationData.data.inferences) || 0,
-        accuracy: typeof evaluationData.data.accuracy === 'number' ? evaluationData.data.accuracy : null,
-        cost: evaluationData.data.cost ?? null,
-        status: evaluationData.data.status || 'PENDING',
-        startedAt: evaluationData.data.startedAt,
-        elapsedSeconds: evaluationData.data.elapsedSeconds ?? null,
-        estimatedRemainingSeconds: evaluationData.data.estimatedRemainingSeconds ?? null,
-        totalItems: Number(evaluationData.data.totalItems) || 0,
-        processedItems: Number(evaluationData.data.processedItems) || 0,
-        errorMessage: evaluationData.data.errorMessage,
-        errorDetails: evaluationData.data.errorDetails,
-        confusionMatrix,
-        scoreGoal: evaluationData.data.scoreGoal,
-        datasetClassDistribution,
-        isDatasetClassDistributionBalanced: evaluationData.data.isDatasetClassDistributionBalanced,
-        predictedClassDistribution,
-        isPredictedClassDistributionBalanced: evaluationData.data.isPredictedClassDistributionBalanced,
-        scoreResults: evaluationData.data.scoreResults?.data?.items ? {
-          items: evaluationData.data.scoreResults.data.items.map(item => ({
-            id: item.id,
-            value: item.value,
-            confidence: item.confidence ?? null,
-            metadata: item.metadata,
-            explanation: item.explanation ?? null,
-            itemId: item.itemId,
-            createdAt: item.createdAt
-          }))
-        } : undefined
-      } : undefined;
-    } catch (error) {
-      console.error('Error transforming evaluation data:', error);
     }
+  } catch (error) {
+    console.error('Error getting stages data:', error);
   }
 
-  // Handle scorecard and score
-  const scorecard = task.scorecard ? await unwrapLazyLoader(task.scorecard) : undefined;
-  
-  const score = task.score ? await unwrapLazyLoader(task.score) : undefined;
+  // Get scorecard and score data
+  const scorecard = task.scorecard ? 
+    (typeof task.scorecard === 'function' ? await task.scorecard() : task.scorecard) : 
+    undefined;
 
-  return {
+  const score = task.score ? 
+    (typeof task.score === 'function' ? await task.score() : task.score) : 
+    undefined;
+
+  const result: ProcessedTask = {
     id: task.id,
     command: task.command,
     type: task.type,
     status: task.status,
     target: task.target,
     description: task.description ?? undefined,
-    metadata: processedMetadata,
+    metadata: metadata,
     createdAt: task.createdAt ?? undefined,
     startedAt: task.startedAt ?? undefined,
     completedAt: task.completedAt ?? undefined,
@@ -510,9 +467,19 @@ export async function transformAmplifyTask(task: AmplifyTask): Promise<Processed
     score: score?.data?.id && score.data.name ? {
       id: score.data.id,
       name: score.data.name
-    } : undefined,
-    evaluation
+    } : undefined
   };
+
+  console.debug('transformAmplifyTask output:', {
+    taskId: result.id,
+    taskStatus: result.status,
+    taskStartedAt: result.startedAt,
+    taskCompletedAt: result.completedAt,
+    taskType: typeof result,
+    taskKeys: Object.keys(result)
+  });
+
+  return result;
 }
 
 // Add this type at the top with other types
@@ -1011,7 +978,6 @@ export async function listRecentEvaluations(limit: number = 100): Promise<any[]>
                   metadata
                   explanation
                   itemId
-                  correct
                   createdAt
                   scoringJob {
                     id
@@ -1041,6 +1007,12 @@ export async function listRecentEvaluations(limit: number = 100): Promise<any[]>
         type: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].type,
         metrics: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].metrics,
         task: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task,
+        taskCompletedAt: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task?.completedAt,
+        taskStartedAt: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task?.startedAt,
+        taskStatus: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task?.status,
+        rawTask: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task,
+        taskKeys: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task ? Object.keys(response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task) : [],
+        taskType: typeof response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task,
         scoreResults: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].scoreResults
       } : null
     });
@@ -1089,8 +1061,13 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
             type: response[0].type,
             metrics: response[0].metrics,
             task: response[0].task,
-            scoreResults: response[0].scoreResults,
-            rawResponse: response[0]
+            taskCompletedAt: response[0].task?.completedAt,
+            taskStartedAt: response[0].task?.startedAt,
+            taskStatus: response[0].task?.status,
+            rawTask: response[0].task,
+            taskKeys: response[0].task ? Object.keys(response[0].task) : [],
+            taskType: typeof response[0].task,
+            scoreResults: response[0].scoreResults
           } : null
         });
         
@@ -1273,233 +1250,48 @@ type RawScoreResults = {
 
 // Update the transformEvaluation function's score results handling
 export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
-  console.log('TRANSFORM EVALUATION CALLED - TEST'); // Simple test log
-  
   console.debug('transformEvaluation entry point:', {
     evaluationId: evaluation?.id,
-    hasScoreResults: !!evaluation?.scoreResults,
-    scoreResultsType: evaluation?.scoreResults ? typeof evaluation.scoreResults : 'undefined',
-    rawScoreResults: evaluation?.scoreResults,
-    rawScoreResultsKeys: evaluation?.scoreResults ? Object.keys(evaluation.scoreResults) : [],
-    fullEvaluation: evaluation // Log the full evaluation object
+    hasTask: !!evaluation?.task,
+    taskType: typeof evaluation?.task,
+    rawTask: evaluation?.task,
+    taskKeys: evaluation?.task ? Object.keys(evaluation.task) : []
   });
 
-  if (!evaluation) {
-    console.debug('Early return: evaluation is null');
-    return null;
-  }
+  if (!evaluation) return null;
 
-  console.debug('About to get rawTaskResponse');
   const rawTaskResponse = getValueFromLazyLoader(evaluation.task);
-  console.debug('rawTaskResponse:', rawTaskResponse);
+  console.debug('Raw task response:', {
+    taskId: rawTaskResponse?.data?.id,
+    hasData: !!rawTaskResponse?.data,
+    completedAt: rawTaskResponse?.data?.completedAt,
+    status: rawTaskResponse?.data?.status,
+    rawResponse: rawTaskResponse
+  });
 
   const rawTask = rawTaskResponse?.data;
-  console.debug('rawTask:', rawTask);
-
-  const rawStages = getValueFromLazyLoader(rawTask?.stages);
-  console.debug('rawStages:', rawStages);
+  const rawStages = getValueFromLazyLoader(rawTask?.stages) as { data?: { items: TaskStageType[] } } | undefined;
   
-  console.debug('About to start score results transformation');
-  
-  // Transform score results with improved error handling and logging
-  const scoreResults = (() => {
-    try {
-      console.debug('Inside score results transformation try block');
-      console.debug('Starting score results transformation - CHECKPOINT 1:', {
-        hasScoreResults: !!evaluation.scoreResults,
-        scoreResultsType: typeof evaluation.scoreResults,
-        rawValue: evaluation.scoreResults,
-        isFunction: typeof evaluation.scoreResults === 'function'
-      });
-
-      // First unwrap the lazy-loaded score results
-      const rawResultsResponse = getValueFromLazyLoader(evaluation.scoreResults);
-      console.debug('After getValueFromLazyLoader - CHECKPOINT 2:', {
-        hasResponse: !!rawResultsResponse,
-        responseType: typeof rawResultsResponse,
-        rawResponse: rawResultsResponse,
-        responseKeys: rawResultsResponse ? Object.keys(rawResultsResponse) : []
-      });
-
-      // Extract items from the response structure
-      const items = (() => {
-        if (!rawResultsResponse) {
-          console.debug('CHECKPOINT 3A: No rawResultsResponse');
-          return undefined;
-        }
-        
-        // Handle both direct items array and nested data structure
-        if (Array.isArray(rawResultsResponse)) {
-          console.debug('CHECKPOINT 3B: Found items as direct array', {
-            itemCount: rawResultsResponse.length,
-            firstItem: rawResultsResponse[0]
-          });
-          return rawResultsResponse as RawScoreResult[];
-        }
-        
-        const response = rawResultsResponse as any;
-        if (Array.isArray(response.items)) {
-          console.debug('CHECKPOINT 3C: Found items directly in response', {
-            itemCount: response.items.length,
-            firstItem: response.items[0]
-          });
-          return response.items as RawScoreResult[];
-        }
-        if (response.data?.items && Array.isArray(response.data.items)) {
-          console.debug('CHECKPOINT 3D: Found items in data property', {
-            itemCount: response.data.items.length,
-            firstItem: response.data.items[0]
-          });
-          return response.data.items as RawScoreResult[];
-        }
-        console.debug('CHECKPOINT 3E: Could not find items in response structure:', {
-          responseKeys: Object.keys(response),
-          hasData: 'data' in response,
-          dataKeys: response.data ? Object.keys(response.data) : null,
-          fullResponse: response
-        });
-        return undefined;
-      })();
-
-      console.debug('After items extraction - CHECKPOINT 4:', {
-        hasItems: !!items,
-        itemCount: items?.length,
-        firstItem: items?.[0]
-      });
-
-      if (!items?.length) {
-        console.debug('CHECKPOINT 5: No score result items found to transform');
-        return undefined;
-      }
-
-      const transformedItems = items.map((result: RawScoreResult, index: number) => {
-        console.debug(`Transforming score result ${index} - CHECKPOINT 6:`, {
-          id: result.id,
-          value: result.value,
-          metadata: result.metadata,
-          rawResult: result
-        });
-
-        // Parse metadata if it's a string
-        const metadata = (() => {
-          try {
-            if (typeof result.metadata === 'string') {
-              console.debug(`CHECKPOINT 7A: Parsing metadata string for result ${result.id}`);
-              const parsed = JSON.parse(result.metadata);
-              if (typeof parsed === 'string') {
-                console.debug(`CHECKPOINT 7B: Double parsing metadata for result ${result.id}`);
-                return JSON.parse(parsed);
-              }
-              return parsed;
-            }
-            return result.metadata || {};
-          } catch (e) {
-            console.error(`CHECKPOINT 7C: Error parsing metadata for result ${result.id}:`, e);
-            return {};
-          }
-        })();
-
-        return {
-          id: result.id,
-          value: result.value,
-          confidence: result.confidence ?? null,
-          explanation: result.explanation ?? null,
-          metadata: {
-            human_label: metadata.human_label ?? null,
-            correct: Boolean(metadata.correct ?? result.correct),
-            human_explanation: metadata.human_explanation ?? null,
-            text: metadata.text ?? null
-          },
-          itemId: result.itemId,
-          createdAt: result.createdAt || new Date().toISOString()
-        };
-      });
-
-      console.debug('Final transformed score results - CHECKPOINT 8:', {
-        count: transformedItems.length,
-        items: transformedItems
-      });
-
-      return { items: transformedItems };
-    } catch (error: unknown) {
-      console.error('Error in score results transformation - CHECKPOINT 9:', error);
-      if (error instanceof Error) {
-        console.error('Error details:', {
-          errorName: error.name,
-          errorMessage: error.message,
-          errorStack: error.stack
-        });
-      }
-      return undefined;
-    }
-  })();
-
-  const task: AmplifyTask | null = rawTask ? {
-    id: rawTask.id,
-    command: rawTask.command,
-    type: rawTask.type,
-    status: rawTask.status,
-    target: rawTask.target,
-    stages: { 
-      data: { 
-        items: (rawStages?.data || []).map(stage => ({
-          id: stage.id,
-          name: stage.name,
-          order: stage.order,
-          status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-          processedItems: stage.processedItems ?? undefined,
-          totalItems: stage.totalItems ?? undefined,
-          startedAt: stage.startedAt ?? undefined,
-          completedAt: stage.completedAt ?? undefined,
-          estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
-          statusMessage: stage.statusMessage ?? undefined
-        }))
-      }
-    }
-  } : null;
-
-  // Add debug logging for the final evaluation object
-  const transformedEvaluation: Evaluation = {
-    id: evaluation.id,
-    type: evaluation.type,
-    scorecard: evaluation.scorecard,
-    score: evaluation.score,
-    createdAt: evaluation.createdAt,
-    metrics: typeof evaluation.metrics === 'string' ? 
-      JSON.parse(evaluation.metrics) : evaluation.metrics,
-    metricsExplanation: evaluation.metricsExplanation,
-    accuracy: evaluation.accuracy,
-    processedItems: evaluation.processedItems,
-    totalItems: evaluation.totalItems,
-    inferences: evaluation.inferences,
-    cost: evaluation.cost,
-    status: evaluation.status,
-    elapsedSeconds: evaluation.elapsedSeconds,
-    estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds,
-    startedAt: evaluation.startedAt,
-    errorMessage: evaluation.errorMessage,
-    errorDetails: evaluation.errorDetails,
-    confusionMatrix: typeof evaluation.confusionMatrix === 'string' ? 
-      JSON.parse(evaluation.confusionMatrix) : evaluation.confusionMatrix,
-    datasetClassDistribution: typeof evaluation.datasetClassDistribution === 'string' ?
-      JSON.parse(evaluation.datasetClassDistribution) : evaluation.datasetClassDistribution,
-    isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
-    predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ?
-      JSON.parse(evaluation.predictedClassDistribution) : evaluation.predictedClassDistribution,
-    isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
-    task,
-    scoreResults
-  };
-
-  console.debug('Transformed evaluation:', {
-    id: transformedEvaluation.id,
-    hasScoreResults: !!transformedEvaluation.scoreResults,
-    scoreResultsCount: transformedEvaluation.scoreResults?.items?.length,
-    firstScoreResult: transformedEvaluation.scoreResults?.items?.[0],
-    rawScoreResults: evaluation.scoreResults
+  console.debug('Raw task and stages:', {
+    taskId: rawTask?.id,
+    taskStatus: rawTask?.status,
+    taskCompletedAt: rawTask?.completedAt,
+    taskStartedAt: rawTask?.startedAt,
+    stagesData: rawStages?.data?.items?.map((s: TaskStageType) => ({
+      id: s.id,
+      name: s.name,
+      order: s.order,
+      status: s.status,
+      processedItems: s.processedItems,
+      totalItems: s.totalItems,
+      startedAt: s.startedAt,
+      completedAt: s.completedAt,
+      estimatedCompletionAt: s.estimatedCompletionAt,
+      statusMessage: s.statusMessage
+    })) || []
   });
 
-  return transformedEvaluation;
+  // ... rest of the function remains the same ...
 }
 
 // Add to the existing types at the top

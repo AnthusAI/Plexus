@@ -1,6 +1,6 @@
 "use client"
-import React, { useMemo, useCallback, useRef } from "react"
-import { useState, useEffect } from "react"
+import React from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useInView } from 'react-intersection-observer'
 import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -107,10 +107,65 @@ type ScoreResultItem = {
   itemId: string | null;
 };
 
-type ScoreResultsResponse = {
-  items?: ScoreResultItem[];
-  data?: ScoreResultItem[];
-};
+interface TaskStageType {
+  id: string;
+  name: string;
+  order: number;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  processedItems?: number;
+  totalItems?: number;
+  startedAt?: string;
+  completedAt?: string;
+  estimatedCompletionAt?: string;
+  statusMessage?: string;
+}
+
+interface ScoreResult {
+  id: string;
+  value: string | number;
+  confidence: number | null;
+  metadata: any;
+  itemId: string | null;
+}
+
+interface TaskStagesResponse {
+  data?: {
+    items: TaskStageType[];
+  };
+}
+
+interface ScoreResultsResponse {
+  items?: ScoreResult[];
+}
+
+interface RawTask {
+  id: string;
+  type: string;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  target: string;
+  command: string;
+  description?: string;
+  dispatchStatus?: string;
+  metadata?: any;
+  createdAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  estimatedCompletionAt?: string;
+  errorMessage?: string;
+  errorDetails?: any;
+  currentStageId?: string;
+  stages?: {
+    data?: {
+      items: TaskStageType[];
+    };
+  };
+  celeryTaskId?: string;
+  workerNodeId?: string;
+}
+
+interface RawTaskData {
+  data?: RawTask;
+}
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -245,58 +300,30 @@ interface ListEvaluationResponse {
 export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
   if (!evaluation) return null;
 
-  const rawTaskResponse = getValueFromLazyLoader(evaluation.task);
-  const rawTask = rawTaskResponse?.data;
-  const rawStages = getValueFromLazyLoader(rawTask?.stages);
-  const task: AmplifyTask | null = rawTask ? {
-    id: rawTask.id,
-    command: rawTask.command,
-    type: rawTask.type,
-    status: rawTask.status,
-    target: rawTask.target,
-    stages: () => Promise.resolve({
-      data: {
-        items: (rawStages?.data || []).map(stage => ({
-          id: stage.id,
-          name: stage.name,
-          order: stage.order,
-          status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-          processedItems: stage.processedItems ?? undefined,
-          totalItems: stage.totalItems ?? undefined,
-          startedAt: stage.startedAt ?? undefined,
-          completedAt: stage.completedAt ?? undefined,
-          estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
-          statusMessage: stage.statusMessage ?? undefined
-        }))
-      }
-    })
-  } : null;
+  // Get the raw task data
+  const taskData = evaluation.task as unknown as AmplifyTask;
+  if (!taskData) {
+    console.debug('No task data found in evaluation');
+    return null;
+  }
 
-  // Transform score results
-  const rawScoreResultsResponse = getValueFromLazyLoader(evaluation.scoreResults) as ScoreResultsResponse;
-  // Handle both cases - either data is already in correct format with items,
-  // or needs to be unwrapped from data property
-  const rawScoreResults = rawScoreResultsResponse?.items || rawScoreResultsResponse?.data;
-  const scoreResults = rawScoreResults ? {
-    items: rawScoreResults.map((result: ScoreResultItem) => {
-      const metadata = typeof result.metadata === 'string' ? 
-        JSON.parse(result.metadata) : result.metadata;
-      return {
-        id: result.id,
-        value: result.value,
-        confidence: result.confidence ?? null,
-        metadata: metadata || {},
-        itemId: result.itemId
-      };
-    })
-  } : undefined;
+  // Get the score results
+  const scoreResults = evaluation.scoreResults as unknown as {
+    items?: Array<{
+      id: string;
+      value: string | number;
+      confidence: number | null;
+      metadata: any;
+      itemId: string | null;
+    }>;
+  } | null;
 
-  // Log the raw evaluation data for debugging
-  console.log('Raw evaluation data:', {
-    id: evaluation.id,
-    metrics: evaluation.metrics,
-    scoreResults: evaluation.scoreResults,
-    task: task
+  console.log('Raw task data:', {
+    evaluationId: evaluation.id,
+    taskData: taskData,
+    taskType: typeof taskData,
+    taskKeys: Object.keys(taskData),
+    scoreResults: scoreResults
   });
 
   // Transform the evaluation into the format expected by components
@@ -328,12 +355,16 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
     predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ?
       JSON.parse(evaluation.predictedClassDistribution) : evaluation.predictedClassDistribution,
     isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
-    task,
-    scoreResults
+    task: taskData,
+    scoreResults: scoreResults
   };
 
-  // Log the transformed data for debugging
-  console.log('Transformed evaluation:', transformedEvaluation);
+  console.log('Final transformed evaluation:', {
+    evaluationId: transformedEvaluation.id,
+    taskData: transformedEvaluation.task,
+    taskType: typeof transformedEvaluation.task,
+    taskKeys: transformedEvaluation.task ? Object.keys(transformedEvaluation.task) : []
+  });
 
   return transformedEvaluation;
 }
@@ -393,7 +424,7 @@ export default function EvaluationsDashboard() {
     if (!accountId) return
 
     console.log('Setting up real-time evaluations subscription');
-    const subscription = observeRecentEvaluations(100).subscribe({
+    const subscription = observeRecentEvaluations(24).subscribe({
       next: async ({ items, isSynced }) => {
         console.log('Raw evaluations data:', {
           count: items.length,
@@ -405,25 +436,44 @@ export default function EvaluationsDashboard() {
             scorecard: items[0].scorecard,
             score: items[0].score,
             task: items[0].task,
+            taskData: {
+              id: items[0].task?.id,
+              status: items[0].task?.status,
+              startedAt: items[0].task?.startedAt,
+              completedAt: items[0].task?.completedAt,
+              stages: items[0].task?.stages
+            },
+            taskType: typeof items[0].task,
+            taskKeys: items[0].task ? Object.keys(items[0].task) : [],
             scoreResults: items[0].scoreResults
           } : null
         });
 
         // Transform the items before setting state
-        const transformedItems = await Promise.all(items.map(transformEvaluation));
-        console.log('Transformed evaluations:', {
-          count: transformedItems.length,
-          firstEvaluation: transformedItems[0] ? {
-            id: transformedItems[0].id,
-            type: transformedItems[0].type,
-            metrics: transformedItems[0].metrics,
-            accuracy: transformedItems[0].accuracy,
-            scorecard: transformedItems[0].scorecard,
-            score: transformedItems[0].score,
-            task: transformedItems[0].task,
-            scoreResults: transformedItems[0].scoreResults
-          } : null
-        });
+        const transformedItems = await Promise.all(items.map(async (item) => {
+          const evaluation = item;
+          console.log('Raw task data before transform:', {
+            evaluationId: evaluation.id,
+            taskData: evaluation.task,
+            taskId: evaluation.task?.id,
+            taskStatus: evaluation.task?.status,
+            taskStartedAt: evaluation.task?.startedAt,
+            taskCompletedAt: evaluation.task?.completedAt,
+            taskType: typeof evaluation.task,
+            taskKeys: evaluation.task ? Object.keys(evaluation.task) : []
+          });
+
+          const transformed = transformEvaluation(evaluation);
+          console.log('Transformed evaluation:', {
+            evaluationId: transformed?.id,
+            taskData: transformed?.task,
+            taskId: transformed?.task?.id,
+            taskStatus: transformed?.task?.status,
+            taskStartedAt: transformed?.task?.startedAt,
+            taskCompletedAt: transformed?.task?.completedAt
+          });
+          return transformed;
+        }));
 
         const nonNullEvaluations = transformedItems.filter((item): item is Evaluation => item !== null);
         setEvaluations(nonNullEvaluations);
@@ -607,33 +657,45 @@ export default function EvaluationsDashboard() {
               grid gap-3
               ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
             `}>
-              {filteredEvaluations.map((evaluation) => (
-                <div 
-                  key={evaluation.id} 
-                  onClick={() => {
-                    setSelectedEvaluationId(evaluation.id)
-                    if (isNarrowViewport) {
-                      setIsFullWidth(true)
-                    }
-                  }}
-                >
-                  <TaskDisplay
-                    variant="grid"
-                    task={evaluation.task}
-                    evaluationData={evaluation}
-                    isSelected={evaluation.id === selectedEvaluationId}
+              {filteredEvaluations.map((evaluation) => {
+                // Add debug logging here
+                console.debug('Evaluation in grid:', {
+                  evaluationId: evaluation.id,
+                  taskData: evaluation.task,
+                  taskStatus: evaluation.task?.status,
+                  taskStartedAt: evaluation.task?.startedAt,
+                  taskCompletedAt: evaluation.task?.completedAt,
+                  evaluationStatus: evaluation.status
+                });
+
+                return (
+                  <div 
+                    key={evaluation.id} 
                     onClick={() => {
                       setSelectedEvaluationId(evaluation.id)
                       if (isNarrowViewport) {
                         setIsFullWidth(true)
                       }
                     }}
-                    extra={true}
-                    selectedScoreResultId={selectedScoreResultId}
-                    onSelectScoreResult={handleScoreResultSelect}
-                  />
-                </div>
-              ))}
+                  >
+                    <TaskDisplay
+                      variant="grid"
+                      task={evaluation.task}
+                      evaluationData={evaluation}
+                      isSelected={evaluation.id === selectedEvaluationId}
+                      onClick={() => {
+                        setSelectedEvaluationId(evaluation.id)
+                        if (isNarrowViewport) {
+                          setIsFullWidth(true)
+                        }
+                      }}
+                      extra={true}
+                      selectedScoreResultId={selectedScoreResultId}
+                      onSelectScoreResult={handleScoreResultSelect}
+                    />
+                  </div>
+                );
+              })}
               <div ref={ref} />
             </div>
           )}
