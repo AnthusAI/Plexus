@@ -10,6 +10,8 @@ module.exports = {
         { pattern: /^bg-/ },
         { pattern: /^text-.*-foreground$/ },
         'grid',
+        'bg-progress-background',
+        'bg-progress-background-selected'
     ],
     theme: {
         extend: {
@@ -56,6 +58,7 @@ module.exports = {
                     foreground: 'var(--destructive-foreground)'
                 },
                 border: 'var(--border)',
+                frame: 'var(--frame)',
                 input: 'var(--input)',
                 ring: 'var(--ring)',
                 'user-chat': 'var(--user-chat)',
@@ -70,6 +73,8 @@ module.exports = {
                 true: 'var(--true)',
                 false: 'var(--false)',
                 neutral: 'var(--neutral)',
+                'progress-background': 'var(--progress-background)',
+                'progress-background-selected': 'var(--progress-background-selected)',
                 'gauge-background': 'var(--gauge-background)',
                 'gauge-inviable': 'var(--gauge-inviable)',
                 'gauge-converging': 'var(--gauge-converging)', 

@@ -21,6 +21,7 @@ import json
 import datetime
 from plexus.cli.task_progress_tracker import TaskProgressTracker, StageConfig
 from datetime import timezone
+from urllib.parse import quote
 
 class ItemCountColumn(ProgressColumn):
     """Renders item count and total."""
@@ -448,7 +449,7 @@ def demo(target: str, task_id: Optional[str] = None, fail: bool = False) -> None
             order=1, 
             status_message="Loading AI models..."
         ),
-        "Running": StageConfig(
+        "Processing": StageConfig(
             order=2, 
             total_items=total_items,
             status_message="Processing items..."
@@ -553,7 +554,7 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
             time.sleep(0.15)  # Reduced from 0.3s to 0.15s per message
         
         # Main processing stage
-        tracker.advance_stage()  # Advance to "Running" stage
+        tracker.advance_stage()  # Advance to "Processing" stage
         
         # Process items with target rate - doubled duration with ±5s jitter
         current_item = 0
@@ -630,7 +631,7 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
             time.sleep(0.15)  # Reduced from 0.3s to 0.15s per message
         
         # Set completion message and complete task in one atomic operation
-        tracker.current_stage.status_message = "Task completed."
+        tracker.current_stage.status_message = "Demo command completed"
         tracker.complete()  # This will mark the task as complete and send the final update
         
     except KeyboardInterrupt:
@@ -654,3 +655,9 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
         except Exception as update_error:
             logging.error(f"Failed to update task status on error: {str(update_error)}")
         raise  # Re-raise the original exception after updating the task status
+
+def safequote(value: str) -> str:
+    """Safely quote a string value, handling None."""
+    if value is None:
+        return ""
+    return quote(str(value))

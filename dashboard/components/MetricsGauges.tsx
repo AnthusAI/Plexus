@@ -84,7 +84,7 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
               index === selectedIndex && variant === 'detail' ? "bg-card-light" : "bg-card"
             )}
             style={{
-              '--gauge-background-transition': index === selectedIndex ? gauge.backgroundColor : 'var(--card-light)',
+              '--gauge-background-transition': index === selectedIndex ? gauge.backgroundColor : 'var(--muted)',
               transition: 'background-color 0.5s ease-in-out, --gauge-background-transition 0.5s ease-in-out'
             } as React.CSSProperties}
           >
@@ -93,7 +93,7 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
               title={gauge.label}
               min={gauge.min}
               max={gauge.max}
-              backgroundColor={index === selectedIndex ? gauge.backgroundColor : 'var(--card-light)'}
+              backgroundColor={index === selectedIndex ? gauge.backgroundColor : 'var(--muted)'}
               showTicks={variant === 'detail'}
               information={gauge.information}
               priority={index === selectedIndex}
