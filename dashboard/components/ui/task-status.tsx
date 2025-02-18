@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { SegmentedProgressBar, SegmentConfig } from './segmented-progress-bar'
 import { ProgressBar } from './progress-bar'
 import { ProgressBarTiming } from './progress-bar-timing'
-import { Radio, Hand, ConciergeBell, Square, RectangleVertical, X, AlertTriangle } from 'lucide-react'
+import { Radio, Hand, ConciergeBell, Square, RectangleVertical, X, AlertTriangle, MessageSquareText, SquareChevronRight } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { StyleTag } from './style-tag'
 import { CardButton } from '@/components/CardButton'
+import { isEqual } from 'lodash'
+import { Timestamp } from './timestamp'
 
 // Add custom animation styles
 const animations = `
@@ -51,6 +53,7 @@ export interface TaskStageConfig {
   completedAt?: string
   estimatedCompletionAt?: string
   statusMessage?: string
+  completed?: boolean
 }
 
 export interface TaskStatusProps {
@@ -74,10 +77,15 @@ export interface TaskStatusProps {
   showPreExecutionStages?: boolean
   completedAt?: string
   truncateMessages?: boolean
-  variant?: 'grid' | 'detail' | 'nested'
+  variant?: 'grid' | 'detail' | 'nested' | 'list'
   isFullWidth?: boolean
   onToggleFullWidth?: () => void
   onClose?: () => void
+  extra?: boolean
+  isSelected?: boolean
+  commandDisplay?: 'hide' | 'show' | 'full'
+  statusMessageDisplay?: 'always' | 'never' | 'error-only'
+  onCommandDisplayChange?: (display: 'show' | 'full') => void
 }
 
 function formatDuration(seconds: number): string {
@@ -94,8 +102,8 @@ function formatDuration(seconds: number): string {
   return `${hours}h ${remainingMinutes}m`
 }
 
-export function TaskStatus({
-  showStages = true,
+export const TaskStatus = React.memo(({
+  showStages = false,
   stages = [],
   currentStageName,
   processedItems,
@@ -103,156 +111,224 @@ export function TaskStatus({
   startedAt,
   estimatedCompletionAt,
   status,
-  stageConfigs,
-  errorLabel = 'Failed',
+  command,
+  statusMessage,
+  errorMessage,
+  stageConfigs = [],
+  isLoading,
+  errorLabel,
   dispatchStatus,
   celeryTaskId,
   workerNodeId,
   showPreExecutionStages = false,
-  command,
-  statusMessage,
-  errorMessage,
   completedAt,
-  truncateMessages = true,
-  variant,
-  isFullWidth,
+  truncateMessages = false,
+  variant = 'grid',
+  isFullWidth = false,
   onToggleFullWidth,
-  onClose
-}: TaskStatusProps) {
+  onClose,
+  extra = false,
+  isSelected = false,
+  commandDisplay = 'show',
+  statusMessageDisplay = 'always',
+  onCommandDisplayChange
+}: TaskStatusProps) => {
+  console.debug('TaskStatus render:', {
+    status,
+    startedAt,
+    completedAt,
+    estimatedCompletionAt,
+    stagesCount: stages.length,
+    firstStageStatus: stages[0]?.status,
+    lastStageStatus: stages[stages.length - 1]?.status,
+    firstStageCompletedAt: stages[0]?.completedAt,
+    lastStageCompletedAt: stages[stages.length - 1]?.completedAt
+  });
+
+  const [isMessageExpanded, setIsMessageExpanded] = useState(false);
   const isInProgress = status === 'RUNNING'
   const isFinished = status === 'COMPLETED' || status === 'FAILED'
   const isError = status === 'FAILED'
 
-  // State for computed timing values
-  const [elapsedTime, setElapsedTime] = useState<string>('')
-  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string>('')
+  // Memoize timing calculations
+  const timingValues = useMemo(() => {
+    if (!startedAt) {
+      return {
+        elapsedTime: '0s',
+        estimatedTimeRemaining: ''
+      };
+    }
+
+    const taskStartTime = new Date(startedAt);
+    const endTime = completedAt ? new Date(completedAt) : new Date();
+    const elapsedSeconds = Math.floor((endTime.getTime() - taskStartTime.getTime()) / 1000);
+    const formattedElapsedTime = formatDuration(elapsedSeconds);
+
+    let formattedEstimatedTime = '';
+    if (isInProgress && estimatedCompletionAt) {
+      const estimated = new Date(estimatedCompletionAt);
+      const remainingSeconds = Math.floor((estimated.getTime() - endTime.getTime()) / 1000);
+      if (remainingSeconds > 0) {
+        formattedEstimatedTime = formatDuration(remainingSeconds);
+      }
+    }
+
+    return {
+      elapsedTime: formattedElapsedTime,
+      estimatedTimeRemaining: formattedEstimatedTime
+    };
+  }, [startedAt, completedAt, isInProgress, estimatedCompletionAt]);
+
+  // State for timing values
+  const [elapsedTime, setElapsedTime] = useState(timingValues.elapsedTime);
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState(timingValues.estimatedTimeRemaining);
 
   // Update timing values every second while not completed
   useEffect(() => {
-    const updateTiming = () => {
-      // If no task start time, show 0s
-      if (!startedAt) {
-        setElapsedTime('0s')
-        return
-      }
+    setElapsedTime(timingValues.elapsedTime);
+    setEstimatedTimeRemaining(timingValues.estimatedTimeRemaining);
 
-      const taskStartTime = new Date(startedAt)
-      const endTime = completedAt ? new Date(completedAt) : new Date()
+    if (!completedAt) {
+      const interval = setInterval(() => {
+        setElapsedTime(timingValues.elapsedTime);
+        setEstimatedTimeRemaining(timingValues.estimatedTimeRemaining);
+      }, 1000);
 
-      // Calculate elapsed time from task start to end time
-      const elapsedSeconds = Math.floor(
-        (endTime.getTime() - taskStartTime.getTime()) / 1000
-      )
-
-      const formattedTime = formatDuration(elapsedSeconds)
-
-      setElapsedTime(formattedTime)
-
-      // Only show ETA if in progress and we have an estimate
-      if (isInProgress && estimatedCompletionAt) {
-        const estimated = new Date(estimatedCompletionAt)
-        const remainingSeconds = Math.floor(
-          (estimated.getTime() - endTime.getTime()) / 1000
-        )
-        if (remainingSeconds > 0) {
-          setEstimatedTimeRemaining(formatDuration(remainingSeconds))
-        } else {
-          setEstimatedTimeRemaining('')
-        }
-      } else {
-        setEstimatedTimeRemaining('')
-      }
+      return () => clearInterval(interval);
     }
+  }, [timingValues, completedAt]);
 
-    // Initial update
-    updateTiming()
+  // Find first running stage if currentStageName is undefined
+  const effectiveCurrentStage = useMemo(() => {
+    // If we have an explicit currentStageName, use it
+    if (currentStageName) return currentStageName;
 
-    // Update every second until completed
-    const interval = !completedAt ? setInterval(updateTiming, 1000) : null
+    // If task is completed or failed, use completion
+    if (status === 'FAILED' || status === 'COMPLETED') return 'completion';
 
-    return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [startedAt, estimatedCompletionAt, completedAt, isInProgress])
+    // Find the first RUNNING stage from the stage configs
+    const runningStage = stageConfigs.find(s => s.status === 'RUNNING');
+    if (runningStage) return runningStage.name;
 
-  // Get progress information from stages if available, otherwise use props
-  const getProgressFromStages = () => {
-    if (!stages || stages.length === 0) {
-      return { processedItems, totalItems }
-    }
+    // If no running stage, find the first PENDING stage
+    const pendingStage = stageConfigs.find(s => s.status === 'PENDING');
+    if (pendingStage) return pendingStage.name;
 
-    // For completed tasks, find the stage with the most progress
-    if (status === 'COMPLETED') {
-      const stageWithProgress = stages
-        .filter(s => s.totalItems !== undefined && s.totalItems > 0)
-        .sort((a, b) => (b.totalItems || 0) - (a.totalItems || 0))[0]
-      
-      if (stageWithProgress) {
-        return {
-          processedItems: stageWithProgress.processedItems,
-          totalItems: stageWithProgress.totalItems
-        }
-      }
-    }
-
-    // For running tasks, start from current stage and work backwards
-    const currentStageIndex = stages.findIndex(s => s.name === currentStageName)
-    if (currentStageIndex === -1) {
-      return { processedItems, totalItems }
-    }
-
-    // Check current stage first
-    const currentStage = stages[currentStageIndex]
-    if (currentStage.totalItems !== undefined && currentStage.totalItems !== null) {
-      return {
-        processedItems: currentStage.processedItems,
-        totalItems: currentStage.totalItems
-      }
-    }
-
-    // Look backwards through previous stages for progress info
-    for (let i = currentStageIndex - 1; i >= 0; i--) {
-      const stage = stages[i]
-      if (stage.totalItems !== undefined && stage.totalItems !== null) {
-        return {
-          processedItems: stage.processedItems,
-          totalItems: stage.totalItems
-        }
-      }
-    }
-
-    // Fallback to props if no stage has progress info
-    return { processedItems, totalItems }
-  }
-
-  const { processedItems: effectiveProcessedItems, totalItems: effectiveTotalItems } = 
-    getProgressFromStages()
-  
-  const progress = effectiveProcessedItems && effectiveTotalItems ? 
-    (effectiveProcessedItems / effectiveTotalItems) * 100 : 0
+    // Default to empty string if no stages found
+    return '';
+  }, [currentStageName, status, stageConfigs]);
 
   // Convert TaskStageConfig to SegmentConfig for the progress bar
-  const segmentConfigs: SegmentConfig[] = stageConfigs ? [
-    ...stageConfigs.map(stage => ({
-      key: stage.name,
-      label: stage.label,
-      color: stage.status === 'PENDING' ? 'bg-neutral' : 
-             stage.status === 'FAILED' ? 'bg-false' : 
-             stage.color,
-      status: stage.status
-    })),
-    // Only add completion segment if we have other stages
-    ...(stageConfigs.length > 0 ? [{
+  const segments = useMemo(() => {
+    const orderedStages = stageConfigs
+      .sort((a, b) => a.order - b.order)  // Ensure stages are ordered
+      .map(stage => {
+        const isRunning = stage.status === 'RUNNING';
+        const isCompleted = stage.status === 'COMPLETED';
+        
+        return {
+          key: stage.name,
+          label: stage.label || stage.name,
+          color: stage.color || (
+            isCompleted ? 'bg-primary' :
+            isRunning ? 'bg-secondary' :
+            stage.status === 'FAILED' ? 'bg-false' :
+            'bg-neutral'
+          ),
+          status: stage.status,
+          completed: isCompleted
+        };
+      });
+
+    // Always add completion segment with appropriate color based on status
+    orderedStages.push({
       key: 'completion',
-      label: status === 'FAILED' ? 'Failed' : 'Complete',
-      color: status === 'FAILED' ? 'bg-false' : 'bg-true',
-      status: status
-    }] : [])
-  ] : []
+      label: 'Complete',
+      color: status === 'COMPLETED' ? 'bg-true' :
+             status === 'FAILED' ? 'bg-false' :
+             'bg-neutral',
+      status: status === 'COMPLETED' ? 'COMPLETED' :
+              status === 'FAILED' ? 'FAILED' :
+              'PENDING',
+      completed: status === 'COMPLETED'
+    });
+
+    return orderedStages;
+  }, [stageConfigs, status]);
+
+  // Update the progress calculation logic
+  const { processedItems: effectiveProcessedItems, totalItems: effectiveTotalItems } = useMemo(() => {
+    // First try to get progress from stages
+    if (stages?.length > 0) {
+      // First try to find a RUNNING stage with progress info
+      const runningStage = stages.find(stage => {
+        return stage.status === 'RUNNING';
+      });
+
+      if (runningStage) {
+        const proc = Number(runningStage.processedItems);
+        const tot = Number(runningStage.totalItems);
+        // Only use the stage's progress if it has valid numbers
+        if (!isNaN(proc) && !isNaN(tot) && tot > 0) {
+          return {
+            processedItems: proc,
+            totalItems: tot
+          };
+        }
+      }
+
+      // If no running stage found with progress, fall back to the last stage with progress
+      const sortedStages = [...stages].sort((a, b) => (b.order || 0) - (a.order || 0));
+      const stageWithProgress = sortedStages.find(stage => {
+        const proc = Number(stage.processedItems);
+        const tot = Number(stage.totalItems);
+        return !isNaN(proc) && !isNaN(tot) && tot > 0;
+      });
+
+      if (stageWithProgress) {
+        const proc = Number(stageWithProgress.processedItems);
+        const tot = Number(stageWithProgress.totalItems);
+        return {
+          processedItems: proc,
+          totalItems: tot
+        };
+      }
+    }
+    
+    // If no stages have progress info, fall back to direct processedItems/totalItems
+    const directProcessed = Number(processedItems);
+    const directTotal = Number(totalItems);
+    
+    if (!isNaN(directProcessed) && !isNaN(directTotal) && directTotal > 0) {
+      return {
+        processedItems: directProcessed,
+        totalItems: directTotal
+      };
+    }
+    
+    // If no valid progress info found anywhere, return zeros
+    return {
+      processedItems: 0,
+      totalItems: 0
+    };
+  }, [stages, processedItems, totalItems]);
+
+  // Calculate progress percentage
+  const progress = useMemo(() => 
+    effectiveTotalItems > 0 ? 
+      Math.round((effectiveProcessedItems / effectiveTotalItems) * 100) : 
+      0
+  , [effectiveProcessedItems, effectiveTotalItems]);
+
+  // Update the progress bar color based on status
+  const progressBarColor = useMemo(() => 
+    status === 'COMPLETED' ? 'primary' :
+    status === 'FAILED' ? 'false' :
+    'secondary'
+  , [status]);
 
   const getPreExecutionStatus = () => {
     if (workerNodeId && workerNodeId.trim() !== '') {
-      console.debug('Task claimed by worker:', workerNodeId);
       return { 
         message: 'Claimed...', 
         icon: Hand,
@@ -260,14 +336,12 @@ export function TaskStatus({
       }
     }
     if (!celeryTaskId) {
-      console.debug('Task announced, no celery ID yet');
       return { 
         message: 'Announced...', 
         icon: ConciergeBell,
         animation: 'animate-jiggle'
       }
     }
-    console.debug('Task has celery ID:', celeryTaskId);
     return { 
       message: 'Announced...', 
       icon: Radio,
@@ -275,7 +349,7 @@ export function TaskStatus({
     }
   }
 
-  // Only show pre-execution status when:
+  // Show pre-execution status when:
   // 1. Task is in PENDING state
   // 2. Has no stages (not started processing yet)
   // 3. Either has a worker node ID or showPreExecutionStages is true
@@ -288,45 +362,180 @@ export function TaskStatus({
 
   const displayMessage = isError && errorMessage ? errorMessage : statusMessage
 
+  const handleCommandClick = () => {
+    if (commandDisplay === 'hide' || !onCommandDisplayChange) return;
+    onCommandDisplayChange(commandDisplay === 'show' ? 'full' : 'show');
+  };
+
+  const handleMessageClick = () => {
+    setIsMessageExpanded(prev => !prev);
+  };
+
+  // If the variant is 'list', render only a simple progress bar
+  if (variant === 'list') {
+    return (
+      <div className="[&>*+*]:mt-2">
+        <StyleTag />
+        <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
+          {command && commandDisplay !== 'hide' && (
+            <div 
+              className={cn(
+                "font-mono text-sm text-muted-foreground leading-6 flex items-start gap-1",
+                {
+                  "overflow-hidden": commandDisplay === 'show',
+                  "cursor-pointer hover:text-foreground": !!onCommandDisplayChange
+                }
+              )}
+              onClick={handleCommandClick}
+              role={onCommandDisplayChange ? "button" : undefined}
+              tabIndex={onCommandDisplayChange ? 0 : undefined}
+              onKeyDown={onCommandDisplayChange ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleCommandClick();
+                }
+              } : undefined}
+            >
+              <SquareChevronRight 
+                className={cn(
+                  "w-4 h-4 flex-shrink-0 mt-1",
+                  onCommandDisplayChange && "cursor-pointer"
+                )} 
+              />
+              <span className={cn({
+                "truncate": commandDisplay === 'show',
+                "whitespace-pre-wrap break-all": commandDisplay === 'full'
+              })}>{command}</span>
+            </div>
+          )}
+          {(statusMessageDisplay === 'always' || 
+            (statusMessageDisplay === 'error-only' && isError) ||
+            (statusMessageDisplay === 'never' && isError && errorMessage)) && (
+            <div 
+              className={cn(
+                "text-sm flex items-center gap-1 cursor-pointer hover:text-foreground",
+                !isMessageExpanded && "truncate",
+                isMessageExpanded && "whitespace-pre-wrap",
+                isError ? 'text-destructive font-medium' : ''
+              )}
+              onClick={handleMessageClick}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleMessageClick();
+                }
+              }}
+            >
+              {isError ? (
+                <AlertTriangle className="w-4 h-4 animate-pulse flex-shrink-0" />
+              ) : displayMessage && (
+                <MessageSquareText className="w-4 h-4 flex-shrink-0" />
+              )}
+              {displayMessage || '\u00A0'}
+            </div>
+          )}
+        </div>
+        {showEmptyState ? (
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+            <Radio className="w-4 h-4 animate-pulse" />
+            <span>Announced...</span>
+          </div>
+        ) : preExecutionStatus ? (
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+            <preExecutionStatus.icon className={`w-4 h-4 ${preExecutionStatus.animation}`} />
+            <span>{preExecutionStatus.message}</span>
+          </div>
+        ) : (
+          <ProgressBarTiming
+            elapsedTime={elapsedTime}
+            estimatedTimeRemaining={estimatedTimeRemaining}
+            isInProgress={isInProgress}
+            className="text-muted-foreground"
+          />
+        )}
+        {showStages && (
+          <ProgressBar
+            progress={progress}
+            processedItems={effectiveProcessedItems}
+            totalItems={effectiveTotalItems}
+            color={progressBarColor}
+            showTiming={false}
+            isSelected={isSelected}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="[&>*+*]:mt-2">
       <StyleTag />
-      {variant === 'detail' && (
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex-grow" />
-          <div className="flex items-center space-x-2">
-            {onToggleFullWidth && (
-              <CardButton
-                icon={isFullWidth ? RectangleVertical : Square}
-                onClick={onToggleFullWidth}
-              />
+      <div className={cn(
+        "rounded-lg px-1 py-1 space-y-1 -mx-1",
+        variant === 'detail' ? "bg-gauge-background" : "bg-background"
+      )}>
+        {command && commandDisplay !== 'hide' && (
+          <div 
+            className={cn(
+              "font-mono text-sm text-muted-foreground leading-6 flex items-start gap-1",
+              {
+                "overflow-hidden": commandDisplay === 'show',
+                "cursor-pointer hover:text-foreground": !!onCommandDisplayChange
+              }
             )}
-            {onClose && (
-              <CardButton
-                icon={X}
-                onClick={onClose}
-              />
-            )}
+            onClick={handleCommandClick}
+            role={onCommandDisplayChange ? "button" : undefined}
+            tabIndex={onCommandDisplayChange ? 0 : undefined}
+            onKeyDown={onCommandDisplayChange ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleCommandClick();
+              }
+            } : undefined}
+          >
+            <SquareChevronRight 
+              className={cn(
+                "w-4 h-4 flex-shrink-0 mt-1",
+                onCommandDisplayChange && "cursor-pointer"
+              )} 
+            />
+            <span className={cn({
+              "truncate": commandDisplay === 'show',
+              "whitespace-pre-wrap break-all": commandDisplay === 'full'
+            })}>{command}</span>
           </div>
-        </div>
-      )}
-      {(command || displayMessage || isFinished) && (
-        <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
-          {command && (
-            <div className={`font-mono text-sm text-muted-foreground ${truncateMessages ? 'truncate' : 'whitespace-pre-wrap'}`}>
-              $ {command}
-            </div>
-          )}
-          <div className={cn(
-            "text-sm flex items-center gap-2",
-            truncateMessages ? 'truncate' : 'whitespace-pre-wrap',
-            isError ? 'text-destructive font-medium' : ''
-          )}>
-            {isError && <AlertTriangle className="w-4 h-4 animate-pulse" />}
+        )}
+        {(statusMessageDisplay === 'always' || 
+          (statusMessageDisplay === 'error-only' && isError) ||
+          (statusMessageDisplay === 'never' && isError && errorMessage)) && (
+          <div 
+            className={cn(
+              "text-sm flex items-center gap-1 cursor-pointer hover:text-foreground",
+              !isMessageExpanded && "truncate",
+              isMessageExpanded && "whitespace-pre-wrap",
+              isError ? 'text-destructive font-medium' : ''
+            )}
+            onClick={handleMessageClick}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleMessageClick();
+              }
+            }}
+          >
+            {isError ? (
+              <AlertTriangle className="w-4 h-4 animate-pulse flex-shrink-0" />
+            ) : displayMessage && (
+              <MessageSquareText className="w-4 h-4 flex-shrink-0" />
+            )}
             {displayMessage || '\u00A0'}
           </div>
-        </div>
-      )}
+        )}
+      </div>
       {showEmptyState ? (
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
           <Radio className="w-4 h-4 animate-pulse" />
@@ -338,27 +547,62 @@ export function TaskStatus({
           <span>{preExecutionStatus.message}</span>
         </div>
       ) : (
-        <ProgressBarTiming
-          elapsedTime={elapsedTime}
-          estimatedTimeRemaining={estimatedTimeRemaining}
-          isInProgress={isInProgress}
-        />
+        startedAt && (
+          <Timestamp 
+            time={startedAt} 
+            completionTime={completedAt} 
+            variant="elapsed" 
+            className="text-muted-foreground"
+          />
+        )
       )}
       {showStages && (
         <SegmentedProgressBar
-          segments={segmentConfigs}
-          currentSegment={status === 'FAILED' || status === 'COMPLETED' ? 'completion' : currentStageName || ''}
+          segments={segments}
+          currentSegment={effectiveCurrentStage}
           error={status === 'FAILED'}
           errorLabel={errorLabel}
+          isSelected={isSelected}
         />
       )}
       <ProgressBar
         progress={progress}
         processedItems={effectiveProcessedItems}
         totalItems={effectiveTotalItems}
-        color={status === 'FAILED' ? 'false' : 'secondary'}
+        color={progressBarColor}
         showTiming={false}
+        isSelected={isSelected}
       />
     </div>
   )
-} 
+}, (prevProps: TaskStatusProps, nextProps: TaskStatusProps) => {
+  // Custom comparison function
+  return (
+    prevProps.showStages === nextProps.showStages &&
+    isEqual(prevProps.stages, nextProps.stages) &&
+    prevProps.currentStageName === nextProps.currentStageName &&
+    prevProps.processedItems === nextProps.processedItems &&
+    prevProps.totalItems === nextProps.totalItems &&
+    prevProps.startedAt === nextProps.startedAt &&
+    prevProps.estimatedCompletionAt === nextProps.estimatedCompletionAt &&
+    prevProps.status === nextProps.status &&
+    prevProps.command === nextProps.command &&
+    prevProps.statusMessage === nextProps.statusMessage &&
+    prevProps.errorMessage === nextProps.errorMessage &&
+    isEqual(prevProps.stageConfigs, nextProps.stageConfigs) &&
+    prevProps.isLoading === nextProps.isLoading &&
+    prevProps.errorLabel === nextProps.errorLabel &&
+    prevProps.dispatchStatus === nextProps.dispatchStatus &&
+    prevProps.celeryTaskId === nextProps.celeryTaskId &&
+    prevProps.workerNodeId === nextProps.workerNodeId &&
+    prevProps.showPreExecutionStages === nextProps.showPreExecutionStages &&
+    prevProps.completedAt === nextProps.completedAt &&
+    prevProps.truncateMessages === nextProps.truncateMessages &&
+    prevProps.variant === nextProps.variant &&
+    prevProps.isFullWidth === nextProps.isFullWidth &&
+    prevProps.extra === nextProps.extra &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.commandDisplay === nextProps.commandDisplay &&
+    prevProps.statusMessageDisplay === nextProps.statusMessageDisplay
+  );
+}); 
