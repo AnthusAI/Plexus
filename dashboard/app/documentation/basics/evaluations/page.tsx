@@ -28,7 +28,7 @@ export default function EvaluationsPage() {
       progress: 100,
       inferences: 200,
       cost: 0.30,
-      status: 'complete',
+      status: 'COMPLETED',
       elapsedSeconds: 4800,
       estimatedRemainingSeconds: 0,
       confusionMatrix: {
@@ -76,20 +76,48 @@ export default function EvaluationsPage() {
           value: predictedLabel,
           confidence: 0.7 + (Math.random() * 0.3),
           explanation,
-          metadata: JSON.stringify({
+          metadata: {
             human_label: isQualified ? "Qualified" : "Not Qualified",
             correct: correctPrediction,
             human_explanation: isQualified ?
               "Represents enterprise client with clear needs and scale" :
               "No clear business need or purchasing authority indicated",
             text: sampleText
-          }),
-          createdAt: new Date(Date.now() - Math.floor(Math.random() * 7200000)).toISOString(), // Random time in last 2 hours
+          },
           itemId: `item-${i}`,
           EvaluationId: 'eval-1',
           scorecardId: 'scorecard-1'
         }
-      })
+      }),
+      task: {
+        id: 'task-1',
+        accountId: 'acc-1',
+        type: 'evaluation',
+        status: 'COMPLETED',
+        target: 'lead-qualification',
+        command: 'evaluate',
+        description: 'Lead qualification evaluation',
+        dispatchStatus: 'DISPATCHED' as const,
+        metadata: {},
+        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        startedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        completedAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+        stages: {
+          items: [
+            {
+              id: 'stage-1',
+              name: 'Processing',
+              order: 1,
+              status: 'COMPLETED',
+              processedItems: 200,
+              totalItems: 200,
+              startedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+              completedAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString()
+            }
+          ],
+          nextToken: null
+        }
+      }
     }
   };
 
