@@ -18,23 +18,41 @@ class DummyAPIStage:
         self.name = name
         self.order = order
         self.id = f"dummy_stage_{name}"
+        self.status = "PENDING"
+        self.status_message = None
+        self.total_items = None
+        self.processed_items = None
+        self.start_time = None
+        self.end_time = None
+
     def update(self, **kwargs):
-        pass
+        # Update any properties that are passed in
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+        return self
 
 class DummyAPITask:
     def __init__(self, id):
         self.id = id
         self._stages = {}
+
     def get_stages(self):
         return list(self._stages.values())
-    def create_stage(self, name, order):
+
+    def create_stage(self, name, order, **kwargs):
         stage = DummyAPIStage(name, order)
+        # Apply any additional properties passed in kwargs
+        for key, value in kwargs.items():
+            setattr(stage, key, value)
         self._stages[name] = stage
         return stage
+
     def advance_stage(self, next_api_stage):
         pass
+
     def update(self, **kwargs):
         pass
+
     def complete_processing(self):
         pass
 
@@ -101,14 +119,23 @@ def test_finalizing_stage_progress(mock_create):
     assert tracker.current_stage.status_message == "Processing items..."
 
     # Process items in smaller batches with longer delays
-    for i in range(1, 101, 20):
-        tracker.update(current_items=i)
+    for i in range(0, 101, 25):  # Use 25 as step size to reach 100 evenly
+        tracker.update(current_items=i if i > 0 else 1)  # Start with 1 instead of 0
         time.sleep(2)  # Wait for API updates
         
         # Verify Processing stage progress
-        assert tracker.current_stage.processed_items == i
+        assert tracker.current_stage.processed_items == (i if i > 0 else 1)
         assert tracker.current_stage.total_items == 100
         assert tracker.current_stage.status == "RUNNING"
+
+    # Make sure we hit 100
+    tracker.update(current_items=100)
+    time.sleep(2)  # Wait for API updates
+
+    # Verify final processing stage state
+    assert tracker.current_stage.processed_items == 100
+    assert tracker.current_stage.total_items == 100
+    assert tracker.current_stage.status == "RUNNING"
 
     # Advance to Finalizing stage
     tracker.advance_stage()
