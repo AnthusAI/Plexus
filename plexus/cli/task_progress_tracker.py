@@ -138,7 +138,7 @@ class TaskProgressTracker:
             metadata: Optional metadata to store with the task
             account_id: Optional account ID to associate with the task
         """
-        # Start with None - we'll set the real count when we know it
+        # Start with the passed in total_items value
         self.total_items = total_items
         logging.info(f"[TRACE] Initialized TaskProgressTracker instance {id(self)} with total_items={total_items}")
         self.current_items = 0
@@ -161,8 +161,8 @@ class TaskProgressTracker:
         # Initialize stages if provided
         if stage_configs:
             for name, config in stage_configs.items():
-                # Don't set total_items for finalizing stage
-                stage_total_items = None if name.lower() == 'finalizing' else config.total_items
+                # Only set total_items if explicitly configured in the stage config
+                stage_total_items = config.total_items  # Will be None if not set in config
                 logging.debug(f"[TRACE] Initializing stage {name} with total_items={stage_total_items} in instance {id(self)}")
                 self._stages[name] = Stage(
                     name=name,
@@ -340,7 +340,7 @@ class TaskProgressTracker:
 
         if current_items < 0:
             raise ValueError("Current items cannot be negative")
-        
+            
         if current_items > self.total_items:
             raise ValueError(f"Current items ({current_items}) cannot exceed total items ({self.total_items})")
 
@@ -413,16 +413,20 @@ class TaskProgressTracker:
             self._update_api_task_progress()
 
     def complete(self):
-        """Complete tracking and update API task if we have one."""
+        """Complete tracking and update API task if we have one.
+        
+        Raises:
+            RuntimeError: If attempting to complete before all stages are processed
+        """
         if self._stages:
-            # Verify all stages have been processed
-            unprocessed_stages = [
+            # First verify all stages have been started (have a start_time)
+            unstarted_stages = [
                 s.name for s in self._stages.values()
-                if s.status not in ['COMPLETED', 'RUNNING']
+                if not s.start_time
             ]
-            if unprocessed_stages:
+            if unstarted_stages:
                 raise RuntimeError(
-                    f"Cannot complete task: stages not processed: {unprocessed_stages}"
+                    f"Cannot complete task: stages not started: {unstarted_stages}"
                 )
 
             # Complete current stage if it exists
@@ -441,18 +445,7 @@ class TaskProgressTracker:
                 if stage.total_items is not None:
                     stage.processed_items = stage.total_items
 
-            # Verify all stages are complete
-            incomplete = [
-                s.name for s in self._stages.values()
-                if not s.end_time
-            ]
-            if incomplete:
-                raise RuntimeError(
-                    f"Cannot complete task: stages not finished: {incomplete}"
-                )
-
-        # Set current_items to total_items when completing
-        self.current_items = self.total_items
+        # Don't override the current_items count
         self.end_time = time.time()
         self.is_complete = True
         self.status = "Complete"
