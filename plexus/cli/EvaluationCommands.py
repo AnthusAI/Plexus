@@ -44,10 +44,12 @@ from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.cli.CommandProgress import CommandProgress
 from plexus.cli.task_progress_tracker import TaskProgressTracker, StageConfig
 
+from plexus.utils import truncate_dict_strings_inner
+
 def create_client() -> PlexusDashboardClient:
     """Create a client and log its configuration"""
     client = PlexusDashboardClient()
-    logger.debug(f"Using API URL: {client.api_url}")
+    logging.debug(f"Using API URL: {client.api_url}")
     return client
 
 @click.group()
@@ -1296,9 +1298,9 @@ def create(
     
     try:
         # First get the account
-        logger.info(f"Looking up account with key: {account_key}")
+        logging.info(f"Looking up account with key: {account_key}")
         account = Account.get_by_key(account_key, client)
-        logger.info(f"Found account: {account.name} ({account.id})")
+        logging.info(f"Found account: {account.name} ({account.id})")
         
         # Build input dictionary with all provided values
         input_data = {
@@ -1310,29 +1312,29 @@ def create(
         # Look up scorecard if any identifier was provided
         if any([scorecard_id, scorecard_key, scorecard_name]):
             if scorecard_id:
-                logger.info(f"Using provided scorecard ID: {scorecard_id}")
+                logging.info(f"Using provided scorecard ID: {scorecard_id}")
                 scorecard = DashboardScorecard.get_by_id(scorecard_id, client)
             elif scorecard_key:
-                logger.info(f"Looking up scorecard by key: {scorecard_key}")
+                logging.info(f"Looking up scorecard by key: {scorecard_key}")
                 scorecard = DashboardScorecard.get_by_key(scorecard_key, client)
             else:
-                logger.info(f"Looking up scorecard by name: {scorecard_name}")
+                logging.info(f"Looking up scorecard by name: {scorecard_name}")
                 scorecard = DashboardScorecard.get_by_name(scorecard_name, client)
-            logger.info(f"Found scorecard: {scorecard.name} ({scorecard.id})")
+            logging.info(f"Found scorecard: {scorecard.name} ({scorecard.id})")
             input_data['scorecardId'] = scorecard.id
         
         # Look up score if any identifier was provided
         if any([score_id, score_key, score_name]):
             if score_id:
-                logger.info(f"Using provided score ID: {score_id}")
+                logging.info(f"Using provided score ID: {score_id}")
                 score = DashboardScore.get_by_id(score_id, client)
             elif score_key:
-                logger.info(f"Looking up score by key: {score_key}")
+                logging.info(f"Looking up score by key: {score_key}")
                 score = DashboardScore.get_by_key(score_key, client)
             else:
-                logger.info(f"Looking up score by name: {score_name}")
+                logging.info(f"Looking up score by name: {score_name}")
                 score = DashboardScore.get_by_name(score_name, client)
-            logger.info(f"Found score: {score.name} ({score.id})")
+            logging.info(f"Found score: {score.name} ({score.id})")
             input_data['scoreId'] = score.id
         
         # Add optional fields if provided
@@ -1354,9 +1356,9 @@ def create(
         if confusion_matrix: input_data['confusionMatrix'] = confusion_matrix
         
         # Create the evaluation
-        logger.info("Creating evaluation...")
+        logging.info("Creating evaluation...")
         evaluation = DashboardEvaluation.create(client=client, **input_data)
-        logger.info(f"Created evaluation: {evaluation.id}")
+        logging.info(f"Created evaluation: {evaluation.id}")
         
         # Output results
         click.echo(f"Created evaluation: {evaluation.id}")
@@ -1365,7 +1367,7 @@ def create(
         click.echo(f"Created at: {evaluation.createdAt}")
         
     except Exception as e:
-        logger.error(f"Error creating evaluation: {str(e)}")
+        logging.error(f"Error creating evaluation: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
 @evaluations.command()
@@ -1422,9 +1424,9 @@ def update(
     
     try:
         # First get the existing evaluation
-        logger.info(f"Looking up evaluation: {id}")
+        logging.info(f"Looking up evaluation: {id}")
         evaluation = DashboardEvaluation.get_by_id(id, client)
-        logger.info(f"Found evaluation: {evaluation.id}")
+        logging.info(f"Found evaluation: {evaluation.id}")
         
         # Build update data with only provided fields
         update_data = {}
@@ -1450,9 +1452,9 @@ def update(
         if confusion_matrix is not None: update_data['confusionMatrix'] = confusion_matrix
         
         # Update the evaluation
-        logger.info("Updating evaluation...")
+        logging.info("Updating evaluation...")
         try:
-            logger.info(f"Updating evaluation record {evaluation.id} with: {update_data}")
+            logging.info(f"Updating evaluation record {evaluation.id} with: {update_data}")
             mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
                 updateEvaluation(input: $input) {
                     id
@@ -1466,9 +1468,9 @@ def update(
                     **update_data
                 }
             })
-            logger.info("Successfully updated evaluation record with scorecard ID")
+            logging.info("Successfully updated evaluation record with scorecard ID")
         except Exception as e:
-            logger.error(f"Failed to update evaluation record with IDs: {str(e)}")
+            logging.error(f"Failed to update evaluation record with IDs: {str(e)}")
             # Continue execution even if update fails
         
         # Output results
@@ -1478,7 +1480,7 @@ def update(
         click.echo(f"Updated at: {evaluation.updatedAt}")
         
     except Exception as e:
-        logger.error(f"Error updating evaluation: {str(e)}")
+        logging.error(f"Error updating evaluation: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
 @evaluations.command()
@@ -1526,5 +1528,5 @@ def list_results(id: str, limit: int):
             )
         
     except Exception as e:
-        logger.error(f"Error listing results: {e}")
+        logging.error(f"Error listing results: {e}")
         click.echo(f"Error: {e}", err=True)
