@@ -240,10 +240,18 @@ def dispatch(
                 expand=True
             ) as progress:
                 # Add a single task that tracks both status and progress
+                stage_configs = {
+                    "Setup": StageConfig(
+                        name="Setup",
+                        order=1,
+                        status_message="Setting up...",
+                        total_items=100  # Set a default total
+                    )
+                }
                 task_progress = progress.add_task(
                     "Processing...",
-                    total=100,
-                    status="Initializing..."
+                    total=100,  # Set a default total
+                    status=stage_configs["Setup"].status_message
                 )
                 
                 while not task.ready():
@@ -371,9 +379,17 @@ def status(task_id: str, loglevel: str) -> None:
                 expand=True
             ) as progress:
                 # Add a single task that tracks both status and progress
+                stage_configs = {
+                    "Setup": StageConfig(
+                        name="Setup",
+                        order=1,
+                        status_message="Setting up...",
+                        total_items=100  # Set a default total
+                    )
+                }
                 task_progress = progress.add_task(
                     "Processing...",
-                    total=total,
+                    total=100,  # Set a default total
                     status=stage_configs["Setup"].status_message
                 )
                 progress.refresh()
@@ -581,7 +597,7 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
                 raise Exception(error_msg)
                 
             # Calculate how many items we should have processed by now to stay on target
-            elapsed = time.time() - stage_start_time  # Use stage-specific elapsed time
+            elapsed = time.time() - stage_start_time
             target_items = min(
                 total_items,
                 int((elapsed / target_duration) * total_items)

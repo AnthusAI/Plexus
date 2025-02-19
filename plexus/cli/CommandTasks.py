@@ -12,6 +12,7 @@ import socket
 import os
 import time
 import random
+import subprocess
 
 def register_tasks(app):
     """Register Celery tasks with the application."""
@@ -348,8 +349,8 @@ def register_tasks(app):
                         # Clear progress callback immediately to prevent further updates
                         CommandProgress.set_update_callback(None)
                         
-                        # Get error message from stderr if available, otherwise use exception message
-                        error_msg = stderr_capture.getvalue().strip() or (str(e) if 'e' in locals() else None)
+                        # Get error message from stderr if available
+                        error_msg = stderr_capture.getvalue().strip()
                         if error_msg:
                             task.fail_processing(error_msg)
                         else:

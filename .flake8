@@ -1,0 +1,32 @@
+[flake8]
+exclude = 
+    .git,
+    __pycache__,
+    build,
+    dist,
+    *.egg-info,
+    node_modules,
+    dashboard/node_modules,
+    venv,
+    .venv
+
+# Only show errors that are likely to be real issues
+select = E9,F63,F7,F82,E225,E226,E227,E228,E231,E241,E251,E261,E262,E265,E266,E271,E272
+
+# Don't show these categories
+ignore = E123,E125,W503,E501,W504
+
+# Don't show source code in output
+show-source = False
+
+# Don't show the error count summary
+count = False
+
+max-line-length = 127
+max-complexity = 10
+
+# Format output to be more concise
+format = %(path)s:%(row)d:%(col)d: %(code)s %(text)s
+
+# Limit the number of errors shown
+max-violations-per-file = 5 
