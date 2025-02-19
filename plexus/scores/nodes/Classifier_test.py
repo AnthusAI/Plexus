@@ -1133,17 +1133,13 @@ async def test_multi_node_condition_routing():
     """Test routing between multiple nodes where middle node has conditions."""
     # Mock the LLM responses for each node
     mock_model = AsyncMock()
-    mock_responses = [
-        # First test case responses
+    
+    # First test case responses
+    first_run_responses = [
         AIMessage(content="Yes"),  # First node
         AIMessage(content="No"),   # Second node (routes to END)
-        
-        # Second test case responses
-        AIMessage(content="Yes"),  # First node
-        AIMessage(content="Yes"),  # Second node (continues to third)
-        AIMessage(content="No")    # Third node
     ]
-    mock_model.ainvoke = AsyncMock(side_effect=mock_responses)
+    mock_model.ainvoke = AsyncMock(side_effect=first_run_responses)
     
     with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
                return_value=mock_model):
@@ -1286,6 +1282,15 @@ async def test_multi_node_condition_routing():
         assert final_state_dict['explanation'] == "No turnip was found in the text."
         assert final_state_dict['classification'] == "No"  # From second node
         assert 'third_node_result' not in final_state_dict  # Verify third node wasn't reached
+        
+        # Reset mock for second test case with new responses
+        second_run_responses = [
+            AIMessage(content="Yes"),  # First node
+            AIMessage(content="Yes"),  # Second node (continues to third)
+            AIMessage(content="No")    # Third node
+        ]
+        mock_model.ainvoke.reset_mock()
+        mock_model.ainvoke.side_effect = second_run_responses
         
         # Create a fresh workflow for the second test to avoid state persistence
         workflow = StateGraph(first_classifier.GraphState)
