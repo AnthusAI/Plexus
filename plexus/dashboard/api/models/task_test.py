@@ -213,9 +213,18 @@ def test_complete_processing():
         client=mock_client
     )
 
+    # Mock the get_stages response
+    mock_stage = MagicMock()
+    mock_stage.status = 'RUNNING'
+    mock_stage.completedAt = None
+    mock_stage.startedAt = None
+    mock_task.get_stages = MagicMock(return_value=[mock_stage])
+
+    # Mock the execute responses for update
     mock_client.execute.side_effect = [
         {
             'getTask': {
+                'id': 'test-task-id',
                 'accountId': 'test-account',
                 'type': 'TEST',
                 'status': 'RUNNING',

@@ -82,3 +82,21 @@ jest.mock("@/utils/amplify-helpers", () => ({
     nextToken: null
   })
 }))
+
+class MockIntersectionObserver implements IntersectionObserver {
+  readonly root: Element | null = null
+  readonly rootMargin: string = ''
+  readonly thresholds: ReadonlyArray<number> = []
+
+  constructor(private callback: IntersectionObserverCallback) {
+    // Immediately call the callback with empty entries to simulate intersection
+    callback([], this)
+  }
+
+  observe() { return null }
+  unobserve() { return null }
+  disconnect() { return null }
+  takeRecords(): IntersectionObserverEntry[] { return [] }
+}
+
+global.IntersectionObserver = MockIntersectionObserver as any

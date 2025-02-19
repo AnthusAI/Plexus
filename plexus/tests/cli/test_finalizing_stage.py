@@ -18,25 +18,52 @@ class DummyAPIStage:
         self.name = name
         self.order = order
         self.id = f"dummy_stage_{name}"
+        self.status = "PENDING"
+        self.processedItems = 0
+        self.totalItems = None
+        self.statusMessage = None
+        self.startedAt = None
+        self.completedAt = None
+        self.estimatedCompletionAt = None
+
     def update(self, **kwargs):
-        pass
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 class DummyAPITask:
     def __init__(self, id):
         self.id = id
+        self.status = "PENDING"
+        self.accountId = "test-account"
+        self.type = "TEST"
+        self.target = "test/target"
+        self.command = "test command"
+        self.total_items = None
         self._stages = {}
+
     def get_stages(self):
         return list(self._stages.values())
-    def create_stage(self, name, order):
+
+    def create_stage(self, name, order, **kwargs):
         stage = DummyAPIStage(name, order)
+        for key, value in kwargs.items():
+            setattr(stage, key, value)
         self._stages[name] = stage
         return stage
+
     def advance_stage(self, next_api_stage):
-        pass
+        if next_api_stage in self._stages:
+            self._stages[next_api_stage].status = "RUNNING"
+
     def update(self, **kwargs):
-        pass
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
     def complete_processing(self):
-        pass
+        self.status = "COMPLETED"
+        for stage in self._stages.values():
+            if stage.status != "FAILED":
+                stage.status = "COMPLETED"
 
 # Modify the test function to patch Task.create
 @patch("plexus.dashboard.api.models.task.Task.create", autospec=True)
