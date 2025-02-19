@@ -1287,7 +1287,60 @@ async def test_multi_node_condition_routing():
         assert final_state_dict['classification'] == "No"  # From second node
         assert 'third_node_result' not in final_state_dict  # Verify third node wasn't reached
         
-        # Reset initial state for second test
+        # Create a fresh workflow for the second test to avoid state persistence
+        workflow = StateGraph(first_classifier.GraphState)
+        
+        # Add nodes for each classifier again
+        workflow.add_node("first_llm_prompt", first_classifier.get_llm_prompt_node())
+        workflow.add_node("first_llm_call", first_classifier.get_llm_call_node())
+        workflow.add_node("first_parse", first_classifier.get_parser_node())
+        
+        workflow.add_node("second_llm_prompt", second_classifier.get_llm_prompt_node())
+        workflow.add_node("second_llm_call", second_classifier.get_llm_call_node())
+        workflow.add_node("second_parse", second_classifier.get_parser_node())
+        
+        workflow.add_node("third_llm_prompt", third_classifier.get_llm_prompt_node())
+        workflow.add_node("third_llm_call", third_classifier.get_llm_call_node())
+        workflow.add_node("third_parse", third_classifier.get_parser_node())
+        
+        # Add value setter node for the "No" condition
+        workflow.add_node("set_no_value", 
+            LangGraphScore.create_value_setter_node({
+                "value": "No",
+                "explanation": "No turnip was found in the text."
+            })
+        )
+        
+        # Add edges between nodes
+        workflow.add_edge("first_llm_prompt", "first_llm_call")
+        workflow.add_edge("first_llm_call", "first_parse")
+        workflow.add_edge("first_parse", "second_llm_prompt")
+        workflow.add_edge("second_llm_prompt", "second_llm_call")
+        workflow.add_edge("second_llm_call", "second_parse")
+        
+        # Add conditional routing from second parse
+        workflow.add_conditional_edges(
+            "second_parse",
+            route_from_second_parse,
+            {
+                "set_no_value": "set_no_value",
+                "third_llm_prompt": "third_llm_prompt"
+            }
+        )
+        
+        # Add remaining edges
+        workflow.add_edge("set_no_value", END)
+        workflow.add_edge("third_llm_prompt", "third_llm_call")
+        workflow.add_edge("third_llm_call", "third_parse")
+        workflow.add_edge("third_parse", END)
+        
+        # Set entry point
+        workflow.set_entry_point("first_llm_prompt")
+        
+        # Compile workflow
+        workflow = workflow.compile()
+        
+        # Reset initial state for second test with completely fresh state
         initial_state = first_classifier.GraphState(
             text="Test message",
             metadata={},
