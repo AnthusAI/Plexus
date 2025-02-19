@@ -36,6 +36,16 @@ import threading
 import socket
 import types  # Add this at the top with other imports
 
+def truncate_dict_strings(d, max_length=100):
+    """Recursively truncate long string values in a dictionary."""
+    if isinstance(d, dict):
+        return {k: truncate_dict_strings(v) for k, v in d.items()}
+    elif isinstance(d, list):
+        return [truncate_dict_strings(v) for v in d]
+    elif isinstance(d, str) and len(d) > max_length:
+        return d[:max_length] + "..."
+    return d
+
 set_log_group('plexus/cli/evaluation')
 
 from plexus.scores.Score import Score
@@ -245,63 +255,77 @@ def accuracy(
                             }),
                             "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
                             "estimatedRemainingSeconds": number_of_samples,
-                            "taskId": task.id
+                            "taskId": task.id  # Add task ID directly in creation params
                         }
                         
                         try:
+                            if not task or not task.id:
+                                error_msg = "Cannot create evaluation record without a valid task ID"
+                                logging.error(error_msg)
+                                raise ValueError(error_msg)
+
                             logging.info("Creating initial Evaluation record...")
+                            logging.info(f"Creating evaluation with params:\n{json.dumps(experiment_params, indent=2)}")
                             evaluation_record = DashboardEvaluation.create(
                                 client=client,
                                 **experiment_params
                             )
                             logging.info(f"Created initial Evaluation record with ID: {evaluation_record.id}")
 
-                            # Explicitly update to ensure task ID is set
-                            mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                                updateEvaluation(input: $input) {
-                                    id
-                                    taskId
+                            # Verify the task ID was set
+                            if not evaluation_record.taskId:
+                                error_msg = f"Evaluation record {evaluation_record.id} was created but task ID was not set"
+                                logging.error(error_msg)
+                                # Try to update it one more time
+                                mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                                    updateEvaluation(input: $input) {
+                                        id
+                                        taskId
+                                    }
+                                }"""
+                                update_data = {
+                                    'id': evaluation_record.id,
+                                    'taskId': task.id
                                 }
-                            }"""
-                            update_data = {
-                                'id': evaluation_record.id,
-                                'taskId': task.id
-                            }
-                            logging.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
-                            client.execute(mutation, {'input': update_data})
-                            logging.info(f"Updated Evaluation record {evaluation_record.id} with taskId: {task.id}")
+                                logging.info(f"Attempting to update evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
+                                result = client.execute(mutation, {'input': update_data})
+                                logging.info(f"Update result:\n{json.dumps(result, indent=2)}")
 
                             # Update evaluation record with scorecard ID if we have one
                             if scorecard_record and 'id' in scorecard_record:
                                 update_data = {
                                     'id': evaluation_record.id,
+                                    'taskId': task.id,  # Always include task ID in updates
                                     'scorecardId': scorecard_record['id']
                                 }
                                 logging.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
                                 mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
                                     updateEvaluation(input: $input) {
                                         id
+                                        taskId
                                         scorecardId
                                     }
                                 }"""
-                                client.execute(mutation, {'input': update_data})
-                                logging.info(f"Updated evaluation record with scorecard ID: {scorecard_record['id']}")
+                                result = client.execute(mutation, {'input': update_data})
+                                logging.info(f"Update result:\n{json.dumps(result, indent=2)}")
 
                             # Update evaluation record with score ID if we have one
                             if score_id:
                                 update_data = {
                                     'id': evaluation_record.id,
+                                    'taskId': task.id,  # Always include task ID in updates
                                     'scoreId': score_id
                                 }
                                 logging.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
                                 mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
                                     updateEvaluation(input: $input) {
                                         id
+                                        taskId
                                         scoreId
                                     }
                                 }"""
-                                client.execute(mutation, {'input': update_data})
-                                logging.info(f"Updated evaluation record with score ID: {score_id}")
+                                result = client.execute(mutation, {'input': update_data})
+                                logging.info(f"Update result:\n{json.dumps(result, indent=2)}")
 
                         except Exception as e:
                             logging.error(f"Failed to create or update Evaluation record: {str(e)}", exc_info=True)
@@ -398,12 +422,14 @@ def accuracy(
                     if scorecard_record and 'id' in scorecard_record:
                         update_data = {
                             'id': evaluation_record.id,
+                            'taskId': task.id,  # Always include task ID in updates
                             'scorecardId': scorecard_record['id']
                         }
                         logging.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
                         mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
                             updateEvaluation(input: $input) {
                                 id
+                                taskId
                                 scorecardId
                             }
                         }"""
@@ -414,12 +440,14 @@ def accuracy(
                     if score_id:
                         update_data = {
                             'id': evaluation_record.id,
+                            'taskId': task.id,  # Always include task ID in updates
                             'scoreId': score_id
                         }
                         logging.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
                         mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
                             updateEvaluation(input: $input) {
                                 id
+                                taskId
                                 scoreId
                             }
                         }"""
@@ -753,7 +781,8 @@ def accuracy(
                                         scorecard_instance, scorecard_name, single_score_name, 
                                         score_config, fresh, content_ids_to_sample_set,
                                         progress_callback=bound_progress_callback,
-                                        number_of_samples=tracker.total_items
+                                        number_of_samples=tracker.total_items,
+                                        random_seed=random_seed
                                     )
                                     
                                     if single_score_labeled_samples:
@@ -926,7 +955,7 @@ def accuracy(
                             result = client.execute(query, {'id': evaluation_record.id})
                             if result and 'getEvaluation' in result:
                                 eval_details = result['getEvaluation']
-                                logging.info(f"Final evaluation state:\n{truncate_dict_strings_inner(eval_details, indent=2)}")
+                                logging.info(f"Final evaluation state:\n{json.dumps(truncate_dict_strings(eval_details), indent=2)}")
 
                         tracker.current_stage.status_message = "Evaluation completed."
                         tracker.update(current_items=tracker.total_items)
@@ -934,10 +963,61 @@ def accuracy(
 
                     except Exception as e:
                         error_msg = f"Error logging final states: {str(e)}"
+                        error_details = ''.join(traceback.format_exc())
                         logging.error(error_msg)
-                        tracker.current_stage.status_message = error_msg
-                        tracker.update(current_items=tracker.total_items)
-                        # Continue with completion even if logging fails
+                        logging.error("Error details:", exc_info=True)
+                        logging.error(f"Stack trace:\n{error_details}")
+                        
+                        # Set error message on the tracker's current stage
+                        if tracker and tracker.current_stage:
+                            tracker.current_stage.status_message = error_msg
+                            tracker.update(current_items=tracker.total_items)
+                            
+                        # Update task with error information
+                        if task:
+                            try:
+                                task.update(
+                                    accountId=task.accountId,
+                                    type=task.type,
+                                    status='FAILED',
+                                    target=task.target,
+                                    command=task.command,
+                                    errorMessage=error_msg,
+                                    errorDetails=error_details,
+                                    completedAt=datetime.now(timezone.utc).isoformat(),
+                                    updatedAt=datetime.now(timezone.utc).isoformat()
+                                )
+                                logging.info(f"Updated task {task.id} with error information")
+                            except Exception as task_update_error:
+                                logging.error(f"Failed to update task with error information: {str(task_update_error)}")
+                        
+                        # Update evaluation record with error information if it exists
+                        if evaluation_record:
+                            try:
+                                mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                                    updateEvaluation(input: $input) {
+                                        id
+                                        status
+                                        errorMessage
+                                        errorDetails
+                                        taskId
+                                    }
+                                }"""
+                                update_data = {
+                                    'id': evaluation_record.id,
+                                    'taskId': task.id,  # Always include task ID in error updates
+                                    'status': 'FAILED',
+                                    'errorMessage': error_msg,
+                                    'errorDetails': error_details
+                                }
+                                logging.info(f"Updating evaluation record with error data:\n{json.dumps(update_data, indent=2)}")
+                                result = client.execute(mutation, {'input': update_data})
+                                logging.info(f"Error update result:\n{json.dumps(result, indent=2)}")
+                            except Exception as eval_update_error:
+                                logging.error(f"Failed to update evaluation record with error information: {str(eval_update_error)}")
+                        
+                        # Continue with completion even if logging fails, but mark as failed
+                        tracker.fail(error_msg)
 
                 except Exception as e:
                     error_msg = f"Failed to create task stages: {str(e)}"
@@ -991,7 +1071,8 @@ def get_data_driven_samples(
     fresh, 
     content_ids_to_sample_set,
     progress_callback=None,
-    number_of_samples=None
+    number_of_samples=None,
+    random_seed=None
 ):
     score_class_name = score_config['class']
     score_module_path = f'plexus.scores.{score_class_name}'
@@ -1010,9 +1091,15 @@ def get_data_driven_samples(
     logging.info(f"Columns: {score_instance.dataframe.columns.tolist()}")
     logging.info(f"Shape: {score_instance.dataframe.shape}")
 
-    # Get the actual number of samples from the dataframe - THIS IS THE ONLY SOURCE OF TRUTH
-    actual_sample_count = len(score_instance.dataframe)
-    logging.info(f"[TRACE] Found actual_sample_count: {actual_sample_count}")
+    # Sample the dataframe if number_of_samples is specified
+    if number_of_samples and number_of_samples < len(score_instance.dataframe):
+        logging.info(f"Sampling {number_of_samples} records from {len(score_instance.dataframe)} total records")
+        score_instance.dataframe = score_instance.dataframe.sample(n=number_of_samples, random_state=random_seed)
+        actual_sample_count = number_of_samples
+        logging.info(f"Using random_seed: {random_seed if random_seed is not None else 'None (fully random)'}")
+    else:
+        actual_sample_count = len(score_instance.dataframe)
+        logging.info(f"Using all {actual_sample_count} records (no sampling needed)")
 
     # Set the actual count as our single source of truth right when we find it
     if progress_callback and hasattr(progress_callback, '__self__'):
@@ -1231,6 +1318,7 @@ def evaluations():
 @evaluations.command()
 @click.option('--account-key', default='call-criteria', help='Account key identifier')
 @click.option('--type', required=True, help='Type of evaluation (e.g., accuracy, consistency)')
+@click.option('--task-id', required=True, help='Associated task ID')
 @click.option('--parameters', type=str, help='JSON string of evaluation parameters')
 @click.option('--metrics', type=str, help='JSON string of evaluation metrics')
 @click.option('--inferences', type=int, help='Number of inferences made')
@@ -1259,6 +1347,7 @@ def evaluations():
 def create(
     account_key: str,
     type: str,
+    task_id: str,
     parameters: Optional[str] = None,
     metrics: Optional[str] = None,
     inferences: Optional[int] = None,
@@ -1292,11 +1381,21 @@ def create(
         account = Account.get_by_key(account_key, client)
         logger.info(f"Found account: {account.name} ({account.id})")
         
+        # Verify task exists
+        logger.info(f"Verifying task ID: {task_id}")
+        task = Task.get_by_id(task_id, client)
+        if not task:
+            error_msg = f"Task with ID {task_id} not found"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        logger.info(f"Found task: {task.id}")
+        
         # Build input dictionary with all provided values
         input_data = {
             'type': type,
             'accountId': account.id,
-            'status': status
+            'status': status,
+            'taskId': task_id
         }
         
         # Look up scorecard if any identifier was provided

@@ -381,11 +381,11 @@ class Task(BaseModel):
         stages = self.get_stages()
         for stage in stages:
             if stage.status != 'FAILED':  # Don't override failed stages
-                stage.status = 'COMPLETED'
-                if not stage.completedAt:
-                    stage.completedAt = datetime.now(timezone.utc).isoformat()
-                if not stage.startedAt:
-                    stage.startedAt = self.startedAt
+                stage.update(
+                    status='COMPLETED',
+                    completedAt=self._format_datetime(datetime.now(timezone.utc)),
+                    startedAt=self._format_datetime(self.startedAt) if not stage.startedAt else stage.startedAt
+                )
 
         # Then complete the task
         self.update(

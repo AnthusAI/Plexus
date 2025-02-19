@@ -213,40 +213,95 @@ def test_complete_processing():
         client=mock_client
     )
 
-    # Mock the get_stages response
-    mock_stage = MagicMock()
-    mock_stage.status = 'RUNNING'
-    mock_stage.completedAt = None
-    mock_stage.startedAt = None
-    mock_task.get_stages = MagicMock(return_value=[mock_stage])
+    # Track the sequence of calls to return appropriate responses
+    call_count = 0
+    def mock_execute(query, variables):
+        nonlocal call_count
+        call_count += 1
+        
+        # First call - list stages
+        if call_count == 1 and 'query ListTaskStageByTaskId' in query:
+            return {
+                'listTaskStageByTaskId': {
+                    'items': [
+                        {
+                            'id': 'test-stage-1',
+                            'taskId': 'test-task-id',
+                            'name': 'Running',
+                            'order': 1,
+                            'status': 'RUNNING',
+                            'statusMessage': None,
+                            'startedAt': None,
+                            'completedAt': None,
+                            'estimatedCompletionAt': None,
+                            'processedItems': 0,
+                            'totalItems': 1
+                        }
+                    ],
+                    'nextToken': None
+                }
+            }
+        # Second call - get stage data
+        elif call_count == 2 and 'query GetTaskStage' in query:
+            return {
+                'getTaskStage': {
+                    'id': 'test-stage-1',
+                    'taskId': 'test-task-id',
+                    'name': 'Running',
+                    'order': 1,
+                    'status': 'RUNNING'
+                }
+            }
+        # Third call - update stage
+        elif call_count == 3 and 'mutation UpdateTaskStage' in query:
+            return {
+                'updateTaskStage': {
+                    'id': 'test-stage-1',
+                    'taskId': 'test-task-id',
+                    'name': 'Running',
+                    'order': 1,
+                    'status': 'COMPLETED',
+                    'completedAt': '2024-01-01T00:00:00Z'
+                }
+            }
+        # Fourth call - get task data
+        elif call_count == 4 and 'query GetTask' in query:
+            return {
+                'getTask': {
+                    'accountId': 'test-account',
+                    'type': 'TEST',
+                    'status': 'RUNNING',
+                    'target': 'test/target',
+                    'command': 'test command'
+                }
+            }
+        # Fifth call - update task
+        elif call_count == 5 and 'mutation UpdateTask' in query:
+            return {
+                'updateTask': {
+                    'id': 'test-task-id',
+                    'accountId': 'test-account',
+                    'type': 'TEST',
+                    'status': 'COMPLETED',
+                    'target': 'test/target',
+                    'command': 'test command',
+                    'completedAt': '2024-01-01T00:00:00Z'
+                }
+            }
+        return {}
 
-    # Mock the execute responses for update
-    mock_client.execute.side_effect = [
-        {
-            'getTask': {
-                'id': 'test-task-id',
-                'accountId': 'test-account',
-                'type': 'TEST',
-                'status': 'RUNNING',
-                'target': 'test/target',
-                'command': 'test command'
-            }
-        },
-        {
-            'updateTask': {
-                'id': 'test-task-id',
-                'accountId': 'test-account',
-                'type': 'TEST',
-                'status': 'COMPLETED',
-                'target': 'test/target',
-                'command': 'test command',
-                'completedAt': '2024-01-01T00:00:00Z'
-            }
-        }
-    ]
+    mock_client.execute = MagicMock(side_effect=mock_execute)
 
     mock_task.complete_processing()
-    assert mock_client.execute.call_count == 2
+    assert mock_client.execute.call_count == 5
+
+    # Verify the sequence of calls
+    calls = mock_client.execute.call_args_list
+    assert 'query ListTaskStageByTaskId' in calls[0][0][0]  # First call should be to list stages
+    assert 'query GetTaskStage' in calls[1][0][0]  # Second call should be GetTaskStage
+    assert 'mutation UpdateTaskStage' in calls[2][0][0]  # Third call should be to update stage
+    assert 'query GetTask' in calls[3][0][0]  # Fourth call should be GetTask for task update
+    assert 'mutation UpdateTask' in calls[4][0][0]  # Fifth call should be to update task
 
 def test_fail_processing():
     mock_client = MagicMock()
