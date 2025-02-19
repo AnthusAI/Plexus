@@ -981,7 +981,8 @@ class LangGraphScore(Score, LangChainUser):
                     'non_qualifying_reason': graph_result.get('non_qualifying_reason'),
                     'non_qualifying_explanation': graph_result.get('non_qualifying_explanation'),
                     'confidence': graph_result.get('confidence'),
-                    'classification': graph_result.get('classification')
+                    'classification': graph_result.get('classification'),
+                    'source': graph_result.get('source')
                 }
             )
         except BatchProcessingPause:

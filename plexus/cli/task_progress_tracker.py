@@ -52,7 +52,8 @@ class Stage:
         """Start this stage."""
         self.start_time = time.time()
         self.status = 'RUNNING'
-        self.processed_items = 0  # Reset processed items when starting stage
+        if self.total_items is not None:
+            self.processed_items = 0  # Only initialize processed_items if total_items is set
         logging.debug(f"Starting stage {self.name} with total_items={self.total_items}")
 
     def complete(self):
