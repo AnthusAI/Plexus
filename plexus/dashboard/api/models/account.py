@@ -49,12 +49,12 @@ class Account(BaseModel):
         """
 
     @classmethod
-    def list_by_key(cls, client: _BaseAPIClient, key: str) -> Optional['Account']:
+    def get_by_key(cls, key: str, client: _BaseAPIClient) -> Optional['Account']:
         """Get an account by its key.
         
         Args:
-            client: The API client instance
             key: The account key to look up
+            client: The API client instance
             
         Returns:
             Account: The found account or None
@@ -76,6 +76,19 @@ class Account(BaseModel):
             return None
             
         return cls.from_dict(items[0], client)
+
+    @classmethod
+    def list_by_key(cls, client: _BaseAPIClient, key: str) -> Optional['Account']:
+        """Get an account by its key.
+        
+        Args:
+            client: The API client instance
+            key: The account key to look up
+            
+        Returns:
+            Account: The found account or None
+        """
+        return cls.get_by_key(key, client)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Account':
