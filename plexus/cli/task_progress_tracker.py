@@ -432,12 +432,18 @@ class TaskProgressTracker:
             # Complete current stage if it exists
             if self.current_stage:
                 self.current_stage.complete()
+                # Ensure processed items matches total items for the stage
+                if self.current_stage.total_items is not None:
+                    self.current_stage.processed_items = self.current_stage.total_items
 
             # Mark all stages as completed
             for stage in self._stages.values():
                 if not stage.end_time:
                     stage.end_time = time.time()
                 stage.status = 'COMPLETED'
+                # Ensure all stages with total_items have matching processed_items
+                if stage.total_items is not None:
+                    stage.processed_items = stage.total_items
 
         # Don't override the current_items count
         self.end_time = time.time()
@@ -743,20 +749,8 @@ class TaskProgressTracker:
         progress = self.progress
         if progress == 0:
             return "Starting..."
-        elif progress <= 5:
-            return "Starting..."
-        elif progress <= 35:
-            return "Processing items..."
-        elif progress <= 65:
-            return "Cruising..."
-        elif progress <= 80:
-            return "On autopilot..."
-        elif progress <= 90:
-            return "Finishing soon..."
-        elif progress < 100:
-            return "Almost done..."
         else:
-            return "Complete"
+            return f"{progress}%"
 
     @property
     def task(self) -> Optional['Task']:
