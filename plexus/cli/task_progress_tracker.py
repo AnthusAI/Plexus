@@ -139,8 +139,8 @@ class TaskProgressTracker:
             account_id: Optional account ID to associate with the task
         """
         # Start with None - we'll set the real count when we know it
-        self.total_items = None
-        logging.info(f"[TRACE] Initialized TaskProgressTracker instance {id(self)} with total_items=None (ignoring passed in value: {total_items})")
+        self.total_items = total_items
+        logging.info(f"[TRACE] Initialized TaskProgressTracker instance {id(self)} with total_items={total_items}")
         self.current_items = 0
         self.start_time = time.time()
         self.end_time: Optional[float] = None
@@ -162,7 +162,7 @@ class TaskProgressTracker:
         if stage_configs:
             for name, config in stage_configs.items():
                 # Don't set total_items for finalizing stage
-                stage_total_items = None if name.lower() == 'finalizing' else None
+                stage_total_items = None if name.lower() == 'finalizing' else config.total_items
                 logging.debug(f"[TRACE] Initializing stage {name} with total_items={stage_total_items} in instance {id(self)}")
                 self._stages[name] = Stage(
                     name=name,
@@ -327,6 +327,9 @@ class TaskProgressTracker:
         Args:
             current_items: The current total count of processed items
             status: Optional status message to update
+            
+        Raises:
+            ValueError: If current_items is negative or exceeds total_items
         """
         logging.info(f"[TRACE] update called on instance {id(self)} with current_items={current_items}, total_items={self.total_items}")
         
@@ -337,6 +340,9 @@ class TaskProgressTracker:
 
         if current_items < 0:
             raise ValueError("Current items cannot be negative")
+        
+        if current_items > self.total_items:
+            raise ValueError(f"Current items ({current_items}) cannot exceed total items ({self.total_items})")
 
         # Log the actual count we're using for this update
         logging.info(f"Updating progress with count: {current_items}/{self.total_items}")
@@ -409,15 +415,31 @@ class TaskProgressTracker:
     def complete(self):
         """Complete tracking and update API task if we have one."""
         if self._stages:
+            # Verify all stages have been processed
+            unprocessed_stages = [
+                s.name for s in self._stages.values()
+                if s.status not in ['COMPLETED', 'RUNNING']
+            ]
+            if unprocessed_stages:
+                raise RuntimeError(
+                    f"Cannot complete task: stages not processed: {unprocessed_stages}"
+                )
+
             # Complete current stage if it exists
             if self.current_stage:
                 self.current_stage.complete()
+                # Ensure processed items matches total items for the stage
+                if self.current_stage.total_items is not None:
+                    self.current_stage.processed_items = self.current_stage.total_items
 
             # Mark all stages as completed
             for stage in self._stages.values():
                 if not stage.end_time:
                     stage.end_time = time.time()
                 stage.status = 'COMPLETED'
+                # Ensure all stages with total_items have matching processed_items
+                if stage.total_items is not None:
+                    stage.processed_items = stage.total_items
 
             # Verify all stages are complete
             incomplete = [
@@ -429,7 +451,8 @@ class TaskProgressTracker:
                     f"Cannot complete task: stages not finished: {incomplete}"
                 )
 
-        # Don't override the current_items count
+        # Set current_items to total_items when completing
+        self.current_items = self.total_items
         self.end_time = time.time()
         self.is_complete = True
         self.status = "Complete"
@@ -733,20 +756,8 @@ class TaskProgressTracker:
         progress = self.progress
         if progress == 0:
             return "Starting..."
-        elif progress <= 5:
-            return "Starting..."
-        elif progress <= 35:
-            return "Processing items..."
-        elif progress <= 65:
-            return "Cruising..."
-        elif progress <= 80:
-            return "On autopilot..."
-        elif progress <= 90:
-            return "Finishing soon..."
-        elif progress < 100:
-            return "Almost done..."
         else:
-            return "Complete"
+            return f"{progress}%"
 
     @property
     def task(self) -> Optional['Task']:
