@@ -53,14 +53,13 @@ from plexus.dashboard.api.models.task import Task
 
 from plexus.scores.LangGraphScore import LangGraphScore, BatchProcessingPause
 from plexus.utils.dict_utils import truncate_dict_strings_inner
-from plexus.CustomLogging import setup_logging, set_log_group
+from plexus.CustomLogging import logging, setup_logging, set_log_group
 
 from plexus.cli.task_progress_tracker import StageConfig, TaskProgressTracker
 
 # Set up logging for evaluations
 set_log_group('plexus/evaluation')
 setup_logging()
-logger = logging.getLogger(__name__)
 
 class Evaluation:
     """
@@ -137,8 +136,8 @@ class Evaluation:
         self.task_id = task_id
         
         # Set up logging for evaluations
-        self.logger = logging.getLogger('plexus/evaluation')
-        self.logger.info("Starting Evaluation initialization...")
+        self.logging = logging.getLogger('plexus/evaluation')
+        self.logging.info("Starting Evaluation initialization...")
 
         # Initialize basic parameters
         self.scorecard_name = scorecard_name
@@ -163,44 +162,44 @@ class Evaluation:
 
         # Initialize dashboard client
         try:
-            self.logger.info("Initializing Plexus Dashboard client...")
+            self.logging.info("Initializing Plexus Dashboard client...")
             self.dashboard_client = PlexusDashboardClient.for_account(account_key)
             
-            self.logger.info(f"Looking up account with key: {account_key}")
+            self.logging.info(f"Looking up account with key: {account_key}")
             account = Account.list_by_key(key=account_key, client=self.dashboard_client)
             if not account:
                 raise ValueError(f"No account found with key: {account_key}")
-            self.logger.info(f"Found account: {account.name} ({account.id})")
+            self.logging.info(f"Found account: {account.name} ({account.id})")
             
             self.account_id = account.id
             
             # Initialize scorecard_id as None
             self.scorecard_id = None
             
-            self.logger.info(f"Looking up scorecard with name: {self.scorecard.name}")
+            self.logging.info(f"Looking up scorecard with name: {self.scorecard.name}")
             try:
                 if hasattr(self.scorecard, 'key'):
-                    self.logger.info(f"Using scorecard key: {self.scorecard.key}")
+                    self.logging.info(f"Using scorecard key: {self.scorecard.key}")
                     scorecard_obj = DashboardScorecard.get_by_key(self.scorecard.key, self.dashboard_client)
                 elif hasattr(self.scorecard, 'id'):
-                    self.logger.info(f"Using scorecard ID: {self.scorecard.id}")
+                    self.logging.info(f"Using scorecard ID: {self.scorecard.id}")
                     scorecard_obj = DashboardScorecard.get_by_id(self.scorecard.id, self.dashboard_client)
                 else:
-                    self.logger.info(f"Looking up scorecard by name: {self.scorecard.name}")
+                    self.logging.info(f"Looking up scorecard by name: {self.scorecard.name}")
                     scorecard_obj = DashboardScorecard.get_by_name(self.scorecard.name, self.dashboard_client)
                 
                 if scorecard_obj:
-                    self.logger.info(f"Found scorecard: {scorecard_obj.name} ({scorecard_obj.id})")
+                    self.logging.info(f"Found scorecard: {scorecard_obj.name} ({scorecard_obj.id})")
                     self.scorecard_id = scorecard_obj.id
                 else:
-                    self.logger.error("Failed to find scorecard")
+                    self.logging.error("Failed to find scorecard")
                     raise ValueError(f"Could not find scorecard with name: {self.scorecard.name}")
             except Exception as e:
-                self.logger.error(f"Error looking up scorecard: {str(e)}")
+                self.logging.error(f"Error looking up scorecard: {str(e)}")
                 raise
 
         except Exception as e:
-            self.logger.error(f"Failed to initialize dashboard client: {str(e)}", exc_info=True)
+            self.logging.error(f"Failed to initialize dashboard client: {str(e)}", exc_info=True)
             self.dashboard_client = None
             self.experiment_id = None
             self.scorecard_id = None
@@ -353,10 +352,10 @@ class Evaluation:
     async def log_to_dashboard(self, metrics, status="RUNNING"):
         """Log metrics to Plexus Dashboard with retry logic"""
         if not self.experiment_id:
-            self.logger.warning("Experiment ID not available - skipping metrics update")
+            self.logging.warning("Experiment ID not available - skipping metrics update")
             return
         
-        self.logger.info(f"Starting dashboard update for experiment {self.experiment_id}")
+        self.logging.info(f"Starting dashboard update for experiment {self.experiment_id}")
         
         try:
             elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
@@ -409,16 +408,16 @@ class Evaluation:
                 "input": update_params
             }
             
-            self.logger.info("Executing dashboard update...")
+            self.logging.info("Executing dashboard update...")
             # Use synchronous execution during cleanup, async otherwise
             if status in ["COMPLETED", "FAILED"]:
                 self.dashboard_client.execute(self._get_update_mutation(), variables)
             else:
                 await asyncio.to_thread(self.dashboard_client.execute, self._get_update_mutation(), variables)
-            self.logger.info("Successfully completed dashboard update")
+            self.logging.info("Successfully completed dashboard update")
             
         except Exception as e:
-            self.logger.error(f"Error updating dashboard experiment: {e}")
+            self.logging.error(f"Error updating dashboard experiment: {e}")
             raise
 
     def calculate_metrics(self, results):
@@ -1066,7 +1065,7 @@ class Evaluation:
                             )
                             last_processed_count = current_count
                         except Exception as e:
-                            self.logger.error(f"Error in final metrics update: {e}")
+                            self.logging.error(f"Error in final metrics update: {e}")
                     else:
                         # For progress updates, use async with shield
                         try:
@@ -1075,9 +1074,9 @@ class Evaluation:
                             last_processed_count = current_count
                         except asyncio.CancelledError:
                             # If cancelled during progress update, just log and continue
-                            self.logger.info("Progress update cancelled")
+                            self.logging.info("Progress update cancelled")
                         except Exception as e:
-                            self.logger.error(f"Error in progress update: {e}")
+                            self.logging.error(f"Error in progress update: {e}")
                 
                 # Wait a bit before checking again
                 await asyncio.sleep(.1)
@@ -1099,10 +1098,10 @@ class Evaluation:
                         update_variables
                     )
                 except Exception as e:
-                    self.logger.error(f"Error during final metrics update: {e}")
-            self.logger.info(f"Metrics computation for {score_name} cancelled")
+                    self.logging.error(f"Error during final metrics update: {e}")
+            self.logging.info(f"Metrics computation for {score_name} cancelled")
         except Exception as e:
-            self.logger.error(f"Error in metrics computation for {score_name}: {e}")
+            self.logging.error(f"Error in metrics computation for {score_name}: {e}")
 
     def _get_update_mutation(self):
         """Get the GraphQL mutation for updating metrics"""
@@ -1640,16 +1639,16 @@ Total cost:       ${expenses['total_cost']:.6f}
             }
 
             # Log the data being sent
-            self.logger.info("Preparing to create score result with data:")
+            self.logging.info("Preparing to create score result with data:")
             for key, value in data.items():
-                self.logger.info(f"{key}: {truncate_dict_strings_inner(value)}")
+                self.logging.info(f"{key}: {truncate_dict_strings_inner(value)}")
 
             # Validate all required fields are present and not None
             required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'value', 'metadata']
             missing_fields = [field for field in required_fields if not data.get(field)]
             if missing_fields:
-                self.logger.error(f"Missing required fields: {', '.join(missing_fields)}")
-                self.logger.error(f"Current data: {data}")
+                self.logging.error(f"Missing required fields: {', '.join(missing_fields)}")
+                self.logging.error(f"Current data: {data}")
                 raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
 
             mutation = """
@@ -1707,7 +1706,7 @@ Total cost:       ${expenses['total_cost']:.6f}
             # Stop the metrics computation task
             self.should_stop = True
             if hasattr(self, 'metrics_tasks') and self.metrics_tasks:
-                self.logger.info("Cleaning up metrics tasks...")
+                self.logging.info("Cleaning up metrics tasks...")
                 for task in self.metrics_tasks.values():
                     if not task.done():
                         task.cancel()
@@ -1716,7 +1715,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                         except asyncio.CancelledError:
                             pass  # Expected during cleanup
                         except Exception as e:
-                            self.logger.error(f"Error cleaning up metrics task: {e}")
+                            self.logging.error(f"Error cleaning up metrics task: {e}")
             
             # Clean up scorecard
             if hasattr(self, 'scorecard'):
@@ -1738,8 +1737,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                     pass
 
         except Exception as e:
-            self.logger.error(f"Error during {self.__class__.__name__} cleanup: {e}")
-            self.logger.debug("Cleanup error details:", exc_info=True)
+            self.logging.error(f"Error during {self.__class__.__name__} cleanup: {e}")
+            self.logging.debug("Cleanup error details:", exc_info=True)
 
     async def __aenter__(self):
         return self
@@ -1792,13 +1791,13 @@ class AccuracyEvaluation(Evaluation):
         self.experiment_id = self.evaluation_id
         
         if not self.experiment_id:
-            self.logger.error("No evaluation_id provided to AccuracyEvaluation")
+            self.logging.error("No evaluation_id provided to AccuracyEvaluation")
             raise ValueError("No evaluation_id provided to AccuracyEvaluation")
         
         # Initialize started_at for elapsed time calculations
         self.started_at = datetime.now(timezone.utc)
         
-        self.logger.info(f"Using existing evaluation record with ID: {self.experiment_id}")
+        self.logging.info(f"Using existing evaluation record with ID: {self.experiment_id}")
         
         # Update the evaluation record with scorecard and score IDs
         if self.dashboard_client:
@@ -1810,7 +1809,7 @@ class AccuracyEvaluation(Evaluation):
             
             if update_data:
                 try:
-                    self.logger.info(f"Updating evaluation record {self.experiment_id} with: {update_data}")
+                    self.logging.info(f"Updating evaluation record {self.experiment_id} with: {update_data}")
                     mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
                         updateEvaluation(input: $input) {
                             id
@@ -1824,9 +1823,9 @@ class AccuracyEvaluation(Evaluation):
                             **update_data
                         }
                     })
-                    self.logger.info("Successfully updated evaluation record with scorecard and score IDs")
+                    self.logging.info("Successfully updated evaluation record with scorecard and score IDs")
                 except Exception as e:
-                    self.logger.error(f"Failed to update evaluation record with IDs: {str(e)}")
+                    self.logging.error(f"Failed to update evaluation record with IDs: {str(e)}")
                     # Continue execution even if update fails
         
         try:
@@ -1845,7 +1844,7 @@ class AccuracyEvaluation(Evaluation):
 
             # Adjust the sample size if necessary
             self.number_of_texts_to_sample = min(len(df), self.requested_sample_size)
-            self.logger.info(f"Adjusted sample size from {self.requested_sample_size} to {self.number_of_texts_to_sample} based on available data")
+            self.logging.info(f"Adjusted sample size from {self.requested_sample_size} to {self.number_of_texts_to_sample} based on available data")
 
             # Sample rows based on the sampling method
             if self.sampling_method == 'random':
@@ -1876,7 +1875,7 @@ class AccuracyEvaluation(Evaluation):
 
             return metrics
         except Exception as e:
-            self.logger.error(f"Error in _run_evaluation: {e}", exc_info=True)
+            self.logging.error(f"Error in _run_evaluation: {e}", exc_info=True)
             raise e
         finally:
             pass
