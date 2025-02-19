@@ -34,6 +34,12 @@ class DummyAPIStage:
 class DummyAPITask:
     def __init__(self, id):
         self.id = id
+        self.status = "PENDING"
+        self.accountId = "test-account"
+        self.type = "TEST"
+        self.target = "test/target"
+        self.command = "test command"
+        self.total_items = None
         self._stages = {}
 
     def get_stages(self):
@@ -54,7 +60,10 @@ class DummyAPITask:
         pass
 
     def complete_processing(self):
-        pass
+        self.status = "COMPLETED"
+        for stage in self._stages.values():
+            if stage.status != "FAILED":
+                stage.status = "COMPLETED"
 
 # Modify the test function to patch Task.create
 @patch("plexus.dashboard.api.models.task.Task.create", autospec=True)

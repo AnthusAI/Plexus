@@ -15,7 +15,7 @@ describe('CTASection', () => {
 
   it('renders the main heading and description', () => {
     render(<CTASection />)
-    expect(screen.getByText('Ready to get started with Plexus?')).toBeInTheDocument()
+    expect(screen.getByText('Ready to get started?')).toBeInTheDocument()
     expect(screen.getByText(/Join the growing community/)).toBeInTheDocument()
   })
 

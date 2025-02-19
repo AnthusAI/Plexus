@@ -14,7 +14,7 @@ from typing import Optional
 import numpy as np
 from datetime import datetime, timezone, timedelta
 
-from plexus.CustomLogging import logging, set_log_group
+from plexus.CustomLogging import logging as logger
 from plexus.Scorecard import Scorecard
 from plexus.Registries import scorecard_registry
 from plexus.Evaluation import AccuracyEvaluation
@@ -36,7 +36,17 @@ import threading
 import socket
 import types  # Add this at the top with other imports
 
-set_log_group('plexus/cli/evaluation')
+def truncate_dict_strings(d, max_length=100):
+    """Recursively truncate long string values in a dictionary."""
+    if isinstance(d, dict):
+        return {k: truncate_dict_strings(v) for k, v in d.items()}
+    elif isinstance(d, list):
+        return [truncate_dict_strings(v) for v in d]
+    elif isinstance(d, str) and len(d) > max_length:
+        return d[:max_length] + "..."
+    return d
+
+logger.set_log_group('plexus/cli/evaluation')
 
 from plexus.scores.Score import Score
 from plexus.dashboard.api.models.task import Task
@@ -64,7 +74,7 @@ def load_configuration_from_yaml_file(configuration_file_path):
         with open(configuration_file_path, 'r') as file:
             return yaml.safe_load(file)
     else:
-        logging.info(f"Configuration file not found: {configuration_file_path}")
+        logger.info(f"Configuration file not found: {configuration_file_path}")
         return {}
 
 @evaluate.command()
@@ -110,22 +120,22 @@ def accuracy(
             
             try:
                 # Get the account ID for call-criteria regardless of path
-                logging.info("Looking up call-criteria account...")
+                logger.info("Looking up call-criteria account...")
                 account = Account.list_by_key(key="call-criteria", client=client)
                 if not account:
                     raise Exception("Could not find account with key: call-criteria")
-                logging.info(f"Found account: {account.name} ({account.id})")
+                logger.info(f"Found account: {account.name} ({account.id})")
             except Exception as e:
-                logging.error(f"Failed to get account: {str(e)}")
+                logger.error(f"Failed to get account: {str(e)}")
                 raise
 
             if task_id:
                 # Get existing task if task_id provided (Celery path)
                 try:
                     task = Task.get_by_id(task_id, client)
-                    logging.info(f"Using existing task: {task_id}")
+                    logger.info(f"Using existing task: {task_id}")
                 except Exception as e:
-                    logging.error(f"Failed to get existing task {task_id}: {str(e)}")
+                    logger.error(f"Failed to get existing task {task_id}: {str(e)}")
                     raise
             else:
                 # Create new task if running standalone
@@ -134,14 +144,14 @@ def accuracy(
                 if api_url and api_key:
                     try:
                         # First verify we can connect to the API
-                        logging.info("Testing API connection...")
+                        logger.info("Testing API connection...")
                         test_query = """
                         query TestConnection {
                             __typename
                         }
                         """
                         client.execute(test_query)
-                        logging.info("API connection successful")
+                        logger.info("API connection successful")
 
                         # Initialize TaskProgressTracker with proper stage configs
                         stage_configs = {
@@ -193,7 +203,7 @@ def accuracy(
                             startedAt=datetime.now(timezone.utc).isoformat(),
                             updatedAt=datetime.now(timezone.utc).isoformat()
                         )
-                        logging.info(f"Successfully claimed task {task.id} with worker ID {worker_id}")
+                        logger.info(f"Successfully claimed task {task.id} with worker ID {worker_id}")
                         
                         # Log complete task details
                         task_details = {
@@ -227,8 +237,8 @@ def accuracy(
                                 for stage in task.get_stages()
                             ]
                         }
-                        logging.info(f"Created task with details:\n{json.dumps(task_details, indent=2)}")
-                        logging.info(f"Successfully created and verified task: {task.id}")
+                        logger.info(f"Created task with details:\n{json.dumps(task_details, indent=2)}")
+                        logger.info(f"Successfully created and verified task: {task.id}")
 
                         # Create the Evaluation record IMMEDIATELY after Task setup
                         started_at = datetime.now(timezone.utc)
@@ -247,74 +257,88 @@ def accuracy(
                             }),
                             "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
                             "estimatedRemainingSeconds": number_of_samples,
-                            "taskId": task.id
+                            "taskId": task.id  # Add task ID directly in creation params
                         }
                         
                         try:
-                            logging.info("Creating initial Evaluation record...")
+                            if not task or not task.id:
+                                error_msg = "Cannot create evaluation record without a valid task ID"
+                                logger.error(error_msg)
+                                raise ValueError(error_msg)
+
+                            logger.info("Creating initial Evaluation record...")
+                            logger.info(f"Creating evaluation with params:\n{json.dumps(experiment_params, indent=2)}")
                             evaluation_record = DashboardEvaluation.create(
                                 client=client,
                                 **experiment_params
                             )
-                            logging.info(f"Created initial Evaluation record with ID: {evaluation_record.id}")
+                            logger.info(f"Created initial Evaluation record with ID: {evaluation_record.id}")
 
-                            # Explicitly update to ensure task ID is set
-                            mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                                updateEvaluation(input: $input) {
-                                    id
-                                    taskId
+                            # Verify the task ID was set
+                            if not evaluation_record.taskId:
+                                error_msg = f"Evaluation record {evaluation_record.id} was created but task ID was not set"
+                                logger.error(error_msg)
+                                # Try to update it one more time
+                                mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                                    updateEvaluation(input: $input) {
+                                        id
+                                        taskId
+                                    }
+                                }"""
+                                update_data = {
+                                    'id': evaluation_record.id,
+                                    'taskId': task.id
                                 }
-                            }"""
-                            update_data = {
-                                'id': evaluation_record.id,
-                                'taskId': task.id
-                            }
-                            logging.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
-                            client.execute(mutation, {'input': update_data})
-                            logging.info(f"Updated Evaluation record {evaluation_record.id} with taskId: {task.id}")
+                                logger.info(f"Attempting to update evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
+                                result = client.execute(mutation, {'input': update_data})
+                                logger.info(f"Update result:\n{json.dumps(result, indent=2)}")
 
                             # Update evaluation record with scorecard ID if we have one
                             if scorecard_record and 'id' in scorecard_record:
                                 update_data = {
                                     'id': evaluation_record.id,
+                                    'taskId': task.id,  # Always include task ID in updates
                                     'scorecardId': scorecard_record['id']
                                 }
-                                logging.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
+                                logger.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
                                 mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
                                     updateEvaluation(input: $input) {
                                         id
+                                        taskId
                                         scorecardId
                                     }
                                 }"""
-                                client.execute(mutation, {'input': update_data})
-                                logging.info(f"Updated evaluation record with scorecard ID: {scorecard_record['id']}")
+                                result = client.execute(mutation, {'input': update_data})
+                                logger.info(f"Update result:\n{json.dumps(result, indent=2)}")
 
                             # Update evaluation record with score ID if we have one
                             if score_id:
                                 update_data = {
                                     'id': evaluation_record.id,
+                                    'taskId': task.id,  # Always include task ID in updates
                                     'scoreId': score_id
                                 }
-                                logging.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
+                                logger.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
                                 mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
                                     updateEvaluation(input: $input) {
                                         id
+                                        taskId
                                         scoreId
                                     }
                                 }"""
-                                client.execute(mutation, {'input': update_data})
-                                logging.info(f"Updated evaluation record with score ID: {score_id}")
+                                result = client.execute(mutation, {'input': update_data})
+                                logger.info(f"Update result:\n{json.dumps(result, indent=2)}")
 
                         except Exception as e:
-                            logging.error(f"Failed to create or update Evaluation record: {str(e)}", exc_info=True)
+                            logger.error(f"Failed to create or update Evaluation record: {str(e)}", exc_info=True)
                             raise
 
                     except Exception as e:
-                        logging.error(f"Failed to create task: {str(e)}")
-                        logging.error("Error details:", exc_info=True)
+                        logger.error(f"Failed to create task: {str(e)}")
+                        logger.error("Error details:", exc_info=True)
                         raise
                 else:
-                    logging.warning("PLEXUS_API_URL or PLEXUS_API_KEY not set, skipping task creation")
+                    logger.warning("PLEXUS_API_URL or PLEXUS_API_KEY not set, skipping task creation")
 
             # If we have a task but no tracker yet (Celery path), create the tracker now
             if task and not tracker:
@@ -373,20 +397,20 @@ def accuracy(
                 }
                 
                 try:
-                    logging.info("Creating initial Evaluation record for Celery path...")
-                    logging.info(f"Creating evaluation record with params:\n{json.dumps(experiment_params, indent=2)}")
+                    logger.info("Creating initial Evaluation record for Celery path...")
+                    logger.info(f"Creating evaluation record with params:\n{json.dumps(experiment_params, indent=2)}")
                     evaluation_record = DashboardEvaluation.create(
                         client=client,
                         **experiment_params
                     )
-                    logging.info(f"Created initial Evaluation record with ID: {evaluation_record.id}")
+                    logger.info(f"Created initial Evaluation record with ID: {evaluation_record.id}")
 
                     # Explicitly update to ensure task ID is set
                     update_data = {
                         'id': evaluation_record.id,
                         'taskId': task.id
                     }
-                    logging.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
+                    logger.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
                     mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
                         updateEvaluation(input: $input) {
                             id
@@ -394,42 +418,46 @@ def accuracy(
                         }
                     }"""
                     client.execute(mutation, {'input': update_data})
-                    logging.info(f"Updated Evaluation record {evaluation_record.id} with taskId: {task.id}")
+                    logger.info(f"Updated Evaluation record {evaluation_record.id} with taskId: {task.id}")
 
                     # Update evaluation record with scorecard ID if we have one
                     if scorecard_record and 'id' in scorecard_record:
                         update_data = {
                             'id': evaluation_record.id,
+                            'taskId': task.id,  # Always include task ID in updates
                             'scorecardId': scorecard_record['id']
                         }
-                        logging.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
+                        logger.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
                         mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
                             updateEvaluation(input: $input) {
                                 id
+                                taskId
                                 scorecardId
                             }
                         }"""
                         client.execute(mutation, {'input': update_data})
-                        logging.info(f"Updated evaluation record with scorecard ID: {scorecard_record['id']}")
+                        logger.info(f"Updated evaluation record with scorecard ID: {scorecard_record['id']}")
 
                     # Update evaluation record with score ID if we have one
                     if score_id:
                         update_data = {
                             'id': evaluation_record.id,
+                            'taskId': task.id,  # Always include task ID in updates
                             'scoreId': score_id
                         }
-                        logging.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
+                        logger.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
                         mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
                             updateEvaluation(input: $input) {
                                 id
+                                taskId
                                 scoreId
                             }
                         }"""
                         client.execute(mutation, {'input': update_data})
-                        logging.info(f"Updated evaluation record with score ID: {score_id}")
+                        logger.info(f"Updated evaluation record with score ID: {score_id}")
 
                 except Exception as e:
-                    logging.error(f"Failed to create or update Evaluation record in Celery path: {str(e)}", exc_info=True)
+                    logger.error(f"Failed to create or update Evaluation record in Celery path: {str(e)}", exc_info=True)
                     raise
 
             if task:
@@ -441,7 +469,7 @@ def accuracy(
                         # Initial setup stage message
                         tracker.current_stage.status_message = "Starting evaluation setup..."
                         tracker.update(current_items=0)
-                        logging.info("Entered Setup stage: Starting evaluation setup")
+                        logger.info("Entered Setup stage: Starting evaluation setup")
 
                     if use_langsmith_trace:
                         os.environ['LANGCHAIN_TRACING_V2'] = 'true'
@@ -454,11 +482,11 @@ def accuracy(
                     content_ids_to_sample_set = set()
                     if content_ids_to_sample:
                         content_ids_to_sample_set = {id.strip() for id in content_ids_to_sample.split(',') if id.strip()}
-                        logging.info(f"Will sample from content IDs: {content_ids_to_sample_set}")
+                        logger.info(f"Will sample from content IDs: {content_ids_to_sample_set}")
 
                     if not scorecard_name:
                         error_msg = "Scorecard not specified"
-                        logging.error(error_msg)
+                        logger.error(error_msg)
                         tracker.current_stage.status_message = error_msg
                         tracker.update(current_items=0)
                         if task:
@@ -468,7 +496,7 @@ def accuracy(
                     scorecard_folder = os.path.join('scorecards', scorecard_name)
                     override_folder: str = os.path.join(scorecard_folder, 'experiments/calibrations')
 
-                    logging.info('Running accuracy experiment...')
+                    logger.info('Running accuracy experiment...')
                     tracker.current_stage.status_message = "Loading scorecard configurations..."
                     tracker.update(current_items=0)
                     
@@ -476,7 +504,7 @@ def accuracy(
                     scorecard_type = scorecard_registry.get(scorecard_name)
                     if scorecard_type is None:
                         error_msg = f"Scorecard with name '{scorecard_name}' not found."
-                        logging.error(error_msg)
+                        logger.error(error_msg)
                         tracker.current_stage.status_message = error_msg
                         tracker.update(current_items=0)
                         if task:
@@ -484,7 +512,7 @@ def accuracy(
                         return
 
                     scorecard_instance = scorecard_type(scorecard=scorecard_name)
-                    logging.info(f"Using scorecard {scorecard_name} with class {scorecard_instance.__class__.__name__}")
+                    logger.info(f"Using scorecard {scorecard_name} with class {scorecard_instance.__class__.__name__}")
                     tracker.current_stage.status_message = f"Loaded scorecard: {scorecard_name}"
                     tracker.update(current_items=0)
 
@@ -497,7 +525,7 @@ def accuracy(
                         if not scorecard_key:
                             raise ValueError(f"Scorecard {scorecard_name} does not have a key defined in its properties")
                             
-                        logging.info(f"Looking up Scorecard record for key: {scorecard_key}")
+                        logger.info(f"Looking up Scorecard record for key: {scorecard_key}")
                         query = """
                         query GetScorecardByKey($key: String!) {
                             listScorecardByKey(key: $key) {
@@ -528,11 +556,11 @@ def accuracy(
                             raise ValueError(f"Could not find Scorecard with key: {scorecard_key}")
                         
                         scorecard_record = result['listScorecardByKey']['items'][0]
-                        logging.info(f"Found Scorecard record with ID: {scorecard_record['id']}")
+                        logger.info(f"Found Scorecard record with ID: {scorecard_record['id']}")
                         
                         # Update task with scorecard ID
                         if task:
-                            logging.info(f"Updating task {task.id} with scorecard ID: {scorecard_record['id']}")
+                            logger.info(f"Updating task {task.id} with scorecard ID: {scorecard_record['id']}")
                             task.update(
                                 accountId=task.accountId,
                                 type=task.type,
@@ -546,7 +574,7 @@ def accuracy(
                         # If we have a score name, try to find its ID
                         score_id = None
                         if score_name:
-                            logging.info(f"Looking up score with name/key: {score_name}")
+                            logger.info(f"Looking up score with name/key: {score_name}")
                             # First try to find the score in the API by name or key
                             for section in scorecard_record['sections']['items']:
                                 if section['scores']['items']:
@@ -554,25 +582,25 @@ def accuracy(
                                         if (score.get('name') == score_name or 
                                             (score.get('key') and score.get('key') == score_name)):
                                             score_id = score['id']
-                                            logging.info(f"Found Score record with ID: {score_id} matching name/key")
+                                            logger.info(f"Found Score record with ID: {score_id} matching name/key")
                                             break
                                 if score_id:
                                     break
                             
                             if not score_id:
-                                logging.warning(f"Could not find score with name/key: {score_name} in API, trying local config")
+                                logger.warning(f"Could not find score with name/key: {score_name} in API, trying local config")
                                 # Try to find score in local config by name first
                                 score_config = next((score for score in scorecard_instance.scores 
                                                    if score.get('name') == score_name), None)
                                 
                                 # If not found by name, try by key
                                 if not score_config:
-                                    logging.info(f"Score not found by name in config, trying key: {score_name}")
+                                    logger.info(f"Score not found by name in config, trying key: {score_name}")
                                     score_config = next((score for score in scorecard_instance.scores 
                                                        if score.get('key') == score_name), None)
                                 
                                 if score_config:
-                                    logging.info(f"Found score config: {score_config}")
+                                    logger.info(f"Found score config: {score_config}")
                                     if 'id' in score_config:
                                         external_id = score_config['id']
                                         # Try to find score by external ID in API
@@ -581,20 +609,20 @@ def accuracy(
                                                 for score in section['scores']['items']:
                                                     if str(score.get('externalId', '')) == str(external_id):
                                                         score_id = score['id']
-                                                        logging.info(f"Found Score record with ID: {score_id} matching external ID: {external_id}")
+                                                        logger.info(f"Found Score record with ID: {score_id} matching external ID: {external_id}")
                                                         break
                                             if score_id:
                                                 break
                                         if not score_id:
-                                            logging.warning(f"Could not find score with external ID {external_id} in API")
+                                            logger.warning(f"Could not find score with external ID {external_id} in API")
                                     else:
-                                        logging.warning(f"Score config found but missing 'id': {score_config}")
+                                        logger.warning(f"Score config found but missing 'id': {score_config}")
                                 else:
-                                    logging.warning(f"Could not find score by either name or key in config: {score_name}")
+                                    logger.warning(f"Could not find score by either name or key in config: {score_name}")
 
                             # Update task with score ID if found
                             if score_id and task:
-                                logging.info(f"Updating task {task.id} with score ID: {score_id}")
+                                logger.info(f"Updating task {task.id} with score ID: {score_id}")
                                 task.update(
                                     accountId=task.accountId,
                                     type=task.type,
@@ -614,7 +642,7 @@ def accuracy(
                             if score_id:
                                 update_data['scoreId'] = score_id
                                 
-                            logging.info(f"Updating evaluation record {evaluation_record.id} with data: {update_data}")
+                            logger.info(f"Updating evaluation record {evaluation_record.id} with data: {update_data}")
                             mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
                                 updateEvaluation(input: $input) {
                                     id
@@ -623,11 +651,11 @@ def accuracy(
                                 }
                             }"""
                             client.execute(mutation, {'input': update_data})
-                            logging.info("Successfully updated evaluation record with IDs")
+                            logger.info("Successfully updated evaluation record with IDs")
 
                     except Exception as e:
                         error_msg = f"Failed to look up Scorecard/Score records: {str(e)}"
-                        logging.error(error_msg)
+                        logger.error(error_msg)
                         tracker.current_stage.status_message = error_msg
                         tracker.update(current_items=0)
                         if task:
@@ -648,11 +676,11 @@ def accuracy(
                     tracker.advance_stage()
                     tracker.current_stage.status_message = "Starting processing..."
                     tracker.update(current_items=0)
-                    logging.info("Entered Processing stage")
+                    logger.info("Entered Processing stage")
 
                     # Process each score while keeping Processing stage active
                     for single_score_name in score_names:
-                        logging.info(f"Running experiment for score: {single_score_name}")
+                        logger.info(f"Running experiment for score: {single_score_name}")
                         tracker.current_stage.status_message = f"Starting evaluation for score: {single_score_name}"
                         tracker.update(current_items=0)
                         
@@ -668,7 +696,7 @@ def accuracy(
                         
                         if score_config and 'id' in score_config:
                             external_id = score_config['id']
-                            logging.info(f"Found Score external ID {external_id} for {single_score_name}")
+                            logger.info(f"Found Score external ID {external_id} for {single_score_name}")
                             
                             # Look up the actual Score record using scorecard ID and external ID
                             try:
@@ -698,12 +726,12 @@ def accuracy(
                                 if score_result and 'listScores' in score_result and score_result['listScores']['items']:
                                     score = score_result['listScores']['items'][0]
                                     score_id = score['id']
-                                    logging.info(f"Found Score record with ID {score_id} for external ID {external_id}")
+                                    logger.info(f"Found Score record with ID {score_id} for external ID {external_id}")
                                     
                                     # Update evaluation record with score ID if we have one
                                     if evaluation_record:
                                         try:
-                                            logging.info(f"Updating Evaluation record {evaluation_record.id} with scoreId: {score_id}")
+                                            logger.info(f"Updating Evaluation record {evaluation_record.id} with scoreId: {score_id}")
                                             mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
                                                 updateEvaluation(input: $input) {
                                                     id
@@ -716,17 +744,17 @@ def accuracy(
                                                     'scoreId': score_id
                                                 }
                                             })
-                                            logging.info(f"Successfully updated Evaluation record with scoreId")
+                                            logger.info(f"Successfully updated Evaluation record with scoreId")
                                         except Exception as e:
-                                            logging.error(f"Failed to update Evaluation record with scoreId: {str(e)}")
+                                            logger.error(f"Failed to update Evaluation record with scoreId: {str(e)}")
                                             # Continue execution even if update fails
                                 else:
-                                    logging.error(f"Could not find Score record for scorecard ID {scorecard_record.id} and external ID {external_id}")
+                                    logger.error(f"Could not find Score record for scorecard ID {scorecard_record.id} and external ID {external_id}")
                             except Exception as e:
-                                logging.error(f"Error looking up Score record: {str(e)}")
+                                logger.error(f"Error looking up Score record: {str(e)}")
                                 # Continue execution even if lookup fails
                         else:
-                            logging.warning(f"No external ID found for score {single_score_name}")
+                            logger.warning(f"No external ID found for score {single_score_name}")
 
                         if uses_data_driven:
                             if score_config:
@@ -763,7 +791,7 @@ def accuracy(
                                         tracker.current_stage.status_message = f"Successfully loaded {len(single_score_labeled_samples)} samples for {single_score_name}"
                                         tracker.update(current_items=0)
                             else:
-                                logging.warning(f"Score '{single_score_name}' not found in scorecard. Skipping.")
+                                logger.warning(f"Score '{single_score_name}' not found in scorecard. Skipping.")
                                 tracker.current_stage.status_message = f"Score '{single_score_name}' not found in scorecard. Skipping."
                                 tracker.update(current_items=0)
                                 continue
@@ -793,7 +821,7 @@ def accuracy(
                         if uses_data_driven:
                             if not single_score_labeled_samples:
                                 error_msg = "The dataset is empty. Cannot proceed with the experiment."
-                                logging.error(error_msg)
+                                logger.error(error_msg)
                                 tracker.current_stage.status_message = error_msg
                                 tracker.update(current_items=0)
                                 if task:
@@ -822,12 +850,12 @@ def accuracy(
                                     )
                                 )
 
-                        logging.info(f"Completed evaluation for score: {single_score_name}")
+                        logger.info(f"Completed evaluation for score: {single_score_name}")
                         tracker.current_stage.status_message = f"Completed evaluation for score: {single_score_name}"
                         tracker.update(current_items=tracker.total_items)
 
                     # Only advance to Finalizing stage after ALL scores are processed
-                    logging.info("All score evaluations completed")
+                    logger.info("All score evaluations completed")
                     tracker.current_stage.status_message = "All evaluations complete, starting finalization..."
                     tracker.update(current_items=tracker.total_items)
                     
@@ -835,7 +863,7 @@ def accuracy(
                     tracker.advance_stage()
                     tracker.current_stage.status_message = "Starting finalization..."
                     tracker.update(current_items=tracker.total_items)
-                    logging.info("Entered Finalizing stage")
+                    logger.info("Entered Finalizing stage")
 
                     # Complete the task
                     # First log the complete task and evaluation state
@@ -887,7 +915,7 @@ def accuracy(
                                 completedAt=datetime.now(timezone.utc).isoformat(),
                                 updatedAt=datetime.now(timezone.utc).isoformat()
                             )
-                            logging.info(f"Successfully marked task {task.id} as completed")
+                            logger.info(f"Successfully marked task {task.id} as completed")
 
                         # Get and log final evaluation state
                         if evaluation_record:
@@ -929,7 +957,7 @@ def accuracy(
                             result = client.execute(query, {'id': evaluation_record.id})
                             if result and 'getEvaluation' in result:
                                 eval_details = result['getEvaluation']
-                                logging.info(f"Final evaluation state:\n{truncate_dict_strings_inner(eval_details, indent=2)}")
+                                logger.info(f"Final evaluation state:\n{json.dumps(truncate_dict_strings(eval_details), indent=2)}")
 
                         tracker.current_stage.status_message = "Evaluation completed."
                         tracker.update(current_items=tracker.total_items)
@@ -937,15 +965,66 @@ def accuracy(
 
                     except Exception as e:
                         error_msg = f"Error logging final states: {str(e)}"
-                        logging.error(error_msg)
-                        tracker.current_stage.status_message = error_msg
-                        tracker.update(current_items=tracker.total_items)
-                        # Continue with completion even if logging fails
+                        error_details = ''.join(traceback.format_exc())
+                        logger.error(error_msg)
+                        logger.error("Error details:", exc_info=True)
+                        logger.error(f"Stack trace:\n{error_details}")
+                        
+                        # Set error message on the tracker's current stage
+                        if tracker and tracker.current_stage:
+                            tracker.current_stage.status_message = error_msg
+                            tracker.update(current_items=tracker.total_items)
+                            
+                        # Update task with error information
+                        if task:
+                            try:
+                                task.update(
+                                    accountId=task.accountId,
+                                    type=task.type,
+                                    status='FAILED',
+                                    target=task.target,
+                                    command=task.command,
+                                    errorMessage=error_msg,
+                                    errorDetails=error_details,
+                                    completedAt=datetime.now(timezone.utc).isoformat(),
+                                    updatedAt=datetime.now(timezone.utc).isoformat()
+                                )
+                                logger.info(f"Updated task {task.id} with error information")
+                            except Exception as task_update_error:
+                                logger.error(f"Failed to update task with error information: {str(task_update_error)}")
+                        
+                        # Update evaluation record with error information if it exists
+                        if evaluation_record:
+                            try:
+                                mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                                    updateEvaluation(input: $input) {
+                                        id
+                                        status
+                                        errorMessage
+                                        errorDetails
+                                        taskId
+                                    }
+                                }"""
+                                update_data = {
+                                    'id': evaluation_record.id,
+                                    'taskId': task.id,  # Always include task ID in error updates
+                                    'status': 'FAILED',
+                                    'errorMessage': error_msg,
+                                    'errorDetails': error_details
+                                }
+                                logger.info(f"Updating evaluation record with error data:\n{json.dumps(update_data, indent=2)}")
+                                result = client.execute(mutation, {'input': update_data})
+                                logger.info(f"Error update result:\n{json.dumps(result, indent=2)}")
+                            except Exception as eval_update_error:
+                                logger.error(f"Failed to update evaluation record with error information: {str(eval_update_error)}")
+                        
+                        # Continue with completion even if logging fails, but mark as failed
+                        tracker.fail(error_msg)
 
                 except Exception as e:
                     error_msg = f"Failed to create task stages: {str(e)}"
-                    logging.error(error_msg)
-                    logging.error("Error details:", exc_info=True)
+                    logger.error(error_msg)
+                    logger.error("Error details:", exc_info=True)
                     if tracker:
                         tracker.current_stage.status_message = error_msg
                         tracker.update(current_items=0)
@@ -953,7 +1032,7 @@ def accuracy(
                     raise
 
         except Exception as e:
-            logging.error(f"Evaluation failed: {str(e)}")
+            logger.error(f"Evaluation failed: {str(e)}")
             if task:
                 task.fail_processing(str(e))
             raise
@@ -971,9 +1050,9 @@ def accuracy(
     try:
         loop.run_until_complete(_run_accuracy())
     except asyncio.CancelledError:
-        logging.info("Task was cancelled - cleaning up...")
+        logger.info("Task was cancelled - cleaning up...")
     except Exception as e:
-        logging.error(f"Error during execution: {e}")
+        logger.error(f"Error during execution: {e}")
         raise
     finally:
         try:
@@ -984,7 +1063,7 @@ def accuracy(
                     asyncio.wait(tasks, timeout=2.0)
                 )
         except Exception as e:
-            logging.error(f"Error during cleanup: {e}")
+            logger.error(f"Error during cleanup: {e}")
 
 def get_data_driven_samples(
     scorecard_instance, 
@@ -1010,56 +1089,56 @@ def get_data_driven_samples(
     score_instance.process_data()
 
     # Log dataframe information
-    logging.info(f"Dataframe info for score {score_name}:")
-    logging.info(f"Columns: {score_instance.dataframe.columns.tolist()}")
-    logging.info(f"Shape: {score_instance.dataframe.shape}")
+    logger.info(f"Dataframe info for score {score_name}:")
+    logger.info(f"Columns: {score_instance.dataframe.columns.tolist()}")
+    logger.info(f"Shape: {score_instance.dataframe.shape}")
 
     # Sample the dataframe if number_of_samples is specified
     if number_of_samples and number_of_samples < len(score_instance.dataframe):
-        logging.info(f"Sampling {number_of_samples} records from {len(score_instance.dataframe)} total records")
+        logger.info(f"Sampling {number_of_samples} records from {len(score_instance.dataframe)} total records")
         score_instance.dataframe = score_instance.dataframe.sample(n=number_of_samples, random_state=random_seed)
         actual_sample_count = number_of_samples
-        logging.info(f"Using random_seed: {random_seed if random_seed is not None else 'None (fully random)'}")
+        logger.info(f"Using random_seed: {random_seed if random_seed is not None else 'None (fully random)'}")
     else:
         actual_sample_count = len(score_instance.dataframe)
-        logging.info(f"Using all {actual_sample_count} records (no sampling needed)")
+        logger.info(f"Using all {actual_sample_count} records (no sampling needed)")
 
     # Set the actual count as our single source of truth right when we find it
     if progress_callback and hasattr(progress_callback, '__self__'):
         tracker = progress_callback.__self__
-        logging.info(f"[TRACE] Got tracker instance {id(tracker)} from progress_callback.__self__")
-        logging.info(f"[TRACE] Before set_total_items: tracker instance {id(tracker)} has total_items={tracker.total_items}")
+        logger.info(f"[TRACE] Got tracker instance {id(tracker)} from progress_callback.__self__")
+        logger.info(f"[TRACE] Before set_total_items: tracker instance {id(tracker)} has total_items={tracker.total_items}")
         
         # First, set the actual total items count we just discovered
         # This is our single source of truth for the total count
         new_total = tracker.set_total_items(actual_sample_count)
-        logging.info(f"[TRACE] After set_total_items: tracker instance {id(tracker)} has total_items={new_total}")
+        logger.info(f"[TRACE] After set_total_items: tracker instance {id(tracker)} has total_items={new_total}")
         
         # Verify the total was set correctly before proceeding
         if new_total != actual_sample_count:
-            logging.error(f"[TRACE] Failed to set total_items to {actual_sample_count} - got {new_total} instead")
+            logger.error(f"[TRACE] Failed to set total_items to {actual_sample_count} - got {new_total} instead")
             raise RuntimeError(f"Failed to set total items to {actual_sample_count}")
         
         # Set the status message
         status_message = f"Successfully loaded {actual_sample_count} samples for {score_name}"
         if tracker.current_stage:
-            logging.info(f"[TRACE] Current stage {tracker.current_stage.name} in tracker instance {id(tracker)} has total_items={tracker.current_stage.total_items}")
+            logger.info(f"[TRACE] Current stage {tracker.current_stage.name} in tracker instance {id(tracker)} has total_items={tracker.current_stage.total_items}")
             tracker.current_stage.status_message = status_message
             # Reset processed items to 0 since we're starting fresh
             tracker.current_stage.processed_items = 0
             
             # Verify stage total_items was updated
             if tracker.current_stage.total_items != actual_sample_count:
-                logging.error(f"[TRACE] Stage {tracker.current_stage.name} has incorrect total_items: {tracker.current_stage.total_items} != {actual_sample_count}")
+                logger.error(f"[TRACE] Stage {tracker.current_stage.name} has incorrect total_items: {tracker.current_stage.total_items} != {actual_sample_count}")
                 raise RuntimeError(f"Stage {tracker.current_stage.name} total_items not updated correctly")
         
         # Now update progress - by this point total_items is set to actual_sample_count
-        logging.info(f"[TRACE] Calling update(0) on tracker instance {id(tracker)} with total_items={tracker.total_items}")
+        logger.info(f"[TRACE] Calling update(0) on tracker instance {id(tracker)} with total_items={tracker.total_items}")
         tracker.update(0, status_message)
         
         # Final verification after update
         if tracker.total_items != actual_sample_count:
-            logging.error(f"[TRACE] After update, tracker has incorrect total_items: {tracker.total_items} != {actual_sample_count}")
+            logger.error(f"[TRACE] After update, tracker has incorrect total_items: {tracker.total_items} != {actual_sample_count}")
             raise RuntimeError("Total items not maintained after update")
     elif progress_callback:
         progress_callback(0)
@@ -1071,13 +1150,13 @@ def get_data_driven_samples(
         with open(content_ids_to_exclude_filename, 'r') as file:
             content_ids_to_exclude = file.read().splitlines()
         samples = [sample for sample in samples if sample['content_id'] not in content_ids_to_exclude]
-        logging.info(f"Number of samples after filtering out training examples: {len(samples)}")
+        logger.info(f"Number of samples after filtering out training examples: {len(samples)}")
 
     # Filter samples based on content_ids_to_sample if provided
     if content_ids_to_sample_set:
         content_ids_as_integers = {int(content_id) for content_id in content_ids_to_sample_set}
         samples = [sample for sample in samples if sample['content_id'] in content_ids_as_integers]
-        logging.info(f"Number of samples after filtering by specified content IDs: {len(samples)}")
+        logger.info(f"Number of samples after filtering by specified content IDs: {len(samples)}")
 
     score_name_column_name = score_name
     if score_config.get('label_score_name'):
@@ -1093,7 +1172,7 @@ def get_data_driven_samples(
             try:
                 metadata = json.loads(metadata)
             except json.JSONDecodeError:
-                logging.warning(f"Failed to parse metadata as JSON for content_id {sample.get('content_id')}")
+                logger.warning(f"Failed to parse metadata as JSON for content_id {sample.get('content_id')}")
                 metadata = {}
         
         # Create the sample dictionary with metadata included
@@ -1114,7 +1193,7 @@ def get_data_driven_samples(
 
 def get_csv_samples(csv_filename):
     if not os.path.exists(csv_filename):
-        logging.error(f"labeled-samples.csv not found at {csv_filename}")
+        logger.error(f"labeled-samples.csv not found at {csv_filename}")
         return []
 
     df = pd.read_csv(csv_filename)
@@ -1132,13 +1211,13 @@ def distribution(
     max_workers: int
 ):
     start_time = time.time()
-    logging.info(f"Starting distribution evaluation for Scorecard {scorecard_name} at {time.strftime('%H:%M:%S')}")
+    logger.info(f"Starting distribution evaluation for Scorecard {scorecard_name} at {time.strftime('%H:%M:%S')}")
 
     Scorecard.load_and_register_scorecards('scorecards/')
     scorecard_class = scorecard_registry.get(scorecard_name)
 
     if scorecard_class is None:
-        logging.error(f"Scorecard with name '{scorecard_name}' not found.")
+        logger.error(f"Scorecard with name '{scorecard_name}' not found.")
         return
 
     # We're removing support for a list of scores.
@@ -1153,19 +1232,19 @@ def distribution(
             try:
                 future.result()
             except Exception as exc:
-                logging.error(f'{score_name} generated an exception: {exc}')
+                logger.error(f'{score_name} generated an exception: {exc}')
 
     end_time = time.time()
-    logging.info(f"Finished distribution evaluation at {time.strftime('%H:%M:%S')}. Total time: {end_time - start_time:.2f} seconds")
+    logger.info(f"Finished distribution evaluation at {time.strftime('%H:%M:%S')}. Total time: {end_time - start_time:.2f} seconds")
 
 def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
     start_time = time.time()
-    logging.info(f"Started evaluating distribution for Score {score_name} at {time.strftime('%H:%M:%S')}")
+    logger.info(f"Started evaluating distribution for Score {score_name} at {time.strftime('%H:%M:%S')}")
     
     score_configuration = next((score for score in scorecard_class.scores if score['name'] == score_name), {})
 
     if not score_configuration:
-        logging.error(f"Score with name '{score_name}' not found in scorecard '{scorecard_class.name}'.")
+        logger.error(f"Score with name '{score_name}' not found in scorecard '{scorecard_class.name}'.")
         return
 
     score_class_name = score_configuration['class']
@@ -1174,7 +1253,7 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
     score_class = getattr(score_module, score_class_name)
 
     if not isinstance(score_class, type):
-        logging.error(f"{score_class_name} is not a class.")
+        logger.error(f"{score_class_name} is not a class.")
         return
 
     score_configuration['scorecard_name'] = scorecard_class.name
@@ -1183,13 +1262,13 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
 
     score_instance.record_configuration(score_configuration)
 
-    logging.info(f"Loading data for {score_name} at {time.strftime('%H:%M:%S')}")
+    logger.info(f"Loading data for {score_name} at {time.strftime('%H:%M:%S')}")
     score_instance.load_data(data=score_configuration['data'])
     
-    logging.info(f"Processing data for {score_name} at {time.strftime('%H:%M:%S')}")
+    logger.info(f"Processing data for {score_name} at {time.strftime('%H:%M:%S')}")
     score_instance.process_data()
 
-    logging.info(f"Starting predictions for {score_name} at {time.strftime('%H:%M:%S')}")
+    logger.info(f"Starting predictions for {score_name} at {time.strftime('%H:%M:%S')}")
     sample_rows = score_instance.dataframe.sample(n=number_of_samples)
     predictions = []
 
@@ -1219,19 +1298,19 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
 
     answer_counts = Counter(pred.score for pred in predictions)
     
-    logging.info(f"\nResults for {score_name}:")
-    logging.info(f"Total samples: {number_of_samples}")
-    logging.info(f"Yes answers: {answer_counts['Yes']}")
-    logging.info(f"No answers: {answer_counts['No']}")
+    logger.info(f"\nResults for {score_name}:")
+    logger.info(f"Total samples: {number_of_samples}")
+    logger.info(f"Yes answers: {answer_counts['Yes']}")
+    logger.info(f"No answers: {answer_counts['No']}")
     
     yes_percentage = (answer_counts['Yes'] / number_of_samples) * 100
     no_percentage = (answer_counts['No'] / number_of_samples) * 100
     
-    logging.info(f"Yes percentage: {yes_percentage:.2f}%")
-    logging.info(f"No percentage: {no_percentage:.2f}%")
+    logger.info(f"Yes percentage: {yes_percentage:.2f}%")
+    logger.info(f"No percentage: {no_percentage:.2f}%")
     
     end_time = time.time()
-    logging.info(f"Finished {score_name} at {time.strftime('%H:%M:%S')}. Time taken: {end_time - start_time:.2f} seconds")
+    logger.info(f"Finished {score_name} at {time.strftime('%H:%M:%S')}. Time taken: {end_time - start_time:.2f} seconds")
 
 @click.group()
 def evaluations():
@@ -1241,6 +1320,7 @@ def evaluations():
 @evaluations.command()
 @click.option('--account-key', default='call-criteria', help='Account key identifier')
 @click.option('--type', required=True, help='Type of evaluation (e.g., accuracy, consistency)')
+@click.option('--task-id', required=True, help='Associated task ID')
 @click.option('--parameters', type=str, help='JSON string of evaluation parameters')
 @click.option('--metrics', type=str, help='JSON string of evaluation metrics')
 @click.option('--inferences', type=int, help='Number of inferences made')
@@ -1269,6 +1349,7 @@ def evaluations():
 def create(
     account_key: str,
     type: str,
+    task_id: str,
     parameters: Optional[str] = None,
     metrics: Optional[str] = None,
     inferences: Optional[int] = None,
@@ -1302,11 +1383,21 @@ def create(
         account = Account.get_by_key(account_key, client)
         logging.info(f"Found account: {account.name} ({account.id})")
         
+        # Verify task exists
+        logger.info(f"Verifying task ID: {task_id}")
+        task = Task.get_by_id(task_id, client)
+        if not task:
+            error_msg = f"Task with ID {task_id} not found"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        logger.info(f"Found task: {task.id}")
+        
         # Build input dictionary with all provided values
         input_data = {
             'type': type,
             'accountId': account.id,
-            'status': status
+            'status': status,
+            'taskId': task_id
         }
         
         # Look up scorecard if any identifier was provided

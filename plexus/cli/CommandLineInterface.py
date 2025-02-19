@@ -1,14 +1,18 @@
-import os
-from dotenv import load_dotenv
-load_dotenv('.env', override=True)
-
-import sys
 import click
+import os
+import time
+from dotenv import load_dotenv
+from celery import Celery
+from plexus.CustomLogging import logging
+from kombu.utils.url import safequote
+import sys
+import rich
+from rich.table import Table
+from rich.console import Console
 import importlib
 import builtins
 import json
 import random
-import time
 import numpy as np
 import threading
 import yaml
@@ -16,7 +20,6 @@ import logging
 import boto3
 from botocore.config import Config
 from datetime import datetime, timezone, timedelta
-from rich.console import Console
 from collections import OrderedDict
 from typing import Optional
 from sklearn.metrics import (
