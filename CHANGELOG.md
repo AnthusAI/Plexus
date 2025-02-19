@@ -1,12 +1,137 @@
 # CHANGELOG
 
 
+## v0.7.0-alpha.1 (2025-02-19)
+
+### Bug Fixes
+
+- **evaluation**: Add random seed support for data sampling in evaluation
+  ([`ed420bd`](https://github.com/AnthusAI/Plexus/commit/ed420bddc1d1ef8d528fcdd057655587825ec33b))
+
+- Modify get_data_driven_samples() to support optional random seed for reproducible sampling -
+  Update accuracy() method to pass random seed through to sampling function - Add logging for random
+  seed usage and sampling details - Implement flexible sampling of dataframe with configurable
+  sample size and seed
+
+- **scorecard**: Update Scorecard to track individual score costs and tokens
+  ([`e9fef87`](https://github.com/AnthusAI/Plexus/commit/e9fef87482c6691bd425e2ad1634e87de8a8af03))
+
+### Documentation
+
+- Add documentation pages for Items, Solutions, Task Dispatch, and update Evaluations
+  ([`ce41298`](https://github.com/AnthusAI/Plexus/commit/ce41298bf75544f89b6f46fc56d38b999ba93045))
+
+### Features
+
+- **CLI**: Consolidated dashboard commands into one `plexus` CLI command.
+  ([`30aeb1e`](https://github.com/AnthusAI/Plexus/commit/30aeb1ee5b0b2c05db1cbd80ae38d5dfe2a96f57))
+
+- **landing**: Sexy, animated workflow pictograms.
+  ([`be16f85`](https://github.com/AnthusAI/Plexus/commit/be16f85d7945a9884a8369e4f8e872dc1fb83fbe))
+
+- **scoring**: `trust_model_output` feature for Extractor node.
+  ([`97e2838`](https://github.com/AnthusAI/Plexus/commit/97e28384b6370d8c440042aa3ba784332dafef50))
+
+- **tasks**: Lambda for triggering Celery task dispatch on creation of new Task.
+  ([`6b5dd4e`](https://github.com/AnthusAI/Plexus/commit/6b5dd4e0f2d2cb2c3b57e8f21c85ff7582afdae3))
+
+- **tasks**: Standardized task-dispatch UI components. With a re-announce feature.
+  ([`daeee25`](https://github.com/AnthusAI/Plexus/commit/daeee25ee73d65caf01f8800be61f799cd6fe80b))
+
+- **toast**: Toast notifications for task creation. More to come.
+  ([`822f836`](https://github.com/AnthusAI/Plexus/commit/822f83663340e7ae8dd707af8cc0e93b8ccdf0f3))
+
+### Refactoring
+
+- **classifier**: Improve chat history and retry message handling
+  ([`5bd8001`](https://github.com/AnthusAI/Plexus/commit/5bd80012684786ed396fce89f06b2a6e26a18d45))
+
+- **classifier**: Simplify message handling and reset state management
+  ([`dc0946a`](https://github.com/AnthusAI/Plexus/commit/dc0946ae3e857fd9cadebd3e502ec39d086de546))
+
+- **evaluation**: Replace logger with logging module in EvaluationCommands
+  ([`74974a1`](https://github.com/AnthusAI/Plexus/commit/74974a13c2d96a0070ec4bb4d20f58ec77b1adb0))
+
+- Switch from logger to custom logging module - Import truncate_dict_strings_inner utility
+  (potential future use)
+
+- **evaluations**: Refactor evaluation listing and sorting logic to use updatedAt and limit
+  evaluations to 100
+  ([`2bdc07a`](https://github.com/AnthusAI/Plexus/commit/2bdc07a514effc9b86bc71f1548f891aa5d92370))
+
+- **logging**: Standardize custom logging across dashboard CLI and evaluation modules
+  ([`bd5f7b1`](https://github.com/AnthusAI/Plexus/commit/bd5f7b1abc9f5cc12c312519b9c503539147051a))
+
+- Replace custom logger with imported logging module in dashboard CLI - Align logging approach with
+  recent changes in EvaluationCommands - Remove redundant logging configuration - Ensure consistent
+  logging import and usage across modules
+
+- **scoring**: Update LangGraph workflow and account model methods
+  ([`9d4aca5`](https://github.com/AnthusAI/Plexus/commit/9d4aca5fef04c405db497070ab815b6e91633c89))
+
+- **task**: Improve task stage completion and update logic
+  ([`27868c9`](https://github.com/AnthusAI/Plexus/commit/27868c9081cff2c73542a2408ad8aa3ee04803f8))
+
+- Enhance task stage completion process with more detailed tracking - Update test to verify
+  multi-step task stage and task completion - Modify stage update method to use a more robust
+  datetime formatting approach
+
+- **task**: Improve TaskProgressTracker with robust progress tracking and validation
+  ([`173c71d`](https://github.com/AnthusAI/Plexus/commit/173c71de30caf7a63904c44b3f72012fadfe7556))
+
+- Add total_items initialization support in constructor - Enhance stage initialization with
+  configurable total_items - Implement stricter validation for current_items updates - Add
+  pre-completion checks for unstarted stages in complete() method - Update test cases to verify
+  multi-stage progress tracking
+
+- **tests**: Refactor Scorecard and Task tests to improve mocking and test coverage
+  ([`cd0d98b`](https://github.com/AnthusAI/Plexus/commit/cd0d98bb0b0449df7457d1c2640b3f236100f352))
+
+### Testing
+
+- **classifier**: Enhance multi-node routing and condition handling tests
+  ([`5ec8bea`](https://github.com/AnthusAI/Plexus/commit/5ec8bea7d2780e2f972729a71ae93166b21b40c4))
+
+
 ## v0.6.2-alpha.1 (2025-01-23)
+
+### Bug Fixes
+
+- **scoring**: Fixed LangGraphScore bypass conditions.
+  ([`9dc8c07`](https://github.com/AnthusAI/Plexus/commit/9dc8c07a906fce9c6cab2107052d7a74cd0ed1c7))
+
+### Features
+
+- **multi-step**: Option to visualize compiled LangGraph graph.
+  ([`b57e649`](https://github.com/AnthusAI/Plexus/commit/b57e649aa81a329464dfa30db5b3ab65f907536d))
+
+
+## v0.6.2 (2025-01-23)
 
 ### Bug Fixes
 
 - **dashboard**: Only show 100 Evaluations.
   ([`bd623c0`](https://github.com/AnthusAI/Plexus/commit/bd623c05ffdca9ca186d94d717f78fa7cd91995d))
+
+
+## v0.6.0-rc.1 (2025-01-21)
+
+
+## v0.4.2-rc.2 (2025-01-18)
+
+
+## v0.4.2-rc.1 (2025-01-17)
+
+
+## v0.4.0-rc.2 (2025-01-15)
+
+
+## v0.4.0-rc.1 (2025-01-13)
+
+
+## v0.3.2-rc.1 (2025-01-09)
+
+### Bug Fixes
 
 - **dependencies**: Add missing comma in pyproject.toml dependencies list
   ([`547280d`](https://github.com/AnthusAI/Plexus/commit/547280dea49669215e9a2391777ad3a461a70592))
@@ -29,9 +154,6 @@
 
 - **dashboard**: Gradient logo backgrounds on login, sidebar
   ([`d82626b`](https://github.com/AnthusAI/Plexus/commit/d82626bcd1f125f4c89a8b6e57827a1dbea1350e))
-
-
-## v0.6.0-rc.1 (2025-01-21)
 
 ### Chores
 
@@ -99,9 +221,6 @@ feat(landing): implement responsive landing page with navigation
 
 ## v0.4.2-alpha.3 (2025-01-18)
 
-
-## v0.4.2-rc.2 (2025-01-18)
-
 ### Bug Fixes
 
 - **logging**: Enhance AWS credentials handling in CustomLogging.py
@@ -115,9 +234,6 @@ feat(landing): implement responsive landing page with navigation
 
 
 ## v0.4.2-alpha.2 (2025-01-17)
-
-
-## v0.4.2-rc.1 (2025-01-17)
 
 ### Bug Fixes
 
@@ -136,12 +252,6 @@ feat(landing): implement responsive landing page with navigation
 ## v0.4.1 (2025-01-15)
 
 
-## v0.4.0 (2025-01-13)
-
-
-## v0.4.0-rc.2 (2025-01-15)
-
-
 ## v0.4.0-alpha.3 (2025-01-14)
 
 ### Bug Fixes
@@ -155,7 +265,7 @@ The score result detail view now properly closes when selecting a different eval
   internal state to determine what detail view to show
 
 
-## v0.4.0-rc.1 (2025-01-13)
+## v0.4.0 (2025-01-13)
 
 
 ## v0.4.0-alpha.2 (2025-01-10)
@@ -187,6 +297,9 @@ The score result detail view now properly closes when selecting a different eval
 ## v0.3.2 (2025-01-09)
 
 
+## v0.3.1-rc.1 (2025-01-06)
+
+
 ## v0.3.2-alpha.2 (2025-01-09)
 
 ### Bug Fixes
@@ -197,16 +310,6 @@ The score result detail view now properly closes when selecting a different eval
 - **evaluations-dashboard**: Confusion matrix filtering -- now case-insensitive.
   ([`bf68cae`](https://github.com/AnthusAI/Plexus/commit/bf68cae9d1d3f85d788fbf47c3aaa185768efd61))
 
-### Testing
-
-- Add CloudWatchLogger unit tests
-  ([`db19395`](https://github.com/AnthusAI/Plexus/commit/db1939576b7ccb02926c63625a0b11cacd142c2b))
-
-Tests cover AWS credential handling, metric logging, and error cases.
-
-
-## v0.3.2-rc.1 (2025-01-09)
-
 ### Refactoring
 
 - **Evaluation**: Adjust total predictions calculation based on evaluation status
@@ -216,6 +319,13 @@ Tests cover AWS credential handling, metric logging, and error cases.
   evaluations, the total is derived from the predicted distribution data. - For ongoing evaluations,
   the initial sample size is used instead. - Ensured that the totalItems parameter reflects the
   correct count in the update parameters.
+
+### Testing
+
+- Add CloudWatchLogger unit tests
+  ([`db19395`](https://github.com/AnthusAI/Plexus/commit/db1939576b7ccb02926c63625a0b11cacd142c2b))
+
+Tests cover AWS credential handling, metric logging, and error cases.
 
 
 ## v0.3.2-alpha.1 (2025-01-08)
@@ -238,9 +348,6 @@ Tests cover AWS credential handling, metric logging, and error cases.
 
 
 ## v0.3.1 (2025-01-06)
-
-
-## v0.3.1-rc.1 (2025-01-06)
 
 ### Bug Fixes
 
