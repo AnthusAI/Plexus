@@ -194,8 +194,8 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
     )}>
       <div className="flex justify-between items-start w-full">
         <div className="flex flex-col pb-1 leading-none">
-          <div className="text-sm">{task.scorecard || '\u00A0'}</div>
-          <div className="text-sm">{task.score || '\u00A0'}</div>
+          <div className="text-sm truncate max-w-[200px]">{task.scorecard || '\u00A0'}</div>
+          <div className="text-sm truncate max-w-[200px]">{task.score || '\u00A0'}</div>
           {variant !== 'grid' && (
             <div className="text-sm text-muted-foreground">{task.type}</div>
           )}
