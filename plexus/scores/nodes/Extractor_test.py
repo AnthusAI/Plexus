@@ -6,6 +6,12 @@ from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import StateGraph
 import nltk
 
+# Patch _initialize_model to bypass real API calls and credentials for tests
+@pytest.fixture(autouse=True)
+def patch_openai_credentials(monkeypatch):
+    from plexus.scores.nodes.Extractor import Extractor
+    monkeypatch.setattr(Extractor, "_initialize_model", lambda self: (lambda x: 'dummy output'))
+
 @pytest.fixture
 def basic_parameters():
     return {
