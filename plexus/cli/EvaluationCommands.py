@@ -143,16 +143,6 @@ def accuracy(
                 api_key = os.environ.get('PLEXUS_API_KEY')
                 if api_url and api_key:
                     try:
-                        # First verify we can connect to the API
-                        logging.info("Testing API connection...")
-                        test_query = """
-                        query TestConnection {
-                            __typename
-                        }
-                        """
-                        client.execute(test_query)
-                        logging.info("API connection successful")
-
                         # Initialize TaskProgressTracker with proper stage configs
                         stage_configs = {
                             "Setup": StageConfig(
@@ -162,11 +152,11 @@ def accuracy(
                             "Processing": StageConfig(
                                 order=2,
                                 total_items=number_of_samples,
-                                status_message="Waiting to start processing..."
+                                status_message="Starting processing..."
                             ),
                             "Finalizing": StageConfig(
                                 order=3,
-                                status_message="Waiting to start finalization..."
+                                status_message="Starting finalization..."
                             )
                         }
 
@@ -240,7 +230,7 @@ def accuracy(
                         logging.info(f"Created task with details:\n{json.dumps(task_details, indent=2)}")
                         logging.info(f"Successfully created and verified task: {task.id}")
 
-                        # Create the Evaluation record IMMEDIATELY after Task setup
+                        # Create the Evaluation record immediately after Task setup
                         started_at = datetime.now(timezone.utc)
                         experiment_params = {
                             "type": "accuracy",
@@ -1106,39 +1096,31 @@ def get_data_driven_samples(
     # Set the actual count as our single source of truth right when we find it
     if progress_callback and hasattr(progress_callback, '__self__'):
         tracker = progress_callback.__self__
-        logging.info(f"[TRACE] Got tracker instance {id(tracker)} from progress_callback.__self__")
-        logging.info(f"[TRACE] Before set_total_items: tracker instance {id(tracker)} has total_items={tracker.total_items}")
         
         # First, set the actual total items count we just discovered
         # This is our single source of truth for the total count
         new_total = tracker.set_total_items(actual_sample_count)
-        logging.info(f"[TRACE] After set_total_items: tracker instance {id(tracker)} has total_items={new_total}")
         
         # Verify the total was set correctly before proceeding
         if new_total != actual_sample_count:
-            logging.error(f"[TRACE] Failed to set total_items to {actual_sample_count} - got {new_total} instead")
             raise RuntimeError(f"Failed to set total items to {actual_sample_count}")
         
         # Set the status message
         status_message = f"Successfully loaded {actual_sample_count} samples for {score_name}"
         if tracker.current_stage:
-            logging.info(f"[TRACE] Current stage {tracker.current_stage.name} in tracker instance {id(tracker)} has total_items={tracker.current_stage.total_items}")
             tracker.current_stage.status_message = status_message
             # Reset processed items to 0 since we're starting fresh
             tracker.current_stage.processed_items = 0
             
             # Verify stage total_items was updated
             if tracker.current_stage.total_items != actual_sample_count:
-                logging.error(f"[TRACE] Stage {tracker.current_stage.name} has incorrect total_items: {tracker.current_stage.total_items} != {actual_sample_count}")
                 raise RuntimeError(f"Stage {tracker.current_stage.name} total_items not updated correctly")
         
         # Now update progress - by this point total_items is set to actual_sample_count
-        logging.info(f"[TRACE] Calling update(0) on tracker instance {id(tracker)} with total_items={tracker.total_items}")
         tracker.update(0, status_message)
         
         # Final verification after update
         if tracker.total_items != actual_sample_count:
-            logging.error(f"[TRACE] After update, tracker has incorrect total_items: {tracker.total_items} != {actual_sample_count}")
             raise RuntimeError("Total items not maintained after update")
     elif progress_callback:
         progress_callback(0)
