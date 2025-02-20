@@ -436,7 +436,7 @@ class Evaluation:
         
         # First pass: build distributions and confusion matrices
         for result in results:
-            logging.info(f"\nProcessing result for form_id: {result['form_id']}")
+            logging.debug(f"\nProcessing result for form_id: {result['form_id']}")
             
             for score_identifier, score_result in result['results'].items():
                 # Skip if the score result is an error
@@ -456,10 +456,10 @@ class Evaluation:
                 predicted = 'na' if predicted in ['', 'nan', 'n/a', 'none', 'null'] else predicted
                 actual = 'na' if actual in ['', 'nan', 'n/a', 'none', 'null'] else actual
                 
-                logging.info(f"Score: {score_name}")
-                logging.info(f"Predicted: '{predicted}'")
-                logging.info(f"Actual: '{actual}'")
-                logging.info(f"Correct: {score_result.metadata['correct']}")
+                logging.debug(f"Score: {score_name}")
+                logging.debug(f"Predicted: '{predicted}'")
+                logging.debug(f"Actual: '{actual}'")
+                logging.debug(f"Correct: {score_result.metadata['correct']}")
                 
                 # Update total correct and predictions - only for the primary score
                 if score_result.metadata['correct']:
