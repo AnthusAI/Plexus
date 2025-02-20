@@ -195,7 +195,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
                   (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
                     ? "text-secondary-foreground"
-                    : "text-secondary group-hover:text-accent-foreground"
+                    : "text-navigation-icon"
                 }`} />
                 {isLeftSidebarOpen && (
                   <span className="ml-3">{item.name}</span>
@@ -221,13 +221,13 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     {selectedAccount?.name?.split(' ').map(word => word[0]).join('') || 'AC'}
                   </AvatarFallback>
                 </Avatar>
-                {isLeftSidebarOpen && <span>{selectedAccount?.name || 'Select Account'}</span>}
+                {isLeftSidebarOpen && <span className="text-muted-foreground">{selectedAccount?.name || 'Select Account'}</span>}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-[200px]">
               <Link href="/settings">
                 <DropdownMenuItem className="cursor-pointer">
-                  <Settings className="mr-2 h-4 w-4" />
+                  <Settings className="mr-2 h-4 w-4 text-navigation-icon" />
                   Settings
                 </DropdownMenuItem>
               </Link>
@@ -279,7 +279,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   <AvatarImage src="/user-avatar.png" alt="User avatar" />
                   <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
                 </Avatar>
-                {isLeftSidebarOpen && <span>Ryan Porter</span>}
+                {isLeftSidebarOpen && <span className="text-muted-foreground">Ryan Porter</span>}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-[200px]">
@@ -287,13 +287,13 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               <DropdownMenuSeparator />
               <Link href="/settings">
                 <DropdownMenuItem className="cursor-pointer">
-                  <Settings className="mr-2 h-4 w-4" />
+                  <Settings className="mr-2 h-4 w-4 text-navigation-icon" />
                   Settings
                 </DropdownMenuItem>
               </Link>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="cursor-pointer" onClick={signOut}>
-                <LogOut className="mr-2 h-4 w-4" />
+                <LogOut className="mr-2 h-4 w-4 text-navigation-icon" />
                 Sign out
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -308,7 +308,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     className="pl-4 group"
                     onClick={toggleLeftSidebar}
                   >
-                    <PanelLeft className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                    <PanelLeft className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                   </DashboardButton>
                 </TooltipTrigger>
                 <TooltipContent side="right">
@@ -327,11 +327,11 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                       onClick={toggleTheme}
                     >
                       {theme === "dark" ? (
-                        <Moon className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                        <Moon className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                       ) : theme === "light" ? (
-                        <Sun className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                        <Sun className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                       ) : (
-                        <Monitor className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                        <Monitor className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                       )}
                     </DashboardButton>
                   </TooltipTrigger>
@@ -361,7 +361,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     className="h-8 w-8 p-0 group"
                     onClick={toggleRightSidebar}
                   >
-                    <MessageSquare className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                    <MessageSquare className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                   </DashboardButton>
                 </TooltipTrigger>
                 <TooltipContent side="left">
@@ -474,7 +474,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                       size="icon"
                       className="h-8 w-8 p-0 group"
                     >
-                      <Mic className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                      <Mic className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                     </DashboardButton>
                   </TooltipTrigger>
                   <TooltipContent side="top">
@@ -490,7 +490,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                       size="icon"
                       className="h-8 w-8 p-0 group"
                     >
-                      <Headphones className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                      <Headphones className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                     </DashboardButton>
                   </TooltipTrigger>
                   <TooltipContent side="top">
@@ -509,7 +509,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   className="h-8 w-8 p-0 ml-auto group"
                   onClick={toggleRightSidebar}
                 >
-                  <PanelRight className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                  <PanelRight className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                 </DashboardButton>
               </TooltipTrigger>
               <TooltipContent side="left">

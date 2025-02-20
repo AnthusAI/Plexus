@@ -14,7 +14,7 @@ const ColorPaletteContent = () => {
       'popover-foreground', 'border', 'input', 'frame', 'progress-background', 'progress-background-selected'
     ],
     [
-      'ring', 'user-chat', 'plexus-chat'
+      'ring', 'user-chat', 'plexus-chat', 'navigation-icon'
     ],
     [
       'gauge-background', 'gauge-inviable', 'gauge-converging',
