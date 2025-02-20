@@ -11,20 +11,38 @@ const ColorPaletteContent = () => {
   const colorColumns = [
     [
       'background', 'foreground', 'focus', 'attention', 'muted', 'muted-foreground', 'popover',
-      'popover-foreground', 'card', 'card-foreground', 'card-light', 'card-light-foreground',
-      'border', 'input', 'frame', 'progress-background', 'progress-background-selected'
+      'popover-foreground', 'border', 'input', 'frame', 'progress-background', 'progress-background-selected'
     ],
     [
-      'primary', 'primary-foreground', 'secondary', 'secondary-foreground',
-      'accent', 'accent-foreground', 'destructive', 'destructive-foreground',
       'ring', 'user-chat', 'plexus-chat'
     ],
     [
-      'chart-1', 'chart-2', 'chart-3', 'chart-4', 'chart-5',
-      'chart-6', 'chart-7', 'true', 'false', 'neutral',
       'gauge-background', 'gauge-inviable', 'gauge-converging',
       'gauge-almost', 'gauge-viable', 'gauge-great'
     ]
+  ]
+
+  const cardColorPairs = [
+    ['card', 'card-selected'],
+    ['card-foreground', 'card-selected-foreground'],
+    ['primary', 'primary-selected'],
+    ['primary-foreground', 'primary-selected-foreground'],
+    ['secondary', 'secondary-selected'],
+    ['secondary-foreground', 'secondary-selected-foreground'],
+    ['accent', 'accent-selected'],
+    ['accent-foreground', 'accent-selected-foreground'],
+    ['destructive', 'destructive-selected'],
+    ['destructive-foreground', 'destructive-selected-foreground'],
+    ['chart-1', 'chart-1-selected'],
+    ['chart-2', 'chart-2-selected'],
+    ['chart-3', 'chart-3-selected'],
+    ['chart-4', 'chart-4-selected'],
+    ['chart-5', 'chart-5-selected'],
+    ['chart-6', 'chart-6-selected'],
+    ['chart-7', 'chart-7-selected'],
+    ['true', 'true-selected'],
+    ['false', 'false-selected'],
+    ['neutral', 'neutral-selected']
   ]
 
   useEffect(() => {
@@ -85,21 +103,54 @@ const ColorPaletteContent = () => {
   }
 
   return (
-    <div className="container">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {colorColumns.map((column, columnIndex) => (
-          <div key={columnIndex}>
-            {column.map((color) => (
+    <div className="container space-y-8">
+      <div>
+        <h2 className="text-lg font-semibold mb-4">Color Palette</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {colorColumns.map((column, columnIndex) => (
+            <div key={columnIndex}>
+              {column.map((color) => (
+                <Button
+                  key={color}
+                  variant="ghost"
+                  className={getButtonClasses(color)}
+                >
+                  {color}
+                </Button>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-lg font-semibold mb-4">Cards</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <h3 className="text-sm font-medium mb-2">Normal</h3>
+            {cardColorPairs.map(([normal]) => (
               <Button
-                key={color}
+                key={normal}
                 variant="ghost"
-                className={getButtonClasses(color)}
+                className={getButtonClasses(normal)}
               >
-                {color}
+                {normal}
               </Button>
             ))}
           </div>
-        ))}
+          <div>
+            <h3 className="text-sm font-medium mb-2">Selected</h3>
+            {cardColorPairs.map(([_, selected]) => (
+              <Button
+                key={selected}
+                variant="ghost"
+                className={getButtonClasses(selected)}
+              >
+                {selected}
+              </Button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
