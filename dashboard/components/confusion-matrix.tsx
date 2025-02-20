@@ -59,13 +59,12 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
   const maxValue = Math.max(...data.matrix.flat())
 
   const getBackgroundColor = (value: number) => {
-    const intensity = Math.round((value / maxValue) * 10)
-    return `hsl(var(--violet-${Math.max(3, intensity)}))` 
+    const opacity = Math.max(0.15, value / maxValue)
+    return `hsl(var(--purple-6) / ${opacity})`
   }
 
   const getTextColor = (value: number) => {
-    const intensity = Math.round((value / maxValue) * 10)
-    return intensity > 5 ? 'text-white dark:text-foreground' : 'text-primary'
+    return 'text-card-selected-foreground'
   }
 
   const handleCellClick = (predicted: string, actual: string) => {
