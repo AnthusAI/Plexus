@@ -61,6 +61,7 @@ module.exports = {
                     selected: 'var(--accent-selected)',
                     'selected-foreground': 'var(--accent-selected-foreground)'
                 },
+                'navigation-icon': 'var(--navigation-icon)',
                 destructive: {
                     DEFAULT: 'var(--destructive)',
                     foreground: 'var(--destructive-foreground)',
