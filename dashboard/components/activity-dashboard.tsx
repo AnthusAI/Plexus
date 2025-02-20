@@ -6,7 +6,7 @@ import { formatTimeAgo } from '@/utils/format-time'
 import { formatDuration } from '@/utils/format-duration'
 import { TaskStageConfig } from '@/components/ui/task-status'
 import { Schema } from '@/amplify/data/resource'
-import { listRecentTasks, observeRecentTasks, updateTask } from '@/utils/data-operations'
+import { listRecentTasks, updateTask } from '@/utils/amplify-api'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { Task, TaskHeader, TaskContent, type BaseTaskProps } from '@/components/Task'
 import { Activity, Square, X, MoreHorizontal, RefreshCw, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
@@ -18,8 +18,7 @@ import { CardButton } from "@/components/CardButton"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { toast } from 'sonner'
 import EvaluationTask, { type EvaluationTaskProps, type EvaluationTaskData } from '@/components/EvaluationTask'
-
-// Import the types from data-operations
+import { observeRecentTasks } from '@/utils/subscriptions'
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
 
 type TaskStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
@@ -487,17 +486,17 @@ export default function ActivityDashboard() {
   // Initial data load
   const fetchRecentTasks = async () => {
     try {
-      const response = await listRecentTasks();
+      const { tasks } = await listRecentTasks();
       console.warn('Initial data load complete:', {
-        count: response.tasks.length,
-        taskIds: response.tasks.map((item: ProcessedTask) => item.id),
-        taskDetails: response.tasks.map((item: ProcessedTask) => ({
+        count: tasks.length,
+        taskIds: tasks.map((item: ProcessedTask) => item.id),
+        taskDetails: tasks.map((item: ProcessedTask) => ({
           id: item.id,
           status: item.status,
           type: item.type
         }))
       });
-      setRecentTasks(response.tasks);
+      setRecentTasks(tasks);
       setIsInitialLoading(false);
     } catch (error) {
       console.error('Error loading initial data:', error);
@@ -510,19 +509,19 @@ export default function ActivityDashboard() {
 
     // Set up real-time subscription
     console.log('Setting up real-time task subscription');
-    const subscription = observeRecentTasks(12).subscribe({
-      next: ({ data }) => {
-        if (data) {
+    const subscription = observeRecentTasks().subscribe({
+      next: ({ data: processedTask }) => {
+        if (processedTask) {
           setRecentTasks(prev => {
-            const taskIndex = prev.findIndex(task => task.id === data.id);
+            const taskIndex = prev.findIndex(t => t.id === processedTask.id);
             if (taskIndex !== -1) {
               // Update existing task
               const updatedTasks = [...prev];
-              updatedTasks[taskIndex] = data;
+              updatedTasks[taskIndex] = processedTask;
               return updatedTasks;
             } else {
               // Add new task at the beginning
-              return [data, ...prev].slice(0, 12);
+              return [processedTask, ...prev].slice(0, 12);
             }
           });
         }
