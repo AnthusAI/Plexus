@@ -70,7 +70,7 @@ export function TaskDispatchButton({ config }: { config: TaskDispatchConfig }) {
     <>
       <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="bg-card hover:bg-accent" disabled={isLoading}>
+          <Button variant="ghost" className="bg-card hover:bg-accent text-muted-foreground" disabled={isLoading}>
             {config.buttonLabel} <ChevronDown className="ml-2 h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
