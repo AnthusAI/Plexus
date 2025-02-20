@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
-import { transformAmplifyTask } from '@/utils/data-operations'
+import { transformAmplifyTask, processTask } from '@/utils/data-operations'
 import type { EvaluationTaskProps } from '@/types/tasks/evaluation'
 import type { TaskStatus } from '@/types/shared'
 import EvaluationTask from '@/components/EvaluationTask'
@@ -103,13 +103,14 @@ export function TaskDisplay({
   const [processedTask, setProcessedTask] = useState<ProcessedTask | null>(null)
 
   useEffect(() => {
-    async function processTask() {
+    async function processTaskData() {
       if (!task) {
         setProcessedTask(null)
         return
       }
       try {
-        const result = await transformAmplifyTask(task)
+        const convertedTask = await transformAmplifyTask(task)
+        const result = await processTask(convertedTask)
         console.debug('Processed task:', {
           taskId: result.id,
           taskStatus: result.status,
@@ -122,7 +123,7 @@ export function TaskDisplay({
         setProcessedTask(null)
       }
     }
-    processTask()
+    processTaskData()
   }, [task])
 
   const taskProps = {

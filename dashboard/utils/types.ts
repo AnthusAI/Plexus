@@ -16,4 +16,9 @@ export type AmplifyListResult<T> = {
   nextToken?: string | null;
 };
 
-export type ConnectionState = 'connecting' | 'connected' | 'disconnected'; 
+export type ConnectionState = 'connecting' | 'connected' | 'disconnected';
+
+export type SubscriptionHandler<T> = {
+  next: (response: { data: T }) => void;
+  error: (error: Error) => void;
+}; 
