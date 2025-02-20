@@ -11,7 +11,8 @@ const ColorPaletteContent = () => {
   const colorColumns = [
     [
       'background', 'foreground', 'focus', 'attention', 'muted', 'muted-foreground', 'popover',
-      'popover-foreground', 'card', 'card-foreground', 'border', 'input'
+      'popover-foreground', 'card', 'card-foreground', 'card-light', 'card-light-foreground',
+      'border', 'input', 'frame', 'progress-background', 'progress-background-selected'
     ],
     [
       'primary', 'primary-foreground', 'secondary', 'secondary-foreground',
@@ -20,7 +21,9 @@ const ColorPaletteContent = () => {
     ],
     [
       'chart-1', 'chart-2', 'chart-3', 'chart-4', 'chart-5',
-      'chart-6', 'chart-7', 'true', 'false', 'neutral'
+      'chart-6', 'chart-7', 'true', 'false', 'neutral',
+      'gauge-background', 'gauge-inviable', 'gauge-converging',
+      'gauge-almost', 'gauge-viable', 'gauge-great'
     ]
   ]
 
