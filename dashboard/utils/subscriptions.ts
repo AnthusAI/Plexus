@@ -16,7 +16,29 @@ import { TASK_UPDATE_SUBSCRIPTION } from '../graphql/evaluation-queries';
 import type { SubscriptionHandler, GraphQLResponse } from './types';
 import { convertToAmplifyTask, processTask } from './transformers';
 import type { ProcessedTask } from './data-operations';
-import type { GraphQLResult } from '@aws-amplify/api';
+import type { GraphQLResult, GraphQLSubscription } from '@aws-amplify/api';
+
+// Add type definitions for GraphQL subscription responses
+type GraphQLSubscriptionResult<T> = {
+  subscribe: (handlers: {
+    next: (data: { data?: T }) => void;
+    error: (error: any) => void;
+  }) => { unsubscribe: () => void };
+};
+
+type CreateEvaluationResponse = {
+  onCreateEvaluation: Schema['Evaluation']['type'];
+};
+
+type UpdateEvaluationResponse = {
+  onUpdateEvaluation: Schema['Evaluation']['type'];
+};
+
+type DeleteEvaluationResponse = {
+  onDeleteEvaluation: Schema['Evaluation']['type'];
+};
+
+type GraphQLSubscriptionResponse = { subscribe: Function };
 
 export type SubscriptionCallback<T> = (data: T) => void;
 export type ErrorCallback = (error: unknown) => void;
@@ -110,7 +132,8 @@ interface AmplifyListResult<T> {
 export function observeRecentEvaluations(limit: number = 100): Observable<{ items: Schema['Evaluation']['type'][], isSynced: boolean }> {
   return new Observable(subscriber => {
     let evaluations: Schema['Evaluation']['type'][] = [];
-    let subscriptionCleanup: { unsubscribe: () => void } | null = null;
+    let subscriptions: { unsubscribe: () => void }[] = [];
+    let isSubscribed = true;
 
     // Load initial data
     async function loadInitialEvaluations() {
@@ -124,8 +147,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
         }) as AmplifyListResult<Schema['Account']['type']>;
 
         if (!accountResponse.data?.length) {
-          console.error('No account found with key:', ACCOUNT_KEY);
-          return [];
+          throw new Error(`No account found with key: ${ACCOUNT_KEY}`);
         }
 
         const accountId = accountResponse.data[0].id;
@@ -241,36 +263,77 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
           listEvaluationByAccountIdAndUpdatedAt: {
             items: Schema['Evaluation']['type'][];
             nextToken?: string | null;
-          };
+          }
         }>;
 
-        if (!response.data) {
-          console.error('No data returned from GraphQL query');
-          return [];
+        if (!response.data?.listEvaluationByAccountIdAndUpdatedAt?.items) {
+          throw new Error('No evaluations data returned from query');
         }
 
-        const result = response.data;
-        if (!result?.listEvaluationByAccountIdAndUpdatedAt?.items) {
-          console.error('No items found in GraphQL response');
-          return [];
+        evaluations = response.data.listEvaluationByAccountIdAndUpdatedAt.items;
+        if (isSubscribed) {
+          subscriber.next({ items: evaluations, isSynced: true });
+          // Set up subscriptions after initial data is loaded
+          setupSubscriptions(accountId);
         }
-
-        evaluations = result.listEvaluationByAccountIdAndUpdatedAt.items;
-        subscriber.next({ items: evaluations, isSynced: true });
       } catch (error) {
         console.error('Error loading initial evaluations:', error);
-        subscriber.error(error);
+        if (isSubscribed) {
+          subscriber.error(error);
+        }
       }
     }
 
-    // Set up subscription
-    try {
-      console.debug('Setting up evaluation subscription...');
-      const client = getClient();
-      subscriptionCleanup = (client.graphql({
-        query: `
-          subscription OnUpdateEvaluation {
-            onUpdateEvaluation {
+    function setupSubscriptions(accountId: string) {
+      try {
+        const client = getClient();
+
+        // Helper function to handle evaluation changes
+        const handleEvaluationChange = (evaluation: Schema['Evaluation']['type'], action: 'create' | 'update' | 'delete') => {
+          if (!evaluation || !isSubscribed) return;
+
+          console.debug(`Handling ${action} for evaluation:`, {
+            evaluationId: evaluation.id,
+            type: evaluation.type,
+            status: evaluation.status
+          });
+
+          if (action === 'delete') {
+            evaluations = evaluations.filter(e => e.id !== evaluation.id);
+          } else {
+            const existingEvaluation = evaluations.find(e => e.id === evaluation.id);
+            
+            console.debug('Existing evaluation state:', {
+              evaluationId: evaluation.id,
+              hasExistingEval: !!existingEvaluation,
+              existingTaskData: existingEvaluation?.task,
+              existingTaskId: existingEvaluation?.taskId,
+              action
+            });
+
+            const finalEvaluation = {
+              ...evaluation,
+              task: evaluation.task || existingEvaluation?.task
+            } as Schema['Evaluation']['type'];
+
+            if (action === 'create') {
+              evaluations = [finalEvaluation, ...evaluations];
+            } else {
+              evaluations = evaluations.map(e => 
+                e.id === finalEvaluation.id ? finalEvaluation : e
+              );
+            }
+          }
+          
+          if (isSubscribed) {
+            subscriber.next({ items: evaluations, isSynced: true });
+          }
+        };
+
+        // Set up create subscription
+        const createSub = (client.graphql({
+          query: `subscription OnCreateEvaluation($accountId: String!) {
+            onCreateEvaluation(accountId: $accountId) {
               id
               type
               parameters
@@ -291,7 +354,15 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
               errorDetails
               accountId
               scorecardId
+              scorecard {
+                id
+                name
+              }
               scoreId
+              score {
+                id
+                name
+              }
               confusionMatrix
               scoreGoal
               datasetClassDistribution
@@ -339,45 +410,177 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                   explanation
                   itemId
                   createdAt
-                  scoringJob {
-                    id
-                    status
-                    metadata
-                  }
                 }
               }
             }
+          }`,
+          variables: { accountId }
+        }) as unknown as GraphQLSubscriptionResult<CreateEvaluationResponse>).subscribe({
+          next: (response: { data?: CreateEvaluationResponse }) => {
+            console.debug('Create subscription event received:', response.data);
+            if (response.data?.onCreateEvaluation) {
+              handleEvaluationChange(response.data.onCreateEvaluation, 'create');
+            }
+          },
+          error: (error: Error) => {
+            console.error('Create subscription error:', error);
+            if (isSubscribed) {
+              subscriber.error(error);
+            }
           }
-        `
-      }) as unknown as { subscribe: Function }).subscribe({
-        next: ({ data }: { data?: { onUpdateEvaluation: any } }) => {
-          if (data?.onUpdateEvaluation) {
-            const updatedEvaluation = data.onUpdateEvaluation;
-            evaluations = evaluations.map(evaluation => 
-              evaluation.id === updatedEvaluation.id ? updatedEvaluation : evaluation
-            );
-            subscriber.next({ items: evaluations, isSynced: true });
+        });
+        subscriptions.push(createSub);
+
+        // Set up update subscription
+        const updateSub = (client.graphql({
+          query: `subscription OnUpdateEvaluation($accountId: String!) {
+            onUpdateEvaluation(accountId: $accountId) {
+              id
+              type
+              parameters
+              metrics
+              metricsExplanation
+              inferences
+              accuracy
+              cost
+              createdAt
+              updatedAt
+              status
+              startedAt
+              elapsedSeconds
+              estimatedRemainingSeconds
+              totalItems
+              processedItems
+              errorMessage
+              errorDetails
+              accountId
+              scorecardId
+              scorecard {
+                id
+                name
+              }
+              scoreId
+              score {
+                id
+                name
+              }
+              confusionMatrix
+              scoreGoal
+              datasetClassDistribution
+              isDatasetClassDistributionBalanced
+              predictedClassDistribution
+              isPredictedClassDistributionBalanced
+              taskId
+              task {
+                id
+                type
+                status
+                target
+                command
+                description
+                dispatchStatus
+                metadata
+                createdAt
+                startedAt
+                completedAt
+                estimatedCompletionAt
+                errorMessage
+                errorDetails
+                currentStageId
+                stages {
+                  items {
+                    id
+                    name
+                    order
+                    status
+                    statusMessage
+                    startedAt
+                    completedAt
+                    estimatedCompletionAt
+                    processedItems
+                    totalItems
+                  }
+                }
+              }
+              scoreResults {
+                items {
+                  id
+                  value
+                  confidence
+                  metadata
+                  explanation
+                  itemId
+                  createdAt
+                }
+              }
+            }
+          }`,
+          variables: { accountId }
+        }) as unknown as GraphQLSubscriptionResult<UpdateEvaluationResponse>).subscribe({
+          next: (response: { data?: UpdateEvaluationResponse }) => {
+            console.debug('Update subscription event received:', response.data);
+            if (response.data?.onUpdateEvaluation) {
+              handleEvaluationChange(response.data.onUpdateEvaluation, 'update');
+            }
+          },
+          error: (error: Error) => {
+            console.error('Update subscription error:', error);
+            if (isSubscribed) {
+              subscriber.error(error);
+            }
           }
-        },
-        error: (error: Error) => {
-          console.error('Error in evaluation subscription:', error);
+        });
+        subscriptions.push(updateSub);
+
+        // Set up delete subscription
+        const deleteSub = (client.graphql({
+          query: `subscription OnDeleteEvaluation($accountId: String!) {
+            onDeleteEvaluation(accountId: $accountId) {
+              id
+            }
+          }`,
+          variables: { accountId }
+        }) as unknown as GraphQLSubscriptionResult<DeleteEvaluationResponse>).subscribe({
+          next: (response: { data?: DeleteEvaluationResponse }) => {
+            console.debug('Delete subscription event received:', response.data);
+            if (response.data?.onDeleteEvaluation) {
+              handleEvaluationChange(response.data.onDeleteEvaluation, 'delete');
+            }
+          },
+          error: (error: Error) => {
+            console.error('Delete subscription error:', error);
+            if (isSubscribed) {
+              subscriber.error(error);
+            }
+          }
+        });
+        subscriptions.push(deleteSub);
+
+      } catch (error) {
+        console.error('Error setting up evaluation subscriptions:', error);
+        if (isSubscribed) {
           subscriber.error(error);
         }
-      });
-    } catch (error) {
-      console.error('Error setting up evaluation subscription:', error);
-      subscriber.error(error);
+      }
     }
 
-    // Load initial data
+    // Start loading initial data
     loadInitialEvaluations();
 
-    // Cleanup function
+    // Return cleanup function
     return () => {
-      console.debug('Cleaning up evaluation subscription');
-      if (subscriptionCleanup) {
-        subscriptionCleanup.unsubscribe();
-      }
+      isSubscribed = false;
+      console.debug('Cleaning up evaluation subscriptions');
+      subscriptions.forEach(sub => {
+        try {
+          if (sub && typeof sub.unsubscribe === 'function') {
+            sub.unsubscribe();
+          }
+        } catch (error) {
+          console.error('Error cleaning up subscription:', error);
+        }
+      });
+      subscriptions = [];
     };
   });
 }

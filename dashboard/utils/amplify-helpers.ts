@@ -23,16 +23,6 @@ export async function listFromModel<T extends { id: string }>(
 ): Promise<AmplifyListResult<T>> {
   const isEvaluation = model?.constructor?.name === 'EvaluationModel';
   
-  console.log('listFromModel called:', {
-    modelName: model?.constructor?.name,
-    modelType: typeof model,
-    hasGraphQL: !!model?.graphql,
-    graphqlFunctions: Object.keys(model?.graphql || {}),
-    filter,
-    nextToken,
-    limit
-  });
-  
   try {
     let response;
     

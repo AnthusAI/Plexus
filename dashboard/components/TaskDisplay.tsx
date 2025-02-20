@@ -89,42 +89,40 @@ export function TaskDisplay({
   isSelected,
   commandDisplay: initialCommandDisplay = 'show'
 }: TaskDisplayProps) {
-  console.debug('TaskDisplay render:', {
-    taskId: task?.id,
-    variant,
-    taskStatus: task?.status,
-    taskStartedAt: task?.startedAt,
-    taskCompletedAt: task?.completedAt,
-    evaluationId: evaluationData?.id,
-    evaluationStatus: evaluationData?.status,
-    taskData: task
-  });
 
   const [processedTask, setProcessedTask] = useState<ProcessedTask | null>(null)
 
   useEffect(() => {
     async function processTaskData() {
       if (!task) {
-        setProcessedTask(null)
-        return
+        console.debug('TaskDisplay: No task data provided', {
+          evaluationId: evaluationData.id,
+          evaluationStatus: evaluationData.status
+        });
+        setProcessedTask(null);
+        return;
       }
       try {
-        const convertedTask = await transformAmplifyTask(task)
-        const result = await processTask(convertedTask)
-        console.debug('Processed task:', {
+        console.debug('TaskDisplay: Processing task data', {
+          taskId: task.id,
+          taskType: task.type,
+          taskStatus: task.status
+        });
+        const convertedTask = await transformAmplifyTask(task);
+        const result = await processTask(convertedTask);
+        console.debug('TaskDisplay: Task processing complete', {
           taskId: result.id,
           taskStatus: result.status,
-          taskStartedAt: result.startedAt,
-          taskCompletedAt: result.completedAt
+          hasStages: !!result.stages?.length
         });
-        setProcessedTask(result)
+        setProcessedTask(result);
       } catch (error) {
-        console.error('Error processing task:', error)
-        setProcessedTask(null)
+        console.error('Error processing task:', error);
+        setProcessedTask(null);
       }
     }
-    processTaskData()
-  }, [task])
+    processTaskData();
+  }, [task, evaluationData.id]);
 
   const taskProps = {
     task: {

@@ -133,17 +133,6 @@ export const TaskStatus = React.memo(({
   statusMessageDisplay = 'always',
   onCommandDisplayChange
 }: TaskStatusProps) => {
-  console.debug('TaskStatus render:', {
-    status,
-    startedAt,
-    completedAt,
-    estimatedCompletionAt,
-    stagesCount: stages.length,
-    firstStageStatus: stages[0]?.status,
-    lastStageStatus: stages[stages.length - 1]?.status,
-    firstStageCompletedAt: stages[0]?.completedAt,
-    lastStageCompletedAt: stages[stages.length - 1]?.completedAt
-  });
 
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
   const isInProgress = status === 'RUNNING'
@@ -428,10 +417,8 @@ export const TaskStatus = React.memo(({
                 }
               }}
             >
-              {isError ? (
+              {isError && (
                 <AlertTriangle className="w-4 h-4 animate-pulse flex-shrink-0" />
-              ) : displayMessage && (
-                <MessageSquareText className="w-4 h-4 flex-shrink-0" />
               )}
               {displayMessage || '\u00A0'}
             </div>
@@ -527,10 +514,8 @@ export const TaskStatus = React.memo(({
               }
             }}
           >
-            {isError ? (
+            {isError && (
               <AlertTriangle className="w-4 h-4 animate-pulse flex-shrink-0" />
-            ) : displayMessage && (
-              <MessageSquareText className="w-4 h-4 flex-shrink-0" />
             )}
             {displayMessage || '\u00A0'}
           </div>

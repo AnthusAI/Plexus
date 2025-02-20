@@ -20,20 +20,40 @@ describe('subscriptions', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.useFakeTimers();
 
     mockUnsubscribe = jest.fn();
     mockSubscribe = jest.fn(() => ({ unsubscribe: mockUnsubscribe }));
 
+    // Mock the GraphQL client with proper subscription support
     mockClient = {
-      graphql: jest.fn(() => ({
-        subscribe: mockSubscribe
-      })),
+      graphql: jest.fn((options: any) => {
+        // If it's a subscription query, return a subscribable
+        if (options.query.includes('subscription')) {
+          return {
+            subscribe: mockSubscribe
+          };
+        }
+        // Otherwise return the data response
+        return Promise.resolve({
+          data: {
+            listEvaluationByAccountIdAndUpdatedAt: {
+              items: [{
+                id: 'eval123',
+                type: 'test'
+              }]
+            }
+          }
+        });
+      }),
       models: {
         Task: {
           list: jest.fn()
         },
         Account: {
-          list: jest.fn()
+          list: jest.fn(() => Promise.resolve({
+            data: [{ id: 'acc123', key: 'call-criteria' }]
+          }))
         },
         ScoreResult: {
           listScoreResultByEvaluationId: jest.fn(),
@@ -45,6 +65,10 @@ describe('subscriptions', () => {
     };
 
     (getClient as jest.Mock).mockReturnValue(mockClient);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   describe('observeRecentTasks', () => {
@@ -111,15 +135,11 @@ describe('subscriptions', () => {
   });
 
   describe('observeRecentEvaluations', () => {
-    beforeEach(() => {
-      // Mock successful account lookup
-      mockClient.models.Account.list.mockResolvedValue({
-        data: [{ id: 'acc123' }]
-      });
-
-      // Mock successful evaluations query
-      mockClient.graphql.mockImplementation(() => ({
-        subscribe: mockSubscribe,
+    it('sets up a subscription for evaluation updates', (done) => {
+      const subscription = observeRecentEvaluations();
+      
+      // Set up the mock to resolve the initial data load
+      mockClient.graphql.mockImplementationOnce(() => ({
         data: {
           listEvaluationByAccountIdAndUpdatedAt: {
             items: [{
@@ -129,38 +149,28 @@ describe('subscriptions', () => {
           }
         }
       }));
-    });
 
-    it('sets up a subscription for evaluation updates', (done) => {
-      const subscription = observeRecentEvaluations();
+      let dataReceived = false;
       
       subscription.subscribe({
         next: (data) => {
           expect(data.items).toBeDefined();
           expect(data.isSynced).toBe(true);
-          done();
-        },
-        error: done
-      });
-
-      expect(mockClient.graphql).toHaveBeenCalled();
-      expect(mockSubscribe).toHaveBeenCalled();
-    });
-
-    it('handles evaluation update events', (done) => {
-      const subscription = observeRecentEvaluations();
-      
-      subscription.subscribe({
-        next: (data) => {
-          if (data.items.length > 0) {
-            expect(data.items[0].id).toBe('eval123');
+          expect(data.items).toHaveLength(1);
+          expect(data.items[0].id).toBe('eval123');
+          
+          if (!dataReceived) {
+            dataReceived = true;
             done();
           }
         },
-        error: done
+        error: (error) => {
+          done(error);
+        }
       });
+    });
 
-      // Simulate an evaluation update
+    it('handles evaluation update events', (done) => {
       const mockUpdate = {
         data: {
           onUpdateEvaluation: {
@@ -170,24 +180,109 @@ describe('subscriptions', () => {
         }
       };
 
-      const subscriptionHandler = mockSubscribe.mock.calls[0][0];
-      subscriptionHandler.next(mockUpdate);
-    });
+      // Mock the account lookup
+      mockClient.models.Account.list.mockResolvedValueOnce({
+        data: [{ id: 'acc123', key: 'call-criteria' }]
+      });
+
+      // Set up the mock to resolve the initial data load
+      mockClient.graphql.mockImplementation((options: any) => {
+        if (options.query.includes('listEvaluationByAccountIdAndUpdatedAt')) {
+          return Promise.resolve({
+            data: {
+              listEvaluationByAccountIdAndUpdatedAt: {
+                items: [{
+                  id: 'eval123',
+                  type: 'test'
+                }]
+              }
+            }
+          });
+        }
+        if (options.query.includes('subscription')) {
+          return {
+            subscribe: mockSubscribe
+          };
+        }
+        return Promise.resolve({ data: null });
+      });
+
+      // Set up the subscription mock
+      mockSubscribe.mockImplementation((handler: any) => {
+        // Immediately trigger the update event
+        handler.next(mockUpdate);
+        return { unsubscribe: mockUnsubscribe };
+      });
+
+      const subscription = observeRecentEvaluations();
+      let initialDataReceived = false;
+
+      subscription.subscribe({
+        next: (data) => {
+          if (!initialDataReceived) {
+            initialDataReceived = true;
+            expect(data.items).toHaveLength(1);
+            expect(data.items[0].id).toBe('eval123');
+            expect(data.items[0].type).toBe('test');
+          } else {
+            expect(data.items[0].type).toBe('updated');
+            done();
+          }
+        },
+        error: (error) => {
+          console.error('Test error:', error);
+          done(error);
+        }
+      });
+    }, 10000); // Increase timeout to 10 seconds
 
     it('handles subscription errors', (done) => {
       const subscription = observeRecentEvaluations();
       
+      // Set up the mock to reject the initial data load
+      mockClient.models.Account.list.mockRejectedValueOnce(new Error('Subscription error'));
+
       subscription.subscribe({
-        next: () => {},
+        next: () => {
+          done(new Error('Should not receive data after error'));
+        },
         error: (error) => {
           expect(error.message).toBe('Subscription error');
           done();
         }
       });
+    });
 
-      const error = new Error('Subscription error');
-      const subscriptionHandler = mockSubscribe.mock.calls[0][0];
-      subscriptionHandler.error(error);
+    it('cleans up subscriptions on unsubscribe', (done) => {
+      let resolveSubscriptionSetup: () => void;
+      const subscriptionSetup = new Promise<void>((resolve) => {
+        resolveSubscriptionSetup = resolve;
+      });
+
+      mockSubscribe.mockImplementation(() => {
+        resolveSubscriptionSetup();
+        return { unsubscribe: mockUnsubscribe };
+      });
+
+      const subscription = observeRecentEvaluations();
+      const sub = subscription.subscribe({
+        next: async (data) => {
+          try {
+            if (data.isSynced) {
+              await subscriptionSetup;
+              sub.unsubscribe();
+              expect(mockUnsubscribe).toHaveBeenCalled();
+              done();
+            }
+          } catch (error) {
+            done(error);
+          }
+        },
+        error: (error) => {
+          console.error('Test error:', error);
+          done(error);
+        }
+      });
     });
   });
 

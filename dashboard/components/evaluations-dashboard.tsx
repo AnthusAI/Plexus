@@ -56,6 +56,7 @@ import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
 import { listRecentEvaluations, observeRecentEvaluations, transformAmplifyTask as transformEvaluationData } from '@/utils/data-operations'
 import { TaskDisplay } from "@/components/TaskDisplay"
 import { getValueFromLazyLoader, unwrapLazyLoader } from '@/utils/data-operations'
+import type { LazyLoader } from '@/utils/types'
 
 type Evaluation = {
   id: string
@@ -298,13 +299,26 @@ interface ListEvaluationResponse {
 }
 
 export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
+  console.debug('transformEvaluation input:', {
+    evaluationId: evaluation?.id,
+    hasTask: !!evaluation?.task,
+    taskType: typeof evaluation?.task,
+    taskData: evaluation?.task,
+    taskKeys: evaluation?.task ? Object.keys(evaluation.task) : [],
+    status: evaluation?.status,
+    type: evaluation?.type
+  });
+
   if (!evaluation) return null;
 
-  // Get the raw task data
+  // Get the raw task data - handle both subscription and initial load formats
   const taskData = evaluation.task as unknown as AmplifyTask;
   if (!taskData) {
-    console.debug('No task data found in evaluation');
-    return null;
+    console.debug('No task data found in evaluation:', {
+      evaluationId: evaluation.id,
+      status: evaluation.status,
+      type: evaluation.type
+    });
   }
 
   // Get the score results
@@ -318,13 +332,38 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
     }>;
   } | null;
 
-  console.log('Raw task data:', {
+  console.debug('Processing evaluation data:', {
     evaluationId: evaluation.id,
-    taskData: taskData,
+    hasTaskData: !!taskData,
     taskType: typeof taskData,
-    taskKeys: Object.keys(taskData),
-    scoreResults: scoreResults
+    taskKeys: taskData ? Object.keys(taskData) : [],
+    hasScoreResults: !!scoreResults?.items?.length,
+    taskStages: taskData?.stages
   });
+
+  // Helper function to transform stages
+  const transformStages = (stages: any): { items: TaskStageType[] } | undefined => {
+    if (!stages) return undefined;
+    
+    // Get the items array from either format
+    const stageItems = stages.items || stages.data?.items || [];
+    
+    // Transform the stages
+    return {
+      items: stageItems.map((stage: any) => ({
+        id: stage.id,
+        name: stage.name,
+        order: stage.order,
+        status: stage.status,
+        processedItems: stage.processedItems,
+        totalItems: stage.totalItems,
+        startedAt: stage.startedAt,
+        completedAt: stage.completedAt,
+        estimatedCompletionAt: stage.estimatedCompletionAt,
+        statusMessage: stage.statusMessage
+      }))
+    };
+  };
 
   // Transform the evaluation into the format expected by components
   const transformedEvaluation: Evaluation = {
@@ -355,15 +394,19 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
     predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ?
       JSON.parse(evaluation.predictedClassDistribution) : evaluation.predictedClassDistribution,
     isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
-    task: taskData,
+    task: taskData ? {
+      ...taskData,
+      stages: transformStages(taskData.stages)
+    } : null,
     scoreResults: scoreResults
   };
 
-  console.log('Final transformed evaluation:', {
+  console.debug('Final transformed evaluation:', {
     evaluationId: transformedEvaluation.id,
-    taskData: transformedEvaluation.task,
+    hasTask: !!transformedEvaluation.task,
     taskType: typeof transformedEvaluation.task,
-    taskKeys: transformedEvaluation.task ? Object.keys(transformedEvaluation.task) : []
+    taskKeys: transformedEvaluation.task ? Object.keys(transformedEvaluation.task) : [],
+    taskStages: transformedEvaluation.task?.stages
   });
 
   return transformedEvaluation;
@@ -450,21 +493,18 @@ export default function EvaluationsDashboard() {
         });
 
         // Transform the items before setting state
-        const transformedItems = await Promise.all(items.map(async (item) => {
-          const evaluation = item;
-          console.log('Raw task data before transform:', {
-            evaluationId: evaluation.id,
-            taskData: evaluation.task,
-            taskId: evaluation.task?.id,
-            taskStatus: evaluation.task?.status,
-            taskStartedAt: evaluation.task?.startedAt,
-            taskCompletedAt: evaluation.task?.completedAt,
-            taskType: typeof evaluation.task,
-            taskKeys: evaluation.task ? Object.keys(evaluation.task) : []
+        const transformedItems = items.map(item => {
+          console.debug('Processing evaluation:', {
+            evaluationId: item.id,
+            taskData: item.task,
+            taskId: item.task?.id,
+            taskStatus: item.task?.status,
+            taskType: typeof item.task,
+            taskKeys: item.task ? Object.keys(item.task) : []
           });
 
-          const transformed = transformEvaluation(evaluation);
-          console.log('Transformed evaluation:', {
+          const transformed = transformEvaluation(item);
+          console.debug('Transformed evaluation:', {
             evaluationId: transformed?.id,
             taskData: transformed?.task,
             taskId: transformed?.task?.id,
@@ -473,10 +513,19 @@ export default function EvaluationsDashboard() {
             taskCompletedAt: transformed?.task?.completedAt
           });
           return transformed;
-        }));
+        }).filter((item): item is Evaluation => item !== null);
 
-        const nonNullEvaluations = transformedItems.filter((item): item is Evaluation => item !== null);
-        setEvaluations(nonNullEvaluations);
+        console.debug('Setting evaluations state:', {
+          count: transformedItems.length,
+          firstItem: transformedItems[0] ? {
+            id: transformedItems[0].id,
+            taskData: transformedItems[0].task,
+            taskId: transformedItems[0].task?.id,
+            taskStatus: transformedItems[0].task?.status
+          } : null
+        });
+
+        setEvaluations(transformedItems);
         if (isSynced) {
           setIsLoading(false);
         }
@@ -658,15 +707,6 @@ export default function EvaluationsDashboard() {
               ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
             `}>
               {filteredEvaluations.map((evaluation) => {
-                // Add debug logging here
-                console.debug('Evaluation in grid:', {
-                  evaluationId: evaluation.id,
-                  taskData: evaluation.task,
-                  taskStatus: evaluation.task?.status,
-                  taskStartedAt: evaluation.task?.startedAt,
-                  taskCompletedAt: evaluation.task?.completedAt,
-                  evaluationStatus: evaluation.status
-                });
 
                 return (
                   <div 
