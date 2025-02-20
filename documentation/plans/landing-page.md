@@ -38,7 +38,7 @@ The landing page introduces Plexus to new users and provides navigation to the d
 - Full reset after completion with pause ✓
 
 ### Applications Section ✓
-- Headline "AI Agents at Scale" ✓
+- Headline "No-CodeAI Agents at Scale" ✓
 - Narrative introduction explaining AI agent capabilities ✓
 - Focus on solving complex data processing challenges ✓
 - Highlights scalability and automation potential ✓

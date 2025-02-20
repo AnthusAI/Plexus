@@ -605,7 +605,7 @@ export async function listRecentEvaluations(limit: number = 100): Promise<any[]>
 export function observeRecentEvaluations(limit: number = 100): Observable<{ items: any[], isSynced: boolean }> {
   return new Observable(subscriber => {
     let evaluations: any[] = [];
-    let subscriptionCleanup: { unsubscribe: () => void } | null = null;
+    let subscriptionCleanup: { unsubscribe: () => void }[] = [];
 
     // Load initial data
     async function loadInitialEvaluations() {
@@ -638,12 +638,37 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
 
     // Set up subscription
     try {
-      console.debug('Setting up evaluation subscription...');
+      console.debug('Setting up evaluation subscriptions...');
       const client = getClient();
-      subscriptionCleanup = (client.graphql({
+
+      // Helper function to handle evaluation changes
+      const handleEvaluationChange = (evaluation: any, action: 'create' | 'update') => {
+        console.debug(`Handling ${action} for evaluation:`, {
+          evaluationId: evaluation.id,
+          type: evaluation.type,
+          taskData: evaluation.task,
+          taskId: evaluation.task?.id,
+          taskStatus: evaluation.task?.status,
+          taskType: typeof evaluation.task,
+          taskKeys: evaluation.task ? Object.keys(evaluation.task) : []
+        });
+
+        if (action === 'create') {
+          evaluations = [evaluation, ...evaluations];
+        } else {
+          evaluations = evaluations.map(e => 
+            e.id === evaluation.id ? evaluation : e
+          );
+        }
+        
+        subscriber.next({ items: evaluations, isSynced: true });
+      };
+
+      // Set up create subscription
+      const createSub = (client.graphql({
         query: `
-          subscription OnUpdateEvaluation {
-            onUpdateEvaluation {
+          subscription OnCreateEvaluation {
+            onCreateEvaluation {
               id
               type
               parameters
@@ -664,7 +689,15 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
               errorDetails
               accountId
               scorecardId
+              scorecard {
+                id
+                name
+              }
               scoreId
+              score {
+                id
+                name
+              }
               confusionMatrix
               scoreGoal
               datasetClassDistribution
@@ -711,13 +744,115 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                   metadata
                   explanation
                   itemId
-                  correct
                   createdAt
-                  scoringJob {
+                }
+              }
+            }
+          }
+        `
+      }) as unknown as { subscribe: Function }).subscribe({
+        next: ({ data }: { data?: { onCreateEvaluation: any } }) => {
+          console.debug('Create subscription event received:', {
+            hasData: !!data,
+            evaluation: data?.onCreateEvaluation ? {
+              id: data.onCreateEvaluation.id,
+              type: data.onCreateEvaluation.type,
+              taskData: data.onCreateEvaluation.task,
+              taskId: data.onCreateEvaluation.task?.id
+            } : null
+          });
+          if (data?.onCreateEvaluation) {
+            handleEvaluationChange(data.onCreateEvaluation, 'create');
+          }
+        },
+        error: (error: Error) => {
+          console.error('Error in create subscription:', error);
+          subscriber.error(error);
+        }
+      });
+      subscriptionCleanup.push(createSub);
+
+      // Set up update subscription
+      const updateSub = (client.graphql({
+        query: `
+          subscription OnUpdateEvaluation {
+            onUpdateEvaluation {
+              id
+              type
+              parameters
+              metrics
+              metricsExplanation
+              inferences
+              accuracy
+              cost
+              createdAt
+              updatedAt
+              status
+              startedAt
+              elapsedSeconds
+              estimatedRemainingSeconds
+              totalItems
+              processedItems
+              errorMessage
+              errorDetails
+              accountId
+              scorecardId
+              scorecard {
+                id
+                name
+              }
+              scoreId
+              score {
+                id
+                name
+              }
+              confusionMatrix
+              scoreGoal
+              datasetClassDistribution
+              isDatasetClassDistributionBalanced
+              predictedClassDistribution
+              isPredictedClassDistributionBalanced
+              taskId
+              task {
+                id
+                type
+                status
+                target
+                command
+                description
+                dispatchStatus
+                metadata
+                createdAt
+                startedAt
+                completedAt
+                estimatedCompletionAt
+                errorMessage
+                errorDetails
+                currentStageId
+                stages {
+                  items {
                     id
+                    name
+                    order
                     status
-                    metadata
+                    statusMessage
+                    startedAt
+                    completedAt
+                    estimatedCompletionAt
+                    processedItems
+                    totalItems
                   }
+                }
+              }
+              scoreResults {
+                items {
+                  id
+                  value
+                  confidence
+                  metadata
+                  explanation
+                  itemId
+                  createdAt
                 }
               }
             }
@@ -725,26 +860,28 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
         `
       }) as unknown as { subscribe: Function }).subscribe({
         next: ({ data }: { data?: { onUpdateEvaluation: any } }) => {
+          console.debug('Update subscription event received:', {
+            hasData: !!data,
+            evaluation: data?.onUpdateEvaluation ? {
+              id: data.onUpdateEvaluation.id,
+              type: data.onUpdateEvaluation.type,
+              taskData: data.onUpdateEvaluation.task,
+              taskId: data.onUpdateEvaluation.task?.id
+            } : null
+          });
           if (data?.onUpdateEvaluation) {
-            const updatedEvaluation = data.onUpdateEvaluation;
-            console.debug('Received evaluation update:', {
-              id: updatedEvaluation.id,
-              scoreResultsCount: updatedEvaluation.scoreResults?.items?.length,
-              firstScoreResult: updatedEvaluation.scoreResults?.items?.[0]
-            });
-            evaluations = evaluations.map(evaluation => 
-              evaluation.id === updatedEvaluation.id ? updatedEvaluation : evaluation
-            );
-            subscriber.next({ items: evaluations, isSynced: true });
+            handleEvaluationChange(data.onUpdateEvaluation, 'update');
           }
         },
         error: (error: Error) => {
-          console.error('Error in evaluation subscription:', error);
+          console.error('Error in update subscription:', error);
           subscriber.error(error);
         }
       });
+      subscriptionCleanup.push(updateSub);
+
     } catch (error) {
-      console.error('Error setting up evaluation subscription:', error);
+      console.error('Error setting up evaluation subscriptions:', error);
       subscriber.error(error);
     }
 
@@ -753,10 +890,17 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
 
     // Cleanup function
     return () => {
-      console.debug('Cleaning up evaluation subscription');
-      if (subscriptionCleanup) {
-        subscriptionCleanup.unsubscribe();
-      }
+      console.debug('Cleaning up evaluation subscriptions');
+      subscriptionCleanup.forEach(sub => {
+        try {
+          if (sub && typeof sub.unsubscribe === 'function') {
+            sub.unsubscribe();
+          }
+        } catch (error) {
+          console.error('Error cleaning up subscription:', error);
+        }
+      });
+      subscriptionCleanup = [];
     };
   });
 }
