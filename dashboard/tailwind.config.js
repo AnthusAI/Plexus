@@ -27,7 +27,9 @@ module.exports = {
                 attention: 'var(--attention)',
                 card: {
                     DEFAULT: 'var(--card)',
-                    foreground: 'var(--card-foreground)'
+                    foreground: 'var(--card-foreground)',
+                    selected: 'var(--card-selected)',
+                    'selected-foreground': 'var(--card-selected-foreground)'
                 },
                 'card-light': {
                     DEFAULT: 'var(--card-light)',
@@ -39,11 +41,15 @@ module.exports = {
                 },
                 primary: {
                     DEFAULT: 'var(--primary)',
-                    foreground: 'var(--primary-foreground)'
+                    foreground: 'var(--primary-foreground)',
+                    selected: 'var(--primary-selected)',
+                    'selected-foreground': 'var(--primary-selected-foreground)'
                 },
                 secondary: {
                     DEFAULT: 'var(--secondary)',
-                    foreground: 'var(--secondary-foreground)'
+                    foreground: 'var(--secondary-foreground)',
+                    selected: 'var(--secondary-selected)',
+                    'selected-foreground': 'var(--secondary-selected-foreground)'
                 },
                 muted: {
                     DEFAULT: 'var(--muted)',
@@ -51,11 +57,15 @@ module.exports = {
                 },
                 accent: {
                     DEFAULT: 'var(--accent)',
-                    foreground: 'var(--accent-foreground)'
+                    foreground: 'var(--accent-foreground)',
+                    selected: 'var(--accent-selected)',
+                    'selected-foreground': 'var(--accent-selected-foreground)'
                 },
                 destructive: {
                     DEFAULT: 'var(--destructive)',
-                    foreground: 'var(--destructive-foreground)'
+                    foreground: 'var(--destructive-foreground)',
+                    selected: 'var(--destructive-selected)',
+                    'selected-foreground': 'var(--destructive-selected-foreground)'
                 },
                 border: 'var(--border)',
                 frame: 'var(--frame)',
@@ -63,16 +73,46 @@ module.exports = {
                 ring: 'var(--ring)',
                 'user-chat': 'var(--user-chat)',
                 'plexus-chat': 'var(--plexus-chat)',
-                'chart-1': 'var(--chart-1)',
-                'chart-2': 'var(--chart-2)',
-                'chart-3': 'var(--chart-3)',
-                'chart-4': 'var(--chart-4)',
-                'chart-5': 'var(--chart-5)',
-                'chart-6': 'var(--chart-6)',
-                'chart-7': 'var(--chart-7)',
-                true: 'var(--true)',
-                false: 'var(--false)',
-                neutral: 'var(--neutral)',
+                'chart-1': {
+                    DEFAULT: 'var(--chart-1)',
+                    selected: 'var(--chart-1-selected)'
+                },
+                'chart-2': {
+                    DEFAULT: 'var(--chart-2)',
+                    selected: 'var(--chart-2-selected)'
+                },
+                'chart-3': {
+                    DEFAULT: 'var(--chart-3)',
+                    selected: 'var(--chart-3-selected)'
+                },
+                'chart-4': {
+                    DEFAULT: 'var(--chart-4)',
+                    selected: 'var(--chart-4-selected)'
+                },
+                'chart-5': {
+                    DEFAULT: 'var(--chart-5)',
+                    selected: 'var(--chart-5-selected)'
+                },
+                'chart-6': {
+                    DEFAULT: 'var(--chart-6)',
+                    selected: 'var(--chart-6-selected)'
+                },
+                'chart-7': {
+                    DEFAULT: 'var(--chart-7)',
+                    selected: 'var(--chart-7-selected)'
+                },
+                true: {
+                    DEFAULT: 'var(--true)',
+                    selected: 'var(--true-selected)'
+                },
+                false: {
+                    DEFAULT: 'var(--false)',
+                    selected: 'var(--false-selected)'
+                },
+                neutral: {
+                    DEFAULT: 'var(--neutral)',
+                    selected: 'var(--neutral-selected)'
+                },
                 'progress-background': 'var(--progress-background)',
                 'progress-background-selected': 'var(--progress-background-selected)',
                 'gauge-background': 'var(--gauge-background)',
