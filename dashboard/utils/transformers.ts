@@ -177,13 +177,41 @@ export async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
         console.error('Error parsing predicted class distribution:', e);
       }
 
+      // Get score results data
+      let scoreResults = undefined;
+      if (evaluationData.data?.scoreResults) {
+        const rawScoreResults = typeof evaluationData.data.scoreResults === 'function' 
+          ? await evaluationData.data.scoreResults()
+          : evaluationData.data.scoreResults;
+
+        if (Array.isArray(rawScoreResults)) {
+          scoreResults = rawScoreResults.map((item: {
+            id: string;
+            value: string | number;
+            confidence?: number | null;
+            metadata: any;
+            explanation?: string | null;
+            itemId?: string | null;
+            createdAt: string;
+          }) => ({
+            id: item.id,
+            value: item.value,
+            confidence: item.confidence ?? null,
+            metadata: item.metadata,
+            explanation: item.explanation ?? null,
+            itemId: item.itemId ?? null,
+            createdAt: item.createdAt
+          }));
+        }
+      }
+
       evaluation = {
         id: evaluationData.data?.id || '',
         type: evaluationData.data?.type || 'unknown',
         metrics,
         metricsExplanation: evaluationData.data?.metricsExplanation,
         inferences: Number(evaluationData.data?.inferences) || 0,
-        accuracy: typeof evaluationData.data?.accuracy === 'number' ? evaluationData.data?.accuracy : null,
+        accuracy: typeof evaluationData.data?.accuracy === 'number' ? evaluationData.data.accuracy : 0,
         cost: evaluationData.data?.cost ?? null,
         status: evaluationData.data?.status || 'PENDING',
         startedAt: evaluationData.data?.startedAt,
@@ -199,17 +227,16 @@ export async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
         isDatasetClassDistributionBalanced: evaluationData.data?.isDatasetClassDistributionBalanced,
         predictedClassDistribution,
         isPredictedClassDistributionBalanced: evaluationData.data?.isPredictedClassDistributionBalanced,
-        scoreResults: evaluationData.data?.scoreResults?.data?.items ? {
-          items: evaluationData.data.scoreResults.data.items.map(item => ({
-            id: item.id,
-            value: item.value,
-            confidence: item.confidence ?? null,
-            metadata: item.metadata,
-            explanation: item.explanation ?? null,
-            itemId: item.itemId,
-            createdAt: item.createdAt
-          }))
-        } : undefined
+        scoreResults,
+        accountId: evaluationData.data?.accountId || '',
+        items: evaluationData.data?.items || (() => Promise.resolve({ data: [] })),
+        scoringJobs: evaluationData.data?.scoringJobs || (() => Promise.resolve({ data: [] })),
+        account: evaluationData.data?.account || (() => Promise.resolve({ data: null })),
+        createdAt: evaluationData.data?.createdAt || new Date().toISOString(),
+        updatedAt: evaluationData.data?.updatedAt || new Date().toISOString(),
+        task: null,
+        scorecard: null,
+        score: null
       };
     } catch (error) {
       console.error('Error transforming evaluation data:', error);

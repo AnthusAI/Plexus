@@ -411,14 +411,6 @@ function parseScoreResult(result: any): ParsedScoreResult {
   const scoreResult = firstResultKey && parsedMetadata.results ? 
     parsedMetadata.results[firstResultKey] : null
 
-  // Log the parsing process for debugging
-  console.debug('Score result parsing:', {
-    originalResult: result,
-    parsedMetadata,
-    firstResultKey,
-    scoreResult
-  })
-
   return {
     id: result.id || '',
     value: String(result.value || scoreResult?.value || ''),

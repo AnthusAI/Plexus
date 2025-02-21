@@ -136,29 +136,6 @@ function transformTaskToActivity(task: ProcessedTask) {
     throw new Error('Invalid task: task or task.id is null')
   }
 
-  // Add detailed logging of the raw task data
-  console.debug('transformTaskToActivity - Raw task data:', {
-    taskId: task.id,
-    type: task.type,
-    rawEvaluation: task.evaluation,
-    hasEvaluation: !!task.evaluation,
-    evaluationFields: task.evaluation ? {
-      id: task.evaluation.id,
-      type: task.evaluation.type,
-      metrics: task.evaluation.metrics,
-      accuracy: task.evaluation.accuracy,
-      processedItems: task.evaluation.processedItems,
-      totalItems: task.evaluation.totalItems,
-      scoreResults: task.evaluation.scoreResults,
-      confusionMatrix: task.evaluation.confusionMatrix,
-      scoreGoal: task.evaluation.scoreGoal,
-      datasetClassDistribution: task.evaluation.datasetClassDistribution,
-      predictedClassDistribution: task.evaluation.predictedClassDistribution
-    } : null,
-    rawStages: task.stages,
-    rawMetadata: task.metadata
-  });
-
   // Parse metadata for task info - ensure we have a default empty object
   let metadata: Record<string, unknown> = {}
   try {
@@ -227,21 +204,6 @@ function transformTaskToActivity(task: ProcessedTask) {
   
   if (evaluation) {
     try {
-      // Log raw evaluation data before transformation
-      console.debug('Raw evaluation data before transformation:', {
-        taskId: task.id,
-        evaluation: {
-          id: evaluation.id,
-          type: evaluation.type,
-          metrics: evaluation.metrics,
-          accuracy: evaluation.accuracy,
-          processedItems: evaluation.processedItems,
-          totalItems: evaluation.totalItems,
-          scoreResults: evaluation.scoreResults,
-          confusionMatrix: evaluation.confusionMatrix,
-          scoreGoal: evaluation.scoreGoal
-        }
-      });
 
       // Parse metrics if it's a string
       let parsedMetrics = [];
@@ -316,13 +278,20 @@ function transformTaskToActivity(task: ProcessedTask) {
         isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
         predictedClassDistribution: parsedPredictedClassDistribution,
         isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
-        scoreResults: evaluation.scoreResults?.items?.map(result => ({
+        scoreResults: evaluation.scoreResults?.map((result: {
+          id: string;
+          value: string | number;
+          confidence: number | null;
+          metadata: any;
+          explanation: string | null;
+          itemId: string | null;
+        }) => ({
           id: result.id,
           value: result.value,
           confidence: result.confidence,
-          explanation: result.explanation,
-          metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
-          itemId: result.itemId
+          metadata: result.metadata,
+          itemId: result.itemId,
+          explanation: result.explanation
         })) || [],
         task: {
           id: task.id,
@@ -353,21 +322,6 @@ function transformTaskToActivity(task: ProcessedTask) {
         }
       }
 
-      // Log the transformed evaluation data
-      if (evaluationData) {
-        console.debug('Transformed evaluation data:', {
-          taskId: task.id,
-          evaluationData: {
-            metrics: evaluationData.metrics,
-            accuracy: evaluationData.accuracy,
-            processedItems: evaluationData.processedItems,
-            totalItems: evaluationData.totalItems,
-            scoreResults: evaluationData.scoreResults?.length,
-            confusionMatrix: evaluationData.confusionMatrix,
-            scoreGoal: evaluationData.scoreGoal
-          }
-        });
-      }
     } catch (error) {
       console.error('Error transforming evaluation data:', error, {
         evaluationId: evaluation.id,
@@ -539,21 +493,6 @@ export default function ActivityDashboard() {
 
   // Handle task updates
   useEffect(() => {
-    console.debug('Processing recentTasks for display:', {
-      count: recentTasks.length,
-      taskIds: recentTasks.map(task => task.id),
-      taskDetails: recentTasks.map(task => ({
-        id: task.id,
-        status: task.status,
-        stages: task.stages?.map(s => ({
-          name: s.name,
-          status: s.status,
-          processedItems: s.processedItems,
-          totalItems: s.totalItems
-        }))
-      }))
-    });
-
     const transformed = recentTasks.map(transformTaskToActivity);
     
     // Sort tasks: use createdAt for in-progress tasks, updatedAt for completed ones
