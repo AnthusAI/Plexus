@@ -123,8 +123,8 @@ export default function ClientLayout({
             visibleToasts={6}
             className="toaster group"
             style={{
-              '--toast-background': 'var(--muted-foreground)',
-              '--toast-color': 'var(--background)',
+              '--toast-background': 'var(--card)',
+              '--toast-color': 'var(--foreground)',
               '--toast-border': 'var(--border)',
               '--toast-success': 'var(--true)',
               '--toast-error': 'var(--false)',
@@ -132,12 +132,19 @@ export default function ClientLayout({
             } as React.CSSProperties}
             toastOptions={{
               style: {
-                background: 'var(--toast-background)',
-                color: 'var(--toast-color)',
-                border: '1px solid var(--toast-border)'
+                background: 'var(--card)',
+                color: 'var(--foreground)',
+                border: '1px solid var(--border)',
+                borderRadius: '0.5rem'
               },
-              className: "flex items-start gap-3",
-              duration: 8000 // Default duration doubled from 4000ms to 8000ms
+              classNames: {
+                toast: "group bg-card text-foreground hover:bg-accent",
+                title: "text-foreground font-medium",
+                description: "text-muted-foreground font-mono text-sm",
+                actionButton: "bg-primary text-primary-foreground",
+                cancelButton: "bg-muted text-muted-foreground"
+              },
+              duration: 8000
             }}
           />
           <AuthWrapper>{children}</AuthWrapper>
