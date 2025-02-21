@@ -33,6 +33,7 @@ describe('transformers', () => {
         stages: {
           items: [{
             id: 'stage-1',
+            taskId: 'test-id',
             name: 'Stage 1',
             order: 1,
             status: 'PENDING'
@@ -111,6 +112,7 @@ describe('transformers', () => {
           data: {
             items: [{
               id: 'stage-1',
+              taskId: 'test-id',
               name: 'Stage 1',
               order: 1,
               status: 'PENDING'
@@ -139,6 +141,7 @@ describe('transformers', () => {
           data: {
             items: [{
               id: 'stage-1',
+              taskId: 'test-id',
               name: 'Stage 1',
               order: 1,
               status: 'PENDING'
