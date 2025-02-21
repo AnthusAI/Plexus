@@ -64,9 +64,9 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
   }
 
   const getTextColor = (value: number) => {
-    // Use focus text color for cells with values close to the max value
+    // Use white text for cells with values close to the max value
     const threshold = maxValue * 0.7; // 70% of max value
-    return value >= threshold ? 'text-focus' : 'text-card-selected-foreground';
+    return value >= threshold ? 'text-white' : 'text-card-selected-foreground';
   }
 
   const handleCellClick = (predicted: string, actual: string) => {
