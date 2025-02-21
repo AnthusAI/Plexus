@@ -160,7 +160,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   const LeftSidebar = () => {
     return (
-      <div className={`flex flex-col h-full py-2 bg-muted ${isMobile ? 'pr-3' : 'pr-2'}`}>
+      <div className={`flex flex-col h-full py-2 bg-frame ${isMobile ? 'pr-3' : 'pr-2'}`}>
         <div className={`mb-4 ${isLeftSidebarOpen ? 'pl-2' : ''}`}>
           <Link href="/" className={`block relative ${isLeftSidebarOpen ? 'w-full max-w-md' : 'w-12 pl-2'}`}>
             <div className="absolute -inset-1 bg-gradient-to-r from-secondary to-primary rounded-md blur-sm opacity-50"></div>
@@ -177,46 +177,30 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         <ScrollArea className="flex-grow overflow-y-auto">
           <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
             {visibleMenuItems.map((item) => (
-              <TooltipProvider key={item.name}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Link href={item.path} passHref>
-                      <DashboardButton
-                        variant={
-                          (pathname === item.path || 
-                          (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
-                          (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
-                            ? "secondary"
-                            : "ghost"
-                        }
-                        className={`w-full justify-start group !rounded-[4px] ${
-                          (pathname === item.path || 
-                          (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
-                          (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
-                            ? "bg-secondary text-secondary-foreground"
-                            : ""
-                        } ${isLeftSidebarOpen ? '' : 'px-2'} ${
-                          isMobile ? 'py-3' : ''
-                        }`}
-                      >
-                        <item.icon className={`h-4 w-4 flex-shrink-0 ${
-                          (pathname === item.path || 
-                          (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
-                          (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
-                            ? "text-secondary-foreground"
-                            : "text-secondary group-hover:text-accent-foreground"
-                        }`} />
-                        {isLeftSidebarOpen && (
-                          <span className="ml-3">{item.name}</span>
-                        )}
-                      </DashboardButton>
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {item.name}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Link 
+                key={item.name}
+                href={item.path}
+                className={`flex items-center w-full px-3 py-2 group !rounded-[4px] ${
+                  (pathname === item.path || 
+                  (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
+                  (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
+                    ? "bg-secondary text-secondary-foreground"
+                    : "hover:bg-accent hover:text-accent-foreground"
+                } ${isLeftSidebarOpen ? '' : 'px-2'} ${
+                  isMobile ? 'py-3' : ''
+                }`}
+              >
+                <item.icon className={`h-4 w-4 flex-shrink-0 ${
+                  (pathname === item.path || 
+                  (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
+                  (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
+                    ? "text-secondary-foreground"
+                    : "text-navigation-icon"
+                }`} />
+                {isLeftSidebarOpen && (
+                  <span className="ml-3">{item.name}</span>
+                )}
+              </Link>
             ))}
           </div>
         </ScrollArea>
@@ -237,13 +221,13 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     {selectedAccount?.name?.split(' ').map(word => word[0]).join('') || 'AC'}
                   </AvatarFallback>
                 </Avatar>
-                {isLeftSidebarOpen && <span>{selectedAccount?.name || 'Select Account'}</span>}
+                {isLeftSidebarOpen && <span className="text-muted-foreground">{selectedAccount?.name || 'Select Account'}</span>}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-[200px]">
               <Link href="/settings">
                 <DropdownMenuItem className="cursor-pointer">
-                  <Settings className="mr-2 h-4 w-4" />
+                  <Settings className="mr-2 h-4 w-4 text-navigation-icon" />
                   Settings
                 </DropdownMenuItem>
               </Link>
@@ -272,7 +256,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                             src={`/avatar-${account.key}.png`} 
                             alt={account.name} 
                           />
-                          <AvatarFallback className="bg-muted dark:bg-border">
+                          <AvatarFallback className="bg-frame dark:bg-border">
                             {account.name.split(' ').map(word => word[0]).join('')}
                           </AvatarFallback>
                         </Avatar>
@@ -295,7 +279,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   <AvatarImage src="/user-avatar.png" alt="User avatar" />
                   <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
                 </Avatar>
-                {isLeftSidebarOpen && <span>Ryan Porter</span>}
+                {isLeftSidebarOpen && <span className="text-muted-foreground">Ryan Porter</span>}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-[200px]">
@@ -303,13 +287,13 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               <DropdownMenuSeparator />
               <Link href="/settings">
                 <DropdownMenuItem className="cursor-pointer">
-                  <Settings className="mr-2 h-4 w-4" />
+                  <Settings className="mr-2 h-4 w-4 text-navigation-icon" />
                   Settings
                 </DropdownMenuItem>
               </Link>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="cursor-pointer" onClick={signOut}>
-                <LogOut className="mr-2 h-4 w-4" />
+                <LogOut className="mr-2 h-4 w-4 text-navigation-icon" />
                 Sign out
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -324,7 +308,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     className="pl-4 group"
                     onClick={toggleLeftSidebar}
                   >
-                    <PanelLeft className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                    <PanelLeft className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                   </DashboardButton>
                 </TooltipTrigger>
                 <TooltipContent side="right">
@@ -343,11 +327,11 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                       onClick={toggleTheme}
                     >
                       {theme === "dark" ? (
-                        <Moon className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                        <Moon className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                       ) : theme === "light" ? (
-                        <Sun className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                        <Sun className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                       ) : (
-                        <Monitor className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                        <Monitor className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                       )}
                     </DashboardButton>
                   </TooltipTrigger>
@@ -365,7 +349,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   const RightSidebar = () => {
     return (
-      <div className="flex flex-col h-full py-2 bg-muted">
+      <div className="flex flex-col h-full py-2 bg-frame">
         {rightSidebarState === 'collapsed' && (
           <div className="px-3 py-2">
             <TooltipProvider>
@@ -377,7 +361,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     className="h-8 w-8 p-0 group"
                     onClick={toggleRightSidebar}
                   >
-                    <MessageSquare className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                    <MessageSquare className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                   </DashboardButton>
                 </TooltipTrigger>
                 <TooltipContent side="left">
@@ -490,7 +474,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                       size="icon"
                       className="h-8 w-8 p-0 group"
                     >
-                      <Mic className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                      <Mic className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                     </DashboardButton>
                   </TooltipTrigger>
                   <TooltipContent side="top">
@@ -506,7 +490,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                       size="icon"
                       className="h-8 w-8 p-0 group"
                     >
-                      <Headphones className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                      <Headphones className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                     </DashboardButton>
                   </TooltipTrigger>
                   <TooltipContent side="top">
@@ -525,7 +509,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   className="h-8 w-8 p-0 ml-auto group"
                   onClick={toggleRightSidebar}
                 >
-                  <PanelRight className="h-4 w-4 flex-shrink-0 text-secondary group-hover:text-accent-foreground" />
+                  <PanelRight className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                 </DashboardButton>
               </TooltipTrigger>
               <TooltipContent side="left">
@@ -545,21 +529,21 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   }
 
   useEffect(() => {
-    document.body.classList.add('bg-muted')
+    document.body.classList.add('bg-frame')
     return () => {
-      document.body.classList.remove('bg-muted')
+      document.body.classList.remove('bg-frame')
     }
   }, [])
 
   return (
-    <div className="flex flex-col h-screen bg-muted">
+    <div className="flex flex-col h-screen bg-frame">
       <MobileHeader 
         toggleLeftSidebar={toggleLeftSidebar}
         toggleRightSidebar={toggleRightSidebar}
         rightSidebarState={rightSidebarState}
       />
       
-      <div className="flex flex-1 overflow-hidden bg-muted">
+      <div className="flex flex-1 overflow-hidden bg-frame">
         <aside
           className={`
             ${isMobile ? 'fixed top-[40px] bottom-0 left-0 z-50 bg-background/80 backdrop-blur-sm' : 
@@ -568,18 +552,9 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             transition-all duration-300 ease-in-out overflow-hidden
             ${isMobile && !isLeftSidebarOpen ? 'hidden' : ''}
           `}
-          onClick={() => {
-            console.log('Right sidebar clicked:', {
-              rightSidebarState,
-              isMobile,
-              width: rightSidebarState === 'collapsed' ? 
-                (isMobile ? '0' : '14') : 
-                (rightSidebarState === 'normal' ? '80' : 'full')
-            });
-          }}
         >
           <div className={`
-            ${isMobile ? 'h-full w-40 bg-muted' : 'h-full'}
+            ${isMobile ? 'h-full w-40 bg-frame' : 'h-full'}
           `}>
             <LeftSidebar />
           </div>
@@ -616,7 +591,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           `}
         >
           <div className={`
-            ${isMobile ? 'h-full w-full bg-muted' : 'h-full'}
+            ${isMobile ? 'h-full w-full bg-frame' : 'h-full'}
             ${isMobile && rightSidebarState !== 'collapsed' ? 'flex flex-col' : ''}
           `}>
             {isMobile && rightSidebarState !== 'collapsed' && (

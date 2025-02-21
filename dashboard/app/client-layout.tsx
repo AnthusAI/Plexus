@@ -7,6 +7,7 @@ import '@aws-amplify/ui-react/styles.css';
 import { Amplify } from "aws-amplify";
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { Toaster } from "sonner";
 
 // Only configure Amplify if we're not in a CI environment
 if (process.env.NODE_ENV !== 'test') {
@@ -114,6 +115,31 @@ export default function ClientLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <Toaster 
+            position="bottom-right"
+            theme="system"
+            closeButton
+            expand={true}
+            visibleToasts={6}
+            className="toaster group"
+            style={{
+              '--toast-background': 'var(--muted-foreground)',
+              '--toast-color': 'var(--background)',
+              '--toast-border': 'var(--border)',
+              '--toast-success': 'var(--true)',
+              '--toast-error': 'var(--false)',
+              '--toast-info': 'var(--primary)'
+            } as React.CSSProperties}
+            toastOptions={{
+              style: {
+                background: 'var(--toast-background)',
+                color: 'var(--toast-color)',
+                border: '1px solid var(--toast-border)'
+              },
+              className: "flex items-start gap-3",
+              duration: 8000 // Default duration doubled from 4000ms to 8000ms
+            }}
+          />
           <AuthWrapper>{children}</AuthWrapper>
         </ThemeProvider>
       </SidebarProvider>

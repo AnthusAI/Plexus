@@ -131,7 +131,7 @@ export const ColorScaling: Story = {
     await expect(maxBgColor).not.toBe(minBgColor)
     
     // Check text color contrast
-    await expect(maxValueCell.closest('div')).toHaveClass('text-white')
+    await expect(maxValueCell.closest('div')).toHaveClass('text-focus')
     await expect(minValueCell.closest('div')).toHaveClass('text-primary')
   }
 }

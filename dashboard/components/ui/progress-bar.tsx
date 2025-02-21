@@ -13,6 +13,7 @@ export interface ProgressBarProps {
   color?: 'primary' | 'secondary' | 'true' | 'false' | 'neutral'
   isFocused?: boolean
   showTiming?: boolean
+  isSelected?: boolean
 }
 
 export function ProgressBar({ 
@@ -24,7 +25,8 @@ export function ProgressBar({
   estimatedTimeRemaining,
   color = 'secondary',
   isFocused = false,
-  showTiming = true
+  showTiming = true,
+  isSelected = false
 }: ProgressBarProps) {
   const highestProgressRef = useRef(0)
   const highestProcessedItemsRef = useRef(0)
@@ -65,7 +67,10 @@ export function ProgressBar({
           isFocused={isFocused}
         />
       )}
-      <div className="relative w-full h-8 bg-neutral rounded-md">
+      <div className={cn(
+        "relative w-full h-8 rounded-md",
+        isSelected ? "bg-progress-background-selected" : "bg-progress-background"
+      )}>
         <div
           role="progressbar"
           className={cn(

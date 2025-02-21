@@ -9,6 +9,20 @@ const meta = {
   parameters: {
     layout: 'centered',
   },
+  argTypes: {
+    commandDisplay: {
+      control: 'select',
+      options: ['hide', 'show', 'full'],
+      defaultValue: 'show',
+      description: 'Controls how to display the command'
+    },
+    statusMessageDisplay: {
+      control: 'select',
+      options: ['always', 'never', 'error-only'],
+      defaultValue: 'always',
+      description: 'Controls when to display the status message'
+    }
+  }
 } satisfies Meta<typeof Task>
 
 export default meta
@@ -21,6 +35,7 @@ const createTask = (id: string, overrides = {}) => ({
   score: 'Test Score',
   time: '2 hours ago',
   description: 'Task Description',
+  command: 'python process_data.py --input data.csv --output results.json',
   ...overrides
 })
 
@@ -316,10 +331,13 @@ export const NoProgress: Story = {
   },
 }
 
-export const Detail = {
+export const Detail: Story = {
   args: {
     variant: 'detail',
-    task: Starting.args.task,
+    task: createTask('1', {
+      type: 'Starting',
+      description: 'Task is starting...'
+    }),
     isFullWidth: false,
     onToggleFullWidth: () => console.log('Toggle full width'),
     onClose: () => console.log('Close'),
@@ -327,12 +345,12 @@ export const Detail = {
     renderContent: TaskStoryContent,
   },
   decorators: [
-    (Story) => (
+    (StoryFn) => (
       <div className="w-[600px]">
-        <Story />
+        <StoryFn />
       </div>
-    ),
-  ],
+    )
+  ]
 }
 
 export const DetailFullWidth = {
@@ -352,26 +370,96 @@ export const DetailFullWidth = {
   ],
 }
 
-export const Demo = {
-  render: () => {
-    const storyList = [
-      { title: 'Starting', args: stories.Starting.args },
-      { title: 'Announced', args: stories.Announced.args },
-      { title: 'Claimed', args: stories.Claimed.args },
-      { title: 'Initializing', args: Initializing.args },
-      { title: 'Running', args: Running.args },
-      { title: 'No Stages', args: NoStages.args },
-      { title: 'Finalizing', args: Finalizing.args },
-      { title: 'Complete', args: Complete.args },
-      { title: 'Failed', args: Failed.args },
-      { title: 'No Progress', args: NoProgress.args },
-    ].filter((story): story is { title: string; args: TaskComponentProps<unknown> } => 
-      story.args !== undefined
+export const DetailWithFullCommand: Story = {
+  args: {
+    variant: 'detail',
+    task: createTask('command-test', {
+      type: 'Test Task',
+      command: 'python process_data.py --input /very/long/path/to/input/data.csv --output /another/very/long/path/to/output/results.json --config /path/to/config.yaml --verbose --debug --log-level INFO --batch-size 1000 --workers 4 --additional-param value --another-param "some value with spaces" --yet-another-param=123',
+      stages: sampleStages,
+      currentStageName: 'Processing',
+      status: 'RUNNING',
+      processedItems: 45,
+      totalItems: 100,
+      statusMessage: 'Processing activity data...'
+    }),
+    isFullWidth: false,
+    onToggleFullWidth: () => console.log('Toggle full width'),
+    onClose: () => console.log('Close'),
+    renderHeader: TaskStoryHeader,
+    renderContent: TaskStoryContent,
+    commandDisplay: 'full'
+  },
+  decorators: [
+    (StoryFn) => (
+      <div className="w-[800px]">
+        <StoryFn />
+      </div>
     )
+  ]
+}
+
+export const Command: Story = {
+  render: () => {
+    const longCommand = 'python process_data.py --input /very/long/path/to/input/data.csv --output /another/very/long/path/to/output/results.json --config /path/to/config.yaml --verbose --debug --log-level INFO --batch-size 1000 --workers 4'
+    
+    const variants: Array<{
+      title: string;
+      args: TaskComponentProps<unknown>;
+    }> = [
+      {
+        title: 'Hidden Command',
+        args: {
+          ...baseArgs,
+          commandDisplay: 'hide',
+          task: createTask('command-hidden', {
+            command: longCommand,
+            stages: sampleStages,
+            currentStageName: 'Processing',
+            status: 'RUNNING',
+            processedItems: 45,
+            totalItems: 100,
+            statusMessage: 'Processing activity data...'
+          }),
+        }
+      },
+      {
+        title: 'Single Line (Truncated)',
+        args: {
+          ...baseArgs,
+          commandDisplay: 'show',
+          task: createTask('command-single', {
+            command: longCommand,
+            stages: sampleStages,
+            currentStageName: 'Processing',
+            status: 'RUNNING',
+            processedItems: 45,
+            totalItems: 100,
+            statusMessage: 'Processing activity data...'
+          }),
+        }
+      },
+      {
+        title: 'Full Command (Wrapped)',
+        args: {
+          ...baseArgs,
+          commandDisplay: 'full',
+          task: createTask('command-full', {
+            command: longCommand,
+            stages: sampleStages,
+            currentStageName: 'Processing',
+            status: 'RUNNING',
+            processedItems: 45,
+            totalItems: 100,
+            statusMessage: 'Processing activity data...'
+          }),
+        }
+      }
+    ]
 
     return (
       <div className="space-y-8">
-        {storyList.map(({ title, args }) => (
+        {variants.map(({ title, args }) => (
           <div key={title}>
             <div className="text-sm text-muted-foreground mb-2">{title}</div>
             <Task {...args} />
@@ -379,5 +467,65 @@ export const Demo = {
         ))}
       </div>
     )
+  }
+}
+
+export const StatusMessageAlwaysShown: Story = {
+  args: {
+    ...baseArgs,
+    statusMessageDisplay: 'always',
+    task: createTask('status-always', {
+      stages: sampleStages,
+      currentStageName: 'Processing',
+      status: 'RUNNING',
+      processedItems: 45,
+      totalItems: 100,
+      statusMessage: 'Processing activity data...'
+    }),
+  },
+}
+
+export const StatusMessageNeverShown: Story = {
+  args: {
+    ...baseArgs,
+    statusMessageDisplay: 'never',
+    task: createTask('status-never', {
+      stages: sampleStages,
+      currentStageName: 'Processing',
+      status: 'RUNNING',
+      processedItems: 45,
+      totalItems: 100,
+      statusMessage: 'Processing activity data...'
+    }),
+  },
+}
+
+export const StatusMessageErrorOnly: Story = {
+  args: {
+    ...baseArgs,
+    statusMessageDisplay: 'error-only',
+    task: createTask('status-error', {
+      stages: sampleStages,
+      currentStageName: 'Processing',
+      status: 'FAILED',
+      processedItems: 45,
+      totalItems: 100,
+      errorMessage: 'Failed to process data: Invalid format'
+    }),
+  },
+}
+
+export const StatusMessageErrorOnlyWithoutError: Story = {
+  args: {
+    ...baseArgs,
+    statusMessageDisplay: 'error-only',
+    task: createTask('status-error-no-error', {
+      stages: sampleStages,
+      currentStageName: 'Processing',
+      status: 'RUNNING',
+      processedItems: 45,
+      totalItems: 100,
+      statusMessage: 'This message should not be shown'
+    }),
   },
 }

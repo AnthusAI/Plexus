@@ -10,10 +10,10 @@ import { SidebarProvider } from "./contexts/SidebarContext"
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Plexus - AI Agents at Scale",
+  title: "Plexus - No-Code AI Agents at Scale",
   description: "Run AI agents over your data with no code. Plexus is a battle-tested platform for building agent-based AI workflows that analyze streams of content and take action.",
   openGraph: {
-    title: "Plexus - AI Agents at Scale",
+    title: "Plexus - No-Code AI Agents at Scale",
     description: "Run AI agents over your data with no code. Plexus is a battle-tested platform for building agent-based AI workflows that analyze streams of content and take action.",
     url: "https://plexus.anth.us",
     siteName: "Plexus",
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Plexus - AI Agents at Scale"
+        alt: "Plexus - No-Code AI Agents at Scale"
       }
     ],
     locale: "en_US",
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Plexus - AI Agents at Scale",
+    title: "Plexus - No-Code AI Agents at Scale",
     description: "Run AI agents over your data with no code. Plexus is a battle-tested platform for building agent-based AI workflows that analyze streams of content and take action.",
     creator: "@Anthus_AI",
     images: ["/og-image.png"],
