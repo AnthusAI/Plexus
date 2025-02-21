@@ -1,6 +1,31 @@
 # CHANGELOG
 
 
+## v0.7.0 (2025-02-21)
+
+### Refactoring
+
+- **dashboard**: Consolidate task and subscription utilities
+  ([`555fb48`](https://github.com/AnthusAI/Plexus/commit/555fb4813fdf9150735a94439168ecd85e696b72))
+
+### Testing
+
+- **extractor**: Add comprehensive test suite for Extractor node
+  ([`9a1e611`](https://github.com/AnthusAI/Plexus/commit/9a1e6113ea0f6a1961cfd7b88d717e29bfc56cce))
+
+- Implement unit tests for Extractor initialization and configuration - Cover various extraction
+  scenarios including exact matching, sliding window, and model output trust - Test output parser
+  with different matching strategies and confidence levels - Add end-to-end chain integration test
+  with dummy model - Ensure robust testing of text extraction functionality
+
+- **extractor**: Add pytest fixture to mock OpenAI model initialization
+  ([`1c02a82`](https://github.com/AnthusAI/Plexus/commit/1c02a828b5a13c7b89efddb4750cbc4fdeae4a6e))
+
+- Create a pytest fixture to bypass real API calls during testing - Patch Extractor's
+  _initialize_model method to return a dummy output - Improve test reliability by preventing
+  external API dependencies
+
+
 ## v0.7.0-alpha.1 (2025-02-19)
 
 ### Bug Fixes

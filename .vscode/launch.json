@@ -32,6 +32,21 @@
             }
         },
         {
+            "name": "Plexus Score (DBI)",
+            "type": "python",
+            "request": "launch",
+            "module": "score",
+            "args": [
+                "--scorecard-name", "primeedu",
+                // "--report-id", "260399240"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/../Call-Criteria-Python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
             "name": "Plexus Predict",
             "type": "python",
             "request": "launch",
