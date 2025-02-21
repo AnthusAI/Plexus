@@ -114,12 +114,12 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
       <Select onValueChange={value => {
         setSelectedScorecard(value === "all" ? null : value)
       }}>
-        <SelectTrigger className="w-[200px] h-8 bg-card-light border-none">
+        <SelectTrigger className="w-[200px] h-8 bg-card border-none">
           <SelectValue placeholder="Scorecard" />
         </SelectTrigger>
         <SelectContent className="bg-card border-none">
           <SelectItem value="all">All Scorecards</SelectItem>
-          {scorecards?.map(field => (
+          {scorecards?.sort((a, b) => a.label.localeCompare(b.label)).map(field => (
             <SelectItem key={field.value} value={field.value}>
               {field.label}
             </SelectItem>
@@ -131,12 +131,12 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
         disabled={!selectedScorecard}
         value={selectedScore || "all"}
       >
-        <SelectTrigger className="w-[200px] h-8 bg-card-light border-none">
+        <SelectTrigger className="w-[200px] h-8 bg-card border-none">
           <SelectValue placeholder="Score" />
         </SelectTrigger>
         <SelectContent className="bg-card border-none">
           <SelectItem value="all">All Scores</SelectItem>
-          {selectedScorecard && scores?.map(option => (
+          {selectedScorecard && scores?.sort((a, b) => a.label.localeCompare(b.label)).map(option => (
             <SelectItem key={option.value} value={option.value}>
               {option.label}
             </SelectItem>

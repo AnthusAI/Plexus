@@ -69,7 +69,7 @@ export const Grid: Story = {
     variant: 'grid'
   },
   render: (args) => (
-    <Card>
+    <Card className="bg-card-light p-6">
       <MetricsGauges {...args} />
     </Card>
   ),
@@ -87,7 +87,7 @@ export const Detail: Story = {
     metricsExplanation: "This evaluation uses accuracy as the primary metric, along with precision and sensitivity to provide a complete picture of model performance across all classes."
   },
   render: (args) => (
-    <Card>
+    <Card className="bg-card-light p-6">
       <MetricsGauges {...args} />
     </Card>
   ),
@@ -114,4 +114,18 @@ export const Detail: Story = {
     await expect(within(specificityGauge!).getByText('95%', { selector: '.text-\\[2\\.25rem\\]' })).toBeInTheDocument()
     await expect(within(precisionGauge!).getByText('91%', { selector: '.text-\\[2\\.25rem\\]' })).toBeInTheDocument()
   }
+}
+
+export const DetailWithSelectedGauge: Story = {
+  args: {
+    ...createDetailGaugeConfig(92, 89, 95, 91),
+    variant: 'detail',
+    selectedIndex: 0,
+    metricsExplanation: "This evaluation uses accuracy as the primary metric, along with precision and sensitivity to provide a complete picture of model performance across all classes."
+  },
+  render: (args) => (
+    <Card className="bg-card-light p-6">
+      <MetricsGauges {...args} />
+    </Card>
+  )
 }

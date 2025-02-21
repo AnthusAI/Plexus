@@ -3,6 +3,12 @@ from rich.logging import RichHandler
 import logging
 import sys
 
+# Import the centralized logging configuration
+from plexus.CustomLogging import setup_logging, console
+
+# The logging configuration is now handled by CustomLogging.py
+# This file is kept for backward compatibility and to provide the console object
+
 # Create a Rich console specifically for output
 console = Console()
 

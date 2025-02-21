@@ -52,10 +52,30 @@ def setup_logging(log_group=DEFAULT_LOG_GROUP):
         logging.getLogger().removeHandler(cloudwatch_handler)
         logging.debug(f"Removed existing CloudWatch handler for log group: {current_log_group}")
     
-    handlers = [
-        RichHandler(console=console, markup=True, rich_tracebacks=True, 
-                   show_time=False, show_path=False)
-    ]
+    # Create custom formatter
+    class PlexusFormatter(logging.Formatter):
+        def format(self, record):
+            # Add timestamp in a consistent format
+            record.asctime = datetime.fromtimestamp(record.created).strftime('%Y-%m-%d %H:%M:%S')
+            # Add the log group if available
+            record.log_group = current_log_group if current_log_group else 'plexus'
+            # First format with our custom format string
+            formatted = super().format(record)
+            return formatted
+
+    # Configure Rich handler with custom settings
+    rich_handler = RichHandler(
+        console=console,
+        markup=True,
+        rich_tracebacks=True,
+        show_time=False,
+        show_path=False,
+        show_level=False,  # Don't show level in Rich output since we include it in our format
+        log_time_format='[%X]'
+    )
+    rich_handler.setFormatter(PlexusFormatter('%(asctime)s [%(log_group)s] [%(levelname)s] %(message)s'))
+
+    handlers = [rich_handler]
 
     # Check AWS credentials
     _, _, region, is_configured = _get_aws_credentials()
@@ -74,6 +94,7 @@ def setup_logging(log_group=DEFAULT_LOG_GROUP):
                 log_group=log_group,
                 stream_name=stream_name
             )
+            cloudwatch_handler.setFormatter(PlexusFormatter())
             handlers.append(cloudwatch_handler)
             current_log_group = log_group
             if os.getenv('DEBUG'):
@@ -88,17 +109,30 @@ def setup_logging(log_group=DEFAULT_LOG_GROUP):
         cloudwatch_handler = None
         current_log_group = None
 
-    # Configure logging
-    logging.basicConfig(
-        force=True,
-        level=logging.DEBUG if os.getenv('DEBUG') else logging.WARNING,  # Change default to WARNING
-        format="%(message)s",
-        datefmt="[%X]",
-        handlers=handlers
-    )
+    # Configure root logger
+    root_logger = logging.getLogger()
+    
+    # Remove any existing handlers
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
+    # Set level based on environment
+    log_level = logging.DEBUG if os.getenv('DEBUG') else logging.INFO
+    root_logger.setLevel(log_level)
+    
+    # Add our handlers
+    for handler in handlers:
+        root_logger.addHandler(handler)
 
     # Ensure that logging output goes to sys.stdout
     logging.getLogger().handlers[0].stream = sys.stdout
+
+    # Configure specific loggers
+    # Disable noisy loggers
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
+    logging.getLogger('botocore').setLevel(logging.WARNING)
+    logging.getLogger('boto3').setLevel(logging.WARNING)
+    logging.getLogger('gql.transport').setLevel(logging.WARNING)
 
 # Initial setup with default log group
 setup_logging()
@@ -122,7 +156,7 @@ def set_log_group(new_log_group):
     
     setup_logging(new_log_group)
     current_log_group = new_log_group
-    logging.debug(f"Switched logging to group: {new_log_group}")  # Change to debug level
+    logging.debug(f"Switched logging to group: {new_log_group}")
 
 def add_log_stream(stream_name):
     """
@@ -150,9 +184,9 @@ def add_log_stream(stream_name):
     logger.addHandler(new_handler)
     
     # Log the addition of the new stream
-    logging.debug(f"Added new log stream: {stream_name}")  # Change to debug level
+    logging.debug(f"Added new log stream: {stream_name}")
     
-    return new_handler  # Return the handler in case it's needed
+    return new_handler
 
 # Export the necessary functions and objects
 __all__ = ['logging', 'set_log_group', 'add_log_stream', 'console']

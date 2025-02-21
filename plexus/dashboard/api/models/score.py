@@ -127,91 +127,97 @@ class Score(BaseModel):
 
     @classmethod
     def get_by_name(cls, name: str, scorecard_id: str, client: _BaseAPIClient) -> Optional['Score']:
-        """Get a score by its name within a scorecard"""
-        # First get all sections for this scorecard
-        sections_query = """
-        query GetScorecardSections($scorecardId: String!) {
-            listScorecardSections(filter: { scorecardId: { eq: $scorecardId } }) {
+        """Get a score by its name"""
+        query = """
+        query GetScoreByName($name: String!) {
+            listScoreByName(name: $name) {
                 items {
-                    id
-                    scores {
-                        items {
-                            %s
-                        }
-                    }
+                    %s
                 }
             }
         }
         """ % cls.fields()
         
-        sections_result = client.execute(sections_query, {'scorecardId': scorecard_id})
-        if not sections_result or 'listScorecardSections' not in sections_result:
+        result = client.execute(query, {'name': name})
+        if not result or 'listScoreByName' not in result or not result['listScoreByName']['items']:
             return None
             
-        # Look through all sections for a score with matching name
-        for section in sections_result['listScorecardSections']['items']:
-            if section.get('scores', {}).get('items'):
-                for score in section['scores']['items']:
-                    if score.get('name') == name:
-                        return cls.from_dict(score, client)
-        
-        return None
+        return cls.from_dict(result['listScoreByName']['items'][0], client)
 
     @classmethod
     def get_by_key(cls, key: str, scorecard_id: str, client: _BaseAPIClient) -> Optional['Score']:
-        """Get a score by its key within a scorecard"""
-        sections_query = """
-        query GetScorecardSections($scorecardId: String!) {
-            listScorecardSections(filter: { scorecardId: { eq: $scorecardId } }) {
+        """Get a score by its key"""
+        query = """
+        query GetScoreByKey($key: String!) {
+            listScoreByKey(key: $key) {
                 items {
-                    id
-                    scores {
-                        items {
-                            %s
-                        }
-                    }
+                    %s
                 }
             }
         }
         """ % cls.fields()
         
-        sections_result = client.execute(sections_query, {'scorecardId': scorecard_id})
-        if not sections_result or 'listScorecardSections' not in sections_result:
+        result = client.execute(query, {'key': key})
+        if not result or 'listScoreByKey' not in result or not result['listScoreByKey']['items']:
             return None
             
-        for section in sections_result['listScorecardSections']['items']:
-            if section.get('scores', {}).get('items'):
-                for score in section['scores']['items']:
-                    if score.get('key') == key:
-                        return cls.from_dict(score, client)
-        return None
+        return cls.from_dict(result['listScoreByKey']['items'][0], client)
 
     @classmethod
     def get_by_external_id(cls, external_id: str, scorecard_id: str, 
                           client: _BaseAPIClient) -> Optional['Score']:
-        """Get a score by its external ID within a scorecard"""
-        sections_query = """
-        query GetScorecardSections($scorecardId: String!) {
-            listScorecardSections(filter: { scorecardId: { eq: $scorecardId } }) {
+        """Get a score by its external ID"""
+        query = """
+        query GetScoreByExternalId($externalId: String!) {
+            listScoreByExternalId(externalId: $externalId) {
                 items {
-                    id
-                    scores {
-                        items {
-                            %s
-                        }
-                    }
+                    %s
                 }
             }
         }
         """ % cls.fields()
         
-        sections_result = client.execute(sections_query, {'scorecardId': scorecard_id})
-        if not sections_result or 'listScorecardSections' not in sections_result:
+        result = client.execute(query, {'externalId': external_id})
+        if not result or 'listScoreByExternalId' not in result or not result['listScoreByExternalId']['items']:
             return None
             
-        for section in sections_result['listScorecardSections']['items']:
-            if section.get('scores', {}).get('items'):
-                for score in section['scores']['items']:
-                    if score.get('externalId') == external_id:
-                        return cls.from_dict(score, client)
-        return None
+        return cls.from_dict(result['listScoreByExternalId']['items'][0], client)
+
+    @classmethod
+    def list_by_section_id(cls, section_id: str, client: _BaseAPIClient, 
+                          next_token: Optional[str] = None, limit: int = 100) -> Dict[str, Any]:
+        """
+        Get all scores for a section with pagination support
+        
+        Returns:
+            Dict containing:
+                - items: List of Score objects
+                - nextToken: Token for next page if more results exist
+        """
+        query = """
+        query ListScoresBySectionId($sectionId: String!, $limit: Int, $nextToken: String) {
+            listScoreBySectionId(sectionId: $sectionId, limit: $limit, nextToken: $nextToken) {
+                items {
+                    %s
+                }
+                nextToken
+            }
+        }
+        """ % cls.fields()
+        
+        variables = {
+            'sectionId': section_id,
+            'limit': limit
+        }
+        if next_token:
+            variables['nextToken'] = next_token
+            
+        result = client.execute(query, variables)
+        if not result or 'listScoreBySectionId' not in result:
+            return {'items': [], 'nextToken': None}
+            
+        list_result = result['listScoreBySectionId']
+        return {
+            'items': [cls.from_dict(item, client) for item in list_result['items']],
+            'nextToken': list_result.get('nextToken')
+        }

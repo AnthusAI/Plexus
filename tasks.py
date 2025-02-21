@@ -1,4 +1,4 @@
-from invoke import task
+from invoke import task, Exit
 
 @task
 def install(context):
@@ -7,11 +7,13 @@ def install(context):
 
 @task
 def lint(context):
-    context.run("flake8 . --exclude=node_modules,dashboard/node_modules " \
-               "--count --select=E9,F63,F7,F82 --show-source --statistics")
-    context.run("flake8 . --exclude=node_modules,dashboard/node_modules " \
-               "--count --exit-zero --max-complexity=10 " \
-               "--max-line-length=127 --statistics")
+    """Run flake8 linting using configuration from .flake8"""
+    result = context.run("flake8 . --count --select=E9,F63,F7,F82 --statistics", warn=True)
+    if result.ok:
+        print("\n✅ Linting passed - no serious errors found!")
+    else:
+        print("\n❌ Linting failed - please fix the errors above")
+        raise Exit(code=result.return_code)
 
 @task
 def test(context):

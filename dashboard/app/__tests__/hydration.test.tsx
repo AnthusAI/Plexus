@@ -1,19 +1,34 @@
 import React from 'react'
 import { render } from '@testing-library/react'
 import LandingPage from '../page'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
+import dynamic from 'next/dynamic'
+
+// Mock next/dynamic
+jest.mock('next/dynamic', () => () => {
+  const DynamicComponent = () => null
+  DynamicComponent.displayName = 'DynamicComponent'
+  return DynamicComponent
+})
 
 jest.mock('next/navigation', () => ({
-  useRouter: jest.fn()
+  useRouter: jest.fn().mockReturnValue({
+    push: jest.fn(),
+    pathname: '/'
+  }),
+  usePathname: jest.fn().mockReturnValue('/')
 }))
 
 const mockUseRouter = useRouter as jest.Mock
+const mockUsePathname = usePathname as jest.Mock
 
 describe('Landing Page Hydration', () => {
   beforeEach(() => {
     mockUseRouter.mockReturnValue({
-      push: jest.fn()
+      push: jest.fn(),
+      pathname: '/'
     })
+    mockUsePathname.mockReturnValue('/')
   })
 
   it('renders server and client components without hydration mismatch', () => {
@@ -31,7 +46,7 @@ describe('Landing Page Hydration', () => {
 
   it('maintains interactive elements after hydration', () => {
     const { getByRole } = render(<LandingPage />)
-    const loginButton = getByRole('button', { name: /log in/i })
+    const loginButton = getByRole('button', { name: /sign in/i })
     expect(loginButton).toBeEnabled()
   })
 }) 

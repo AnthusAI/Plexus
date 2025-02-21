@@ -11,7 +11,7 @@ export interface AccuracyBarProps {
 export function AccuracyBar({ accuracy, className, onSegmentClick }: AccuracyBarProps) {
   if (accuracy === null) {
     return (
-      <div className={cn("relative w-full h-8 bg-neutral rounded-md", className)} />
+      <div className={cn("relative w-full h-8 bg-progress-background rounded-md", className)} />
     )
   }
 
@@ -20,7 +20,7 @@ export function AccuracyBar({ accuracy, className, onSegmentClick }: AccuracyBar
   const showThumbsDown = clampedAccuracy < 100
   
   return (
-    <div className={cn("relative w-full h-8 bg-false rounded-md", className)}>
+    <div className={cn("relative w-full h-8 bg-progress-background rounded-md", className)}>
       <div
         className={cn(
           "absolute top-0 left-0 h-full bg-true cursor-pointer hover:opacity-90",

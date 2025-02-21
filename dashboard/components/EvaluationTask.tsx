@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useMemo } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { FlaskConical, Square, X, Split, ChevronLeft } from 'lucide-react'
 import MetricsGauges from '@/components/MetricsGauges'
-import { ProgressBar } from "@/components/ui/progress-bar"
+import { TaskStatus, type TaskStageConfig } from '@/components/ui/task-status'
 import { ConfusionMatrix } from '@/components/confusion-matrix'
 import { CardButton } from '@/components/CardButton'
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
@@ -14,6 +14,8 @@ import { EvaluationTaskScoreResults } from '@/components/EvaluationTaskScoreResu
 import { EvaluationTaskScoreResultDetail } from '@/components/EvaluationTaskScoreResultDetail'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { BaseTaskData } from '@/types/base'
+import { EvaluationListAccuracyBar } from '@/components/EvaluationListAccuracyBar'
+import isEqual from 'lodash/isEqual'
 
 export interface EvaluationMetric {
   name: string
@@ -23,9 +25,65 @@ export interface EvaluationMetric {
   priority: boolean
 }
 
-export interface EvaluationTaskData {
+interface Distribution {
+  label: string
+  count: number
+}
+
+interface ScoreResult {
+  id: string
+  value: string | number
+  confidence: number | null
+  explanation: string | null
+  metadata: {
+    human_label: string | null
+    correct: boolean
+  }
+  itemId: string | null
+}
+
+interface TaskStage {
+  id: string;
+  name: string;
+  order: number;
+  status: string;
+  statusMessage?: string;
+  startedAt?: string;
+  completedAt?: string;
+  estimatedCompletionAt?: string;
+  processedItems?: number;
+  totalItems?: number;
+}
+
+interface TaskData {
+  id: string;
+  accountId: string;
+  type: string;
+  status: string;
+  target: string;
+  command: string;
+  completedAt?: string;
+  startedAt?: string;
+  dispatchStatus?: 'DISPATCHED';
+  celeryTaskId?: string;
+  workerNodeId?: string;
+  description?: string;
+  metadata?: any;
+  createdAt?: string;
+  estimatedCompletionAt?: string;
+  errorMessage?: string;
+  errorDetails?: string;
+  currentStageId?: string;
+  stages?: {
+    items: TaskStage[];
+    nextToken?: string | null;
+  };
+}
+
+export interface EvaluationTaskData extends BaseTaskData {
   id: string
   title: string
+  command?: string
   accuracy: number | null
   metrics: EvaluationMetric[]
   metricsExplanation?: string | null
@@ -37,7 +95,7 @@ export interface EvaluationTaskData {
   status: string
   elapsedSeconds: number | null
   estimatedRemainingSeconds: number | null
-  startedAt?: string | null
+  startedAt?: string | undefined
   errorMessage?: string
   errorDetails?: any | null
   confusionMatrix?: {
@@ -45,26 +103,16 @@ export interface EvaluationTaskData {
     labels: string[] | null
   } | null
   scoreGoal?: string | null
-  datasetClassDistribution?: { label: string, count: number }[]
+  datasetClassDistribution?: Array<Distribution>
   isDatasetClassDistributionBalanced?: boolean | null
-  predictedClassDistribution?: { label: string, count: number }[]
+  predictedClassDistribution?: Array<Distribution>
   isPredictedClassDistributionBalanced?: boolean | null
-  scoreResults?: Array<{
-    id: string
-    value: string | number
-    confidence?: number | null
-    explanation?: string | null
-    metadata?: any
-    createdAt?: string
-    itemId?: string
-    EvaluationId?: string
-    scorecardId?: string
-    [key: string]: any  // Allow additional properties
-  }>
+  scoreResults?: ScoreResult[]
   selectedScoreResult?: Schema['ScoreResult']['type'] | null
+  task?: TaskData | null
 }
 
-export interface EvaluationTaskProps {
+export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskData>, 'variant'> {
   variant?: 'grid' | 'detail'
   task: {
     id: string
@@ -75,40 +123,25 @@ export interface EvaluationTaskProps {
     summary?: string
     description?: string
     data: EvaluationTaskData
+    stages?: TaskStageConfig[]
+    currentStageName?: string
+    processedItems?: number
+    totalItems?: number
+    startedAt?: string
+    estimatedCompletionAt?: string
+    status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+    dispatchStatus?: 'DISPATCHED'
+    celeryTaskId?: string
+    workerNodeId?: string
+    completedAt?: string
+    errorMessage?: string
+    statusMessage?: string
   }
-  onClick?: () => void
-  controlButtons?: React.ReactNode
-  isFullWidth?: boolean
-  onToggleFullWidth?: () => void
-  onClose?: () => void
-  /** ID of the currently selected score result. Null means no result is selected */
   selectedScoreResultId?: string | null
-  /** Callback fired when a score result is selected or deselected */
   onSelectScoreResult?: (id: string | null) => void
-}
-
-function computeEvaluationType(data: EvaluationTaskData): string {
-  if (data.errorMessage || data.errorDetails) {
-    return "Error in Evaluation"
-  }
-  
-  if (data.progress === 100) {
-    return "Evaluation finished"
-  }
-  
-  if (data.progress >= 90) {
-    return "Evaluation finishing"
-  }
-  
-  if (data.progress >= 10) {
-    return "Evaluation running"
-  }
-  
-  if (data.progress > 0) {
-    return "Evaluation started"
-  }
-  
-  return "Evaluation pending"
+  extra?: boolean
+  isSelected?: boolean
+  commandDisplay?: 'hide' | 'show' | 'full'
 }
 
 function formatDuration(seconds: number): string {
@@ -137,21 +170,191 @@ function computeIsBalanced(distribution: { label: string, count: number }[] | nu
   )
 }
 
-const GridContent = React.memo(({ data }: { data: EvaluationTaskData }) => (
-  <div className="mt-4">
-    <ProgressBar 
-      progress={data.progress}
-      elapsedTime={data.elapsedSeconds !== null ? 
-        formatDuration(data.elapsedSeconds) : undefined}
-      processedItems={data.processedItems}
-      totalItems={data.totalItems}
-      estimatedTimeRemaining={data.estimatedRemainingSeconds !== null ? 
-        formatDuration(data.estimatedRemainingSeconds) : undefined}
-      color="secondary"
-      isFocused={false}
-    />
-  </div>
-))
+const mapTaskStatus = (status: string | undefined | null): 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' => {
+  if (!status) return 'PENDING';
+  const upperStatus = status.toUpperCase();
+  switch (upperStatus) {
+    case 'PENDING':
+    case 'RUNNING':
+    case 'COMPLETED':
+    case 'FAILED':
+      return upperStatus;
+    case 'DONE':
+      return 'COMPLETED';
+    case 'ERROR':
+      return 'FAILED';
+    default:
+      return 'PENDING';
+  }
+}
+
+const getStatusMessage = (data: EvaluationTaskData) => {
+  // If we have task data with stages, use that
+  if (data.task?.stages?.items?.length) {
+    // If task failed, show the failed stage's message
+    if (data.task.status === 'FAILED') {
+      const failedStage = data.task.stages.items.find(stage => stage.status === 'FAILED')
+      return failedStage?.statusMessage;
+    }
+
+    // If task completed, show the last stage's message
+    if (data.task.status === 'COMPLETED') {
+      return [...data.task.stages.items]
+        .reverse()
+        .find(stage => stage.statusMessage)?.statusMessage;
+    }
+
+    // If there's a running stage, use its message
+    const runningStage = data.task.stages.items.find(stage => stage.status === 'RUNNING');
+    if (runningStage?.statusMessage) {
+      return runningStage.statusMessage;
+    }
+
+    // If no running stage message, find the last non-pending stage with a message
+    const lastActiveStage = [...data.task.stages.items]
+      .sort((a, b) => b.order - a.order)
+      .find(stage => stage.status !== 'PENDING' && stage.statusMessage);
+    if (lastActiveStage?.statusMessage) {
+      return lastActiveStage.statusMessage;
+    }
+
+    // If all stages are pending, use the first stage's message
+    if (data.task.stages.items.every(stage => stage.status === 'PENDING')) {
+      const firstStage = [...data.task.stages.items].sort((a, b) => a.order - b.order)[0];
+      return firstStage?.statusMessage;
+    }
+  }
+  
+  // Otherwise, construct a status message from the evaluation data
+  if (data.status === 'COMPLETED') {
+    return `Processed ${data.processedItems} of ${data.totalItems} items`;
+  }
+  if (data.status === 'FAILED') {
+    return data.errorMessage || 'Task failed';
+  }
+  if (data.status === 'RUNNING') {
+    return `Processing ${data.processedItems} of ${data.totalItems} items...`;
+  }
+  return undefined;
+}
+
+const GridContent = React.memo(({ data, extra, isSelected }: { 
+  data: EvaluationTaskData; 
+  extra?: boolean;
+  isSelected?: boolean;
+}) => {
+  const progress = useMemo(() => 
+    data.processedItems && data.totalItems ? 
+      Math.round((data.processedItems / data.totalItems) * 100) : 0
+  , [data.processedItems, data.totalItems]);
+  
+  const accuracy = data.accuracy ?? 0;
+
+  const stages = useMemo(() => 
+    data.task?.stages?.items?.map(stage => ({
+      key: stage.name,
+      label: stage.name,
+      color: stage.name === 'Processing' ? 'bg-secondary' : (
+        stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
+        stage.status === 'FAILED' ? 'bg-false' :
+        'bg-neutral'
+      ),
+      name: stage.name,
+      order: stage.order,
+      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      statusMessage: stage.statusMessage,
+      startedAt: stage.startedAt || undefined,
+      completedAt: stage.completedAt || undefined,
+      estimatedCompletionAt: stage.estimatedCompletionAt || undefined
+    })) || []
+  , [data.task?.stages?.items]);
+
+  const taskStatus = useMemo(() => ({
+    showStages: true,
+    status: mapTaskStatus(data.task?.status || data.status),
+    stageConfigs: stages,
+    stages,
+    processedItems: data.processedItems,
+    totalItems: data.totalItems,
+    startedAt: data.task?.startedAt || data.startedAt || undefined,
+    completedAt: data.task?.completedAt || undefined,
+    estimatedCompletionAt: data.task?.estimatedCompletionAt || undefined,
+    errorMessage: data.task?.errorMessage || data.errorMessage || undefined,
+    command: data.task?.command || data.command,
+    statusMessage: getStatusMessage(data),
+    variant: 'grid' as const,
+    extra,
+    isSelected,
+    commandDisplay: 'hide' as const
+  }), [
+    data.task?.status,
+    data.status,
+    stages,
+    data.processedItems,
+    data.totalItems,
+    data.task?.startedAt,
+    data.startedAt,
+    data.task?.completedAt,
+    data.task?.estimatedCompletionAt,
+    data.task?.errorMessage,
+    data.errorMessage,
+    data.task?.command,
+    data.command,
+    extra,
+    isSelected
+  ]);
+
+  return (
+    <div className="space-y-2">
+      <TaskStatus {...taskStatus} />
+      {extra && (
+        <EvaluationListAccuracyBar 
+          progress={progress}
+          accuracy={accuracy}
+          isSelected={isSelected}
+        />
+      )}
+    </div>
+  )
+}, (prevProps, nextProps) => {
+  // Custom comparison function to prevent unnecessary re-renders
+  if (prevProps.extra !== nextProps.extra || prevProps.isSelected !== nextProps.isSelected) {
+    return false;
+  }
+
+  const prevData = prevProps.data;
+  const nextData = nextProps.data;
+
+  // Compare task stages
+  const prevStages = prevData.task?.stages?.items;
+  const nextStages = nextData.task?.stages?.items;
+  if (!isEqual(prevStages, nextStages)) {
+    return false;
+  }
+
+  // Compare essential task data
+  if (
+    prevData.processedItems !== nextData.processedItems ||
+    prevData.totalItems !== nextData.totalItems ||
+    prevData.accuracy !== nextData.accuracy ||
+    prevData.status !== nextData.status ||
+    prevData.task?.status !== nextData.task?.status ||
+    prevData.task?.command !== nextData.task?.command ||
+    prevData.command !== nextData.command ||
+    prevData.errorMessage !== nextData.errorMessage ||
+    prevData.task?.errorMessage !== nextData.task?.errorMessage ||
+    prevData.startedAt !== nextData.startedAt ||
+    prevData.task?.startedAt !== nextData.task?.startedAt ||
+    prevData.task?.completedAt !== nextData.task?.completedAt ||
+    prevData.task?.estimatedCompletionAt !== nextData.task?.estimatedCompletionAt
+  ) {
+    return false;
+  }
+
+  return true;
+});
 
 interface ParsedScoreResult {
   id: string
@@ -238,6 +441,10 @@ const DetailContent = React.memo(({
   metricsVariant,
   selectedScoreResultId,
   onSelectScoreResult,
+  extra,
+  isSelected,
+  commandDisplay = 'show',
+  onCommandDisplayChange
 }: { 
   data: EvaluationTaskData
   isFullWidth: boolean
@@ -245,7 +452,28 @@ const DetailContent = React.memo(({
   metricsVariant: 'grid' | 'detail'
   selectedScoreResultId?: string | null
   onSelectScoreResult?: (id: string | null) => void
+  extra?: boolean
+  isSelected?: boolean
+  commandDisplay?: 'hide' | 'show' | 'full'
+  onCommandDisplayChange?: (display: 'show' | 'full') => void
 }) => {
+  console.log('DetailContent render:', {
+    distributions: {
+      dataset: data.datasetClassDistribution,
+      predicted: data.predictedClassDistribution,
+      isBalanced: {
+        dataset: data.isDatasetClassDistributionBalanced,
+        predicted: data.isPredictedClassDistributionBalanced
+      }
+    },
+    scoreResults: {
+      count: data.scoreResults?.length,
+      firstResult: data.scoreResults?.[0],
+      selectedId: selectedScoreResultId,
+      selectedResult: data.scoreResults?.find(r => r.id === selectedScoreResultId)
+    }
+  });
+
   const [containerWidth, setContainerWidth] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const [selectedPredictedActual, setSelectedPredictedActual] = useState<{
@@ -312,74 +540,122 @@ const DetailContent = React.memo(({
         }}
       >
         {showMainPanel && (
-          <div className="w-full h-full overflow-y-auto pr-2">
-            <div className="mb-4">
-              <ProgressBar 
-                progress={data.progress}
-                elapsedTime={data.elapsedSeconds !== null ? 
-                  formatDuration(data.elapsedSeconds) : undefined}
-                processedItems={data.processedItems}
-                totalItems={data.totalItems}
-                estimatedTimeRemaining={data.estimatedRemainingSeconds !== null ? 
-                  formatDuration(data.estimatedRemainingSeconds) : undefined}
-                color="secondary"
-                isFocused={true}
-              />
-            </div>
+          <div className="w-full h-full flex flex-col">
+            <div className="flex-1 overflow-y-auto">
+              <div className="px-1">
+                <div className="mb-3">
+                  <TaskStatus
+                    variant="detail"
+                    showStages={true}
+                    status={mapTaskStatus(data.task?.status || data.status)}
+                    stageConfigs={data.task?.stages?.items?.map(stage => ({
+                      key: stage.name,
+                      label: stage.name,
+                      color: stage.name === 'Processing' ? 'bg-secondary' : (
+                        stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
+                        stage.status === 'FAILED' ? 'bg-false' :
+                        'bg-neutral'
+                      ),
+                      name: stage.name,
+                      order: stage.order,
+                      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+                      processedItems: stage.processedItems,
+                      totalItems: stage.totalItems,
+                      statusMessage: stage.statusMessage,
+                      completed: stage.status === 'COMPLETED',
+                      startedAt: stage.startedAt || undefined,
+                      completedAt: stage.completedAt || undefined,
+                      estimatedCompletionAt: stage.estimatedCompletionAt || undefined
+                    })) || []}
+                    stages={data.task?.stages?.items?.map(stage => ({
+                      key: stage.name,
+                      label: stage.name,
+                      color: stage.name === 'Processing' ? 'bg-secondary' : (
+                        stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
+                        stage.status === 'FAILED' ? 'bg-false' :
+                        'bg-neutral'
+                      ),
+                      name: stage.name,
+                      order: stage.order,
+                      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+                      processedItems: stage.processedItems,
+                      totalItems: stage.totalItems,
+                      statusMessage: stage.statusMessage,
+                      startedAt: stage.startedAt || undefined,
+                      completedAt: stage.completedAt || undefined,
+                      estimatedCompletionAt: stage.estimatedCompletionAt || undefined
+                    })) || []}
+                    processedItems={data.processedItems}
+                    totalItems={data.totalItems}
+                    startedAt={data.task?.startedAt || data.startedAt || undefined}
+                    completedAt={data.task?.completedAt || undefined}
+                    estimatedCompletionAt={data.task?.estimatedCompletionAt || undefined}
+                    errorMessage={data.task?.errorMessage || data.errorMessage || undefined}
+                    command={data.task?.command || data.command}
+                    statusMessage={getStatusMessage(data)}
+                    truncateMessages={true}
+                    extra={extra}
+                    isSelected={true}
+                    commandDisplay={commandDisplay}
+                    onCommandDisplayChange={onCommandDisplayChange}
+                  />
+                </div>
 
-            <div className="mb-4">
-              <ClassDistributionVisualizer
-                data={data.datasetClassDistribution}
-                isBalanced={data.isDatasetClassDistributionBalanced}
-                onLabelSelect={handleActualLabelSelect}
-              />
-            </div>
+                <div className="mb-3">
+                  <ClassDistributionVisualizer
+                    data={data.datasetClassDistribution}
+                    isBalanced={data.isDatasetClassDistributionBalanced}
+                    onLabelSelect={handleActualLabelSelect}
+                  />
+                </div>
 
-            <div className="mb-4">
-              <PredictedClassDistributionVisualizer
-                data={data.predictedClassDistribution}
-                onLabelSelect={handlePredictedLabelSelect}
-              />
-            </div>
+                <div className="mb-3">
+                  <PredictedClassDistributionVisualizer
+                    data={data.predictedClassDistribution}
+                    onLabelSelect={handlePredictedLabelSelect}
+                  />
+                </div>
 
-            <div className="mb-2">
-              <MetricsGaugesExplanation
-                explanation={data.metricsExplanation}
-                goal={data.scoreGoal}
-              />
-            </div>
+                <div className="mb-3">
+                  <MetricsGaugesExplanation
+                    explanation={data.metricsExplanation}
+                    goal={data.scoreGoal}
+                  />
+                </div>
 
-            <MetricsGauges 
-              gauges={metrics} 
-              variant="detail"
-            />
-
-            {data.confusionMatrix?.matrix && 
-             data.confusionMatrix.matrix.length > 0 && 
-             data.confusionMatrix.labels && (
-              <div className="mt-4">
-                <ConfusionMatrix 
-                  data={{
-                    matrix: data.confusionMatrix.matrix,
-                    labels: data.confusionMatrix.labels
-                  }}
-                  onSelectionChange={setSelectedPredictedActual}
+                <MetricsGauges 
+                  gauges={metrics} 
+                  variant="detail"
                 />
-              </div>
-            )}
 
-            {!showAsColumns && data.scoreResults && data.scoreResults.length > 0 && (
-              <div className="mt-4">
-                <EvaluationTaskScoreResults 
-                  results={parsedScoreResults} 
-                  accuracy={data.accuracy ?? 0}
-                  selectedPredictedValue={selectedPredictedActual.predicted}
-                  selectedActualValue={selectedPredictedActual.actual}
-                  onResultSelect={handleScoreResultSelect}
-                  selectedScoreResult={selectedScoreResult}
-                />
+                {data.confusionMatrix?.matrix && 
+                 data.confusionMatrix.matrix.length > 0 && 
+                 data.confusionMatrix.labels && (
+                  <div className="mt-3">
+                    <ConfusionMatrix 
+                      data={{
+                        matrix: data.confusionMatrix.matrix,
+                        labels: data.confusionMatrix.labels
+                      }}
+                      onSelectionChange={setSelectedPredictedActual}
+                    />
+                  </div>
+                )}
+
+                {!showAsColumns && data.scoreResults && data.scoreResults.length > 0 && (
+                  <div className="mt-6">
+                    <EvaluationTaskScoreResults 
+                      results={parsedScoreResults} 
+                      accuracy={data.accuracy ?? 0}
+                      selectedPredictedValue={selectedPredictedActual.predicted}
+                      selectedActualValue={selectedPredictedActual.actual}
+                      onResultSelect={handleScoreResultSelect}
+                      selectedScoreResult={selectedScoreResult}
+                    />
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -422,10 +698,15 @@ export default function EvaluationTask({
   onToggleFullWidth,
   onClose,
   selectedScoreResultId,
-  onSelectScoreResult
+  onSelectScoreResult,
+  extra,
+  isSelected,
+  commandDisplay: initialCommandDisplay = 'show',
+  ...restProps
 }: EvaluationTaskProps) {
+  const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay);
+
   const data = task.data ?? {} as EvaluationTaskData
-  const computedType = computeEvaluationType(data)
 
   const metrics = useMemo(() => 
     variant === 'detail' ? 
@@ -448,50 +729,151 @@ export default function EvaluationTask({
   , [variant, data.metrics, data.accuracy])
 
   const headerContent = useMemo(() => (
-    <div className="flex justify-end w-full">
-      {variant === 'detail' ? (
-        <div className="flex items-center space-x-2">
-          {typeof onToggleFullWidth === 'function' && (
-            <CardButton
-              icon={Square}
-              onClick={onToggleFullWidth}
-            />
-          )}
-          {typeof onClose === 'function' && (
-            <CardButton
-              icon={X}
-              onClick={onClose}
-            />
-          )}
-        </div>
-      ) : (
-        <FlaskConical className="h-6 w-6" />
-      )}
-    </div>
+    variant === 'detail' ? (
+      <div className="flex items-center space-x-2">
+        {typeof onToggleFullWidth === 'function' && (
+          <CardButton
+            icon={Square}
+            onClick={onToggleFullWidth}
+          />
+        )}
+        {typeof onClose === 'function' && (
+          <CardButton
+            icon={X}
+            onClick={onClose}
+          />
+        )}
+      </div>
+    ) : null
   ), [variant, onToggleFullWidth, onClose])
+
+  const taskData = task.data?.task as TaskData | undefined;
+
+  const taskWithDefaults = useMemo(() => ({
+    id: task.id,
+    type: (() => {
+      // If we have a task record, use its type directly (just capitalize it)
+      if (taskData?.type) {
+        return taskData.type.split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(' ')
+      }
+      // Otherwise, this is from an Evaluation record, so append "Evaluation"
+      return `${(task.type || '').split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ')} Evaluation`.trim()
+    })(),
+    scorecard: task.scorecard,
+    score: task.score,
+    time: task.time,
+    description: variant === 'detail' ? undefined : task.summary,
+    data: task.data,
+    command: taskData?.command,
+    stages: taskData?.stages?.items?.map(stage => ({
+      key: stage.name,
+      label: stage.name,
+      color: stage.name === 'Processing' ? 'bg-secondary' : (
+        stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
+        stage.status === 'FAILED' ? 'bg-false' :
+        'bg-neutral'
+      ),
+      name: stage.name,
+      order: stage.order,
+      status: mapTaskStatus(stage.status),
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      statusMessage: stage.statusMessage
+    })) || [],
+    currentStageName: taskData?.currentStageId || undefined,
+    processedItems: task.data?.processedItems,
+    totalItems: task.data?.totalItems,
+    startedAt: taskData?.startedAt || task.data?.startedAt || undefined,
+    estimatedCompletionAt: taskData?.estimatedCompletionAt || undefined,
+    status: mapTaskStatus(taskData?.status || task.data?.status),
+    dispatchStatus: taskData?.dispatchStatus,
+    celeryTaskId: taskData?.celeryTaskId,
+    workerNodeId: taskData?.workerNodeId,
+    completedAt: taskData?.completedAt || undefined,
+    errorMessage: taskData?.errorMessage || task.data?.errorMessage || undefined
+  }), [task, taskData, variant]);
+
+  // Type assertion to ensure all properties match BaseTaskProps
+  const typedTask = {
+    ...taskWithDefaults,
+    startedAt: taskWithDefaults.startedAt || undefined,
+    completedAt: taskWithDefaults.completedAt || undefined,
+    estimatedCompletionAt: taskWithDefaults.estimatedCompletionAt || undefined,
+    errorMessage: taskWithDefaults.errorMessage || undefined,
+    status: taskWithDefaults.status,
+    dispatchStatus: taskWithDefaults.dispatchStatus,
+    celeryTaskId: taskWithDefaults.celeryTaskId,
+    workerNodeId: taskWithDefaults.workerNodeId,
+    currentStageName: taskWithDefaults.currentStageName,
+    stages: taskWithDefaults.stages
+  } as unknown as BaseTaskProps['task']
+
+  // Update TaskStatus components to handle null values
+  const renderTaskStatus = (data: EvaluationTaskData) => {
+    const taskStages = data.task?.stages?.items?.map(stage => ({
+      key: stage.name,
+      label: stage.name,
+      color: stage.name === 'Processing' ? 'bg-secondary' : (
+        stage.status === 'COMPLETED' || stage.status === 'RUNNING' ? 'bg-primary' :
+        stage.status === 'FAILED' ? 'bg-false' :
+        'bg-neutral'
+      ),
+      name: stage.name,
+      order: stage.order,
+      status: mapTaskStatus(stage.status),
+      processedItems: stage.processedItems,
+      totalItems: stage.totalItems,
+      statusMessage: stage.statusMessage,
+      startedAt: stage.startedAt || undefined,
+      completedAt: stage.completedAt || undefined,
+      estimatedCompletionAt: stage.estimatedCompletionAt || undefined
+    })) || []
+
+    const taskStatus = {
+      showStages: true,
+      status: mapTaskStatus(data.task?.status || data.status),
+      stageConfigs: taskStages,
+      stages: taskStages,
+      processedItems: data.processedItems,
+      totalItems: data.totalItems,
+      startedAt: data.task?.startedAt || data.startedAt || undefined,
+      completedAt: data.task?.completedAt || undefined,
+      estimatedCompletionAt: data.task?.estimatedCompletionAt || undefined,
+      errorMessage: data.task?.errorMessage || data.errorMessage || undefined,
+      command: data.task?.command || data.command,
+      statusMessage: data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage || undefined,
+      isSelected
+    } as const
+
+    return <TaskStatus {...taskStatus} />
+  }
 
   return (
     <Task
       variant={variant}
-      task={{
-        ...task,
-        type: computedType,
-        description: variant === 'detail' ? undefined : task.summary
-      }}
+      task={typedTask}
       onClick={onClick}
       controlButtons={controlButtons}
       isFullWidth={isFullWidth}
       onToggleFullWidth={onToggleFullWidth}
       onClose={onClose}
+      extra={extra}
+      isSelected={isSelected}
+      commandDisplay={commandDisplay}
+      {...restProps}
       renderHeader={(props) => (
         <TaskHeader {...props}>
           {headerContent}
         </TaskHeader>
       )}
       renderContent={(props) => (
-        <TaskContent {...props}>
+        <TaskContent {...props} hideTaskStatus={true}>
           {variant === 'grid' ? (
-            <GridContent data={data} />
+            <GridContent data={data} extra={extra} isSelected={isSelected} />
           ) : (
             <DetailContent 
               data={data}
@@ -500,6 +882,10 @@ export default function EvaluationTask({
               metricsVariant="detail"
               selectedScoreResultId={selectedScoreResultId}
               onSelectScoreResult={onSelectScoreResult}
+              extra={extra}
+              isSelected={isSelected}
+              commandDisplay={commandDisplay}
+              onCommandDisplayChange={setCommandDisplay}
             />
           )}
         </TaskContent>

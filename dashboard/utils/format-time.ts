@@ -10,27 +10,7 @@ export function formatTimeAgo(timestamp: string | Date, abbreviated: boolean = t
       return 'Invalid date'
     }
     
-    const timeSince = formatDistanceToNow(date, { addSuffix: true })
-    
-    if (!abbreviated) {
-      return timeSince
-    }
-
-    // Abbreviate the formatted time
-    return timeSince
-      .replace('about ', '')
-      .replace('less than ', '<')
-      .replace(' minutes', 'm')
-      .replace(' minute', 'm')
-      .replace(' hours', 'h')
-      .replace(' hour', 'h')
-      .replace(' days', 'd')
-      .replace(' day', 'd')
-      .replace(' months', 'mo')
-      .replace(' month', 'mo')
-      .replace(' years', 'y')
-      .replace(' year', 'y')
-      .replace(' ago', '')
+    return formatDistanceToNow(date, { addSuffix: true })
   } catch (error) {
     console.error('Error formatting date:', error)
     return 'Invalid date'
