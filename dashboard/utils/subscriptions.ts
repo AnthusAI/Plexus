@@ -332,8 +332,8 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
 
         // Set up create subscription
         const createSub = (client.graphql({
-          query: `subscription OnCreateEvaluation($accountId: String!) {
-            onCreateEvaluation(accountId: $accountId) {
+          query: `subscription OnCreateEvaluation {
+            onCreateEvaluation {
               id
               type
               parameters
@@ -413,8 +413,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                 }
               }
             }
-          }`,
-          variables: { accountId }
+          }`
         }) as unknown as GraphQLSubscriptionResult<CreateEvaluationResponse>).subscribe({
           next: (response: { data?: CreateEvaluationResponse }) => {
             console.debug('Create subscription event received:', response.data);
@@ -433,8 +432,8 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
 
         // Set up update subscription
         const updateSub = (client.graphql({
-          query: `subscription OnUpdateEvaluation($accountId: String!) {
-            onUpdateEvaluation(accountId: $accountId) {
+          query: `subscription OnUpdateEvaluation {
+            onUpdateEvaluation {
               id
               type
               parameters
@@ -514,8 +513,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                 }
               }
             }
-          }`,
-          variables: { accountId }
+          }`
         }) as unknown as GraphQLSubscriptionResult<UpdateEvaluationResponse>).subscribe({
           next: (response: { data?: UpdateEvaluationResponse }) => {
             console.debug('Update subscription event received:', response.data);
@@ -534,12 +532,11 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
 
         // Set up delete subscription
         const deleteSub = (client.graphql({
-          query: `subscription OnDeleteEvaluation($accountId: String!) {
-            onDeleteEvaluation(accountId: $accountId) {
+          query: `subscription OnDeleteEvaluation {
+            onDeleteEvaluation {
               id
             }
-          }`,
-          variables: { accountId }
+          }`
         }) as unknown as GraphQLSubscriptionResult<DeleteEvaluationResponse>).subscribe({
           next: (response: { data?: DeleteEvaluationResponse }) => {
             console.debug('Delete subscription event received:', response.data);
@@ -710,4 +707,254 @@ export function observeScoreResults(evaluationId: string) {
       };
     }
   };
+}
+
+// Task subscription queries
+const onCreateTaskSubscriptionQuery = /* GraphQL */ `
+  subscription OnCreateTask {
+    onCreateTask {
+      id
+      type
+      command
+      status
+      target
+      description
+      dispatchStatus
+      metadata
+      createdAt
+      startedAt
+      completedAt
+      estimatedCompletionAt
+      errorMessage
+      errorDetails
+      currentStageId
+      celeryTaskId
+      workerNodeId
+      updatedAt
+    }
+  }
+`;
+
+const onUpdateTaskSubscriptionQuery = /* GraphQL */ `
+  subscription OnUpdateTask {
+    onUpdateTask {
+      id
+      type
+      command
+      status
+      target
+      description
+      dispatchStatus
+      metadata
+      createdAt
+      startedAt
+      completedAt
+      estimatedCompletionAt
+      errorMessage
+      errorDetails
+      currentStageId
+      celeryTaskId
+      workerNodeId
+      updatedAt
+    }
+  }
+`;
+
+// TaskStage subscription queries
+const onCreateTaskStageSubscriptionQuery = /* GraphQL */ `
+  subscription OnCreateTaskStage {
+    onCreateTaskStage {
+      id
+      taskId
+      name
+      order
+      status
+      processedItems
+      totalItems
+      startedAt
+      completedAt
+      estimatedCompletionAt
+      statusMessage
+    }
+  }
+`;
+
+const onUpdateTaskStageSubscriptionQuery = /* GraphQL */ `
+  subscription OnUpdateTaskStage {
+    onUpdateTaskStage {
+      id
+      taskId
+      name
+      order
+      status
+      processedItems
+      totalItems
+      startedAt
+      completedAt
+      estimatedCompletionAt
+      statusMessage
+    }
+  }
+`;
+
+export function observeTaskUpdates() {
+  return new Observable(observer => {
+    const client = getClient();
+    const subscriptions: { unsubscribe: () => void }[] = [];
+
+    // Subscribe to create events
+    const createSub = (client.graphql({ query: onCreateTaskSubscriptionQuery }) as any)
+      .subscribe({
+        next: ({ data }: { data: any }) => {
+          console.log('Task create subscription event:', {
+            taskId: data?.onCreateTask?.id,
+            type: data?.onCreateTask?.type,
+            status: data?.onCreateTask?.status,
+            data: data?.onCreateTask
+          });
+          observer.next({ type: 'create', data: data?.onCreateTask });
+        },
+        error: (error: any) => {
+          console.error('Task create subscription error:', error);
+          observer.error(error);
+        }
+      });
+    subscriptions.push(createSub);
+
+    // Subscribe to update events
+    const updateSub = (client.graphql({ query: onUpdateTaskSubscriptionQuery }) as any)
+      .subscribe({
+        next: ({ data }: { data: any }) => {
+          console.log('Task update subscription event:', {
+            taskId: data?.onUpdateTask?.id,
+            type: data?.onUpdateTask?.type,
+            status: data?.onUpdateTask?.status,
+            data: data?.onUpdateTask
+          });
+          observer.next({ type: 'update', data: data?.onUpdateTask });
+        },
+        error: (error: any) => {
+          console.error('Task update subscription error:', error);
+          observer.error(error);
+        }
+      });
+    subscriptions.push(updateSub);
+
+    return () => {
+      subscriptions.forEach(sub => sub.unsubscribe());
+    };
+  });
+}
+
+export function observeTaskStageUpdates() {
+  return new Observable(observer => {
+    const client = getClient();
+    const subscriptions: { unsubscribe: () => void }[] = [];
+
+    // Subscribe to create events
+    const createSub = (client.graphql({ query: onCreateTaskStageSubscriptionQuery }) as any)
+      .subscribe({
+        next: (response: { data?: { onCreateTaskStage?: any }, errors?: any[] }) => {
+          // Log the full response first
+          console.log('Raw TaskStage create subscription response:', response);
+          
+          const taskStageData = response?.data?.onCreateTaskStage;
+          
+          // Check for specific timestamp-related errors but still process the data
+          if (response.errors) {
+            const nonTimestampErrors = response.errors.filter(error => 
+              !error.message.includes('AWSDateTime') && 
+              !error.message.includes('createdAt') && 
+              !error.message.includes('updatedAt')
+            );
+            
+            // Only log timestamp errors at debug level
+            response.errors.forEach(error => {
+              if (error.message.includes('AWSDateTime')) {
+                console.debug('Ignorable timestamp error:', error);
+              }
+            });
+
+            // If we have other errors, log them as warnings
+            if (nonTimestampErrors.length > 0) {
+              console.warn('TaskStage create subscription errors:', nonTimestampErrors);
+            }
+          }
+
+          // Process the data even if we have timestamp errors
+          if (taskStageData?.id && taskStageData?.taskId) {
+            console.log('TaskStage create subscription event:', {
+              stageId: taskStageData.id,
+              taskId: taskStageData.taskId,
+              name: taskStageData.name,
+              status: taskStageData.status
+            });
+            observer.next({ type: 'create', data: taskStageData });
+          } else if (!response.errors || response.errors.every(e => e.message.includes('AWSDateTime'))) {
+            // Only warn if we're missing data and it's not just timestamp errors
+            console.warn('Received TaskStage create event but data was invalid:', response);
+          }
+        },
+        error: (error: any) => {
+          console.error('TaskStage create subscription error:', error);
+          observer.error(error);
+        }
+      });
+    subscriptions.push(createSub);
+
+    // Subscribe to update events
+    const updateSub = (client.graphql({ query: onUpdateTaskStageSubscriptionQuery }) as any)
+      .subscribe({
+        next: (response: { data?: { onUpdateTaskStage?: any }, errors?: any[] }) => {
+          // Log the full response first
+          console.log('Raw TaskStage update subscription response:', response);
+          
+          const taskStageData = response?.data?.onUpdateTaskStage;
+
+          // Check for specific timestamp-related errors but still process the data
+          if (response.errors) {
+            const nonTimestampErrors = response.errors.filter(error => 
+              !error.message.includes('AWSDateTime') && 
+              !error.message.includes('createdAt') && 
+              !error.message.includes('updatedAt')
+            );
+            
+            // Only log timestamp errors at debug level
+            response.errors.forEach(error => {
+              if (error.message.includes('AWSDateTime')) {
+                console.debug('Ignorable timestamp error:', error);
+              }
+            });
+
+            // If we have other errors, log them as warnings
+            if (nonTimestampErrors.length > 0) {
+              console.warn('TaskStage update subscription errors:', nonTimestampErrors);
+            }
+          }
+
+          // Process the data even if we have timestamp errors
+          if (taskStageData?.id && taskStageData?.taskId) {
+            console.log('TaskStage update subscription event:', {
+              stageId: taskStageData.id,
+              taskId: taskStageData.taskId,
+              name: taskStageData.name,
+              status: taskStageData.status
+            });
+            observer.next({ type: 'update', data: taskStageData });
+          } else if (!response.errors || response.errors.every(e => e.message.includes('AWSDateTime'))) {
+            // Only warn if we're missing data and it's not just timestamp errors
+            console.warn('Received TaskStage update event but data was invalid:', response);
+          }
+        },
+        error: (error: any) => {
+          console.error('TaskStage update subscription error:', error);
+          observer.error(error);
+        }
+      });
+    subscriptions.push(updateSub);
+
+    return () => {
+      subscriptions.forEach(sub => sub.unsubscribe());
+    };
+  });
 } 
