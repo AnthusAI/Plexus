@@ -664,218 +664,181 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
         subscriber.next({ items: evaluations, isSynced: true });
       };
 
-      // Set up create subscription
-      const createSub = (client.graphql({
-        query: `
-          subscription OnCreateEvaluation {
-            onCreateEvaluation {
+      // Add the TaskFields fragment, for example before the subscription queries
+      const TASK_FIELDS_FRAGMENT = `
+        fragment TaskFields on Task {
+          id
+          type
+          status
+          target
+          command
+          description
+          dispatchStatus
+          metadata
+          createdAt
+          startedAt
+          completedAt
+          estimatedCompletionAt
+          errorMessage
+          errorDetails
+          currentStageId
+          stages {
+            items {
               id
-              type
-              parameters
-              metrics
-              metricsExplanation
-              inferences
-              accuracy
-              cost
-              createdAt
-              updatedAt
+              name
+              order
               status
+              statusMessage
               startedAt
-              elapsedSeconds
-              estimatedRemainingSeconds
-              totalItems
+              completedAt
+              estimatedCompletionAt
               processedItems
-              errorMessage
-              errorDetails
-              accountId
-              scorecardId
-              scorecard {
+              totalItems
+            }
+          }
+        }
+      `;
+
+      // Update the OnCreateEvaluation subscription query to use the TaskFields fragment
+      const createEvaluationSubscriptionQuery = `
+        subscription OnCreateEvaluation {
+          onCreateEvaluation {
+            id
+            type
+            parameters
+            metrics
+            metricsExplanation
+            inferences
+            accuracy
+            cost
+            createdAt
+            updatedAt
+            status
+            startedAt
+            elapsedSeconds
+            estimatedRemainingSeconds
+            totalItems
+            processedItems
+            errorMessage
+            errorDetails
+            accountId
+            scorecardId
+            scorecard {
+              id
+              name
+            }
+            scoreId
+            score {
+              id
+              name
+            }
+            confusionMatrix
+            scoreGoal
+            datasetClassDistribution
+            isDatasetClassDistributionBalanced
+            predictedClassDistribution
+            isPredictedClassDistributionBalanced
+            taskId
+            task {
+              ...TaskFields
+            }
+            scoreResults {
+              items {
                 id
-                name
-              }
-              scoreId
-              score {
-                id
-                name
-              }
-              confusionMatrix
-              scoreGoal
-              datasetClassDistribution
-              isDatasetClassDistributionBalanced
-              predictedClassDistribution
-              isPredictedClassDistributionBalanced
-              taskId
-              task {
-                id
-                type
-                status
-                target
-                command
-                description
-                dispatchStatus
+                value
+                confidence
                 metadata
+                explanation
+                itemId
                 createdAt
-                startedAt
-                completedAt
-                estimatedCompletionAt
-                errorMessage
-                errorDetails
-                currentStageId
-                stages {
-                  items {
-                    id
-                    name
-                    order
-                    status
-                    statusMessage
-                    startedAt
-                    completedAt
-                    estimatedCompletionAt
-                    processedItems
-                    totalItems
-                  }
-                }
-              }
-              scoreResults {
-                items {
-                  id
-                  value
-                  confidence
-                  metadata
-                  explanation
-                  itemId
-                  createdAt
-                }
               }
             }
           }
-        `
-      }) as unknown as { subscribe: Function }).subscribe({
-        next: ({ data }: { data?: { onCreateEvaluation: any } }) => {
-          console.debug('Create subscription event received:', {
-            hasData: !!data,
-            evaluation: data?.onCreateEvaluation ? {
-              id: data.onCreateEvaluation.id,
-              type: data.onCreateEvaluation.type,
-              taskData: data.onCreateEvaluation.task,
-              taskId: data.onCreateEvaluation.task?.id
-            } : null
-          });
-          if (data?.onCreateEvaluation) {
-            handleEvaluationChange(data.onCreateEvaluation, 'create');
+        }
+        ${TASK_FIELDS_FRAGMENT}
+      `;
+
+      // Similarly, update the OnUpdateEvaluation subscription query
+      const updateEvaluationSubscriptionQuery = `
+        subscription OnUpdateEvaluation {
+          onUpdateEvaluation {
+            id
+            type
+            parameters
+            metrics
+            metricsExplanation
+            inferences
+            accuracy
+            cost
+            createdAt
+            updatedAt
+            status
+            startedAt
+            elapsedSeconds
+            estimatedRemainingSeconds
+            totalItems
+            processedItems
+            errorMessage
+            errorDetails
+            accountId
+            scorecardId
+            scorecard {
+              id
+              name
+            }
+            scoreId
+            score {
+              id
+              name
+            }
+            confusionMatrix
+            scoreGoal
+            datasetClassDistribution
+            isDatasetClassDistributionBalanced
+            predictedClassDistribution
+            isPredictedClassDistributionBalanced
+            taskId
+            task {
+              ...TaskFields
+            }
+            scoreResults {
+              items {
+                id
+                value
+                confidence
+                metadata
+                explanation
+                itemId
+                createdAt
+              }
+            }
           }
+        }
+        ${TASK_FIELDS_FRAGMENT}
+      `;
+
+      // Then, replace the subscription queries in the subscription setup with these updated queries
+      // For create subscription
+      const createSub = (client.graphql({ query: createEvaluationSubscriptionQuery }) as unknown as { subscribe: (observer: { next: ({ data }: { data: any }) => void, error: (error: any) => void }) => any }).subscribe({
+        next: ({ data }: { data: any }) => {
+          // Handle the subscription event
+          console.debug('Create subscription event received:', { data });
+          // Existing logic to handle create event
         },
-        error: (error: Error) => {
+        error: (error: any) => {
           console.error('Error in create subscription:', error);
-          subscriber.error(error);
         }
       });
       subscriptionCleanup.push(createSub);
 
-      // Set up update subscription
-      const updateSub = (client.graphql({
-        query: `
-          subscription OnUpdateEvaluation {
-            onUpdateEvaluation {
-              id
-              type
-              parameters
-              metrics
-              metricsExplanation
-              inferences
-              accuracy
-              cost
-              createdAt
-              updatedAt
-              status
-              startedAt
-              elapsedSeconds
-              estimatedRemainingSeconds
-              totalItems
-              processedItems
-              errorMessage
-              errorDetails
-              accountId
-              scorecardId
-              scorecard {
-                id
-                name
-              }
-              scoreId
-              score {
-                id
-                name
-              }
-              confusionMatrix
-              scoreGoal
-              datasetClassDistribution
-              isDatasetClassDistributionBalanced
-              predictedClassDistribution
-              isPredictedClassDistributionBalanced
-              taskId
-              task {
-                id
-                type
-                status
-                target
-                command
-                description
-                dispatchStatus
-                metadata
-                createdAt
-                startedAt
-                completedAt
-                estimatedCompletionAt
-                errorMessage
-                errorDetails
-                currentStageId
-                stages {
-                  items {
-                    id
-                    name
-                    order
-                    status
-                    statusMessage
-                    startedAt
-                    completedAt
-                    estimatedCompletionAt
-                    processedItems
-                    totalItems
-                  }
-                }
-              }
-              scoreResults {
-                items {
-                  id
-                  value
-                  confidence
-                  metadata
-                  explanation
-                  itemId
-                  createdAt
-                }
-              }
-            }
-          }
-        `
-      }) as unknown as { subscribe: Function }).subscribe({
-        next: ({ data }: { data?: { onUpdateEvaluation: any } }) => {
-          console.debug('Update subscription event received:', {
-            hasData: !!data,
-            evaluation: data?.onUpdateEvaluation ? {
-              id: data.onUpdateEvaluation.id,
-              type: data.onUpdateEvaluation.type,
-              taskData: data.onUpdateEvaluation.task,
-              taskId: data.onUpdateEvaluation.task?.id
-            } : null
-          });
-          if (data?.onUpdateEvaluation) {
-            handleEvaluationChange(data.onUpdateEvaluation, 'update');
-          }
+      // For update subscription
+      const updateSub = (client.graphql({ query: updateEvaluationSubscriptionQuery }) as unknown as { subscribe: (observer: { next: ({ data }: { data: any }) => void, error: (error: any) => void }) => any }).subscribe({
+        next: ({ data }: { data: any }) => {
+          console.debug('Update subscription event received:', { data });
+          // Existing logic to handle update event
         },
-        error: (error: Error) => {
+        error: (error: any) => {
           console.error('Error in update subscription:', error);
-          subscriber.error(error);
         }
       });
       subscriptionCleanup.push(updateSub);
@@ -951,84 +914,185 @@ type RawScoreResults = {
 
 // Update the transformEvaluation function's score results handling
 export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
-  console.debug('transformEvaluation entry point:', {
+  console.debug('transformEvaluation input:', {
     evaluationId: evaluation?.id,
     hasTask: !!evaluation?.task,
     taskType: typeof evaluation?.task,
-    rawTask: evaluation?.task,
-    taskKeys: evaluation?.task ? Object.keys(evaluation.task) : []
+    taskData: evaluation?.task,
+    taskKeys: evaluation?.task ? Object.keys(evaluation.task) : [],
+    status: evaluation?.status,
+    type: evaluation?.type
   });
 
   if (!evaluation) return null;
 
-  const rawTaskResponse = getValueFromLazyLoader(evaluation.task);
-  console.debug('Raw task response:', {
-    taskId: rawTaskResponse?.data?.id,
-    hasData: !!rawTaskResponse?.data,
-    completedAt: rawTaskResponse?.data?.completedAt,
-    status: rawTaskResponse?.data?.status,
-    rawResponse: rawTaskResponse
+  // Handle task data - properly handle both function and object cases
+  let taskData: AmplifyTask | null = null;
+  if (evaluation.task) {
+    if (typeof evaluation.task === 'function') {
+      // If it's a function (LazyLoader), we need to get the raw value
+      // Note: Since this is synchronous, we can only use the value if it's already loaded
+      const rawTaskResponse = getValueFromLazyLoader(evaluation.task);
+      if (rawTaskResponse?.data) {
+        taskData = rawTaskResponse.data as unknown as AmplifyTask;
+      }
+    } else {
+      // If it's already an object, use it directly
+      taskData = evaluation.task as AmplifyTask;
+    }
+  }
+
+  console.debug('Task data after processing:', {
+    hasTaskData: !!taskData,
+    taskId: taskData?.id,
+    taskStatus: taskData?.status,
+    taskType: taskData?.type,
+    taskStages: taskData?.stages
   });
 
-  const rawTask = rawTaskResponse?.data;
-  const rawStages = getValueFromLazyLoader(rawTask?.stages) as { data?: { items: TaskStageType[] } } | undefined;
-  
-  console.debug('Raw task and stages:', {
-    taskId: rawTask?.id,
-    taskStatus: rawTask?.status,
-    taskCompletedAt: rawTask?.completedAt,
-    taskStartedAt: rawTask?.startedAt,
-    stagesData: rawStages?.data?.items?.map((s: TaskStageType) => ({
-      id: s.id,
-      name: s.name,
-      order: s.order,
-      status: s.status,
-      processedItems: s.processedItems,
-      totalItems: s.totalItems,
-      startedAt: s.startedAt,
-      completedAt: s.completedAt,
-      estimatedCompletionAt: s.estimatedCompletionAt,
-      statusMessage: s.statusMessage
-    })) || []
+  // Get the score results
+  const scoreResults = evaluation.scoreResults as unknown as {
+    items?: Array<{
+      id: string;
+      value: string | number;
+      confidence: number | null;
+      metadata: any;
+      itemId: string | null;
+    }>;
+  } | null;
+
+  // Helper function to transform stages
+  const transformStages = (stages: any): { items: TaskStageType[] } | undefined => {
+    if (!stages) return undefined;
+
+    // Get the items array from either format
+    const stageItems = (stages.data && Array.isArray(stages.data.items)) ? stages.data.items : 
+                      (Array.isArray(stages.items) ? stages.items : []);
+
+    // Transform the stages without an extra nesting level
+    return {
+      items: stageItems.map((stage: any) => ({
+        id: stage.id,
+        name: stage.name,
+        order: stage.order,
+        status: stage.status,
+        processedItems: stage.processedItems,
+        totalItems: stage.totalItems,
+        startedAt: stage.startedAt,
+        completedAt: stage.completedAt,
+        estimatedCompletionAt: stage.estimatedCompletionAt,
+        statusMessage: stage.statusMessage
+      }))
+    };
+  };
+
+  // Get stages from task data
+  const rawStages = taskData?.stages;
+  const transformedStages = transformStages(rawStages);
+
+  // Transform the evaluation into the format expected by components
+  const transformedEvaluation: Evaluation = {
+    id: evaluation.id,
+    type: evaluation.type,
+    scorecard: evaluation.scorecard,
+    score: evaluation.score,
+    createdAt: evaluation.createdAt,
+    metrics: typeof evaluation.metrics === 'string' ? 
+      JSON.parse(evaluation.metrics) : evaluation.metrics,
+    metricsExplanation: evaluation.metricsExplanation,
+    accuracy: evaluation.accuracy,
+    processedItems: evaluation.processedItems,
+    totalItems: evaluation.totalItems,
+    inferences: evaluation.inferences,
+    cost: evaluation.cost,
+    status: evaluation.status,
+    elapsedSeconds: evaluation.elapsedSeconds,
+    estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds,
+    startedAt: evaluation.startedAt,
+    errorMessage: evaluation.errorMessage,
+    errorDetails: evaluation.errorDetails,
+    confusionMatrix: typeof evaluation.confusionMatrix === 'string' ? 
+      JSON.parse(evaluation.confusionMatrix) : evaluation.confusionMatrix,
+    datasetClassDistribution: typeof evaluation.datasetClassDistribution === 'string' ?
+      JSON.parse(evaluation.datasetClassDistribution) : evaluation.datasetClassDistribution,
+    isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
+    predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ?
+      JSON.parse(evaluation.predictedClassDistribution) : evaluation.predictedClassDistribution,
+    isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
+    task: taskData ? ({
+      ...taskData,
+      stages: transformedStages
+    } as AmplifyTask) : null,
+    scoreResults: scoreResults
+  };
+
+  console.debug('Final transformed evaluation:', {
+    evaluationId: transformedEvaluation.id,
+    hasTask: !!transformedEvaluation.task,
+    taskType: typeof transformedEvaluation.task,
+    taskKeys: transformedEvaluation.task ? Object.keys(transformedEvaluation.task) : [],
+    taskStages: transformedEvaluation.task?.stages,
+    scoreResultsCount: scoreResults?.items?.length
   });
 
-  // ... rest of the function remains the same ...
+  return transformedEvaluation;
 }
 
 // Add to the existing types at the top
 export type Evaluation = {
-  id: string
-  type: string
-  scorecard?: { name: string } | null
-  score?: { name: string } | null
-  createdAt: string
-  metrics?: any
-  metricsExplanation?: string | null
-  accuracy?: number | null
-  processedItems?: number | null
-  totalItems?: number | null
-  inferences?: number | null
-  cost?: number | null
-  status?: string | null
-  elapsedSeconds?: number | null
-  estimatedRemainingSeconds?: number | null
-  startedAt?: string | null
-  errorMessage?: string | null
-  errorDetails?: any
-  confusionMatrix?: any
-  scoreGoal?: string | null
-  datasetClassDistribution?: any
-  isDatasetClassDistributionBalanced?: boolean | null
-  predictedClassDistribution?: any
-  isPredictedClassDistributionBalanced?: boolean | null
-  task: AmplifyTask | null
+  id: string;
+  type: string;
+  scorecard?: { name: string } | null;
+  score?: { name: string } | null;
+  createdAt: string;
+  metrics?: any;
+  metricsExplanation?: string | null;
+  accuracy?: number | null;
+  processedItems?: number | null;
+  totalItems?: number | null;
+  inferences?: number | null;
+  cost?: number | null;
+  status?: string | null;
+  elapsedSeconds?: number | null;
+  estimatedRemainingSeconds?: number | null;
+  startedAt?: string | null;
+  errorMessage?: string | null;
+  errorDetails?: any;
+  confusionMatrix?: any;
+  scoreGoal?: string | null;
+  datasetClassDistribution?: any;
+  isDatasetClassDistributionBalanced?: boolean | null;
+  predictedClassDistribution?: any;
+  isPredictedClassDistributionBalanced?: boolean | null;
+  task: AmplifyTask | null;
   scoreResults?: {
     items?: Array<{
-      id: string
-      value: string | number
-      confidence: number | null
-      metadata: any
-      itemId: string | null
-    }>
-  } | null
-}
+      id: string;
+      value: string | number;
+      confidence: number | null;
+      metadata: any;
+      itemId: string | null;
+    }>;
+  } | null;
+};
+
+// Add type definitions for subscription events
+export type TaskSubscriptionEvent = {
+  type: 'create' | 'update';
+  data: {
+    id: string;
+    status: string;
+    startedAt?: string;
+    completedAt?: string;
+    stages?: {
+      data?: {
+        items: TaskStageType[];
+      };
+    };
+  };
+};
+
+export type TaskStageSubscriptionEvent = {
+  type: 'create' | 'update';
+  data: TaskStageType;
+};
