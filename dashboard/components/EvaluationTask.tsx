@@ -411,14 +411,6 @@ function parseScoreResult(result: any): ParsedScoreResult {
   const scoreResult = firstResultKey && parsedMetadata.results ? 
     parsedMetadata.results[firstResultKey] : null
 
-  // Log the parsing process for debugging
-  console.debug('Score result parsing:', {
-    originalResult: result,
-    parsedMetadata,
-    firstResultKey,
-    scoreResult
-  })
-
   return {
     id: result.id || '',
     value: String(result.value || scoreResult?.value || ''),
@@ -457,22 +449,6 @@ const DetailContent = React.memo(({
   commandDisplay?: 'hide' | 'show' | 'full'
   onCommandDisplayChange?: (display: 'show' | 'full') => void
 }) => {
-  console.log('DetailContent render:', {
-    distributions: {
-      dataset: data.datasetClassDistribution,
-      predicted: data.predictedClassDistribution,
-      isBalanced: {
-        dataset: data.isDatasetClassDistributionBalanced,
-        predicted: data.isPredictedClassDistributionBalanced
-      }
-    },
-    scoreResults: {
-      count: data.scoreResults?.length,
-      firstResult: data.scoreResults?.[0],
-      selectedId: selectedScoreResultId,
-      selectedResult: data.scoreResults?.find(r => r.id === selectedScoreResultId)
-    }
-  });
 
   const [containerWidth, setContainerWidth] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
