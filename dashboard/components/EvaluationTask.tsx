@@ -449,6 +449,25 @@ const DetailContent = React.memo(({
   commandDisplay?: 'hide' | 'show' | 'full'
   onCommandDisplayChange?: (display: 'show' | 'full') => void
 }) => {
+  // Force isSelected to true in detail mode
+  const effectiveIsSelected = true;
+
+  console.log('DetailContent render:', {
+    distributions: {
+      dataset: data.datasetClassDistribution,
+      predicted: data.predictedClassDistribution,
+      isBalanced: {
+        dataset: data.isDatasetClassDistributionBalanced,
+        predicted: data.isPredictedClassDistributionBalanced
+      }
+    },
+    scoreResults: {
+      count: data.scoreResults?.length,
+      firstResult: data.scoreResults?.[0],
+      selectedId: selectedScoreResultId,
+      selectedResult: data.scoreResults?.find(r => r.id === selectedScoreResultId)
+    }
+  });
 
   const [containerWidth, setContainerWidth] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -571,7 +590,7 @@ const DetailContent = React.memo(({
                     statusMessage={getStatusMessage(data)}
                     truncateMessages={true}
                     extra={extra}
-                    isSelected={true}
+                    isSelected={effectiveIsSelected}
                     commandDisplay={commandDisplay}
                     onCommandDisplayChange={onCommandDisplayChange}
                   />
