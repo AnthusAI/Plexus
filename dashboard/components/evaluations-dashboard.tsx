@@ -462,24 +462,22 @@ export default function EvaluationsDashboard() {
     const evaluation = evaluations.find(e => e.id === selectedEvaluationId)
     if (!evaluation) return null
 
-    console.log('Rendering task for evaluation:', {
-      evaluationId: evaluation.id,
-      evaluationData: {
-        type: evaluation.type,
-        metrics: evaluation.metrics,
-        accuracy: evaluation.accuracy,
-        scorecard: evaluation.scorecard,
-        score: evaluation.score,
-        task: evaluation.task,
-        scoreResults: evaluation.scoreResults
-      }
-    });
-
     return (
       <TaskDisplay
         variant="detail"
         task={evaluation.task}
-        evaluationData={evaluation}
+        evaluationData={{
+          ...evaluation,
+          scoreResults: evaluation.scoreResults ? {
+            items: evaluation.scoreResults.map(result => ({
+              id: result.id,
+              value: result.value,
+              confidence: result.confidence,
+              metadata: result.metadata,
+              itemId: result.itemId
+            }))
+          } : undefined
+        }}
         controlButtons={
           <DropdownMenu>
             <DropdownMenuTrigger>
@@ -590,7 +588,18 @@ export default function EvaluationsDashboard() {
                     <TaskDisplay
                       variant="grid"
                       task={evaluation.task}
-                      evaluationData={evaluation}
+                      evaluationData={{
+                        ...evaluation,
+                        scoreResults: evaluation.scoreResults ? {
+                          items: evaluation.scoreResults.map(result => ({
+                            id: result.id,
+                            value: result.value,
+                            confidence: result.confidence,
+                            metadata: result.metadata,
+                            itemId: result.itemId
+                          }))
+                        } : undefined
+                      }}
                       isSelected={evaluation.id === selectedEvaluationId}
                       onClick={() => {
                         setSelectedEvaluationId(evaluation.id)

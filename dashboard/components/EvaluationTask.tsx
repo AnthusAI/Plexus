@@ -411,14 +411,6 @@ function parseScoreResult(result: any): ParsedScoreResult {
   const scoreResult = firstResultKey && parsedMetadata.results ? 
     parsedMetadata.results[firstResultKey] : null
 
-  // Log the parsing process for debugging
-  console.debug('Score result parsing:', {
-    originalResult: result,
-    parsedMetadata,
-    firstResultKey,
-    scoreResult
-  })
-
   return {
     id: result.id || '',
     value: String(result.value || scoreResult?.value || ''),
@@ -457,6 +449,9 @@ const DetailContent = React.memo(({
   commandDisplay?: 'hide' | 'show' | 'full'
   onCommandDisplayChange?: (display: 'show' | 'full') => void
 }) => {
+  // Force isSelected to true in detail mode
+  const effectiveIsSelected = true;
+
   console.log('DetailContent render:', {
     distributions: {
       dataset: data.datasetClassDistribution,
@@ -595,7 +590,7 @@ const DetailContent = React.memo(({
                     statusMessage={getStatusMessage(data)}
                     truncateMessages={true}
                     extra={extra}
-                    isSelected={true}
+                    isSelected={effectiveIsSelected}
                     commandDisplay={commandDisplay}
                     onCommandDisplayChange={onCommandDisplayChange}
                   />

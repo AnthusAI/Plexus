@@ -7,12 +7,14 @@ import { ChevronDown } from "lucide-react"
 import { createTask } from "@/utils/data-operations"
 import { toast } from "sonner"
 import { TaskAction, TaskDispatchConfig } from "./types"
+import { useAccount } from "@/app/contexts/AccountContext"
 
 export function TaskDispatchButton({ config }: { config: TaskDispatchConfig }) {
   const [selectedAction, setSelectedAction] = useState<TaskAction | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const { selectedAccount } = useAccount()
 
   const handleActionSelect = (action: TaskAction) => {
     setSelectedAction(action)
@@ -43,7 +45,7 @@ export function TaskDispatchButton({ config }: { config: TaskDispatchConfig }) {
         type: selectedAction.name === 'Accuracy' ? 'Accuracy Evaluation' : selectedAction.name.toLowerCase(),
         target: selectedAction.target || '',
         command: commandStr,
-        accountId: 'call-criteria',
+        accountId: selectedAccount?.id || 'call-criteria',
         dispatchStatus: 'PENDING',
         status: 'PENDING'
       });

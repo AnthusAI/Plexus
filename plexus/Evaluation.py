@@ -962,65 +962,65 @@ class Evaluation:
         self.generate_metrics_json(report_folder_path, len(selected_sample_rows), expenses)
 
     async def score_all_texts_for_score(self, selected_sample_rows, score_name: str, tracker):
-        """Score all texts for a specific score concurrently"""
+        """Score all texts for a specific score with controlled concurrency"""
         if score_name not in self.results_by_score:
             self.results_by_score[score_name] = []
         if score_name not in self.processed_items_by_score:
             self.processed_items_by_score[score_name] = 0
 
-        tasks = []
-        total_rows = len(selected_sample_rows)
-        for idx, (_, row) in enumerate(selected_sample_rows.iterrows()):
-            task = asyncio.create_task(self.score_text(row, score_name))
-            tasks.append(task)
+        # Create a semaphore to limit concurrency
+        # Default to 20 concurrent operations
+        concurrency_limit = getattr(self, 'concurrency_limit', 20)
+        semaphore = asyncio.Semaphore(concurrency_limit)
         
+        # Use an atomic counter for tracking progress
+        processed_counter = 0
+        total_rows = len(selected_sample_rows)
+        
+        async def process_text(row, idx):
+            async with semaphore:  # This ensures only N concurrent operations
+                try:
+                    result = await self.score_text(row, score_name)
+                    if result:
+                        # Use nonlocal to modify the counter from within the nested function
+                        nonlocal processed_counter
+                        processed_counter += 1
+                        
+                        # Store result in order received
+                        self.results_by_score[score_name].append(result)
+                        self.processed_items_by_score[score_name] = processed_counter
+                        self.processed_items = sum(self.processed_items_by_score.values())
+                        
+                        # Update tracker with actual count of processed items
+                        tracker.current_stage.status_message = f"Generating predictions ({processed_counter}/{total_rows})"
+                        tracker.update(current_items=self.processed_items)
+                        
+                        # Start metrics task if needed
+                        is_final_result = processed_counter == total_rows
+                        await self.maybe_start_metrics_task(score_name, is_final_result)
+                        
+                        return result
+                except Exception as e:
+                    logging.error(f"Error processing text at index {idx} for {score_name}: {e}")
+                    raise
+
+        # Create tasks for all rows but process them with controlled concurrency
+        tasks = [
+            asyncio.create_task(process_text(row, idx))
+            for idx, (_, row) in enumerate(selected_sample_rows.iterrows())
+        ]
+        
+        # Wait for all tasks to complete
+        results = []
         for task in asyncio.as_completed(tasks):
             try:
                 result = await task
                 if result:
-                    self.results_by_score[score_name].append(result)
-                    self.processed_items_by_score[score_name] += 1
-                    self.processed_items = sum(self.processed_items_by_score.values())
-
-                    # Update evaluation status
-                    update_data = {
-                        'status': 'RUNNING',
-                        'processedItems': self.processed_items,
-                        'elapsedSeconds': int((datetime.now(timezone.utc) - self.started_at).total_seconds())
-                    }
-
-                    # Update the evaluation record directly using the dashboard client
-                    if hasattr(self, 'dashboard_client') and hasattr(self, 'experiment_id'):
-                        mutation = """
-                        mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                            updateEvaluation(input: $input) {
-                                id
-                                processedItems
-                                status
-                                elapsedSeconds
-                            }
-                        }
-                        """
-                        variables = {
-                            'input': {
-                                'id': self.experiment_id,
-                                **update_data
-                            }
-                        }
-                        await asyncio.to_thread(self.dashboard_client.execute, mutation, variables)
-
-                    # Update task progress
-                    tracker.current_stage.status_message = f"Generating predictions ({self.processed_items}/{total_rows})"
-                    tracker.update(current_items=self.processed_items)
-
-                    # Start metrics task if needed
-                    is_final_result = self.processed_items_by_score[score_name] == total_rows
-                    await self.maybe_start_metrics_task(score_name, is_final_result)
+                    results.append(result)
             except Exception as e:
-                logging.error(f"Error scoring text for {score_name}: {e}")
-                raise
+                logging.error(f"Error in task for {score_name}: {e}")
         
-        return self.results_by_score[score_name]
+        return results
 
     async def maybe_start_metrics_task(self, score_name: str, is_final_result: bool = False):
         """Start a metrics computation task if one isn't running, or if this is the final result"""
