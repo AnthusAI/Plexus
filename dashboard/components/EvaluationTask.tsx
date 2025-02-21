@@ -457,6 +457,9 @@ const DetailContent = React.memo(({
   commandDisplay?: 'hide' | 'show' | 'full'
   onCommandDisplayChange?: (display: 'show' | 'full') => void
 }) => {
+  // Force isSelected to true in detail mode
+  const effectiveIsSelected = true;
+
   console.log('DetailContent render:', {
     distributions: {
       dataset: data.datasetClassDistribution,
@@ -595,7 +598,7 @@ const DetailContent = React.memo(({
                     statusMessage={getStatusMessage(data)}
                     truncateMessages={true}
                     extra={extra}
-                    isSelected={true}
+                    isSelected={effectiveIsSelected}
                     commandDisplay={commandDisplay}
                     onCommandDisplayChange={onCommandDisplayChange}
                   />
