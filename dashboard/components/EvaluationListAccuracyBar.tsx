@@ -5,12 +5,14 @@ interface EvaluationListAccuracyBarProps {
   progress: number
   accuracy: number
   isFocused?: boolean
+  isSelected?: boolean
 }
 
 export function EvaluationListAccuracyBar({ 
   progress, 
   accuracy,
-  isFocused = false 
+  isFocused = false,
+  isSelected = false
 }: EvaluationListAccuracyBarProps) {
   const formattedAccuracy = accuracy >= 98 
     ? Math.round(accuracy * 10) / 10 
@@ -22,7 +24,10 @@ export function EvaluationListAccuracyBar({
   const falseWidth = 100 - trueWidth
   
   return (
-    <div className="relative w-full h-8 bg-neutral rounded-md">
+    <div className={cn(
+      "relative w-full h-8 rounded-md",
+      isSelected ? "bg-progress-background-selected" : "bg-progress-background"
+    )}>
       {clampedProgress > 0 && (
         <>
           <div

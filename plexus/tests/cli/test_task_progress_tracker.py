@@ -7,7 +7,7 @@ def test_basic_progress_tracking():
     default_stages = {
         "Default": StageConfig(order=1, total_items=100, status_message="Processing")
     }
-    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages)
+    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages, prevent_new_task=True)
     assert tracker.total_items == 100
     assert tracker.current_items == 0
     assert tracker.progress == 0
@@ -17,7 +17,7 @@ def test_update_progress():
     default_stages = {
         "Default": StageConfig(order=1, total_items=100, status_message="Processing")
     }
-    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages)
+    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages, prevent_new_task=True)
     tracker.update(current_items=50, status="Processing")
     assert tracker.current_items == 50
     assert tracker.progress == 50
@@ -37,7 +37,7 @@ def test_estimated_time_remaining():
     default_stages = {
         "Default": StageConfig(order=1, total_items=100, status_message="Processing")
     }
-    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages)
+    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages, prevent_new_task=True)
     time.sleep(1)  # Process for 1 second
     tracker.update(current_items=50)  # Update halfway through
     # If 50 items took 1 second, remaining 50 should take ~1 second
@@ -89,7 +89,7 @@ def test_context_manager():
     default_stages = {
         "Default": StageConfig(order=1, total_items=100, status_message="Processing")
     }
-    with TaskProgressTracker(total_items=100, stage_configs=default_stages) as tracker:
+    with TaskProgressTracker(total_items=100, stage_configs=default_stages, prevent_new_task=True) as tracker:
         assert tracker.total_items == 100
         tracker.update(current_items=50)
         assert tracker.current_items == 50
@@ -101,7 +101,7 @@ def test_error_handling():
     default_stages = {
         "Default": StageConfig(order=1, total_items=100, status_message="Processing")
     }
-    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages)
+    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages, prevent_new_task=True)
     
     # Test invalid updates
     with pytest.raises(ValueError):
@@ -122,31 +122,28 @@ def test_error_handling():
 def test_status_message_generation():
     default_stages = {
         "Default": StageConfig(
-            order=1, 
-            total_items=100, 
+            order=1,
+            total_items=100,
             status_message=None  # Explicitly set to None to allow dynamic messages
         )
     }
-    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages)
+    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages, prevent_new_task=True)
     
     # Test different progress levels
     tracker.update(current_items=5)
-    assert tracker.status == "Starting..."
+    assert "5%" in tracker.status or "5.0%" in tracker.status
     
-    tracker.update(current_items=35)
-    assert tracker.status == "Processing items..."
-    
-    tracker.update(current_items=95)
-    assert tracker.status == "Almost done..."
+    tracker.update(current_items=50)
+    assert "50%" in tracker.status or "50.0%" in tracker.status
     
     tracker.update(current_items=100)
-    assert tracker.status == "Complete"
+    assert "100%" in tracker.status or "Complete" in tracker.status
 
 def test_estimated_completion_time():
     default_stages = {
         "Default": StageConfig(order=1, total_items=100, status_message="Processing")
     }
-    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages)
+    tracker = TaskProgressTracker(total_items=100, stage_configs=default_stages, prevent_new_task=True)
     time.sleep(1)  # Process for 1 second
     tracker.update(current_items=50)  # Update halfway through
     

@@ -755,7 +755,10 @@ class LangGraphScore(Score, LangChainUser):
             for alias, original in output_mapping.items():
                 if hasattr(state, original):
                     new_state[alias] = getattr(state, original)
-                    logging.info(f"Added alias {alias}={getattr(state, original)} from {original}")
+                    value = str(getattr(state, original))
+                    if len(value) > 80:
+                        value = value[:77] + "..."
+                    logging.info(f"Added alias {alias}={value} from {original}")
                 else:
                     # If the original isn't a state variable, treat it as a literal value
                     new_state[alias] = original
