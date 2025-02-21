@@ -52,48 +52,13 @@ import { GraphQLResult as APIGraphQLResult } from '@aws-amplify/api-graphql'
 import type { EvaluationTaskProps } from '@/components/EvaluationTask'
 import type { TaskData } from '@/types/evaluation'
 import { transformAmplifyTask } from '@/utils/data-operations'
-import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
-import { listRecentEvaluations, observeRecentEvaluations, transformAmplifyTask as transformEvaluationData } from '@/utils/data-operations'
+import { AmplifyTask, ProcessedTask, Evaluation, TaskStageType, TaskSubscriptionEvent } from '@/utils/data-operations'
+import { listRecentEvaluations, transformAmplifyTask as transformEvaluationData } from '@/utils/data-operations'
 import { TaskDisplay } from "@/components/TaskDisplay"
 import { getValueFromLazyLoader, unwrapLazyLoader } from '@/utils/data-operations'
 import type { LazyLoader } from '@/utils/types'
-
-type Evaluation = {
-  id: string
-  type: string
-  scorecard?: { name: string } | null
-  score?: { name: string } | null
-  createdAt: string
-  metrics?: any
-  metricsExplanation?: string | null
-  accuracy?: number | null
-  processedItems?: number | null
-  totalItems?: number | null
-  inferences?: number | null
-  cost?: number | null
-  status?: string | null
-  elapsedSeconds?: number | null
-  estimatedRemainingSeconds?: number | null
-  startedAt?: string | null
-  errorMessage?: string | null
-  errorDetails?: any
-  confusionMatrix?: any
-  scoreGoal?: string | null
-  datasetClassDistribution?: any
-  isDatasetClassDistributionBalanced?: boolean | null
-  predictedClassDistribution?: any
-  isPredictedClassDistributionBalanced?: boolean | null
-  task: AmplifyTask | null
-  scoreResults?: {
-    items?: Array<{
-      id: string
-      value: string | number
-      confidence: number | null
-      metadata: any
-      itemId: string | null
-    }>
-  } | null
-}
+import { observeRecentEvaluations, observeTaskUpdates, observeTaskStageUpdates } from '@/utils/subscriptions'
+import { useEvaluationData } from '@/features/evaluations/hooks/useEvaluationData'
 
 type TaskResponse = {
   items: Evaluation[]
@@ -107,27 +72,6 @@ type ScoreResultItem = {
   metadata: any;
   itemId: string | null;
 };
-
-interface TaskStageType {
-  id: string;
-  name: string;
-  order: number;
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
-  processedItems?: number;
-  totalItems?: number;
-  startedAt?: string;
-  completedAt?: string;
-  estimatedCompletionAt?: string;
-  statusMessage?: string;
-}
-
-interface ScoreResult {
-  id: string;
-  value: string | number;
-  confidence: number | null;
-  metadata: any;
-  itemId: string | null;
-}
 
 interface TaskStagesResponse {
   data?: {
@@ -311,8 +255,10 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
 
   if (!evaluation) return null;
 
-  // Get the raw task data - handle both subscription and initial load formats
-  const taskData = evaluation.task as unknown as AmplifyTask;
+  // Unwrap the lazy loader and cast task data properly
+  const rawTask = getValueFromLazyLoader(evaluation.task);
+  // Cast through unknown first to avoid type overlap errors
+  const taskData = ((rawTask ? rawTask : evaluation.task) as any) as AmplifyTask & { stages?: any };
   if (!taskData) {
     console.debug('No task data found in evaluation:', {
       evaluationId: evaluation.id,
@@ -332,23 +278,15 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
     }>;
   } | null;
 
-  console.debug('Processing evaluation data:', {
-    evaluationId: evaluation.id,
-    hasTaskData: !!taskData,
-    taskType: typeof taskData,
-    taskKeys: taskData ? Object.keys(taskData) : [],
-    hasScoreResults: !!scoreResults?.items?.length,
-    taskStages: taskData?.stages
-  });
-
   // Helper function to transform stages
   const transformStages = (stages: any): { items: TaskStageType[] } | undefined => {
     if (!stages) return undefined;
-    
+
     // Get the items array from either format
-    const stageItems = stages.items || stages.data?.items || [];
-    
-    // Transform the stages
+    const stageItems = (stages.data && Array.isArray(stages.data.items)) ? stages.data.items : 
+                      (Array.isArray(stages.items) ? stages.items : []);
+
+    // Transform the stages without an extra nesting level
     return {
       items: stageItems.map((stage: any) => ({
         id: stage.id,
@@ -364,6 +302,20 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
       }))
     };
   };
+
+  // Get stages from task data
+  const rawStages = taskData?.stages;
+  const transformedStages = transformStages(rawStages);
+
+  console.debug('Processing evaluation data:', {
+    evaluationId: evaluation.id,
+    hasTaskData: !!taskData,
+    taskType: typeof taskData,
+    taskKeys: taskData ? Object.keys(taskData) : [],
+    hasScoreResults: !!scoreResults?.items?.length,
+    rawStages,
+    transformedStages
+  });
 
   // Transform the evaluation into the format expected by components
   const transformedEvaluation: Evaluation = {
@@ -394,10 +346,10 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
     predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ?
       JSON.parse(evaluation.predictedClassDistribution) : evaluation.predictedClassDistribution,
     isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
-    task: taskData ? {
+    task: taskData ? ({
       ...taskData,
-      stages: transformStages(taskData.stages)
-    } : null,
+      stages: transformedStages
+    } as AmplifyTask) : null,
     scoreResults: scoreResults
   };
 
@@ -416,20 +368,16 @@ export default function EvaluationsDashboard() {
   const { user } = useAuthenticator()
   const router = useRouter()
   const [accountId, setAccountId] = useState<string | null>(null)
-  const [evaluations, setEvaluations] = useState<Evaluation[]>([])
   const [selectedEvaluationId, setSelectedEvaluationId] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(50)
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
   const [selectedScore, setSelectedScore] = useState<string | null>(null)
+  const [accountError, setAccountError] = useState<string | null>(null)
   const isNarrowViewport = useMediaQuery("(max-width: 768px)")
   const { ref, inView } = useInView({
     threshold: 0,
   })
-  const [processedTaskData, setProcessedTaskData] = useState<ProcessedTask | null>(null);
-  const [selectedEvaluation, setSelectedEvaluation] = useState<string | null>(null)
   const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null)
 
   // Fetch account ID
@@ -450,104 +398,27 @@ export default function EvaluationsDashboard() {
           setAccountId(id)
         } else {
           console.warn('No account found with key:', ACCOUNT_KEY)
-          setError('No account found')
-          setIsLoading(false)
+          setAccountError('No account found')
         }
       } catch (error) {
         console.error('Error fetching account:', error)
-        setError('Error fetching account')
-        setIsLoading(false)
+        setAccountError('Error fetching account')
       }
     }
     fetchAccountId()
   }, [])
 
-  // Fetch evaluations
-  useEffect(() => {
-    if (!accountId) return
+  // Use the new hook for evaluation data
+  const { evaluations, isLoading, error } = useEvaluationData({ accountId });
 
-    console.log('Setting up real-time evaluations subscription');
-    const subscription = observeRecentEvaluations(24).subscribe({
-      next: async ({ items, isSynced }) => {
-        console.log('Raw evaluations data:', {
-          count: items.length,
-          firstEvaluation: items[0] ? {
-            id: items[0].id,
-            type: items[0].type,
-            metrics: items[0].metrics,
-            accuracy: items[0].accuracy,
-            scorecard: items[0].scorecard,
-            score: items[0].score,
-            task: items[0].task,
-            taskData: {
-              id: items[0].task?.id,
-              status: items[0].task?.status,
-              startedAt: items[0].task?.startedAt,
-              completedAt: items[0].task?.completedAt,
-              stages: items[0].task?.stages
-            },
-            taskType: typeof items[0].task,
-            taskKeys: items[0].task ? Object.keys(items[0].task) : [],
-            scoreResults: items[0].scoreResults
-          } : null
-        });
-
-        // Transform the items before setting state
-        const transformedItems = items.map(item => {
-          console.debug('Processing evaluation:', {
-            evaluationId: item.id,
-            taskData: item.task,
-            taskId: item.task?.id,
-            taskStatus: item.task?.status,
-            taskType: typeof item.task,
-            taskKeys: item.task ? Object.keys(item.task) : []
-          });
-
-          const transformed = transformEvaluation(item);
-          console.debug('Transformed evaluation:', {
-            evaluationId: transformed?.id,
-            taskData: transformed?.task,
-            taskId: transformed?.task?.id,
-            taskStatus: transformed?.task?.status,
-            taskStartedAt: transformed?.task?.startedAt,
-            taskCompletedAt: transformed?.task?.completedAt
-          });
-          return transformed;
-        }).filter((item): item is Evaluation => item !== null);
-
-        console.debug('Setting evaluations state:', {
-          count: transformedItems.length,
-          firstItem: transformedItems[0] ? {
-            id: transformedItems[0].id,
-            taskData: transformedItems[0].task,
-            taskId: transformedItems[0].task?.id,
-            taskStatus: transformedItems[0].task?.status
-          } : null
-        });
-
-        setEvaluations(transformedItems);
-        if (isSynced) {
-          setIsLoading(false);
-        }
-      },
-      error: (error) => {
-        console.error('Evaluations subscription error:', error);
-        setError('Error fetching evaluations');
-        setIsLoading(false);
-      }
-    });
-
-    return () => {
-      console.log('Cleaning up evaluations subscription');
-      subscription.unsubscribe();
-    };
-  }, [accountId]);
+  // Combine errors from account fetching and evaluation data
+  const combinedError = accountError || error;
 
   const handleDelete = async (evaluationId: string) => {
     try {
       const currentClient = getClient()
       await currentClient.graphql({
-                query: `
+        query: `
           mutation DeleteEvaluation($id: ID!) {
             deleteEvaluation(id: $id) {
               id
@@ -556,12 +427,11 @@ export default function EvaluationsDashboard() {
         `,
         variables: { id: evaluationId }
       })
-      setEvaluations(prev => prev.filter(evaluation => evaluation.id !== evaluationId))
       if (selectedEvaluationId === evaluationId) {
         setSelectedEvaluationId(null)
       }
       return true
-            } catch (error) {
+    } catch (error) {
       console.error('Error deleting evaluation:', error)
       return false
     }
@@ -658,20 +528,20 @@ export default function EvaluationsDashboard() {
     return (
       <div>
         <div className="mb-4 text-sm text-muted-foreground">
-          {error ? `Error: ${error}` : 'Loading evaluations...'}
+          {combinedError ? `Error: ${combinedError}` : 'Loading evaluations...'}
         </div>
         <EvaluationDashboardSkeleton />
       </div>
     )
   }
 
-  if (error) {
+  if (combinedError) {
     return (
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Evaluations</h1>
         </div>
-        <div className="text-sm text-destructive">Error: {error}</div>
+        <div className="text-sm text-destructive">Error: {combinedError}</div>
       </div>
     )
   }
@@ -707,7 +577,6 @@ export default function EvaluationsDashboard() {
               ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
             `}>
               {filteredEvaluations.map((evaluation) => {
-
                 return (
                   <div 
                     key={evaluation.id} 
@@ -768,4 +637,138 @@ export default function EvaluationsDashboard() {
       </div>
     </div>
   )
+}
+
+// Add the ScoreResult type
+interface ScoreResult {
+  id: string;
+  value: string | number;
+  confidence: number | null;
+  metadata: any;
+  itemId: string | null;
+}
+
+// Add TaskStageSubscriptionEvent type
+type TaskStageSubscriptionEvent = {
+  type: 'create' | 'update';
+  data: {
+    stageId?: string;
+    taskId?: string;
+    name?: string;
+    status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+    processedItems?: number;
+    totalItems?: number;
+    startedAt?: string;
+    completedAt?: string;
+    estimatedCompletionAt?: string;
+    statusMessage?: string;
+  } | null;
+};
+
+// Update the merge functions to properly handle the LazyLoader type
+function mergeTaskUpdate(evaluations: Evaluation[], taskData: TaskSubscriptionEvent['data']): Evaluation[] {
+  if (!evaluations || !taskData) {
+    console.warn('mergeTaskUpdate called with invalid data:', { hasEvaluations: !!evaluations, hasTaskData: !!taskData });
+    return evaluations || [];
+  }
+
+  return evaluations.map(evaluation => {
+    // Skip if evaluation is null or doesn't have a task
+    if (!evaluation?.task) {
+      return evaluation;
+    }
+
+    const task = getValueFromLazyLoader(evaluation.task);
+    if (!task?.id || !taskData?.id || task.id !== taskData.id) {
+      return evaluation;
+    }
+
+    // Create updated task with new data
+    const updatedTask = {
+      ...task,
+      status: taskData.status,
+      startedAt: taskData.startedAt,
+      completedAt: taskData.completedAt,
+      stages: taskData.stages
+    };
+
+    return {
+      ...evaluation,
+      task: updatedTask as AmplifyTask
+    };
+  });
+}
+
+function mergeTaskStageUpdate(
+  evaluations: Evaluation[], 
+  stageData: TaskStageType,
+  taskId: string
+): Evaluation[] {
+  if (!evaluations || !stageData || !taskId) {
+    console.warn('mergeTaskStageUpdate called with invalid data:', { 
+      hasEvaluations: !!evaluations, 
+      hasStageData: !!stageData,
+      taskId 
+    });
+    return evaluations || [];
+  }
+
+  return evaluations.map(evaluation => {
+    // Skip if evaluation is null or doesn't have a task
+    if (!evaluation?.task) {
+      return evaluation;
+    }
+
+    const task = getValueFromLazyLoader(evaluation.task);
+    // Check if this is the task we're looking for
+    if (!task || task.id !== taskId) {
+      return evaluation;
+    }
+
+    const stages = getValueFromLazyLoader(task.stages);
+    if (!stages?.data?.items) {
+      // If no stages exist yet, create new stages array
+      const updatedStages = {
+        data: {
+          items: [stageData]
+        }
+      };
+
+      const updatedTask = {
+        ...task,
+        stages: updatedStages
+      };
+
+      return {
+        ...evaluation,
+        task: updatedTask as AmplifyTask
+      };
+    }
+
+    // Find if this stage already exists
+    const stageIndex = stages.data.items.findIndex(
+      (stage: TaskStageType) => stage?.id === stageData.id || stage?.name === stageData.name
+    );
+
+    const updatedStages = {
+      data: {
+        items: stageIndex === -1 
+          ? [...stages.data.items, stageData] // Add new stage
+          : stages.data.items.map((stage: TaskStageType, index: number) => // Update existing stage
+              index === stageIndex ? { ...stage, ...stageData } : stage
+            )
+      }
+    };
+
+    // Create updated task with new stages
+    const updatedTask = {
+      ...task,
+      stages: updatedStages
+    };
+
+    return {
+      ...evaluation,
+      task: updatedTask as AmplifyTask
+    };
+  });
 }

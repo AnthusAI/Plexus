@@ -552,15 +552,6 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             transition-all duration-300 ease-in-out overflow-hidden
             ${isMobile && !isLeftSidebarOpen ? 'hidden' : ''}
           `}
-          onClick={() => {
-            console.log('Right sidebar clicked:', {
-              rightSidebarState,
-              isMobile,
-              width: rightSidebarState === 'collapsed' ? 
-                (isMobile ? '0' : '14') : 
-                (rightSidebarState === 'normal' ? '80' : 'full')
-            });
-          }}
         >
           <div className={`
             ${isMobile ? 'h-full w-40 bg-frame' : 'h-full'}
