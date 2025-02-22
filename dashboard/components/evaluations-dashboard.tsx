@@ -59,6 +59,7 @@ import { getValueFromLazyLoader, unwrapLazyLoader } from '@/utils/data-operation
 import type { LazyLoader } from '@/utils/types'
 import { observeRecentEvaluations, observeTaskUpdates, observeTaskStageUpdates } from '@/utils/subscriptions'
 import { useEvaluationData } from '@/features/evaluations/hooks/useEvaluationData'
+import { useToast } from "@/components/ui/use-toast"
 
 type TaskResponse = {
   items: Evaluation[]
@@ -379,6 +380,7 @@ export default function EvaluationsDashboard() {
     threshold: 0,
   })
   const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null)
+  const { toast } = useToast()
 
   // Fetch account ID
   useEffect(() => {
@@ -488,6 +490,25 @@ export default function EvaluationsDashboard() {
               />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={async () => {
+                const url = `${window.location.origin}/evaluations/${evaluation.id}`;
+                try {
+                  await navigator.clipboard.writeText(url);
+                  toast({
+                    title: "Link copied",
+                    description: "Public evaluation link has been copied to clipboard",
+                  });
+                } catch (err) {
+                  toast({
+                    title: "Failed to copy",
+                    description: "Could not copy link to clipboard",
+                    variant: "destructive",
+                  });
+                }
+              }}>
+                <Eye className="mr-2 h-4 w-4" />
+                Copy Public Link
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleDelete(evaluation.id)}>
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
