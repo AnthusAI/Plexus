@@ -35,9 +35,9 @@ import { listFromModel } from "@/utils/amplify-helpers"
 import { AmplifyListResult } from '@/types/shared'
 import { getClient } from "@/utils/amplify-client"
 import { generateClient } from "aws-amplify/data"
-import ScorecardCard from "./scorecards/ScorecardCard"
+import ScorecardComponent from "./scorecards/ScorecardComponent"
 import { cn } from "@/lib/utils"
-import { ScoreCard } from "./ui/score-card"
+import { ScoreComponent } from "./ui/score-component"
 import ScorecardDetailView from "./scorecards/ScorecardDetailView"
 
 const ACCOUNT_KEY = 'call-criteria'
@@ -356,7 +356,7 @@ export default function ScorecardsComponent() {
       style={selectedScore && !maximizedScoreId ? {
         width: `${scorecardDetailWidth}%`
       } : { width: '100%' }}>
-        <ScorecardCard
+        <ScorecardComponent
           variant="detail"
           score={scorecardData}
           onEdit={() => handleEdit(selectedScorecard)}
@@ -391,7 +391,7 @@ export default function ScorecardsComponent() {
       style={!maximizedScoreId ? {
         width: `${100 - scorecardDetailWidth}%`
       } : undefined}>
-        <ScoreCard
+        <ScoreComponent
           score={selectedScore}
           variant="detail"
           isFullWidth={maximizedScoreId === selectedScore.id}
@@ -512,7 +512,7 @@ export default function ScorecardsComponent() {
                     }
 
                     return (
-                      <ScorecardCard
+                      <ScorecardComponent
                         key={scorecard.id}
                         variant="grid"
                         score={scorecardData}

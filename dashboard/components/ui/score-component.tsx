@@ -14,9 +14,10 @@ export interface ScoreData {
   type: string
   configuration: any
   order: number
+  icon?: React.ReactNode
 }
 
-interface ScoreCardProps extends React.HTMLAttributes<HTMLDivElement> {
+interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   score: ScoreData
   variant?: 'grid' | 'detail'
   isSelected?: boolean
@@ -27,7 +28,7 @@ interface ScoreCardProps extends React.HTMLAttributes<HTMLDivElement> {
   onSave?: (configuration: any) => Promise<void>
 }
 
-export function ScoreCard({
+export function ScoreComponent({
   score,
   variant = 'grid',
   isSelected,
@@ -38,7 +39,7 @@ export function ScoreCard({
   onSave,
   className,
   ...props
-}: ScoreCardProps) {
+}: ScoreComponentProps) {
   const [editedConfig, setEditedConfig] = React.useState<string>('')
   const [isEditing, setIsEditing] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -149,7 +150,7 @@ export function ScoreCard({
   return (
     <Card
       className={cn(
-        "w-full cursor-pointer hover:bg-accent/50 transition-colors",
+        "w-full cursor-pointer hover:bg-accent/50 transition-colors border-0",
         isSelected && "ring-2 ring-primary",
         className
       )}
@@ -157,14 +158,15 @@ export function ScoreCard({
       {...props}
     >
       <div className="p-4">
-        <div className="space-y-2">
-          <div className="text-sm">
-            <div className="font-medium">{score.name}</div>
-            <div className="text-muted-foreground">{score.description}</div>
+        <div className="flex justify-between items-start w-full">
+          <div className="space-y-2">
+            <div className="text-sm">
+              <div className="font-medium">{score.name}</div>
+              <div className="text-muted-foreground">{score.description}</div>
+            </div>
           </div>
-          <div className="text-sm text-muted-foreground">
-            <div>Type: {score.type}</div>
-            <div>Key: {score.key}</div>
+          <div className="text-muted-foreground">
+            {score.icon}
           </div>
         </div>
       </div>
