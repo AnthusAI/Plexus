@@ -26,10 +26,13 @@ const sampleSegments: SegmentConfig[] = [
   { key: 'end', label: 'End', color: 'bg-true' }
 ]
 
-const baseArgs = {
+const baseArgs: Omit<React.ComponentProps<typeof SegmentedProgressBar>, 'currentSegment'> = {
   segments: sampleSegments,
-  error: false
-} as const
+  error: false,
+  errorLabel: undefined,
+  className: undefined,
+  isSelected: false
+}
 
 export const AtStart: Story = {
   args: {
@@ -78,7 +81,10 @@ export const CustomColors: Story = {
       { key: 'three', label: 'Three', color: 'bg-purple-500' }
     ],
     currentSegment: 'two',
-    error: false
+    error: false,
+    errorLabel: undefined,
+    className: undefined,
+    isSelected: false
   }
 }
 
@@ -87,27 +93,34 @@ export const Demo: Story = {
     <div className="space-y-8">
       <div>
         <div className="text-sm text-muted-foreground mb-2">At Start</div>
-        <SegmentedProgressBar {...AtStart.args} />
+        <SegmentedProgressBar segments={sampleSegments} currentSegment="start" />
       </div>
       <div>
         <div className="text-sm text-muted-foreground mb-2">In Middle</div>
-        <SegmentedProgressBar {...InMiddle.args} />
+        <SegmentedProgressBar segments={sampleSegments} currentSegment="middle" />
       </div>
       <div>
         <div className="text-sm text-muted-foreground mb-2">At End</div>
-        <SegmentedProgressBar {...AtEnd.args} />
+        <SegmentedProgressBar segments={sampleSegments} currentSegment="end" />
       </div>
       <div>
         <div className="text-sm text-muted-foreground mb-2">With Error</div>
-        <SegmentedProgressBar {...WithError.args} />
+        <SegmentedProgressBar segments={sampleSegments} currentSegment="end" error errorLabel="Error" />
       </div>
       <div>
         <div className="text-sm text-muted-foreground mb-2">With Custom Error Label</div>
-        <SegmentedProgressBar {...WithCustomErrorLabel.args} />
+        <SegmentedProgressBar segments={sampleSegments} currentSegment="end" error errorLabel="Failed" />
       </div>
       <div>
         <div className="text-sm text-muted-foreground mb-2">Custom Colors</div>
-        <SegmentedProgressBar {...CustomColors.args} />
+        <SegmentedProgressBar 
+          segments={[
+            { key: 'one', label: 'One', color: 'bg-blue-500' },
+            { key: 'two', label: 'Two', color: 'bg-green-500' },
+            { key: 'three', label: 'Three', color: 'bg-purple-500' }
+          ]} 
+          currentSegment="two" 
+        />
       </div>
     </div>
   )
