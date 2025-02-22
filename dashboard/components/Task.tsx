@@ -102,6 +102,9 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
   commandDisplay = 'show',
   statusMessageDisplay = 'always'
 }: TaskComponentProps<TData>) => {
+  // Force isSelected to true in detail mode
+  const effectiveIsSelected = variant === 'detail' ? true : isSelected;
+
   const childProps: TaskChildProps<TData> = {
     variant,
     task,
@@ -114,7 +117,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
     error,
     onRetry,
     showPreExecutionStages,
-    isSelected: variant === 'detail' ? true : isSelected,
+    isSelected: effectiveIsSelected,
     commandDisplay,
     statusMessageDisplay,
     extra
@@ -135,7 +138,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
         transition-colors duration-200 
         flex flex-col h-full p-3 rounded-lg
         ${variant === 'grid' ? 'cursor-pointer hover:bg-accent/50' : ''}
-        ${(isSelected || variant === 'detail') ? 'bg-card-selected' : 'bg-card'}
+        ${effectiveIsSelected ? 'bg-card-selected' : 'bg-card'}
       `}
       onClick={variant === 'grid' && !isLoading ? onClick : undefined}
       role={variant === 'grid' ? 'button' : 'article'}
