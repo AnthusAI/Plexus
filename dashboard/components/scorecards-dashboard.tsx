@@ -100,11 +100,65 @@ export default function ScorecardsComponent() {
       const foundAccountId = accountResult.data[0].id
       setAccountId(foundAccountId)
 
+      type NestedScorecard = Schema['Scorecard']['type'] & {
+        sections?: {
+          data?: Array<{
+            id: string;
+            scores?: {
+              data?: Array<{ id: string }>;
+            };
+          }>;
+        };
+      }
+
+      // Get scorecards with nested sections and scores
       const initialScorecards = await amplifyClient.Scorecard.list({
         filter: { accountId: { eq: foundAccountId } }
       })
 
-      setScorecards(initialScorecards.data.filter(s => s.accountId === foundAccountId))
+      // Process scorecards and load sections/scores in parallel
+      const scorecardsWithCounts = await Promise.all(
+        initialScorecards.data
+          .filter(s => s.accountId === foundAccountId)
+          .map(async scorecard => {
+            const sectionsResult = await scorecard.sections();
+            const sections = sectionsResult.data || [];
+            
+            // Load all scores for each section in parallel
+            const sectionsWithScores = await Promise.all(
+              sections.map(async section => {
+                const scoresResult = await section.scores();
+                return {
+                  id: section.id,
+                  scores: {
+                    data: scoresResult.data || []
+                  }
+                };
+              })
+            );
+
+            const scoreCount = sectionsWithScores.reduce(
+              (total, section) => total + (section.scores.data.length || 0),
+              0
+            );
+
+            // Store the count in our state object
+            setScorecardScoreCounts(prev => ({
+              ...prev,
+              [scorecard.id]: scoreCount
+            }));
+
+            return {
+              ...scorecard,
+              sections: async () => ({
+                data: sections,
+                nextToken: null
+              })
+            } as Schema['Scorecard']['type'];
+          })
+      );
+
+      setScorecards(scorecardsWithCounts);
       setIsLoading(false)
     } catch (error) {
       console.error('Error loading initial data:', error)
@@ -427,34 +481,6 @@ export default function ScorecardsComponent() {
     document.addEventListener('mousemove', handleDrag)
     document.addEventListener('mouseup', handleDragEnd)
   }
-
-  useEffect(() => {
-    async function calculateScoreCounts() {
-      const counts: Record<string, number> = {}
-      
-      for (const scorecard of scorecards) {
-        try {
-          const sectionsResult = await scorecard.sections()
-          const sections = sectionsResult.data || []
-          
-          let totalScores = 0
-          for (const section of sections) {
-            const scoresResult = await section.scores()
-            totalScores += scoresResult.data?.length || 0
-          }
-          
-          counts[scorecard.id] = totalScores
-        } catch (error) {
-          console.error('Error calculating score count:', error)
-          counts[scorecard.id] = 0
-        }
-      }
-      
-      setScorecardScoreCounts(counts)
-    }
-
-    calculateScoreCounts()
-  }, [scorecards])
 
   if (isLoading) {
     return <div>Loading scorecards...</div>
