@@ -462,16 +462,15 @@ export default function EvaluationsDashboard() {
     const evaluation = evaluations.find(e => e.id === selectedEvaluationId)
     if (!evaluation) return null
 
-    console.log('Rendering task for evaluation:', {
+    console.log('Rendering selected task:', {
       evaluationId: evaluation.id,
-      evaluationData: {
-        type: evaluation.type,
-        metrics: evaluation.metrics,
-        accuracy: evaluation.accuracy,
-        scorecard: evaluation.scorecard,
-        score: evaluation.score,
-        task: evaluation.task,
-        scoreResults: evaluation.scoreResults
+      status: evaluation.status,
+      taskStatus: evaluation.task?.status,
+      scoreResults: {
+        count: evaluation.scoreResults?.items?.length ?? 0,
+        firstResult: evaluation.scoreResults?.items?.[0],
+        lastResult: evaluation.scoreResults?.items?.[evaluation.scoreResults?.items?.length - 1],
+        allResults: evaluation.scoreResults?.items // Log all results to see the full data
       }
     });
 
@@ -524,6 +523,69 @@ export default function EvaluationsDashboard() {
     setSelectedScoreResultId(id);
   }, []);
 
+  interface EvaluationsGridProps {
+    evaluations: Evaluation[];
+    selectedEvaluationId: string | null;
+    setSelectedEvaluationId: (id: string | null) => void;
+    isNarrowViewport: boolean;
+    setIsFullWidth: (isFullWidth: boolean) => void;
+    selectedScoreResultId: string | null;
+    onSelectScoreResult: (id: string | null) => void;
+  }
+
+  const EvaluationsGrid: React.FC<EvaluationsGridProps> = React.memo(({ 
+    evaluations, 
+    selectedEvaluationId, 
+    setSelectedEvaluationId, 
+    isNarrowViewport, 
+    setIsFullWidth,
+    selectedScoreResultId,
+    onSelectScoreResult
+  }) => {
+    return (
+      <div className={`
+        grid gap-3
+        ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
+      `}>
+        {evaluations.map((evaluation) => (
+          <div 
+            key={evaluation.id} 
+            onClick={() => {
+              setSelectedEvaluationId(evaluation.id)
+              if (isNarrowViewport) {
+                setIsFullWidth(true)
+              }
+            }}
+          >
+            <TaskDisplay
+              variant="grid"
+              task={evaluation.task}
+              evaluationData={evaluation}
+              isSelected={evaluation.id === selectedEvaluationId}
+              onClick={() => {
+                setSelectedEvaluationId(evaluation.id)
+                if (isNarrowViewport) {
+                  setIsFullWidth(true)
+                }
+              }}
+              extra={true}
+              selectedScoreResultId={selectedScoreResultId}
+              onSelectScoreResult={onSelectScoreResult}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  }, (prevProps, nextProps) => {
+    // Custom comparison to prevent unnecessary re-renders
+    return (
+      prevProps.evaluations === nextProps.evaluations &&
+      prevProps.selectedEvaluationId === nextProps.selectedEvaluationId &&
+      prevProps.isNarrowViewport === nextProps.isNarrowViewport &&
+      prevProps.selectedScoreResultId === nextProps.selectedScoreResultId
+    );
+  });
+
   if (isLoading) {
     return (
       <div>
@@ -572,41 +634,18 @@ export default function EvaluationsDashboard() {
           {filteredEvaluations.length === 0 ? (
             <div className="text-sm text-muted-foreground">No evaluations found</div>
           ) : (
-            <div className={`
-              grid gap-3
-              ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
-            `}>
-              {filteredEvaluations.map((evaluation) => {
-                return (
-                  <div 
-                    key={evaluation.id} 
-                    onClick={() => {
-                      setSelectedEvaluationId(evaluation.id)
-                      if (isNarrowViewport) {
-                        setIsFullWidth(true)
-                      }
-                    }}
-                  >
-                    <TaskDisplay
-                      variant="grid"
-                      task={evaluation.task}
-                      evaluationData={evaluation}
-                      isSelected={evaluation.id === selectedEvaluationId}
-                      onClick={() => {
-                        setSelectedEvaluationId(evaluation.id)
-                        if (isNarrowViewport) {
-                          setIsFullWidth(true)
-                        }
-                      }}
-                      extra={true}
-                      selectedScoreResultId={selectedScoreResultId}
-                      onSelectScoreResult={handleScoreResultSelect}
-                    />
-                  </div>
-                );
-              })}
+            <>
+              <EvaluationsGrid 
+                evaluations={filteredEvaluations}
+                selectedEvaluationId={selectedEvaluationId}
+                setSelectedEvaluationId={setSelectedEvaluationId}
+                isNarrowViewport={isNarrowViewport}
+                setIsFullWidth={setIsFullWidth}
+                selectedScoreResultId={selectedScoreResultId}
+                onSelectScoreResult={handleScoreResultSelect}
+              />
               <div ref={ref} />
-            </div>
+            </>
           )}
         </div>
 
@@ -683,7 +722,7 @@ function mergeTaskUpdate(evaluations: Evaluation[], taskData: TaskSubscriptionEv
       return evaluation;
     }
 
-    // Create updated task with new data
+    // Create updated task with new data, preserving all existing fields
     const updatedTask = {
       ...task,
       status: taskData.status,
@@ -692,9 +731,12 @@ function mergeTaskUpdate(evaluations: Evaluation[], taskData: TaskSubscriptionEv
       stages: taskData.stages
     };
 
+    // Return updated evaluation while preserving all other fields
     return {
       ...evaluation,
-      task: updatedTask as AmplifyTask
+      task: updatedTask as AmplifyTask,
+      // Explicitly preserve score results
+      scoreResults: evaluation.scoreResults
     };
   });
 }
@@ -739,9 +781,12 @@ function mergeTaskStageUpdate(
         stages: updatedStages
       };
 
+      // Return updated evaluation while preserving all other fields
       return {
         ...evaluation,
-        task: updatedTask as AmplifyTask
+        task: updatedTask as AmplifyTask,
+        // Explicitly preserve score results
+        scoreResults: evaluation.scoreResults
       };
     }
 
@@ -766,9 +811,12 @@ function mergeTaskStageUpdate(
       stages: updatedStages
     };
 
+    // Return updated evaluation while preserving all other fields
     return {
       ...evaluation,
-      task: updatedTask as AmplifyTask
+      task: updatedTask as AmplifyTask,
+      // Explicitly preserve score results
+      scoreResults: evaluation.scoreResults
     };
   });
 }

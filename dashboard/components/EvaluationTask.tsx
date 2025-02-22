@@ -250,6 +250,28 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   
   const accuracy = data.accuracy ?? 0;
 
+  // Parse score results
+  const parsedScoreResults = useMemo(() => {
+    if (!data.scoreResults) return [];
+    
+    console.log('Parsing score results:', {
+      count: data.scoreResults.length,
+      firstResult: data.scoreResults[0]
+    });
+    
+    return data.scoreResults.map(result => {
+      return parseScoreResult(result);
+    });
+  }, [data.scoreResults]);
+
+  console.log('GridContent render:', {
+    scoreResults: {
+      raw: data.scoreResults,
+      parsed: parsedScoreResults,
+      count: parsedScoreResults.length
+    }
+  });
+
   const stages = useMemo(() => 
     data.task?.stages?.items?.map(stage => ({
       key: stage.name,
@@ -334,6 +356,15 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
     return false;
   }
 
+  // Compare score results directly without parsing
+  if (!isEqual(prevData.scoreResults, nextData.scoreResults)) {
+    console.log('Score results changed:', {
+      prevCount: prevData.scoreResults?.length ?? 0,
+      nextCount: nextData.scoreResults?.length ?? 0
+    });
+    return false;
+  }
+
   // Compare essential task data
   if (
     prevData.processedItems !== nextData.processedItems ||
@@ -372,7 +403,7 @@ interface ParsedScoreResult {
 
 function parseScoreResult(result: any): ParsedScoreResult {
   if (!result) {
-    console.warn('Received null or undefined score result')
+    console.warn('Received null or undefined score result');
     return {
       id: '',
       value: '',
@@ -385,39 +416,32 @@ function parseScoreResult(result: any): ParsedScoreResult {
         text: null
       },
       itemId: null
+    };
+  }
+
+  // Cache parsed metadata to prevent repeated parsing
+  let parsedMetadata = result._parsedMetadata;
+  if (!parsedMetadata) {
+    try {
+      let metadata = result.metadata;
+      if (typeof metadata === 'string') {
+        metadata = JSON.parse(metadata);
+        if (typeof metadata === 'string') {
+          metadata = JSON.parse(metadata);
+        }
+      }
+      parsedMetadata = metadata || {};
+      // Cache the parsed result
+      result._parsedMetadata = parsedMetadata;
+    } catch (e) {
+      console.error('Error parsing metadata:', e);
+      parsedMetadata = {};
     }
   }
 
-  // Handle metadata parsing with better error handling
-  const parsedMetadata = (() => {
-    try {
-      let metadata = result.metadata
-      if (typeof metadata === 'string') {
-        metadata = JSON.parse(metadata)
-        if (typeof metadata === 'string') {
-          metadata = JSON.parse(metadata)
-        }
-      }
-      return metadata || {}
-    } catch (e) {
-      console.error('Error parsing metadata:', e)
-      return {}
-    }
-  })()
-
   // Extract results from nested structure if present
-  const firstResultKey = parsedMetadata?.results ? 
-    Object.keys(parsedMetadata.results)[0] : null
-  const scoreResult = firstResultKey && parsedMetadata.results ? 
-    parsedMetadata.results[firstResultKey] : null
-
-  // Log the parsing process for debugging
-  console.debug('Score result parsing:', {
-    originalResult: result,
-    parsedMetadata,
-    firstResultKey,
-    scoreResult
-  })
+  const firstResultKey = parsedMetadata?.results ? Object.keys(parsedMetadata.results)[0] : null;
+  const scoreResult = firstResultKey && parsedMetadata.results ? parsedMetadata.results[firstResultKey] : null;
 
   return {
     id: result.id || '',
@@ -431,7 +455,7 @@ function parseScoreResult(result: any): ParsedScoreResult {
       text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? null
     },
     itemId: result.itemId || parsedMetadata.item_id?.toString() || null
-  }
+  };
 }
 
 const DetailContent = React.memo(({ 
@@ -457,21 +481,17 @@ const DetailContent = React.memo(({
   commandDisplay?: 'hide' | 'show' | 'full'
   onCommandDisplayChange?: (display: 'show' | 'full') => void
 }) => {
+  // Add more detailed logging for DetailContent
   console.log('DetailContent render:', {
-    distributions: {
-      dataset: data.datasetClassDistribution,
-      predicted: data.predictedClassDistribution,
-      isBalanced: {
-        dataset: data.isDatasetClassDistributionBalanced,
-        predicted: data.isPredictedClassDistributionBalanced
-      }
-    },
     scoreResults: {
-      count: data.scoreResults?.length,
+      raw: data.scoreResults,
+      count: data.scoreResults?.length ?? 0,
       firstResult: data.scoreResults?.[0],
-      selectedId: selectedScoreResultId,
-      selectedResult: data.scoreResults?.find(r => r.id === selectedScoreResultId)
-    }
+      lastResult: data.scoreResults?.[data.scoreResults?.length - 1],
+      allResults: data.scoreResults // Log all results to see the full data
+    },
+    selectedScoreResultId,
+    hasSelectedResult: !!selectedScoreResultId
   });
 
   const [containerWidth, setContainerWidth] = useState(0)
@@ -482,6 +502,28 @@ const DetailContent = React.memo(({
   }>({ predicted: null, actual: null })
 
   const selectedScoreResult = data.scoreResults?.find(r => r.id === selectedScoreResultId) ?? null
+
+  // Parse score results with more detailed logging
+  const parsedScoreResults = useMemo(() => {
+    if (!data.scoreResults) return [];
+    
+    console.log('Parsing score results in DetailContent:', {
+      count: data.scoreResults.length,
+      firstResult: data.scoreResults[0],
+      lastResult: data.scoreResults[data.scoreResults.length - 1],
+      allResults: data.scoreResults // Log all results to see the full data
+    });
+    
+    const results = data.scoreResults.map(result => parseScoreResult(result));
+    
+    console.log('Parsed score results:', {
+      count: results.length,
+      firstResult: results[0],
+      lastResult: results[results.length - 1]
+    });
+    
+    return results;
+  }, [data.scoreResults]);
 
   useResizeObserver(containerRef, (entry) => {
     setContainerWidth(entry.contentRect.width)
@@ -503,25 +545,33 @@ const DetailContent = React.memo(({
     }))
   }
 
+  // Add logging for display conditions
   const isWideEnoughForTwo = containerWidth >= 800
   const isWideEnoughForThree = containerWidth >= 1180 && isFullWidth
-  
   const showAsColumns = isWideEnoughForTwo
-  const showMainPanel = !selectedScoreResult || isWideEnoughForThree
-  const showResultsList = !selectedScoreResult || showAsColumns
-  const showResultDetail = selectedScoreResult
+  const showMainPanel = true
+  const showResultsList = parsedScoreResults.length > 0
+  const showResultDetail = selectedScoreResult !== null
+
+  console.log('DetailContent render conditions:', {
+    hasScoreResults: !!data.scoreResults?.length,
+    parsedResultCount: parsedScoreResults.length,
+    showMainPanel,
+    showResultsList,
+    showResultDetail,
+    showAsColumns,
+    selectedScoreResult: selectedScoreResult?.id
+  });
 
   const handleScoreResultSelect = (result: Schema['ScoreResult']['type']) => {
+    console.log('Score result selected:', result.id);
     onSelectScoreResult?.(result.id)
   }
 
   const handleScoreResultClose = () => {
+    console.log('Score result detail closed');
     onSelectScoreResult?.(null)
   }
-
-  const parsedScoreResults = useMemo(() => {
-    return data.scoreResults?.map(parseScoreResult) ?? []
-  }, [data.scoreResults])
 
   return (
     <div 
@@ -532,7 +582,7 @@ const DetailContent = React.memo(({
         style={{
           gridTemplateColumns: isWideEnoughForThree && selectedScoreResult 
             ? '1fr 1fr 1fr' 
-            : isWideEnoughForTwo
+            : isWideEnoughForTwo && parsedScoreResults.length > 0
               ? selectedScoreResult 
                 ? '1fr 1fr'  // Show results list and detail only
                 : '1fr 1fr'  // Show main and results list
@@ -642,7 +692,7 @@ const DetailContent = React.memo(({
                   </div>
                 )}
 
-                {!showAsColumns && data.scoreResults && data.scoreResults.length > 0 && (
+                {!showAsColumns && parsedScoreResults.length > 0 && (
                   <div className="mt-6">
                     <EvaluationTaskScoreResults 
                       results={parsedScoreResults} 
@@ -659,7 +709,7 @@ const DetailContent = React.memo(({
           </div>
         )}
 
-        {showAsColumns && showResultsList && data.scoreResults && data.scoreResults.length > 0 && (
+        {showAsColumns && parsedScoreResults.length > 0 && (
           <div className="w-full h-full relative">
             <div className="absolute inset-0 pr-0">
               <EvaluationTaskScoreResults 
@@ -687,7 +737,28 @@ const DetailContent = React.memo(({
       </div>
     </div>
   )
-})
+}, (prevProps, nextProps) => {
+  // Add logging for memo comparison
+  const shouldUpdate = 
+    prevProps.extra !== nextProps.extra || 
+    prevProps.isSelected !== nextProps.isSelected ||
+    prevProps.selectedScoreResultId !== nextProps.selectedScoreResultId ||
+    prevProps.isFullWidth !== nextProps.isFullWidth ||
+    prevProps.commandDisplay !== nextProps.commandDisplay ||
+    prevProps.data.scoreResults?.length !== nextProps.data.scoreResults?.length ||
+    !isEqual(prevProps.data.scoreResults, nextProps.data.scoreResults);
+
+  console.log('DetailContent memo comparison:', {
+    shouldUpdate,
+    prevScoreResultCount: prevProps.data.scoreResults?.length ?? 0,
+    nextScoreResultCount: nextProps.data.scoreResults?.length ?? 0,
+    scoreResultsChanged: !isEqual(prevProps.data.scoreResults, nextProps.data.scoreResults),
+    prevFirstResult: prevProps.data.scoreResults?.[0],
+    nextFirstResult: nextProps.data.scoreResults?.[0]
+  });
+
+  return !shouldUpdate;
+});
 
 export default function EvaluationTask({ 
   variant = 'grid',
@@ -707,6 +778,20 @@ export default function EvaluationTask({
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay);
 
   const data = task.data ?? {} as EvaluationTaskData
+
+  // Add logging for incoming data
+  console.log('EvaluationTask render:', {
+    taskId: task.id,
+    variant,
+    scoreResults: {
+      count: data.scoreResults?.length ?? 0,
+      firstResult: data.scoreResults?.[0],
+      lastResult: data.scoreResults?.[data.scoreResults?.length - 1],
+      allResults: data.scoreResults // Log all results to see the full data
+    },
+    status: data.status,
+    taskStatus: data.task?.status
+  });
 
   const metrics = useMemo(() => 
     variant === 'detail' ? 
@@ -870,26 +955,36 @@ export default function EvaluationTask({
           {headerContent}
         </TaskHeader>
       )}
-      renderContent={(props) => (
-        <TaskContent {...props} hideTaskStatus={true}>
-          {variant === 'grid' ? (
-            <GridContent data={data} extra={extra} isSelected={isSelected} />
-          ) : (
-            <DetailContent 
-              data={data}
-              isFullWidth={isFullWidth ?? false}
-              metrics={metrics}
-              metricsVariant="detail"
-              selectedScoreResultId={selectedScoreResultId}
-              onSelectScoreResult={onSelectScoreResult}
-              extra={extra}
-              isSelected={isSelected}
-              commandDisplay={commandDisplay}
-              onCommandDisplayChange={setCommandDisplay}
-            />
-          )}
-        </TaskContent>
-      )}
+      renderContent={(props) => {
+        // Add logging for content rendering decision
+        console.log('EvaluationTask renderContent:', {
+          variant,
+          hasScoreResults: !!data.scoreResults?.length,
+          scoreResultCount: data.scoreResults?.length ?? 0,
+          isDetailView: variant === 'detail'
+        });
+
+        return (
+          <TaskContent {...props} hideTaskStatus={true}>
+            {variant === 'grid' ? (
+              <GridContent data={data} extra={extra} isSelected={isSelected} />
+            ) : (
+              <DetailContent 
+                data={data}
+                isFullWidth={isFullWidth ?? false}
+                metrics={metrics}
+                metricsVariant="detail"
+                selectedScoreResultId={selectedScoreResultId}
+                onSelectScoreResult={onSelectScoreResult}
+                extra={extra}
+                isSelected={isSelected}
+                commandDisplay={commandDisplay}
+                onCommandDisplayChange={setCommandDisplay}
+              />
+            )}
+          </TaskContent>
+        );
+      }}
     />
   )
 }
