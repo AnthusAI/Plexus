@@ -10,8 +10,8 @@ import { EditableField } from '@/components/ui/editable-field'
 import { amplifyClient } from '@/utils/amplify-client'
 import { generateClient } from '@aws-amplify/api'
 import type { Schema } from '@/amplify/data/resource'
-import NestedScorecardCard from './ScorecardCard'
-import { toast } from "sonner";
+import { ScoreComponent } from '@/components/ui/score-component'
+import { toast } from "sonner"
 
 const client = generateClient<Schema>()
 
@@ -46,7 +46,7 @@ export interface ScorecardData {
   }
 }
 
-interface ScorecardCardProps extends React.HTMLAttributes<HTMLDivElement> {
+interface ScorecardComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   score: ScorecardData
   onEdit?: () => void
   onViewData?: () => void
@@ -325,9 +325,9 @@ const DetailContent = React.memo(({
               </div>
               <div className="bg-background rounded-lg p-4 w-full">
                 <div className="@container w-full">
-                  <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-2 w-full">
+                  <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-4 w-full">
                     {section.scores?.items?.map((score) => (
-                      <NestedScorecardCard
+                      <ScoreComponent
                         key={score.id}
                         variant="grid"
                         score={{
@@ -338,7 +338,6 @@ const DetailContent = React.memo(({
                           type: score.type,
                           configuration: score.configuration,
                           order: score.order,
-                          externalId: '',
                           icon: <CheckSquare className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
                         }}
                         onClick={() => onScoreSelect?.(score, section.id)}
@@ -362,7 +361,7 @@ const DetailContent = React.memo(({
   )
 })
 
-export default function ScorecardCard({ 
+export default function ScorecardComponent({ 
   score, 
   onEdit, 
   onViewData, 
@@ -376,7 +375,7 @@ export default function ScorecardCard({
   onScoreSelect,
   className, 
   ...props 
-}: ScorecardCardProps) {
+}: ScorecardComponentProps) {
   const [editedScore, setEditedScore] = React.useState<ScorecardData>(score)
   const [hasChanges, setHasChanges] = React.useState(false)
 

@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/card'
 import { MoreHorizontal, Pencil, Database } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
-import { ScoreCard, type ScoreData } from '@/components/ui/score-card'
+import { ScoreComponent, type ScoreData } from '@/components/ui/score-component'
 
 export interface ScorecardDetailData {
   id: string
@@ -100,7 +100,7 @@ const DetailContent = React.memo(({
                 <h4 className="font-medium text-sm text-muted-foreground">{section.name}</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {section.scores?.items?.map(score => (
-                    <ScoreCard
+                    <ScoreComponent
                       key={score.id}
                       score={score}
                       onClick={() => onScoreSelect?.(score)}
@@ -118,7 +118,7 @@ const DetailContent = React.memo(({
         section.scores?.items?.map(score => {
           if (score.id === maximizedScoreId) {
             return (
-              <ScoreCard
+              <ScoreComponent
                 key={score.id}
                 score={score}
                 variant="detail"
