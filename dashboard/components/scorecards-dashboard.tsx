@@ -1,7 +1,6 @@
 "use client"
 import React, { useState, useEffect } from "react"
 import { Button } from "./ui/button"
-import { ScorecardForm } from "./scorecards/create-edit-form"
 import { amplifyClient } from "@/utils/amplify-client"
 import type { Schema } from "@/amplify/data/resource"
 import type { AuthModeStrategyType } from "aws-amplify/datastore"
@@ -59,7 +58,6 @@ export default function ScorecardsComponent() {
       }
     }>
   } | null>(null)
-  const [isEditing, setIsEditing] = useState(false)
   const [accountId, setAccountId] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
@@ -196,17 +194,13 @@ export default function ScorecardsComponent() {
   const handleCreate = async () => {
     if (!accountId) return
 
-    const newScorecard = {
+    const blankScorecard = {
+      id: '',
       name: '',
       key: '',
       externalId: '',
       description: '',
       accountId,
-    }
-
-    setSelectedScorecard({
-      ...newScorecard,
-      id: '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       account: async () => amplifyClient.Account.get({ id: accountId }),
@@ -224,19 +218,17 @@ export default function ScorecardsComponent() {
       tasks: async (): Promise<AmplifyListResult<Schema['Task']['type']>> => {
         return listFromModel<Schema['Task']['type']>(
           client.models.Task,
-          { scorecardId: { eq: '' } }  // Empty ID for new scorecard
+          { scorecardId: { eq: '' } }
         );
       }
-    } as Schema['Scorecard']['type'])
-    setIsEditing(true)
+    } as Schema['Scorecard']['type']
+
+    setSelectedScorecard(blankScorecard)
+    setSelectedScorecardSections({ items: [] })
   }
 
   // Handle editing an existing scorecard
   const handleEdit = async (scorecard: Schema['Scorecard']['type']) => {
-    if (isEditing) {
-      setIsEditing(false)
-    }
-    
     try {
       console.log('handleEdit: Starting to edit scorecard:', scorecard.id)
       
@@ -314,14 +306,13 @@ export default function ScorecardsComponent() {
       
       console.log('Setting selected scorecard with data:', fullScorecardData)
       setSelectedScorecard(fullScorecardData)
-      setIsEditing(true)
     } catch (error) {
       console.error('Error fetching scorecard details:', error)
     }
   }
 
   const renderSelectedScorecard = () => {
-    if (!selectedScorecard || !selectedScorecardSections) return null
+    if (!selectedScorecard) return null
 
     const scorecardData = {
       id: selectedScorecard.id,
@@ -330,7 +321,9 @@ export default function ScorecardsComponent() {
       description: selectedScorecard.description || '',
       type: 'scorecard',
       configuration: {},
-      order: 0
+      order: 0,
+      externalId: selectedScorecard.externalId || '',
+      sections: selectedScorecardSections || { items: [] }
     }
 
     return (
@@ -347,6 +340,9 @@ export default function ScorecardsComponent() {
         onClose={() => {
           setSelectedScorecard(null)
           setIsFullWidth(false)
+        }}
+        onSave={async () => {
+          await fetchScorecards()
         }}
       />
     )
@@ -427,59 +423,45 @@ export default function ScorecardsComponent() {
             width: `${leftPanelWidth}%`
           } : undefined}
         >
-          {isEditing ? (
-            <ScorecardForm
-              scorecard={selectedScorecard}
-              accountId={accountId!}
-              onSave={async () => {
-                setIsEditing(false)
-              }}
-              onCancel={() => {
-                setIsEditing(false)
-                setSelectedScorecard(null)
-              }}
-            />
-          ) : (
-            <div className="space-y-2 p-1.5">
-              <div className="flex justify-end">
-                <Button 
-                  onClick={handleCreate} 
-                  variant="ghost" 
-                  className="bg-card hover:bg-accent text-muted-foreground"
-                >
-                  New Scorecard
-                </Button>
-              </div>
-              <div className="space-y-2 grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-2">
-                {scorecards
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map(scorecard => {
-                    const scorecardData = {
-                      id: scorecard.id,
-                      name: scorecard.name,
-                      key: scorecard.key || '',
-                      description: scorecard.description || '',
-                      type: 'scorecard',
-                      configuration: {},
-                      order: 0,
-                      externalId: scorecard.externalId || '',
-                      scoreCount: scorecardScoreCounts[scorecard.id] || 0
-                    }
-
-                    return (
-                      <ScorecardCard
-                        key={scorecard.id}
-                        variant="grid"
-                        score={scorecardData}
-                        isSelected={selectedScorecard?.id === scorecard.id}
-                        onClick={() => setSelectedScorecard(scorecard)}
-                        onEdit={() => handleEdit(scorecard)}
-                      />
-                    )
-                  })}
-              </div>
+          <div className="space-y-2 p-1.5">
+            <div className="flex justify-end">
+              <Button 
+                onClick={handleCreate} 
+                variant="ghost" 
+                className="bg-card hover:bg-accent text-muted-foreground"
+              >
+                New Scorecard
+              </Button>
             </div>
-          )}
+            <div className="space-y-2 grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-2">
+              {scorecards
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map(scorecard => {
+                  const scorecardData = {
+                    id: scorecard.id,
+                    name: scorecard.name,
+                    key: scorecard.key || '',
+                    description: scorecard.description || '',
+                    type: 'scorecard',
+                    configuration: {},
+                    order: 0,
+                    externalId: scorecard.externalId || '',
+                    scoreCount: scorecardScoreCounts[scorecard.id] || 0
+                  }
+
+                  return (
+                    <ScorecardCard
+                      key={scorecard.id}
+                      variant="grid"
+                      score={scorecardData}
+                      isSelected={selectedScorecard?.id === scorecard.id}
+                      onClick={() => setSelectedScorecard(scorecard)}
+                      onEdit={() => handleEdit(scorecard)}
+                    />
+                  )
+                })}
+            </div>
+          </div>
         </div>
 
         {selectedScorecard && !isNarrowViewport && !isFullWidth && (
@@ -492,7 +474,7 @@ export default function ScorecardsComponent() {
           </div>
         )}
 
-        {selectedScorecard && !isEditing && !isNarrowViewport && (
+        {selectedScorecard && !isNarrowViewport && (
           <div 
             className={`
               ${isFullWidth ? 'w-full' : ''}
