@@ -1,9 +1,10 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, RectangleVertical } from 'lucide-react'
+import { MoreHorizontal, X, Square, RectangleVertical, Save, X as Cancel } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { Button } from '@/components/ui/button'
 
 export interface ScoreData {
   id: string
@@ -23,6 +24,7 @@ interface ScoreCardProps extends React.HTMLAttributes<HTMLDivElement> {
   onClose?: () => void
   onToggleFullWidth?: () => void
   isFullWidth?: boolean
+  onSave?: (configuration: any) => Promise<void>
 }
 
 export function ScoreCard({
@@ -33,9 +35,44 @@ export function ScoreCard({
   onClose,
   onToggleFullWidth,
   isFullWidth,
+  onSave,
   className,
   ...props
 }: ScoreCardProps) {
+  const [editedConfig, setEditedConfig] = React.useState<string>('')
+  const [isEditing, setIsEditing] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    // Reset edited config when score changes
+    setEditedConfig(JSON.stringify(score.configuration, null, 2))
+    setIsEditing(false)
+    setError(null)
+  }, [score])
+
+  const handleEdit = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setEditedConfig(e.target.value)
+    setIsEditing(true)
+    setError(null)
+  }
+
+  const handleSave = async () => {
+    try {
+      const parsedConfig = JSON.parse(editedConfig)
+      await onSave?.(parsedConfig)
+      setIsEditing(false)
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Invalid JSON format')
+    }
+  }
+
+  const handleCancel = () => {
+    setEditedConfig(JSON.stringify(score.configuration, null, 2))
+    setIsEditing(false)
+    setError(null)
+  }
+
   if (variant === 'detail') {
     return (
       <Card
@@ -68,14 +105,41 @@ export function ScoreCard({
               />
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto w-full">
-            <pre className="p-4 bg-background rounded-lg overflow-x-auto whitespace-pre-wrap break-words w-full max-w-full">
-              <code className="block w-full overflow-x-auto">
-                {/* Temporarily hidden for debugging */}
-                {/* {JSON.stringify(score.configuration, null, 2)} */}
-                [Configuration display temporarily hidden for debugging]
-              </code>
-            </pre>
+          <div className="flex-1 overflow-hidden w-full flex flex-col">
+            <div className="flex-1 min-h-0 w-full relative bg-background rounded-lg p-1">
+              <textarea
+                className="w-full h-full absolute inset-0 font-mono text-sm p-4 resize-none bg-transparent border-0 focus:ring-0 focus:outline-none"
+                value={editedConfig}
+                onChange={handleEdit}
+                spellCheck={false}
+              />
+            </div>
+            {error && (
+              <div className="text-sm text-destructive mt-2 px-1">
+                {error}
+              </div>
+            )}
+            {isEditing && (
+              <div className="flex justify-end gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancel}
+                  className="flex items-center gap-1"
+                >
+                  <Cancel className="h-4 w-4" />
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  className="flex items-center gap-1"
+                >
+                  <Save className="h-4 w-4" />
+                  Save Changes
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </Card>

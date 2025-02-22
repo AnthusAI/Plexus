@@ -67,44 +67,70 @@ const DetailContent = React.memo(({
   data,
   isFullWidth,
   isSelected,
-  onScoreSelect
+  onScoreSelect,
+  maximizedScoreId,
+  onScoreMaximize
 }: { 
   data: ScorecardDetailData
   isFullWidth: boolean
   isSelected?: boolean
   onScoreSelect?: (score: any) => void
+  maximizedScoreId?: string | null
+  onScoreMaximize?: (scoreId: string | null) => void
 }) => {
   return (
     <div className="space-y-4 px-1">
-      <div>
-        <h3 className="text-lg font-semibold">{data.title}</h3>
-        <p className="text-sm text-muted-foreground">{data.description}</p>
-      </div>
-      
-      <div className="space-y-2">
-        <div className="text-sm">
-          <div><span className="font-medium">Key:</span> {data.key}</div>
-          <div><span className="font-medium">External ID:</span> {data.externalId}</div>
-        </div>
-      </div>
-
-      <div className="space-y-6">
-        {data.sections?.items?.map(section => (
-          <div key={section.id} className="space-y-2">
-            <h4 className="font-medium text-sm text-muted-foreground">{section.name}</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-              {section.scores?.items?.map(score => (
-                <ScoreCard
-                  key={score.id}
-                  score={score}
-                  onClick={() => onScoreSelect?.(score)}
-                  variant="grid"
-                />
-              ))}
+      {!maximizedScoreId && (
+        <>
+          <div>
+            <h3 className="text-lg font-semibold">{data.title}</h3>
+            <p className="text-sm text-muted-foreground">{data.description}</p>
+          </div>
+          
+          <div className="space-y-2">
+            <div className="text-sm">
+              <div><span className="font-medium">Key:</span> {data.key}</div>
+              <div><span className="font-medium">External ID:</span> {data.externalId}</div>
             </div>
           </div>
-        ))}
-      </div>
+
+          <div className="space-y-6">
+            {data.sections?.items?.map(section => (
+              <div key={section.id} className="space-y-2">
+                <h4 className="font-medium text-sm text-muted-foreground">{section.name}</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {section.scores?.items?.map(score => (
+                    <ScoreCard
+                      key={score.id}
+                      score={score}
+                      onClick={() => onScoreSelect?.(score)}
+                      variant="grid"
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {maximizedScoreId && data.sections?.items?.map(section => 
+        section.scores?.items?.map(score => {
+          if (score.id === maximizedScoreId) {
+            return (
+              <ScoreCard
+                key={score.id}
+                score={score}
+                variant="detail"
+                isFullWidth={true}
+                onToggleFullWidth={() => onScoreMaximize?.(null)}
+                onClose={() => onScoreMaximize?.(null)}
+              />
+            );
+          }
+          return null;
+        })
+      )}
     </div>
   )
 })
@@ -119,6 +145,8 @@ export default function ScorecardDetailView({
   className, 
   ...props 
 }: ScorecardDetailViewProps) {
+  const [maximizedScoreId, setMaximizedScoreId] = React.useState<string | null>(null);
+
   return (
     <Card
       className={cn(
@@ -136,42 +164,46 @@ export default function ScorecardDetailView({
               data={data} 
               isFullWidth={isFullWidth || false}
               onScoreSelect={onScoreSelect}
+              maximizedScoreId={maximizedScoreId}
+              onScoreMaximize={setMaximizedScoreId}
             />
           )}
         </div>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            <button
-              type="button"
-              className="inline-flex items-center justify-center h-8 w-8 rounded-md bg-border hover:bg-accent hover:text-accent-foreground"
-              aria-label="Open menu"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
-              {onEdit && (
-                <DropdownMenu.Item 
-                  className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                  onSelect={onEdit}
-                >
-                  <Pencil className="mr-2 h-4 w-4" />
-                  Edit
-                </DropdownMenu.Item>
-              )}
-              {onViewData && (
-                <DropdownMenu.Item 
-                  className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                  onSelect={onViewData}
-                >
-                  <Database className="mr-2 h-4 w-4" />
-                  View Data
-                </DropdownMenu.Item>
-              )}
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+        {!maximizedScoreId && (
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              <button
+                type="button"
+                className="inline-flex items-center justify-center h-8 w-8 rounded-md bg-border hover:bg-accent hover:text-accent-foreground"
+                aria-label="Open menu"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+                {onEdit && (
+                  <DropdownMenu.Item 
+                    className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                    onSelect={onEdit}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit
+                  </DropdownMenu.Item>
+                )}
+                {onViewData && (
+                  <DropdownMenu.Item 
+                    className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                    onSelect={onViewData}
+                  >
+                    <Database className="mr-2 h-4 w-4" />
+                    View Data
+                  </DropdownMenu.Item>
+                )}
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+        )}
       </div>
     </Card>
   )
