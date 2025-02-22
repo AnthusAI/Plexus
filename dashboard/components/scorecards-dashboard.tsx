@@ -38,6 +38,7 @@ import { generateClient } from "aws-amplify/data"
 import ScorecardCard from "./scorecards/ScorecardCard"
 import { cn } from "@/lib/utils"
 import { ScoreCard } from "./ui/score-card"
+import ScorecardDetailView from "./scorecards/ScorecardDetailView"
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -82,6 +83,7 @@ export default function ScorecardsComponent() {
   const [leftPanelWidth, setLeftPanelWidth] = useState(40)
   const [scorecardScoreCounts, setScorecardScoreCounts] = useState<Record<string, number>>({})
   const [scorecardDetailWidth, setScorecardDetailWidth] = useState(50)
+  const [maximizedScoreId, setMaximizedScoreId] = useState<string | null>(null)
 
   // Initial data load
   const fetchScorecards = async () => {
@@ -332,7 +334,7 @@ export default function ScorecardsComponent() {
   }
 
   const renderSelectedScorecard = () => {
-    if (!selectedScorecard) return null
+    if (!selectedScorecard || !selectedScorecardSections) return null;
 
     const scorecardData = {
       id: selectedScorecard.id,
@@ -347,47 +349,64 @@ export default function ScorecardsComponent() {
     }
 
     return (
-      <ScorecardCard
-        variant="detail"
-        score={scorecardData}
-        onEdit={() => handleEdit(selectedScorecard)}
-        onViewData={() => {
-          setSelectedScorecardForDataset(selectedScorecard.id)
-          setShowDatasetConfig(true)
-        }}
-        isFullWidth={isFullWidth}
-        onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-        onClose={() => {
-          setSelectedScorecard(null)
-          setSelectedScore(null)
-          setIsFullWidth(false)
-        }}
-        onSave={async () => {
-          await fetchScorecards()
-        }}
-        onScoreSelect={handleScoreSelect}
-      />
-    )
-  }
+      <div className={cn(
+        "h-full overflow-y-auto overflow-x-hidden",
+        maximizedScoreId ? "hidden" : ""
+      )}
+      style={selectedScore && !maximizedScoreId ? {
+        width: `${scorecardDetailWidth}%`
+      } : { width: '100%' }}>
+        <ScorecardCard
+          variant="detail"
+          score={scorecardData}
+          onEdit={() => handleEdit(selectedScorecard)}
+          onViewData={() => {
+            setSelectedScorecardForDataset(selectedScorecard.id)
+            setShowDatasetConfig(true)
+          }}
+          isFullWidth={isFullWidth}
+          onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+          onClose={() => {
+            setSelectedScorecard(null)
+            setSelectedScore(null)
+            setIsFullWidth(false)
+          }}
+          onSave={async () => {
+            await fetchScorecards()
+          }}
+          onScoreSelect={handleScoreSelect}
+        />
+      </div>
+    );
+  };
 
   const renderSelectedScore = () => {
-    if (!selectedScore) return null
+    if (!selectedScore) return null;
 
     return (
-      <ScoreCard
-        variant="detail"
-        score={selectedScore}
-        isFullWidth={isFullWidth}
-        onToggleFullWidth={() => {
-          setIsFullWidth(!isFullWidth)
-          if (!isFullWidth) {
-            setSelectedScorecard(null)
-          }
-        }}
-        onClose={() => setSelectedScore(null)}
-      />
-    )
-  }
+      <div className={cn(
+        "h-full overflow-y-auto overflow-x-hidden",
+        maximizedScoreId ? "w-full" : ""
+      )}
+      style={!maximizedScoreId ? {
+        width: `${100 - scorecardDetailWidth}%`
+      } : undefined}>
+        <ScoreCard
+          score={selectedScore}
+          variant="detail"
+          isFullWidth={maximizedScoreId === selectedScore.id}
+          onToggleFullWidth={() => setMaximizedScoreId(maximizedScoreId ? null : selectedScore.id)}
+          onClose={() => {
+            setSelectedScore(null);
+            setMaximizedScoreId(null);
+          }}
+          onSave={async (configuration) => {
+            // ... existing save logic ...
+          }}
+        />
+      </div>
+    );
+  };
 
   const handleDragStart = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -452,7 +471,7 @@ export default function ScorecardsComponent() {
   }
 
   return (
-    <div className="flex flex-col h-full w-full">
+    <div className="h-full flex flex-col">
       <div className="flex h-full w-full">
         {/* Grid Panel */}
         <div 
@@ -512,7 +531,7 @@ export default function ScorecardsComponent() {
         </div>
 
         {/* Resize Handle between Grid and Detail */}
-        {selectedScorecard && !isFullWidth && (
+        {selectedScorecard && !isFullWidth && !selectedScore && (
           <div
             className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
             onMouseDown={handleDragStart}
@@ -523,79 +542,48 @@ export default function ScorecardsComponent() {
         )}
 
         {/* Detail Panel Container */}
-        {selectedScorecard && (
-          <div className={cn(
-            "flex h-full items-stretch",
-            isFullWidth ? "w-full" : "flex-1",
-            "transition-all duration-200"
-          )}>
-            {/* Scorecard Detail */}
-            <div className={cn(
-              "h-full overflow-y-auto overflow-x-hidden",
-              selectedScore ? "" : "w-full",
-              "transition-all duration-200"
-            )}
-            style={selectedScore ? {
-              width: `${scorecardDetailWidth}%`,
-              minWidth: "30%",
-              maxWidth: "70%"
-            } : undefined}>
-              {renderSelectedScorecard()}
+        <div className="flex-1 flex overflow-hidden">
+          {renderSelectedScorecard()}
+          
+          {/* Resize Handle between Scorecard and Score */}
+          {selectedScore && !maximizedScoreId && (
+            <div
+              className="w-[12px] relative cursor-col-resize flex-shrink-0 group mx-1"
+              onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => {
+                e.preventDefault()
+                const startX = e.pageX
+                const startDetailWidth = scorecardDetailWidth
+                const container = e.currentTarget.parentElement
+                if (!container) return
+
+                const handleDrag = (e: MouseEvent) => {
+                  const deltaX = e.pageX - startX
+                  const containerWidth = container.getBoundingClientRect().width
+                  const deltaPercent = (deltaX / containerWidth) * 100
+                  const newDetailWidth = Math.min(Math.max(startDetailWidth + deltaPercent, 30), 70)
+                  requestAnimationFrame(() => {
+                    setScorecardDetailWidth(newDetailWidth)
+                  })
+                }
+
+                const handleDragEnd = () => {
+                  document.removeEventListener('mousemove', handleDrag)
+                  document.removeEventListener('mouseup', handleDragEnd)
+                  document.body.style.cursor = ''
+                }
+
+                document.body.style.cursor = 'col-resize'
+                document.addEventListener('mousemove', handleDrag)
+                document.addEventListener('mouseup', handleDragEnd)
+              }}
+            >
+              <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                group-hover:bg-accent" />
             </div>
-
-            {/* Resize Handle for Detail/Score */}
-            {selectedScore && (
-              <div
-                className="w-[12px] relative cursor-col-resize flex-shrink-0 group mx-1"
-                onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => {
-                  e.preventDefault()
-                  const startX = e.pageX
-                  const startDetailWidth = scorecardDetailWidth
-                  const parentContainer = e.currentTarget.parentElement
-
-                  const handleDrag = (e: MouseEvent) => {
-                    if (!parentContainer) return
-                    const rect = parentContainer.getBoundingClientRect()
-                    const delta = e.pageX - startX
-                    const deltaPercent = (delta / rect.width) * 100
-                    const newWidth = Math.min(Math.max(startDetailWidth + deltaPercent, 30), 70)
-                    setScorecardDetailWidth(newWidth)
-                  }
-
-                  const handleDragEnd = () => {
-                    document.removeEventListener('mousemove', handleDrag)
-                    document.removeEventListener('mouseup', handleDragEnd)
-                    document.body.style.cursor = ''
-                  }
-
-                  document.addEventListener('mousemove', handleDrag)
-                  document.addEventListener('mouseup', handleDragEnd)
-                  document.body.style.cursor = 'col-resize'
-                }}
-              >
-                <div className="absolute inset-0 rounded-full transition-colors duration-150 
-                  group-hover:bg-accent" />
-              </div>
-            )}
-
-            {/* Score Detail */}
-            {selectedScore && (
-              <div className={cn(
-                "h-full overflow-y-auto overflow-x-hidden",
-                "transition-all duration-200"
-              )}
-              style={{
-                width: `${100 - scorecardDetailWidth}%`,
-                minWidth: "30%",
-                maxWidth: "70%"
-              }}>
-                <div className="w-full h-full">
-                  {renderSelectedScore()}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+          )}
+          
+          {renderSelectedScore()}
+        </div>
       </div>
 
       {showDatasetConfig && selectedScorecardForDataset && (
