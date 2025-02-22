@@ -57,6 +57,7 @@ interface ScorecardCardProps extends React.HTMLAttributes<HTMLDivElement> {
   onClose?: () => void
   variant?: 'grid' | 'detail'
   onSave?: () => void
+  onScoreSelect?: (score: any, sectionId: string) => void
 }
 
 const GridContent = React.memo(({ 
@@ -98,6 +99,7 @@ interface DetailContentProps {
   onSave?: () => void
   onCancel?: () => void
   hasChanges?: boolean
+  onScoreSelect?: (score: any, sectionId: string) => void
 }
 
 const DetailContent = React.memo(({ 
@@ -114,7 +116,8 @@ const DetailContent = React.memo(({
   onDeleteSection,
   onSave,
   onCancel,
-  hasChanges
+  hasChanges,
+  onScoreSelect
 }: DetailContentProps) => {
   const [editingSectionId, setEditingSectionId] = React.useState<string | null>(null)
   const [sectionNameChanges, setSectionNameChanges] = React.useState<Record<string, string>>({})
@@ -338,7 +341,7 @@ const DetailContent = React.memo(({
                           externalId: '',
                           icon: <CheckSquare className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
                         }}
-                        onEdit={() => undefined}
+                        onClick={() => onScoreSelect?.(score, section.id)}
                       />
                     ))}
                   </div>
@@ -370,6 +373,7 @@ export default function ScorecardCard({
   onToggleFullWidth,
   onClose,
   onSave,
+  onScoreSelect,
   className, 
   ...props 
 }: ScorecardCardProps) {
@@ -511,6 +515,7 @@ export default function ScorecardCard({
               onSave={handleSave}
               onCancel={handleCancel}
               hasChanges={hasChanges}
+              onScoreSelect={onScoreSelect}
             />
           )}
         </div>

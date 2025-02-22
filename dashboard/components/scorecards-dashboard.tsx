@@ -23,7 +23,10 @@ import {
   Pencil, 
   MoreHorizontal,
   Plus,
-  Database
+  Database,
+  RectangleVertical,
+  Square,
+  X
 } from "lucide-react"
 import { ScoreCount } from "./scorecards/score-count"
 import { CardButton } from "./CardButton"
@@ -33,6 +36,8 @@ import { AmplifyListResult } from '@/types/shared'
 import { getClient } from "@/utils/amplify-client"
 import { generateClient } from "aws-amplify/data"
 import ScorecardCard from "./scorecards/ScorecardCard"
+import { cn } from "@/lib/utils"
+import { ScoreCard } from "./ui/score-card"
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -40,6 +45,16 @@ export default function ScorecardsComponent() {
   const [scorecards, setScorecards] = useState<Schema['Scorecard']['type'][]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedScorecard, setSelectedScorecard] = useState<Schema['Scorecard']['type'] | null>(null)
+  const [selectedScore, setSelectedScore] = useState<{
+    id: string
+    name: string
+    key: string
+    description: string
+    order: number
+    type: string
+    configuration: any
+    sectionId: string
+  } | null>(null)
   const [selectedScorecardSections, setSelectedScorecardSections] = useState<{
     items: Array<{
       id: string
@@ -66,6 +81,7 @@ export default function ScorecardsComponent() {
   const [selectedScorecardForDataset, setSelectedScorecardForDataset] = useState<string>("")
   const [leftPanelWidth, setLeftPanelWidth] = useState(40)
   const [scorecardScoreCounts, setScorecardScoreCounts] = useState<Record<string, number>>({})
+  const [scorecardDetailWidth, setScorecardDetailWidth] = useState(50)
 
   // Initial data load
   const fetchScorecards = async () => {
@@ -311,6 +327,10 @@ export default function ScorecardsComponent() {
     }
   }
 
+  const handleScoreSelect = (score: any, sectionId: string) => {
+    setSelectedScore({ ...score, sectionId })
+  }
+
   const renderSelectedScorecard = () => {
     if (!selectedScorecard) return null
 
@@ -339,11 +359,32 @@ export default function ScorecardsComponent() {
         onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
         onClose={() => {
           setSelectedScorecard(null)
+          setSelectedScore(null)
           setIsFullWidth(false)
         }}
         onSave={async () => {
           await fetchScorecards()
         }}
+        onScoreSelect={handleScoreSelect}
+      />
+    )
+  }
+
+  const renderSelectedScore = () => {
+    if (!selectedScore) return null
+
+    return (
+      <ScoreCard
+        variant="detail"
+        score={selectedScore}
+        isFullWidth={isFullWidth}
+        onToggleFullWidth={() => {
+          setIsFullWidth(!isFullWidth)
+          if (!isFullWidth) {
+            setSelectedScorecard(null)
+          }
+        }}
+        onClose={() => setSelectedScore(null)}
       />
     )
   }
@@ -355,7 +396,7 @@ export default function ScorecardsComponent() {
 
     const handleDrag = (e: MouseEvent) => {
       const delta = e.pageX - startX
-      const newWidth = Math.min(Math.max(startWidth + (delta / window.innerWidth) * 100, 20), 80)
+      const newWidth = Math.min(Math.max(startWidth + (delta / window.innerWidth) * 100, 30), 70)
       setLeftPanelWidth(newWidth)
     }
 
@@ -411,19 +452,20 @@ export default function ScorecardsComponent() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex h-full">
+    <div className="flex flex-col h-full w-full">
+      <div className="flex h-full w-full">
+        {/* Grid Panel */}
         <div 
-          className={`
-            ${selectedScorecard && !isNarrowViewport && !isFullWidth ? '' : 'w-full'}
-            ${selectedScorecard && !isNarrowViewport && isFullWidth ? 'hidden' : ''}
-            h-full overflow-y-auto overflow-x-hidden @container
-          `}
-          style={selectedScorecard && !isNarrowViewport && !isFullWidth ? {
+          className={cn(
+            "h-full overflow-y-auto overflow-x-hidden",
+            selectedScore || (selectedScorecard && isFullWidth) ? "hidden" : selectedScorecard ? "flex" : "w-full",
+            "transition-all duration-200"
+          )}
+          style={selectedScorecard && !isFullWidth ? {
             width: `${leftPanelWidth}%`
           } : undefined}
         >
-          <div className="space-y-2 p-1.5">
+          <div className="space-y-2 p-1.5 w-full">
             <div className="flex justify-end">
               <Button 
                 onClick={handleCreate} 
@@ -433,38 +475,44 @@ export default function ScorecardsComponent() {
                 New Scorecard
               </Button>
             </div>
-            <div className="space-y-2 grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-2">
-              {scorecards
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map(scorecard => {
-                  const scorecardData = {
-                    id: scorecard.id,
-                    name: scorecard.name,
-                    key: scorecard.key || '',
-                    description: scorecard.description || '',
-                    type: 'scorecard',
-                    configuration: {},
-                    order: 0,
-                    externalId: scorecard.externalId || '',
-                    scoreCount: scorecardScoreCounts[scorecard.id] || 0
-                  }
+            <div className="@container">
+              <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-4">
+                {scorecards
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map(scorecard => {
+                    const scorecardData = {
+                      id: scorecard.id,
+                      name: scorecard.name,
+                      key: scorecard.key || '',
+                      description: scorecard.description || '',
+                      type: 'scorecard',
+                      configuration: {},
+                      order: 0,
+                      externalId: scorecard.externalId || '',
+                      scoreCount: scorecardScoreCounts[scorecard.id] || 0
+                    }
 
-                  return (
-                    <ScorecardCard
-                      key={scorecard.id}
-                      variant="grid"
-                      score={scorecardData}
-                      isSelected={selectedScorecard?.id === scorecard.id}
-                      onClick={() => setSelectedScorecard(scorecard)}
-                      onEdit={() => handleEdit(scorecard)}
-                    />
-                  )
-                })}
+                    return (
+                      <ScorecardCard
+                        key={scorecard.id}
+                        variant="grid"
+                        score={scorecardData}
+                        isSelected={selectedScorecard?.id === scorecard.id}
+                        onClick={() => {
+                          setSelectedScorecard(scorecard)
+                          setSelectedScore(null)
+                        }}
+                        onEdit={() => handleEdit(scorecard)}
+                      />
+                    )
+                  })}
+              </div>
             </div>
           </div>
         </div>
 
-        {selectedScorecard && !isNarrowViewport && !isFullWidth && (
+        {/* Resize Handle between Grid and Detail */}
+        {selectedScorecard && !isFullWidth && (
           <div
             className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
             onMouseDown={handleDragStart}
@@ -474,17 +522,78 @@ export default function ScorecardsComponent() {
           </div>
         )}
 
-        {selectedScorecard && !isNarrowViewport && (
-          <div 
-            className={`
-              ${isFullWidth ? 'w-full' : ''}
-              h-full overflow-y-auto overflow-x-hidden ml-4
-            `}
-            style={!isFullWidth ? {
-              width: `${100 - leftPanelWidth}%`
-            } : undefined}
-          >
-            {renderSelectedScorecard()}
+        {/* Detail Panel Container */}
+        {selectedScorecard && (
+          <div className={cn(
+            "flex h-full items-stretch",
+            isFullWidth ? "w-full" : "flex-1",
+            "transition-all duration-200"
+          )}>
+            {/* Scorecard Detail */}
+            <div className={cn(
+              "h-full overflow-y-auto overflow-x-hidden",
+              selectedScore ? "" : "w-full",
+              "transition-all duration-200"
+            )}
+            style={selectedScore ? {
+              width: `${scorecardDetailWidth}%`,
+              minWidth: "30%",
+              maxWidth: "70%"
+            } : undefined}>
+              {renderSelectedScorecard()}
+            </div>
+
+            {/* Resize Handle for Detail/Score */}
+            {selectedScore && (
+              <div
+                className="w-[12px] relative cursor-col-resize flex-shrink-0 group mx-1"
+                onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => {
+                  e.preventDefault()
+                  const startX = e.pageX
+                  const startDetailWidth = scorecardDetailWidth
+                  const parentContainer = e.currentTarget.parentElement
+
+                  const handleDrag = (e: MouseEvent) => {
+                    if (!parentContainer) return
+                    const rect = parentContainer.getBoundingClientRect()
+                    const delta = e.pageX - startX
+                    const deltaPercent = (delta / rect.width) * 100
+                    const newWidth = Math.min(Math.max(startDetailWidth + deltaPercent, 30), 70)
+                    setScorecardDetailWidth(newWidth)
+                  }
+
+                  const handleDragEnd = () => {
+                    document.removeEventListener('mousemove', handleDrag)
+                    document.removeEventListener('mouseup', handleDragEnd)
+                    document.body.style.cursor = ''
+                  }
+
+                  document.addEventListener('mousemove', handleDrag)
+                  document.addEventListener('mouseup', handleDragEnd)
+                  document.body.style.cursor = 'col-resize'
+                }}
+              >
+                <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                  group-hover:bg-accent" />
+              </div>
+            )}
+
+            {/* Score Detail */}
+            {selectedScore && (
+              <div className={cn(
+                "h-full overflow-y-auto overflow-x-hidden",
+                "transition-all duration-200"
+              )}
+              style={{
+                width: `${100 - scorecardDetailWidth}%`,
+                minWidth: "30%",
+                maxWidth: "70%"
+              }}>
+                <div className="w-full h-full">
+                  {renderSelectedScore()}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
