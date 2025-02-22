@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { AlertTaskData } from '@/types/tasks'
 import { BaseTaskProps } from '@/components/Task'
 
-interface AlertTaskProps extends BaseTaskProps<AlertTaskData> {}
+export interface AlertTaskProps extends BaseTaskProps<AlertTaskData> {}
 
 const AlertTask: React.FC<AlertTaskProps> = ({
   variant,

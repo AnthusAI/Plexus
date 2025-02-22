@@ -32,13 +32,15 @@ interface ScoreUpdatedTaskStoryProps extends Omit<BaseTaskProps, 'task'> {
 const createTask = (id: number, beforeScore: number, afterScore: number): ScoreUpdatedTaskStoryProps => ({
   variant: 'grid',
   task: {
-    id,
+    id: id.toString(),
     type: 'Score Update',
     scorecard: 'Performance Review',
     score: 'Improved',
     time: '30 minutes ago',
     description: 'Score update details',
     data: {
+      id: id.toString(),
+      title: 'Score Update',
       before: {
         outerRing: [
           { category: "Positive", value: beforeScore, fill: "var(--true)" },

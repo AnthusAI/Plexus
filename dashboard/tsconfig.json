@@ -28,7 +28,6 @@
   "exclude": [
     "node_modules",
     "amplify",
-    ".next",
-    "**/*.stories.tsx"
+    ".next"
   ]
 }

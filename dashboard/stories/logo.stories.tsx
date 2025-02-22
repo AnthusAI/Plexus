@@ -1,5 +1,5 @@
 import React from 'react'
-import type { Meta, StoryObj } from '@storybook/react'
+import type { Meta, StoryObj, StoryFn } from '@storybook/react'
 import SquareLogo, { LogoVariant } from '../components/logo-square'
 
 const meta = {
@@ -8,13 +8,10 @@ const meta = {
   parameters: {
     layout: 'padded',
   },
-  decorators: [
-    (Story) => (
-      <div className="bg-background p-8 rounded-lg">
-        <Story />
-      </div>
-    ),
-  ],
+  args: {
+    variant: LogoVariant.Square,
+    className: 'w-full',
+  },
 } satisfies Meta<typeof SquareLogo>
 
 export default meta
@@ -24,41 +21,41 @@ export const Square = {
   parameters: {
     layout: 'padded',
   },
-  decorators: [
-    (Story) => (
-      <div className="w-full flex justify-center bg-background p-8">
-        <div className="w-1/2">
-          <Story />
-        </div>
-      </div>
-    ),
-  ],
   args: {
     variant: LogoVariant.Square,
     className: 'w-full',
   },
-}
+  decorators: [
+    (Story: StoryFn<typeof SquareLogo>, context) => (
+      <div className="w-full flex justify-center bg-background p-8">
+        <div className="w-1/2">
+          <Story {...context.args} />
+        </div>
+      </div>
+    ),
+  ],
+} satisfies Story
 
 export const Wide = {
   args: {
     variant: LogoVariant.Wide,
     className: 'w-128',
   },
-}
+} satisfies Story
 
 export const Narrow = {
+  args: {
+    variant: LogoVariant.Narrow,
+    className: 'w-full',
+  },
   decorators: [
-    (Story) => (
+    (Story: StoryFn<typeof SquareLogo>) => (
       <div className="w-24 aspect-square">
-        <Story />
+        <Story {...Narrow.args} />
       </div>
     ),
   ],
-  args: {
-    variant: LogoVariant.Narrow,
-    className: 'w-full h-full',
-  },
-}
+} satisfies Story
 
 export const AllVariants = {
   render: () => (
@@ -88,4 +85,4 @@ export const AllVariants = {
       </div>
     </div>
   ),
-} 
+} satisfies Story 
