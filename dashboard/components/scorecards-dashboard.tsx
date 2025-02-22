@@ -1,7 +1,7 @@
 "use client"
 import React, { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { ScorecardForm } from "@/components/scorecards/create-edit-form"
+import { Button } from "./ui/button"
+import { ScorecardForm } from "./scorecards/create-edit-form"
 import { amplifyClient } from "@/utils/amplify-client"
 import type { Schema } from "@/amplify/data/resource"
 import type { AuthModeStrategyType } from "aws-amplify/datastore"
@@ -12,13 +12,13 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "./ui/table"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "./ui/dropdown-menu"
 import { 
   Activity, 
   Pencil, 
@@ -27,87 +27,124 @@ import {
   Database
 } from "lucide-react"
 import { ScoreCount } from "./scorecards/score-count"
-import { CardButton } from "@/components/CardButton"
-import { DatasetConfigFormComponent } from "@/components/dataset-config-form"
+import { CardButton } from "./CardButton"
+import { DatasetConfigFormComponent } from "./dataset-config-form"
 import { listFromModel } from "@/utils/amplify-helpers"
 import { AmplifyListResult } from '@/types/shared'
-import { getClient } from "@/utils/data-operations"
+import { getClient } from "@/utils/amplify-client"
 import { generateClient } from "aws-amplify/data"
+import ScorecardCard from "./scorecards/ScorecardCard"
 
 const ACCOUNT_KEY = 'call-criteria'
-
-const client = generateClient<Schema>()
 
 export default function ScorecardsComponent() {
   const [scorecards, setScorecards] = useState<Schema['Scorecard']['type'][]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedScorecard, setSelectedScorecard] = useState<Schema['Scorecard']['type'] | null>(null)
+  const [selectedScorecardSections, setSelectedScorecardSections] = useState<{
+    items: Array<{
+      id: string
+      name: string
+      order: number
+      scores: {
+        items: Array<{
+          id: string
+          name: string
+          key: string
+          description: string
+          order: number
+          type: string
+          configuration: any
+        }>
+      }
+    }>
+  } | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [accountId, setAccountId] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
-  
-  // **Add refreshTrigger state (if needed)**
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
-
-  // Add missing state variables
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
   const [showDatasetConfig, setShowDatasetConfig] = useState(false)
   const [selectedScorecardForDataset, setSelectedScorecardForDataset] = useState<string>("")
+  const [leftPanelWidth, setLeftPanelWidth] = useState(40)
+  const [scorecardScoreCounts, setScorecardScoreCounts] = useState<Record<string, number>>({})
+
+  // Initial data load
+  const fetchScorecards = async () => {
+    try {
+      const accountResult = await amplifyClient.Account.list({
+        filter: { key: { eq: ACCOUNT_KEY } }
+      })
+
+      if (accountResult.data.length === 0) {
+        setIsLoading(false)
+        return
+      }
+
+      const foundAccountId = accountResult.data[0].id
+      setAccountId(foundAccountId)
+
+      const initialScorecards = await amplifyClient.Scorecard.list({
+        filter: { accountId: { eq: foundAccountId } }
+      })
+
+      setScorecards(initialScorecards.data.filter(s => s.accountId === foundAccountId))
+      setIsLoading(false)
+    } catch (error) {
+      console.error('Error loading initial data:', error)
+      setError(error as Error)
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    let subscription: { unsubscribe: () => void } | null = null
-
-    async function setupRealTimeSync() {
-      try {
-        const [accountResult, initialScorecards] = await Promise.all([
-          amplifyClient.Account.list({
-            filter: { key: { eq: ACCOUNT_KEY } }
-          }),
-          amplifyClient.Scorecard.list()
-        ])
-
-        if (accountResult.data.length > 0) {
-          const foundAccountId = accountResult.data[0].id
-          setAccountId(foundAccountId)
-          
-          setScorecards(initialScorecards.data.filter(s => 
-            s.accountId === foundAccountId
-          ))
-          setIsLoading(false)
-
-          subscription = amplifyClient.Scorecard.observeQuery({
-            filter: { accountId: { eq: foundAccountId } }
-          }).subscribe({
-            next: ({ items }: { items: Schema['Scorecard']['type'][] }) => {
-              console.log('Subscription event:', JSON.stringify(items, null, 2))
-              setScorecards(items.filter((item: Schema['Scorecard']['type']) => 
-                item && item.accountId === foundAccountId
-              ))
-            },
-            error: (error: Error) => {
-              console.error('Subscription error:', error)
-              setError(error)
-            }
-          })
-        } else {
-          setIsLoading(false)
-        }
-      } catch (error) {
-        console.error('Error setting up real-time sync:', error)
-        setError(error as Error)
-        setIsLoading(false)
-      }
-    }
-
-    setupRealTimeSync()
-
-    return () => {
-      if (subscription) {
-        subscription.unsubscribe()
-      }
-    }
+    fetchScorecards()
   }, [])
+
+  useEffect(() => {
+    async function loadScorecardSections() {
+      if (!selectedScorecard) {
+        setSelectedScorecardSections(null)
+        return
+      }
+
+      try {
+        const sectionsResult = await selectedScorecard.sections()
+        const sections = sectionsResult.data || []
+        
+        const transformedSections = {
+          items: await Promise.all(sections.map(async section => {
+            const scoresResult = await section.scores()
+            const scores = scoresResult.data || []
+            
+            return {
+              id: section.id,
+              name: section.name,
+              order: section.order,
+              scores: {
+                items: scores.map(score => ({
+                  id: score.id,
+                  name: score.name,
+                  key: score.key || '',
+                  description: score.description || '',
+                  order: score.order,
+                  type: score.type,
+                  configuration: score.configuration
+                }))
+              }
+            }
+          }))
+        }
+
+        setSelectedScorecardSections(transformedSections)
+      } catch (error) {
+        console.error('Error loading scorecard sections:', error)
+        setError(error as Error)
+      }
+    }
+
+    loadScorecardSections()
+  }, [selectedScorecard])
 
   // Helper function to fetch all scores for a section
   const fetchAllScoresForSection = async (sectionId: string) => {
@@ -283,170 +320,202 @@ export default function ScorecardsComponent() {
     }
   }
 
+  const renderSelectedScorecard = () => {
+    if (!selectedScorecard || !selectedScorecardSections) return null
+
+    const scorecardData = {
+      id: selectedScorecard.id,
+      name: selectedScorecard.name,
+      key: selectedScorecard.key || '',
+      description: selectedScorecard.description || '',
+      type: 'scorecard',
+      configuration: {},
+      order: 0
+    }
+
+    return (
+      <ScorecardCard
+        variant="detail"
+        score={scorecardData}
+        onEdit={() => handleEdit(selectedScorecard)}
+        onViewData={() => {
+          setSelectedScorecardForDataset(selectedScorecard.id)
+          setShowDatasetConfig(true)
+        }}
+        isFullWidth={isFullWidth}
+        onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+        onClose={() => {
+          setSelectedScorecard(null)
+          setIsFullWidth(false)
+        }}
+      />
+    )
+  }
+
+  const handleDragStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.pageX
+    const startWidth = leftPanelWidth
+
+    const handleDrag = (e: MouseEvent) => {
+      const delta = e.pageX - startX
+      const newWidth = Math.min(Math.max(startWidth + (delta / window.innerWidth) * 100, 20), 80)
+      setLeftPanelWidth(newWidth)
+    }
+
+    const handleDragEnd = () => {
+      document.removeEventListener('mousemove', handleDrag)
+      document.removeEventListener('mouseup', handleDragEnd)
+    }
+
+    document.addEventListener('mousemove', handleDrag)
+    document.addEventListener('mouseup', handleDragEnd)
+  }
+
+  useEffect(() => {
+    async function calculateScoreCounts() {
+      const counts: Record<string, number> = {}
+      
+      for (const scorecard of scorecards) {
+        try {
+          const sectionsResult = await scorecard.sections()
+          const sections = sectionsResult.data || []
+          
+          let totalScores = 0
+          for (const section of sections) {
+            const scoresResult = await section.scores()
+            totalScores += scoresResult.data?.length || 0
+          }
+          
+          counts[scorecard.id] = totalScores
+        } catch (error) {
+          console.error('Error calculating score count:', error)
+          counts[scorecard.id] = 0
+        }
+      }
+      
+      setScorecardScoreCounts(counts)
+    }
+
+    calculateScoreCounts()
+  }, [scorecards])
+
   if (isLoading) {
-    return <div>Loading scorecards...</div>;
+    return <div>Loading scorecards...</div>
   }
 
   if (error) {
     return (
-      <div className="p-4 text-red-500">
-        Error loading scorecards: {error.message}
+      <div className="p-4">
+        <div className="text-red-500 mb-2">
+          Error loading scorecards: {error.message}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4 h-full flex flex-col">
-      <div className={`flex flex-col flex-grow overflow-hidden pb-2`}>
-        {(selectedScorecard || showDatasetConfig) ? (
-          <div className="flex-shrink-0 h-full overflow-hidden">
-            {selectedScorecard && (
-              <ScorecardForm
-                scorecard={selectedScorecard}
-                accountId={accountId!}
-                onSave={async () => {
-                  setIsEditing(false)
-                  setSelectedScorecard(null)
-                }}
-                onCancel={() => {
-                  setIsEditing(false)
-                  setSelectedScorecard(null)
-                }}
-                isFullWidth={isFullWidth}
-                onToggleWidth={() => setIsFullWidth(!isFullWidth)}
-                isNarrowViewport={isNarrowViewport}
-              />
-            )}
-            {showDatasetConfig && (
-              <DatasetConfigFormComponent 
-                scorecardId={selectedScorecardForDataset}
-                onClose={() => setShowDatasetConfig(false)}
-                isFullWidth={isFullWidth}
-                onToggleWidth={() => setIsFullWidth(!isFullWidth)}
-                isNarrowViewport={isNarrowViewport}
-              />
-            )}
-          </div>
-        ) : (
-          <div className={`flex ${isNarrowViewport || isFullWidth ? 'flex-col' : 'space-x-6'} h-full overflow-hidden`}>
-            <div className={`flex-1 @container overflow-auto`}>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[70%]">Scorecard</TableHead>
-                    <TableHead className="w-[20%] @[630px]:table-cell hidden text-right">Scores</TableHead>
-                    <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {scorecards.map((scorecard) => (
-                    <TableRow 
-                      key={scorecard.id} 
-                      onClick={() => handleEdit(scorecard)} 
-                      className="cursor-pointer transition-colors duration-200 hover:bg-muted"
-                    >
-                      <TableCell className="w-[70%]">
-                        <div>
-                          {/* Narrow variant - visible below 630px */}
-                          <div className="block @[630px]:hidden">
-                            <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <div className="font-medium">{scorecard.name}</div>
-                                <div className="text-sm text-muted-foreground font-mono">
-                                  {scorecard.externalId || 'No ID'} - {scorecard.key}
-                                </div>
-                                <div className="text-sm text-muted-foreground mt-1">
-                                  <ScoreCount scorecard={scorecard} />
-                                </div>
-                              </div>
-                              <div className="flex items-center">
-                                <CardButton 
-                                  icon={Pencil}
-                                  onClick={() => handleEdit(scorecard)}
-                                />
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <CardButton 
-                                      icon={MoreHorizontal}
-                                      onClick={() => {}}
-                                    />
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={(e) => {
-                                      e.stopPropagation()
-                                      setSelectedScorecardForDataset(scorecard.id)
-                                      setShowDatasetConfig(true)
-                                    }}>
-                                      <Database className="h-4 w-4 mr-2" /> Datasets
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem>
-                                      <Activity className="h-4 w-4 mr-2" /> Activity
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-                            </div>
-                          </div>
-                          {/* Wide variant - visible at 630px and above */}
-                          <div className="hidden @[630px]:block">
-                            <div className="font-medium">{scorecard.name}</div>
-                            <div className="text-sm text-muted-foreground font-mono">
-                              {scorecard.externalId || 'No ID'} - {scorecard.key}
-                            </div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-[20%] hidden @[630px]:table-cell text-right">
-                        <ScoreCount scorecard={scorecard} />
-                      </TableCell>
-                      <TableCell className="w-[10%] hidden @[630px]:table-cell text-right">
-                        <div className="flex items-center justify-end space-x-2">
-                          <CardButton 
-                            icon={Pencil}
-                            onClick={() => {
-                              handleEdit(scorecard)
-                            }}
-                          />
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
-                                className="h-8 w-8 p-0"
-                              >
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={(e) => {
-                                e.stopPropagation()
-                                setSelectedScorecardForDataset(scorecard.id)
-                                setShowDatasetConfig(true)
-                              }}>
-                                <Database className="h-4 w-4 mr-2" /> Datasets
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={(e) => e.stopPropagation()}>
-                                <Activity className="h-4 w-4 mr-2" /> Activity
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <div className="mt-4">
-                <CardButton
-                  icon={Plus}
-                  label="Create Scorecard"
-                  onClick={handleCreate}
-                />
+    <div className="flex flex-col h-full">
+      <div className="flex h-full">
+        <div 
+          className={`
+            ${selectedScorecard && !isNarrowViewport && !isFullWidth ? '' : 'w-full'}
+            ${selectedScorecard && !isNarrowViewport && isFullWidth ? 'hidden' : ''}
+            h-full overflow-y-auto overflow-x-hidden @container
+          `}
+          style={selectedScorecard && !isNarrowViewport && !isFullWidth ? {
+            width: `${leftPanelWidth}%`
+          } : undefined}
+        >
+          {isEditing ? (
+            <ScorecardForm
+              scorecard={selectedScorecard}
+              accountId={accountId!}
+              onSave={async () => {
+                setIsEditing(false)
+              }}
+              onCancel={() => {
+                setIsEditing(false)
+                setSelectedScorecard(null)
+              }}
+            />
+          ) : (
+            <div className="space-y-2 p-1.5">
+              <div className="flex justify-end">
+                <Button 
+                  onClick={handleCreate} 
+                  variant="ghost" 
+                  className="bg-card hover:bg-accent text-muted-foreground"
+                >
+                  New Scorecard
+                </Button>
+              </div>
+              <div className="space-y-2 grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-2">
+                {scorecards
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map(scorecard => {
+                    const scorecardData = {
+                      id: scorecard.id,
+                      name: scorecard.name,
+                      key: scorecard.key || '',
+                      description: scorecard.description || '',
+                      type: 'scorecard',
+                      configuration: {},
+                      order: 0,
+                      externalId: scorecard.externalId || '',
+                      scoreCount: scorecardScoreCounts[scorecard.id] || 0
+                    }
+
+                    return (
+                      <ScorecardCard
+                        key={scorecard.id}
+                        variant="grid"
+                        score={scorecardData}
+                        isSelected={selectedScorecard?.id === scorecard.id}
+                        onClick={() => setSelectedScorecard(scorecard)}
+                        onEdit={() => handleEdit(scorecard)}
+                      />
+                    )
+                  })}
               </div>
             </div>
+          )}
+        </div>
+
+        {selectedScorecard && !isNarrowViewport && !isFullWidth && (
+          <div
+            className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+            onMouseDown={handleDragStart}
+          >
+            <div className="absolute inset-0 rounded-full transition-colors duration-150 
+              group-hover:bg-accent" />
+          </div>
+        )}
+
+        {selectedScorecard && !isEditing && !isNarrowViewport && (
+          <div 
+            className={`
+              ${isFullWidth ? 'w-full' : ''}
+              h-full overflow-y-auto overflow-x-hidden ml-4
+            `}
+            style={!isFullWidth ? {
+              width: `${100 - leftPanelWidth}%`
+            } : undefined}
+          >
+            {renderSelectedScorecard()}
           </div>
         )}
       </div>
+
+      {showDatasetConfig && selectedScorecardForDataset && (
+        <DatasetConfigFormComponent
+          scorecardId={selectedScorecardForDataset}
+          onClose={() => {
+            setShowDatasetConfig(false)
+            setSelectedScorecardForDataset("")
+          }}
+        />
+      )}
     </div>
   )
 }
