@@ -10,6 +10,39 @@ import type { Schema } from '@/amplify/data/resource';
 import type { Evaluation, TaskStageType, AmplifyTask } from '@/utils/data-operations';
 import { transformEvaluation, getValueFromLazyLoader, transformAmplifyTask, processTask } from '@/utils/data-operations';
 import { observeRecentEvaluations } from '@/utils/data-operations';
+import { observeScoreResults } from '@/utils/amplify-helpers';
+import { isEqual } from 'lodash';
+
+// Add type for score result
+type ScoreResult = {
+  id: string;
+  value: string | number;
+  confidence: number | null;
+  metadata: any;
+  itemId: string | null;
+};
+
+// Add type for subscription
+type Subscription = {
+  unsubscribe: () => void;
+};
+
+// Add type for subscription response
+type ScoreResultsSubscriptionResponse = {
+  items: Schema['ScoreResult']['type'][];
+  isSynced: boolean;
+};
+
+// Add type for subscription handler
+type ScoreResultsSubscriptionHandler = {
+  next: (data: ScoreResultsSubscriptionResponse) => void;
+  error: (error: Error) => void;
+};
+
+// Add type for subscription
+type ScoreResultsSubscription = {
+  subscribe: (handlers: ScoreResultsSubscriptionHandler) => { unsubscribe: () => void };
+};
 
 type UseEvaluationDataProps = {
   accountId: string | null;
@@ -29,6 +62,7 @@ export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataPr
   const [error, setError] = useState<string | null>(null);
   const [evaluationMap, setEvaluationMap] = useState<Map<string, Evaluation>>(new Map());
   const taskMapRef = useRef<Map<string, AmplifyTask>>(new Map());
+  const activeSubscriptionRef = useRef<Subscription | null>(null);
 
   // Helper function to update maps
   const updateMaps = useCallback((newEvaluations: Evaluation[]) => {
@@ -261,6 +295,50 @@ export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataPr
         
         if (isSynced) {
           setIsLoading(false);
+        }
+
+        // Find the active evaluation that needs score results
+        const activeEvaluation = transformedItems
+          .sort((a, b) => {
+            const aStarted = a.startedAt ? new Date(a.startedAt).getTime() : 0;
+            const bStarted = b.startedAt ? new Date(b.startedAt).getTime() : 0;
+            return bStarted - aStarted;
+          })
+          .find(e => {
+            const taskStatus = typeof e.task === 'function' ? null : e.task?.status;
+            return (e.status === 'RUNNING' || e.status === 'COMPLETED') && 
+                   (taskStatus === 'RUNNING' || taskStatus === 'COMPLETED');
+          });
+
+        if (activeEvaluation?.id && !activeSubscriptionRef.current) {
+          // Clean up any existing subscription
+          if (activeSubscriptionRef.current) {
+            activeSubscriptionRef.current.unsubscribe();
+            activeSubscriptionRef.current = null;
+          }
+
+          // Set up subscription for the active evaluation
+          const subscription = observeScoreResults(client, activeEvaluation.id);
+          activeSubscriptionRef.current = subscription.subscribe({
+            next: ({ items: scoreResults }) => {
+              setEvaluations(prevEvaluations => {
+                return prevEvaluations.map(e => {
+                  if (e.id === activeEvaluation.id) {
+                    return {
+                      ...e,
+                      scoreResults: {
+                        ...e.scoreResults,
+                        items: scoreResults
+                      }
+                    };
+                  }
+                  return e;
+                });
+              });
+            }
+          });
+
+          subscriptions.push(activeSubscriptionRef.current);
         }
       },
       error: (error: Error) => {
@@ -515,14 +593,191 @@ export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataPr
         if (data?.onUpdateEvaluation) {
           console.log('Evaluation update received:', {
             evaluationId: data.onUpdateEvaluation.id,
-            type: data.onUpdateEvaluation.type
+            type: data.onUpdateEvaluation.type,
+            status: data.onUpdateEvaluation.status,
+            taskStatus: typeof data.onUpdateEvaluation.task === 'function' 
+              ? null 
+              : (data.onUpdateEvaluation.task as any)?.status, // Type assertion to bypass strict typing
+            startedAt: data.onUpdateEvaluation.startedAt
           });
+
           const transformedEvaluation = transformEvaluation(data.onUpdateEvaluation);
           if (transformedEvaluation) {
-            setEvaluations(prev => 
-              prev.map(e => e.id === transformedEvaluation.id ? transformedEvaluation : e)
-            );
+            // Check if this evaluation is now running and should be subscribed to
+            const isNowRunning = 
+              transformedEvaluation.status === 'RUNNING' || 
+              transformedEvaluation.task?.status === 'RUNNING';
+
+            // Check if this is the most recent running evaluation
+            const isMostRecent = (prevEvaluations: Evaluation[]) => {
+              const runningEvals = prevEvaluations
+                .filter(e => e.status === 'RUNNING' || e.task?.status === 'RUNNING')
+                .sort((a, b) => {
+                  const aStarted = a.startedAt ? new Date(a.startedAt).getTime() : 0;
+                  const bStarted = b.startedAt ? new Date(b.startedAt).getTime() : 0;
+                  return bStarted - aStarted;
+                });
+              return runningEvals[0]?.id === transformedEvaluation.id;
+            };
+
+            setEvaluations(prev => {
+              const updatedEvaluations = prev.map(e => 
+                e.id === transformedEvaluation.id ? transformedEvaluation : e
+              );
+
+              // If this evaluation is now running and is the most recent, set up subscription
+              if (isNowRunning && isMostRecent(updatedEvaluations)) {
+                const scoreResults = getValueFromLazyLoader(transformedEvaluation.scoreResults);
+                console.log('Setting up score results subscription for evaluation:', {
+                  evaluationId: transformedEvaluation.id,
+                  currentScoreResultsCount: scoreResults?.length ?? 0,
+                  taskStatus: getValueFromLazyLoader(transformedEvaluation.task)?.status,
+                  evaluationStatus: transformedEvaluation.status,
+                  isNewestEvaluation: transformedEvaluation === updatedEvaluations[0]
+                });
+
+                // Clean up existing subscription if any
+                if (activeSubscriptionRef.current) {
+                  console.log('Cleaning up existing subscription');
+                  activeSubscriptionRef.current.unsubscribe();
+                  activeSubscriptionRef.current = null;
+                }
+
+                // Set up new subscription
+                const subscription = observeScoreResults(client, transformedEvaluation.id);
+                const sub = subscription.subscribe({
+                  next: (data: ScoreResultsSubscriptionResponse) => {
+                    console.log('Received score results update:', {
+                      evaluationId: transformedEvaluation.id,
+                      scoreResultCount: data.items.length,
+                      firstResult: data.items[0],
+                      lastResult: data.items[data.items.length - 1],
+                      timestamp: new Date().toISOString()
+                    });
+                    
+                    setEvaluations(prevEvals => {
+                      // Only create a new array if we actually update an evaluation
+                      const evalToUpdate = prevEvals.find(e => e.id === transformedEvaluation.id);
+                      if (!evalToUpdate) return prevEvals;
+
+                      // Transform items to match expected type
+                      const transformedItems = data.items.map(item => {
+                        // Parse metadata if it's a string
+                        let parsedMetadata;
+                        try {
+                          if (typeof item.metadata === 'string') {
+                            parsedMetadata = JSON.parse(item.metadata);
+                            if (typeof parsedMetadata === 'string') {
+                              parsedMetadata = JSON.parse(parsedMetadata);
+                            }
+                          } else {
+                            parsedMetadata = item.metadata || {};
+                          }
+
+                          console.log('Score result metadata in useEvaluationData:', {
+                            rawMetadata: item.metadata,
+                            parsedMetadata,
+                            metadataType: typeof item.metadata,
+                            hasResults: !!parsedMetadata?.results,
+                            resultsKeys: parsedMetadata?.results ? Object.keys(parsedMetadata.results) : [],
+                            humanLabel: parsedMetadata?.human_label,
+                            nestedHumanLabel: parsedMetadata?.results?.[Object.keys(parsedMetadata.results)[0]]?.metadata?.human_label
+                          });
+
+                        } catch (e) {
+                          console.error('Error parsing score result metadata:', e);
+                          parsedMetadata = {};
+                        }
+
+                        // Extract results from nested structure if present
+                        const firstResultKey = parsedMetadata?.results ? Object.keys(parsedMetadata.results)[0] : null;
+                        const scoreResult = firstResultKey && parsedMetadata.results ? parsedMetadata.results[firstResultKey] : null;
+
+                        const result = {
+                          id: item.id,
+                          value: item.value,
+                          confidence: item.confidence ?? null,
+                          explanation: item.explanation ?? scoreResult?.explanation ?? null,
+                          metadata: {
+                            human_label: scoreResult?.metadata?.human_label ?? parsedMetadata.human_label ?? item.metadata?.human_label ?? null,
+                            correct: Boolean(scoreResult?.metadata?.correct ?? parsedMetadata.correct ?? item.metadata?.correct),
+                            human_explanation: scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? item.metadata?.human_explanation ?? null,
+                            text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? item.metadata?.text ?? null
+                          },
+                          itemId: item.itemId ?? parsedMetadata.item_id?.toString() ?? null,
+                          createdAt: item.createdAt
+                        };
+
+                        console.log('Transformed score result in useEvaluationData:', {
+                          id: result.id,
+                          value: result.value,
+                          humanLabel: result.metadata.human_label,
+                          correct: result.metadata.correct,
+                          rawMetadata: item.metadata,
+                          parsedMetadata,
+                          scoreResult,
+                          nestedHumanLabel: scoreResult?.metadata?.human_label
+                        });
+
+                        return result;
+                      });
+
+                      // Create updated evaluation with new score results
+                      const updatedEval = {
+                        ...evalToUpdate,
+                        scoreResults: {
+                          items: transformedItems
+                        }
+                      };
+
+                      // Only create new array if evaluation actually changed
+                      if (Object.is(evalToUpdate.scoreResults?.items, updatedEval.scoreResults.items)) {
+                        return prevEvals;
+                      }
+
+                      // Return new array with only the updated evaluation changed
+                      return prevEvals.map(e => 
+                        e.id === transformedEvaluation.id ? updatedEval : e
+                      );
+                    });
+                  },
+                  error: (error: Error) => {
+                    console.error('Error in score results subscription:', error);
+                  }
+                });
+
+                const unsubscribe = sub.unsubscribe;
+                activeSubscriptionRef.current = { unsubscribe };
+                subscriptions.push({ unsubscribe });
+              }
+
+              return updatedEvaluations;
+            });
           }
+
+          console.log('Checking if should subscribe to score results:', {
+            evaluationId: data.onUpdateEvaluation.id,
+            status: data.onUpdateEvaluation.status,
+            taskStatus: typeof data.onUpdateEvaluation.task === 'function' 
+              ? null 
+              : (data.onUpdateEvaluation.task as any)?.status,
+            hasExistingSubscription: !!activeSubscriptionRef.current
+          });
+
+          // After setting up new subscription
+          console.log('Score results subscription set up:', {
+            evaluationId: data.onUpdateEvaluation.id,
+            subscriptionTime: new Date().toISOString()
+          });
+
+          // When receiving score results
+          console.log('Score results received:', {
+            evaluationId: data.onUpdateEvaluation.id,
+            count: data.onUpdateEvaluation.scoreResults?.items?.length,
+            firstResult: data.onUpdateEvaluation.scoreResults?.items?.[0],
+            lastResult: data.onUpdateEvaluation.scoreResults?.items?.[data.onUpdateEvaluation.scoreResults.items.length - 1],
+            timestamp: new Date().toISOString()
+          });
         }
       },
       error: (error: Error) => {
@@ -627,6 +882,10 @@ export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataPr
     return () => {
       console.log('Cleaning up all subscriptions');
       subscriptions.forEach(sub => sub.unsubscribe());
+      if (activeSubscriptionRef.current) {
+        activeSubscriptionRef.current.unsubscribe();
+        activeSubscriptionRef.current = null;
+      }
     };
   }, [accountId, limit, mergeTaskUpdate, mergeTaskStageUpdate, updateMaps]);
 

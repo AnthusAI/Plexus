@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
 import { transformAmplifyTask, processTask } from '@/utils/data-operations'
 import type { EvaluationTaskProps } from '@/types/tasks/evaluation'
@@ -122,7 +122,92 @@ export function TaskDisplay({
       }
     }
     processTaskData();
-  }, [task, evaluationData.id]);
+  }, [task]);
+
+  // Memoize score results transformation
+  const transformedScoreResults = useMemo(() => {
+    console.log('Transforming score results:', {
+      hasResults: !!evaluationData.scoreResults?.items,
+      count: evaluationData.scoreResults?.items?.length ?? 0,
+      firstResult: evaluationData.scoreResults?.items?.[0],
+      lastResult: evaluationData.scoreResults?.items?.[evaluationData.scoreResults?.items?.length - 1]
+    });
+
+    if (!evaluationData.scoreResults?.items?.length) {
+      console.log('No score results to transform');
+      return [];
+    }
+
+    const transformed = evaluationData.scoreResults.items.map((result: any) => {
+      // Parse metadata if it's a string
+      let parsedMetadata;
+      try {
+        if (typeof result.metadata === 'string') {
+          parsedMetadata = JSON.parse(result.metadata);
+          if (typeof parsedMetadata === 'string') {
+            parsedMetadata = JSON.parse(parsedMetadata);
+          }
+        } else {
+          parsedMetadata = result.metadata || {};
+        }
+
+        console.log('Score result metadata in TaskDisplay:', {
+          rawMetadata: result.metadata,
+          parsedMetadata,
+          metadataType: typeof result.metadata,
+          hasResults: !!parsedMetadata?.results,
+          resultsKeys: parsedMetadata?.results ? Object.keys(parsedMetadata.results) : [],
+          humanLabel: parsedMetadata?.human_label,
+          nestedHumanLabel: parsedMetadata?.results?.[Object.keys(parsedMetadata.results)[0]]?.metadata?.human_label
+        });
+
+      } catch (e) {
+        console.error('Error parsing score result metadata:', e);
+        parsedMetadata = {};
+      }
+
+      // Extract results from nested structure if present
+      const firstResultKey = parsedMetadata?.results ? Object.keys(parsedMetadata.results)[0] : null;
+      const scoreResult = firstResultKey && parsedMetadata.results ? parsedMetadata.results[firstResultKey] : null;
+
+      const transformedResult = {
+        id: result.id,
+        value: result.value,
+        confidence: result.confidence ?? null,
+        explanation: result.explanation ?? scoreResult?.explanation ?? null,
+        metadata: {
+          human_label: scoreResult?.metadata?.human_label ?? parsedMetadata.human_label ?? result.metadata?.human_label ?? null,
+          correct: Boolean(scoreResult?.metadata?.correct ?? parsedMetadata.correct ?? result.metadata?.correct),
+          human_explanation: scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? result.metadata?.human_explanation ?? null,
+          text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? result.metadata?.text ?? null
+        },
+        itemId: result.itemId ?? parsedMetadata.item_id?.toString() ?? null,
+        createdAt: result.createdAt
+      };
+
+      console.log('Transformed score result in TaskDisplay:', {
+        id: transformedResult.id,
+        value: transformedResult.value,
+        humanLabel: transformedResult.metadata.human_label,
+        correct: transformedResult.metadata.correct,
+        rawMetadata: result.metadata,
+        parsedMetadata,
+        scoreResult,
+        nestedHumanLabel: scoreResult?.metadata?.human_label
+      });
+
+      return transformedResult;
+    });
+
+    console.log('Transformed score results:', {
+      inputCount: evaluationData.scoreResults.items.length,
+      transformedCount: transformed.length,
+      firstTransformed: transformed[0],
+      lastTransformed: transformed[transformed.length - 1]
+    });
+
+    return transformed;
+  }, [evaluationData.scoreResults?.items]);
 
   const taskProps = {
     task: {
@@ -176,43 +261,7 @@ export function TaskDisplay({
         predictedClassDistribution: typeof evaluationData.predictedClassDistribution === 'string' ? 
           JSON.parse(evaluationData.predictedClassDistribution) : evaluationData.predictedClassDistribution,
         isPredictedClassDistributionBalanced: evaluationData.isPredictedClassDistributionBalanced ?? null,
-        scoreResults: evaluationData.scoreResults?.items?.map((result: any) => {
-          // Parse metadata if it's a string
-          const metadata = (() => {
-            try {
-              if (typeof result.metadata === 'string') {
-                const parsed = JSON.parse(result.metadata);
-                // Handle double-stringified JSON
-                if (typeof parsed === 'string') {
-                  return JSON.parse(parsed);
-                }
-                return parsed;
-              }
-              return result.metadata || {};
-            } catch (e) {
-              console.error('Error parsing score result metadata:', e);
-              return {};
-            }
-          })();
-
-          // Extract results from nested structure if present
-          const firstResultKey = metadata?.results ? Object.keys(metadata.results)[0] : null;
-          const scoreResult = firstResultKey && metadata.results ? metadata.results[firstResultKey] : null;
-
-          return {
-            id: result.id,
-            value: result.value,
-            confidence: result.confidence ?? null,
-            explanation: scoreResult?.explanation ?? metadata.explanation ?? null,
-            metadata: {
-              human_label: scoreResult?.metadata?.human_label ?? metadata.human_label ?? null,
-              correct: Boolean(scoreResult?.metadata?.correct ?? metadata.correct),
-              human_explanation: scoreResult?.metadata?.human_explanation ?? metadata.human_explanation ?? null,
-              text: scoreResult?.metadata?.text ?? metadata.text ?? null
-            },
-            itemId: result.itemId
-          };
-        }) || [],
+        scoreResults: transformedScoreResults,
         task: processedTask ? {
           ...processedTask,
           accountId: evaluationData.id,
