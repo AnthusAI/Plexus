@@ -429,6 +429,7 @@ export default function ScorecardsComponent() {
             await fetchScorecards()
           }}
           onScoreSelect={handleScoreSelect}
+          selectedScoreId={selectedScore?.id}
         />
       </div>
     );

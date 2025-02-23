@@ -151,7 +151,7 @@ export function ScoreComponent({
     <Card
       className={cn(
         "w-full cursor-pointer hover:bg-accent/50 transition-colors border-0",
-        isSelected && "ring-2 ring-primary",
+        isSelected ? "bg-card-selected" : "bg-card",
         className
       )}
       onClick={onClick}

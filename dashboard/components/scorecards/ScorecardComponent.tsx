@@ -58,6 +58,7 @@ interface ScorecardComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   variant?: 'grid' | 'detail'
   onSave?: () => void
   onScoreSelect?: (score: any, sectionId: string) => void
+  selectedScoreId?: string
 }
 
 const GridContent = React.memo(({ 
@@ -100,6 +101,7 @@ interface DetailContentProps {
   onCancel?: () => void
   hasChanges?: boolean
   onScoreSelect?: (score: any, sectionId: string) => void
+  selectedScoreId?: string
 }
 
 const DetailContent = React.memo(({ 
@@ -117,7 +119,8 @@ const DetailContent = React.memo(({
   onSave,
   onCancel,
   hasChanges,
-  onScoreSelect
+  onScoreSelect,
+  selectedScoreId
 }: DetailContentProps) => {
   const [editingSectionId, setEditingSectionId] = React.useState<string | null>(null)
   const [sectionNameChanges, setSectionNameChanges] = React.useState<Record<string, string>>({})
@@ -323,8 +326,8 @@ const DetailContent = React.memo(({
                   />
                 </div>
               </div>
-              <div className="bg-background rounded-lg p-4 w-full">
-                <div className="@container w-full">
+              <div className="bg-background rounded-lg w-full">
+                <div className="@container w-full p-4">
                   <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-4 w-full">
                     {section.scores?.items?.map((score) => (
                       <ScoreComponent
@@ -340,6 +343,7 @@ const DetailContent = React.memo(({
                           order: score.order,
                           icon: <CheckSquare className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
                         }}
+                        isSelected={selectedScoreId === score.id}
                         onClick={() => onScoreSelect?.(score, section.id)}
                       />
                     ))}
@@ -373,6 +377,7 @@ export default function ScorecardComponent({
   onClose,
   onSave,
   onScoreSelect,
+  selectedScoreId,
   className, 
   ...props 
 }: ScorecardComponentProps) {
@@ -471,9 +476,11 @@ export default function ScorecardComponent({
   return (
     <div
       className={cn(
-        "w-full rounded-lg bg-card text-card-foreground hover:bg-accent/50 transition-colors",
+        "w-full rounded-lg text-card-foreground hover:bg-accent/50 transition-colors",
+        variant === 'grid' ? (
+          isSelected ? "bg-card-selected" : "bg-card"
+        ) : "bg-card-selected",
         variant === 'detail' && "h-full flex flex-col",
-        isSelected && "bg-accent",
         className
       )}
       {...props}
@@ -515,6 +522,7 @@ export default function ScorecardComponent({
               onCancel={handleCancel}
               hasChanges={hasChanges}
               onScoreSelect={onScoreSelect}
+              selectedScoreId={selectedScoreId}
             />
           )}
         </div>
