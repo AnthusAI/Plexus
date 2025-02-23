@@ -55,20 +55,55 @@ This document outlines the implementation of Plexus's scorecard management syste
   - Finalized detail view layouts and functionality
   - Added proper metadata display and state management
 
-### Phase 2: Schema Updates (Current Focus)
+### Phase 2: Schema Updates
+- Status: ✅ Completed
+- Achievements:
+  - Created new `ScoreVersion` model to store versioned score configurations
+  - Moved score configuration from `Score` model to `ScoreVersion`
+  - Added `championVersion` reference in `Score` to track current version
+  - Updated GraphQL schema and resolvers
+  - Updated front-end types and components to match new schema
+  - Successfully migrated existing configurations to new structure
+
+### Phase 3: Front-End UI Updates (Current Focus)
 - Status: In Progress
 - Goals:
-  - Review and update data models for improved structure
-  - Implement new GraphQL schema changes
-  - Update queries and mutations for better data handling
-  - Migrate existing data to new structure
-  - Ensure backward compatibility during transition
+  - Update UI to support score version management
+  - Add version history view for scores
+  - Implement version comparison interface
+  - Add ability to promote versions to champion
+  - Show version metadata in evaluation results
 - Next Steps:
-  - Document current schema limitations
-  - Design new schema structure
-  - Plan migration strategy
-  - Create migration scripts
-  - Test data integrity
+  - Design version management UI components
+  - Implement version history view
+  - Add version promotion workflow
+  - Update evaluation display to show version info
+
+### Phase 4: CLI API Integration
+- Status: Planned
+- Goals:
+  - Update `plexus evaluate accuracy` to use API
+  - Remove dependency on local YAML files for evaluation
+  - Support fetching score configuration from cloud
+  - Add version selection for evaluations
+- Next Steps:
+  - Update CLI evaluation command
+  - Add API client for score version fetching
+  - Implement version selection logic
+  - Add progress indicators for API operations
+
+### Phase 5: YAML Mode Support
+- Status: Planned
+- Goals:
+  - Add commands for syncing score configuration YAML
+  - Support `plexus scorecard pull` for downloading configs
+  - Support `plexus scorecard push` for uploading configs
+  - Maintain backward compatibility with YAML workflow
+- Next Steps:
+  - Design YAML format for version data
+  - Implement pull/push commands
+  - Add conflict resolution
+  - Document YAML mode workflow
 
 ### Score Version Management
 - Status: In Progress
