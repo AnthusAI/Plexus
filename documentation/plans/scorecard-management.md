@@ -70,6 +70,54 @@ This document outlines the implementation of Plexus's scorecard management syste
   - Create migration scripts
   - Test data integrity
 
+### Score Version Management
+- Status: In Progress
+- Implementation Details:
+  - Score configurations are versioned in new `ScoreVersion` model
+  - Each `Score` has a `championVersion` reference to its current champion
+  - `ScoreResult` has optional `scoreVersion` reference for backward compatibility
+  - Evaluations track which version they evaluated via `scoreVersion` reference
+  - Optimized index structure for quick lookups:
+    - `ScoreVersion`: `scoreId` + `createdAt` sort key for version history
+    - `Evaluation`: `scoreVersionId` + `createdAt` sort key for latest results
+
+#### Example GraphQL Query for Dashboard
+This query efficiently fetches scores with their champion versions and latest evaluations:
+```graphql
+query GetScorecardScores($scorecardId: ID!) {
+  listScores(filter: { scorecardId: { eq: $scorecardId } }) {
+    items {
+      id
+      name
+      type
+      # ... other score fields ...
+      championVersion {
+        id
+        configuration
+        evaluations(
+          filter: { status: { eq: "COMPLETED" } }
+          sortDirection: DESC
+          limit: 1
+        ) {
+          items {
+            id
+            accuracy
+            createdAt
+            # ... other evaluation fields ...
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+This query structure enables:
+- Single-query loading of scorecard dashboard
+- Direct access to champion versions
+- Efficient retrieval of latest evaluation results
+- O(1) lookup time for most recent evaluations
+
 ### Phase 3-4: Future Phases
 - Visual editor and advanced features planned for future iterations
 - Will build on stable foundation from Phase 1 and 2
