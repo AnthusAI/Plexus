@@ -149,7 +149,8 @@ const schema = a.schema({
             scoresAsChampion: a.hasMany('Score', 'championVersionId'),
             parentVersionId: a.string(),
             parentVersion: a.belongsTo('ScoreVersion', 'parentVersionId'),
-            childVersions: a.hasMany('ScoreVersion', 'parentVersionId')
+            childVersions: a.hasMany('ScoreVersion', 'parentVersionId'),
+            evaluations: a.hasMany('Evaluation', 'scoreVersionId')
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
