@@ -145,7 +145,11 @@ const schema = a.schema({
             isFeatured: a.boolean().required(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
-            scoreResults: a.hasMany('ScoreResult', 'scoreVersionId')
+            scoreResults: a.hasMany('ScoreResult', 'scoreVersionId'),
+            scoresAsChampion: a.hasMany('Score', 'championVersionId'),
+            parentVersionId: a.string(),
+            parentVersion: a.belongsTo('ScoreVersion', 'parentVersionId'),
+            childVersions: a.hasMany('ScoreVersion', 'parentVersionId')
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -181,6 +185,8 @@ const schema = a.schema({
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
+            scoreVersionId: a.string(),
+            scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
             confusionMatrix: a.json(),
             items: a.hasMany('Item', 'evaluationId'),
             scoreResults: a.hasMany('ScoreResult', 'evaluationId'),
@@ -200,7 +206,8 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
-            idx("scoreId").sortKeys(["updatedAt"])
+            idx("scoreId").sortKeys(["updatedAt"]),
+            idx("scoreVersionId").sortKeys(["createdAt"])
         ]),
 
     BatchJob: a
