@@ -18,7 +18,8 @@ export const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['t
       scoringJobs: async () => ({ data: [], nextToken: null }),
       account: async () => ({ data: null }),
       scorecard: async () => ({ data: null }),
-      score: async () => ({ data: null })
+      score: async () => ({ data: null }),
+      scoreVersion: async () => ({ data: null })
     }
   }
 
@@ -85,7 +86,8 @@ export const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['t
         return { data: rawEvaluation.score.data }
       }
       return { data: null }
-    }
+    },
+    scoreVersion: async () => ({ data: null })
   }
 
   return safeEvaluation as Schema['Evaluation']['type']

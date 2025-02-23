@@ -53,7 +53,6 @@ export default function ScorecardsComponent() {
     description: string
     order: number
     type: string
-    configuration: any
     sectionId: string
   } | null>(null)
   const [selectedScorecardSections, setSelectedScorecardSections] = useState<{
@@ -69,7 +68,6 @@ export default function ScorecardsComponent() {
           description: string
           order: number
           type: string
-          configuration: any
         }>
       }
     }>
@@ -199,7 +197,6 @@ export default function ScorecardsComponent() {
                   description: score.description || '',
                   order: score.order,
                   type: score.type,
-                  configuration: score.configuration
                 }))
               }
             }
@@ -454,9 +451,6 @@ export default function ScorecardsComponent() {
           onClose={() => {
             setSelectedScore(null);
             setMaximizedScoreId(null);
-          }}
-          onSave={async (configuration) => {
-            // ... existing save logic ...
           }}
         />
       </div>

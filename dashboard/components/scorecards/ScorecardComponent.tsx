@@ -21,7 +21,6 @@ export interface ScorecardData {
   key: string
   description: string
   type: string
-  configuration: any
   order: number
   externalId?: string
   scoreCount?: number
@@ -39,7 +38,6 @@ export interface ScorecardData {
           description: string
           order: number
           type: string
-          configuration: any
         }>
       }
     }>
@@ -145,7 +143,6 @@ const DetailContent = React.memo(({
         description: string
         order: number
         type: string
-        configuration: any
       }>
     }
   }, index: number) => {
@@ -179,7 +176,6 @@ const DetailContent = React.memo(({
         description: string
         order: number
         type: string
-        configuration: any
       }>
     }
   }, index: number) => {
@@ -339,7 +335,6 @@ const DetailContent = React.memo(({
                           key: score.key,
                           description: score.description || '',
                           type: score.type,
-                          configuration: score.configuration,
                           order: score.order,
                           icon: <CheckSquare className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
                         }}

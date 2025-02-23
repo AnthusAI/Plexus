@@ -170,7 +170,6 @@ export function ScorecardForm({
                 name: section.name,
                 order: section.order,
                 scores: scoresResult.data?.map(score => {
-                  const metadata = score.configuration as any ?? {}
                   return {
                     id: score.id,
                     name: score.name,
@@ -183,10 +182,10 @@ export function ScorecardForm({
                     aiProvider: score.aiProvider ?? undefined,
                     aiModel: score.aiModel ?? undefined,
                     metadata: {
-                      configuration: metadata.configuration ?? {},
-                      distribution: metadata.distribution ?? [],
-                      versionHistory: metadata.versionHistory ?? [],
-                      isFineTuned: metadata.isFineTuned ?? false
+                      configuration: {},
+                      distribution: [],
+                      versionHistory: [],
+                      isFineTuned: false
                     }
                   }
                 }) ?? []
