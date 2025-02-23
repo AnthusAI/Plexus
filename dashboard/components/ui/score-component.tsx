@@ -78,7 +78,7 @@ export function ScoreComponent({
     return (
       <Card
         className={cn(
-          "w-full h-full flex flex-col overflow-hidden border-0",
+          "w-full h-full flex flex-col overflow-hidden border-0 bg-card-selected",
           className
         )}
         {...props}
