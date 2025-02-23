@@ -2,6 +2,7 @@ import React from 'react'
 import type { Meta, StoryObj } from '@storybook/react'
 import { TaskDispatchButton, SimpleDialog, EvaluationDialog } from '@/components/task-dispatch'
 import { ClipboardCheck, Play, Zap } from 'lucide-react'
+import { AccountProvider } from '@/app/contexts/AccountContext'
 
 const meta: Meta<typeof TaskDispatchButton> = {
   title: 'Task Dispatch/TaskDispatchButton',
@@ -10,6 +11,13 @@ const meta: Meta<typeof TaskDispatchButton> = {
     layout: 'centered',
   },
   tags: ['autodocs'],
+  decorators: [
+    (Story) => (
+      <AccountProvider>
+        <Story />
+      </AccountProvider>
+    ),
+  ],
 }
 
 export default meta
