@@ -7,6 +7,7 @@ interface ReportTaskData {
   id: string;
   title: string;
   command: string;
+  elapsedTime?: string;
 }
 
 const meta: Meta<typeof ReportTask> = {
@@ -23,7 +24,7 @@ type Story = StoryObj<typeof ReportTask>;
 type TaskType = BaseTaskProps<ReportTaskData>['task'];
 
 const createTask = (id: string, overrides: Partial<TaskType> = {}) => {
-  const baseTask = {
+  const baseTask: { variant: 'grid' | 'detail' | 'nested', task: TaskType, onClick: () => void } = {
     variant: 'grid',
     task: {
       id,
@@ -31,7 +32,6 @@ const createTask = (id: string, overrides: Partial<TaskType> = {}) => {
       scorecard: 'Monthly Report',
       score: 'In Progress',
       time: '1 day ago',
-      summary: 'Generating monthly activity report',
       data: {
         id,
         title: 'Report Generation',
@@ -39,6 +39,9 @@ const createTask = (id: string, overrides: Partial<TaskType> = {}) => {
       },
       stages: [
         {
+          key: 'initialization',
+          label: 'Initialization',
+          color: 'bg-primary',
           name: 'Initialization',
           order: 1,
           status: 'PENDING',
@@ -47,6 +50,9 @@ const createTask = (id: string, overrides: Partial<TaskType> = {}) => {
           statusMessage: 'Preparing report generation...'
         },
         {
+          key: 'processing',
+          label: 'Processing',
+          color: 'bg-secondary',
           name: 'Processing',
           order: 2,
           status: 'PENDING',
@@ -55,6 +61,9 @@ const createTask = (id: string, overrides: Partial<TaskType> = {}) => {
           statusMessage: 'Processing activity data...'
         },
         {
+          key: 'finishing',
+          label: 'Finishing',
+          color: 'bg-primary',
           name: 'Finishing',
           order: 3,
           status: 'PENDING',
@@ -63,11 +72,9 @@ const createTask = (id: string, overrides: Partial<TaskType> = {}) => {
           statusMessage: 'Finalizing report...'
         }
       ],
-      processedItems: 0,
-      totalItems: 100,
       ...overrides
-    } as TaskType,
-    onClick: () => console.log(`Clicked task ${id}`),
+    },
+    onClick: () => console.log('Task clicked')
   }
 
   // Calculate overall progress if not provided in overrides
@@ -85,199 +92,255 @@ const createTask = (id: string, overrides: Partial<TaskType> = {}) => {
 }
 
 export const Starting: Story = {
-  args: createTask('starting', {
-    stages: [
-      {
-        name: 'Initialization',
-        order: 1,
-        status: 'RUNNING',
-        processedItems: 20,
-        totalItems: 100,
-        statusMessage: 'Loading activity data from database...'
-      },
-      {
-        name: 'Processing',
-        order: 2,
-        status: 'PENDING',
-        processedItems: 0,
-        totalItems: 100,
-        statusMessage: 'Processing activity data...'
-      },
-      {
-        name: 'Finishing',
-        order: 3,
-        status: 'PENDING',
-        processedItems: 0,
-        totalItems: 100,
-        statusMessage: 'Finalizing report...'
+  args: {
+    ...createTask('starting', {
+      stages: [
+        {
+          key: 'initialization',
+          label: 'Initialization',
+          color: 'bg-primary',
+          name: 'Initialization',
+          order: 1,
+          status: 'RUNNING',
+          processedItems: 20,
+          totalItems: 100,
+          statusMessage: 'Loading activity data from database...'
+        },
+        {
+          key: 'processing',
+          label: 'Processing',
+          color: 'bg-secondary',
+          name: 'Processing',
+          order: 2,
+          status: 'PENDING',
+          processedItems: 0,
+          totalItems: 100,
+          statusMessage: 'Processing activity data...'
+        },
+        {
+          key: 'finishing',
+          label: 'Finishing',
+          color: 'bg-primary',
+          name: 'Finishing',
+          order: 3,
+          status: 'PENDING',
+          processedItems: 0,
+          totalItems: 100,
+          statusMessage: 'Finalizing report...'
+        }
+      ],
+      currentStageName: 'Initialization',
+      status: 'RUNNING',
+      data: {
+        id: 'starting',
+        title: 'Report Generation',
+        command: 'plexus report generate --type monthly',
+        elapsedTime: '15s'
       }
-    ],
-    currentStageName: 'Initialization',
-    status: 'RUNNING',
-    elapsedTime: '15s',
-    estimatedTimeRemaining: '2m 45s'
-  })
+    }),
+    variant: 'grid'
+  }
 };
 
 export const Processing: Story = {
-  args: createTask('processing', {
-    stages: [
-      {
-        name: 'Initialization',
-        order: 1,
-        status: 'COMPLETED',
-        processedItems: 100,
-        totalItems: 100,
-        statusMessage: 'Activity data loaded'
-      },
-      {
-        name: 'Processing',
-        order: 2,
-        status: 'RUNNING',
-        processedItems: 45,
-        totalItems: 100,
-        statusMessage: 'Analyzing call metrics and trends...'
-      },
-      {
-        name: 'Finishing',
-        order: 3,
-        status: 'PENDING',
-        processedItems: 0,
-        totalItems: 100,
-        statusMessage: 'Finalizing report...'
+  args: {
+    ...createTask('processing', {
+      stages: [
+        {
+          key: 'initialization',
+          label: 'Initialization',
+          color: 'bg-primary',
+          name: 'Initialization',
+          order: 1,
+          status: 'COMPLETED',
+          processedItems: 100,
+          totalItems: 100,
+          statusMessage: 'Activity data loaded'
+        },
+        {
+          key: 'processing',
+          label: 'Processing',
+          color: 'bg-secondary',
+          name: 'Processing',
+          order: 2,
+          status: 'RUNNING',
+          processedItems: 45,
+          totalItems: 100,
+          statusMessage: 'Analyzing call metrics and trends...'
+        },
+        {
+          key: 'finishing',
+          label: 'Finishing',
+          color: 'bg-primary',
+          name: 'Finishing',
+          order: 3,
+          status: 'PENDING',
+          processedItems: 0,
+          totalItems: 100,
+          statusMessage: 'Finalizing report...'
+        }
+      ],
+      currentStageName: 'Processing',
+      status: 'RUNNING',
+      data: {
+        id: 'processing',
+        title: 'Report Generation',
+        command: 'plexus report generate --type monthly',
+        elapsedTime: '1m 30s'
       }
-    ],
-    currentStageName: 'Processing',
-    status: 'RUNNING',
-    elapsedTime: '1m 30s',
-    estimatedTimeRemaining: '1m 15s'
-  })
+    }),
+    variant: 'grid'
+  }
 };
 
 export const Finishing: Story = {
-  args: createTask('finishing', {
-    stages: [
-      {
-        name: 'Initialization',
-        order: 1,
-        status: 'COMPLETED',
-        processedItems: 100,
-        totalItems: 100,
-        statusMessage: 'Activity data loaded'
-      },
-      {
-        name: 'Processing',
-        order: 2,
-        status: 'COMPLETED',
-        processedItems: 100,
-        totalItems: 100,
-        statusMessage: 'Analysis complete'
-      },
-      {
-        name: 'Finishing',
-        order: 3,
-        status: 'RUNNING',
-        statusMessage: 'Generating final report...'
+  args: {
+    ...createTask('finishing', {
+      stages: [
+        {
+          key: 'initialization',
+          label: 'Initialization',
+          color: 'bg-primary',
+          name: 'Initialization',
+          order: 1,
+          status: 'COMPLETED',
+          processedItems: 100,
+          totalItems: 100,
+          statusMessage: 'Activity data loaded'
+        },
+        {
+          key: 'processing',
+          label: 'Processing',
+          color: 'bg-secondary',
+          name: 'Processing',
+          order: 2,
+          status: 'COMPLETED',
+          processedItems: 100,
+          totalItems: 100,
+          statusMessage: 'Analysis complete'
+        },
+        {
+          key: 'finishing',
+          label: 'Finishing',
+          color: 'bg-primary',
+          name: 'Finishing',
+          order: 3,
+          status: 'RUNNING',
+          processedItems: 80,
+          totalItems: 100,
+          statusMessage: 'Generating final report...'
+        }
+      ],
+      currentStageName: 'Finishing',
+      status: 'RUNNING',
+      data: {
+        id: 'finishing',
+        title: 'Report Generation',
+        command: 'plexus report generate --type monthly',
+        elapsedTime: '2m 45s'
       }
-    ],
-    currentStageName: 'Finishing',
-    status: 'RUNNING',
-    elapsedTime: '2m 45s',
-    estimatedTimeRemaining: '15s'
-  })
+    }),
+    variant: 'grid'
+  }
 };
 
 export const Complete: Story = {
-  args: createTask('complete', {
-    stages: [
-      {
-        name: 'Initialization',
-        order: 1,
-        status: 'COMPLETED',
-        processedItems: 100,
-        totalItems: 100,
-        statusMessage: 'Activity data loaded'
-      },
-      {
-        name: 'Processing',
-        order: 2,
-        status: 'COMPLETED',
-        processedItems: 100,
-        totalItems: 100,
-        statusMessage: 'Analysis complete'
-      },
-      {
-        name: 'Finishing',
-        order: 3,
-        status: 'COMPLETED',
-        processedItems: 100,
-        totalItems: 100,
-        statusMessage: 'Report generated successfully'
+  args: {
+    ...createTask('complete', {
+      stages: [
+        {
+          key: 'initialization',
+          label: 'Initialization',
+          color: 'bg-primary',
+          name: 'Initialization',
+          order: 1,
+          status: 'COMPLETED',
+          processedItems: 100,
+          totalItems: 100,
+          statusMessage: 'Activity data loaded'
+        },
+        {
+          key: 'processing',
+          label: 'Processing',
+          color: 'bg-secondary',
+          name: 'Processing',
+          order: 2,
+          status: 'COMPLETED',
+          processedItems: 100,
+          totalItems: 100,
+          statusMessage: 'Analysis complete'
+        },
+        {
+          key: 'finishing',
+          label: 'Finishing',
+          color: 'bg-primary',
+          name: 'Finishing',
+          order: 3,
+          status: 'COMPLETED',
+          processedItems: 100,
+          totalItems: 100,
+          statusMessage: 'Report generated successfully'
+        }
+      ],
+      currentStageName: 'Finishing',
+      status: 'COMPLETED',
+      data: {
+        id: 'complete',
+        title: 'Report Generation',
+        command: 'plexus report generate --type monthly',
+        elapsedTime: '3m 0s'
       }
-    ],
-    currentStageName: 'Finishing',
-    status: 'COMPLETED',
-    elapsedTime: '3m 0s'
-  })
+    }),
+    variant: 'grid'
+  }
 };
 
 export const Failed: Story = {
-  args: createTask('failed', {
-    stages: [
-      {
-        name: 'Initialization',
-        order: 1,
-        status: 'COMPLETED',
-        processedItems: 100,
-        totalItems: 100,
-        statusMessage: 'Activity data loaded'
-      },
-      {
-        name: 'Processing',
-        order: 2,
-        status: 'FAILED',
-        processedItems: 50,
-        totalItems: 100,
-        statusMessage: 'Error analyzing call metrics: insufficient data'
-      },
-      {
-        name: 'Finishing',
-        order: 3,
-        status: 'PENDING',
-        processedItems: 0,
-        totalItems: 100,
-        statusMessage: 'Finalizing report...'
+  args: {
+    ...createTask('failed', {
+      stages: [
+        {
+          key: 'initialization',
+          label: 'Initialization',
+          color: 'bg-primary',
+          name: 'Initialization',
+          order: 1,
+          status: 'FAILED',
+          processedItems: 20,
+          totalItems: 100,
+          statusMessage: 'Failed to load activity data'
+        }
+      ],
+      currentStageName: 'Initialization',
+      status: 'FAILED',
+      data: {
+        id: 'failed',
+        title: 'Report Generation',
+        command: 'plexus report generate --type monthly',
+        elapsedTime: '1m 45s'
       }
-    ],
-    currentStageName: 'Processing',
-    status: 'FAILED',
-    elapsedTime: '1m 45s'
-  })
+    }),
+    variant: 'grid'
+  }
 };
 
-export const Demo = {
-  render: () => (
-    <div className="space-y-4 p-4">
-      <div>
-        <div className="text-sm text-muted-foreground mb-2">Starting</div>
-        <ReportTask {...Starting.args} />
+export const AllStages = {
+  render: () => {
+    // Ensure all tasks have the required properties
+    const tasks = [
+      Starting.args?.task,
+      Processing.args?.task,
+      Finishing.args?.task,
+      Complete.args?.task,
+      Failed.args?.task,
+    ].filter((task): task is NonNullable<typeof task> => task !== undefined);
+
+    return (
+      <div className="grid grid-cols-1 gap-4">
+        {tasks.map((task, index) => (
+          <ReportTask key={task.id} variant="grid" task={task} />
+        ))}
       </div>
-      <div>
-        <div className="text-sm text-muted-foreground mb-2">Processing</div>
-        <ReportTask {...Processing.args} />
-      </div>
-      <div>
-        <div className="text-sm text-muted-foreground mb-2">Finishing</div>
-        <ReportTask {...Finishing.args} />
-      </div>
-      <div>
-        <div className="text-sm text-muted-foreground mb-2">Complete</div>
-        <ReportTask {...Complete.args} />
-      </div>
-      <div>
-        <div className="text-sm text-muted-foreground mb-2">Failed</div>
-        <ReportTask {...Failed.args} />
-      </div>
-    </div>
-  )
+    );
+  },
 };
