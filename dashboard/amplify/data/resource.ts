@@ -141,7 +141,7 @@ const schema = a.schema({
         .model({
             scoreId: a.string().required(),
             score: a.belongsTo('Score', 'scoreId'),
-            configuration: a.json().required(),
+            configuration: a.string().required(),
             isFeatured: a.boolean().required(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
