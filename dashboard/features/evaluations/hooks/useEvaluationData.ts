@@ -11,7 +11,8 @@ import type {
   BaseEvaluation,
   ProcessedEvaluation,
   TaskStageType, 
-  AmplifyTask 
+  AmplifyTask,
+  Evaluation
 } from '@/utils/data-operations';
 import { transformEvaluation, getValueFromLazyLoader, transformAmplifyTask, processTask } from '@/utils/data-operations';
 import { observeRecentEvaluations } from '@/utils/data-operations';
@@ -68,6 +69,7 @@ export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataPr
   const [evaluationMap, setEvaluationMap] = useState<Map<string, ProcessedEvaluation>>(new Map());
   const taskMapRef = useRef<Map<string, AmplifyTask>>(new Map());
   const stageMapRef = useRef<Map<string, Map<string, TaskStageType>>>(new Map());
+  const activeSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
 
   // Helper function to get task stages
   const getTaskStages = useCallback((taskId: string | null | undefined) => {
@@ -490,7 +492,7 @@ export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataPr
               transformedEvaluation.task?.status === 'RUNNING';
 
             // Check if this is the most recent running evaluation
-            const isMostRecent = (prevEvaluations: Evaluation[]) => {
+            const isMostRecent = (prevEvaluations: ProcessedEvaluation[]) => {
               const runningEvals = prevEvaluations
                 .filter(e => e.status === 'RUNNING' || e.task?.status === 'RUNNING')
                 .sort((a, b) => {
@@ -580,10 +582,10 @@ export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataPr
                           confidence: item.confidence ?? null,
                           explanation: item.explanation ?? scoreResult?.explanation ?? null,
                           metadata: {
-                            human_label: scoreResult?.metadata?.human_label ?? parsedMetadata.human_label ?? item.metadata?.human_label ?? null,
-                            correct: Boolean(scoreResult?.metadata?.correct ?? parsedMetadata.correct ?? item.metadata?.correct),
-                            human_explanation: scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? item.metadata?.human_explanation ?? null,
-                            text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? item.metadata?.text ?? null
+                            human_label: scoreResult?.metadata?.human_label ?? parsedMetadata.human_label ?? (typeof item.metadata === 'object' ? (item.metadata as any).human_label : null) ?? null,
+                            correct: Boolean(scoreResult?.metadata?.correct ?? parsedMetadata.correct ?? (typeof item.metadata === 'object' ? (item.metadata as any).correct : null)),
+                            human_explanation: scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? (typeof item.metadata === 'object' ? (item.metadata as any).human_explanation : null) ?? null,
+                            text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? (typeof item.metadata === 'object' ? (item.metadata as any).text : null) ?? null
                           },
                           itemId: item.itemId ?? parsedMetadata.item_id?.toString() ?? null,
                           createdAt: item.createdAt
@@ -606,13 +608,11 @@ export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataPr
                       // Create updated evaluation with new score results
                       const updatedEval = {
                         ...evalToUpdate,
-                        scoreResults: {
-                          items: transformedItems
-                        }
+                        scoreResults: transformedItems
                       };
 
                       // Only create new array if evaluation actually changed
-                      if (Object.is(evalToUpdate.scoreResults?.items, updatedEval.scoreResults.items)) {
+                      if (Object.is(evalToUpdate.scoreResults, updatedEval.scoreResults)) {
                         return prevEvals;
                       }
 
@@ -654,9 +654,7 @@ export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataPr
           // When receiving score results
           console.log('Score results received:', {
             evaluationId: data.onUpdateEvaluation.id,
-            count: data.onUpdateEvaluation.scoreResults?.items?.length,
-            firstResult: data.onUpdateEvaluation.scoreResults?.items?.[0],
-            lastResult: data.onUpdateEvaluation.scoreResults?.items?.[data.onUpdateEvaluation.scoreResults.items.length - 1],
+            hasScoreResults: !!data.onUpdateEvaluation.scoreResults,
             timestamp: new Date().toISOString()
           });
         }
