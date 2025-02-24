@@ -2,6 +2,7 @@ import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import OptimizationTask from '@/components/OptimizationTask';
 import { BaseTaskProps } from '@/components/Task';
+import type { OptimizationTaskData } from '@/components/OptimizationTask';
 
 const meta: Meta<typeof OptimizationTask> = {
   title: 'Tasks/Types/OptimizationTask',
@@ -16,15 +17,7 @@ type Story = StoryObj<typeof OptimizationTask>;
 
 interface OptimizationTaskStoryProps extends Omit<BaseTaskProps, 'task'> {
   task: BaseTaskProps['task'] & {
-    data?: {
-      before: { innerRing: Array<{ value: number }> }
-      after: { innerRing: Array<{ value: number }> }
-      progress: number
-      elapsedTime: string
-      numberComplete: number
-      numberTotal: number
-      eta: string
-    }
+    data?: OptimizationTaskData
   }
 }
 
@@ -35,21 +28,33 @@ const createTask = (
 ): OptimizationTaskStoryProps => ({
   variant: 'grid',
   task: {
-    id,
-    type: 'Data Optimization',
-    scorecard: 'Analysis',
-    score: 'In Progress',
-    time: '2 hours ago',
-    summary: 'Optimization Summary',
-    description: 'Optimization Description',
+    id: id.toString(),
+    type: 'optimization',
+    scorecard: 'Optimization',
+    score: '90',
+    time: '1h 30m',
     data: {
-      before: { innerRing: [{ value: 70 }] },
-      after: { innerRing: [{ value: 90 }] },
+      id: id.toString(),
+      title: 'Optimization Task',
+      before: {
+        outerRing: [{ category: 'Accuracy', value: 70, fill: '#4CAF50' }],
+        innerRing: [{ category: 'Accuracy', value: 70, fill: '#4CAF50' }]
+      },
+      after: {
+        outerRing: [{ category: 'Accuracy', value: 90, fill: '#4CAF50' }],
+        innerRing: [{ category: 'Accuracy', value: 90, fill: '#4CAF50' }]
+      },
       progress: (numberComplete / numberTotal) * 100,
+      accuracy: 90,
       elapsedTime: '1h 30m',
       numberComplete,
       numberTotal,
-      eta: '30m remaining'
+      eta: '30m remaining',
+      processedItems: numberComplete,
+      totalItems: numberTotal,
+      estimatedTimeRemaining: '30m remaining',
+      elapsedSeconds: 5400,
+      estimatedRemainingSeconds: 1800
     }
   },
   onClick: () => console.log(`Clicked task ${id}`),

@@ -440,8 +440,10 @@ function parseScoreResult(result: any): ParsedScoreResult {
   }
 
   // Extract results from nested structure if present
-  const firstResultKey = parsedMetadata?.results ? Object.keys(parsedMetadata.results)[0] : null;
-  const scoreResult = firstResultKey && parsedMetadata.results ? parsedMetadata.results[firstResultKey] : null;
+  const firstResultKey = parsedMetadata?.results ? 
+    Object.keys(parsedMetadata.results)[0] : null
+  const scoreResult = firstResultKey && parsedMetadata.results ? 
+    parsedMetadata.results[firstResultKey] : null
 
   return {
     id: result.id || '',
@@ -481,7 +483,9 @@ const DetailContent = React.memo(({
   commandDisplay?: 'hide' | 'show' | 'full'
   onCommandDisplayChange?: (display: 'show' | 'full') => void
 }) => {
-  // Add more detailed logging for DetailContent
+  // Force isSelected to true in detail mode
+  const effectiveIsSelected = true;
+
   console.log('DetailContent render:', {
     scoreResults: {
       raw: data.scoreResults,
@@ -645,7 +649,7 @@ const DetailContent = React.memo(({
                     statusMessage={getStatusMessage(data)}
                     truncateMessages={true}
                     extra={extra}
-                    isSelected={true}
+                    isSelected={effectiveIsSelected}
                     commandDisplay={commandDisplay}
                     onCommandDisplayChange={onCommandDisplayChange}
                   />
