@@ -12,7 +12,9 @@ import { transformEvaluation } from '@/components/evaluations-dashboard'
 import { type Evaluation } from '@/utils/data-operations'
 import { getValueFromLazyLoader } from '@/utils/data-operations'
 import type { LazyLoader } from '@/utils/types'
+import { fetchAuthSession } from 'aws-amplify/auth'
 
+// Create client
 const client = generateClient<Schema>()
 
 const GET_EVALUATION = `
@@ -109,16 +111,31 @@ export default function PublicEvaluation() {
   useEffect(() => {
     async function fetchEvaluation() {
       try {
+        // Try to get the auth session
+        let authMode: 'apiKey' | 'userPool' = 'apiKey';
+        try {
+          const session = await fetchAuthSession();
+          if (session.tokens?.idToken) {
+            authMode = 'userPool';
+          }
+        } catch {
+          console.log('No auth session, using apiKey');
+        }
+
+        // Use direct GraphQL query
         const response = await client.graphql({
           query: GET_EVALUATION,
-          variables: { id: id as string }
+          variables: { id: id as string },
+          authMode
         }) as GraphQLResult<{
           getEvaluation: Schema['Evaluation']['type']
         }>;
         
         const result = response.data?.getEvaluation;
-        const transformedEvaluation = result ? transformEvaluation(result) : null;
-        console.log('Transformed evaluation:', transformedEvaluation);
+        if (!result) {
+          throw new Error('No evaluation found');
+        }
+        const transformedEvaluation = transformEvaluation(result);
         setEvaluation(transformedEvaluation);
       } catch (err) {
         console.error('Error fetching evaluation:', err);
