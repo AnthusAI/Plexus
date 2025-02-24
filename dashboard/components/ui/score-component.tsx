@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, RectangleVertical, FileStack, ChevronDown, ChevronUp } from 'lucide-react'
+import { MoreHorizontal, X, Square, RectangleVertical, FileStack, ChevronDown, ChevronUp, Award } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -10,6 +10,9 @@ import { Input } from '@/components/ui/input'
 import { generateClient } from 'aws-amplify/api'
 import { toast } from 'sonner'
 import { ScoreVersionHistory } from './score-version-history'
+import type { GraphQLResult } from '@aws-amplify/api'
+import Editor from '@monaco-editor/react'
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 
 const client = generateClient();
 
@@ -21,12 +24,14 @@ export interface ScoreData {
   order: number
   externalId?: string
   icon?: React.ReactNode
+  configuration?: string // YAML configuration string
+  championVersionId?: string // ID of the champion version
 }
 
 interface ScoreVersion {
   id: string
   scoreId: string
-  configuration: string
+  configuration: string // YAML string
   isFeatured: boolean
   isChampion?: boolean
   comment?: string
@@ -48,6 +53,25 @@ interface ScoreVersionRecord {
     // ... other score fields
   }
   versions: ScoreVersion[]
+}
+
+interface GetScoreVersionsResponse {
+  listScoreVersions: {
+    items: ScoreVersion[]
+  }
+}
+
+interface CreateScoreVersionResponse {
+  createScoreVersion: ScoreVersion
+}
+
+interface GetScoreResponse {
+  getScore: {
+    id: string
+    name: string
+    externalId?: string
+    championVersionId?: string
+  }
 }
 
 interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -95,6 +119,8 @@ const DetailContent = React.memo(({
   hasChanges,
   versions,
   championVersionId,
+  selectedVersionId,
+  onVersionSelect,
   onToggleFeature,
   versionComment,
   onCommentChange,
@@ -109,31 +135,62 @@ const DetailContent = React.memo(({
   hasChanges?: boolean
   versions?: ScoreVersion[]
   championVersionId?: string
+  selectedVersionId?: string
+  onVersionSelect?: (version: ScoreVersion) => void
   onToggleFeature?: (versionId: string) => void
   versionComment: string
   onCommentChange: (comment: string) => void
 }) => {
-  const [isHistoryExpanded, setIsHistoryExpanded] = React.useState(false)
+  // Get the current version's configuration
+  const currentVersion = versions?.find(v => 
+    v.id === (selectedVersionId || championVersionId)
+  )
+  
+  // Parse YAML configuration if available, otherwise create default YAML
+  const defaultYaml = stringifyYaml({
+    name: score.name,
+    externalId: score.externalId
+  })
+  const configuration = currentVersion?.configuration || defaultYaml
+  
+  // Parse current configuration for form fields
+  const parsedConfig = React.useMemo(() => {
+    try {
+      return parseYaml(configuration)
+    } catch (error) {
+      console.error('Error parsing YAML:', error)
+      return { name: score.name, externalId: score.externalId }
+    }
+  }, [configuration, score])
 
   return (
     <div className="w-full flex flex-col min-h-0">
       <div className="flex justify-between items-start w-full">
         <div className="space-y-2 flex-1">
           <Input
-            value={score.name}
-            onChange={(e) => onEditChange?.({ name: e.target.value })}
+            value={parsedConfig.name}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => onEditChange?.({ name: e.target.value })}
             className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
                      focus-visible:ring-0 focus-visible:ring-offset-0 
                      placeholder:text-muted-foreground rounded-md"
             placeholder="Score Name"
           />
           <Input
-            value={score.externalId ?? ''}
-            onChange={(e) => onEditChange?.({ externalId: e.target.value })}
+            value={parsedConfig.externalId ?? ''}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => onEditChange?.({ externalId: e.target.value })}
             className="font-mono bg-background border-0 px-2 h-auto w-full
                      focus-visible:ring-0 focus-visible:ring-offset-0 
                      placeholder:text-muted-foreground rounded-md"
             placeholder="External ID"
+          />
+          <textarea
+            value={versionComment}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onCommentChange(e.target.value)}
+            placeholder="Add a comment about this version..."
+            className="w-full px-2 py-1.5 rounded-md bg-background border-0 text-sm resize-none
+                     focus-visible:ring-0 focus-visible:ring-offset-0 
+                     placeholder:text-muted-foreground"
+            rows={2}
           />
         </div>
         <div className="flex gap-2 ml-4">
@@ -167,20 +224,40 @@ const DetailContent = React.memo(({
         </div>
       </div>
 
+      {/* YAML Editor */}
+      <div className="mt-6 rounded-md border bg-background">
+        <Editor
+          height="300px"
+          defaultLanguage="yaml"
+          value={configuration}
+          onChange={(value) => {
+            try {
+              // Parse YAML to validate it and get values for form
+              const parsed = parseYaml(value || '')
+              onEditChange?.({
+                name: parsed.name,
+                externalId: parsed.externalId,
+                configuration: value // Store the original YAML string
+              })
+            } catch (error) {
+              // Ignore parse errors while typing
+            }
+          }}
+          options={{
+            minimap: { enabled: false },
+            fontSize: 14,
+            lineNumbers: 'on',
+            scrollBeyondLastLine: false,
+            wordWrap: 'on',
+            wrappingIndent: 'indent',
+            automaticLayout: true,
+            fontFamily: 'monospace'
+          }}
+        />
+      </div>
+
       {hasChanges && (
         <div className="mt-4 space-y-4">
-          <div className="space-y-2">
-            <label htmlFor="version-comment" className="text-sm text-muted-foreground">
-              Version Comment
-            </label>
-            <textarea
-              id="version-comment"
-              value={versionComment}
-              onChange={(e) => onCommentChange(e.target.value)}
-              placeholder="Describe the changes made in this version..."
-              className="w-full min-h-[80px] px-3 py-2 rounded-md border bg-background text-sm resize-none"
-            />
-          </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onCancel}>Cancel</Button>
             <Button onClick={onSave}>Save Changes</Button>
@@ -188,31 +265,17 @@ const DetailContent = React.memo(({
         </div>
       )}
 
-      <div className="mt-6">
-        <Button
-          variant="ghost"
-          className="w-full flex items-center justify-start gap-2 h-auto py-2 px-0 font-medium hover:bg-transparent"
-          onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
-        >
-          <FileStack className="h-4 w-4" />
-          <span>History</span>
-          {isHistoryExpanded ? (
-            <ChevronUp className="h-4 w-4 ml-1" />
-          ) : (
-            <ChevronDown className="h-4 w-4 ml-1" />
-          )}
-        </Button>
-        
-        {isHistoryExpanded && versions && (
-          <div className="mt-2 rounded-lg bg-background p-4">
-            <ScoreVersionHistory
-              versions={versions}
-              championVersionId={championVersionId}
-              onToggleFeature={onToggleFeature}
-            />
-          </div>
-        )}
-      </div>
+      {versions && (
+        <div className="mt-6">
+          <ScoreVersionHistory
+            versions={versions}
+            championVersionId={championVersionId}
+            selectedVersionId={selectedVersionId}
+            onVersionSelect={onVersionSelect}
+            onToggleFeature={onToggleFeature}
+          />
+        </div>
+      )}
     </div>
   )
 })
@@ -233,6 +296,7 @@ export function ScoreComponent({
   const [hasChanges, setHasChanges] = React.useState(false)
   const [versions, setVersions] = React.useState<ScoreVersion[]>([])
   const [championVersionId, setChampionVersionId] = React.useState<string>()
+  const [selectedVersionId, setSelectedVersionId] = React.useState<string>()
   const [versionComment, setVersionComment] = React.useState('')
 
   React.useEffect(() => {
@@ -241,6 +305,36 @@ export function ScoreComponent({
     const fetchVersions = async () => {
       try {
         console.log('Fetching versions for score:', score.id);
+        
+        // First, get the score details to get the championVersionId
+        const scoreResponse = await client.graphql({
+          query: `
+            query GetScore($id: ID!) {
+              getScore(id: $id) {
+                id
+                name
+                externalId
+                championVersionId
+              }
+            }
+          `,
+          variables: {
+            id: score.id
+          }
+        }) as GraphQLResult<GetScoreResponse>;
+        
+        let championId: string | undefined;
+        
+        if ('data' in scoreResponse && scoreResponse.data?.getScore) {
+          const scoreData = scoreResponse.data.getScore;
+          championId = scoreData?.championVersionId;
+          
+          if (championId) {
+            setChampionVersionId(championId);
+          }
+        }
+        
+        // Then fetch all versions
         const response = await client.graphql({
           query: `
             query GetScoreVersions($scoreId: String!) {
@@ -260,16 +354,31 @@ export function ScoreComponent({
           variables: {
             scoreId: score.id
           }
-        });
+        }) as GraphQLResult<GetScoreVersionsResponse>;
+        
         console.log('API Response:', response);
         
-        if (response.data?.listScoreVersions?.items) {
+        if ('data' in response && response.data?.listScoreVersions?.items) {
           const versionItems = response.data.listScoreVersions.items;
           console.log('Found versions:', versionItems);
           setVersions(versionItems);
-          // For now, let's consider the most recent version as champion
-          if (versionItems.length > 0) {
-            setChampionVersionId(versionItems[0].id);
+          
+          // Sort versions by createdAt in descending order
+          const sortedVersions = [...versionItems].sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+          
+          // Find champion version or use the most recent one
+          const champion = championId 
+            ? versionItems.find(v => v.id === championId) 
+            : sortedVersions[0];
+            
+          if (champion) {
+            if (!championId) {
+              setChampionVersionId(champion.id);
+            }
+            // Automatically select the champion version
+            handleVersionSelect(champion);
           }
         } else {
           console.log('No versions found in response:', response);
@@ -293,6 +402,31 @@ export function ScoreComponent({
     setEditedScore(score)
     setVersionComment('') // Reset comment on cancel
     setHasChanges(false)
+    setSelectedVersionId(undefined) // Reset selection to champion
+  }
+
+  const handleVersionSelect = (version: ScoreVersion) => {
+    setSelectedVersionId(version.id)
+    setVersionComment(version.comment || '')
+    
+    try {
+      const config = parseYaml(version.configuration)
+      setEditedScore(prev => ({
+        ...prev,
+        name: config.name || prev.name,
+        externalId: config.externalId || prev.externalId,
+        description: config.description || prev.description,
+        configuration: version.configuration // Keep original YAML
+      }))
+      
+      // If this is a new selection (not just re-rendering), show a confirmation
+      if (selectedVersionId !== version.id) {
+        toast.info(`Viewing version from ${new Date(version.createdAt).toLocaleString()}`)
+      }
+    } catch (error) {
+      console.error('Error parsing version YAML:', error)
+      toast.error('Error loading version configuration')
+    }
   }
 
   const handleToggleFeature = async (versionId: string) => {
@@ -340,15 +474,16 @@ export function ScoreComponent({
         }
       });
 
-      // Create a new version
+      // Create a new version with YAML configuration
       const versionPayload = {
         scoreId: score.id,
-        configuration: JSON.stringify({
+        configuration: editedScore.configuration || stringifyYaml({
           name: editedScore.name,
-          externalId: editedScore.externalId
+          externalId: editedScore.externalId,
+          description: editedScore.description
         }),
         isFeatured: false,
-        comment: versionComment || 'Updated score configuration', // Use default if no comment provided
+        comment: versionComment || 'Updated score configuration',
       };
 
       const createVersionResponse = await client.graphql({
@@ -368,25 +503,51 @@ export function ScoreComponent({
         variables: {
           input: versionPayload
         }
-      });
+      }) as GraphQLResult<CreateScoreVersionResponse>;
       
-      const newVersion = createVersionResponse.data.createScoreVersion;
+      const newVersion = 'data' in createVersionResponse && createVersionResponse.data?.createScoreVersion;
       
       // Update local state with the new version
-      const placeholderVersion = {
-        ...newVersion,
-        user: {
-          name: "Ryan Porter",
-          avatar: "/user-avatar.png",
-          initials: "RP"
+      if (newVersion) {
+        const placeholderVersion = {
+          ...newVersion,
+          user: {
+            name: "Ryan Porter",
+            avatar: "/user-avatar.png",
+            initials: "RP"
+          }
+        };
+        setVersions(prev => [placeholderVersion, ...prev]);
+        setChampionVersionId(placeholderVersion.id);
+        setSelectedVersionId(placeholderVersion.id);
+        
+        // Update the Score record to set this as the champion version
+        try {
+          await client.graphql({
+            query: `
+              mutation UpdateScoreChampion($input: UpdateScoreInput!) {
+                updateScore(input: $input) {
+                  id
+                  championVersionId
+                }
+              }
+            `,
+            variables: {
+              input: {
+                id: score.id,
+                championVersionId: placeholderVersion.id,
+              }
+            }
+          });
+        } catch (error) {
+          console.error('Error updating champion version:', error);
+          // Continue even if this fails
         }
-      };
-      setVersions(prev => [placeholderVersion, ...prev]);
-      setChampionVersionId(placeholderVersion.id);
+      }
       
       toast.success('Score updated successfully');
       setHasChanges(false);
-      setVersionComment(''); // Reset comment after successful save
+      setVersionComment('');
     } catch (error) {
       console.error('Error saving score:', error);
       toast.error(error instanceof Error ? error.message : 'Error updating score');
@@ -439,6 +600,8 @@ export function ScoreComponent({
               hasChanges={hasChanges}
               versions={versions}
               championVersionId={championVersionId}
+              selectedVersionId={selectedVersionId}
+              onVersionSelect={handleVersionSelect}
               onToggleFeature={handleToggleFeature}
               versionComment={versionComment}
               onCommentChange={setVersionComment}
