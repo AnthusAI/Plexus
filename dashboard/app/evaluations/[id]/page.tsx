@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Layout } from '@/components/landing/Layout'
@@ -14,9 +15,7 @@ import { getValueFromLazyLoader } from '@/utils/data-operations'
 import type { LazyLoader } from '@/utils/types'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
-// Create client
-const client = generateClient<Schema>()
-
+// GraphQL query
 const GET_EVALUATION = `
   query GetEvaluation($id: ID!) {
     getEvaluation(id: $id) {
@@ -102,41 +101,64 @@ const GET_EVALUATION = `
   }
 `
 
-export default function PublicEvaluation() {
-  const { id } = useParams()
-  const [evaluation, setEvaluation] = useState<Evaluation | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+// Create a service for data fetching that can be easily mocked in tests
+export class EvaluationService {
+  constructor(
+    private client = generateClient<Schema>(),
+    private authService = { fetchAuthSession }
+  ) {}
+
+  async fetchEvaluation(id: string): Promise<Evaluation> {
+    // Try to get the auth session
+    let authMode: 'apiKey' | 'userPool' = 'apiKey';
+    try {
+      const session = await this.authService.fetchAuthSession();
+      if (session.tokens?.idToken) {
+        authMode = 'userPool';
+      }
+    } catch {
+      console.log('No auth session, using apiKey');
+    }
+
+    // Use direct GraphQL query
+    const response = await this.client.graphql({
+      query: GET_EVALUATION,
+      variables: { id },
+      authMode
+    }) as GraphQLResult<{
+      getEvaluation: Schema['Evaluation']['type']
+    }>;
+    
+    const result = response.data?.getEvaluation;
+    if (!result) {
+      throw new Error('No evaluation found');
+    }
+    
+    return transformEvaluation(result) as Evaluation;
+  }
+}
+
+// Props interface for the component
+interface PublicEvaluationProps {
+  evaluationService?: EvaluationService;
+}
+
+export default function PublicEvaluation({ 
+  evaluationService = new EvaluationService() 
+}: PublicEvaluationProps = {}) {
+  const { id } = useParams() as { id: string };
+  const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Memoize the service to prevent re-renders
+  const memoizedService = React.useMemo(() => evaluationService, []);
 
   useEffect(() => {
-    async function fetchEvaluation() {
+    async function loadEvaluation() {
       try {
-        // Try to get the auth session
-        let authMode: 'apiKey' | 'userPool' = 'apiKey';
-        try {
-          const session = await fetchAuthSession();
-          if (session.tokens?.idToken) {
-            authMode = 'userPool';
-          }
-        } catch {
-          console.log('No auth session, using apiKey');
-        }
-
-        // Use direct GraphQL query
-        const response = await client.graphql({
-          query: GET_EVALUATION,
-          variables: { id: id as string },
-          authMode
-        }) as GraphQLResult<{
-          getEvaluation: Schema['Evaluation']['type']
-        }>;
-        
-        const result = response.data?.getEvaluation;
-        if (!result) {
-          throw new Error('No evaluation found');
-        }
-        const transformedEvaluation = transformEvaluation(result);
-        setEvaluation(transformedEvaluation);
+        const data = await memoizedService.fetchEvaluation(id);
+        setEvaluation(data);
       } catch (err) {
         console.error('Error fetching evaluation:', err);
         setError('Failed to load evaluation');
@@ -146,9 +168,9 @@ export default function PublicEvaluation() {
     }
 
     if (id) {
-      fetchEvaluation();
+      loadEvaluation();
     }
-  }, [id]);
+  }, [id, memoizedService]);
 
   return (
     <Layout>
