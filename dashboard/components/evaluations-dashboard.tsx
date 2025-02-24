@@ -463,7 +463,7 @@ export default function EvaluationsDashboard() {
 
   const renderSelectedTask = () => {
     if (!selectedEvaluationId) return null
-    const evaluation = evaluations.find(e => e.id === selectedEvaluationId)
+    const evaluation = evaluations.find((e: { id: string }) => e.id === selectedEvaluationId)
     if (!evaluation) return null
 
     return (
@@ -473,7 +473,7 @@ export default function EvaluationsDashboard() {
         evaluationData={{
           ...evaluation,
           scoreResults: evaluation.scoreResults ? {
-            items: evaluation.scoreResults.map(result => ({
+            items: evaluation.scoreResults.map((result: { id: string; value: string | number; confidence: number | null; explanation: string | null; metadata: any; itemId: string | null }) => ({
               id: result.id,
               value: result.value,
               confidence: result.confidence,
@@ -513,7 +513,7 @@ export default function EvaluationsDashboard() {
 
   // Add filtering logic for evaluations based on selected scorecard and score
   const filteredEvaluations = useMemo(() => {
-    return evaluations.filter(evaluation => {
+    return evaluations.filter((evaluation: any) => {
       if (!selectedScorecard && !selectedScore) return true;
       if (selectedScorecard && evaluation.scorecard?.name !== selectedScorecard) return false;
       if (selectedScore && evaluation.score?.name !== selectedScore) return false;
@@ -641,7 +641,7 @@ export default function EvaluationsDashboard() {
               grid gap-3
               ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
             `}>
-              {filteredEvaluations.map((evaluation) => {
+              {filteredEvaluations.map((evaluation: any) => {
                 return (
                   <div 
                     key={evaluation.id} 
@@ -658,7 +658,7 @@ export default function EvaluationsDashboard() {
                       evaluationData={{
                         ...evaluation,
                         scoreResults: evaluation.scoreResults ? {
-                          items: evaluation.scoreResults.map(result => ({
+                          items: evaluation.scoreResults.map((result: { id: string; value: string | number; confidence: number | null; explanation: string | null; metadata: any; itemId: string | null }) => ({
                             id: result.id,
                             value: result.value,
                             confidence: result.confidence,
@@ -681,8 +681,8 @@ export default function EvaluationsDashboard() {
                   </div>
                 );
               })}
-              <div ref={ref} />
-            </>
+              <div ref={ref} className="h-4" />
+            </div>
           )}
         </div>
 
