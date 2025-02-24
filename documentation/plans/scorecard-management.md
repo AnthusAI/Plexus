@@ -58,17 +58,59 @@ This document outlines the implementation of Plexus's scorecard management syste
 ### Phase 2: Schema Updates (Current Focus)
 - Status: In Progress
 - Goals:
-  - Review and update data models for improved structure
-  - Implement new GraphQL schema changes
-  - Update queries and mutations for better data handling
-  - Migrate existing data to new structure
-  - Ensure backward compatibility during transition
+  - Update UI to support score version management
+  - Add version history view for scores
+  - Implement version comparison interface
+  - Add ability to promote versions to champion
+  - Show version metadata in evaluation results
+  - Add version indicator with timestamp in ScoreComponent
+  - Add version history dropdown in ScoreComponent
+  - Support creating new versions through name editing
+- Progress:
+  ✅ Basic version history UI implemented in ScoreComponent
+  ✅ Version comment field added when editing scores
+  ✅ Version list fetching from API working
+  ✅ Creating new versions with comments working
+  ✅ Version history expandable/collapsible view
+  ✅ Basic version metadata display (timestamp, comment)
+  🔄 In Progress:
+    - Version promotion to champion
+    - Version comparison interface
+    - Version metadata in evaluation results
+  📝 Next Steps:
+    - Add version promotion workflow
+    - Update evaluation display to show version info
+    - Add version comparison UI
+    - Implement version metadata in evaluation results
+    - Add version indicator with timestamp to ScoreComponent
+    - Add version history dropdown menu
+    - Add name editing and new version creation flow
+
+### Phase 4: CLI API Integration
+- Status: Planned
+- Goals:
+  - Update `plexus evaluate accuracy` to use API
+  - Remove dependency on local YAML files for evaluation
+  - Support fetching score configuration from cloud
+  - Add version selection for evaluations
 - Next Steps:
-  - Document current schema limitations
-  - Design new schema structure
-  - Plan migration strategy
-  - Create migration scripts
-  - Test data integrity
+  - Update CLI evaluation command
+  - Add API client for score version fetching
+  - Implement version selection logic
+  - Add progress indicators for API operations
+
+### Phase 5: YAML Mode Support
+- Status: Planned
+- Goals:
+  - Add commands for syncing score configuration YAML
+  - Support `plexus scorecard pull` for downloading configs
+  - Support `plexus scorecard push` for uploading configs
+  - Maintain backward compatibility with YAML workflow
+- Next Steps:
+  - Design YAML format for version data
+  - Implement pull/push commands
+  - Add conflict resolution
+  - Document YAML mode workflow
 
 ### Score Version Management
 - Status: In Progress
@@ -234,3 +276,54 @@ Card (Base)
 - Interaction testing for interactive states
 - Accessibility testing in Storybook
 - Responsive testing across breakpoints
+
+### Score Version Management UI
+- Status: In Progress
+- Implementation Details:
+  - Each ScoreComponent displays:
+    ✅ Basic header structure matching ScorecardComponent:
+      - Editable title field with consistent styling
+      - Editable external ID field with monospace font
+      - Save/Cancel buttons appearing on changes
+      - Action buttons in top-right (more, full width, close)
+    - Current version indicator showing:
+      - Relative timestamp using standard Timestamp component
+      - "Champion" pill for champion version
+      - Star icon for featured versions (clickable in detail mode)
+      - Left-aligned placement under header section
+    - Version history dropdown showing:
+      - 12 most recent versions in reverse chronological order
+      - Champion status via pill
+      - Featured status via star icon
+      - Relative timestamp for each version
+  - Version Creation Flow:
+    ✅ Name editing matches ScorecardCard UX:
+      - In-place editing with same styling
+      - Save/Cancel buttons appear on edit
+      - Only name field editable initially
+      - Name is required, no other validation
+    - New version behavior:
+      - Inherits configuration from current version
+      - Does not automatically become champion
+      - Timestamp set to creation time
+  - UI Layout:
+    ✅ Top-right corner reserved for action buttons (X, square, "...")
+    ✅ Basic header layout established
+    - Version selector positioned left-aligned under header
+    - Version controls placed above YAML editor section
+  - UI Components Needed:
+    ✅ Editable name field
+    ✅ Save/Cancel action buttons
+    - Version indicator with timestamp
+    - Champion status pill
+    - Featured status star icon (interactive)
+    - Version history dropdown
+
+- Data Access Patterns
+  - To achieve fast lookups in production, the Score record will store denormalized fields from the champion ScoreVersion:
+    - Name and externalId are duplicated in the Score record.
+    - A Global Secondary Index (GSI) will be applied on externalId (and optionally on name) to allow rapid querying of the current champion score.
+    - This approach ensures that even while a full history is maintained in ScoreVersion records, the primary Score record remains the single source of truth for fast access.
+
+- Overall Benefit
+  - A single GraphQL query can quickly retrieve the current champion score using the denormalized fields, and then access the full version history via the associated ScoreVersion content.
