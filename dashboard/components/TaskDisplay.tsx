@@ -103,18 +103,8 @@ export function TaskDisplay({
         return;
       }
       try {
-        console.debug('TaskDisplay: Processing task data', {
-          taskId: task.id,
-          taskType: task.type,
-          taskStatus: task.status
-        });
         const convertedTask = await transformAmplifyTask(task);
         const result = await processTask(convertedTask);
-        console.debug('TaskDisplay: Task processing complete', {
-          taskId: result.id,
-          taskStatus: result.status,
-          hasStages: !!result.stages?.length
-        });
         setProcessedTask(result);
       } catch (error) {
         console.error('Error processing task:', error);

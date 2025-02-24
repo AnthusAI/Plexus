@@ -27,6 +27,8 @@ const createSampleData = () => {
   ]
   
   return {
+    id: 'sample-evaluation-1',
+    title: 'Lead Qualification Evaluation',
     accuracy: 85.5,
     metrics: [
       { name: "Accuracy", value: 85.5, unit: "%", maximum: 100, priority: true },
@@ -49,55 +51,19 @@ const createSampleData = () => {
         [45, 5],
         [10, 40]
       ],
-      labels: labels
+      labels
     },
-    datasetClassDistribution: [
-      { label: labels[0], count: 55 },
-      { label: labels[1], count: 45 }
-    ],
-    isDatasetClassDistributionBalanced: true,
-    predictedClassDistribution: [
-      { label: labels[0], count: 50 },
-      { label: labels[1], count: 50 }
-    ],
-    isPredictedClassDistributionBalanced: true,
-    scoreResults: Array.from({ length: 20 }, (_, i) => {
-      const isQualified = Math.random() > 0.4
-      const correctPrediction = Math.random() > 0.15
-      const sampleText = sampleTexts[i % sampleTexts.length]
-      const confidence = 0.7 + (Math.random() * 0.3)
-      
-      const predictedLabel = correctPrediction ? 
-        (isQualified ? labels[0] : labels[1]) :
-        (isQualified ? labels[1] : labels[0])
-      
-      const explanation = isQualified ?
-        (correctPrediction ?
-          "Shows clear interest in enterprise-level solution with specific requirements and scale indicators." :
-          "Missed qualification signals: Mentioned team size and specific use case requirements.") :
-        (correctPrediction ?
-          "No clear buying intent or business requirements mentioned." :
-          "Incorrectly interpreted general interest as qualified lead.")
-
-      return {
-        id: `result-${i}`,
-        value: predictedLabel,
-        confidence,
-        explanation,
-        metadata: JSON.stringify({
-          human_label: isQualified ? labels[0] : labels[1],
-          correct: correctPrediction,
-          human_explanation: isQualified ?
-            "Represents enterprise client with clear needs and scale" :
-            "No clear business need or purchasing authority indicated",
-          text: sampleText
-        }),
-        createdAt: new Date().toISOString(),
-        itemId: `item-${i}`,
-        EvaluationId: 'eval-1',
-        scorecardId: 'scorecard-1'
-      }
-    })
+    scoreResults: sampleTexts.map((text, i) => ({
+      id: `result-${i}`,
+      value: i % 2 === 0 ? "Qualified" : "Not Qualified",
+      confidence: 0.85 + (Math.random() * 0.1),
+      explanation: `Based on analysis of intent and context`,
+      metadata: {
+        human_label: null,
+        correct: true
+      },
+      itemId: `item-${i}`
+    }))
   }
 }
 

@@ -419,13 +419,17 @@ export default function EvaluationsDashboard() {
       const currentClient = getClient()
       await currentClient.graphql({
         query: `
-          mutation DeleteEvaluation($id: ID!) {
-            deleteEvaluation(id: $id) {
+          mutation DeleteEvaluation($input: DeleteEvaluationInput!) {
+            deleteEvaluation(input: $input) {
               id
             }
           }
         `,
-        variables: { id: evaluationId }
+        variables: { 
+          input: {
+            id: evaluationId
+          }
+        }
       })
       if (selectedEvaluationId === evaluationId) {
         setSelectedEvaluationId(null)
@@ -462,23 +466,22 @@ export default function EvaluationsDashboard() {
     const evaluation = evaluations.find(e => e.id === selectedEvaluationId)
     if (!evaluation) return null
 
-    console.log('Rendering selected task:', {
-      evaluationId: evaluation.id,
-      status: evaluation.status,
-      taskStatus: evaluation.task?.status,
-      scoreResults: {
-        count: evaluation.scoreResults?.items?.length ?? 0,
-        firstResult: evaluation.scoreResults?.items?.[0],
-        lastResult: evaluation.scoreResults?.items?.[evaluation.scoreResults?.items?.length - 1],
-        allResults: evaluation.scoreResults?.items // Log all results to see the full data
-      }
-    });
-
     return (
       <TaskDisplay
         variant="detail"
         task={evaluation.task}
-        evaluationData={evaluation}
+        evaluationData={{
+          ...evaluation,
+          scoreResults: evaluation.scoreResults ? {
+            items: evaluation.scoreResults.map(result => ({
+              id: result.id,
+              value: result.value,
+              confidence: result.confidence,
+              metadata: result.metadata,
+              itemId: result.itemId
+            }))
+          } : undefined
+        }}
         controlButtons={
           <DropdownMenu>
             <DropdownMenuTrigger>
@@ -634,16 +637,50 @@ export default function EvaluationsDashboard() {
           {filteredEvaluations.length === 0 ? (
             <div className="text-sm text-muted-foreground">No evaluations found</div>
           ) : (
-            <>
-              <EvaluationsGrid 
-                evaluations={filteredEvaluations}
-                selectedEvaluationId={selectedEvaluationId}
-                setSelectedEvaluationId={setSelectedEvaluationId}
-                isNarrowViewport={isNarrowViewport}
-                setIsFullWidth={setIsFullWidth}
-                selectedScoreResultId={selectedScoreResultId}
-                onSelectScoreResult={handleScoreResultSelect}
-              />
+            <div className={`
+              grid gap-3
+              ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
+            `}>
+              {filteredEvaluations.map((evaluation) => {
+                return (
+                  <div 
+                    key={evaluation.id} 
+                    onClick={() => {
+                      setSelectedEvaluationId(evaluation.id)
+                      if (isNarrowViewport) {
+                        setIsFullWidth(true)
+                      }
+                    }}
+                  >
+                    <TaskDisplay
+                      variant="grid"
+                      task={evaluation.task}
+                      evaluationData={{
+                        ...evaluation,
+                        scoreResults: evaluation.scoreResults ? {
+                          items: evaluation.scoreResults.map(result => ({
+                            id: result.id,
+                            value: result.value,
+                            confidence: result.confidence,
+                            metadata: result.metadata,
+                            itemId: result.itemId
+                          }))
+                        } : undefined
+                      }}
+                      isSelected={evaluation.id === selectedEvaluationId}
+                      onClick={() => {
+                        setSelectedEvaluationId(evaluation.id)
+                        if (isNarrowViewport) {
+                          setIsFullWidth(true)
+                        }
+                      }}
+                      extra={true}
+                      selectedScoreResultId={selectedScoreResultId}
+                      onSelectScoreResult={handleScoreResultSelect}
+                    />
+                  </div>
+                );
+              })}
               <div ref={ref} />
             </>
           )}
