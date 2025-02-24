@@ -215,21 +215,24 @@ export default function PublicEvaluation({
                       },
                       {
                         name: 'Precision',
-                        value: evaluation.metrics?.precision || 0,
+                        value: Array.isArray(evaluation.metrics) ? 
+                          (evaluation.metrics.find(m => m.name === 'Precision')?.value || 0) : 0,
                         unit: '%',
                         maximum: 100,
                         priority: true
                       },
                       {
                         name: 'Sensitivity',
-                        value: evaluation.metrics?.sensitivity || 0,
+                        value: Array.isArray(evaluation.metrics) ? 
+                          (evaluation.metrics.find(m => m.name === 'Sensitivity')?.value || 0) : 0,
                         unit: '%',
                         maximum: 100,
                         priority: true
                       },
                       {
                         name: 'Specificity',
-                        value: evaluation.metrics?.specificity || 0,
+                        value: Array.isArray(evaluation.metrics) ? 
+                          (evaluation.metrics.find(m => m.name === 'Specificity')?.value || 0) : 0,
                         unit: '%',
                         maximum: 100,
                         priority: true
