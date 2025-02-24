@@ -145,6 +145,7 @@ const schema = a.schema({
             isFeatured: a.boolean().required(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
+            comment: a.string(),
             scoreResults: a.hasMany('ScoreResult', 'scoreVersionId'),
             scoresAsChampion: a.hasMany('Score', 'championVersionId'),
             parentVersionId: a.string(),
