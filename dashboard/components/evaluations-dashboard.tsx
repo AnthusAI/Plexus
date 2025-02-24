@@ -59,7 +59,7 @@ import { getValueFromLazyLoader, unwrapLazyLoader } from '@/utils/data-operation
 import type { LazyLoader } from '@/utils/types'
 import { observeRecentEvaluations, observeTaskUpdates, observeTaskStageUpdates } from '@/utils/subscriptions'
 import { useEvaluationData } from '@/features/evaluations/hooks/useEvaluationData'
-import { useToast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 
 type TaskResponse = {
   items: Evaluation[]
@@ -380,7 +380,6 @@ export default function EvaluationsDashboard() {
     threshold: 0,
   })
   const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null)
-  const { toast } = useToast()
 
   // Fetch account ID
   useEffect(() => {
@@ -490,24 +489,9 @@ export default function EvaluationsDashboard() {
               />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={async () => {
-                const url = `${window.location.origin}/evaluations/${evaluation.id}`;
-                try {
-                  await navigator.clipboard.writeText(url);
-                  toast({
-                    title: "Link copied",
-                    description: "Public evaluation link has been copied to clipboard",
-                  });
-                } catch (err) {
-                  toast({
-                    title: "Failed to copy",
-                    description: "Could not copy link to clipboard",
-                    variant: "destructive",
-                  });
-                }
-              }}>
+              <DropdownMenuItem onClick={copyLinkToClipboard}>
                 <Eye className="mr-2 h-4 w-4" />
-                Copy Public Link
+                Share
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleDelete(evaluation.id)}>
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -542,6 +526,21 @@ export default function EvaluationsDashboard() {
   const handleScoreResultSelect = useCallback((id: string | null) => {
     setSelectedScoreResultId(id);
   }, []);
+
+  const copyLinkToClipboard = () => {
+    navigator.clipboard.writeText(window.location.href + '/' + selectedEvaluationId).then(
+      () => {
+        toast.success("Link copied to clipboard", {
+          description: "You can now share this evaluation with others"
+        });
+      },
+      () => {
+        toast.error("Failed to copy link", {
+          description: "Please try again"
+        });
+      }
+    );
+  };
 
   if (isLoading) {
     return (
