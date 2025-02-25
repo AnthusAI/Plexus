@@ -56,7 +56,7 @@ This document outlines the implementation of Plexus's scorecard management syste
   - Added proper metadata display and state management
 
 ### Phase 2: Schema Updates (Current Focus)
-- Status: In Progress
+- Status: ✅ Completed
 - Goals:
   - Update UI to support score version management
   - Add version history view for scores
@@ -73,47 +73,76 @@ This document outlines the implementation of Plexus's scorecard management syste
   ✅ Creating new versions with comments working
   ✅ Version history expandable/collapsible view
   ✅ Basic version metadata display (timestamp, comment)
-  🔄 In Progress:
-    - Version promotion to champion
-    - Version comparison interface
-    - Version metadata in evaluation results
-  📝 Next Steps:
-    - Add version promotion workflow
-    - Update evaluation display to show version info
-    - Add version comparison UI
-    - Implement version metadata in evaluation results
-    - Add version indicator with timestamp to ScoreComponent
-    - Add version history dropdown menu
-    - Add name editing and new version creation flow
+  ✅ Version promotion to champion
+  ✅ Version comparison interface
+  ✅ Version metadata in evaluation results
+  ✅ Version indicator with timestamp to ScoreComponent
+  ✅ Version history dropdown menu
+  ✅ Name editing and new version creation flow
+  ✅ Featured version indicator and toggle functionality
 
-### Phase 4: CLI API Integration
-- Status: Planned
+### Phase 3: CLI API Integration (Current Focus)
+- Status: In Progress
 - Goals:
   - Update `plexus evaluate accuracy` to use API
   - Remove dependency on local YAML files for evaluation
   - Support fetching score configuration from cloud
   - Add version selection for evaluations
+  - Improve CLI scorecard display
+- Progress:
+  ✅ Enhanced scorecard display in CLI with improved layout
+  ✅ Added "Scores" header to tree view with proper alignment
+  ✅ Implemented full-width tree view for better readability
+  ✅ Ensured proper display in both single and multiple column modes
 - Next Steps:
   - Update CLI evaluation command
   - Add API client for score version fetching
   - Implement version selection logic
   - Add progress indicators for API operations
 
-### Phase 5: YAML Mode Support
-- Status: Planned
+### Phase 4: YAML Mode Support
+- Status: In Progress
 - Goals:
   - Add commands for syncing score configuration YAML
   - Support `plexus scorecard pull` for downloading configs
   - Support `plexus scorecard push` for uploading configs
   - Maintain backward compatibility with YAML workflow
-- Next Steps:
-  - Design YAML format for version data
-  - Implement pull/push commands
-  - Add conflict resolution
-  - Document YAML mode workflow
+- Implementation Plan:
+  1. CLI Consolidation:
+     - Remove redundant `plexus-dashboard scorecard sync` command
+     - Consolidate all scorecard management functionality in the main `plexus` CLI
+     - Ensure any unique functionality from dashboard CLI is preserved
+  
+  2. Handle duplicate records:
+     - When synchronizing a score, check for multiple implementations of the same score ID in API
+     - Reduce to maximum of one implementation
+  
+  3. Implement version-based upsert:
+     - Perform upsert into score version record instead of score record
+     - Find version corresponding to local YAML code
+     - Create new child record from matching version
+  
+  4. Optimization:
+     - Perform string comparison before creating new score version
+     - Only create new version if YAML code differs
+     - Otherwise just update timestamp on existing version
+     - Add appropriate version metadata (user, timestamp, comment)
+  
+  5. New CLI Commands:
+     - `plexus scorecard pull`: Download latest champion version of scores to local YAML files
+     - `plexus scorecard push`: Upload local YAML changes as new versions
+     - `plexus scorecard history`: View version history for scores
+     - `plexus scorecard promote`: Promote specific version to champion
+  
+  6. Implementation Details:
+     - Pull command will fetch champion versions of scores and save to local YAML files
+     - Push command will create new versions of scores from local YAML files
+     - History command will display version history with timestamps, comments, and status
+     - Promote command will set a specific version as the champion
+     - All commands will support filtering by scorecard, score name, or score key
 
 ### Score Version Management
-- Status: In Progress
+- Status: ✅ Completed
 - Implementation Details:
   - Score configurations are versioned in new `ScoreVersion` model
   - Each `Score` has a `championVersion` reference to its current champion
@@ -122,53 +151,27 @@ This document outlines the implementation of Plexus's scorecard management syste
   - Optimized index structure for quick lookups:
     - `ScoreVersion`: `scoreId` + `createdAt` sort key for version history
     - `Evaluation`: `scoreVersionId` + `createdAt` sort key for latest results
+  - UI Features Implemented:
+    - Version history dropdown with timestamps and comments
+    - Champion version promotion workflow
+    - Featured version toggle
+    - Version notes/comments
+    - Version comparison
+    - New version creation on edit
 
-#### Example GraphQL Query for Dashboard
-This query efficiently fetches scores with their champion versions and latest evaluations:
-```graphql
-query GetScorecardScores($scorecardId: ID!) {
-  listScores(filter: { scorecardId: { eq: $scorecardId } }) {
-    items {
-      id
-      name
-      type
-      # ... other score fields ...
-      championVersion {
-        id
-        configuration
-        evaluations(
-          filter: { status: { eq: "COMPLETED" } }
-          sortDirection: DESC
-          limit: 1
-        ) {
-          items {
-            id
-            accuracy
-            createdAt
-            # ... other evaluation fields ...
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-This query structure enables:
-- Single-query loading of scorecard dashboard
-- Direct access to champion versions
-- Efficient retrieval of latest evaluation results
-- O(1) lookup time for most recent evaluations
-
-### Phase 3-4: Future Phases
-- Visual editor and advanced features planned for future iterations
-- Will build on stable foundation from Phase 1 and 2
-- Features to consider:
-  - No-code visual block editor
-  - Advanced configuration options
-  - Enhanced validation rules
-  - Template system
-  - Bulk operations support
+### Phase 5: Visual Editor (Future)
+- Status: Planned
+- Goals:
+  - Implement no-code visual block editor
+  - Add advanced configuration options
+  - Enhance validation rules
+  - Create template system
+  - Support bulk operations
+- Next Steps:
+  - Design visual editor interface
+  - Implement block-based configuration
+  - Add validation and testing tools
+  - Create template library
 
 ## Component Architecture
 

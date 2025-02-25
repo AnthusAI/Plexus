@@ -128,12 +128,276 @@ def scorecards():
     pass
 
 @scorecards.command()
-@click.option('--account-key', help='Filter by account key')
-@click.option('--name', help='Filter by name')
-@click.option('--key', help='Filter by key')
-def list_scorecards(account_key: Optional[str], name: Optional[str], key: Optional[str]):
-    """List dashboard scorecards with optional filtering"""
-    # ... [rest of the list_scorecards function implementation] ...
+@click.argument('account')
+@click.option('--name', help='Filter by scorecard name')
+@click.option('--key', help='Filter by scorecard key')
+@click.option('--columns', type=int, default=1, help='Number of columns to display')
+@click.option('--show-scores/--hide-scores', default=True, help='Show sub-scores for each scorecard')
+@click.option('--debug', is_flag=True, help='Show debug information')
+def list(account: str, name: Optional[str], key: Optional[str], columns: int, show_scores: bool, debug: bool):
+    """List dashboard scorecards with optional filtering.
+    
+    ACCOUNT: Account name, key, or ID to scope the query
+    """
+    client = create_client()
+    console.print("[bold]Fetching scorecards...[/bold]")
+    
+    try:
+        # Try to identify the account by name, key, or ID
+        account_id = None
+        account_name = None
+        account_key = None
+        
+        # First try as key (most common)
+        if debug:
+            console.print(f"[dim]DEBUG: Trying to find account with key '{account}'[/dim]")
+        account_obj = client.Account.get_by_key(account)
+        
+        # If not found, try as ID
+        if not account_obj:
+            if debug:
+                console.print(f"[dim]DEBUG: Not found by key, trying as ID[/dim]")
+            try:
+                account_obj = client.Account.get_by_id(account)
+            except Exception:
+                account_obj = None
+        
+        # If still not found, try by name (using GraphQL query)
+        if not account_obj:
+            if debug:
+                console.print(f"[dim]DEBUG: Not found by ID, trying as name[/dim]")
+            try:
+                query = """
+                query GetAccountByName($name: String!) {
+                    listAccounts(filter: { name: { eq: $name } }) {
+                        items {
+                            id
+                            name
+                            key
+                        }
+                    }
+                }
+                """
+                result = client.execute(query, {"name": account})
+                accounts = result.get('listAccounts', {}).get('items', [])
+                if accounts:
+                    # Use the first matching account
+                    from plexus.dashboard.api.models.account import Account
+                    account_obj = Account.from_dict(accounts[0], client)
+            except Exception as e:
+                if debug:
+                    console.print(f"[red]DEBUG ERROR: Error searching by name: {str(e)}[/red]")
+                account_obj = None
+        
+        # If account not found by any method, exit
+        if not account_obj:
+            console.print(f"[bold red]Error:[/bold red] Account '{account}' not found by key, ID, or name.")
+            return
+        
+        # Set account details
+        account_id = account_obj.id
+        account_name = account_obj.name
+        account_key = account_obj.key
+        
+        console.print(f"Using account: [bold]{account_name}[/bold] (Key: {account_key}, ID: {account_id})")
+        
+        # Build filter for GraphQL query
+        filter_dict = {"accountId": {"eq": account_id}}
+        if name:
+            filter_dict["name"] = {"contains": name}
+        if key:
+            filter_dict["key"] = {"contains": key}
+        
+        # Construct and execute GraphQL query
+        from plexus.dashboard.api.models.scorecard import Scorecard
+        from plexus.dashboard.api.models.account import Account
+        from rich.panel import Panel
+        from rich.table import Table
+        from rich.columns import Columns
+        from rich.text import Text
+        from rich.console import Group
+        from rich.tree import Tree
+        
+        query = """
+        query ListScorecards($filter: ModelScorecardFilterInput) {
+            listScorecards(filter: $filter) {
+                items {
+                    %s
+                }
+            }
+        }
+        """ % Scorecard.fields()
+        
+        variables = {"filter": filter_dict}
+        result = client.execute(query, variables)
+        scorecards = result.get('listScorecards', {}).get('items', [])
+        
+        if not scorecards:
+            console.print(f"[yellow]No scorecards found for account '{account_name}' matching the criteria.[/yellow]")
+            return
+        
+        # Sort scorecards by name for consistent display
+        sorted_scorecards = sorted([Scorecard.from_dict(sc, client) for sc in scorecards], 
+                                  key=lambda x: x.name.lower())
+        
+        console.print(f"\n[bold]Found {len(sorted_scorecards)} scorecards for account '{account_name}':[/bold]\n")
+        
+        # Fetch sections and scores for all scorecards if show_scores is enabled
+        scorecard_sections = {}
+        if show_scores:
+            for sc in sorted_scorecards:
+                try:
+                    if debug:
+                        console.print(f"[dim]DEBUG: Fetching sections for scorecard {sc.id} ({sc.name})[/dim]")
+                    
+                    # Use GraphQL to fetch sections and scores
+                    sections_query = """
+                    query GetScorecardSections($scorecardId: String!) {
+                        listScorecardSections(filter: { scorecardId: { eq: $scorecardId } }) {
+                            items {
+                                id
+                                name
+                                order
+                            }
+                        }
+                    }
+                    """
+                    sections_result = client.execute(sections_query, {"scorecardId": sc.id})
+                    sections = sections_result.get('listScorecardSections', {}).get('items', [])
+                    
+                    if debug:
+                        console.print(f"[dim]DEBUG: Found {len(sections)} sections for scorecard {sc.name}[/dim]")
+                    
+                    scorecard_sections[sc.id] = []
+                    
+                    # For each section, fetch its scores
+                    for section in sections:
+                        if debug:
+                            console.print(f"[dim]DEBUG: Fetching scores for section {section['id']} ({section['name']})[/dim]")
+                        
+                        scores_query = """
+                        query GetSectionScores($sectionId: String!) {
+                            listScores(filter: { sectionId: { eq: $sectionId } }) {
+                                items {
+                                    id
+                                    name
+                                    key
+                                    order
+                                    type
+                                }
+                            }
+                        }
+                        """
+                        scores_result = client.execute(scores_query, {"sectionId": section['id']})
+                        scores = scores_result.get('listScores', {}).get('items', [])
+                        
+                        if debug:
+                            console.print(f"[dim]DEBUG: Found {len(scores)} scores for section {section['name']}[/dim]")
+                        
+                        scorecard_sections[sc.id].append({
+                            'section': section,
+                            'scores': scores
+                        })
+                except Exception as e:
+                    error_msg = f"Error fetching sections for scorecard {sc.id}: {str(e)}"
+                    logger.error(error_msg)
+                    if debug:
+                        console.print(f"[red]DEBUG ERROR: {error_msg}[/red]")
+                    scorecard_sections[sc.id] = []
+        
+        # Process scorecards in batches for columns display
+        batch_size = min(columns, len(sorted_scorecards))  # Use the smaller of columns or total scorecards
+        
+        for i in range(0, len(sorted_scorecards), batch_size):
+            batch = sorted_scorecards[i:i+batch_size]
+            panels = []
+            
+            for scorecard in batch:
+                # Create a table for the scorecard details
+                table = Table(show_header=False, box=None, padding=(0, 1), expand=True)
+                table.add_column("Field", style="cyan bold")
+                table.add_column("Value")
+                
+                # Add rows for each field in the specified order
+                table.add_row("Name", f"[bold]{scorecard.name}[/bold]")
+                table.add_row("Key", f"[sky_blue]{scorecard.key or '-'}[/sky_blue]")
+                table.add_row("External ID", f"[magenta]{scorecard.externalId or '-'}[/magenta]")
+                table.add_row("Account", f"{account_key} ([dim]{account_id}[/dim])")
+                
+                # Add description (potentially multi-line)
+                description = scorecard.description or "-"
+                table.add_row("Description", description)
+                
+                # Get sections and scores for this scorecard
+                sections_data = scorecard_sections.get(scorecard.id, [])
+                
+                # Calculate total score count
+                score_count = sum(len(section_data['scores']) for section_data in sections_data)
+                
+                # Add score count
+                table.add_row("Score Count", f"[bold green]{score_count}[/bold green]")
+                
+                # Add scores tree if requested
+                if show_scores and sections_data:
+                    # Create a tree with a "Scores" header
+                    scores_tree = Tree(" [bold]Scores[/bold]")
+                    has_scores = False
+                    
+                    for section_data in sorted(sections_data, key=lambda s: s['section']['order']):
+                        section = section_data['section']
+                        scores = section_data['scores']
+                        
+                        # Always show the section, even if it has no scores
+                        section_branch = scores_tree.add(f"[bold]{section['name']}[/bold] ({len(scores)})")
+                        
+                        if scores:
+                            has_scores = True
+                            for score in sorted(scores, key=lambda s: s['order']):
+                                score_text = f"[sky_blue]{score['name']}[/sky_blue]"
+                                if score.get('key'):
+                                    score_text += f" ([dim]{score['key']}[/dim])"
+                                section_branch.add(score_text)
+                        else:
+                            section_branch.add("[italic dim]No scores defined[/italic dim]")
+                    
+                    # Add the scores tree to the table, spanning both columns
+                    if has_scores:
+                        # Add a separator row
+                        table.add_row("", "")
+                
+                # Create a header with the scorecard ID
+                header = Text.from_markup(f"ID: {scorecard.id}")
+                header.stylize("dim")
+                
+                # Create the content for the panel
+                content = table
+                
+                # If we have scores, add them after the table to span the full width
+                if show_scores and sections_data and has_scores:
+                    # Remove the extra padding to fix alignment
+                    content = Group(table, scores_tree)
+                
+                # Create a panel with the content
+                panel = Panel(
+                    content,
+                    title=header,
+                    subtitle=f"Scorecard {i+batch.index(scorecard)+1}/{len(sorted_scorecards)}",
+                    border_style="blue",
+                    expand=True,
+                    padding=(1, 2)
+                )
+                panels.append(panel)
+            
+            # Display the panels in columns
+            console.print(Columns(panels, equal=True, expand=True))
+            
+            # Add spacing between batches
+            if i + batch_size < len(sorted_scorecards):
+                console.print()
+        
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        logger.error(f"Error listing scorecards: {str(e)}", exc_info=True)
 
 @scorecards.command()
 @click.option('--account-key', default='call-criteria', help='Account key identifier')
@@ -141,6 +405,72 @@ def list_scorecards(account_key: Optional[str], name: Optional[str], key: Option
 def sync(account_key: str, directory: str):
     """Sync YAML scorecards to the dashboard API"""
     # ... [rest of the sync function implementation] ...
+
+@scorecards.command()
+@click.option('--account-key', required=True, help='Account key')
+@click.option('--scorecard-key', help='Filter by scorecard key')
+@click.option('--score-key', help='Filter by score key')
+@click.option('--directory', default='scorecards', help='Directory to save YAML files')
+def pull(account_key: str, scorecard_key: Optional[str], score_key: Optional[str], directory: str):
+    """Download latest champion version of scores to local YAML files.
+    
+    Examples:
+        plexus scorecards pull --account-key my-account
+        plexus scorecards pull --account-key my-account --scorecard-key my-scorecard
+        plexus scorecards pull --account-key my-account --score-key my-score
+        plexus scorecards pull --account-key my-account --directory path/to/save
+    """
+    logger.info("This command will be implemented to download champion versions of scores")
+    logger.info(f"Parameters: account_key={account_key}, scorecard_key={scorecard_key}, score_key={score_key}, directory={directory}")
+    click.echo("The 'pull' command is not yet implemented. Coming soon!")
+
+@scorecards.command()
+@click.option('--account-key', required=True, help='Account key')
+@click.option('--directory', default='scorecards', help='Directory containing YAML scorecard files')
+@click.option('--comment', help='Comment for the new version')
+def push(account_key: str, directory: str, comment: Optional[str]):
+    """Upload local YAML changes as new versions.
+    
+    Examples:
+        plexus scorecards push --account-key my-account
+        plexus scorecards push --account-key my-account --directory path/to/scorecards
+        plexus scorecards push --account-key my-account --comment "Updated configuration"
+    """
+    logger.info("This command will be implemented to upload local changes as new versions")
+    logger.info(f"Parameters: account_key={account_key}, directory={directory}, comment={comment}")
+    click.echo("The 'push' command is not yet implemented. Coming soon!")
+
+@scorecards.command()
+@click.option('--account-key', required=True, help='Account key')
+@click.option('--scorecard-key', help='Filter by scorecard key')
+@click.option('--score-key', help='Filter by score key')
+@click.option('--score-id', help='Filter by score ID')
+def history(account_key: str, scorecard_key: Optional[str], score_key: Optional[str], score_id: Optional[str]):
+    """View version history for scores.
+    
+    Examples:
+        plexus scorecards history --account-key my-account
+        plexus scorecards history --account-key my-account --scorecard-key my-scorecard
+        plexus scorecards history --account-key my-account --score-key my-score
+        plexus scorecards history --account-key my-account --score-id 123456
+    """
+    logger.info("This command will be implemented to view version history")
+    logger.info(f"Parameters: account_key={account_key}, scorecard_key={scorecard_key}, score_key={score_key}, score_id={score_id}")
+    click.echo("The 'history' command is not yet implemented. Coming soon!")
+
+@scorecards.command()
+@click.option('--account-key', required=True, help='Account key')
+@click.option('--score-id', required=True, help='Score ID')
+@click.option('--version-id', required=True, help='Version ID to promote')
+def promote(account_key: str, score_id: str, version_id: str):
+    """Promote a specific version to champion.
+    
+    Examples:
+        plexus scorecards promote --account-key my-account --score-id 123456 --version-id 789012
+    """
+    logger.info("This command will be implemented to promote versions to champion")
+    logger.info(f"Parameters: account_key={account_key}, score_id={score_id}, version_id={version_id}")
+    click.echo("The 'promote' command is not yet implemented. Coming soon!")
 
 @scorecards.command()
 @click.option('--account-key', required=True, help='Account key')
