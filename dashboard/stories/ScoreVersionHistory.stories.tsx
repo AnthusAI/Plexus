@@ -40,7 +40,7 @@ const mockVersions = [
     isFeatured: false,
     createdAt: getTimeAgo(60), // 1 hour ago
     updatedAt: getTimeAgo(60),
-    comment: "Added initial score configuration with basic validation rules",
+    note: "Added initial score configuration with basic validation rules",
     user: mockUsers.rp
   },
   {
@@ -53,7 +53,7 @@ const mockVersions = [
     isFeatured: true,
     createdAt: getTimeAgo(30), // 30 mins ago
     updatedAt: getTimeAgo(30),
-    comment: "Improved accuracy by adjusting thresholds and adding edge case handling",
+    note: "Improved accuracy by adjusting thresholds and adding edge case handling",
     user: mockUsers.jd
   },
   {
@@ -66,7 +66,7 @@ const mockVersions = [
     isFeatured: false,
     createdAt: getTimeAgo(5), // 5 mins ago
     updatedAt: getTimeAgo(5),
-    comment: "Optimized model parameters based on production feedback",
+    note: "Optimized model parameters based on production feedback",
     user: mockUsers.as
   }
 ]
@@ -112,7 +112,7 @@ export const LongComments: Story = {
     versions: [
       {
         ...mockVersions[0],
-        comment: `Comprehensive update to improve scoring reliability:
+        note: `Comprehensive update to improve scoring reliability:
 
 - Adjusted core parameters for better edge case handling
 - Added validation rules for special characters
@@ -167,7 +167,7 @@ export const AllVariants: Story = {
             versions={[
               {
                 ...mockVersions[0],
-                comment: "This is a much longer comment that describes in detail the changes made to this version. We updated the scoring criteria, improved accuracy by 15%, and added new validation rules for edge cases that were previously not handled correctly.",
+                note: "This is a much longer comment that describes in detail the changes made to this version. We updated the scoring criteria, improved accuracy by 15%, and added new validation rules for edge cases that were previously not handled correctly.",
                 user: mockUsers.rp
               },
               ...mockVersions.slice(1)
