@@ -6,6 +6,8 @@ import { Star, StarIcon, FileStack, ChevronDown, ChevronUp, Award } from 'lucide
 import { Button } from './button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { parse as parseYaml } from 'yaml'
+import { Switch } from './switch'
+import { Label } from './label'
 
 export interface ScoreVersion {
   id: string
@@ -30,6 +32,8 @@ export interface ScoreVersionHistoryProps extends React.HTMLAttributes<HTMLDivEl
   onVersionSelect?: (version: ScoreVersion) => void
   onToggleFeature?: (versionId: string) => void
   onPromoteToChampion?: (versionId: string) => void
+  showOnlyFeatured?: boolean
+  onToggleShowOnlyFeatured?: () => void
 }
 
 export function ScoreVersionHistory({
@@ -39,6 +43,8 @@ export function ScoreVersionHistory({
   onVersionSelect,
   onToggleFeature,
   onPromoteToChampion,
+  showOnlyFeatured = false,
+  onToggleShowOnlyFeatured,
   className,
   ...props
 }: ScoreVersionHistoryProps) {
@@ -52,8 +58,13 @@ export function ScoreVersionHistory({
   // Find champion version if it exists
   const championVersion = championVersionId ? versions.find(v => v.id === championVersionId) : null
   
+  // Filter versions based on showOnlyFeatured toggle
+  const filteredVersions = showOnlyFeatured 
+    ? sortedVersions.filter(v => v.isFeatured || v.id === championVersionId)
+    : sortedVersions
+  
   // Separate champion version from other versions
-  const otherVersions = sortedVersions.filter(v => v.id !== championVersionId)
+  const otherVersions = filteredVersions.filter(v => v.id !== championVersionId)
 
   const renderVersion = (version: ScoreVersion, isChampion = false) => {
     const config = parseYaml(version.configuration)
@@ -139,18 +150,33 @@ export function ScoreVersionHistory({
   return (
     <div className={cn("space-y-4 w-full", className)} {...props}>
       <div className="space-y-4">
-        {/* Header with appropriate icon */}
-        <div className="flex items-center gap-2 text-sm font-medium">
-          {championVersion ? (
-            <>
-              <Award className="h-4 w-4" />
-              <span>Champion Version</span>
-            </>
-          ) : (
-            <>
-              <FileStack className="h-4 w-4" />
-              <span>Version History</span>
-            </>
+        {/* Header with appropriate icon and toggle control */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            {championVersion ? (
+              <>
+                <Award className="h-4 w-4 text-foreground" />
+                <span>Champion Version</span>
+              </>
+            ) : (
+              <>
+                <FileStack className="h-4 w-4" />
+                <span>Version History</span>
+              </>
+            )}
+          </div>
+          
+          {onToggleShowOnlyFeatured && (
+            <div className="flex items-center gap-2">
+              <Switch 
+                id="show-featured" 
+                checked={showOnlyFeatured}
+                onCheckedChange={onToggleShowOnlyFeatured}
+              />
+              <Label htmlFor="show-featured" className="text-xs">
+                Featured
+              </Label>
+            </div>
           )}
         </div>
 

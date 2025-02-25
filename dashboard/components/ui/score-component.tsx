@@ -169,6 +169,9 @@ const DetailContent = React.memo(({
   // Track if we're currently editing to prevent useEffect from overriding changes
   const [isEditing, setIsEditing] = React.useState(false)
   
+  // Add showOnlyFeatured state directly to the DetailContent component
+  const [showOnlyFeatured, setShowOnlyFeatured] = React.useState(true)
+  
   // Reset isEditing when resetEditingCounter changes
   React.useEffect(() => {
     console.log('resetEditingCounter changed, resetting isEditing');
@@ -618,6 +621,8 @@ const DetailContent = React.memo(({
             onVersionSelect={onVersionSelect}
             onToggleFeature={onToggleFeature}
             onPromoteToChampion={onPromoteToChampion}
+            showOnlyFeatured={showOnlyFeatured}
+            onToggleShowOnlyFeatured={() => setShowOnlyFeatured(prev => !prev)}
           />
         </div>
       )}
@@ -668,7 +673,7 @@ export function ScoreComponent({
         // First, get the score details to get the championVersionId
         const scoreResponse = await client.graphql({
           query: `
-            query GetScore($id: ID!) {
+            query GetScore($id: String!) {
               getScore(id: $id) {
                 id
                 name
@@ -711,7 +716,7 @@ export function ScoreComponent({
             }
           `,
           variables: {
-            scoreId: score.id
+            scoreId: String(score.id) // Explicitly convert to string
           }
         }) as GraphQLResult<GetScoreVersionsResponse>;
         
@@ -758,8 +763,8 @@ export function ScoreComponent({
                   `,
                   variables: {
                     input: {
-                      id: score.id,
-                      championVersionId: sortedVersions[0].id,
+                      id: String(score.id),
+                      championVersionId: String(sortedVersions[0].id),
                     }
                   }
                 });
@@ -933,13 +938,26 @@ export function ScoreComponent({
       const version = versions.find(v => v.id === versionId);
       if (!version) return;
 
-      // TODO: Enable API call once schema is updated
-      // await amplifyClient.ScoreVersion.update({
-      //   id: versionId,
-      //   isFeatured: !version.isFeatured
-      // });
+      // Enable API call to persist the feature status
+      const response = await client.graphql({
+        query: `
+          mutation UpdateScoreVersion($input: UpdateScoreVersionInput!) {
+            updateScoreVersion(input: $input) {
+              id
+              isFeatured
+            }
+          }
+        `,
+        variables: {
+          input: {
+            id: String(versionId),
+            isFeatured: !version.isFeatured
+          }
+        }
+      });
 
-      // Update local state
+      // Update local state regardless of response
+      // This ensures UI is updated even if we can't verify the response format
       setVersions(prev => prev.map(v => 
         v.id === versionId ? { ...v, isFeatured: !v.isFeatured } : v
       ));
@@ -982,7 +1000,7 @@ export function ScoreComponent({
         `,
         variables: {
           input: {
-            id: score.id,
+            id: String(score.id),
             name: editedScore.name,
             externalId: editedScore.externalId,
             key: editedScore.key,
@@ -1016,7 +1034,7 @@ export function ScoreComponent({
       }
       
       const versionPayload = {
-        scoreId: score.id,
+        scoreId: String(score.id),
         configuration: configurationYaml,
         isFeatured: false,
         note: versionNote || 'Updated score configuration',
@@ -1076,8 +1094,8 @@ export function ScoreComponent({
               `,
               variables: {
                 input: {
-                  id: score.id,
-                  championVersionId: placeholderVersion.id,
+                  id: String(score.id),
+                  championVersionId: String(placeholderVersion.id),
                 }
               }
             });
@@ -1117,8 +1135,8 @@ export function ScoreComponent({
         `,
         variables: {
           input: {
-            id: score.id,
-            championVersionId: versionId,
+            id: String(score.id),
+            championVersionId: String(versionId),
           }
         }
       });
