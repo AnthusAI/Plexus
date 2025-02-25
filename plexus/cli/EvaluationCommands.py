@@ -89,6 +89,7 @@ def load_configuration_from_yaml_file(configuration_file_path):
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 @click.option('--visualize', is_flag=True, default=False, help='Generate PNG visualization of LangGraph scores')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
+@click.option('--concurrency-limit', default=50, type=int, help='Maximum number of concurrent operations')
 def accuracy(
     scorecard_name: str,
     use_langsmith_trace: bool,
@@ -100,7 +101,8 @@ def accuracy(
     experiment_label: str,
     fresh: bool,
     visualize: bool,
-    task_id: Optional[str]
+    task_id: Optional[str],
+    concurrency_limit: int
     ):
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
@@ -805,7 +807,8 @@ def accuracy(
                             'task_id': task_id,  # Pass task_id to experiment
                             'evaluation_id': evaluation_record.id if evaluation_record else None,  # Pass the evaluation ID
                             'account_id': account.id if account else None,  # Pass account ID
-                            'scorecard_id': scorecard_record['id'] if scorecard_record else None  # Pass scorecard ID
+                            'scorecard_id': scorecard_record['id'] if scorecard_record else None,  # Pass scorecard ID
+                            'concurrency_limit': concurrency_limit  # Pass concurrency limit
                         }
                         
                         if uses_data_driven:
