@@ -54,7 +54,8 @@ export function EvaluationTaskScoreResults({
     accuracy,
     selectedPredictedValue,
     selectedActualValue,
-    hasSelectedResult: !!selectedScoreResult
+    hasSelectedResult: !!selectedScoreResult,
+    selectedScoreResultId: selectedScoreResult?.id
   });
 
   const [filters, setFilters] = useState<FilterState>({
