@@ -15,7 +15,7 @@ export interface ScoreVersion {
   createdAt: string
   updatedAt: string
   // Temporary mock data until we have a user model
-  comment?: string
+  note?: string
   user?: {
     name: string
     avatar: string
@@ -121,7 +121,7 @@ export function ScoreVersionHistory({
         
         <div className="flex items-start gap-4 mt-2">
           <div className="flex-1 text-sm text-foreground italic break-words">
-            {version.comment || "Updated name and external ID"}
+            {version.note || "Updated name and external ID"}
           </div>
           {version.user && (
             <Avatar className="h-8 w-8 flex-shrink-0">

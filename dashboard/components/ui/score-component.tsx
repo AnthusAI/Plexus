@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, RectangleVertical, FileStack, ChevronDown, ChevronUp, Award } from 'lucide-react'
+import { MoreHorizontal, X, Square, RectangleVertical, FileStack, ChevronDown, ChevronUp, Award, FileCode } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -38,7 +38,7 @@ interface ScoreVersion {
   configuration: string // YAML string
   isFeatured: boolean
   isChampion?: boolean
-  comment?: string
+  note?: string
   createdAt: string
   updatedAt: string
   user?: {
@@ -104,8 +104,8 @@ interface DetailContentProps {
   onVersionSelect?: (version: ScoreVersion) => void
   onToggleFeature?: (versionId: string) => void
   onPromoteToChampion?: (versionId: string) => void
-  versionComment: string
-  onCommentChange: (comment: string) => void
+  versionNote: string
+  onNoteChange: (note: string) => void
   resetEditingCounter: number
 }
 
@@ -147,8 +147,8 @@ const DetailContent = React.memo(({
   onVersionSelect,
   onToggleFeature,
   onPromoteToChampion,
-  versionComment,
-  onCommentChange,
+  versionNote,
+  onNoteChange,
   resetEditingCounter,
 }: DetailContentProps) => {
   // Get the current version's configuration
@@ -268,10 +268,10 @@ const DetailContent = React.memo(({
     }
   };
 
-  // Handle comment changes
-  const handleCommentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    // Call the parent's onCommentChange handler
-    onCommentChange?.(e.target.value);
+  // Handle note changes
+  const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    // Call the parent's onNoteChange handler
+    onNoteChange?.(e.target.value);
   };
 
   // Create a ref to store the Monaco instance
@@ -466,9 +466,9 @@ const DetailContent = React.memo(({
             />
           </div>
           <textarea
-            value={versionComment}
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onCommentChange(e.target.value)}
-            placeholder="Add a comment about this version..."
+            value={versionNote}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onNoteChange(e.target.value)}
+            placeholder="Add a note about this version..."
             className="w-full px-2 py-1.5 rounded-md bg-background border-0 text-sm resize-none
                      focus-visible:ring-0 focus-visible:ring-offset-0 
                      placeholder:text-muted-foreground"
@@ -506,8 +506,14 @@ const DetailContent = React.memo(({
         </div>
       </div>
 
+      {/* Configuration Label */}
+      <div className="mt-6 flex items-center gap-2">
+        <FileCode className="h-4 w-4 text-foreground" />
+        <span className="text-sm font-medium">Configuration</span>
+      </div>
+
       {/* YAML Editor */}
-      <div className="mt-6 rounded-md border bg-background">
+      <div className="mt-2 rounded-md border bg-background">
         <Editor
           height="300px"
           defaultLanguage="yaml"
@@ -636,9 +642,9 @@ export function ScoreComponent({
   const [versions, setVersions] = React.useState<ScoreVersion[]>([])
   const [championVersionId, setChampionVersionId] = React.useState<string>()
   const [selectedVersionId, setSelectedVersionId] = React.useState<string>()
-  const [versionComment, setVersionComment] = React.useState('')
+  const [versionNote, setVersionNote] = React.useState('')
   const [resetEditingCounter, setResetEditingCounter] = React.useState(0)
-  const [onlyCommentChanged, setOnlyCommentChanged] = React.useState(false)
+  const [onlyNoteChanged, setOnlyNoteChanged] = React.useState(false)
   
   // Debug log when editedScore changes
   React.useEffect(() => {
@@ -649,9 +655,9 @@ export function ScoreComponent({
   React.useEffect(() => {
     console.log('Score prop changed, updating editedScore:', score);
     setEditedScore(score)
-    setVersionComment('') // Reset comment when score changes
+    setVersionNote('') // Reset note when score changes
     setHasChanges(false) // Reset changes flag when score changes
-    setOnlyCommentChanged(false) // Reset comment change flag
+    setOnlyNoteChanged(false) // Reset note change flag
     setResetEditingCounter(prev => prev + 1) // Signal to DetailContent to reset editing state
   }, [score])
   
@@ -699,7 +705,7 @@ export function ScoreComponent({
                   scoreId
                   configuration
                   isFeatured
-                  comment
+                  note
                   createdAt
                   updatedAt
                 }
@@ -723,17 +729,48 @@ export function ScoreComponent({
             (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           );
           
-          // Find champion version or use the most recent one
+          // Find champion version or use the most recent one if no champion exists
           const champion = championId 
             ? versionItems.find(v => v.id === championId) 
-            : sortedVersions[0];
+            : null;
             
           if (champion) {
-            if (!championId) {
-              setChampionVersionId(champion.id);
-            }
             // Automatically select the champion version
             handleVersionSelect(champion);
+          } else if (sortedVersions.length > 0) {
+            // If no champion exists but we have versions, select the most recent one
+            // but don't automatically set it as champion
+            handleVersionSelect(sortedVersions[0]);
+            
+            // Only set the most recent version as champion if there are no champions at all
+            // AND there are no existing versions (this is the first version)
+            if (!championId && sortedVersions.length === 1) {
+              setChampionVersionId(sortedVersions[0].id);
+              
+              // Update the Score record to set this as the champion version
+              try {
+                await client.graphql({
+                  query: `
+                    mutation UpdateScoreChampion($input: UpdateScoreInput!) {
+                      updateScore(input: $input) {
+                        id
+                        championVersionId
+                      }
+                    }
+                  `,
+                  variables: {
+                    input: {
+                      id: score.id,
+                      championVersionId: sortedVersions[0].id,
+                    }
+                  }
+                });
+                
+                console.log('Set initial champion version (first version ever):', sortedVersions[0].id);
+              } catch (error) {
+                console.error('Error setting initial champion version:', error);
+              }
+            }
           }
         } else {
           console.log('No versions found in response:', response);
@@ -756,10 +793,19 @@ export function ScoreComponent({
       // Mark that we have unsaved changes
       setHasChanges(true);
       
-      // If we're changing fields other than the comment, reset onlyCommentChanged flag
+      // If we're changing fields other than the note, reset onlyNoteChanged flag
       if ('name' in changes || 'key' in changes || 'externalId' in changes || 
           'description' in changes || 'configuration' in changes) {
-        setOnlyCommentChanged(false);
+        setOnlyNoteChanged(false);
+        
+        // Log the changes for debugging
+        console.log('Field changes detected:', {
+          name: changes.name !== undefined ? `${prev.name} -> ${changes.name}` : undefined,
+          key: changes.key !== undefined ? `${prev.key} -> ${changes.key}` : undefined,
+          externalId: changes.externalId !== undefined ? `${prev.externalId} -> ${changes.externalId}` : undefined,
+          description: changes.description !== undefined ? `${prev.description} -> ${changes.description}` : undefined,
+          configChanged: changes.configuration !== undefined
+        });
       }
       
       // If we're directly setting the configuration (from the YAML editor or form field handler),
@@ -832,7 +878,7 @@ export function ScoreComponent({
 
   const handleCancel = () => {
     setEditedScore(score)
-    setVersionComment('') // Reset comment on cancel
+    setVersionNote('') // Reset note on cancel
     setHasChanges(false)
     setSelectedVersionId(undefined) // Reset selection to champion
     setResetEditingCounter(prev => prev + 1) // Signal to DetailContent to reset editing state
@@ -840,7 +886,7 @@ export function ScoreComponent({
 
   const handleVersionSelect = (version: ScoreVersion) => {
     setSelectedVersionId(version.id)
-    setVersionComment(version.comment || '')
+    setVersionNote(version.note || '')
     console.log('handleVersionSelect called with version:', version.id);
     
     // Signal to DetailContent to reset editing state
@@ -878,6 +924,7 @@ export function ScoreComponent({
       
       // Reset hasChanges since we just loaded a version
       setHasChanges(false);
+      setOnlyNoteChanged(false);
       
       // Remove toast notification for simply viewing a version
       // We only want notifications for actions that change state
@@ -886,6 +933,21 @@ export function ScoreComponent({
       toast.error('Error loading version configuration')
     }
   }
+
+  // Handle note changes and set hasChanges to true
+  const handleNoteChange = (note: string) => {
+    console.log('Note changed:', note);
+    setVersionNote(note);
+    
+    // Set hasChanges to true when note is changed
+    setHasChanges(true);
+    
+    // Set flag indicating only the note has changed
+    setOnlyNoteChanged(true);
+    
+    // Log the change
+    console.log('Note changed, hasChanges=true, onlyNoteChanged=true');
+  };
 
   const handleToggleFeature = async (versionId: string) => {
     try {
@@ -908,15 +970,6 @@ export function ScoreComponent({
       console.error('Error toggling feature:', error);
       toast.error('Failed to update version feature status');
     }
-  };
-
-  // Handle comment changes and set hasChanges to true
-  const handleCommentChange = (comment: string) => {
-    setVersionComment(comment);
-    // Set hasChanges to true when comment is changed
-    setHasChanges(true);
-    // Set flag indicating only the comment has changed
-    setOnlyCommentChanged(true);
   };
 
   const handleSave = async () => {
@@ -949,12 +1002,12 @@ export function ScoreComponent({
       // Check if we're editing an existing version or creating a new one
       const isEditingExistingVersion = selectedVersionId && versions.some(v => v.id === selectedVersionId);
       
-      // If we're editing an existing version and only the comment has changed
-      if (isEditingExistingVersion && onlyCommentChanged) {
+      // If we're editing an existing version and only the note has changed
+      if (isEditingExistingVersion && onlyNoteChanged) {
         const currentVersion = versions.find(v => v.id === selectedVersionId);
         if (currentVersion) {
-          // Only update the comment on the existing version
-          console.log('Only updating comment on existing version:', selectedVersionId);
+          // Only update the note on the existing version
+          console.log('Only updating note on existing version:', selectedVersionId);
           
           await client.graphql({
             query: `
@@ -962,7 +1015,7 @@ export function ScoreComponent({
                 updateScoreVersion(input: $input) {
                   id
                   scoreId
-                  comment
+                  note
                   updatedAt
                 }
               }
@@ -970,7 +1023,7 @@ export function ScoreComponent({
             variables: {
               input: {
                 id: selectedVersionId,
-                comment: versionComment
+                note: versionNote
               }
             }
           });
@@ -978,18 +1031,19 @@ export function ScoreComponent({
           // Update local state
           setVersions(prev => prev.map(v => 
             v.id === selectedVersionId 
-              ? { ...v, comment: versionComment, updatedAt: new Date().toISOString() } 
+              ? { ...v, note: versionNote, updatedAt: new Date().toISOString() } 
               : v
           ));
           
-          toast.success('Version comment updated');
+          toast.success('Version note updated');
           setHasChanges(false);
-          setOnlyCommentChanged(false);
+          setOnlyNoteChanged(false);
           return; // Exit early, no need to create a new version
         }
       }
       
       // If we get here, we're creating a new version (either new config or not editing an existing version)
+      // or we're editing an existing version but fields other than the note have changed
       let configurationYaml = editedScore.configuration;
       
       // If no configuration exists, create one based on current values
@@ -1004,11 +1058,18 @@ export function ScoreComponent({
         });
       }
       
+      // Log what we're doing
+      if (isEditingExistingVersion && !onlyNoteChanged) {
+        console.log('Creating new version because fields other than note have changed');
+      } else if (!isEditingExistingVersion) {
+        console.log('Creating new version (not editing an existing version)');
+      }
+      
       const versionPayload = {
         scoreId: score.id,
         configuration: configurationYaml,
         isFeatured: false,
-        comment: versionComment || 'Updated score configuration',
+        note: versionNote || 'Updated score configuration',
       };
 
       console.log('Creating new version with payload:', versionPayload);
@@ -1021,7 +1082,7 @@ export function ScoreComponent({
               scoreId
               configuration
               isFeatured
-              comment
+              note
               createdAt
               updatedAt
             }
@@ -1045,37 +1106,45 @@ export function ScoreComponent({
           }
         };
         setVersions(prev => [placeholderVersion, ...prev]);
-        setChampionVersionId(placeholderVersion.id);
         setSelectedVersionId(placeholderVersion.id);
         
-        // Update the Score record to set this as the champion version
-        try {
-          await client.graphql({
-            query: `
-              mutation UpdateScoreChampion($input: UpdateScoreInput!) {
-                updateScore(input: $input) {
-                  id
-                  championVersionId
+        // Only set as champion if there isn't already a champion version
+        // AND this is the very first version ever created for this score
+        if (!championVersionId && versions.length === 0) {
+          setChampionVersionId(placeholderVersion.id);
+          
+          // Update the Score record to set this as the champion version
+          try {
+            await client.graphql({
+              query: `
+                mutation UpdateScoreChampion($input: UpdateScoreInput!) {
+                  updateScore(input: $input) {
+                    id
+                    championVersionId
+                  }
+                }
+              `,
+              variables: {
+                input: {
+                  id: score.id,
+                  championVersionId: placeholderVersion.id,
                 }
               }
-            `,
-            variables: {
-              input: {
-                id: score.id,
-                championVersionId: placeholderVersion.id,
-              }
-            }
-          });
-        } catch (error) {
-          console.error('Error updating champion version:', error);
-          // Continue even if this fails
+            });
+            
+            toast.success('New version created and set as champion (first version ever)');
+          } catch (error) {
+            console.error('Error updating champion version:', error);
+            toast.error('Created version but failed to set as champion');
+          }
+        } else {
+          toast.success('New version created successfully');
         }
       }
       
-      toast.success('Score updated successfully');
       setHasChanges(false);
-      setVersionComment('');
-      setOnlyCommentChanged(false);
+      setVersionNote('');
+      setOnlyNoteChanged(false);
     } catch (error) {
       console.error('Error saving score:', error);
       toast.error(error instanceof Error ? error.message : 'Error updating score');
@@ -1170,8 +1239,8 @@ export function ScoreComponent({
               onVersionSelect={handleVersionSelect}
               onToggleFeature={handleToggleFeature}
               onPromoteToChampion={handlePromoteToChampion}
-              versionComment={versionComment}
-              onCommentChange={handleCommentChange}
+              versionNote={versionNote}
+              onNoteChange={handleNoteChange}
               resetEditingCounter={resetEditingCounter}
             />
           )}
