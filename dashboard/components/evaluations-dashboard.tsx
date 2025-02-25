@@ -53,7 +53,7 @@ import type { EvaluationTaskProps } from '@/components/EvaluationTask'
 import type { TaskData } from '@/types/evaluation'
 import { transformAmplifyTask } from '@/utils/data-operations'
 import { AmplifyTask, ProcessedTask, Evaluation, TaskStageType, TaskSubscriptionEvent } from '@/utils/data-operations'
-import { listRecentEvaluations, transformAmplifyTask as transformEvaluationData } from '@/utils/data-operations'
+import { listRecentEvaluations, transformAmplifyTask as transformEvaluationData, standardizeScoreResults } from '@/utils/data-operations'
 import { TaskDisplay } from "@/components/TaskDisplay"
 import { getValueFromLazyLoader, unwrapLazyLoader } from '@/utils/data-operations'
 import type { LazyLoader } from '@/utils/types'
@@ -466,21 +466,27 @@ export default function EvaluationsDashboard() {
     const evaluation = evaluations.find((e: { id: string }) => e.id === selectedEvaluationId)
     if (!evaluation) return null
 
+    console.log('Rendering selected task:', {
+      evaluationId: evaluation.id,
+      hasScoreResults: !!evaluation.scoreResults,
+      scoreResultsType: typeof evaluation.scoreResults,
+      scoreResultsIsArray: Array.isArray(evaluation.scoreResults),
+      scoreResultsCount: Array.isArray(evaluation.scoreResults) ? evaluation.scoreResults.length : 
+                        (evaluation.scoreResults && typeof evaluation.scoreResults === 'object' && 'items' in evaluation.scoreResults ? 
+                         (evaluation.scoreResults as any).items.length : 0),
+      firstScoreResult: Array.isArray(evaluation.scoreResults) ? evaluation.scoreResults[0] : 
+                       (evaluation.scoreResults && typeof evaluation.scoreResults === 'object' && 'items' in evaluation.scoreResults ? 
+                        (evaluation.scoreResults as any).items[0] : undefined)
+    });
+
     return (
       <TaskDisplay
         variant="detail"
         task={evaluation.task}
         evaluationData={{
           ...evaluation,
-          scoreResults: evaluation.scoreResults ? {
-            items: evaluation.scoreResults.map((result: { id: string; value: string | number; confidence: number | null; explanation: string | null; metadata: any; itemId: string | null }) => ({
-              id: result.id,
-              value: result.value,
-              confidence: result.confidence,
-              metadata: result.metadata,
-              itemId: result.itemId
-            }))
-          } : undefined
+          // Pass the raw score results - they will be standardized in the components
+          scoreResults: evaluation.scoreResults
         }}
         controlButtons={
           <DropdownMenu>
@@ -657,15 +663,8 @@ export default function EvaluationsDashboard() {
                       task={evaluation.task}
                       evaluationData={{
                         ...evaluation,
-                        scoreResults: evaluation.scoreResults ? {
-                          items: evaluation.scoreResults.map((result: { id: string; value: string | number; confidence: number | null; explanation: string | null; metadata: any; itemId: string | null }) => ({
-                            id: result.id,
-                            value: result.value,
-                            confidence: result.confidence,
-                            metadata: result.metadata,
-                            itemId: result.itemId
-                          }))
-                        } : undefined
+                        // Pass the raw score results - they will be standardized in the components
+                        scoreResults: evaluation.scoreResults
                       }}
                       isSelected={evaluation.id === selectedEvaluationId}
                       onClick={() => {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
-import { transformAmplifyTask, processTask } from '@/utils/data-operations'
+import { transformAmplifyTask, processTask, standardizeScoreResults } from '@/utils/data-operations'
 import type { EvaluationTaskProps } from '@/types/tasks/evaluation'
 import type { TaskStatus } from '@/types/shared'
 import EvaluationTask from '@/components/EvaluationTask'
@@ -50,15 +50,7 @@ interface TaskDisplayProps {
     isDatasetClassDistributionBalanced?: boolean | null
     predictedClassDistribution?: any
     isPredictedClassDistributionBalanced?: boolean | null
-    scoreResults?: {
-      items?: Array<{
-        id: string
-        value: string | number
-        confidence: number | null
-        metadata: any
-        itemId: string | null
-      }>
-    } | null
+    scoreResults?: any // Accept any type for score results - we'll standardize it internally
   }
   controlButtons?: React.ReactNode
   isFullWidth?: boolean
@@ -92,6 +84,18 @@ export function TaskDisplay({
 
   const [processedTask, setProcessedTask] = useState<ProcessedTask | null>(null)
 
+  // Add detailed logging for evaluationData
+  console.log('TaskDisplay received evaluationData:', {
+    id: evaluationData.id,
+    hasScoreResults: !!evaluationData.scoreResults,
+    scoreResultsType: evaluationData.scoreResults ? typeof evaluationData.scoreResults : 'undefined',
+    scoreResultsItemsType: evaluationData.scoreResults?.items ? typeof evaluationData.scoreResults.items : 'undefined',
+    scoreResultsItemsLength: evaluationData.scoreResults?.items?.length ?? 0,
+    scoreResultsItemsIsArray: Array.isArray(evaluationData.scoreResults?.items),
+    firstScoreResult: evaluationData.scoreResults?.items?.[0],
+    variant
+  });
+
   useEffect(() => {
     async function processTaskData() {
       if (!task) {
@@ -116,19 +120,27 @@ export function TaskDisplay({
 
   // Memoize score results transformation
   const transformedScoreResults = useMemo(() => {
-    console.log('Transforming score results:', {
-      hasResults: !!evaluationData.scoreResults?.items,
-      count: evaluationData.scoreResults?.items?.length ?? 0,
-      firstResult: evaluationData.scoreResults?.items?.[0],
-      lastResult: evaluationData.scoreResults?.items?.[evaluationData.scoreResults?.items?.length - 1]
+    console.log('TaskDisplay transforming score results:', {
+      hasResults: !!evaluationData.scoreResults,
+      scoreResultsType: evaluationData.scoreResults ? typeof evaluationData.scoreResults : 'undefined',
+      hasItems: evaluationData.scoreResults && 'items' in evaluationData.scoreResults
     });
 
-    if (!evaluationData.scoreResults?.items?.length) {
+    // Standardize score results to ensure consistent format
+    const standardizedResults = standardizeScoreResults(evaluationData.scoreResults);
+    
+    console.log('TaskDisplay standardized score results:', {
+      count: standardizedResults.length,
+      firstResult: standardizedResults[0],
+      isArray: Array.isArray(standardizedResults)
+    });
+
+    if (!standardizedResults.length) {
       console.log('No score results to transform');
       return [];
     }
 
-    const transformed = evaluationData.scoreResults.items.map((result: any) => {
+    const transformed = standardizedResults.map((result: any) => {
       // Parse metadata if it's a string
       let parsedMetadata;
       try {
@@ -142,6 +154,7 @@ export function TaskDisplay({
         }
 
         console.log('Score result metadata in TaskDisplay:', {
+          resultId: result.id,
           rawMetadata: result.metadata,
           parsedMetadata,
           metadataType: typeof result.metadata,
@@ -152,7 +165,7 @@ export function TaskDisplay({
         });
 
       } catch (e) {
-        console.error('Error parsing score result metadata:', e);
+        console.error('Error parsing metadata:', e);
         parsedMetadata = {};
       }
 
@@ -180,24 +193,20 @@ export function TaskDisplay({
         value: transformedResult.value,
         humanLabel: transformedResult.metadata.human_label,
         correct: transformedResult.metadata.correct,
-        rawMetadata: result.metadata,
-        parsedMetadata,
-        scoreResult,
-        nestedHumanLabel: scoreResult?.metadata?.human_label
+        explanation: transformedResult.explanation
       });
 
       return transformedResult;
     });
 
-    console.log('Transformed score results:', {
-      inputCount: evaluationData.scoreResults.items.length,
+    console.log('TaskDisplay final transformed score results:', {
+      inputCount: standardizedResults.length,
       transformedCount: transformed.length,
-      firstTransformed: transformed[0],
-      lastTransformed: transformed[transformed.length - 1]
+      firstTransformed: transformed[0]
     });
 
     return transformed;
-  }, [evaluationData.scoreResults?.items]);
+  }, [evaluationData.scoreResults]);
 
   const taskProps = {
     task: {
