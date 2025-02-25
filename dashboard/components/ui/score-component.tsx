@@ -11,8 +11,11 @@ import { generateClient } from 'aws-amplify/api'
 import { toast } from 'sonner'
 import { ScoreVersionHistory } from './score-version-history'
 import type { GraphQLResult } from '@aws-amplify/api'
-import Editor from '@monaco-editor/react'
+import Editor, { Monaco } from '@monaco-editor/react'
+import * as monaco from 'monaco-editor'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import type { editor } from 'monaco-editor'
 
 const client = generateClient();
 
@@ -23,6 +26,7 @@ export interface ScoreData {
   type: string
   order: number
   externalId?: string
+  key?: string
   icon?: React.ReactNode
   configuration?: string // YAML configuration string
   championVersionId?: string // ID of the champion version
@@ -85,6 +89,26 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onSave?: () => void
 }
 
+interface DetailContentProps {
+  score: ScoreData
+  isFullWidth: boolean
+  onToggleFullWidth?: () => void
+  onClose?: () => void
+  onEditChange?: (changes: Partial<ScoreData>) => void
+  onSave?: () => void
+  onCancel?: () => void
+  hasChanges?: boolean
+  versions?: ScoreVersion[]
+  championVersionId?: string
+  selectedVersionId?: string
+  onVersionSelect?: (version: ScoreVersion) => void
+  onToggleFeature?: (versionId: string) => void
+  onPromoteToChampion?: (versionId: string) => void
+  versionComment: string
+  onCommentChange: (comment: string) => void
+  resetEditingCounter: number
+}
+
 const GridContent = React.memo(({ 
   score,
   isSelected 
@@ -122,25 +146,11 @@ const DetailContent = React.memo(({
   selectedVersionId,
   onVersionSelect,
   onToggleFeature,
+  onPromoteToChampion,
   versionComment,
   onCommentChange,
-}: {
-  score: ScoreData
-  isFullWidth: boolean
-  onToggleFullWidth?: () => void
-  onClose?: () => void
-  onEditChange?: (changes: Partial<ScoreData>) => void
-  onSave?: () => void
-  onCancel?: () => void
-  hasChanges?: boolean
-  versions?: ScoreVersion[]
-  championVersionId?: string
-  selectedVersionId?: string
-  onVersionSelect?: (version: ScoreVersion) => void
-  onToggleFeature?: (versionId: string) => void
-  versionComment: string
-  onCommentChange: (comment: string) => void
-}) => {
+  resetEditingCounter,
+}: DetailContentProps) => {
   // Get the current version's configuration
   const currentVersion = versions?.find(v => 
     v.id === (selectedVersionId || championVersionId)
@@ -149,40 +159,312 @@ const DetailContent = React.memo(({
   // Parse YAML configuration if available, otherwise create default YAML
   const defaultYaml = stringifyYaml({
     name: score.name,
-    externalId: score.externalId
+    externalId: score.externalId,
+    key: score.key
   })
-  const configuration = currentVersion?.configuration || defaultYaml
+  
+  // Track the current configuration in local state
+  const [currentConfig, setCurrentConfig] = React.useState(currentVersion?.configuration || defaultYaml)
+  
+  // Track if we're currently editing to prevent useEffect from overriding changes
+  const [isEditing, setIsEditing] = React.useState(false)
+  
+  // Reset isEditing when resetEditingCounter changes
+  React.useEffect(() => {
+    console.log('resetEditingCounter changed, resetting isEditing');
+    setIsEditing(false);
+  }, [resetEditingCounter])
+  
+  // Update currentConfig when score or version changes, but only if we're not editing
+  React.useEffect(() => {
+    if (!isEditing) {
+      console.log('Updating currentConfig from version/score change');
+      setCurrentConfig(currentVersion?.configuration || defaultYaml);
+    } else {
+      console.log('Skipping currentConfig update because isEditing is true');
+    }
+  }, [currentVersion, defaultYaml, score, isEditing])
+  
+  // Update currentConfig when score.configuration changes (from parent component)
+  React.useEffect(() => {
+    if (score.configuration && !isEditing) {
+      console.log('Updating currentConfig from score.configuration:', score.configuration);
+      setCurrentConfig(score.configuration);
+    }
+  }, [score.configuration, isEditing])
   
   // Parse current configuration for form fields
   const parsedConfig = React.useMemo(() => {
     try {
-      return parseYaml(configuration)
+      const parsed = parseYaml(currentConfig);
+      console.log('DetailContent parsed YAML:', parsed);
+      
+      // Handle both external_id and externalId formats
+      const externalIdValue = parsed.externalId !== undefined ? 
+        parsed.externalId : 
+        (parsed.external_id !== undefined ? parsed.external_id : score.externalId);
+      
+      return {
+        ...parsed,
+        // Ensure we always have externalId in our parsed config regardless of format in YAML
+        externalId: externalIdValue
+      };
     } catch (error) {
       console.error('Error parsing YAML:', error)
-      return { name: score.name, externalId: score.externalId }
+      return { 
+        name: score.name, 
+        externalId: score.externalId,
+        key: score.key
+      }
     }
-  }, [configuration, score])
+  }, [currentConfig, score])
+
+  // Handle form field changes
+  const handleFormChange = (field: string, value: string) => {
+    console.log(`Form field ${field} changed to:`, value);
+    
+    // Set editing flag to prevent useEffect from overriding our changes
+    setIsEditing(true);
+    
+    // Update the form field in the parent component
+    onEditChange?.({ [field]: value });
+    
+    // Also update the YAML directly in our local state
+    try {
+      const parsed = parseYaml(currentConfig);
+      
+      // Check if using external_id format
+      const usesUnderscoreFormat = currentConfig.includes('external_id:') && 
+        !currentConfig.includes('externalId:');
+      
+      // Update the field
+      if (field === 'externalId') {
+        if (usesUnderscoreFormat) {
+          parsed.external_id = value;
+          // Remove camelCase if exists
+          if ('externalId' in parsed) {
+            delete parsed.externalId;
+          }
+        } else {
+          parsed.externalId = value;
+          // Remove snake_case if exists
+          if ('external_id' in parsed) {
+            delete parsed.external_id;
+          }
+        }
+      } else {
+        parsed[field] = value;
+      }
+      
+      // Update the configuration
+      const updatedYaml = stringifyYaml(parsed);
+      console.log('Updated YAML from form field:', updatedYaml);
+      setCurrentConfig(updatedYaml);
+      
+      // Also pass the updated configuration to the parent
+      onEditChange?.({ configuration: updatedYaml });
+    } catch (error) {
+      console.error('Error updating YAML from form field:', error);
+    }
+  };
+
+  // Handle comment changes
+  const handleCommentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    // Call the parent's onCommentChange handler
+    onCommentChange?.(e.target.value);
+  };
+
+  // Create a ref to store the Monaco instance
+  const monacoRef = useRef<Monaco | null>(null);
+  
+  // Define a custom Monaco Editor theme that matches our Tailwind theme
+  const defineCustomTheme = useCallback((monaco: Monaco) => {
+    // Helper function to get CSS variable value
+    const getCssVar = (name: string) => {
+      const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      
+      // If the value is an HSL color, convert it to hex
+      if (value.startsWith('hsl(')) {
+        // Create a temporary element to use the browser's color conversion
+        const tempEl = document.createElement('div');
+        tempEl.style.color = value;
+        document.body.appendChild(tempEl);
+        const computedColor = getComputedStyle(tempEl).color;
+        document.body.removeChild(tempEl);
+        
+        // Convert rgb() format to hex
+        if (computedColor.startsWith('rgb')) {
+          const rgbValues = computedColor.match(/\d+/g);
+          if (rgbValues && rgbValues.length >= 3) {
+            const hex = rgbValues.slice(0, 3).map(x => {
+              const hex = parseInt(x).toString(16);
+              return hex.length === 1 ? '0' + hex : hex;
+            }).join('');
+            return hex; // Return without # prefix as Monaco requires
+          }
+        }
+      }
+      
+      // If it's already a hex color, remove the # prefix
+      if (value.startsWith('#')) {
+        return value.substring(1);
+      }
+      
+      return value;
+    };
+
+    // More comprehensive token rules for YAML syntax highlighting
+    const commonRules = [
+      // Comments - muted foreground with italic style
+      { token: 'comment', foreground: getCssVar('--muted-foreground'), fontStyle: 'italic' },
+      
+      // Keys - primary color (blue in your theme)
+      { token: 'type', foreground: getCssVar('--primary') },
+      { token: 'key', foreground: getCssVar('--primary') },
+      
+      // Values - foreground color (main text color)
+      { token: 'string', foreground: getCssVar('--foreground') },
+      { token: 'number', foreground: getCssVar('--foreground') },
+      { token: 'boolean', foreground: getCssVar('--foreground') },
+      
+      // Structural elements - muted color
+      { token: 'delimiter', foreground: getCssVar('--muted-foreground') },
+      { token: 'bracket', foreground: getCssVar('--muted-foreground') },
+      
+      // Keywords - accent color (violet in your theme)
+      { token: 'keyword', foreground: getCssVar('--accent') },
+      
+      // Identifiers - foreground color
+      { token: 'identifier', foreground: getCssVar('--foreground') },
+      
+      // YAML specific
+      { token: 'tag', foreground: getCssVar('--primary') },
+      { token: 'number.yaml', foreground: getCssVar('--foreground') },
+      { token: 'string.yaml', foreground: getCssVar('--foreground') },
+      { token: 'keyword.yaml', foreground: getCssVar('--accent') },
+    ];
+
+    // Create a light theme that uses CSS variables
+    monaco.editor.defineTheme('plexusLightTheme', {
+      base: 'vs',
+      inherit: true,
+      rules: commonRules,
+      colors: {
+        'editor.background': '#' + getCssVar('--background'),
+        'editor.foreground': '#' + getCssVar('--foreground'),
+        'editor.lineHighlightBackground': '#' + getCssVar('--muted'),
+        'editorLineNumber.foreground': '#' + getCssVar('--muted-foreground'),
+        'editor.selectionBackground': '#' + getCssVar('--primary'),
+        'editorIndentGuide.background': '#' + getCssVar('--border'),
+        'editor.selectionHighlightBackground': '#' + getCssVar('--muted'),
+        'editorCursor.foreground': '#' + getCssVar('--foreground'),
+        'editorWhitespace.foreground': '#' + getCssVar('--border'),
+        'editorLineNumber.activeForeground': '#' + getCssVar('--foreground'),
+      }
+    } as editor.IStandaloneThemeData);
+
+    // Create a dark theme that uses CSS variables
+    monaco.editor.defineTheme('plexusDarkTheme', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: commonRules,
+      colors: {
+        'editor.background': '#' + getCssVar('--background'),
+        'editor.foreground': '#' + getCssVar('--foreground'),
+        'editor.lineHighlightBackground': '#' + getCssVar('--muted'),
+        'editorLineNumber.foreground': '#' + getCssVar('--muted-foreground'),
+        'editor.selectionBackground': '#' + getCssVar('--primary'),
+        'editorIndentGuide.background': '#' + getCssVar('--border'),
+        'editor.selectionHighlightBackground': '#' + getCssVar('--muted'),
+        'editorCursor.foreground': '#' + getCssVar('--foreground'),
+        'editorWhitespace.foreground': '#' + getCssVar('--border'),
+        'editorLineNumber.activeForeground': '#' + getCssVar('--foreground'),
+      }
+    } as editor.IStandaloneThemeData);
+  }, []);
+
+  // Detect theme changes and update Monaco theme accordingly
+  useEffect(() => {
+    // Function to apply the appropriate theme
+    const applyTheme = () => {
+      if (!monacoRef.current) return;
+      
+      // Check if we're in dark mode
+      const isDarkMode = document.documentElement.classList.contains('dark');
+      console.log('Theme changed, isDarkMode:', isDarkMode);
+      
+      // Force a refresh of CSS variables before applying theme
+      const background = getComputedStyle(document.documentElement).getPropertyValue('--background').trim();
+      const foreground = getComputedStyle(document.documentElement).getPropertyValue('--foreground').trim();
+      console.log('Current CSS variables - background:', background, 'foreground:', foreground);
+      
+      // Redefine themes to ensure they have the latest CSS variables
+      defineCustomTheme(monacoRef.current);
+      
+      // Apply the appropriate theme
+      monacoRef.current.editor.setTheme(isDarkMode ? 'plexusDarkTheme' : 'plexusLightTheme');
+    };
+    
+    // Apply theme immediately if Monaco is available
+    applyTheme();
+    
+    // Set up a mutation observer to detect theme changes
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'class') {
+          applyTheme();
+        }
+      });
+    });
+    
+    // Start observing the document element for class changes
+    observer.observe(document.documentElement, { attributes: true });
+    
+    // Clean up the observer when the component unmounts
+    return () => {
+      observer.disconnect();
+    };
+  }, [defineCustomTheme]);
 
   return (
-    <div className="w-full flex flex-col min-h-0">
+    <div className="w-full flex flex-col min-h-0 overflow-y-auto">
       <div className="flex justify-between items-start w-full">
         <div className="space-y-2 flex-1">
           <Input
-            value={parsedConfig.name}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => onEditChange?.({ name: e.target.value })}
+            value={parsedConfig.name || ''}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+              handleFormChange('name', e.target.value)
+            }
+            onFocus={() => setIsEditing(true)}
             className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
                      focus-visible:ring-0 focus-visible:ring-offset-0 
                      placeholder:text-muted-foreground rounded-md"
             placeholder="Score Name"
           />
-          <Input
-            value={parsedConfig.externalId ?? ''}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => onEditChange?.({ externalId: e.target.value })}
-            className="font-mono bg-background border-0 px-2 h-auto w-full
-                     focus-visible:ring-0 focus-visible:ring-offset-0 
-                     placeholder:text-muted-foreground rounded-md"
-            placeholder="External ID"
-          />
+          <div className="flex gap-2 w-full">
+            <Input
+              value={parsedConfig.key || ''}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                handleFormChange('key', e.target.value)
+              }
+              onFocus={() => setIsEditing(true)}
+              className="font-mono bg-background border-0 px-2 h-auto flex-1
+                       focus-visible:ring-0 focus-visible:ring-offset-0 
+                       placeholder:text-muted-foreground rounded-md"
+              placeholder="score-key"
+            />
+            <Input
+              value={parsedConfig.externalId || ''}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                handleFormChange('externalId', e.target.value)
+              }
+              onFocus={() => setIsEditing(true)}
+              className="font-mono bg-background border-0 px-2 h-auto flex-1
+                       focus-visible:ring-0 focus-visible:ring-offset-0 
+                       placeholder:text-muted-foreground rounded-md"
+              placeholder="External ID"
+            />
+          </div>
           <textarea
             value={versionComment}
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onCommentChange(e.target.value)}
@@ -229,18 +511,61 @@ const DetailContent = React.memo(({
         <Editor
           height="300px"
           defaultLanguage="yaml"
-          value={configuration}
+          value={currentConfig}
+          key={`editor-${selectedVersionId || championVersionId}`}
+          onMount={(editor, monaco) => {
+            console.log('Editor mounted');
+            // Store the Monaco instance
+            monacoRef.current = monaco;
+            
+            // Apply our custom theme when the editor mounts
+            defineCustomTheme(monaco);
+            
+            // Set the initial theme based on current mode
+            const isDarkMode = document.documentElement.classList.contains('dark');
+            console.log('Editor mounted, isDarkMode:', isDarkMode);
+            
+            // Force a refresh of CSS variables before applying theme
+            const background = getComputedStyle(document.documentElement).getPropertyValue('--background').trim();
+            const foreground = getComputedStyle(document.documentElement).getPropertyValue('--foreground').trim();
+            console.log('Current CSS variables - background:', background, 'foreground:', foreground);
+            
+            // Apply the appropriate theme
+            monaco.editor.setTheme(isDarkMode ? 'plexusDarkTheme' : 'plexusLightTheme');
+          }}
           onChange={(value) => {
+            if (!value) return;
+            
+            // Set editing flag to prevent useEffect from overriding our changes
+            setIsEditing(true);
+            
             try {
               // Parse YAML to validate it and get values for form
-              const parsed = parseYaml(value || '')
+              const parsed = parseYaml(value)
+              console.log('YAML editor onChange parsed:', parsed);
+              
+              // Extract external ID from either format
+              const externalIdValue = parsed.externalId !== undefined ? 
+                parsed.externalId : 
+                (parsed.external_id !== undefined ? parsed.external_id : undefined);
+              
+              console.log('YAML editor extracted externalId:', externalIdValue);
+              
+              // Update our local state
+              setCurrentConfig(value);
+              
+              // Ensure we're capturing all fields from the YAML
               onEditChange?.({
                 name: parsed.name,
-                externalId: parsed.externalId,
+                // Support both externalId and external_id formats
+                externalId: externalIdValue,
+                key: parsed.key,
+                description: parsed.description,
                 configuration: value // Store the original YAML string
               })
             } catch (error) {
               // Ignore parse errors while typing
+              console.log('YAML parse error (ignored):', error)
             }
           }}
           options={{
@@ -251,7 +576,14 @@ const DetailContent = React.memo(({
             wordWrap: 'on',
             wrappingIndent: 'indent',
             automaticLayout: true,
-            fontFamily: 'monospace'
+            fontFamily: 'monospace',
+            fontLigatures: true,
+            contextmenu: true,
+            cursorBlinking: 'smooth',
+            cursorSmoothCaretAnimation: 'on',
+            smoothScrolling: true,
+            renderLineHighlight: 'all',
+            colorDecorators: true
           }}
         />
       </div>
@@ -259,20 +591,27 @@ const DetailContent = React.memo(({
       {hasChanges && (
         <div className="mt-4 space-y-4">
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onCancel}>Cancel</Button>
-            <Button onClick={onSave}>Save Changes</Button>
+            <Button variant="outline" onClick={() => {
+              setIsEditing(false); // Reset editing flag
+              onCancel?.();
+            }}>Cancel</Button>
+            <Button onClick={() => {
+              setIsEditing(false); // Reset editing flag
+              onSave?.();
+            }}>Save Changes</Button>
           </div>
         </div>
       )}
 
       {versions && (
-        <div className="mt-6">
+        <div className="mt-6 overflow-hidden">
           <ScoreVersionHistory
             versions={versions}
             championVersionId={championVersionId}
             selectedVersionId={selectedVersionId}
             onVersionSelect={onVersionSelect}
             onToggleFeature={onToggleFeature}
+            onPromoteToChampion={onPromoteToChampion}
           />
         </div>
       )}
@@ -298,10 +637,26 @@ export function ScoreComponent({
   const [championVersionId, setChampionVersionId] = React.useState<string>()
   const [selectedVersionId, setSelectedVersionId] = React.useState<string>()
   const [versionComment, setVersionComment] = React.useState('')
-
+  const [resetEditingCounter, setResetEditingCounter] = React.useState(0)
+  const [onlyCommentChanged, setOnlyCommentChanged] = React.useState(false)
+  
+  // Debug log when editedScore changes
   React.useEffect(() => {
+    console.log('editedScore updated:', editedScore);
+  }, [editedScore]);
+  
+  // Ensure editedScore is updated when score prop changes
+  React.useEffect(() => {
+    console.log('Score prop changed, updating editedScore:', score);
     setEditedScore(score)
     setVersionComment('') // Reset comment when score changes
+    setHasChanges(false) // Reset changes flag when score changes
+    setOnlyCommentChanged(false) // Reset comment change flag
+    setResetEditingCounter(prev => prev + 1) // Signal to DetailContent to reset editing state
+  }, [score])
+  
+  // Fetch versions when score changes
+  React.useEffect(() => {
     const fetchVersions = async () => {
       try {
         console.log('Fetching versions for score:', score.id);
@@ -391,38 +746,141 @@ export function ScoreComponent({
   }, [score])
 
   const handleEditChange = (changes: Partial<ScoreData>) => {
+    console.log('handleEditChange called with:', changes);
+    
+    // Always update the editedScore state with the changes
     setEditedScore(prev => {
-      const updated = { ...prev, ...changes }
-      setHasChanges(true)
-      return updated
-    })
-  }
+      // Create updated state with the changes
+      const updated = { ...prev, ...changes };
+      
+      // Mark that we have unsaved changes
+      setHasChanges(true);
+      
+      // If we're changing fields other than the comment, reset onlyCommentChanged flag
+      if ('name' in changes || 'key' in changes || 'externalId' in changes || 
+          'description' in changes || 'configuration' in changes) {
+        setOnlyCommentChanged(false);
+      }
+      
+      // If we're directly setting the configuration (from the YAML editor or form field handler),
+      // we don't need to regenerate it
+      if (changes.configuration) {
+        console.log('Using provided configuration:', changes.configuration);
+        return updated;
+      }
+      
+      // Otherwise, we need to update the YAML configuration to match the form fields
+      try {
+        // Get current configuration or create default
+        let currentConfig;
+        try {
+          currentConfig = prev.configuration ? parseYaml(prev.configuration) : {};
+        } catch (e) {
+          currentConfig = {};
+        }
+        
+        // Check if using external_id format
+        const usesUnderscoreFormat = prev.configuration && 
+          prev.configuration.includes('external_id:') && 
+          !prev.configuration.includes('externalId:');
+        
+        // Create updated config
+        const updatedConfig = { ...currentConfig };
+        
+        // Update name if changed
+        if (changes.name !== undefined) {
+          updatedConfig.name = changes.name;
+        }
+        
+        // Update key if changed
+        if (changes.key !== undefined) {
+          updatedConfig.key = changes.key;
+        }
+        
+        // Update description if changed
+        if (changes.description !== undefined) {
+          updatedConfig.description = changes.description;
+        }
+        
+        // Update external ID with the appropriate format
+        if (changes.externalId !== undefined) {
+          if (usesUnderscoreFormat) {
+            updatedConfig.external_id = changes.externalId;
+            // Remove camelCase if exists
+            if ('externalId' in updatedConfig) {
+              delete updatedConfig.externalId;
+            }
+          } else {
+            updatedConfig.externalId = changes.externalId;
+            // Remove snake_case if exists
+            if ('external_id' in updatedConfig) {
+              delete updatedConfig.external_id;
+            }
+          }
+        }
+        
+        // Update the configuration
+        updated.configuration = stringifyYaml(updatedConfig);
+        console.log('Generated updated YAML configuration:', updated.configuration);
+      } catch (error) {
+        console.error('Error updating YAML configuration:', error);
+      }
+      
+      return updated;
+    });
+  };
 
   const handleCancel = () => {
     setEditedScore(score)
     setVersionComment('') // Reset comment on cancel
     setHasChanges(false)
     setSelectedVersionId(undefined) // Reset selection to champion
+    setResetEditingCounter(prev => prev + 1) // Signal to DetailContent to reset editing state
   }
 
   const handleVersionSelect = (version: ScoreVersion) => {
     setSelectedVersionId(version.id)
     setVersionComment(version.comment || '')
+    console.log('handleVersionSelect called with version:', version.id);
+    
+    // Signal to DetailContent to reset editing state
+    setResetEditingCounter(prev => prev + 1)
     
     try {
+      // Parse the YAML configuration to extract all fields
       const config = parseYaml(version.configuration)
-      setEditedScore(prev => ({
-        ...prev,
-        name: config.name || prev.name,
-        externalId: config.externalId || prev.externalId,
-        description: config.description || prev.description,
-        configuration: version.configuration // Keep original YAML
-      }))
+      console.log('Parsed YAML configuration:', config);
       
-      // If this is a new selection (not just re-rendering), show a confirmation
-      if (selectedVersionId !== version.id) {
-        toast.info(`Viewing version from ${new Date(version.createdAt).toLocaleString()}`)
-      }
+      // Extract external ID from either format
+      const externalIdValue = config.externalId !== undefined ? 
+        config.externalId : 
+        (config.external_id !== undefined ? config.external_id : undefined);
+      
+      console.log('Extracted externalId value:', externalIdValue);
+      
+      // Update the editedScore with values from the YAML configuration
+      // This ensures we're using the YAML as the source of truth
+      setEditedScore(prev => {
+        const updated = {
+          ...prev,
+          // Use values from YAML, falling back to previous values if not present
+          name: config.name !== undefined ? config.name : prev.name,
+          // Support both externalId and external_id formats
+          externalId: externalIdValue,
+          key: config.key !== undefined ? config.key : prev.key,
+          description: config.description !== undefined ? config.description : prev.description,
+          // Store the complete configuration for the editor
+          configuration: version.configuration
+        };
+        console.log('Updated editedScore with version data:', updated);
+        return updated;
+      })
+      
+      // Reset hasChanges since we just loaded a version
+      setHasChanges(false);
+      
+      // Remove toast notification for simply viewing a version
+      // We only want notifications for actions that change state
     } catch (error) {
       console.error('Error parsing version YAML:', error)
       toast.error('Error loading version configuration')
@@ -452,8 +910,20 @@ export function ScoreComponent({
     }
   };
 
+  // Handle comment changes and set hasChanges to true
+  const handleCommentChange = (comment: string) => {
+    setVersionComment(comment);
+    // Set hasChanges to true when comment is changed
+    setHasChanges(true);
+    // Set flag indicating only the comment has changed
+    setOnlyCommentChanged(true);
+  };
+
   const handleSave = async () => {
     try {
+      // Signal to DetailContent to reset editing state
+      setResetEditingCounter(prev => prev + 1)
+      
       // Update the Score record with the new values
       await client.graphql({
         query: `
@@ -462,6 +932,7 @@ export function ScoreComponent({
               id
               name
               externalId
+              key
             }
           }
         `,
@@ -470,21 +941,77 @@ export function ScoreComponent({
             id: score.id,
             name: editedScore.name,
             externalId: editedScore.externalId,
+            key: editedScore.key,
           }
         }
       });
 
-      // Create a new version with YAML configuration
+      // Check if we're editing an existing version or creating a new one
+      const isEditingExistingVersion = selectedVersionId && versions.some(v => v.id === selectedVersionId);
+      
+      // If we're editing an existing version and only the comment has changed
+      if (isEditingExistingVersion && onlyCommentChanged) {
+        const currentVersion = versions.find(v => v.id === selectedVersionId);
+        if (currentVersion) {
+          // Only update the comment on the existing version
+          console.log('Only updating comment on existing version:', selectedVersionId);
+          
+          await client.graphql({
+            query: `
+              mutation UpdateScoreVersion($input: UpdateScoreVersionInput!) {
+                updateScoreVersion(input: $input) {
+                  id
+                  scoreId
+                  comment
+                  updatedAt
+                }
+              }
+            `,
+            variables: {
+              input: {
+                id: selectedVersionId,
+                comment: versionComment
+              }
+            }
+          });
+          
+          // Update local state
+          setVersions(prev => prev.map(v => 
+            v.id === selectedVersionId 
+              ? { ...v, comment: versionComment, updatedAt: new Date().toISOString() } 
+              : v
+          ));
+          
+          toast.success('Version comment updated');
+          setHasChanges(false);
+          setOnlyCommentChanged(false);
+          return; // Exit early, no need to create a new version
+        }
+      }
+      
+      // If we get here, we're creating a new version (either new config or not editing an existing version)
+      let configurationYaml = editedScore.configuration;
+      
+      // If no configuration exists, create one based on current values
+      if (!configurationYaml) {
+        // Check if we should use external_id or externalId format
+        // Default to external_id for new configurations as it's more standard
+        configurationYaml = stringifyYaml({
+          name: editedScore.name,
+          external_id: editedScore.externalId,
+          key: editedScore.key,
+          description: editedScore.description
+        });
+      }
+      
       const versionPayload = {
         scoreId: score.id,
-        configuration: editedScore.configuration || stringifyYaml({
-          name: editedScore.name,
-          externalId: editedScore.externalId,
-          description: editedScore.description
-        }),
+        configuration: configurationYaml,
         isFeatured: false,
         comment: versionComment || 'Updated score configuration',
       };
+
+      console.log('Creating new version with payload:', versionPayload);
 
       const createVersionResponse = await client.graphql({
         query: `
@@ -548,9 +1075,48 @@ export function ScoreComponent({
       toast.success('Score updated successfully');
       setHasChanges(false);
       setVersionComment('');
+      setOnlyCommentChanged(false);
     } catch (error) {
       console.error('Error saving score:', error);
       toast.error(error instanceof Error ? error.message : 'Error updating score');
+    }
+  };
+
+  const handlePromoteToChampion = async (versionId: string) => {
+    try {
+      const version = versions.find(v => v.id === versionId);
+      if (!version) return;
+
+      // Update the Score record to set this as the champion version
+      await client.graphql({
+        query: `
+          mutation UpdateScoreChampion($input: UpdateScoreInput!) {
+            updateScore(input: $input) {
+              id
+              championVersionId
+            }
+          }
+        `,
+        variables: {
+          input: {
+            id: score.id,
+            championVersionId: versionId,
+          }
+        }
+      });
+
+      // Update local state
+      setChampionVersionId(versionId);
+      
+      // If this version is not already selected, select it
+      if (selectedVersionId !== versionId) {
+        handleVersionSelect(version);
+      }
+
+      toast.success('Version promoted to champion');
+    } catch (error) {
+      console.error('Error promoting version to champion:', error);
+      toast.error('Failed to promote version to champion');
     }
   };
 
@@ -561,14 +1127,14 @@ export function ScoreComponent({
         variant === 'grid' ? (
           isSelected ? "bg-card-selected" : "bg-card"
         ) : "bg-card-selected",
-        variant === 'detail' && "h-full flex flex-col",
+        variant === 'detail' && "h-full flex flex-col overflow-hidden",
         className
       )}
       {...props}
     >
       <div className={cn(
         "p-4 w-full",
-        variant === 'detail' && "flex-1 flex flex-col min-h-0"
+        variant === 'detail' && "flex-1 flex flex-col min-h-0 overflow-hidden"
       )}>
         <div 
           className={cn(
@@ -603,8 +1169,10 @@ export function ScoreComponent({
               selectedVersionId={selectedVersionId}
               onVersionSelect={handleVersionSelect}
               onToggleFeature={handleToggleFeature}
+              onPromoteToChampion={handlePromoteToChampion}
               versionComment={versionComment}
-              onCommentChange={setVersionComment}
+              onCommentChange={handleCommentChange}
+              resetEditingCounter={resetEditingCounter}
             />
           )}
         </div>

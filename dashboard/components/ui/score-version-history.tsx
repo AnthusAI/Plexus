@@ -5,6 +5,7 @@ import { Badge } from './badge'
 import { Star, StarIcon, FileStack, ChevronDown, ChevronUp, Award } from 'lucide-react'
 import { Button } from './button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { parse as parseYaml } from 'yaml'
 
 export interface ScoreVersion {
   id: string
@@ -28,6 +29,7 @@ export interface ScoreVersionHistoryProps extends React.HTMLAttributes<HTMLDivEl
   selectedVersionId?: string
   onVersionSelect?: (version: ScoreVersion) => void
   onToggleFeature?: (versionId: string) => void
+  onPromoteToChampion?: (versionId: string) => void
 }
 
 export function ScoreVersionHistory({
@@ -36,27 +38,25 @@ export function ScoreVersionHistory({
   selectedVersionId,
   onVersionSelect,
   onToggleFeature,
+  onPromoteToChampion,
   className,
   ...props
 }: ScoreVersionHistoryProps) {
   const [isHistoryExpanded, setIsHistoryExpanded] = React.useState(false)
 
-  // Sort versions by createdAt in descending order
+  // Sort versions by createdAt in descending order (newest first)
   const sortedVersions = [...versions].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )
 
-  // Get selected version or champion version if it exists, otherwise use most recent
-  const selectedVersion = selectedVersionId ? versions.find(v => v.id === selectedVersionId) : null
+  // Find champion version if it exists
   const championVersion = championVersionId ? versions.find(v => v.id === championVersionId) : null
-  const firstVersion = selectedVersion || championVersion || sortedVersions[0]
-  const otherVersions = sortedVersions
-    .filter(v => v.id !== firstVersion?.id)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  
+  // Separate champion version from other versions
+  const otherVersions = sortedVersions.filter(v => v.id !== championVersionId)
 
-  const renderVersion = (version: ScoreVersion) => {
-    const config = JSON.parse(version.configuration)
-    const isChampion = version.id === championVersionId
+  const renderVersion = (version: ScoreVersion, isChampion = false) => {
+    const config = parseYaml(version.configuration)
     const isSelected = version.id === selectedVersionId
     
     return (
@@ -64,8 +64,7 @@ export function ScoreVersionHistory({
         key={version.id}
         className={cn(
           "flex flex-col p-3 rounded-md cursor-pointer transition-colors",
-          isSelected ? "bg-accent" : "bg-card hover:bg-accent/50",
-          isSelected && "border-2 border-primary"
+          isSelected ? "bg-secondary" : "bg-background hover:bg-accent/10"
         )}
         onClick={() => onVersionSelect?.(version)}
         role="button"
@@ -79,16 +78,26 @@ export function ScoreVersionHistory({
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm text-foreground">
               <Timestamp time={version.createdAt} variant="relative" />
-              {isSelected && (
-                <span className="ml-2 text-primary font-medium">(Selected)</span>
-              )}
             </div>
           </div>
           <div className="flex items-center gap-2 ml-4">
-            {isChampion && (
-              <Award className="h-4 w-4 text-muted-foreground" />
+            {isChampion ? (
+              <Award className="h-4 w-4 text-primary" />
+            ) : onPromoteToChampion && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onPromoteToChampion(version.id)
+                }}
+                className="h-7 text-xs px-2 py-0 flex items-center gap-1"
+              >
+                <Award className="h-3 w-3" />
+                Promote
+              </Button>
             )}
             {onToggleFeature && (
               <Button
@@ -111,7 +120,7 @@ export function ScoreVersionHistory({
         </div>
         
         <div className="flex items-start gap-4 mt-2">
-          <div className="flex-1 text-sm text-muted-foreground italic break-words">
+          <div className="flex-1 text-sm text-foreground italic break-words">
             {version.comment || "Updated name and external ID"}
           </div>
           {version.user && (
@@ -128,16 +137,11 @@ export function ScoreVersionHistory({
   }
 
   return (
-    <div className={cn("space-y-4", className)} {...props}>
+    <div className={cn("space-y-4 w-full", className)} {...props}>
       <div className="space-y-4">
-        {/* Header with Award icon */}
-        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          {selectedVersion ? (
-            <>
-              <Award className="h-4 w-4" />
-              <span>Selected Version {selectedVersion.id === championVersionId && "(Champion)"}</span>
-            </>
-          ) : championVersion ? (
+        {/* Header with appropriate icon */}
+        <div className="flex items-center gap-2 text-sm font-medium">
+          {championVersion ? (
             <>
               <Award className="h-4 w-4" />
               <span>Champion Version</span>
@@ -145,13 +149,13 @@ export function ScoreVersionHistory({
           ) : (
             <>
               <FileStack className="h-4 w-4" />
-              <span>Latest Version</span>
+              <span>Version History</span>
             </>
           )}
         </div>
 
-        {/* Always show selected/champion/first version */}
-        {firstVersion && renderVersion(firstVersion)}
+        {/* Always show champion version at the top if it exists */}
+        {championVersion && renderVersion(championVersion, true)}
         
         {/* Show expand/collapse button if there are more versions */}
         {otherVersions.length > 0 && (
@@ -170,10 +174,12 @@ export function ScoreVersionHistory({
           </Button>
         )}
         
-        {/* Show other versions when expanded */}
+        {/* Show other versions when expanded with proper scrolling */}
         {isHistoryExpanded && otherVersions.length > 0 && (
-          <div className="space-y-2">
-            {otherVersions.map(renderVersion)}
+          <div className="max-h-[300px] overflow-y-auto pr-1">
+            <div className="space-y-2">
+              {otherVersions.map(version => renderVersion(version, false))}
+            </div>
           </div>
         )}
       </div>

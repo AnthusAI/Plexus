@@ -2,6 +2,7 @@ import React from 'react'
 import type { Meta, StoryObj } from '@storybook/react'
 import { action } from '@storybook/addon-actions'
 import { ScoreVersionHistory } from '../components/ui/score-version-history'
+import { stringify as stringifyYaml } from 'yaml'
 
 // Helper to get a date from X minutes ago
 const getTimeAgo = (minutes: number) => {
@@ -32,7 +33,7 @@ const mockVersions = [
   {
     id: '1',
     scoreId: 'score1',
-    configuration: JSON.stringify({
+    configuration: stringifyYaml({
       name: 'Original Version',
       externalId: 'SCORE_V1'
     }),
@@ -45,7 +46,7 @@ const mockVersions = [
   {
     id: '2',
     scoreId: 'score1',
-    configuration: JSON.stringify({
+    configuration: stringifyYaml({
       name: 'Updated Name',
       externalId: 'SCORE_V2'
     }),
@@ -58,7 +59,7 @@ const mockVersions = [
   {
     id: '3',
     scoreId: 'score1',
-    configuration: JSON.stringify({
+    configuration: stringifyYaml({
       name: 'Latest Version',
       externalId: 'SCORE_V3'
     }),
