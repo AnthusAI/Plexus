@@ -25,7 +25,7 @@ type ItemIndexFields = "name" | "description" | "accountId";
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
-    "scoringJobId" | "evaluationId";
+    "scoringJobId" | "evaluationId" | "scoreVersionId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
@@ -33,6 +33,7 @@ type TaskStageIndexFields = "taskId" | "name" | "order" | "status";
 type DatasetIndexFields = "scorecardId" | "scoreId";
 type DatasetVersionIndexFields = "datasetId";
 type DatasetProfileIndexFields = "datasetId" | "datasetVersionId";
+type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
 
 const schema = a.schema({
     Account: a
@@ -120,7 +121,9 @@ const schema = a.schema({
             scoringJobs: a.hasMany('ScoringJob', 'scoreId'),
             datasets: a.hasMany('Dataset', 'scoreId'),
             tasks: a.hasMany('Task', 'scoreId'),
-            configuration: a.json(),
+            versions: a.hasMany('ScoreVersion', 'scoreId'),
+            championVersionId: a.string(),
+            championVersion: a.belongsTo('ScoreVersion', 'championVersionId'),
             externalId: a.string().required()
         })
         .authorization((allow: AuthorizationCallback) => [
@@ -132,6 +135,30 @@ const schema = a.schema({
             idx("externalId"),
             idx("key"),
             idx("name")
+        ]),
+
+    ScoreVersion: a
+        .model({
+            scoreId: a.string().required(),
+            score: a.belongsTo('Score', 'scoreId'),
+            configuration: a.json().required(),
+            isFeatured: a.boolean().required(),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+            scoreResults: a.hasMany('ScoreResult', 'scoreVersionId'),
+            scoresAsChampion: a.hasMany('Score', 'championVersionId'),
+            parentVersionId: a.string(),
+            parentVersion: a.belongsTo('ScoreVersion', 'parentVersionId'),
+            childVersions: a.hasMany('ScoreVersion', 'parentVersionId'),
+            evaluations: a.hasMany('Evaluation', 'scoreVersionId')
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx) => [
+            idx("scoreId").sortKeys(["createdAt"]),
+            idx("updatedAt")
         ]),
 
     Evaluation: a
@@ -159,6 +186,8 @@ const schema = a.schema({
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
+            scoreVersionId: a.string(),
+            scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
             confusionMatrix: a.json(),
             items: a.hasMany('Item', 'evaluationId'),
             scoreResults: a.hasMany('ScoreResult', 'evaluationId'),
@@ -178,7 +207,8 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
-            idx("scoreId").sortKeys(["updatedAt"])
+            idx("scoreId").sortKeys(["updatedAt"]),
+            idx("scoreVersionId").sortKeys(["createdAt"])
         ]),
 
     BatchJob: a
@@ -286,6 +316,8 @@ const schema = a.schema({
             evaluation: a.belongsTo('Evaluation', 'evaluationId'),
             scorecardId: a.string().required(),
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scoreVersionId: a.string(),
+            scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId')
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -296,7 +328,8 @@ const schema = a.schema({
             idx("itemId"),
             idx("scoringJobId"),
             idx("scorecardId"),
-            idx("evaluationId")
+            idx("evaluationId"),
+            idx("scoreVersionId")
         ]),
 
     BatchJobScoringJob: a
