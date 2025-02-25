@@ -1763,7 +1763,7 @@ class ConsistencyEvaluation(Evaluation):
         mlflow.log_param("number_of_times_to_sample_each_text", self.number_of_times_to_sample_each_text)
 
 class AccuracyEvaluation(Evaluation):
-    def __init__(self, *, override_folder: str, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, scorecard_id: str = None, **kwargs):
+    def __init__(self, *, override_folder: str, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, scorecard_id: str = None, concurrency_limit: int = 50, **kwargs):
         # Store scorecard_id before calling super().__init__
         self.scorecard_id = scorecard_id
         super().__init__(**kwargs)
@@ -1775,6 +1775,7 @@ class AccuracyEvaluation(Evaluation):
         self.task_id = task_id  # Store task ID
         self.evaluation_id = evaluation_id  # Store evaluation ID
         self.account_id = account_id  # Store account ID
+        self.concurrency_limit = concurrency_limit  # Store concurrency limit
         # Don't overwrite scorecard_id here since it's already set
         self.results_queue = Queue()
         self.metrics_tasks = {}  # Dictionary to track metrics tasks per score
