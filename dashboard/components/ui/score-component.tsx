@@ -467,7 +467,7 @@ const DetailContent = React.memo(({
           </div>
           <textarea
             value={versionNote}
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onNoteChange(e.target.value)}
+            onChange={handleNoteChange}
             placeholder="Add a note about this version..."
             className="w-full px-2 py-1.5 rounded-md bg-background border-0 text-sm resize-none
                      focus-visible:ring-0 focus-visible:ring-offset-0 
@@ -644,7 +644,6 @@ export function ScoreComponent({
   const [selectedVersionId, setSelectedVersionId] = React.useState<string>()
   const [versionNote, setVersionNote] = React.useState('')
   const [resetEditingCounter, setResetEditingCounter] = React.useState(0)
-  const [onlyNoteChanged, setOnlyNoteChanged] = React.useState(false)
   
   // Debug log when editedScore changes
   React.useEffect(() => {
@@ -657,7 +656,6 @@ export function ScoreComponent({
     setEditedScore(score)
     setVersionNote('') // Reset note when score changes
     setHasChanges(false) // Reset changes flag when score changes
-    setOnlyNoteChanged(false) // Reset note change flag
     setResetEditingCounter(prev => prev + 1) // Signal to DetailContent to reset editing state
   }, [score])
   
@@ -796,9 +794,6 @@ export function ScoreComponent({
       // If we're changing fields other than the note, reset onlyNoteChanged flag
       if ('name' in changes || 'key' in changes || 'externalId' in changes || 
           'description' in changes || 'configuration' in changes) {
-        setOnlyNoteChanged(false);
-        
-        // Log the changes for debugging
         console.log('Field changes detected:', {
           name: changes.name !== undefined ? `${prev.name} -> ${changes.name}` : undefined,
           key: changes.key !== undefined ? `${prev.key} -> ${changes.key}` : undefined,
@@ -924,7 +919,6 @@ export function ScoreComponent({
       
       // Reset hasChanges since we just loaded a version
       setHasChanges(false);
-      setOnlyNoteChanged(false);
       
       // Remove toast notification for simply viewing a version
       // We only want notifications for actions that change state
@@ -933,21 +927,6 @@ export function ScoreComponent({
       toast.error('Error loading version configuration')
     }
   }
-
-  // Handle note changes and set hasChanges to true
-  const handleNoteChange = (note: string) => {
-    console.log('Note changed:', note);
-    setVersionNote(note);
-    
-    // Set hasChanges to true when note is changed
-    setHasChanges(true);
-    
-    // Set flag indicating only the note has changed
-    setOnlyNoteChanged(true);
-    
-    // Log the change
-    console.log('Note changed, hasChanges=true, onlyNoteChanged=true');
-  };
 
   const handleToggleFeature = async (versionId: string) => {
     try {
@@ -970,6 +949,18 @@ export function ScoreComponent({
       console.error('Error toggling feature:', error);
       toast.error('Failed to update version feature status');
     }
+  };
+
+  // Handle note changes and set hasChanges to true
+  const handleNoteChange = (note: string) => {
+    console.log('Note changed:', note);
+    setVersionNote(note);
+    
+    // Set hasChanges to true when note is changed
+    setHasChanges(true);
+    
+    // Log the change
+    console.log('Note changed, hasChanges=true');
   };
 
   const handleSave = async () => {
@@ -1002,48 +993,7 @@ export function ScoreComponent({
       // Check if we're editing an existing version or creating a new one
       const isEditingExistingVersion = selectedVersionId && versions.some(v => v.id === selectedVersionId);
       
-      // If we're editing an existing version and only the note has changed
-      if (isEditingExistingVersion && onlyNoteChanged) {
-        const currentVersion = versions.find(v => v.id === selectedVersionId);
-        if (currentVersion) {
-          // Only update the note on the existing version
-          console.log('Only updating note on existing version:', selectedVersionId);
-          
-          await client.graphql({
-            query: `
-              mutation UpdateScoreVersion($input: UpdateScoreVersionInput!) {
-                updateScoreVersion(input: $input) {
-                  id
-                  scoreId
-                  note
-                  updatedAt
-                }
-              }
-            `,
-            variables: {
-              input: {
-                id: selectedVersionId,
-                note: versionNote
-              }
-            }
-          });
-          
-          // Update local state
-          setVersions(prev => prev.map(v => 
-            v.id === selectedVersionId 
-              ? { ...v, note: versionNote, updatedAt: new Date().toISOString() } 
-              : v
-          ));
-          
-          toast.success('Version note updated');
-          setHasChanges(false);
-          setOnlyNoteChanged(false);
-          return; // Exit early, no need to create a new version
-        }
-      }
-      
-      // If we get here, we're creating a new version (either new config or not editing an existing version)
-      // or we're editing an existing version but fields other than the note have changed
+      // Create a new version with the current configuration
       let configurationYaml = editedScore.configuration;
       
       // If no configuration exists, create one based on current values
@@ -1059,9 +1009,9 @@ export function ScoreComponent({
       }
       
       // Log what we're doing
-      if (isEditingExistingVersion && !onlyNoteChanged) {
-        console.log('Creating new version because fields other than note have changed');
-      } else if (!isEditingExistingVersion) {
+      if (isEditingExistingVersion) {
+        console.log('Creating new version from existing version');
+      } else {
         console.log('Creating new version (not editing an existing version)');
       }
       
@@ -1144,7 +1094,6 @@ export function ScoreComponent({
       
       setHasChanges(false);
       setVersionNote('');
-      setOnlyNoteChanged(false);
     } catch (error) {
       console.error('Error saving score:', error);
       toast.error(error instanceof Error ? error.message : 'Error updating score');
