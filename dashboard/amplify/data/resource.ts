@@ -21,9 +21,9 @@ type EvaluationIndexFields = "accountId" | "scorecardId" | "type" | "accuracy" |
     "scoreGoal" | "metricsExplanation" | "inferences" | "cost";
 type BatchJobIndexFields = "accountId" | "scorecardId" | "type" | "scoreId" | 
     "status" | "modelProvider" | "modelName" | "batchId";
-type ItemIndexFields = "name" | "description" | "accountId";
+type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId";
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
-    "scoreId";
+    "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
     "scoringJobId" | "evaluationId" | "scoreVersionId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
@@ -259,13 +259,14 @@ const schema = a.schema({
             scorecards: a.hasMany('Scorecard', 'itemId'),
             evaluationId: a.string(),
             evaluation: a.belongsTo('Evaluation', 'evaluationId'),
+            updatedAt: a.datetime(),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("accountId").sortKeys(["updatedAt"])
+            idx("accountId")
         ]),
 
     ScoringJob: a
@@ -288,13 +289,14 @@ const schema = a.schema({
             score: a.belongsTo('Score', 'scoreId'),
             batchJobLinks: a.hasMany('BatchJobScoringJob', 'scoringJobId'),
             scoreResults: a.hasMany('ScoreResult', 'scoringJobId'),
+            updatedAt: a.datetime(),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("accountId").sortKeys(["updatedAt"]),
+            idx("accountId"),
             idx("itemId"),
             idx("scorecardId"),
             idx("scoreId"),
