@@ -420,13 +420,17 @@ export default function EvaluationsDashboard() {
       const currentClient = getClient()
       await currentClient.graphql({
         query: `
-          mutation DeleteEvaluation($id: ID!) {
-            deleteEvaluation(id: $id) {
+          mutation DeleteEvaluation($input: DeleteEvaluationInput!) {
+            deleteEvaluation(input: $input) {
               id
             }
           }
         `,
-        variables: { id: evaluationId }
+        variables: { 
+          input: {
+            id: evaluationId
+          }
+        }
       })
       if (selectedEvaluationId === evaluationId) {
         setSelectedEvaluationId(null)
