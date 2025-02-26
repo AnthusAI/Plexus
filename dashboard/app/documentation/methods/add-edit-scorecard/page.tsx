@@ -108,7 +108,17 @@ export default function AddEditScorecardPage() {
           </p>
           
           <pre className="bg-muted p-4 rounded-lg mb-4">
-            <code>{`# Create a new scorecard
+            <code>{`# List scorecards with optimized performance
+plexus scorecards list "account-name" --fast
+
+# View a specific scorecard by filtering
+plexus scorecards list "account-name" --name "Content Quality"
+
+# View detailed information about a score
+plexus scorecards score "score-name" --account "account-name" --show-versions
+
+# Coming soon:
+# Create a new scorecard
 plexus scorecards create --name "Content Quality" --description "Evaluates content quality"
 
 # Add a score to the scorecard
@@ -117,6 +127,27 @@ plexus scorecards add-score scorecard-id --type sentiment --weight 0.5
 # Update a scorecard
 plexus scorecards update scorecard-id --name "Updated Name"`}</code>
           </pre>
+          
+          <div className="mt-4 space-y-4">
+            <div>
+              <h3 className="text-xl font-medium mb-2">Performance Considerations</h3>
+              <p className="text-muted-foreground">
+                The CLI now uses optimized GraphQL queries to fetch scorecard data efficiently:
+              </p>
+              <ul className="list-disc pl-6 mt-2 space-y-2 text-muted-foreground">
+                <li>
+                  <strong>Single Query Approach:</strong> Instead of making separate queries for each scorecard's sections and scores, 
+                  the system now fetches all data in a single comprehensive GraphQL query.
+                </li>
+                <li>
+                  <strong>Fast Mode:</strong> Use the <code>--fast</code> option to skip fetching sections and scores when you only need basic scorecard information.
+                </li>
+                <li>
+                  <strong>Hide Scores:</strong> Use <code>--hide-scores</code> to exclude score details from the output while still fetching basic scorecard data.
+                </li>
+              </ul>
+            </div>
+          </div>
         </section>
 
         <section>
@@ -158,6 +189,7 @@ scorecard.update(name="Updated Name")`}</code>
             <li>Scorecard version control</li>
             <li>Collaborative editing features</li>
             <li>Performance analytics</li>
+            <li>YAML synchronization for offline editing</li>
           </ul>
         </section>
       </div>
