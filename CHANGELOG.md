@@ -1,7 +1,31 @@
 # CHANGELOG
 
 
+## v0.9.0 (2025-02-26)
+
+### Features
+
+- **dashboard**: Add Monaco Editor
+  ([`eefbb98`](https://github.com/AnthusAI/Plexus/commit/eefbb98c13606d192e341593f18fc41f9f0b7d5a))
+
+
 ## v0.8.0 (2025-02-22)
+
+### Bug Fixes
+
+- **evaluation**: Handle metrics array in public evaluation page
+  ([`8da1176`](https://github.com/AnthusAI/Plexus/commit/8da11766e6914dd4ed60caf483c6ef1effe56624))
+
+Modify metrics rendering to support array-based metrics structure, ensuring correct value retrieval
+  for Precision, Sensitivity, and Specificity
+
+### Documentation
+
+- **dashboard**: Add comprehensive development guide for Plexus Dashboard
+  ([`583374e`](https://github.com/AnthusAI/Plexus/commit/583374e9fe3275d3bcc23eb8b4905bb69417c51b))
+
+Create CLAUDE.md with detailed documentation covering build commands, test commands, and code style
+  guidelines for the project
 
 ### Features
 
@@ -11,6 +35,50 @@
 - Introduce new `--foreground-selected` CSS variable in global styles - Update Tailwind config to
   support the new color token - Modify confusion matrix cell text color to use foreground-selected
   for high-value cells - Adjust text color threshold from 70% to 90% of max value
+
+- **share-evaluation**: Implement public evaluation route with comprehensive testing
+  ([`73e8c15`](https://github.com/AnthusAI/Plexus/commit/73e8c15bc38cde6a64f0698264a0266bd957a9eb))
+
+- Add route files for public evaluation page and layout - Implement data fetching, transformation,
+  and rendering - Create unit and end-to-end tests for route functionality - Add public link copy
+  feature to evaluations dashboard - Enhance error handling and responsive design
+
+### Refactoring
+
+- **auth**: Allow public access to single evaluation pages
+  ([`69d6402`](https://github.com/AnthusAI/Plexus/commit/69d64022851a5b7974d58e0732c18a0cdbb03c9d))
+
+Modify client-layout to permit unauthenticated access to specific evaluation routes by dynamically
+  checking the pathname structure
+
+- **evaluation**: Enhance authentication and sharing for single evaluation page
+  ([`5942d14`](https://github.com/AnthusAI/Plexus/commit/5942d1404fa16bedee986b896697d74f3c5c9ffa))
+
+- Implement dynamic authentication mode for evaluation fetching - Replace `useToast` with `sonner`
+  for toast notifications - Refactor link sharing functionality with improved error handling -
+  Simplify evaluation data retrieval and error management
+
+- **evaluation**: Improve data fetching and testing for public evaluation page
+  ([`074ff99`](https://github.com/AnthusAI/Plexus/commit/074ff99921f4283af13fd62941b4f955d2f9ff54))
+
+- Introduce EvaluationService for better separation of concerns - Add comprehensive unit tests for
+  PublicEvaluation component - Enhance error handling and loading state management - Implement
+  dependency injection for easier testing - Optimize authentication and data fetching logic
+
+- **share-links**: Add ShareLink model to Amplify schema
+  ([`64e0dce`](https://github.com/AnthusAI/Plexus/commit/64e0dce63264cf159760e5c6ddfb271d660af40d))
+
+Implement ShareLink model with comprehensive indexing and authorization, supporting token-based
+  resource sharing functionality
+
+### Testing
+
+- **evaluation**: Add responsive testing utilities and unit tests for public evaluation page
+  ([`ea0219f`](https://github.com/AnthusAI/Plexus/commit/ea0219f82f88b37928b405445613e14b21d4794d))
+
+- Create test utilities for responsive design testing - Add comprehensive responsive screen size
+  tests for PublicEvaluation component - Remove redundant Cypress end-to-end responsiveness test -
+  Implement mockMatchMedia and resizeWindow utility functions
 
 
 ## v0.7.0 (2025-02-21)
