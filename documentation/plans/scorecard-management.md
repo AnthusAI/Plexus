@@ -55,7 +55,7 @@ This document outlines the implementation of Plexus's scorecard management syste
   - Finalized detail view layouts and functionality
   - Added proper metadata display and state management
 
-### Phase 2: Schema Updates (Current Focus)
+### Phase 2: Schema Updates
 - Status: ✅ Completed
 - Goals:
   - Update UI to support score version management
@@ -82,7 +82,7 @@ This document outlines the implementation of Plexus's scorecard management syste
   ✅ Featured version indicator and toggle functionality
 
 ### Phase 3: CLI API Integration (Current Focus)
-- Status: In Progress
+- Status: ✅ Completed
 - Goals:
   - Update `plexus evaluate accuracy` to use API
   - Remove dependency on local YAML files for evaluation
@@ -94,11 +94,13 @@ This document outlines the implementation of Plexus's scorecard management syste
   ✅ Added "Scores" header to tree view with proper alignment
   ✅ Implemented full-width tree view for better readability
   ✅ Ensured proper display in both single and multiple column modes
-- Next Steps:
-  - Update CLI evaluation command
-  - Add API client for score version fetching
-  - Implement version selection logic
-  - Add progress indicators for API operations
+  ✅ Added new `plexus scorecards score` command to view detailed information about a single score
+  ✅ Implemented lookup by score ID, key, or external ID
+  ✅ Added support for viewing score version history and configuration
+  ✅ Optimized scorecard data fetching with single comprehensive GraphQL query
+  ✅ Added `--fast` option to skip fetching sections and scores for better performance
+  ✅ Added progress indicators for API operations
+  ✅ Updated documentation to reflect new commands and performance improvements
 
 ### Phase 4: YAML Mode Support
 - Status: In Progress
@@ -158,6 +160,29 @@ This document outlines the implementation of Plexus's scorecard management syste
     - Version notes/comments
     - Version comparison
     - New version creation on edit
+
+### Performance Improvements
+- Status: ✅ Completed
+- Implementation Details:
+  - Replaced multiple separate GraphQL queries with a single comprehensive query
+  - Eliminated the "N+1 query problem" in scorecard data fetching
+  - Added `--fast` option to skip fetching sections and scores for better performance
+  - Added `--hide-scores` option to exclude score details from output
+  - Improved error handling and debug output
+  - Updated documentation to reflect performance enhancements
+  - Added progress indicators for long-running operations
+  - Optimized score lookup with multiple identification methods (ID, key, name, external ID)
+
+### Documentation Updates
+- Status: ✅ Completed
+- Implementation Details:
+  - Updated Scorecards concept page with comprehensive CLI management section
+  - Added Best Practices section with guidance on organization and performance
+  - Updated Add/Edit Scorecard page with performance considerations
+  - Added Score Version Management section to Add/Edit Score page
+  - Added YAML Configuration section with examples
+  - Updated CLI examples to reflect new commands and options
+  - Added Efficient Score Lookup section explaining multiple lookup methods
 
 ### Phase 5: Visual Editor (Future)
 - Status: Planned
@@ -281,7 +306,7 @@ Card (Base)
 - Responsive testing across breakpoints
 
 ### Score Version Management UI
-- Status: In Progress
+- Status: ✅ Completed
 - Implementation Details:
   - Each ScoreComponent displays:
     ✅ Basic header structure matching ScorecardComponent:
