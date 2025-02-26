@@ -1,6 +1,7 @@
 ---
 description: Overall Project Structure
 globs: 
+alwaysApply: false
 ---
 # Plexus Overall Project Structure
 
@@ -18,7 +19,8 @@ Plexus is a documentation and evaluation platform for AI/ML systems, with an Amp
 - React / Shadcn UI
 
 ## Key Directories
-- `plexus`: Python modules for AI/ML, CLI, etc
+- `/plexus`: Python modules for AI/ML, CLI, etc
+- `/dashboard/`: Next.js app -- run `npm run ci` from here!
 - `/dashboard/app`: Next.js routes & pages
 - `/dashboard/components`: React components
 - `/dashboard/amplify`: AWS config & resources
